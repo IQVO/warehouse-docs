@@ -304,12 +304,20 @@
                             "example": 45,
                             "x-parser-schema-id": "<anonymous-schema-20>"
                           },
+                          "travel_component_seconds": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 0,
+                            "description": "Optional declaration of how much of expected_seconds is attributable to travel between locations for this task type. Omitted entirely (not present, not null) when the standard never declared one — the default, most common case. This service never computes or validates it against a live location lookup (ADR 0015).",
+                            "example": 15,
+                            "x-parser-schema-id": "<anonymous-schema-21>"
+                          },
                           "effective_from": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the standard came into force. The BUSINESS time the projector buckets this event on.",
                             "example": "2026-09-05T09:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-21>"
+                            "x-parser-schema-id": "<anonymous-schema-22>"
                           }
                         },
                         "x-parser-schema-id": "<anonymous-schema-17>"
@@ -335,6 +343,24 @@
                       "task_type": "PICK",
                       "expected_seconds": 45,
                       "effective_from": "2026-09-05T09:00:00Z"
+                    }
+                  }
+                },
+                {
+                  "name": "firstPickStandardWithTravelComponent",
+                  "summary": "A first PICK standard declaring a 15s travel component.",
+                  "payload": {
+                    "event_id": "2c0f5d13-84b6-5e29-af70-3d9c1b5e8f46",
+                    "event_type": "LaborStandardDefined",
+                    "occurred_at": "2026-09-05T09:05:00Z",
+                    "source": "labor-performance",
+                    "schema_version": 1,
+                    "data": {
+                      "standard_id": "std-0003",
+                      "task_type": "PICK",
+                      "expected_seconds": 45,
+                      "travel_component_seconds": 15,
+                      "effective_from": "2026-09-05T09:05:00Z"
                     }
                   }
                 }
@@ -371,7 +397,7 @@
                             "type": "string",
                             "description": "The id of the NEW standard record opened by this revision.",
                             "example": "std-0002",
-                            "x-parser-schema-id": "<anonymous-schema-24>"
+                            "x-parser-schema-id": "<anonymous-schema-25>"
                           },
                           "task_type": {
                             "type": "string",
@@ -381,34 +407,42 @@
                               "SLAM"
                             ],
                             "example": "PICK",
-                            "x-parser-schema-id": "<anonymous-schema-25>"
+                            "x-parser-schema-id": "<anonymous-schema-26>"
                           },
                           "previous_expected_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "description": "The now-closed standard's expected duration, carried so a consumer can see the size of the change without joining back to the prior event.",
                             "example": 45,
-                            "x-parser-schema-id": "<anonymous-schema-26>"
+                            "x-parser-schema-id": "<anonymous-schema-27>"
                           },
                           "expected_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "description": "The newly effective expected duration.",
                             "example": 40,
-                            "x-parser-schema-id": "<anonymous-schema-27>"
+                            "x-parser-schema-id": "<anonymous-schema-28>"
+                          },
+                          "travel_component_seconds": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 0,
+                            "description": "Optional declaration of how much of the NEW (revised) expected_seconds is attributable to travel — always the revision's own value, never carried over from the closed prior standard. Omitted entirely when the revision does not declare one.",
+                            "example": 20,
+                            "x-parser-schema-id": "<anonymous-schema-29>"
                           },
                           "effective_from": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the new standard came into force — the same instant the prior one was closed. The BUSINESS time the projector buckets this event on.",
                             "example": "2026-09-05T10:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-28>"
+                            "x-parser-schema-id": "<anonymous-schema-30>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-23>"
+                        "x-parser-schema-id": "<anonymous-schema-24>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-22>"
+                    "x-parser-schema-id": "<anonymous-schema-23>"
                   }
                 ],
                 "x-parser-schema-id": "LaborStandardRevisedEnvelope"
@@ -464,19 +498,19 @@
                             "type": "string",
                             "description": "fulfillment-execution's task id, treated as an opaque foreign reference. This context does not own or validate it.",
                             "example": "task-10231",
-                            "x-parser-schema-id": "<anonymous-schema-31>"
+                            "x-parser-schema-id": "<anonymous-schema-33>"
                           },
                           "associate_id": {
                             "type": "string",
                             "description": "The associate who completed the task. The EMPTY STRING is a legitimate, expected value: the completing station had no checked-in occupant (e.g. a robot station). Such a task is still counted in task-type reporting; it is only excluded from per-associate scorecards.",
                             "example": "assoc-4471",
-                            "x-parser-schema-id": "<anonymous-schema-32>"
+                            "x-parser-schema-id": "<anonymous-schema-34>"
                           },
                           "task_type": {
                             "type": "string",
                             "description": "PICK, PACK, SLAM, or the empty string when the task type could not be resolved. Empty is the normal case TODAY: fulfillment-execution's TaskCompleted payload carries no task_type field yet. The projector labels the empty case `UNCLASSIFIED` rather than dropping the row or keying its fact table on an empty string.",
                             "example": "PICK",
-                            "x-parser-schema-id": "<anonymous-schema-33>"
+                            "x-parser-schema-id": "<anonymous-schema-35>"
                           },
                           "efficiency_pct": {
                             "type": "number",
@@ -484,14 +518,14 @@
                             "nullable": true,
                             "description": "100 * standard_seconds_at_completion / actual_seconds, or NULL when the task could not be scored — no active standard for its TaskType at completion time, or a non-positive duration. NULL is a real business fact (\"unmeasurable\"), never an error and never to be coerced to 0 by a consumer.",
                             "example": 86.5,
-                            "x-parser-schema-id": "<anonymous-schema-34>"
+                            "x-parser-schema-id": "<anonymous-schema-36>"
                           },
                           "actual_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "description": "The measured duration, from the inbound event's duration_seconds. `0` means unmeasurable and is excluded from any mean-duration aggregate.",
                             "example": 52,
-                            "x-parser-schema-id": "<anonymous-schema-35>"
+                            "x-parser-schema-id": "<anonymous-schema-37>"
                           },
                           "idle_seconds_before": {
                             "type": "integer",
@@ -499,20 +533,20 @@
                             "nullable": true,
                             "description": "The measured idle gap immediately preceding this task's claim (previous completion -> this claim instant), added by the idleness feature (ADR 0014-labor-utilization-idleness). NULL — never a fabricated number — when there was no prior completion to measure from (this associate's first- ever observation), the gap was negative/zero (out-of-order Kafka delivery), or the completing station had no checked-in occupant. ADDITIVE field: a Conformist unmarshaling unknown-field-tolerant JSON is unaffected by its presence.",
                             "example": 90,
-                            "x-parser-schema-id": "<anonymous-schema-36>"
+                            "x-parser-schema-id": "<anonymous-schema-38>"
                           },
                           "completed_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the associate actually finished the task. The BUSINESS time the projector buckets this event on — NOT occurred_at, so a replayed or late-ingested event lands in the hour the work really happened.",
                             "example": "2026-09-05T09:30:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-37>"
+                            "x-parser-schema-id": "<anonymous-schema-39>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-30>"
+                        "x-parser-schema-id": "<anonymous-schema-32>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-29>"
+                    "x-parser-schema-id": "<anonymous-schema-31>"
                   }
                 ],
                 "x-parser-schema-id": "TaskPerformanceRecordedEnvelope"
@@ -605,27 +639,27 @@
                 "type": "string",
                 "format": "uuid",
                 "description": "Unique per published message. This is a downstream consumer's de-duplication key under Kafka's at-least-once delivery.",
-                "x-parser-schema-id": "<anonymous-schema-38>"
+                "x-parser-schema-id": "<anonymous-schema-40>"
               },
               "event_type": {
                 "type": "string",
                 "enum": [
                   "TaskPerformanceRecorded"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-39>"
+                "x-parser-schema-id": "<anonymous-schema-41>"
               },
               "occurred_at": {
                 "type": "string",
                 "format": "date-time",
                 "description": "When this service emitted the event (publish/ingestion time).",
-                "x-parser-schema-id": "<anonymous-schema-40>"
+                "x-parser-schema-id": "<anonymous-schema-42>"
               },
               "source": {
                 "type": "string",
                 "enum": [
                   "labor-performance"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-41>"
+                "x-parser-schema-id": "<anonymous-schema-43>"
               },
               "data": {
                 "type": "object",
@@ -640,19 +674,19 @@
                     "type": "string",
                     "description": "fulfillment-execution's task id, treated as an opaque foreign reference. This context does not own or validate it.",
                     "example": "task-10231",
-                    "x-parser-schema-id": "<anonymous-schema-43>"
+                    "x-parser-schema-id": "<anonymous-schema-45>"
                   },
                   "associate_id": {
                     "type": "string",
                     "description": "The associate who completed the task, and the partition key of this topic. The EMPTY STRING is a legitimate, expected value: the completing station had no checked-in occupant (e.g. a robot station).",
                     "example": "assoc-4471",
-                    "x-parser-schema-id": "<anonymous-schema-44>"
+                    "x-parser-schema-id": "<anonymous-schema-46>"
                   },
                   "task_type": {
                     "type": "string",
                     "description": "PICK, PACK, SLAM, or the empty string when the task type could not be resolved (see the analytics envelope's identical field for why this is common today).",
                     "example": "PICK",
-                    "x-parser-schema-id": "<anonymous-schema-45>"
+                    "x-parser-schema-id": "<anonymous-schema-47>"
                   },
                   "efficiency_pct": {
                     "type": "number",
@@ -660,14 +694,14 @@
                     "nullable": true,
                     "description": "100 * standard_seconds_at_completion / actual_seconds, or NULL when the task could not be scored. NULL is a real business fact (\"unmeasurable\"); a consumer MUST NOT coerce it to 0.",
                     "example": 91.2,
-                    "x-parser-schema-id": "<anonymous-schema-46>"
+                    "x-parser-schema-id": "<anonymous-schema-48>"
                   },
                   "actual_seconds": {
                     "type": "integer",
                     "format": "int64",
                     "description": "The measured duration. `0` means unmeasurable.",
                     "example": 41,
-                    "x-parser-schema-id": "<anonymous-schema-47>"
+                    "x-parser-schema-id": "<anonymous-schema-49>"
                   },
                   "idle_seconds_before": {
                     "type": "integer",
@@ -675,17 +709,17 @@
                     "nullable": true,
                     "description": "The measured idle gap immediately preceding this task's claim, added by the idleness feature (ADR 0014-labor-utilization-idleness). NULL — never a fabricated number — when there was no prior completion, the gap was negative/zero (out-of-order Kafka delivery), or the completing station had no checked-in occupant. ADDITIVE field: a Conformist unmarshaling unknown-field- tolerant JSON (e.g. workforce-management's laborperformancecache) is unaffected by its presence.",
                     "example": 90,
-                    "x-parser-schema-id": "<anonymous-schema-48>"
+                    "x-parser-schema-id": "<anonymous-schema-50>"
                   },
                   "completed_at": {
                     "type": "string",
                     "format": "date-time",
                     "description": "When the associate actually finished the task — the BUSINESS time, distinct from the envelope's occurred_at.",
                     "example": "2026-09-05T09:30:00Z",
-                    "x-parser-schema-id": "<anonymous-schema-49>"
+                    "x-parser-schema-id": "<anonymous-schema-51>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-42>"
+                "x-parser-schema-id": "<anonymous-schema-44>"
               }
             },
             "x-parser-schema-id": "TaskPerformanceRecordedIntegrationEnvelope"
