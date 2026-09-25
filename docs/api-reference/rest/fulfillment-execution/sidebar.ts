@@ -62,6 +62,12 @@ const sidebar: SidebarsConfig = {
           label: "Sweep every Claimed task whose lease has expired back to Pending",
           className: "api-method post",
         },
+        {
+          type: "doc",
+          id: "api-reference/rest/fulfillment-execution/sweep-cpt-misses",
+          label: "Sweep every still-open task whose CPT has passed and report it as missed",
+          className: "api-method post",
+        },
       ],
     },
     {

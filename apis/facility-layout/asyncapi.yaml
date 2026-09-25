@@ -94,6 +94,16 @@ tags:
     description: >
       Events raised by the LocationSlot aggregate: the coded leaf slots of
       the warehouse map — registration, decommissioning, and bulk import.
+  - name: structure
+    description: >
+      Events raised by the FixedStructure aggregate (ADR-0017): site-scoped
+      physical obstacles — walls, columns, offices, conveyors — drawn on
+      the warehouse map. Not a location; nothing can be stowed at one.
+  - name: crossaisle
+    description: >
+      Events raised by the CrossAisle aggregate (ADR-0017): zone-scoped
+      connections between two aisles at a bay ordinal, the travel graph's
+      cross-aisle edges.
 
 servers:
   production:
@@ -146,6 +156,10 @@ channels:
           - $ref: '#/components/messages/locationSlotRegistered'
           - $ref: '#/components/messages/locationSlotDecommissioned'
           - $ref: '#/components/messages/facilityLayoutImported'
+          - $ref: '#/components/messages/locationGeometryUpdated'
+          - $ref: '#/components/messages/aisleGeometryUpdated'
+          - $ref: '#/components/messages/fixedStructureRegistered'
+          - $ref: '#/components/messages/crossAisleRegistered'
 
 components:
   schemas:
@@ -324,8 +338,19 @@ components:
                       locationType:
                         type: string
                         description: e.g. `PalletRack`, `ShelfBin`.
+                      role:
+                        type: string
+                        description: >
+                          The LocationRole (ADR-0016): Storage, Dock, Yard,
+                          WorkCenter, Drop, Staging, QC, Consolidation, or
+                          Shipping. Added additively; absent on events
+                          emitted before this field existed, which consumers
+                          should treat as `Storage`.
                       maxWeightKg:
                         type: number
+                        description: >
+                          0/absent for a role that does not require
+                          capacity (Dock, Yard, WorkCenter, QC, Shipping).
                       maxVolumeM3:
                         type: number
 
@@ -397,8 +422,31 @@ components:
                         type: string
                       locationType:
                         type: string
+                      role:
+                        type: string
+                        description: >
+                          The LocationRole (ADR-0016). Added additively;
+                          absent on events emitted before this field
+                          existed, which consumers should treat as
+                          `Storage`.
+                      dockFlow:
+                        type: string
+                        description: >
+                          Inbound, Outbound, or Both. Present only when
+                          role is Dock (ADR-0016).
+                      activities:
+                        type: array
+                        items:
+                          type: string
+                        description: >
+                          Pack, Sort, QC, VAS, Deconsolidate, Receive
+                          and/or Kit. Present only when role is WorkCenter
+                          (ADR-0016).
                       maxWeightKg:
                         type: number
+                        description: >
+                          0/absent for a role that does not require
+                          capacity (Dock, Yard, WorkCenter, QC, Shipping).
                       maxVolumeM3:
                         type: number
 
@@ -459,3 +507,176 @@ components:
                         type: integer
                       rowsRejected:
                         type: integer
+
+    locationGeometryUpdated:
+      name: LocationGeometryUpdated
+      title: Location geometry updated
+      tags: [{ name: locationslot }]
+      summary: A coded slot's physical position/footprint was set or changed.
+      description: >
+        Raised by `SetLocationGeometry` (ADR-0017). Kafka key:
+        `locationCode`. No consumer wired today.
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/envelopeBase'
+          - type: object
+            properties:
+              event_type:
+                const: com.warehouse.wms.facility-layout.locationslot.LocationGeometryUpdated
+              data:
+                allOf:
+                  - $ref: '#/components/schemas/eventDataBase'
+                  - type: object
+                    required: [locationCode, xM, yM, zM, widthM, depthM, heightM]
+                    properties:
+                      locationCode:
+                        type: string
+                        description: >
+                          The full coded location, e.g.
+                          `WH1-STOR-AMB-A07-03-02-B`.
+                      xM:
+                        type: number
+                        description: Position in the site's local coordinate frame, in metres.
+                      yM:
+                        type: number
+                      zM:
+                        type: number
+                        description: Height above floor level, in metres. Never negative.
+                      widthM:
+                        type: number
+                        description: Footprint extent, in metres. Always strictly positive.
+                      depthM:
+                        type: number
+                      heightM:
+                        type: number
+                      pickSequence:
+                        type: integer
+                        description: >
+                          Optional explicit pick-path override for this
+                          slot. Absent when no override was given.
+
+    aisleGeometryUpdated:
+      name: AisleGeometryUpdated
+      title: Aisle geometry updated
+      tags: [{ name: aisle }]
+      summary: An aisle's travel centreline was set or changed.
+      description: >
+        Raised by `SetAisleGeometry` (ADR-0017): the straight-line path the
+        travel graph uses as this aisle's walkable route. Kafka key:
+        `aisleId`. No consumer wired today.
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/envelopeBase'
+          - type: object
+            properties:
+              event_type:
+                const: com.warehouse.wms.facility-layout.aisle.AisleGeometryUpdated
+              data:
+                allOf:
+                  - $ref: '#/components/schemas/eventDataBase'
+                  - type: object
+                    required: [aisleId, startXM, startYM, startZM, endXM, endYM, endZM, lengthM]
+                    properties:
+                      aisleId:
+                        type: string
+                        example: WH1-STOR-AMB-A07
+                      startXM:
+                        type: number
+                      startYM:
+                        type: number
+                      startZM:
+                        type: number
+                      endXM:
+                        type: number
+                      endYM:
+                        type: number
+                      endZM:
+                        type: number
+                      lengthM:
+                        type: number
+                        description: The centreline's straight-line length, in metres.
+
+    fixedStructureRegistered:
+      name: FixedStructureRegistered
+      title: Fixed structure registered
+      tags: [{ name: structure }]
+      summary: A site-scoped physical obstacle was added to the warehouse map.
+      description: >
+        Raised by `RegisterFixedStructure` (ADR-0017): a wall, column,
+        office, conveyor, or other fixed object. Not a location — nothing
+        can be stowed at it. Kafka key: `structureId`. No consumer wired
+        today.
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/envelopeBase'
+          - type: object
+            properties:
+              event_type:
+                const: com.warehouse.wms.facility-layout.structure.FixedStructureRegistered
+              data:
+                allOf:
+                  - $ref: '#/components/schemas/eventDataBase'
+                  - type: object
+                    required: [structureId, siteCode, kind, xM, yM, zM, widthM, depthM, heightM, label]
+                    properties:
+                      structureId:
+                        type: string
+                        example: STR-1
+                      siteCode:
+                        type: string
+                        example: WH1
+                      kind:
+                        type: string
+                        description: Wall, Column, Office, Conveyor, or Other.
+                      xM:
+                        type: number
+                        description: Footprint origin, in the site's local coordinate frame, in metres.
+                      yM:
+                        type: number
+                      zM:
+                        type: number
+                      widthM:
+                        type: number
+                      depthM:
+                        type: number
+                      heightM:
+                        type: number
+                      label:
+                        type: string
+                        example: North wall
+
+    crossAisleRegistered:
+      name: CrossAisleRegistered
+      title: Cross-aisle registered
+      tags: [{ name: crossaisle }]
+      summary: A connection between two aisles was added to the travel graph.
+      description: >
+        Raised by `RegisterCrossAisle` (ADR-0017): a zone-scoped connection
+        between two of its aisles at a bay ordinal, letting the travel
+        graph route between aisles without walking to either end. Kafka
+        key: `zoneId`. No consumer wired today.
+      payload:
+        allOf:
+          - $ref: '#/components/schemas/envelopeBase'
+          - type: object
+            properties:
+              event_type:
+                const: com.warehouse.wms.facility-layout.crossaisle.CrossAisleRegistered
+              data:
+                allOf:
+                  - $ref: '#/components/schemas/eventDataBase'
+                  - type: object
+                    required: [zoneId, fromAisle, toAisle, atBay]
+                    properties:
+                      zoneId:
+                        type: string
+                        example: WH1-STOR-AMB
+                      fromAisle:
+                        type: string
+                        example: A07
+                      toAisle:
+                        type: string
+                        example: A08
+                      atBay:
+                        type: string
+                        example: "02"

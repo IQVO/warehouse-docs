@@ -35,7 +35,7 @@ const sidebar: SidebarsConfig = {
         {
           type: "doc",
           id: "api-reference/rest/process-path-management/revise-path",
-          label: "Revise an Active process path's matchPrefix/requiredCapabilities",
+          label: "Revise an Active process path's matchPrefix/requiredCapabilities/cycleTimeP95/eligibility",
           className: "api-method put",
         },
         {
@@ -43,6 +43,28 @@ const sidebar: SidebarsConfig = {
           id: "api-reference/rest/process-path-management/deactivate-path",
           label: "Deactivate (retire) a process path",
           className: "api-method delete",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "cpt-schedule",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/process-path-management/cpt-schedule",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/process-path-management/get-cpt-schedule",
+          label: "Get one site's CPT schedule",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/process-path-management/define-cpt-schedule",
+          label: "Define or wholesale-revise a site's CPT schedule",
+          className: "api-method put",
         },
       ],
     },
