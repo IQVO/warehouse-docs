@@ -109,7 +109,7 @@ instance can compute about itself.
 | `EnqueueWorkUnit(pathId, cpt, ref)` | Creates a `WorkUnit` (see below) and adds a `Pending` entry to this path's `WorkPool`, keyed by the unit's id. |
 | `ReleaseNextWork(pathId)` | Applies `ReleasePolicy` to the pool: hands out the pending entry with the earliest CPT, subject to W1–W5. |
 | `RecordCompletion(workUnitId)` | Transitions the referenced `WorkUnit` to `Completed`; the pool's `WIP()` projection drops accordingly on the next read (no counter is decremented on the pool itself — see Read models). |
-| `SampleBacklog(pathId)` | Not a mutation — computes the telemetry read model from `entries` and may raise `BacklogThresholdBreached`. |
+| `SampleBacklog(pathId, cutoffAt?)` | Not a mutation — computes the telemetry read model from `entries` and may raise `BacklogThresholdBreached`. When the caller supplies the optional `cutoffAt`, it also reads `RemainingCapacity()` and raises `PathCapacityChanged` (ADR-0018); both events commit atomically in one call. |
 | `RebalanceDecision(pathId)` | Not a mutation — computes the flow-balancing recommendation from the same snapshot. |
 
 ## Created Events
@@ -122,10 +122,20 @@ instance can compute about itself.
 | `BacklogThresholdBreached` | `SampleBacklog` (flow-fed pool over threshold) | `PathId` |
 | `PathThrottled` | `RebalanceDecision` (flow-fed, over alarm threshold) | `PathId` |
 | `LaborReassignmentFlagged` | `RebalanceDecision` (release-fed, saturated with backlog remaining) | `PathId` |
+| **`PathCapacityChanged`** | `SampleBacklog` (only when `cutoffAt` is supplied) | `PathId`, `CutoffAt`, `RemainingUnits`, `Known` |
 
-`WorkReleased` is the only event any sibling service consumes today —
-`fulfillment-execution` turns it into a `Task`. The rest are published for
-observability and future subscribers.
+Two of these events are consumed by sibling services today:
+`WorkReleased` — `fulfillment-execution` turns it into a `Task` — and
+`PathCapacityChanged` — `order-management` caches remaining capacity per
+(path, cutoff). The rest are published for observability and future
+subscribers.
+
+`RemainingCapacity()` is a pure read over existing pool state, not new
+stored state: `max(0, wipLimit − WIP())` with `known=true` on a
+release-fed pool with `wipLimit > 0`; `known=false` (and `0`) on a flow-fed
+pool or an unprovisioned release-fed pool, because an alarm threshold is
+not an admission ceiling
+([ADR-0018](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md)).
 
 ## Throughput
 
@@ -153,6 +163,12 @@ its own right, because it sits directly on the admission path:
   Using the primary-key violation *as* the check — rather than
   read-then-write — removes the race between two consumers processing the
   same redelivery concurrently.
+- **Publishing cannot diverge from the saved pool.** With Kafka and
+  Postgres both configured, the events a use case raises are written to
+  `outbox_events` in the same transaction as the `WorkPool`/`WorkUnit`
+  change and relayed afterwards
+  ([ADR-0014](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0014-transactional-outbox.md)),
+  so a released unit is never missing its `WorkReleased` or vice versa.
 - **The Release Throughput & Backlog Health analytical report** (per
   path × hour: `workReleased`, `workUnitCompleted`,
   `backlogThresholdBreached`, `pathThrottled`, `rateDeviationDetected`) is

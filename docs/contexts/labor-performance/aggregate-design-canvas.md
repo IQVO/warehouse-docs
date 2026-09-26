@@ -8,13 +8,15 @@ description: The full ddd-crew Aggregate Design Canvas for TaskPerformance, labo
 # Aggregate Design Canvas
 
 Following the [ddd-crew Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas)
-template. This context owns two aggregates — `LaborStandard` and
-`TaskPerformance` — but `TaskPerformance` is the primary aggregate: it is
+template. This context owns three aggregates — `LaborStandard`,
+`TaskPerformance` and, since ADR 0014, `IdlePeriod` — but
+`TaskPerformance` is the primary aggregate: it is
 the one the context's whole job (scoring a completed task) exists to
 produce, and it is the one exercised on every consumed Kafka message.
 `LaborStandard`'s design is folded into the notes below where its
 append-only-history behavior directly shapes `TaskPerformance`'s own
-invariants.
+invariants, and `IdlePeriod` — derived in the same unit of work — is
+summarised at the end of this page.
 
 ## Name
 
@@ -80,7 +82,10 @@ with `TaskPerformance` being "immutable once recorded."
   prior record's effective range rather than overwriting it in place, so
   already-recorded `TaskPerformance` rows' frozen values stay historically
   accurate after a later revision. Exactly ONE active standard per
-  `TaskType` at any instant.
+  `TaskType` at any instant. An optional, caller-supplied
+  `TravelComponentSeconds` must satisfy `0 <= t <= ExpectedSeconds` and is
+  never computed or validated against a live lookup
+  ([ADR 0015](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0015-optional-travel-component-on-labor-standard.md)).
 
 ## Corrective Policies
 
@@ -90,8 +95,8 @@ with `TaskPerformance` being "immutable once recorded."
   is the expected steady state, not an exception.
 - **Missing or stale wire fields → degrade gracefully, never block.** An
   older `TaskCompleted` payload that predates the `associate_id`/
-  `duration_seconds` enrichment (or the still-missing `task_type` field)
-  unmarshals those fields to their Go zero values (`""`/`0`) rather than
+  `duration_seconds`/`task_type` enrichments (or carries a `task_type`
+  this context does not model, e.g. `REBIN`) unmarshals those fields to their Go zero values (`""`/`0`) rather than
   failing — the resulting `TaskPerformance` is still recorded, with the
   corresponding invariant (nil `EfficiencyPct`, unclassified `TaskType`,
   or empty `AssociateId`) doing the honest work of representing the gap.
@@ -105,13 +110,14 @@ with `TaskPerformance` being "immutable once recorded."
 
 | Command | Effect |
 | --- | --- |
-| `RecordTaskPerformance(taskId, associateId, taskType, actualSeconds, completedAt, kafkaEventId)` | The Kafka-consumer-driven use case — called from the inbound Kafka adapter, never from HTTP. Idempotent on `kafkaEventId`. Resolves the `LaborStandard` active as of `completedAt` to freeze `StandardSecondsAtCompletion` and compute `EfficiencyPct`. Produces one `TaskPerformance` row. |
+| `RecordTaskPerformance(taskId, associateId, taskType, actualSeconds, completedAt, kafkaEventId)` | The Kafka-consumer-driven use case — called from the inbound Kafka adapter, never from HTTP. Idempotent on `kafkaEventId`. Resolves the `LaborStandard` active as of `completedAt` to freeze `StandardSecondsAtCompletion` and compute `EfficiencyPct`. Produces one `TaskPerformance` row, and (ADR 0014) derives and saves the associate's `IdlePeriod` in the same unit of work. |
 | `GetAssociateScorecard(associateId)` | Read-only. Projects the associate's `TaskPerformance` rows into a `Scorecard` (task count, mean efficiency, per-`TaskType` breakdown, `Trend`, `CoachingFlag`). 404 if zero rows exist for the associate. |
 | `GetTaskTypePerformance(taskType)` | Read-only. Projects ALL associates' `TaskPerformance` rows for one `TaskType` into a fleet-wide view (task count, mean efficiency, `MeanActualSeconds`). |
+| `GetUtilization.ForTaskType` / `.ForAssociate(subject, window)` | Read-only (ADR 0014). Task time plus idle time over a trailing window (default 1h); `ForAssociate` adds the read-time open gap. |
 
 *(Handled by the sibling `LaborStandard` aggregate, included for
 completeness since `RecordTaskPerformance` depends on it):*
-`DefineStandard(taskType, expectedSeconds)` and
+`DefineStandard(taskType, expectedSeconds, travelComponentSeconds?)` and
 `GetStandard(taskType)`.
 
 ## Created Events
@@ -148,3 +154,17 @@ Small and flat by design. A `TaskPerformance` row carries `TaskId`,
 deliberately denormalized: `StandardSecondsAtCompletion` duplicates data
 that, at insert time, also exists in `labor_standards` — an accepted
 tradeoff for correctness under time-travel/replay, not an oversight.
+
+## Third aggregate — IdlePeriod (ADR 0014)
+
+One associate's between-task wait, derived when a `TaskCompleted`
+arrives: from the associate's previous completion to this task's claim
+instant (`CompletedAt − ActualSeconds`). It rejects an empty `AssociateId`
+and a non-positive gap — both routine on an unordered stream, so the use
+case skips them rather than failing the enclosing
+`RecordTaskPerformance` — and caps a gap at `IDLE_GAP_CAP_SECONDS`
+(default 3600, stored with `Capped: true`). A still-running **open gap**
+is computed at read time only and never persisted. The recorded gap is
+published additively as `idle_seconds_before` on
+`TaskPerformanceRecorded`. See
+[ADR 0014](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0014-labor-utilization-idleness.md).

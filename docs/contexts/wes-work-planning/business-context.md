@@ -219,7 +219,26 @@ decision, not an omission.
 - **It does not talk to equipment.** No PLC, no conveyor, no robot.
   Releasing work is an *admission decision*, made in units of work, not
   actuator commands.
+- **It does not own geography or the list of paths.** Physical location
+  and travel distance belong to `facility-layout` (read once, optionally,
+  at shift-plan commit —
+  [ADR-0017](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0017-travel-distance-lookup-on-commit-shift-plan.md));
+  which process paths exist belongs to `process-path-management`
+  ([ADR-0012](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0012-process-path-catalogue-validation.md)).
+  This context conforms to both rather than modelling either.
+
+## Closing the promise loop
+
+Order intake needs to know whether a path can still absorb work before a
+given truck. This context already knows that for release-fed paths — it is
+the WIP limit minus current WIP — so it **publishes** it as
+`PathCapacityChanged`, correlated by CPT cutoff timestamp, for
+`order-management` to cache
+([ADR-0018](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md)).
+It reports `known=false` for flow-fed paths rather than dress an alarm
+threshold up as a ceiling, and — like flow balancing — it publishes only
+when a caller asks (`GET /paths/{pathId}/telemetry?cutoffAt=…`).
 
 See [Ubiquitous Language](./ubiquitous-language) for the exact vocabulary
-and the traps that come with sitting at the intersection of three other
+and the traps that come with sitting at the intersection of several other
 contexts.

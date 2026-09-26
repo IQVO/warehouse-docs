@@ -2,7 +2,7 @@
 
 Fleet-wide documentation for the **warehouse-systems** ecosystem: strategic
 and tactical Domain-Driven Design artifacts, generated REST and AsyncAPI
-references, and business context for all nine backend bounded contexts.
+references, and business context for all ten backend bounded contexts.
 Built with [Docusaurus](https://docusaurus.io/), published to GitHub Pages.
 
 Live site: https://claudioed.github.io/warehouse-docs/
@@ -22,10 +22,13 @@ never copies).
 - Single Docusaurus site, no develop/main split — this repo builds and
   deploys straight off `main` on every push (unlike the fleet's GitFlow
   service repos).
-- **Scope**: the platform's nine backend bounded contexts —
+- **Scope**: the platform's ten backend bounded contexts —
   `order-management`, `inventory-storage`, `wes-work-planning`,
   `fulfillment-execution`, `workforce-management`, `facility-layout`,
-  `process-path-management`, `labor-performance`, `warehouse-ops-agent`.
+  `process-path-management`, `labor-performance`, `warehouse-ops-agent`,
+  `network-fulfillment` (the anti-corruption layer to an external retail
+  fulfillment network; REST only, no asyncapi.yaml, and its own ADRs live
+  under `docs/adr/`, not `docs/docs/adr/`).
   The frontend repos (`warehouse-console`, `warehouse-ui-kit`) and
   `warehouse-infra` are referenced where relevant but are not bounded
   contexts in the Evans/Vernon sense — out of scope for DDD artifacts here.
@@ -47,9 +50,11 @@ docs/
                                 context, ubiquitous language, Bounded
                                 Context Canvas, Aggregate Design Canvas,
                                 domain events, async-API narrative
-  api-reference/                GENERATED at build time — REST (docusaurus-
-                                plugin-openapi-docs) + AsyncAPI (asyncapi-gen);
-                                not committed, regenerated on every build
+  api-reference/                GENERATED — REST (docusaurus-plugin-openapi-docs)
+                                + AsyncAPI (asyncapi-gen). The REST .mdx files
+                                and per-context sidebar.ts ARE committed, and
+                                `npm run build` regenerates them first; commit
+                                the regenerated output after syncing specs
   adr/                          index linking to each context's OWN ADR
                                 trail (never copied — never drifts)
 apis/<context>/
@@ -76,7 +81,7 @@ the source of truth. Refresh them from each context repo's own `develop`
 cd ..   # warehouse-systems/ (siblings checked out)
 for repo in order-management inventory-storage wes-work-planning \
             fulfillment-execution workforce-management facility-layout \
-            process-path-management labor-performance; do
+            process-path-management labor-performance network-fulfillment; do
   git -C "$repo" show origin/develop:apis/openapi.yaml \
     > "warehouse-docs/apis/$repo/openapi.yaml" 2>/dev/null
   git -C "$repo" show origin/develop:apis/asyncapi.yaml \

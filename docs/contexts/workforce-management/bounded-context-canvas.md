@@ -84,32 +84,58 @@ codebase.
 | `process-path-management` | Kafka, topic `warehouse.process-path-management.events`, events `ProcessPathCreated`/`Updated`/`Deactivated` | Open Host Service + Published Language, Conformist downstream — this context replays the topic from `FirstOffset` into a local `kafkacatalog` read model, replacing a boot-time static-YAML load. **Live**, verified with no restart on both a new path definition and a deactivation. See `process-path-management` ADR 0002 and this repo's own ADR 0013. |
 | `labor-performance` | Kafka, topic `warehouse.labor-performance.events`, event `TaskPerformanceRecorded` | Customer/Supplier — this context is a **Conformist** downstream, consuming `labor-performance`'s Published Language into a local, event-fed running-mean cache. **Live** (ADR 0019), the SAME architectural pattern this context's own `kafkacatalog` package already applies to `process-path-management`'s events above: per-process-unique consumer group, `FirstOffset` replay, `Ready()`/`WaitReady()` readiness gate. Since labor-performance ADR 0014 added an additive, nullable `idle_seconds_before` to the SAME message, this context's `laborperformancecache.Consumer` (own ADR 0020) also tracks a running idle share per `TaskType` off the identical stream — no new topic, no new consumer group. `GetStaffingGap` surfaces it as `observedIdlePct`, and `ProposePathPlan` trims proposed heads when it is high (see Business Decisions below). |
 
-Every other one of this context's ten REST/MCP use cases is invoked directly
-by a human operator (via `workforce-mfe` or a REST client) or an AI agent
-(via the MCP inbound adapter, ADR-0008) — never by another bounded
-context's outbound event or API call, with the one exception above.
+Both consumers above are **opt-in** (`PATH_CATALOGUE_SOURCE=kafka`,
+`LABOR_PERFORMANCE_MODE=kafka-cache`; the defaults are a file and
+`permissive`), rebuild an in-memory cache only, and write nothing to
+Postgres. The `warehouse-infra` kind cluster turns both on.
+
+The one inbound *caller* from another bounded context is read-only:
+`warehouse-ops-agent` calls this context's MCP tools `get_staffing_gap` and
+`propose_path_heads` (ADR-0008) and reads the labor report
+(`GET /reports/labor` on `cmd/workforce-reports`, ADR-0010). The MCP server
+also exposes a write tool, `assign_labor`, annotated destructive; no sibling
+calls it. Every command — the ten REST operations in `apis/openapi.yaml` —
+is otherwise invoked by a human operator (via `workforce-mfe` or a REST
+client). No sibling invokes a command here. REST and MCP are
+**unauthenticated** by deliberate decision: the static-bearer-key layer of
+ADR-0017 was removed by
+[ADR 0018](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0018-remove-fleet-rest-identity.md).
+
 `installedStations` — a fact `wes-work-planning` also holds — still
 arrives **in the `CommitShiftPlan` request payload** from the caller
-rather than being fetched from Work Planning, precisely so `CommitShiftPlan`
-itself takes no synchronous dependency on any sibling. This is a
-deliberate architectural property (see Business Decisions and Assumptions
-below), not an integration gap waiting to be filled — and it is
-unaffected by the new `labor-performance` consumer above, which only
-feeds `ProposePathPlan`'s optional measured-rate enrichment, a separate
-use case.
+rather than being fetched from Work Planning, so this context takes no
+dependency on Work Planning. `CommitShiftPlan` is no longer free of
+synchronous dependencies, though: since
+[ADR 0014](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0014-installed-capacity-ceiling.md)
+it also reads `fulfillment-execution`'s live installed capacity — see
+Outbound Communication below.
 
 ## Outbound Communication
 
 | Collaborator | Message / Contract | Pattern |
 | --- | --- | --- |
 | `wes-work-planning` | `ShiftPlanCommitted` on topic `warehouse.workforce.events` (Kafka, asynchronous, one message per `PathPlan` line) | Open-Host Service + Published Language — this context is the supplier, one-way, publish-and-forget |
-| `warehouse-ops-agent` | Read-only, via this context's REST staffing-gap read model (`GET /paths/{pathId}/staffing-gap`, whose response now also carries `observedIdlePct *float64` — ADR 0020) and MCP resources (`staffing://{buildingId}/{shiftId}/{pathId}/gap`) | Conformist (read-only fan-out) — never a write, never a synchronous dependency this service must honor |
+| own analytics projector (`cmd/workforce-projector`) | Every domain event on topic `warehouse.workforce.analytics` (ADR 0010) | Internal data product, not a sibling contract |
+| `fulfillment-execution` | Synchronous query `GET /capacity/{capability}` for every line of every `CommitShiftPlan` ([ADR 0014](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0014-installed-capacity-ceiling.md)) | Conformist on a **count** — fail-LOUD: any failure rejects the whole commit with `503 installed-capacity-unavailable`. `INSTALLED_CAPACITY_MODE=http` + `FULFILLMENT_EXECUTION_BASE_URL`; the `permissive` default fails every commit. The kind cluster sets `http`. |
+| `labor-performance` | Synchronous query `GET /task-types/{taskType}/performance` when `ProposePathPlan` gets no caller rate (ADR 0012) | Conformist, fail-open, **alternative** to the Kafka cache above — only when `LABOR_PERFORMANCE_MODE=http` (the kind cluster uses `kafka-cache` instead) |
 
-This service publishes and forgets: no consumer group of its own, no
-inbound adapter, no synchronous call to any sibling. Committing a shift plan
-cannot fail because a downstream consumer happens to be unavailable — a
-Supporting context must never become a runtime availability risk to a Core
-one.
+The `warehouse-ops-agent` reads described under Inbound Communication —
+MCP `get_staffing_gap` (whose REST twin, `GET /paths/{pathId}/staffing-gap`,
+now also carries `observedIdlePct` — ADR 0020), `propose_path_heads`, the
+`staffing://{buildingId}/{shiftId}/{pathId}/gap` MCP resource, and
+`GET /reports/labor` — are read-only fan-out: never a write, never a
+dependency this service must honor.
+
+Publishing is still publish-and-forget: events are written to an
+`outbox_events` table in the same Postgres transaction as the aggregate and
+relayed to Kafka by a goroutine in `cmd/workforce` (transactional outbox,
+[ADR 0016](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0016-transactional-outbox.md)),
+so a commit never fails because a downstream consumer is unavailable. The
+one exception to "no runtime dependency on a sibling" is the deliberate,
+fail-loud installed-capacity read above: a commit mutates real state, so
+this context would rather reject it than commit headcount it cannot verify
+against physical stations. Neither outbound query sends an `Authorization`
+header (ADR 0018).
 
 ## Ubiquitous Language
 
@@ -142,6 +168,13 @@ path boundary explicitly.
   independently of `wes-work-planning`.** Not duplication by accident — this
   is the aggregate that actually commits headcount, so it validates its own
   commitment rather than trusting an upstream check it does not control.
+- **A second, live ceiling: `plannedHeads(path) ≤ installedCapacity(path)`.**
+  Since [ADR 0014](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0014-installed-capacity-ceiling.md),
+  every line is also checked against the registered-station count
+  `fulfillment-execution` reports for the path's capability, fetched fresh
+  on every commit. Exceeding it is a `409 exceeds-installed-capacity`;
+  failing to fetch it rejects the whole commit with `503` — no fallback,
+  because a commit mutates real state.
 - **`PathUnderstaffed` is a flag, not a decision.** When active assignments
   fall below a path's committed `plannedHeads`, this context raises the
   flag and stops. It never picks a victim path, never ranks associates, and
@@ -170,9 +203,12 @@ path boundary explicitly.
 
 - `wes-work-planning` is the only party that needs to know committed labor
   per path, and needs it asynchronously, not synchronously.
-- The caller of `CommitShiftPlan` — a human, via the HTTP or MCP adapter —
+- The caller of `CommitShiftPlan` — a human, via the HTTP adapter —
   already knows each path's `installedStations` count and supplies it
-  correctly; this context does not verify it against any other system.
+  correctly; this context does not verify that number against any other
+  system. It does, separately, check each line against
+  `fulfillment-execution`'s live installed capacity (ADR 0014), which
+  bounds the damage of a wrong caller-supplied count.
 - A path's required certification always has the same name as the `PathId`.
   This convention is documented in three places (README, OpenAPI, this docs
   site) but is invisible in the type system — renaming a path with no
@@ -196,14 +232,15 @@ path boundary explicitly.
 | Acceptance specs over the real HTTP surface | `godog`/Gherkin BDD suite | `make check-all` (`bdd`) |
 | Architecture fitness (hexagonal layering) | `arch-go` fitness tests, blocking CI | ADR-0007 |
 | Vulnerability scanning | `govulncheck ./...`, blocking CI on `go.mod`/`go.sum` changes | `make vuln` |
-| Events published to Kafka vs. cataloged | 1 of 10 (`ShiftPlanCommitted` only) | `ddd/domain-events.md` |
+| Events published to the integration topic vs. cataloged | 1 of 10 (`ShiftPlanCommitted` only); all 10 also go to the internal `warehouse.workforce.analytics` topic | `ddd/domain-events.md`, ADR 0010 |
 
 ## Open Questions
 
-- **Is the deliberate non-integration with `fulfillment-execution` still
-  correct as the platform grows?** There is **no direct integration** — no
-  topic, no HTTP call, no shared table, in either direction — between this
-  context and `fulfillment-execution`. This is a stated, ADR-backed decision
+- **Is the deliberate task-level non-integration with `fulfillment-execution`
+  still correct as the platform grows?** No task, claim, associate identity
+  or assignment crosses between this context and `fulfillment-execution`, in
+  either direction, and there is no shared table. The only edge is the
+  installed-capacity read (a count, ADR 0014). This is a stated, ADR-backed decision
   ([ADR 0002](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0002-stop-at-the-path-boundary.md)),
   not a gap in the diagram: the two contexts change at cadences three orders
   of magnitude apart (shifts vs. seconds), are decided by different actors

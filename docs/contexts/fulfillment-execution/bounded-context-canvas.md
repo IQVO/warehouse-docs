@@ -27,7 +27,7 @@ to the completion fact flowing back to the context that released the work.
 | Dimension | Verdict | Justification |
 | --- | --- | --- |
 | **Domain** | Core | This platform builds and tunes its own execution layer — there is no vendor WES behind an anti-corruption layer here. The reference model is explicit: the WES tier is Core *if* operational efficiency is your differentiator, Supporting/Generic if you consume a vendor WES at arm's length. This platform chose to build `claimNext`, which is only justified under a Core classification. |
-| **Model maturity** | Established | Nineteen accepted ADRs, a documented ubiquitous language, invariant-level failing-path tests, and an executable architecture-fitness suite (`arch-go`) — the deepest decision trail of any context in this fleet. |
+| **Model maturity** | Established | Twenty-six ADRs (one superseded), a documented ubiquitous language, invariant-level failing-path tests, and an executable architecture-fitness suite (`arch-go`) — the deepest decision trail of any context in this fleet. |
 | **Business risk / criticality** | High | Every invariant here — at-most-once claiming, capability matching, lease expiry ordering, no double-complete, seal-requires-contents, SLAM weigh-check tolerance — has a real, expensive-to-unwind failure mode (a duplicate physical pick, a mis-shipped package) if it is wrong. |
 | **Team topology** | Stream-aligned, sole owner | One team owns `internal/domain/`, `internal/application/`, and both inbound/outbound adapters end to end. No shared aggregate with any other context. |
 
@@ -46,7 +46,7 @@ dispatch that drive throughput.
 | --- | --- |
 | **Execution engine** | Owns a real-time dispatch and claim mechanism (`claimNext`, lease-based at-most-once claiming) — not a passthrough, not a CRUD layer. |
 | **Anti-corruption gateway** | Translates `WorkReleased` at its inbound boundary into its own vocabulary (`task.Type`, `shared.OrderRef`, `shared.CPT`, `shared.CapabilitySet`) — no upstream struct crosses the line. |
-| **Feedback publisher** | Closes the drum-buffer-rope loop back to `wes-work-planning` via `TaskCompleted` — without this edge the conductor releases work into a void. |
+| **Feedback publisher** | Closes the drum-buffer-rope loop back to `wes-work-planning` via `TaskCompleted` — without this edge the conductor releases work into a void — and feeds `order-management`'s promise loop via `TaskCPTMissed` / `PackageManifested`. |
 
 ## Inbound Communication
 
@@ -54,18 +54,24 @@ dispatch that drive throughput.
 | --- | --- | --- |
 | `wes-work-planning` | `WorkReleased` (Kafka, `warehouse.work-planning.events`) | Translated via the Anti-Corruption Layer and passed to the existing `CreateTask` use case — a released unit becomes a `Task` in the pool. Idempotent on `event_id` via `ProcessedEvents.MarkProcessed`. |
 | `warehouse-ops-agent` | `GET /tasks?orderRef=` (HTTP, read-only) | A read-only fan-out query backing the fleet's cross-service Order Lifecycle console screen. Side-effect-free; this service is one of several the agent stitches together per order, and each stage degrades independently. |
+| `workforce-management` | `GET /capacity/{capability}` (HTTP, read-only) | Returns how many registered stations can serve a capability, so shift plans are bounded by physical station count ([ADR-0018](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0018-installed-capacity-read-endpoint.md)). An Open Host read of the `Station` pool — no shared type, no roster. |
+| `process-path-management` | `ProcessPathCreated` / `Updated` / `Deactivated` (Kafka, `warehouse.process-path-management.events`) — **only with `PATH_CATALOGUE_SOURCE=kafka`** (default `file` loads the same catalogue from YAML) | Replayed into the in-memory process-path catalogue the `WorkReleased` ACL resolves `path_id` against ([ADR-0017](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0017-process-path-catalogue-as-configuration.md)). |
+| Any REST / MCP caller | REST API and MCP tools (e.g. `find_claimable_work`, `get_queue_status`, `diagnose_stuck_tasks`, `complete_task`, `get_fulfillment_throughput_report`, `get_on_time_to_cpt`) | **Unauthenticated by deliberate decision** — the static-bearer layer was removed and ADR-0021 superseded ([ADR-0022](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0022-remove-rest-mcp-auth.md)). |
 
 ## Outbound Communication
 
 | To | Event / Call | Status |
 | --- | --- | --- |
 | `wes-work-planning` | `TaskCompleted` (Kafka, `warehouse.fulfillment.events`) | **Wired.** Enriched at the adapter with `work_unit_id` (via a `TaskRepo` lookup of `OrderRef()`) so Work Planning can call `RecordCompletion(workUnitId)` directly. |
-| `labor-performance` | `TaskCompleted` (Kafka, **same** `warehouse.fulfillment.events` fan-out topic) | **Wired**, as a second, independent Conformist consumer of the identical event — enriched additionally with `associate_id` and `duration_seconds`, resolved at publish time via `StationRepo` and `Task.ClaimedAt()`. |
+| `labor-performance` | `TaskCompleted` (Kafka, **same** `warehouse.fulfillment.events` fan-out topic) | **Wired**, as a second, independent Conformist consumer of the identical event — enriched additionally with `associate_id` and `duration_seconds`, resolved at publish time via `StationRepo` and `Task.ClaimedAt()`, plus `task_type` read off the task ([ADR-0023](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0023-task-type-on-wire.md)). |
+| `order-management` | `TaskCPTMissed`, `PackageManifested` (Kafka, **same** topic) | **Wired.** Its `RepromiseOrder` consumer closes the promise feedback loop. `TaskCPTMissed` is raised by `POST /tasks/sweep-cpt-misses` for every task still open at or past its CPT; `PackageManifested` alongside `LabelApplied` on a SLAM pass ([ADR-0025](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0025-cpt-missed-sweep-and-package-manifested.md)). |
+| `inventory-storage` | `GET /products/{sku}/classification` (HTTP, at seal time) | **Opt-in** (`PRODUCT_CLASSIFICATION_MODE=http`; default `permissive` skips the lookup). Supplies each scanned SKU's DOT hazard class for package segregation ([ADR-0010](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0010-package-segregation-and-sort-lane.md)). |
+| `facility-layout` | `GET /locations/{locationCode}` (HTTP, at `RegisterStation`) | **Opt-in** (`LOCATION_ROLE_MODE=http`; default `permissive` records a supplied `locationCode` unchecked). Rejects a station whose location resolves to a **known** non-WorkCenter role; fails open on everything else ([ADR-0024](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0024-station-location-code-and-workcenter-role-check.md)). |
 | WCS / equipment | Device commands (divert, label-print, weigh-check) | **Planned, not wired.** `ports.EquipmentCommandPort` exists as a structural, deliberately empty outbound port — no adapter, no callable methods — so the documented refusal to drive equipment directly is a compile-time seam, not only prose in `openapi.yaml` and the context map. |
 
 ## Ubiquitous Language
 
-See the dedicated [Ubiquitous Language](./ubiquitous-language) page for the
+See the dedicated [Ubiquitous Language](/contexts/fulfillment-execution/ubiquitous-language) page for the
 full glossary (Task, `claimNext`, Lease, Station, Fragile, Gift wrap, and
 the rest). The single most important entry on that page is the careful,
 deliberate distinction between **Fragile** (sourced from
@@ -98,8 +104,9 @@ packing-care hints that never gate claiming, and both are explicitly unlike
   looked up **live**, per scanned SKU, at seal time — not stamped on `Task`
   at release time — because a Pack task's actual contents are only known at
   the scan station.
-- **Domain events stay deliberately thin.** Every event carries only
-  aggregate identifiers. Integration-specific enrichment (`work_unit_id`,
+- **Domain events stay deliberately thin.** Almost every event carries only
+  aggregate identifiers (the ADR-0025 pair add just the `order_ref`,
+  `task_type` and `cpt` order-management needs). Integration-specific enrichment (`work_unit_id`,
   `associate_id`, `duration_seconds`) happens in the outbound Kafka adapter
   via repository lookups, never on the domain event itself — so a
   downstream consumer's correlation need never reshapes the domain model.
@@ -112,16 +119,23 @@ packing-care hints that never gate claiming, and both are explicitly unlike
 - `wes-work-planning` continues to be the sole producer of `WorkReleased`
   on `warehouse.work-planning.events`, and continues to encode `path_id`,
   `work_unit_id`, and `cpt` in the documented shapes.
-- The shared broker (`~/warehouse-systems/docker-compose.kafka.yml`) is
-  reachable at `KAFKA_BROKERS`; this repository's own `docker-compose.yml`
-  intentionally provisions only Postgres.
-- `labor-performance` reads `TaskCompleted` off the same
+- The shared platform broker (in the `warehouse-infra` kind cluster,
+  `localhost:9092` from the host) is reachable at `KAFKA_BROKERS`; this
+  repository's own `docker-compose.yml` intentionally provisions only
+  Postgres.
+- `labor-performance` and `order-management` read the same
   `warehouse.fulfillment.events` topic `wes-work-planning` already consumes
-  from, filtering by `event_type` — this service publishes once, to one
-  topic, for both consumers.
-- The current `path_id` prefix convention (`pick-*` → `PICK`, etc.,
-  defaulting to `PICK`) is an accepted, documented simplification for this
-  round of integration, not a durable contract.
+  from, each filtering by `event_type` — this service publishes once, to one
+  topic, for all three consumers.
+- Every `path_id` on `WorkReleased` resolves in the process-path catalogue
+  (longest `matchPrefix` wins); an unknown id is a hard error, not a silent
+  `PICK` ([ADR-0017](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0017-process-path-catalogue-as-configuration.md)).
+- Both outbound HTTP lookups default to `permissive` (no network call); the
+  deployed cluster sets the real modes.
+- With `EVENT_PUBLISHER=kafka` and a `DATABASE_URL`, published events are
+  written to an outbox table in the same transaction as the aggregate and
+  relayed to both the integration and analytics topics by an in-process
+  relay ([ADR-0020](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0020-transactional-outbox.md)).
 
 ## Verification Metrics
 
@@ -150,11 +164,14 @@ packing-care hints that never gate claiming, and both are explicitly unlike
   process is logged and dropped; because idempotency is marked *before*
   task creation, an event whose task creation fails is treated as
   already-processed on redelivery.
-- **The `path_id` prefix-guessing convention is a known simplification.**
-  It does not carry the task type in general and silently defaults
-  unrecognized values to `PICK` — called out explicitly rather than
-  papered over, pending a durable resolution (an explicit `task_type`
-  field or a process-path registry lookup).
+- **Nothing schedules the sweeps.** `POST /tasks/expire-leases` and
+  `POST /tasks/sweep-cpt-misses` are Clock-driven but externally
+  triggered; their cadence is whatever caller invokes them, and
+  `TaskCPTMissed` re-fires on every pass while a task stays overdue
+  ([ADR-0025](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0025-cpt-missed-sweep-and-package-manifested.md)).
+- **`POST /rebin/arrivals` is on the router but not in `apis/openapi.yaml`**,
+  so generated API docs and drift checks cannot see it — a spec gap still
+  to close.
 - **`AssociateId` on `TaskCompleted` can be stale.** It reflects whichever
   occupant is checked in *at publish time*, not necessarily whoever
   performed the task's entire duration — a worker could check out mid-task

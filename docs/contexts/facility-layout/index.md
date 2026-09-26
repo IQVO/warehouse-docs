@@ -60,8 +60,16 @@ facility-layout scaled to zero replicas. The original synchronous
 configured rollback path, and this context's own `facility-mfe` browser
 client (a Module Federation remote) plus its read-only MCP tools
 (consumed live by `warehouse-ops-agent`) round out the inbound surface.
-The WES-tier contexts deliberately do **not** consume facility events —
-no use case needs them yet; see the [Bounded Context
+`wes-work-planning` is a live **synchronous** consumer: it calls
+`GET /distance` for travel distance (`TRAVEL_DISTANCE_MODE=http`, enabled in
+the kind cluster). `fulfillment-execution` has an opt-in
+`GET /locations/{locationCode}` lookup for a slot's functional `role`
+(`LOCATION_ROLE_MODE=http`) that the cluster does not enable yet. Both are
+backed by the ADR-0016 location roles and ADR-0017 geometry/travel graph.
+Every consumer mode defaults to `permissive`. No WES-tier context
+consumes the facility *events* yet, and this context calls no other
+service. REST and MCP are unauthenticated by deliberate decision
+(ADR-0015). See the [Bounded Context
 Canvas](/contexts/facility-layout/bounded-context-canvas) for every edge's exact status.
 
 ## Read next
@@ -74,7 +82,7 @@ Canvas](/contexts/facility-layout/bounded-context-canvas) for every edge's exact
   canvas: purpose, classification, communication, decisions, open questions.
 - [Aggregate Design Canvas](/contexts/facility-layout/aggregate-design-canvas) — `LocationSlot`,
   the leaf aggregate, and its place in the Site → Zone → Aisle hierarchy.
-- [Domain events](/contexts/facility-layout/domain-events) — the eight past-tense facts this
+- [Domain events](/contexts/facility-layout/domain-events) — the twelve past-tense facts this
   context publishes to `warehouse.facility.events`, and who consumes them.
 - [Repository](https://github.com/claudioed/facility-layout) — source,
   ADRs, and the real `apis/openapi.yaml`.

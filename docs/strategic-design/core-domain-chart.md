@@ -2,7 +2,7 @@
 id: core-domain-chart
 title: Core Domain Chart
 sidebar_label: Core Domain Chart
-description: Plotting the nine bounded contexts by business differentiation vs. complexity, per ddd-crew's Core Domain Charts method.
+description: Plotting the ten bounded contexts by business differentiation vs. complexity, per ddd-crew's Core Domain Charts method.
 ---
 
 # Core Domain Chart
@@ -30,6 +30,7 @@ quadrantChart
     "labor-performance": [0.4, 0.35]
     "order-management": [0.35, 0.3]
     "warehouse-ops-agent": [0.3, 0.28]
+    "network-fulfillment": [0.45, 0.4]
     "facility-layout": [0.3, 0.15]
     "process-path-management": [0.2, 0.1]
 ```
@@ -44,7 +45,7 @@ quadrantChart
   path, and bin-accurate chaotic storage, are where a real fulfillment
   operation wins or loses.
 - **Quadrant 4 (Supporting)** — `workforce-management`, `labor-performance`,
-  `order-management`, and `warehouse-ops-agent` sit here: necessary,
+  `order-management`, `warehouse-ops-agent` and `network-fulfillment` sit here: necessary,
   non-trivial, but not what a competitor would copy first. Order intake and
   labor allocation are industry-common concerns done well, not novel ones.
 - **Lower-left (Generic)** — `facility-layout` and `process-path-management`

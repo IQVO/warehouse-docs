@@ -9,7 +9,7 @@ slug: /overview
 # warehouse-systems documentation
 
 This site is the single, fleet-wide reference for the **warehouse-systems**
-ecosystem — nine independently deployable, hexagonal-architecture Go services
+ecosystem — ten independently deployable, hexagonal-architecture Go services
 implementing a warehouse fulfillment platform, each owning its own bounded
 context, its own database, and its own REST/async API surface.
 
@@ -58,7 +58,7 @@ docs site (its ADRs, its detailed tactical design, its running-locally guide)
 
 ## Scope
 
-This site documents the **nine backend bounded contexts**. The two frontend
+This site documents the **ten backend bounded contexts** (the newest, `network-fulfillment`, is the anti-corruption layer to an external retail fulfillment network). The two frontend
 repositories (`warehouse-console`, `warehouse-ui-kit`) and the deployment
 repository (`warehouse-infra`) are referenced from context pages where
 relevant (e.g. Module Federation remotes, Kafka topology) but are not

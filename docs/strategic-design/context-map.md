@@ -2,13 +2,13 @@
 id: context-map
 title: Context Map
 sidebar_label: Context Map
-description: The nine bounded contexts, what is actually wired between them, and the ddd-crew strategic relationship pattern on every edge.
+description: The ten bounded contexts, what is actually wired between them, and the ddd-crew strategic relationship pattern on every edge.
 ---
 
 # Context Map
 
 Following [ddd-crew's context-mapping](https://github.com/ddd-crew/context-mapping)
-patterns, this page draws every real integration between the platform's nine
+patterns, this page draws every real integration between the platform's ten
 bounded contexts, labels each edge with its strategic relationship pattern
 (Open-Host Service, Published Language, Customer/Supplier, Conformist,
 Partnership), and — matching the honesty convention every context's own
@@ -46,8 +46,21 @@ flowchart TB
         OA["<b>warehouse-ops-agent</b><br/>console BFF · agentic daily brief"]
     end
 
-    OM ==>|"HTTP POST /reservations<br/>HTTP DELETE /reservations/{id}<br/>Customer/Supplier"| INV
-    OM ==>|"HTTP POST /paths/{id}/work-units<br/>Customer/Supplier"| WP
+    subgraph EDGE["External network edge"]
+        NF["<b>network-fulfillment</b><br/>Supporting · ACL to an external<br/>retail fulfillment network"]
+    end
+
+    NF ==>|"HTTP POST /orders (held) · POST /orders/{id}/release<br/>DELETE /orders/{id}<br/>Customer/Supplier"| OM
+    OM ==>|"HTTP POST /reservations<br/>HTTP DELETE /reservations/{id}<br/>GET /products/{sku}/classification<br/>Customer/Supplier"| INV
+    OM ==>|"warehouse.order-management.events<br/>OrderAllocated · OrderPartiallyAllocated<br/>OHS + Published Language"| WP
+    WP ==>|"warehouse.work-planning.events<br/>PathCapacityChanged<br/>OHS + Published Language"| OM
+    FE ==>|"warehouse.fulfillment.events<br/>TaskCPTMissed · PackageManifested<br/>OHS + Published Language"| OM
+    PPM ==>|"warehouse.process-path-management.events<br/>ProcessPath* · CPTScheduleChanged<br/>OHS + Published Language"| OM
+    WP ==>|"GET /products/{sku}/classification<br/>Customer/Supplier"| INV
+    FE ==>|"GET /products/{sku}/classification<br/>Customer/Supplier"| INV
+    WP ==>|"GET /distance<br/>Customer/Supplier"| FL
+    FE -.->|"GET /locations/{code}<br/>opt-in, not enabled in the cluster"| FL
+    WFM ==>|"GET /capacity/{capability}<br/>Customer/Supplier"| FE
     INV ==>|"warehouse.inventory.events<br/>StockReserved · ReservationRevoked<br/>OHS + Published Language"| WP
     WFM ==>|"warehouse.workforce.events<br/>ShiftPlanCommitted<br/>OHS + Published Language"| WP
     WP ==>|"warehouse.work-planning.events<br/>WorkReleased<br/>OHS + Published Language"| FE
@@ -66,7 +79,7 @@ flowchart TB
     OA -.-|"MCP: get_backlog_telemetry, get_rebalance_recommendation<br/>read-only, Conformist"| WP
     OA -.-|"MCP: get_queue_status, find_claimable_work, diagnose_stuck_tasks<br/>read-only, Conformist"| FE
     OA -.-|"MCP: get_staffing_gap, propose_path_heads<br/>read-only, Conformist"| WFM
-    OA -.-|"MCP: list_sites, get_site_layout, get_zone_grid<br/>read-only, Conformist"| FL
+    OA -.-|"MCP: list_sites, get_site_layout, get_zone_grid, estimate_travel_distance<br/>read-only, Conformist"| FL
     OA -.-|"MCP: get_order — wired, unconsumed"| OM
     OA -.-|"MCP: get_associate_scorecard/get_task_type_performance/get_labor_standard — wired, unconsumed; get_task_type_utilization — Live, E1 correlation"| LP
     OA -.-|"MCP: get_process_path/list_process_paths/get_catalogue_growth_report — wired, unconsumed"| PPM
@@ -78,8 +91,18 @@ flowchart TB
     class INV,WP,FE core;
     class WFM,LP,OM ops;
     class FL,PPM gen;
-    class OA ops;
+    class OA,NF ops;
 ```
+
+**Synchronous `*_MODE` edges are opt-in.** Every consumer binary defaults
+its sync-lookup mode to `permissive` (no network call) when the variable is
+unset; the edges above drawn bold are the ones the local kind cluster
+actually switches on (`warehouse-infra/terraform/locals.tf`,
+`sync_edge_env`). `fulfillment-execution`'s station location-role lookup
+against `facility-layout` (`LOCATION_ROLE_MODE`, its ADR 0024) exists in
+code but is not enabled in the cluster, so it is drawn dashed.
+`network-fulfillment` runs against a stub network only (`NETWORK_MODE`);
+no sandbox or live network gateway is built yet.
 
 **Bold edges are live** — a real publisher and a real consumer, verified
 against each context's own `CLAUDE.md` and adapter code, or a real HTTP
@@ -87,8 +110,9 @@ client calling a real endpoint. **Dashed edges labeled `GET`/`cross-service
 fan-out`** are `warehouse-ops-agent`'s read-only REST fan-out — live reads
 that never write into another context. **Dashed edges labeled `MCP:`** are
 a *different contract type*: `warehouse-ops-agent`'s outbound MCP
-tool-call surface, reaching all eight backend bounded contexts (the ninth,
-`warehouse-ops-agent` itself, is the Customer, not an Open Host Service).
+tool-call surface, reaching eight backend bounded contexts (`warehouse-ops-agent`
+itself is the Customer, not an Open Host Service, and `network-fulfillment`
+has no MCP server).
 Six of those eight (`inventory-storage`, `wes-work-planning`,
 `fulfillment-execution`, `workforce-management`, `facility-layout`, and now
 `labor-performance`) are **live and actually called** by the E1/E2/E3 use
@@ -120,8 +144,16 @@ altogether.
 
 | Edge | Pattern | Direction |
 | --- | --- | --- |
-| `order-management` → `inventory-storage` | Customer/Supplier | OM is Customer; inventory-storage is Supplier/OHS |
-| `order-management` → `wes-work-planning` | Customer/Supplier | OM is Customer; wes-work-planning is Supplier/OHS |
+| `network-fulfillment` → `order-management` | Customer/Supplier | network-fulfillment is Customer (and Conformist to the external network upstream, Anti-Corruption Layer for everything downstream); order-management is Supplier. It places network-originated demand as a **held** order and later releases or cancels it (order-management ADR 0020, network-fulfillment ADR 0001). No Kafka on this edge yet |
+| `order-management` → `inventory-storage` | Customer/Supplier | OM is Customer; inventory-storage is Supplier/OHS (reservations, plus the opt-in product-classification lookup) |
+| `order-management` → `wes-work-planning` | Open-Host Service + Published Language | Since order-management ADR 0005, release is choreographed: OM publishes `OrderAllocated`/`OrderPartiallyAllocated`, wes-work-planning consumes them. There is no longer a synchronous HTTP call on this edge |
+| `wes-work-planning` → `order-management` | Open-Host Service + Published Language | `PathCapacityChanged` feeds OM's capability-derived promise (order-management ADR 0015) |
+| `fulfillment-execution` → `order-management` | Open-Host Service + Published Language | `TaskCPTMissed` / `PackageManifested` drive OM's repromise consumer (order-management ADR 0018) |
+| `process-path-management` → `order-management` | Open-Host Service + Published Language | Path catalogue (cycle time, eligibility) and `CPTScheduleChanged` feed OM's path selection and promise (order-management ADR 0013/0014/0016) |
+| `wes-work-planning`, `fulfillment-execution` → `inventory-storage` | Customer/Supplier | Opt-in `GET /products/{sku}/classification` (`PRODUCT_CLASSIFICATION_MODE`), enabled in the cluster |
+| `wes-work-planning` → `facility-layout` | Customer/Supplier | `GET /distance` travel-distance hint at shift-plan commit (`TRAVEL_DISTANCE_MODE`, wes-work-planning ADR 0017), enabled in the cluster |
+| `fulfillment-execution` → `facility-layout` | Customer/Supplier | `GET /locations/{code}` station role lookup (`LOCATION_ROLE_MODE`, fulfillment-execution ADR 0024) — in code, **not** enabled in the cluster |
+| `workforce-management` → `fulfillment-execution` | Customer/Supplier | `GET /capacity/{capability}` installed-capacity ceiling on shift plans (`INSTALLED_CAPACITY_MODE`, workforce-management ADR 0014), enabled in the cluster |
 | `inventory-storage` → `wes-work-planning` | Open-Host Service + Published Language | inventory-storage is upstream OHS; wes-work-planning is downstream Conformist to the event shape |
 | `workforce-management` → `wes-work-planning` | Open-Host Service + Published Language | workforce-management is upstream OHS; wes-work-planning is downstream Conformist |
 | `wes-work-planning` → `fulfillment-execution` | Open-Host Service + Published Language | wes-work-planning is upstream OHS (`WorkReleased`) |
@@ -129,16 +161,17 @@ altogether.
 | `fulfillment-execution` → `labor-performance` | Customer/Supplier, Conformist | labor-performance is a pure Conformist downstream reader of the same `TaskCompleted` event, zero write access |
 | `labor-performance` → `workforce-management` | Open-Host Service + Published Language, Conformist downstream | **Live.** workforce-management maintains a local, in-memory running-mean cache of `TaskPerformanceRecorded` fed by labor-performance's `warehouse.labor-performance.events` topic, replacing `ProposePathPlan`'s per-request synchronous `GET /task-types/{taskType}/performance` call. Same event-fed-cache-replacing-sync-call pattern as the two edges above, mirroring workforce-management's own existing `kafkacatalog` consumer of process-path-management's events byte-for-byte (per-process-unique consumer group, `FirstOffset` replay, `Ready()`/`WaitReady()` gate). The old sync HTTP client is retained as the configured rollback (`LABOR_PERFORMANCE_MODE=http`; a third mode, `permissive`, also still exists as a no-op fail-open default). Selected via `LABOR_PERFORMANCE_MODE=kafka-cache`. **This is one event-fed cache now carrying two derived signals, not two integrations:** since labor-performance ADR 0014 added an additive, nullable `idle_seconds_before` to the same `TaskPerformanceRecorded` message, the SAME `laborperformancecache.Consumer` instance also keeps a running idle-share total per `TaskType` (sum+count, mirroring its existing running-mean strategy byte-for-byte) alongside the pre-existing measured-rate mean — no new topic, no new consumer group, no new Kafka read. `GetStaffingGap` surfaces the result as `observedIdlePct` (nil when unwired or unobserved), and `ProposePathPlan` trims its proposed heads (floored at 1) when the observed idle share exceeds `IDLE_SHARE_TRIM_THRESHOLD` (default 0.30), returning an auditable `trimReason`; it fails open (no trim) whenever idle data is unavailable. See labor-performance ADR 0013 / ADR 0014, workforce-management ADR 0019 / ADR 0020 |
 | `facility-layout` → `inventory-storage` | Open-Host Service + Published Language, Conformist downstream | **Live.** inventory-storage maintains a local read model of location classifications fed by `warehouse.facility.events`, replacing the per-stow synchronous call. Verified with facility-layout scaled to **zero replicas**: stows are still classified correctly from the cache. The old sync `GET /locations/{code}/classification` is retained as the configured rollback (`LOCATION_LOOKUP_MODE=http`), not deleted. See inventory-storage ADR 0013 / facility-layout ADR 0013 |
-| `facility-layout` → WES tier | Open-Host Service (no consumer yet) | facility-layout is the OHS for physical-location facts. Its only wired consumer today is `inventory-storage` (above); no WES-tier context consumes it, because none has a use case for it yet — a deliberate non-integration, not an oversight |
-| `process-path-management` → WES tier | Open-Host Service + Published Language, Conformist downstreams | **Live.** `fulfillment-execution`, `wes-work-planning` and `workforce-management` each replay `ProcessPathCreated/Updated/Deactivated` into a local catalogue cache and gate readiness on that replay. The predecessor static YAML (`warehouse-infra/config/process-paths/sortable-fc.yaml`) is frozen and SUPERSEDED, kept only as the rollback target. Verified live: a newly-defined path reached all three running consumers with **no restart**, and a deactivation propagated the same way. See process-path-management ADR 0002 |
+| `facility-layout` → WES tier | Open-Host Service (REST only) | The WES tier reads facility-layout synchronously, not from its topic: `wes-work-planning` calls `GET /distance`, and `fulfillment-execution` has an opt-in `GET /locations/{code}` lookup (see rows above). No WES-tier context consumes `warehouse.facility.events` |
+| `process-path-management` → WES tier and `order-management` | Open-Host Service + Published Language, Conformist downstreams | **Live.** `fulfillment-execution`, `wes-work-planning`, `workforce-management` and `order-management` each replay `ProcessPathCreated/Updated/Deactivated` into a local catalogue cache and gate readiness on that replay. The predecessor static YAML (`warehouse-infra/config/process-paths/sortable-fc.yaml`) is frozen and SUPERSEDED, kept only as the rollback target. Verified live: a newly-defined path reached the three original running consumers with **no restart**, and a deactivation propagated the same way. See process-path-management ADR 0002 |
 | `warehouse-ops-agent` → `order-management`, `inventory-storage`, `wes-work-planning`, `fulfillment-execution` | Conformist (read-only fan-out) | The console BFF stitches one order's cross-service lifecycle; each stage degrades independently, never a write |
 
 ## MCP surface: warehouse-ops-agent's outbound tool-call edges
 
-`warehouse-ops-agent` is a Customer of all **eight** other backend bounded
-contexts' published MCP Open Host Services — it is the ninth backend
-context in the fleet's MCP count, and the only Customer, not an Open Host
-Service, on this surface. This is a separate contract type from the REST
+`warehouse-ops-agent` is a Customer of eight other backend bounded
+contexts' published MCP Open Host Services, and the only Customer, not an
+Open Host Service, on this surface (`network-fulfillment`, the tenth
+context, exposes no MCP server). MCP calls carry no credentials: the
+fleet's REST and MCP auth layer was removed (warehouse-ops-agent ADR 0006). This is a separate contract type from the REST
 fan-out table above (MCP tool calls, not `GET` requests) and from the
 Kafka edges on the diagram (synchronous request/response, not
 publish/consume), so it gets its own table rather than blurring into
@@ -150,7 +183,7 @@ either:
 | `wes-work-planning` | `get_backlog_telemetry`, `get_rebalance_recommendation` | **Yes** — E1/E3 correlation |
 | `fulfillment-execution` | `get_queue_status`, `find_claimable_work`, `diagnose_stuck_tasks` | **Yes** — E1/E3 correlation |
 | `workforce-management` | `get_staffing_gap`, `propose_path_heads` | **Yes** — E1/E3 correlation |
-| `facility-layout` | `list_sites`, `get_site_layout`, `get_zone_grid` | **Yes** — E3 daily-brief grouping |
+| `facility-layout` | `list_sites`, `get_site_layout`, `get_zone_grid`, `estimate_travel_distance` | **Yes** — E3 daily-brief grouping; `estimate_travel_distance` backs `explain-travel-factor` (ADR 0009) |
 | `order-management` | `get_order` | **No.** Client wired in the composition root (`internal/adapters/outbound/mcpclient/order_management.go`), full unit test coverage, but not called by `DailyBrief`, `FlowBalanceAdvisory`, or any other use case |
 | `labor-performance` | `get_associate_scorecard`, `get_task_type_performance`, `get_labor_standard`, `get_task_type_utilization` | **Yes** — `get_task_type_utilization` is consumed by E1's `FlowBalanceAdvisory` since ADR 0008. The other three tools remain wired but unconsumed by any use case today |
 | `process-path-management` | `get_process_path`, `list_process_paths`, `get_catalogue_growth_report` | **No.** Same wired-but-unconsumed state as above |
@@ -212,18 +245,26 @@ an omission. They are recorded because each one has been mistaken for a gap
 at least once:
 
 - **`inventory-storage` does not consume process-path events.** The
-  process-path catalogue is consumed by exactly three contexts —
-  `fulfillment-execution`, `wes-work-planning`, `workforce-management`.
-  inventory-storage has no notion of a process path and needs none.
+  process-path catalogue is consumed by exactly four contexts —
+  `fulfillment-execution`, `wes-work-planning`, `workforce-management`,
+  `order-management`. inventory-storage has no notion of a process path
+  and needs none.
 - **No WES-tier context consumes `warehouse.facility.events`.**
-  `facility-layout` is an Open-Host Service and its full Published Language
-  is available, but `wes-work-planning` and `fulfillment-execution` have no
-  use case for physical-location facts today. The topic is published for
-  whoever needs it, not because someone already does.
-- **Nothing calls back into `process-path-management`.** It is the *source*
-  of the process-path language and never a consumer of anyone else's;
-  propagation is exclusively one-way over Kafka, never a synchronous
-  callback.
+  `facility-layout`'s full Published Language is available on the topic,
+  but the WES tier only needs point lookups (travel distance, a station's
+  location role), which it makes over REST. The topic's only consumer is
+  `inventory-storage`.
+- **Nothing calls back into `process-path-management`**, and it calls
+  nobody. It is the *source* of the process-path language and never a
+  consumer of anyone else's; its build fails if an outbound HTTP client to
+  a sibling is ever added (`TestNoSiblingContextOutboundCalls`).
+- **`labor-performance` makes no outbound REST or MCP call to any
+  sibling.** It only consumes `warehouse.fulfillment.events` and publishes
+  its own topic.
+- **`network-fulfillment` publishes no events yet.** It talks to the fleet
+  only through `order-management`'s REST API; its use cases emit domain
+  events through a publisher port that is wired to a log-only publisher, so
+  nothing reaches Kafka.
 
 ## Transactional outbox: fleet-wide rollout, one repo still open
 

@@ -1,7 +1,7 @@
 ---
 title: Domain Events
 sidebar_label: Domain Events
-description: The eleven past-tense domain events inventory-storage raises, which aggregate raises each, when each is published, and who consumes it.
+description: The eleven past-tense domain events inventory-storage raises, which aggregate raises each, when each is published, and who consumes it (two cross the boundary on Kafka).
 ---
 
 # Domain Events
@@ -17,11 +17,14 @@ buffered, Postgres table, Kafka) is a composition-root decision.
 `StockReserved` and `ReservationRevoked`, published to Kafka topic
 `warehouse.inventory.events`. The rest are raised in-process and delivered to
 whichever `ports.EventPublisher` is configured (the log publisher by
-default); the Kafka adapter's `switch` has a `default: return nil` branch
-that silently drops everything else. That is deliberate, not an
-oversight — the other nine are local concerns, and `apis/asyncapi.yaml`
-documents the full catalog while marking each catalog-only message as such,
-so a downstream team cannot mistake a documented event for a wired one.
+default, or the Postgres `events` table when `DATABASE_URL` is set — a
+table with no relay to a broker); the Kafka adapter's `switch` has a
+`default: return nil` branch that silently drops everything else. That is
+deliberate, not an oversight — the other nine are local concerns.
+`apis/asyncapi.yaml` documents ten of the eleven as messages (every event
+except `ProductClassified`, which is not in the AsyncAPI catalog at all)
+and marks each catalog-only message as such, so a downstream team cannot
+mistake a documented event for a wired one.
 
 ## The catalog
 
@@ -37,10 +40,11 @@ so a downstream team cannot mistake a documented event for a wired one.
 | `ItemUnlocated` | `StockUnit` | A cycle-count shortfall cannot account for stock | In-process only — no external consumer |
 | `CycleCountCompleted` | `Bin` | Any cycle count finishes, clean or not | In-process only — no external consumer |
 | `DiscrepancyDetected` | `Bin` | A cycle count finds counted ≠ system | In-process only — no external consumer |
-| `ProductClassified` | `ProductClassification` | `ClassifyProduct` registers or replaces a SKU's classification | In-process only — no external consumer |
+| `ProductClassified` | `ProductClassification` | `ClassifyProduct` registers or replaces a SKU's classification | In-process only — no external consumer; not an AsyncAPI message. Siblings read classification over REST (`GET /products/{sku}/classification`) instead. |
 
-*"In-process only" events, and `StockReserved`/`ReservationRevoked`, are also
-fanned out on the separate `warehouse.inventory.analytics` topic (see
+*Nine of the eleven — every event except `LocationRecorded` and
+`ProductClassified` — are also fanned out (when `EVENT_PUBLISHER=kafka`) on
+the separate `warehouse.inventory.analytics` topic (see
 [ADR-0011](https://github.com/claudioed/inventory-storage/blob/develop/docs/docs/adr/0011-analytical-data-product.md)),
 consumed exclusively by this service's own `cmd/inventory-projector` — an
 internal data-mesh detail, not a cross-context integration, and distinct from
@@ -122,8 +126,8 @@ here rather than papered over.
 **In-process:** bare past-tense names — `"StockReserved"`, `"ItemStowed"` —
 the domain's own vocabulary, carrying no transport or platform naming.
 
-**On the wire:** reverse-DNS CloudEvents `type`, identical across all five
-services:
+**On the wire (target):** reverse-DNS CloudEvents `type`, the platform-wide
+convention:
 
 ```text
 com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>
@@ -142,7 +146,7 @@ Across the boundary, `wes-work-planning` projects `StockReserved` /
 by SKU. Same discipline, two scopes — read models (usable-by-SKU, bin
 occupancy) are always projections, never separately-maintained aggregates.
 
-See [Async API — Narrative](./async-api) for the wire-level envelope detail,
+See [Async API — Narrative](/contexts/inventory-storage/async-api) for the wire-level envelope detail,
 and the generated reference at
 [`/api-reference/async/inventory-storage`](/api-reference/async/inventory-storage)
 for the complete, linted AsyncAPI document.

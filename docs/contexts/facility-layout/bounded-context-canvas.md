@@ -20,9 +20,15 @@ read model of location classifications fed by this topic
 (`LOCATION_LOOKUP_MODE=kafka`, inventory-storage ADR-0013), replacing its
 per-stow synchronous classification call. Verified in the running cluster
 with facility-layout scaled to **zero replicas** — stows were still
-classified correctly from the cache. The WES-tier edges below remain
-*deliberate non-integrations*: available Published Language with no
-consumer, because no use case needs it yet.
+classified correctly from the cache. `wes-work-planning` is now a live
+**synchronous** Conformist too: it calls `GET /distance`
+(`TRAVEL_DISTANCE_MODE=http`, enabled in the kind cluster).
+`fulfillment-execution` has an opt-in `GET /locations/{locationCode}` role
+lookup (`LOCATION_ROLE_MODE=http`) that the kind cluster does **not** enable
+yet. Every consumer's mode defaults to `permissive` (no network). No
+WES-tier context consumes the *events* yet. REST and MCP are
+unauthenticated by deliberate decision
+([ADR 0015](https://github.com/claudioed/facility-layout/blob/develop/docs/docs/adr/0015-remove-rest-mcp-auth.md)).
 :::
 
 ## Name
@@ -86,27 +92,31 @@ slow-changing structural catalogue, with a first-class rendering capability
 |---|---|---|---|
 | `inventory-storage` | **Live, synchronous HTTP, rollback path** | `GET /locations/{locationCode}/classification` | The original scoped cross-backend call: `inventory-storage` called it at stow time to validate a Hazmat or TemperatureSensitive SKU against the slot's parent Zone's `hazmat`/`temperatureClass` attributes. Since inventory-storage ADR-0013 the **primary path is the event-fed cache** (see Outbound Communication); this endpoint is retained as the configured rollback (`LOCATION_LOOKUP_MODE=http`), not deleted. Note the direction: outbound from `inventory-storage`'s perspective, inbound to `facility-layout` — `facility-layout` is the callee, never the caller. |
 | `facility-mfe` (this context's own browser client) | **Live, synchronous HTTP, browser-origin** | `GET /sites`, `GET /sites/{siteCode}/layout` over CORS | A Vite + React Module Federation remote owned in this repo's own `web/` directory, composed at runtime by the separate `warehouse-console` shell. It is a real, live, additive inbound HTTP surface — browser calling this service's own published REST API — not a bounded-context relationship in the Evans/Vernon sense (`warehouse-console` owns no domain model or aggregate). |
-| Any REST client | **Live, synchronous HTTP** | The full `apis/openapi.yaml` surface (`POST/GET /sites`, `/zones`, `/aisles`, `/location-types`, `/placement-rules`, `/locations`, `/locations/import`) | Usable today by anything that can make an HTTP call — operators, scripts, the getting-started curl walkthrough. Not a wired backend-to-backend integration; a generally-available Open Host Service surface. |
-| MCP clients (Claude, agent frameworks) | **Live, synchronous, read-only** | `list_sites`, `get_site_layout`, `get_zone_grid` MCP tools over Streamable HTTP | A second driving adapter over the same read use cases the HTTP adapter calls. No write tool is registered — the map is written by operators, not agents. |
+| `wes-work-planning` | **Live, synchronous HTTP** | `GET /distance?from=&to=` → `{metresM, estimated, route}` | Travel-distance input at `CommitShiftPlan`, via its `traveldistance` client (`TRAVEL_DISTANCE_MODE=http` + `FACILITY_LAYOUT_BASE_URL`; default `permissive`). Same-zone only; `estimated: true` when geometry is missing ([ADR 0017](https://github.com/claudioed/facility-layout/blob/develop/docs/docs/adr/0017-geometry-and-travel-graph.md)). |
+| `fulfillment-execution` | **Opt-in, synchronous HTTP — not enabled in the kind cluster** | `GET /locations/{locationCode}` — the slot's `role` | Resolves a location's functional role at `RegisterStation`, via its `facilitylayout` client (`LOCATION_ROLE_MODE=http` + `FACILITY_LAYOUT_BASE_URL`; default `permissive`) ([ADR 0016](https://github.com/claudioed/facility-layout/blob/develop/docs/docs/adr/0016-functional-location-roles.md)). |
+| `warehouse-ops-agent` | **Live, synchronous, read-only** | MCP tools `list_sites`, `get_site_layout`, `get_zone_grid`, `estimate_travel_distance`; REST `GET /reports/catalog-growth` (+ `/freshness`) on `cmd/facility-reports` | Read-side decision support; never writes. |
+| Any REST client | **Live, synchronous HTTP** | The full `apis/openapi.yaml` surface — 31 operations across 23 paths: `/sites`, `/zones`, `/aisles`, `/location-types`, `/placement-rules`, `/locations`, `/locations/import`, plus the ADR 0016/0017 additions (`/sites/{siteCode}/locations?role=`, `/sites/{siteCode}/structures`, `/zones/{zoneId}/cross-aisles`, `/zones/{zoneId}/travel-graph`, the two geometry `PUT`s, `/distance`) | Usable today by anything that can make an HTTP call — operators, scripts, the getting-started curl walkthrough. Unauthenticated (ADR 0015). |
+| MCP clients (Claude, agent frameworks) | **Live, synchronous, read-only** | Six tools over Streamable HTTP — `list_sites`, `get_site_layout`, `get_zone_grid`, `list_functional_locations`, `get_zone_travel_graph`, `estimate_travel_distance` — plus the curated `get_facility_catalog_growth_report` tool when the reports client is configured | A second driving adapter over the same read use cases the HTTP adapter calls. Every tool is annotated read-only; no write tool is registered — the map is written by operators, not agents. Unauthenticated (ADR 0015). |
 
 ## Outbound Communication
 
-:::note[OHS status: one live Conformist, WES-tier edges deliberately unwired]
-`facility-layout` publishes its whole Published Language — every domain
-event — to `warehouse.facility.events` via
+:::note[OHS status: one live event consumer; WES tier reads synchronously]
+`facility-layout` publishes its whole Published Language — all twelve
+domain events — to `warehouse.facility.events` via
 `internal/adapters/outbound/kafka` (`EVENT_PUBLISHER=kafka`, ADR-0009),
 documented in
 [`apis/asyncapi.yaml`](https://github.com/claudioed/facility-layout/blob/develop/apis/asyncapi.yaml).
-One consumer is live today (`inventory-storage`); the WES-tier rows are
-**deliberate non-integrations** — available Published Language, no
-consumer, because no use case needs it yet — not backlog.
+One event consumer is live today (`inventory-storage`). The WES-tier
+contexts do not consume events; they call this context's REST API instead
+(see Inbound Communication). This context itself calls no other service.
 :::
 
 | Receiver | Communication style | What it consumes | Status |
 |---|---|---|---|
 | `inventory-storage` (WMS · Core) | **Live** — event subscription, local read-model cache | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | **Wired and verified.** inventory-storage's `internal/adapters/outbound/facilitycache/` replays the topic from the first offset on every start (per-instance-unique consumer group, readiness gated on catch-up) into a local location-classification cache used by `StowStock`'s Hazmat/TemperatureSensitive placement check (`LOCATION_LOOKUP_MODE=kafka`, its ADR-0013). Verified live with facility-layout at zero replicas: stows still classified correctly from the cache. The synchronous `GET /locations/{code}/classification` remains as the configured rollback (`LOCATION_LOOKUP_MODE=http`). |
-| `wes-work-planning` (WES · Core) | Not wired — deliberate | `ZoneRegistered`, `AisleRegistered` would be the candidates | The WES ubiquitous language contains `Zone`, `Travel Path` and `Congestion`, and an Aisle's `SequenceHint`/`Direction` are the concrete travel-distance inputs — but no shipped use case consumes them yet, so no consumer is built. Deliberate non-integration, not an oversight. |
-| `fulfillment-execution` (Core) | Not wired — deliberate | Same physical facts as `wes-work-planning`, at dispatch granularity | Same reasoning: no consuming use case exists yet. |
+| `wes-work-planning` (WES · Core) | Events not consumed — reads synchronously instead | `AisleRegistered`, `AisleGeometryUpdated`, `CrossAisleRegistered` would be the candidates for a local travel graph | Travel distance reaches it today through the live synchronous `GET /distance` call (Inbound Communication). Consuming the geometry events to keep a local travel graph is a design option, not code. |
+| `fulfillment-execution` (Core) | Events not consumed — reads synchronously instead | — | Can read a slot's `role` through the opt-in synchronous `GET /locations/{locationCode}` call (Inbound Communication). No event consumer is built. |
+| own analytics projector (`cmd/facility-projector`) | **Live** — separate topic `warehouse.facility.analytics` | The original eight events | This context's own read side for the catalog-growth report (ADR-0010) — not another bounded context. |
 | `workforce-management` (Supporting) | **No planned relationship** | — | Stops at the process-path boundary and never links an associate to a specific location. |
 
 The wired consumer is a downstream **Conformist**: it accepts this
@@ -114,8 +124,9 @@ context's model rather than negotiating a shared one, and translates it
 into its own vocabulary at its edge (an anti-corruption cache keyed the
 way *its* stow check needs). That is the right pattern precisely *because*
 this is a Generic Subdomain — there is nothing to differentiate by
-modelling location differently. Any future WES-tier consumer should follow
-the same shape.
+modelling location differently. `wes-work-planning` and
+`fulfillment-execution` follow the same shape over REST, translating
+`metresM` and `role` into their own models at their edge.
 
 ## Ubiquitous Language
 
@@ -198,15 +209,19 @@ appearing in the domain layer would mean the boundary had leaked.
 | Architecture fitness test (`arch-go`) | Zero violations, blocking | `internal/architecture/architecture_test.go`, its own CI job |
 | Failing-path test per invariant | 100% — every rejection branch in the chain-of-custody flow has a dedicated test | Domain + application unit tests, `godog`/Gherkin BDD suite over the real HTTP API |
 | Report freshness SLA (analytical read side) | p95 event-to-report lag < 30s | `GET /reports/catalog-growth/freshness` |
-| MCP tool surface size | ≤ 8 tools, PR-gated | MCP governance charter, Phase-6 CI lint (planned) |
+| MCP tool surface size | ≤ 8 tools, PR-gated (7 today: six read tools plus the report tool) | MCP governance charter, Phase-6 CI lint (planned) |
 
 ## Open Questions
 
-- Whether (and when) `wes-work-planning` / `fulfillment-execution` gain a
-  use case that justifies consuming `ZoneRegistered`/`AisleRegistered` for
-  travel-path and congestion reasoning. Today this is a deliberate
-  non-integration: the Published Language is on the topic and specced, but
-  nobody builds a consumer without a consuming use case.
+- Whether `wes-work-planning` should move from the synchronous
+  `GET /distance` call to consuming `AisleRegistered`/`AisleGeometryUpdated`/
+  `CrossAisleRegistered` into a local travel graph. Today the geometry
+  events are on the topic and specced with no consumer.
+- Cross-zone travel: `/distance` and `estimate_travel_distance` refuse two
+  locations in different zones, because the travel graph does not yet
+  connect zones ([ADR 0017](https://github.com/claudioed/facility-layout/blob/develop/docs/docs/adr/0017-geometry-and-travel-graph.md),
+  status *Proposed* in the repository though the endpoints ship on
+  `develop`).
 - Whether a first-class "revalidate existing slots against current
   PlacementRules" use case is ever warranted, given that rule changes are
   not retroactive today and the only mitigation is a manual read-plus-audit

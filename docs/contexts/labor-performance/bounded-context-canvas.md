@@ -21,7 +21,7 @@ does one associate's completed task compare to the engineered standard
 for it?" — nothing more. It defines and revises `LaborStandard`, scores
 every completed task it hears about into a `TaskPerformance` row, and
 serves that scoring back as read models (`Scorecard`,
-`TaskTypePerformance`). It is a pure downstream observer of work that
+`TaskTypePerformance`, and — since ADR 0014 — idle-gap / utilization). It is a pure downstream observer of work that
 happens elsewhere: it never decides what work gets done, never gates
 whether an associate may keep working, and never talks to payroll, HR, or
 scheduling.
@@ -63,32 +63,40 @@ Service**, not "analysis context" in the `warehouse-ops-agent` sense.
 | --- | --- | --- | --- |
 | `fulfillment-execution` | Customer/Supplier — this context is a **Conformist** downstream | Kafka, topic `warehouse.fulfillment.events`, event `TaskCompleted` | `fulfillment-execution` is the Open Host Service; this context subscribes to its Published Language and never gets write access to `Task` or `Station`. Own consumer group id `labor-performance`. Only `event_type == "TaskCompleted"` is acted on; every other event type on the shared, fan-out topic is silently skipped. |
 
-There is **no other inbound relationship**. `workforce-management` has
-zero *inbound* relationship with this context — it never sends this
-service anything. (It is, since ADR 0013, an *outbound* Kafka Customer of
-this service — see Outbound Communication below — but that is a separate
-direction from this table, which is inbound-only.)
+That is this context's **only input**. Every other relationship is a
+sibling reading this context's own Open Host Services (listed under
+Outbound Communication, since data flows out) — this context never
+initiates a call to anyone. `workforce-management` never sends this
+service anything; it is, since ADR 0013, an *outbound* Kafka Customer of
+this service (see below).
 
 ## Outbound Communication
 
 | To | Relationship | Integration | Notes |
 | --- | --- | --- | --- |
-| `workforce-management` | Open-Host Service + Published Language — this context is the **Supplier**, `workforce-management` a Conformist downstream | Kafka, topic `warehouse.labor-performance.events`, event `TaskPerformanceRecorded` | **Live** (ADR 0013). This context's first Open-Host-Service Published Language for another bounded context — before this, `labor-performance` was the fleet's only pure event sink. `workforce-management` consumes it into a local, event-fed running-mean cache, replacing a synchronous HTTP call (`LABOR_PERFORMANCE_MODE=kafka-cache`, that repo's ADR 0019). Publish-and-forget: no reply, no confirmation loop. |
-| Future console (`labor-mfe`) | Open Host Service (planned) | REST — `POST /standards`, `GET /standards/{taskType}`, `GET /associates/{associateId}/scorecard`, `GET /task-types/{taskType}/performance`, `GET /task-types/{taskType}/utilization`, `GET /associates/{associateId}/utilization` (idle-gap / utilization, ADR 0014) | **No consumer wired yet.** CORS is enabled proactively (matching the fleet's convention that CORS ships alongside a service's first console-facing REST surface), but the `labor-mfe` micro-frontend remote itself is explicitly deferred. |
-| Analytics consumers (WES Dashboard) | Open Host Service, separate analytics surface | REST — `GET /reports/performance`, `GET /reports/performance/freshness` via `cmd/labor-reports`, fed by a dedicated `warehouse.labor-performance.analytics` Kafka topic | Fleet-parity analytical data product (ADR-0007): a separate writer/reader/database triad, never touching the OLTP path. |
+| `workforce-management` | Open-Host Service + Published Language — this context is the **Supplier**, `workforce-management` a Conformist downstream | Kafka, topic `warehouse.labor-performance.events`, event `TaskPerformanceRecorded` | **Live** (ADR 0013). This context's first Open-Host-Service Published Language for another bounded context — before this, `labor-performance` was the fleet's only pure event sink. `workforce-management` consumes it into a local, event-fed running-mean cache, replacing a synchronous HTTP call (`LABOR_PERFORMANCE_MODE=kafka-cache`, that repo's ADR 0019 — opt-in: its binary defaults to `permissive`, the kind cluster sets `kafka-cache`), and reads the additive `idle_seconds_before` as a staffing signal (its ADR 0020). Publish-and-forget: no reply, no confirmation loop. |
+| `warehouse-console` (the `labor_mfe` remote) | Open Host Service | OLTP REST (`apis/openapi.yaml`, 7 operations) — the remote calls `POST /standards`, `GET /associates/{associateId}/scorecard` and `GET /task-types/{taskType}/performance`; the API also serves `GET /standards/{taskType}`, `GET /task-types/{taskType}/utilization` and `GET /associates/{associateId}/utilization` (ADR 0014) | **Live.** `web/` is this repo's Module Federation remote (`labor_mfe`), mounted by the console shell at `/labor`. CORS via `CORS_ALLOWED_ORIGINS`. |
+| `warehouse-ops-agent` | Open Host Service (MCP, read-only) | MCP (`cmd/mcp`, ADR 0009) — tools `get_associate_scorecard`, `get_task_type_performance`, `get_labor_standard`, `get_task_type_utilization`; resource template `scorecard://labor/{associateId}`; prompt `review_associate_performance` | **Live.** The agent calls `get_associate_scorecard` and `get_task_type_utilization` (the latter feeding its flow-balance advisory). This service knows nothing about the agent. |
+| Analytics consumers (WES Dashboard via `warehouse-ops-agent`) | Open Host Service, separate analytics surface | REST — `GET /reports/performance`, `GET /reports/performance/freshness` via `cmd/labor-reports` (`apis/openapi-reports.yaml`, 3 operations incl. `/healthz`), fed by a dedicated `warehouse.labor-performance.analytics` Kafka topic | Fleet-parity analytical data product (ADR-0007): a separate writer/reader/database triad, never touching the OLTP path. |
 
-This context has **zero REST dependency in either direction** with any
-other bounded context. Everything the OLTP side needs
-(`AssociateId`, `TaskType`, `DurationSeconds`) already travels on the one
-Kafka event it consumes, and everything `workforce-management` needs from
-this context now travels on the one Kafka event it publishes.
+This context makes **no outbound REST or MCP call** to any other bounded
+context (ADR 0003; restated for facility-layout by
+[ADR 0015](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0015-optional-travel-component-on-labor-standard.md)).
+Everything the OLTP side needs (`AssociateId`, `TaskType`,
+`DurationSeconds`) already travels on the one Kafka event it consumes, and
+everything `workforce-management` needs from this context travels on the
+one Kafka event it publishes. None of its REST, reports or MCP surfaces is
+authenticated — a deliberate decision
+([ADR 0012](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0012-remove-rest-auth-layer.md)
+removed ADR 0011's static bearer-key layer).
 
 ## Ubiquitous Language
 
 See [Ubiquitous Language](./ubiquitous-language) for the full glossary —
 `LaborStandard`, `TaskPerformance`, `StandardSecondsAtCompletion`,
 `EfficiencyPct`, `MeanActualSeconds`, `TaskType`, `Scorecard`, `Trend`,
-`Coaching Flag`, `TaskTypePerformance`.
+`Coaching Flag`, `TaskTypePerformance`, `IdlePeriod`, `Utilization`,
+`TravelComponentSeconds`.
 
 ## Business Decisions
 
@@ -112,6 +120,17 @@ See [Ubiquitous Language](./ubiquitous-language) for the full glossary —
   time; the envelope's own de-duplication key gates the entire OLTP write
   path, since consuming `TaskCompleted` is this service's whole job, not
   a side effect of it.
+- **Idleness is derived, never requested upstream.** An associate's
+  between-task gap (`IdlePeriod`) is computed from data already on
+  `TaskCompleted` (previous completion to this claim instant), capped at
+  `IDLE_GAP_CAP_SECONDS` (default 3600), and published additively as
+  `idle_seconds_before` on `TaskPerformanceRecorded`. See
+  [ADR 0014](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0014-labor-utilization-idleness.md).
+- **A standard's travel component is declared, never looked up.**
+  `TravelComponentSeconds` is optional and caller-supplied at
+  `DefineStandard` (`0 <= t <= ExpectedSeconds`); this service never calls
+  facility-layout to compute or validate it. See
+  [ADR 0015](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0015-optional-travel-component-on-labor-standard.md).
 - **Visibility, not enforcement.** No score this context computes ever
   gates or blocks an associate's ability to claim tasks in
   `fulfillment-execution`. `CoachingFlag` is a signal a human reads, never
@@ -119,10 +138,10 @@ See [Ubiquitous Language](./ubiquitous-language) for the full glossary —
 
 ## Assumptions
 
-- `fulfillment-execution`'s `TaskCompleted` payload will eventually gain a
-  `task_type` field; until then every consumed event resolves `TaskType`
-  as `""` (unclassified) — a documented, accepted wire-contract gap, not
-  a bug in this service.
+- `fulfillment-execution`'s `TaskCompleted` payload now carries
+  `task_type` (its ADR-0023); a value this context does not model (e.g.
+  `REBIN`) or an older payload without it still resolves `TaskType` as
+  `""` (unclassified) — recorded, never scored.
 - The 5-percentage-point `Trend` band and the 85% `CoachingFlag` floor are
   judgment calls, not derived from real production traffic (this context
   has none yet) — explicitly revisitable constants.
@@ -139,21 +158,21 @@ See [Ubiquitous Language](./ubiquitous-language) for the full glossary —
   `StandardSecondsAtCompletion`) has a dedicated failing-path,
   table-driven test.
 - A build-tagged Kafka consumer integration test
-  (`consumer_integration_test.go`), skipped without a real broker,
-  alongside the fake-reader unit test used for the common case.
+  (`consumer_integration_test.go`) that starts its own broker via
+  Testcontainers, alongside the fake-reader unit test used for the common
+  case.
 - Target: p95 event-to-report lag under 30 seconds for the analytical
   data product (ADR-0007), matching the fleet's sibling contexts.
 
 ## Open Questions
 
-- **`labor-mfe` deferred.** CORS is wired proactively, but the actual
-  console micro-frontend remote that would consume this context's REST
-  Open Host Service is not yet built — this context's outbound REST
-  surface has strategic intent but no live consumer today.
-- **When does `fulfillment-execution` add `task_type` to its
-  `TaskCompleted` payload?** Until it does, this service cannot backfill
-  or repair `TaskType` for already-recorded, unclassified rows — there is
-  no synchronous fallback lookup to fill the gap, by design.
+- **Backfilling unclassified history.** `task_type` is now on the wire,
+  but rows recorded before it arrived stay `""` (unclassified) — there is
+  no synchronous fallback lookup to repair them, by design.
+- **A declared travel component can drift from reality.** If a zone is
+  re-slotted, nothing here notices until someone re-runs
+  `DefineStandard` with an updated number — the deliberate price of the
+  zero-outbound-call boundary (ADR 0015).
 - **Automatic pay-for-performance and coaching workflows** remain
   explicitly out of scope; if the business ever wants to act on
   `CoachingFlag` automatically, that decision belongs to a different,

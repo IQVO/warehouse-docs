@@ -28,7 +28,10 @@ becomes the upstream context that supplies it to the others (per
 
 Order Management owns **Order** and **OrderLine** as first-class,
 validated aggregates: intake, per-line stock allocation (via
-`inventory-storage`), promise-date calculation, release of allocated work
+`inventory-storage`), a delivery promise derived from what the warehouse
+can actually ship by which truck departure (per
+[ADR-0014](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0014-promise-derived-from-fulfillment-capability.md)),
+release of allocated work
 (via `wes-work-planning`, choreographed over Kafka since
 [ADR-0005](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0005-choreographed-release-via-kafka.md)),
 and cancellation up to the release boundary.
@@ -94,8 +97,21 @@ this context's contracts cannot express. So **cancellation is legal only
 while no line has reached Released.** Once any line is released, the order
 simply cannot be cancelled through this system — that is a documented,
 deliberate known gap (see the
-[Bounded Context Canvas](./bounded-context-canvas)'s Open Questions), not
+[Bounded Context Canvas](/contexts/order-management/bounded-context-canvas)'s Open Questions), not
 an oversight quietly papered over.
+
+### Some demand must be accepted before it is committed (hold, ADR-0020)
+
+Orders that originate from an external retail fulfillment network arrive
+through `network-fulfillment` with a deadline the network dictates. Such
+an order is **held**: stock is reserved, but nothing is handed to the
+warehouse floor until the caller decides to accept it — then it is
+released, or cancelled cleanly (it never crossed the release boundary).
+The promise for a held order is the latest truck departure that still
+meets the deadline; if no departure can, the order carries **no promise
+at all**, because "could not determine" and "can meet it" must never be
+the same answer (see
+[ADR-0020](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md)).
 
 ### The order's status can never lie
 

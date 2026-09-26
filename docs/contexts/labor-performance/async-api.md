@@ -23,9 +23,9 @@ independently under its own group.
 `KAFKA_CONSUMER_GROUP`).
 
 **Filter:** only `event_type == "TaskCompleted"` is acted on. Every other
-event type on this shared topic — there are none from
-`fulfillment-execution` today, but the topic is shared/fan-out by
-convention — is silently skipped, **not an error**, mirroring
+event type on this shared topic — `fulfillment-execution` now also
+publishes `TaskCPTMissed` and `PackageManifested` there — is silently
+skipped, **not an error**, mirroring
 `wes-work-planning`'s own consumer's skip-unrecognized-event-type
 behavior.
 
@@ -54,34 +54,36 @@ uses:
     "station_id": "...",
     "work_unit_id": "...",
     "associate_id": "...",
-    "duration_seconds": 52
+    "duration_seconds": 52,
+    "task_type": "PICK"
   }
 }
 ```
 
-`associate_id` and `duration_seconds` are enrichments added by the
-sibling `feature/labor-performance-hooks` change in
-`fulfillment-execution` — both are optional on the wire, and an older
-payload that predates the enrichment omits them. This service's JSON
-unmarshaling degrades those absent fields to their Go zero values
-(`""` / `0`) rather than erroring — exactly the "no checked-in occupant" /
-"unmeasurable duration" business facts this service's own aggregate
-invariants already model.
+`associate_id`, `duration_seconds` and `task_type` are enrichments added
+over time in `fulfillment-execution` — all three are optional on the
+wire, and an older payload that predates an enrichment omits the field.
+This service's JSON unmarshaling degrades those absent fields to their Go
+zero values (`""` / `0`) rather than erroring — exactly the "no
+checked-in occupant" / "unmeasurable duration" / "unclassified" business
+facts this service's own aggregate invariants already model.
 
-### Known wire-contract gap: no `task_type` field yet
+### `task_type` on the wire (gap closed)
 
-As verified against `fulfillment-execution`'s actual `TaskCompletedData`
-struct, the payload above does **not** carry a `task_type` field. This
-service resolves `TaskType` as `""` (unclassified) for every consumed
-event as a result. A `""`-typed `TaskPerformance` row is still recorded
-and counted in a hypothetical "all types" view, but it never resolves a
-`LaborStandard` (no lookup is possible without a known type) and never
-appears under any `GetTaskTypePerformance` query, which requires one of
-the three known enum values. This is a documented, accepted gap — adding
-`task_type` to that payload is a natural, additive fast-follow on the
-`fulfillment-execution` side, not something this context can work around
-with a synchronous fallback lookup (this context has zero REST dependency
-on `fulfillment-execution`, by design).
+`task_type` was once a known wire-contract gap: every consumed event was
+bucketed as `""` (unclassified). `fulfillment-execution`'s ADR-0023 added
+it to the `TaskCompleted` payload, and this service's consumer now passes
+it through `shared.ParseTaskTypeLenient`. A recognized `PICK`/`PACK`/`SLAM`
+passes through; an unrecognized value (e.g. `REBIN`, which this context
+does not model as an engineered-labor-standard task type) or an absent
+field still resolves to `""` — recorded and counted, but never scored
+against a `LaborStandard` and never listed under `GetTaskTypePerformance`
+(the analytics side reports it as `UNCLASSIFIED`).
+
+The same event also drives idleness (ADR 0014): the gap between an
+associate's previous completion and this task's claim instant
+(`occurred_at − duration_seconds`) is recorded as an `IdlePeriod`, with no
+additional upstream field required.
 
 ### Idempotency
 
@@ -94,17 +96,20 @@ service's whole job, not a side effect of it.
 
 ## What this context does NOT consume or call
 
-- **No REST dependency on `fulfillment-execution` or
-  `workforce-management`**, in either direction. Everything this context
-  needs (`AssociateId`, `TaskType`, `DurationSeconds`) already travels on
-  the Kafka event above.
+- **No outbound REST or MCP call to any sibling context** —
+  `fulfillment-execution`, `workforce-management`, `facility-layout` or
+  anyone else (ADR 0003; restated for facility-layout by
+  [ADR 0015](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0015-optional-travel-component-on-labor-standard.md),
+  which made a standard's travel component caller-supplied rather than
+  looked up). Everything this context needs (`AssociateId`, `TaskType`,
+  `DurationSeconds`) already travels on the Kafka event above.
 - **`workforce-management` is now a Kafka relationship, not "no
   relationship at all."** That framing predates ADR 0013. This context
   still has zero REST dependency on `workforce-management` and never will
   — labor allocation ("who is on shift, at what rate") and labor
   performance scoring still share no concepts — but the two contexts are
   no longer disconnected: `workforce-management` consumes
-  `warehouse.labor-performance.events` (above) for its own read model.
+  `warehouse.labor-performance.events` (below) for its own read model.
   The relationship is exclusively asynchronous and one-way; this context
   has no idea `workforce-management` exists at the code level, since it
   never imports its package and has no inbound adapter that context
@@ -158,7 +163,13 @@ analytics topic; the log-only default is unchanged.
 **Live consumer:** `workforce-management`, replacing what was previously
 a synchronous `GET /task-types/{taskType}/performance` call from
 `ProposePathPlan` with a local, event-fed running-mean cache
-(`LABOR_PERFORMANCE_MODE=kafka-cache`). See that repo's own ADR 0019.
+(`LABOR_PERFORMANCE_MODE=kafka-cache`, that repo's ADR 0019), which also
+reads the additive `idle_seconds_before` field as a staffing signal (its
+ADR 0020). That mode is opt-in: `workforce-management`'s binary defaults
+`LABOR_PERFORMANCE_MODE` to `permissive`, keeps an older `http` option
+that calls this service's REST API, and the kind cluster sets
+`kafka-cache`. Either way the dependency points from
+`workforce-management` to this context.
 
 See [ADR 0013](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0013-labor-performance-integration-events.md)
 in the source repository for the full decision record.
@@ -174,13 +185,18 @@ honest gaps in the current wire contract.
 
 ## A separate reports API exists too
 
-Beyond the OLTP `apis/openapi.yaml` (the `POST /standards`,
+Beyond the OLTP `apis/openapi.yaml` (7 operations: `POST /standards`,
 `GET /standards/{taskType}`, `GET /associates/{associateId}/scorecard`,
-`GET /task-types/{taskType}/performance` surface), the source repository
-also ships a **separate `openapi-reports.yaml`** covering the read-only
-analytical Reports API served by `cmd/labor-reports`
-(`GET /reports/performance`, `GET /reports/performance/freshness`,
-`GET /healthz`). That API is fed by the
+`GET /task-types/{taskType}/performance`,
+`GET /task-types/{taskType}/utilization`,
+`GET /associates/{associateId}/utilization`, `GET /healthz`), the source
+repository also ships a **separate `openapi-reports.yaml`** covering the
+read-only analytical Reports API served by `cmd/labor-reports` (3
+operations: `GET /reports/performance`,
+`GET /reports/performance/freshness`, `GET /healthz`). Neither API — nor
+the MCP server — is authenticated, by deliberate decision
+([ADR 0012](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0012-remove-rest-auth-layer.md)
+removed ADR 0011's static bearer-key layer). That API is fed by the
 `warehouse.labor-performance.analytics` Kafka topic described in
 [Domain Events](./domain-events) — a separate publish direction from the
 `TaskCompleted` consumption this page documents, and one this context

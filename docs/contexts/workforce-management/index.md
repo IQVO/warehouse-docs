@@ -23,7 +23,9 @@ a specific task, by design (ADR-0002), leaving task dispatch entirely to
 `fulfillment-execution`. Since ADR 0020, it also folds `labor-performance`'s
 observed idle share into `GetStaffingGap` (`observedIdlePct`) and into
 `ProposePathPlan`'s headcount trim — a staffing signal, never a second
-source of truth about task dispatch.
+source of truth about task dispatch. Its one synchronous dependency is a
+fail-loud read of `fulfillment-execution`'s installed station capacity on
+every `CommitShiftPlan` (ADR 0014) — a count, not tasks.
 
 ## On this page set
 
@@ -40,9 +42,10 @@ source of truth about task dispatch.
   `ShiftPlan` and `LaborAssignment` aggregates: state transitions,
   invariants, corrective policies, commands, events.
 - **[Domain Events](/contexts/workforce-management/domain-events)** — all ten events, what raises them,
-  and the one that leaves the process today.
+  and the one that reaches another bounded context today.
 - **[Async API](/contexts/workforce-management/async-api)** — the Kafka integration to
-  `wes-work-planning`, narrative form.
+  `wes-work-planning`, plus the two opt-in sibling topics it consumes,
+  narrative form.
 
 ## Elsewhere
 

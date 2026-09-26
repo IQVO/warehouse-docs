@@ -2,7 +2,7 @@
 id: index
 title: Labor Performance
 sidebar_label: Labor Performance
-description: Engineered labor standards and actual-vs-standard performance scoring — a Supporting subdomain, a pure Kafka Customer of fulfillment-execution's TaskCompleted event, zero REST dependency on any other service.
+description: Engineered labor standards and actual-vs-standard performance scoring — a Supporting subdomain, a Kafka Customer of fulfillment-execution's TaskCompleted event and a Kafka Supplier to workforce-management, with zero outbound calls to any other service.
 slug: /contexts/labor-performance
 ---
 
@@ -15,18 +15,22 @@ slug: /contexts/labor-performance
 (`TaskPerformance` — "this associate's last PICK took 52s, 87% of
 standard"). Since ADR 0014, it also derives idle-gap / utilization
 read models — the between-task waits `TaskPerformance` scoring alone
-never measured — additively on the same event stream. It is the fleet's
-eighth bounded-context Go service, added after `order-management`,
-`inventory-storage`, `wes-work-planning`, `workforce-management`,
-`fulfillment-execution`, `facility-layout`, and `warehouse-ops-agent`.
+never measured — additively on the same event stream, and since ADR 0015 a
+standard may carry an optional, caller-supplied travel-time component. It
+was the fleet's eighth bounded-context Go service, added after
+`order-management`, `inventory-storage`, `wes-work-planning`,
+`workforce-management`, `fulfillment-execution`, `facility-layout`, and
+`warehouse-ops-agent` (the fleet has since grown to ten backend contexts).
 
-:::info[Exactly one relationship in the whole fleet]
-This context has **zero REST dependency** on any other service and
-**exactly one** integration: it is a pure Kafka **Customer** of
-`fulfillment-execution`'s already-published `TaskCompleted` event, on the
-same shared, fan-out topic `wes-work-planning` also consumes from. It
-exposes its own REST Open Host Service for a future console screen
-(`labor-mfe`), but nothing is wired to consume it yet. See
+:::info[One input, zero outbound calls]
+This context has exactly **one input**: it is a Kafka **Customer** of
+`fulfillment-execution`'s `TaskCompleted` event, on the same shared,
+fan-out topic `wes-work-planning` also consumes from. Everything else
+points the other way: it publishes `TaskPerformanceRecorded` on
+`warehouse.labor-performance.events`, consumed by `workforce-management`
+(ADR 0013), and exposes its own OLTP REST, reports and MCP surfaces, read
+by the console's `labor_mfe` remote and by `warehouse-ops-agent`. It makes
+**no outbound REST or MCP call** to any sibling context. See
 [Bounded Context Canvas](/contexts/labor-performance/bounded-context-canvas) and
 [Context Map](/strategic-design/context-map) for the full picture.
 :::
@@ -42,12 +46,13 @@ exposes its own REST Open Host Service for a future console screen
   ddd-crew canvas: purpose, strategic classification, domain roles,
   inbound/outbound communication, business decisions, open questions.
 - **[Aggregate Design Canvas](/contexts/labor-performance/aggregate-design-canvas)** — the
-  `TaskPerformance` aggregate: state transitions, invariants, commands,
-  events, throughput, size.
+  `TaskPerformance` aggregate (with notes on `LaborStandard` and
+  `IdlePeriod`): state transitions, invariants, commands, events,
+  throughput, size.
 - **[Domain Events](/contexts/labor-performance/domain-events)** — `LaborStandardDefined`,
   `LaborStandardRevised`, `TaskPerformanceRecorded` (and its additive
   `IdleSecondsBefore` field since ADR 0014).
-- **[Async API](/contexts/labor-performance/async-api)** — the Kafka integration, narrative form.
+- **[Async API](/contexts/labor-performance/async-api)** — the Kafka integrations (one inbound, one outbound), narrative form.
 
 ## Elsewhere
 

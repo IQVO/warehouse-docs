@@ -2,7 +2,7 @@
 id: ubiquitous-language
 title: Ubiquitous Language (Fleet Overview)
 sidebar_label: Ubiquitous Language
-description: How the shared vocabulary is organized across nine bounded contexts, and where "same word, different model" deliberately occurs.
+description: How the shared vocabulary is organized across ten bounded contexts, and where "same word, different model" deliberately occurs.
 ---
 
 # Ubiquitous Language — Fleet Overview
@@ -30,6 +30,7 @@ For a single alphabetical index across every context, see [Glossary](/glossary).
 | `process-path-management` | [ProcessPath, PathId, Capability, MatchPrefix, Direct, Status](/contexts/process-path-management/ubiquitous-language) |
 | `labor-performance` | [Standard, Scorecard, Coaching Flag](/contexts/labor-performance/ubiquitous-language) |
 | `warehouse-ops-agent` | [DailyBrief, FlowBalanceException, StrandedReservation](/contexts/warehouse-ops-agent/ubiquitous-language) |
+| `network-fulfillment` | [NetworkOrder, Acknowledgement deadline, Held order, ACL dictionary](/contexts/network-fulfillment/ubiquitous-language) |
 
 ## Same word, different model (the traps)
 

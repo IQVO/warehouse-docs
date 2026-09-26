@@ -118,14 +118,18 @@ both would guarantee they drift, and re-slotting a building would then be a
 two-service migration with a window where they disagree. So the map is
 extracted into one service, and everyone else references it.
 
-This service has **no inbound dependency** on any of the other four
-warehouse-systems services, and never will. Everything it publishes is its
-**Published Language**: eight past-tense domain events plus a stable REST
-surface. The other contexts are downstream **Conformists** to whatever shape
-this service publishes — a relationship that is **live**: `inventory-storage`
-consumes `warehouse.facility.events` into a local location-classification
-cache (its ADR-0013). See [Bounded Context
-Canvas](./bounded-context-canvas.md) for every edge's exact status.
+This service has **no outbound dependency** on any other warehouse-systems
+service — it calls no one and consumes no other context's events — and never
+will. Everything it publishes is its **Published Language**: twelve
+past-tense domain events plus a stable REST surface. The other contexts are
+downstream **Conformists** to whatever shape this service publishes — a
+relationship that is **live**: `inventory-storage` consumes
+`warehouse.facility.events` into a local location-classification cache (its
+ADR-0013) and `wes-work-planning` calls `GET /distance` for travel distance.
+`fulfillment-execution` can also call `GET /locations/{locationCode}` for a
+slot's functional role, but that lookup is opt-in and not enabled in the kind
+cluster yet. See [Bounded Context Canvas](./bounded-context-canvas.md)
+for every edge's exact status.
 
 ## PlacementRules: the enforcement point
 
@@ -165,3 +169,14 @@ per-zone 2D grid (levels × aisle/bay columns, shaped for direct painting).
 Both are **projections** assembled across the aggregates — not separately
 stored state, so they cannot go stale relative to the aggregates they are
 built from.
+
+Since [ADR 0017](https://github.com/claudioed/facility-layout/blob/develop/docs/docs/adr/0017-geometry-and-travel-graph.md)
+the map can also carry optional physical geometry — slot position and
+dimensions, aisle centrelines, cross-aisles and fixed structures (walls,
+columns, offices, conveyors) — and a pure-domain travel graph per zone
+behind `GET /zones/{zoneId}/travel-graph` and `GET /distance`. Distance is
+same-zone only, and when geometry is missing the answer is flagged
+`estimated` rather than presented with false precision. This context
+supplies map topology; optimising a pick path stays in the WES tier. (ADR
+0017 is still marked *Proposed* in the repository, though the endpoints
+ship on `develop`.)

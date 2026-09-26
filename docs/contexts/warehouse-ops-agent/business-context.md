@@ -2,21 +2,21 @@
 id: business-context
 title: Business Context
 sidebar_label: Business Context
-description: What a daily brief and a flow-balance exception mean operationally, and why the console needs a BFF that fans out read-only to four contexts rather than each micro-frontend calling them directly.
+description: What a daily brief, a flow-balance exception, a travel-factor explanation and the runtime-signals report mean operationally, and why the console needs a BFF that fans out read-only rather than each micro-frontend calling several contexts directly.
 ---
 
 # Business Context
 
 > A read-side, decision-support mechanism that correlates signals from the
-> fleet's five bounded contexts into a single diagnosis and a ranked,
+> fleet's bounded contexts into a single diagnosis and a ranked,
 > human-gated recommendation. It owns no aggregate, enforces no new
 > invariant, and persists no domain state — its "domain" is decision
 > **policy**.
 
 ## The operational problem: nobody was looking across the whole floor
 
-Each of the fleet's five upstream bounded contexts already answers its
-own, narrow question well: is a path's backlog above its alarm threshold
+Each of the fleet's original five upstream bounded contexts already
+answers its own, narrow question well: is a path's backlog above its alarm threshold
 (`wes-work-planning`), is a shift understaffed (`workforce-management`),
 is a task stuck (`fulfillment-execution`), is stock usable or reserved
 (`inventory-storage`), does a location exist and where (`facility-layout`).
@@ -37,9 +37,12 @@ summary an operator opens at the start of a shift: every monitored
 process path's raw facts (backlog telemetry, staffing gap, queue depth,
 stuck-task counts), grouped by the facility-layout site they belong to,
 plus the **open exceptions** derived from those facts. It is built fresh
-on every request, from five synchronous MCP tool calls out to the
-upstream contexts — this agent holds no database and remembers nothing
-between requests.
+on every request, from synchronous MCP tool calls out to four upstream
+contexts (`wes-work-planning` backlog telemetry, `workforce-management`
+staffing gap, `fulfillment-execution` queue status and stuck tasks,
+`facility-layout` site list) — this agent holds no database and
+remembers nothing between requests. The monitored paths come from the
+`DAILY_BRIEF_PATH_TARGETS` configuration.
 
 Critically, a single bad reading never becomes an exception on its own.
 A path shows up in `openExceptions` only when **two or more independent
@@ -63,7 +66,15 @@ naming exactly which upstream tool call produced each fact it used, and
 degrades to the conservative `hold` action, never a guess, if a needed
 signal is unavailable.
 
-Since [ADR 0008](https://claudioed.github.io/warehouse-ops-agent/docs/adr/0008-labor-utilization-advisory-correlation),
+Optionally — only when `LLM_MODE` is set to `shadow` or `on`; the
+default is `off` — a real LLM reasoner is consulted *behind* the
+deterministic policy
+([ADR 0004](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0004-llm-reasoner-behind-the-policy-layer.md)):
+the deterministic decision always runs first, the model may only call
+allow-listed MCP read tools, and its plan must pass `policy.ValidatePlan`
+or the deterministic decision is returned instead.
+
+Since [ADR 0008](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0008-labor-utilization-advisory-correlation.md),
 `FlowBalanceAdvisory` also calls `labor-performance`'s
 `get_task_type_utilization` MCP tool — the moment that client graduates
 from wired-but-unconsumed to actually consumed (see
@@ -91,6 +102,37 @@ an unreachable call, or a `null` `utilizationPct` — degrades identically
 to `nil`, matching this agent's existing deterministic-fallback
 discipline for every other signal.
 
+## What "explain travel factor" means, operationally
+
+[ADR 0009](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0009-explain-travel-factor.md) adds a narrower,
+caller-driven question: "how far apart are these two specific locations,
+and is that distance a plausible contributor to a slow path?"
+`explain_travel_factor` (MCP) and `GET /explain-travel-factor` (REST)
+call `facility-layout`'s `estimate_travel_distance` for two
+**caller-supplied** location codes and classify the result as
+`travel_significant` (above 60 m) or `travel_negligible`, carrying
+facility-layout's "estimated vs. measured" caveat. The agent never infers
+the two location codes itself: no published tool anywhere in the fleet
+binds a path's stuck work to two locations, and guessing a pair would
+fabricate evidence. Its usefulness therefore depends on the caller (a
+human operator, a runbook) already knowing both codes — a disclosed
+limitation, not a documentation gap.
+
+## What the runtime-signals report means, operationally
+
+`GET /runtime-signals` answers "is any service itself unhealthy right
+now?" rather than "is the floor flowing?". For each backend context
+(default: the eight original backends, overridable via
+`RUNTIME_SIGNALS_SERVICES`) it reads the Istio 5xx error rate and p99
+latency from Prometheus over a 10-minute window, plus error/fatal log
+lines from Loki, and classifies them (error rate warning ≥ 1%, critical
+≥ 5%; p99 warning ≥ 1000 ms, critical ≥ 3000 ms; any recent error log
+lifts a service to at least `warning`). A failing Prometheus or Loki
+query is reported in `unavailableSources` rather than failing the
+request.
+
+## The disclosed gap: stranded reservations
+
 A sibling capability not yet reachable from either inbound adapter,
 **StrandedReservation (E2)**, correlates expired or expiring task leases
 in `fulfillment-execution` against a usable-stock shortfall in
@@ -102,8 +144,7 @@ disclosed as a gap rather than implied as shipped — see
 [Open Questions](./bounded-context-canvas.md#open-questions).
 
 In every case, this agent's authority stops at correlation: it never
-re-derives or overrides a fact one of the five upstream contexts already
-owns, and it never executes a recommendation itself. Executing is a
+re-derives or overrides a fact an upstream context already owns, and it never executes a recommendation itself. Executing is a
 human's job today, and a later, separately-gated write slice's job
 eventually.
 
@@ -127,7 +168,9 @@ business grounds, not just technical ones:
 
 - It would require every touched service to expose CORS to a public
   browser origin permanently, not just to a controlled BFF's server-side
-  calls.
+  calls. (The Order Lifecycle screen touches four contexts; the WMS/WES
+  report dashboards added by ADR 0003 touch seven contexts' separate
+  `*-reports` analytics binaries.)
 - It would push a fact about how two backend services relate — the
   non-uniform join key, where `fulfillment-execution`'s task is keyed by
   a derived WorkUnit id rather than the plain order id — into frontend
@@ -146,4 +189,4 @@ the bounded-context test exactly the way the correlation policies do.
 This repository already exists as the fleet's cross-context read
 surface, so the BFF is a second, separate use-case family living beside
 the MCP-facing one — not a new context, and not smuggled into any of the
-five domains it reads from.
+domains it reads from.

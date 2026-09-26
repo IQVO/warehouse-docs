@@ -9,6 +9,7 @@ import facilityLayoutSidebar from './docs/api-reference/rest/facility-layout/sid
 import processPathManagementSidebar from './docs/api-reference/rest/process-path-management/sidebar';
 import laborPerformanceSidebar from './docs/api-reference/rest/labor-performance/sidebar';
 import laborPerformanceReportsSidebar from './docs/api-reference/rest/labor-performance-reports/sidebar';
+import networkFulfillmentSidebar from './docs/api-reference/rest/network-fulfillment/sidebar';
 
 /**
  * Five independent sidebars, one per navbar item:
@@ -174,6 +175,18 @@ const sidebars: SidebarsConfig = {
         'contexts/warehouse-ops-agent/bounded-context-canvas',
       ],
     },
+    {
+      type: 'category',
+      label: 'network-fulfillment',
+      link: {type: 'doc', id: 'contexts/network-fulfillment/index'},
+      items: [
+        'contexts/network-fulfillment/business-context',
+        'contexts/network-fulfillment/ubiquitous-language',
+        'contexts/network-fulfillment/bounded-context-canvas',
+        'contexts/network-fulfillment/aggregate-design-canvas',
+        'contexts/network-fulfillment/domain-events',
+      ],
+    },
   ],
 
   apiSidebar: [
@@ -226,6 +239,11 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'warehouse-ops-agent',
       items: ['api-reference/warehouse-ops-agent'],
+    },
+    {
+      type: 'category',
+      label: 'network-fulfillment',
+      items: [...networkFulfillmentSidebar],
     },
   ],
 };

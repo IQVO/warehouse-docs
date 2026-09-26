@@ -97,6 +97,13 @@ fails, none of them commit, because heads are a finite pool being divided.
 from `wes-work-planning`. Work Planning owns installed-station counts, but
 this context has no dependency on Work Planning and does not want one — a
 Supporting context should never become a runtime risk to a Core one.
+Independently of that, since
+[ADR 0014](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0014-installed-capacity-ceiling.md)
+every line is also checked against the live installed capacity
+`fulfillment-execution` reports for the path's capability
+(`GET /capacity/{capability}`). That is a physical ceiling, and it fails
+loud: if capacity cannot be verified, the whole commit is rejected with
+`503` rather than silently allowed.
 
 **Horizon 2 — intra-shift assignment tracking.** Once the shift is running,
 the plan starts drifting: someone calls in sick, a tote jam empties a pick
@@ -164,13 +171,16 @@ coupling would be pure accident of packaging. From this repo's own
 > without touching workforce planning, and vice versa, because they change
 > at completely different cadences (shifts vs seconds).
 
-**What the seam looks like in practice.** `fulfillment-execution` needs two
-things from the labor world, and gets both without ever writing here: it
-reads certifications to gate a station claim (never modifying them —
-`AssociateShift` remains the single writer), and it may read the staffing
-picture via this context's *read* model (`GetStaffingGap`) — never its write
-model. The important part is the direction: consumption of a read surface,
-not invocation of a command.
+**What the seam looks like in practice.** The one live edge between the two
+contexts runs the other way and carries a count, not tasks: this context
+reads `fulfillment-execution`'s installed station capacity per capability
+as a ceiling on committed heads (ADR 0014). Conceptually,
+`fulfillment-execution` gates a station claim on capabilities that mirror
+the certifications written here, but that gate is **not wired** to this
+context's data today. If it ever is, the documented shape is
+`fulfillment-execution` reading this context's *read* surface — never its
+write model, never writing to `AssociateShift`. The important part is the
+direction: consumption of a read surface, not invocation of a command.
 
 **Why `PathUnderstaffed` is a flag, not a decision.** The same boundary
 logic applies one level up. When active assignments on a path fall below its
@@ -193,5 +203,5 @@ planning decision *and* a second-granularity dispatch decision.
 
 See [Ubiquitous Language](./ubiquitous-language) for the exact vocabulary
 this decision produces, and [Bounded Context Canvas](./bounded-context-canvas)
-for how the non-integration with `fulfillment-execution` shows up as an
-explicit open question rather than an implied gap.
+for how the task-level non-integration with `fulfillment-execution` shows
+up as an explicit open question rather than an implied gap.

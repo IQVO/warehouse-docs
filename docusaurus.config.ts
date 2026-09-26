@@ -116,6 +116,12 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          networkFulfillment: {
+            specPath: 'apis/network-fulfillment/openapi.yaml',
+            outputDir: 'docs/api-reference/rest/network-fulfillment',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],
@@ -193,6 +199,7 @@ const config: Config = {
             {label: 'process-path-management', href: 'https://github.com/claudioed/process-path-management'},
             {label: 'labor-performance', href: 'https://github.com/claudioed/labor-performance'},
             {label: 'warehouse-ops-agent', href: 'https://github.com/claudioed/warehouse-ops-agent'},
+            {label: 'network-fulfillment', href: 'https://github.com/claudioed/network-fulfillment'},
           ],
         },
         {
