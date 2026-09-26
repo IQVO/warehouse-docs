@@ -2,13 +2,13 @@
 id: domain-events
 title: Domain Events
 sidebar_label: Domain Events
-description: The nine past-tense domain events raised by wes-work-planning, what raises each, and who actually consumes them.
+description: The ten past-tense domain events raised by wes-work-planning, what raises each, and who actually consumes them.
 ---
 
 # Domain Events
 
-Nine past-tense domain events are declared in
-`internal/domain/shared/events.go`. All nine implement one interface:
+Ten past-tense domain events are declared in
+`internal/domain/shared/events.go`. All ten implement one interface:
 
 ```go
 type DomainEvent interface {
@@ -34,10 +34,12 @@ repository's test suite is exact rather than approximate.
 | `RateDeviationDetected` | *(declared; no use case raises it today — see the gap below)* | *(none — never raised)* |
 | `PathThrottled` | `RebalanceDecision` recommends `ThrottleUpstream` (flow-fed, over alarm threshold) | *(none today)* |
 | `LaborReassignmentFlagged` | `RebalanceDecision` recommends `ReassignLabor` (release-fed, saturated with backlog remaining) | *(none today)* |
+| **`PathCapacityChanged`** | `SampleBacklog`, only when the caller supplies `cutoffAt` (`GET /paths/{pathId}/telemetry?cutoffAt=…`) — reports `PathId`, `CutoffAt`, `RemainingUnits`, `Known` ([ADR-0018](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md)) | **`order-management`** — its `kafkapathcapacity` adapter caches remaining capacity per (path, cutoff) |
 
-**`WorkReleased` is the only event any other service consumes today.**
-Every other event is published for observability and future subscribers;
-nothing in the platform reads them yet. Saying so plainly is more useful
+**Exactly two events are consumed by another service today:**
+`WorkReleased` (by `fulfillment-execution`) and `PathCapacityChanged` (by
+`order-management`). Every other event is published for observability and
+future subscribers; nothing in the platform reads them yet. Saying so plainly is more useful
 than implying a richer event mesh than exists.
 
 :::caution[`RateDeviationDetected` is declared, not raised]
@@ -45,6 +47,16 @@ It appears in the domain event catalogue and in `apis/asyncapi.yaml`, but no
 use case raises it today: computing rate deviation needs a time-windowed
 actual-rate projection that has not been built. It is documented rather
 than quietly dropped, because it is part of the declared model.
+:::
+
+:::note[`PathCapacityChanged` is honest about what it does not know]
+`RemainingUnits` is `wipLimit − WIP` for a **release-fed** pool with a WIP
+limit provisioned. For a **flow-fed** pool (or a release-fed pool with no
+WIP limit) `Known` is `false` and `RemainingUnits` is `0` — an alarm
+threshold is not an admission ceiling, so no figure is invented. The event
+correlates by CPT **timestamp** (`CutoffAt`), not by
+process-path-management's `cptId`; order-management does the matching.
+Nothing publishes it unless a caller asks — there is no scheduler.
 :::
 
 :::note[Two `ShiftPlanCommitted` events, two different contexts]
@@ -58,7 +70,10 @@ never fed into this context's own `ShiftPlan` aggregate. See
 
 Kafka publication is **opt-in at runtime** via `EVENT_PUBLISHER=kafka`. With
 the default `EVENT_PUBLISHER=log`, every event above is written to the log
-publisher instead. "Published" in this catalogue means "the outbound Kafka
+publisher instead. With `kafka` and a `DATABASE_URL`, events go through a
+transactional outbox (`outbox_events`, committed with the aggregate) and an
+in-process relay onto both the integration topic and `warehouse.wes.analytics`
+([ADR-0014](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0014-transactional-outbox.md)). "Published" in this catalogue means "the outbound Kafka
 adapter has a payload mapping for it and a use case hands it to
 `EventPublisher.Publish`," not "it is flowing in your environment right
 now."
@@ -72,6 +87,7 @@ sequenceDiagram
     participant INV as inventory-storage
     participant WES as wes-work-planning
     participant FE as fulfillment-execution
+    participant OM as order-management
 
     WM-->>WES: ShiftPlanCommitted (integration event)
     Note over WES: projected to LaborPlanObserved<br/>NOT into our ShiftPlan aggregate
@@ -96,6 +112,9 @@ sequenceDiagram
 
     Note over WES: GET /paths/pick-a/telemetry
     WES->>WES: BacklogThresholdBreached (if over threshold)
+    Note over WES: GET /paths/pick-a/telemetry?cutoffAt=...
+    WES->>WES: PathCapacityChanged
+    WES-->>OM: PathCapacityChanged on warehouse.work-planning.events
     Note over WES: GET /paths/pick-a/rebalance
     WES->>WES: PathThrottled | LaborReassignmentFlagged
 ```
@@ -119,5 +138,9 @@ carries two OPTIONAL fields, present only when there is a hint to give:
 `Hazmat`) and `fragile` (`true` when the SKU is classified `Fragile`), plus
 `gift_wrap` (caller-supplied — see [Ubiquitous Language](./ubiquitous-language)
 Trap 5).
+
+`PathCapacityChanged` is the other event that carries more than a bare
+`PathId`: it is a *report*, not just a fact-of-occurrence, so it needs
+`CutoffAt`/`RemainingUnits`/`Known` to be useful to order-management at all.
 
 See [Async API](./async-api) for the wire format and every consumed topic.

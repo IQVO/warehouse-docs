@@ -8,7 +8,9 @@ description: The three past-tense domain events this context creates from its ow
 # Domain Events
 
 Labor Performance publishes three past-tense domain events, all raised
-from its own two aggregates (`LaborStandard` and `TaskPerformance`). None
+from two of its aggregates (`LaborStandard` and `TaskPerformance`; the
+third aggregate, `IdlePeriod`, raises no event of its own — its gap
+travels on `TaskPerformanceRecorded`, below). None
 of them is triggered by anything this context consumes from Kafka in
 turn — they are the *output* of scoring, not an echo of the input.
 
@@ -52,6 +54,26 @@ as `EfficiencyPct` was when it shipped, and the existing
 `workforce-management`'s `laborperformancecache` (ADR 0019 / ADR 0020) is
 the live first consumer of the field, feeding a running idle-share signal
 alongside its pre-existing measured-rate mean.
+
+## Additive field: `TravelComponentSeconds` (ADR 0015)
+
+Since [ADR 0015](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0015-optional-travel-component-on-labor-standard.md),
+`LaborStandardDefined` and `LaborStandardRevised` carry an optional,
+caller-supplied travel-time breakdown of the standard
+(`travel_component_seconds` on the analytics topic), omitted entirely —
+never defaulted to `0` — when none was declared. It is the value the
+caller supplied to `DefineStandard`; this service never computes or
+validates it against facility-layout or any other live lookup.
+
+## How this maps to `apis/asyncapi.yaml`
+
+The spec documents three channels and five messages: the consumed
+`TaskCompleted` on `warehouse.fulfillment.events`; `LaborStandardDefined`,
+`LaborStandardRevised` and `TaskPerformanceRecorded` on
+`warehouse.labor-performance.analytics`; and
+`TaskPerformanceRecordedIntegration` — the SAME `TaskPerformanceRecorded`
+domain event in the plain integration envelope (no `schema_version`,
+keyed by `AssociateId`) — on `warehouse.labor-performance.events`.
 
 ## Published, but not (yet) integration events for anyone else
 
@@ -99,4 +121,4 @@ for the full analytical data product design.
 See [Async API](./async-api) for the one live, *inbound* Kafka
 integration this context has — consuming `TaskCompleted` from
 `fulfillment-execution` — which is a separate topic and a separate
-direction from everything on this page.
+direction from the events on this page.

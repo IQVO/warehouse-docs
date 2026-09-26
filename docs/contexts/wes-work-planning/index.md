@@ -16,9 +16,11 @@ continuously** — waveless, one unit at a time, earliest-CPT-first — and
 performs **flow balancing** from live buffer telemetry so that every parcel
 makes its truck without the floor ever being starved or flooded.
 
-It is the only context in the platform that sits downstream of three upstream
-suppliers (`inventory-storage`, `workforce-management`, `order-management`)
-and closes a control loop with a fourth (`fulfillment-execution`). Following
+It sits downstream of three upstream event suppliers (`inventory-storage`,
+`workforce-management`, `order-management`), conforms to two Generic
+contexts (`process-path-management`'s catalogue and `facility-layout`'s
+travel distances), closes a control loop with `fulfillment-execution`, and
+reports remaining path capacity back to `order-management`. Following
 the industry WMS/WES/WCS framing this platform adopts: WMS says *what must
 happen*, WCS says *how equipment performs it*, and this service — the WES
 tier's core — decides **which activities happen when**. That is what
@@ -49,8 +51,9 @@ justification.
 - **[Aggregate Design Canvas](/contexts/wes-work-planning/aggregate-design-canvas)** — the `WorkPool`
   aggregate: state, invariants, corrective policies, commands, events,
   throughput, size.
-- **[Domain Events](/contexts/wes-work-planning/domain-events)** — the nine past-tense domain events,
-  including the one (`WorkReleased`) any sibling actually consumes today.
+- **[Domain Events](/contexts/wes-work-planning/domain-events)** — the ten past-tense domain events,
+  including the two (`WorkReleased`, `PathCapacityChanged`) siblings
+  actually consume today.
 - **[Async API](/contexts/wes-work-planning/async-api)** — the Kafka integration in narrative form:
   the shared envelope, topics published and consumed, real payloads.
 

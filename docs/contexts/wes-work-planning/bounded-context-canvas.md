@@ -52,9 +52,11 @@ flow right now — re-planned continuously rather than computed once.
 | `workforce-management` | Customer/Supplier, with an **ACL on our side** | `ShiftPlanCommitted` on `warehouse.workforce.events` (one message per path line) | Projected into `LaborPlanObserved`, keyed by `path_id`. **Never** fed into this service's own `ShiftPlan`/`PathPlan` aggregate — same word, different bounded context. |
 | `order-management` | Customer/Supplier, choreographed and **fire-and-forget** | `OrderAllocated`, `OrderPartiallyAllocated` on `warehouse.order-management.events` | For each line, calls the existing `EnqueueWorkUnit` use case with a deterministic `work_unit_id` (`"{order_id}-line-{line_no}"`). No reply event — order-management learns of downstream progress only via this service's own published events, if it chooses to subscribe. |
 | `fulfillment-execution` (feedback edge) | Customer/Supplier, **roles reversed** from the outbound edge below | `TaskCompleted` on `warehouse.fulfillment.events` | Calls the existing `RecordCompletion` use case — the same code path `POST /work-units/{id}/complete` uses. Closes the control loop: WIP drops, the next release can proceed. |
+| `process-path-management` | **Conformist** to its OHS/Published Language | `ProcessPathCreated` / `ProcessPathUpdated` / `ProcessPathDeactivated` on `warehouse.process-path-management.events` — **only when `PATH_CATALOGUE_SOURCE=kafka`** (default `file` reads the same catalogue from YAML) | Replayed from the beginning, under its own per-process consumer group, into the in-memory catalogue that validates every `pathId` ([ADR-0012](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0012-process-path-catalogue-validation.md)). A state rebuild, not an effect — no `processed_events` row. |
+| API callers (`warehouse-ops-agent`, `warehouse-console`) | Open-Host Service (REST + MCP) | REST calls (e.g. `GET /work-units?reference=`, the reports API) and MCP tool calls; the console shell mounts this repo's `web/` micro-frontend | Every REST and MCP route is **unauthenticated by deliberate decision** — the static-bearer layer was removed ([ADR-0016](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0016-remove-rest-mcp-static-bearer-auth.md)); network-level isolation is the only access control. |
 
 The inbound Kafka adapter (`internal/adapters/inbound/kafka/consumer.go`) is
-the concrete, locatable home of the ACL: unexported structs
+the concrete, locatable home of the ACL for the four integration topics: unexported structs
 (`inventoryEventData`, `shiftPlanCommittedData`, `taskCompletedData`,
 `orderAllocatedData`) hold the foreign shape and never cross into the
 application layer.
@@ -64,6 +66,9 @@ application layer.
 | To | Relationship pattern | What is sent | Consumer effect |
 |---|---|---|---|
 | `fulfillment-execution` | Customer/Supplier, **we are the supplier**; Open-Host Service + Published Language | `WorkReleased` on `warehouse.work-planning.events`, enriched at the adapter with `cpt` and `ref` (and optionally `required_capabilities`, `fragile`, `gift_wrap`) | Builds its own `Task` — a different model with a different lifecycle (leases, claims, stations). The enrichment makes the contract self-sufficient: no callback into this service is required. |
+| `order-management` (capacity edge) | Customer/Supplier, **we are the supplier**; OHS + Published Language | `PathCapacityChanged` on `warehouse.work-planning.events` — `path_id`, `cutoff_at`, `remaining_units`, `known`; raised only when `GET /paths/{pathId}/telemetry` is called with `cutoffAt` ([ADR-0018](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md)) | Its `kafkapathcapacity` adapter caches remaining capacity per (path, cutoff) behind its `PathCapacity` port, correlating `cutoff_at` against its own CPT windows. |
+| `facility-layout` (synchronous query) | **Conformist** to its OHS | `GET /distance?from=&to=`, once, when `CommitShiftPlan` is given both `fromLocationCode` and `toLocationCode` ([ADR-0017](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0017-travel-distance-lookup-on-commit-shift-plan.md)) | Stamps an optional `travelDistanceM`/`travelDistanceEstimated` hint onto the `PathPlan`. Opt-in via `TRAVEL_DISTANCE_MODE=http` (default `permissive` — no call) and fail-open: a lookup failure never blocks the commit. |
+| `inventory-storage` (synchronous query) | Customer/Supplier, we conform to its OHS | `GET /products/{sku}/classification`, once per release ([ADR-0009](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0009-product-classification-propagation-to-work-released.md)) | Supplies the optional `required_capabilities`/`fragile` hints on `WorkReleased`. Opt-in via `PRODUCT_CLASSIFICATION_MODE=http` (default `permissive`) and fail-open. |
 
 `fulfillment-execution` is downstream of us for release and **upstream of
 us** for completion (the inbound feedback edge above) — two directed
@@ -74,7 +79,8 @@ contracts, different payloads, and different failure modes.
 The other eight domain events are also written to
 `warehouse.work-planning.events` with a `{"path_id": ...}`-shaped payload,
 but nothing in the platform consumes them today — published for
-observability and future subscribers. See [Domain Events](./domain-events).
+observability and future subscribers. See
+[Domain Events](/contexts/wes-work-planning/domain-events).
 
 ## Ubiquitous Language
 
@@ -113,8 +119,8 @@ sibling's. Full glossary: [Ubiquitous Language](./ubiquitous-language).
 
 ## Assumptions
 
-- The platform runs one shared Kafka broker across all five (now six)
-  publishing services; this repository does not run its own.
+- The platform runs one shared Kafka broker across every publishing
+  service in the fleet; this repository does not run its own.
 - `KAFKA_BROKERS` being set starts the inbound consumer independently of
   `EVENT_PUBLISHER` — a service can observe the platform without emitting
   to it.
@@ -122,11 +128,20 @@ sibling's. Full glossary: [Ubiquitous Language](./ubiquitous-language).
   log, not Kafka, in most environments; the ✅ marks in the
   [domain events catalogue](./domain-events) mean "a payload mapping and a
   publishing call exist," not "this is flowing in your environment right
-  now."
+  now." With `EVENT_PUBLISHER=kafka` **and** `DATABASE_URL` set, events
+  are written to an `outbox_events` table in the same transaction as the
+  aggregate and relayed to both Kafka topics by an in-process relay
+  ([ADR-0014](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0014-transactional-outbox.md));
+  without `DATABASE_URL` they are published directly.
 - Product classification lookups (`ProductClassificationLookup`) are
   fail-open by design: a lookup failure omits the optional enrichment
   rather than blocking or delaying release. This is a deliberate asymmetry
   with `inventory-storage`'s own fail-closed `StowStock` placement check.
+  Travel-distance lookups (`TravelDistanceLookup`, ADR-0017) follow the
+  same rule: missing location codes, an unknown or cross-zone pair, or
+  facility-layout being down all degrade to "no hint", never a failed
+  `CommitShiftPlan`. Both lookups default to `permissive` (no network call);
+  the deployed cluster sets them to `http`.
 - `order-management`'s fire-and-forget enqueue integration assumes
   duplicate-safe enqueue via a deterministic `work_unit_id`
   (`"{order_id}-line-{line_no}"`) as a second line of defense on top of
@@ -145,7 +160,8 @@ sibling's. Full glossary: [Ubiquitous Language](./ubiquitous-language).
 - **Architecture fitness tests** (`internal/architecture/architecture_test.go`,
   [ADR-0007](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0007-arch-go-fitness-tests.md))
   fail the build if the hexagonal dependency rule is violated — six
-  assertions, run as a blocking CI job.
+  assertions, plus an MCP-adapter dependency rule (ADR-0008) in
+  `internal/architecture/fitness_test.go`, run as a blocking CI job.
 - **Idempotency under redelivery**, unit-tested per consumed event type:
   replaying `StockReserved`/`ReservationRevoked` does not double-adjust
   `UsableInventoryObserved`; replaying `ShiftPlanCommitted` does not
@@ -159,12 +175,19 @@ sibling's. Full glossary: [Ubiquitous Language](./ubiquitous-language).
 
 ## Open Questions
 
-- **`facility-layout` is not wired at all.** No shared topic, no API call,
-  no dependency in either direction today. If release ever becomes
-  travel-aware, or balancing ever becomes congestion-aware, this context
-  would become a **Conformist** to facility-layout's location-code
-  Published Language rather than model geography itself — but until then,
-  the honest context map has no edge there.
+- **The travel-distance hint is thin by design.** Since ADR-0017,
+  `CommitShiftPlan` reads facility-layout's `GET /distance` — but only for
+  two **caller-supplied** location codes (nothing derives them from the
+  process-path catalogue yet), only once at commit time (a later layout
+  change is not retroactively applied), and release is still not
+  travel-aware: travel time, congestion and route choice remain unmodelled
+  here. No facility-layout Kafka topic is consumed.
+- **`PathCapacityChanged` is a snapshot, driven from outside.** It is
+  published only when someone calls `GET /paths/{pathId}/telemetry` with
+  `cutoffAt` — there is no scheduler — and `known` is always `false` for a
+  flow-fed path. Correlation with order-management's CPT windows is by
+  timestamp, not by `cptId`, an accepted v1 imprecision
+  ([ADR-0018](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md)).
 - **`RateDeviationDetected` is declared but never raised.** It exists in
   the domain event catalogue and in `apis/asyncapi.yaml`, but computing
   rate deviation needs a time-windowed actual-rate projection that is not

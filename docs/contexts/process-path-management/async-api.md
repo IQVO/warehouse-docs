@@ -2,7 +2,7 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: Kafka integration for process-path-management — topic, envelope, and the honest zero-consumer state of this integration today.
+description: Kafka integration for process-path-management — topics, envelope, the four event types, and the live consumer state of this integration today.
 ---
 
 # Async API
@@ -13,7 +13,7 @@ This context publishes on two separate Kafka topics, deliberately kept
 apart so their contracts evolve independently:
 
 - **`warehouse.process-path-management.events`** — the integration
-  Published Language, documented below. Three sibling contexts consume it.
+  Published Language, documented below. Four sibling contexts consume it.
 - **`warehouse.process-path-management.analytics`** — a second,
   additive analytics-only topic (ADR 0007) feeding this service's own
   `cmd/pathmgmt-projector`. See
@@ -28,7 +28,16 @@ This context is the **exclusive** publisher on this topic and has **zero
 inbound Kafka consumer** and **zero synchronous dependency** in any
 direction — it is the SOURCE of the process-path published language, never
 a consumer of anyone else's. Publishing happens whenever
-`EVENT_PUBLISHER=kafka` is configured.
+`EVENT_PUBLISHER=kafka` is configured (the default is a local log
+publisher); with a `DATABASE_URL` set as well — the cluster's mode —
+every event goes through the transactional outbox (ADR 0003), relayed to
+Kafka by an in-process relay, and each domain event enqueues one row per
+topic in the same transaction as the aggregate change.
+
+The topic carries four event types, filtered by consumers on
+`event_type`: `ProcessPathCreated`, `ProcessPathUpdated`,
+`ProcessPathDeactivated` (keyed by `path_id`), and `CPTScheduleChanged`
+(keyed by `site_id`, ADR 0010).
 
 ## The envelope
 
@@ -45,13 +54,19 @@ Here it is for `ProcessPathCreated`:
     "path_id": "PICK",
     "match_prefix": "pick",
     "direct": true,
-    "required_capabilities": ["pick"]
+    "required_capabilities": ["pick"],
+    "cycle_time_p95": "2h0m0s"
   }
 }
 ```
 
+`data` may also carry an optional `destination_location_role` (ADR 0009;
+omitted when unset) and an `eligibility` object (ADR 0010).
 `ProcessPathUpdated` and `ProcessPathDeactivated` share the same envelope
-shape, with `data` carrying the fields relevant to each transition. See
+shape, with `data` carrying the fields relevant to each transition —
+`ProcessPathDeactivated` carries only `path_id`. `CPTScheduleChanged`
+carries a full schedule snapshot (`site_id`, `timezone`, `cutoffs[]`),
+never a diff. See
 [apis/asyncapi.yaml](https://github.com/claudioed/process-path-management/blob/develop/apis/asyncapi.yaml)
 in the source repository for the full, per-event-type schema.
 
@@ -61,24 +76,26 @@ Every other cross-context integration in this fleet that resembles
 "context A needs a fact that context B owns" is Kafka-driven, never a
 synchronous hot-path call — `StockReserved`, `ShiftPlanCommitted`, and
 `TaskCompleted` are all consumed asynchronously, never RPC'd on every
-request. A synchronous read-through here — each of the three intended
-consumers calling this service's REST API on every `claimNext`/dispatch
+request. A synchronous read-through here — each consumer calling this service's REST API on every `claimNext`/dispatch
 decision — would put a Generic-subdomain service's availability on the hot
-path of three Core-subdomain contexts' most latency-sensitive operations.
+path of the consuming contexts' most latency-sensitive operations.
 Path definitions also change rarely relative to how often they'd be read,
 which makes a local, event-maintained cache in each consumer the natural
-fit. See the ADR in the source repository (`docs/docs/adr/0001-*.md`) for
-the full reasoning.
+fit. See [ADR 0001](https://github.com/claudioed/process-path-management/blob/develop/docs/docs/adr/0001-process-path-management-bounded-context.md)
+for the full reasoning.
 
 ## Live consumers today
 
-:::note[All three intended consumers are now wired]
-The topic and this service's publisher are **real and tested**, and, as
-of the fleet's bounded-context wiring plan, all three of
+:::note[Four live consumers]
+The topic and this service's publisher are **real and tested**.
 `fulfillment-execution`, `wes-work-planning`, and `workforce-management`
-have a live Kafka consumer wired to this topic — each replays it into a
-local read model rather than reading a live value on every dispatch
-decision. See [Domain Events](./domain-events) and the platform
+each replay it into a local catalogue cache (ADR 0002; `ProcessPath*`
+events only), rather than reading a live value on every dispatch
+decision. `order-management` consumes it with two consumers — path
+`cycle_time_p95`/`eligibility` and `CPTScheduleChanged` — as the
+fulfillment capability contract behind its promise (ADR 0010). Every
+consumer's catalogue source is opt-in (`PATH_CATALOGUE_SOURCE`, default
+`file`/`none`); the cluster sets `kafka`. See [Domain Events](./domain-events) and the platform
 [Context Map](/strategic-design/context-map) for the full, honest state.
 :::
 

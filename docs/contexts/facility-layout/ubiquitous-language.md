@@ -19,7 +19,11 @@ DDD and expected here.
 | **Site** | A physical facility/building. The root of the hierarchy. Has a `SiteCode` (non-empty, uppercase alphanumeric, unique) and a human name. |
 | **Zone** | A behavioral classification scoped to a Site, bundling the Area and Zone code segments into one aggregate. Carries a `TemperatureClass` (Ambient/Chilled/Frozen) and a `Hazmat` flag. Zones are not cosmetic — every `PlacementRule` is keyed by one. |
 | **Aisle** | A physical corridor scoped to a Zone. Carries a `SequenceHint` (its walk-order position — the concrete travel-distance input the WES tier needs) and a `Direction` (`OneWay`/`TwoWay`). |
-| **LocationType** | A reusable classification of physical slot shape/kind — `PalletRack`, `Shelf`, `ToteWall`, `BulkFloor`, `Staging`, `Amnesty` — each carrying a default capacity envelope (max weight, max volume). |
+| **LocationType** | A reusable classification of physical slot shape/kind — `PalletRack`, `Shelf`, `ToteWall`, `BulkFloor`, `Staging`, `Amnesty` — each carrying a `LocationRole` and a default capacity envelope (max weight, max volume). |
+| **LocationRole** | What a location is *for* (ADR 0016): `Storage` (default), `Dock`, `Yard`, `WorkCenter`, `Drop`, `Staging`, `QC`, `Consolidation`, `Shipping`. Only `Storage`/`Staging`/`Drop`/`Consolidation` require a capacity envelope. A `Dock` slot carries a `dockFlow` (`Inbound`/`Outbound`/`Both`); a `WorkCenter` slot carries at least one activity (`Pack`, `Sort`, `QC`, `VAS`, `Deconsolidate`, `Receive`, `Kit`). `fulfillment-execution` reads it via `GET /locations/{locationCode}`. |
+| **CrossAisle** | A walkable connection between two aisles of the same zone at one bay (ADR 0017). |
+| **FixedStructure** | A non-slot physical obstacle on a site — `Wall`, `Column`, `Office`, `Conveyor`, `Other` — with a footprint in metres (ADR 0017). |
+| **Travel graph** | The pure-domain graph of a zone's aisle/bay waypoints behind `GET /zones/{zoneId}/travel-graph` and `GET /distance`. Same-zone only; distances are flagged `estimated` when geometry is missing (ADR 0017). |
 | **LocationSlot** | The leaf aggregate: one coded physical slot. Its identity **is** its `LocationCode`. Has a LocationType, a capacity envelope (which may override the type's default), and a `Status`. |
 | **PlacementRule** | A declaration of which LocationTypes are legal in which Zones. The mechanism that prevents "ambient product in the frozen zone" — enforced once, at registration time, not re-checked by every caller. |
 | **LocationCode** | The coded address of a slot: seven typed, hyphen-joined segments, coarsest to finest. A value object, never free text. |
@@ -30,7 +34,7 @@ DDD and expected here.
 | Term | Values / shape | Notes |
 |---|---|---|
 | **LocationCode** | `Site-Area-Zone-Aisle-Bay-Level-Position` | Each segment non-empty and `[A-Z0-9]` only. Always round-trips through `String()` / `ParseLocationCode()`. |
-| **Capacity** | `maxWeightKg`, `maxVolumeM3` | Both must be strictly positive. |
+| **Capacity** | `maxWeightKg`, `maxVolumeM3` | Both must be strictly positive when the LocationType's role requires capacity. |
 | **TemperatureClass** | `Ambient`, `Chilled`, `Frozen` | A Zone attribute; a PlacementRule predicate can match on it. |
 | **Direction** | `OneWay`, `TwoWay` | An Aisle attribute; an input to travel-path planning. |
 | **Status** | `Active`, `UnderMaintenance`, `Decommissioned` | Shared by every structural aggregate. |
@@ -63,9 +67,12 @@ of `apis/openapi.yaml`) are its **Published Language**. `GET
 /locations/{locationCode}/classification` is a concrete instance of that:
 rather than `inventory-storage` re-deriving or duplicating Zone's
 `Hazmat`/`TemperatureClass` fields, it reads them here, denormalized to
-exactly the shape a stow-time placement check needs. This is the one scoped,
-real, live HTTP call this context participates in — see [Bounded Context
-Canvas](./bounded-context-canvas.md).
+exactly the shape a stow-time placement check needs. It is now
+`inventory-storage`'s rollback path (`LOCATION_LOOKUP_MODE=http`) behind its
+event-fed cache. The other backend-to-backend HTTP reads of this context are
+`wes-work-planning`'s live `GET /distance` and `fulfillment-execution`'s
+opt-in `GET /locations/{locationCode}` — see [Bounded
+Context Canvas](./bounded-context-canvas.md).
 
 ## Words this context deliberately does **not** use
 

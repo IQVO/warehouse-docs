@@ -7,7 +7,7 @@ description: The Kafka integration in narrative form — the shared envelope, to
 
 # Async API
 
-All five (now six) warehouse-systems services share **one Kafka broker**
+Every warehouse-systems service shares **one Kafka broker**
 (`localhost:9092` locally). This service does not run its own broker — it
 connects to the shared one via `github.com/segmentio/kafka-go` (pure Go, no
 cgo).
@@ -59,6 +59,7 @@ CloudEvents-shaped spec document.
 | `event_type` | `data` | Published when | Consumed by |
 |---|---|---|---|
 | `WorkReleased` | `{"path_id","work_unit_id","cpt","ref"}` (+ optional `required_capabilities`, `fragile`, `gift_wrap`) | `ReleaseNextWork` releases a unit | **`fulfillment-execution`** → creates a `Task` |
+| `PathCapacityChanged` | `{"path_id","cutoff_at","remaining_units","known"}` | `SampleBacklog` is called with `cutoffAt` set (`GET /paths/{pathId}/telemetry?cutoffAt=…`, ADR-0018) | **`order-management`** — its `kafkapathcapacity` adapter (own per-process consumer group, filters for this one event type) caches remaining capacity keyed by path and cutoff instant |
 
 ```json
 {
@@ -75,20 +76,44 @@ CloudEvents-shaped spec document.
 }
 ```
 
+`PathCapacityChanged` reports the path's remaining admission capacity
+(`wipLimit` minus current WIP, never negative), correlated against a CPT
+cutoff **timestamp** rather than process-path-management's `cptId`.
+`known=false` for a flow-fed path or a release-fed path with no WIP limit
+provisioned. See
+[ADR-0018](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md).
+
 The other eight domain events are also written to this topic by the
 outbound adapter with a `{"path_id": ...}`-shaped payload, but nothing
-consumes them today — see [Domain Events](./domain-events).
+consumes them today — see [Domain Events](./domain-events). (Separately,
+with `EVENT_PUBLISHER=kafka` a second publisher writes every domain event,
+in a richer envelope, to `warehouse.wes.analytics` for the analytics data
+product —
+[ADR-0011](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0011-analytical-data-product.md).)
 
 Set `EVENT_PUBLISHER=kafka` (with `KAFKA_BROKERS`) to publish here; the
 default `log` publisher writes the same events to the log instead. Both
 implement the same `ports.EventPublisher` interface, so the use cases
-cannot tell which is wired.
+cannot tell which is wired. With `kafka` **and** `DATABASE_URL` set, the
+publishers act only as encoders inside the use case's transaction: one
+`outbox_events` row per event per topic, drained onto Kafka by an
+in-process relay
+([ADR-0014](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0014-transactional-outbox.md)).
+Without `DATABASE_URL` events are published directly.
 
 ## Consumed
 
 Setting `KAFKA_BROKERS` starts the inbound consumer automatically,
 **independent of `EVENT_PUBLISHER`**. It reads four topics concurrently,
-one goroutine each.
+one goroutine each, under the consumer group `KAFKA_CONSUMER_GROUP`
+(default `wes-work-planning`, shared by every deployed replica). A second
+process against the shared broker — a developer's `go run`, the e2e
+harness — must set a unique value, or the rebalance hands the single
+partition to one member and the other consumes nothing while reporting
+healthy.
+
+With `PATH_CATALOGUE_SOURCE=kafka` a fifth, separate consumer replays
+process-path-management's topic — see the last section below.
 
 ### `warehouse.workforce.events` — `ShiftPlanCommitted`, from `workforce-management`
 
@@ -165,10 +190,24 @@ of the `processed_events` idempotency guard. This integration is
 deliberately **fire-and-forget**: there is no reply event back to
 order-management.
 
+### `warehouse.process-path-management.events` — the process-path catalogue, from `process-path-management`
+
+Consumed only when `PATH_CATALOGUE_SOURCE=kafka` (the default `file` source
+reads the same catalogue from YAML instead). The
+`internal/adapters/outbound/kafkacatalog` consumer replays the topic from
+the beginning under its **own per-process consumer group** — not
+`KAFKA_CONSUMER_GROUP` — folding `ProcessPathCreated`,
+`ProcessPathUpdated` and `ProcessPathDeactivated` into the in-memory
+catalogue that validates every `pathId`
+([ADR-0012](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0012-process-path-catalogue-validation.md)).
+Startup blocks until the replay has caught up, then the consumer keeps
+following the topic live. It is a state rebuild, not an effect, so it does
+not use `processed_events`.
+
 ## Idempotency
 
 Kafka is at-least-once, so redelivery is normal, not exceptional. Every
-consumer path is idempotent by construction:
+integration-event consumer path is idempotent by construction:
 
 ```mermaid
 flowchart LR
@@ -209,7 +248,10 @@ nobody reads.
 | Env var | Default | Effect |
 |---|---|---|
 | `KAFKA_BROKERS` | *(unset)* | Comma-separated brokers. **Setting it starts the inbound consumer.** |
-| `EVENT_PUBLISHER` | `log` | `kafka` switches the outbound publisher; requires `KAFKA_BROKERS`. |
+| `KAFKA_CONSUMER_GROUP` | `wes-work-planning` | Consumer group of the integration-event consumer; set a unique value for any second process on the shared broker. |
+| `EVENT_PUBLISHER` | `log` | `kafka` switches the outbound publisher; requires `KAFKA_BROKERS`. With `DATABASE_URL` also set, events go through the transactional outbox. |
+| `OUTBOX_RELAY_INTERVAL` | `1s` | How long the outbox relay sleeps between empty passes (outbox mode only). |
+| `PATH_CATALOGUE_SOURCE` | `file` | `kafka` replays `warehouse.process-path-management.events` into the catalogue; requires `KAFKA_BROKERS`. |
 
 ## Generated reference
 

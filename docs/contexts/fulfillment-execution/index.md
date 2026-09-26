@@ -22,10 +22,13 @@ task (`claimNext(stationId, capabilities)`); the system selects work, not
 workers. There is deliberately no `assign(task, station)` operation. A claim
 is a time-boxed **lease** — if it is not renewed or completed before expiry,
 the task returns to the pool rather than vanishing. This is the context with
-the deepest ADR trail in the fleet: nineteen accepted decisions, including
-the pull-dispatch rule itself, the lease mechanism, per-package DOT hazard
-segregation, and a structural (unimplemented) anti-corruption seam reserved
-for the WCS/equipment tier this platform deliberately does not build.
+the deepest ADR trail in the fleet: twenty-six decisions (one since
+superseded), including the pull-dispatch rule itself, the lease mechanism,
+per-package DOT hazard segregation, a structural (unimplemented)
+anti-corruption seam reserved for the WCS/equipment tier this platform
+deliberately does not build, and — most recently — a CPT-missed sweep,
+`PackageManifested`, and an on-time-to-CPT KPI that feed order-management's
+promise loop.
 
 ## On this page set
 
@@ -40,17 +43,17 @@ for the WCS/equipment tier this platform deliberately does not build.
 - **[Aggregate Design Canvas](/contexts/fulfillment-execution/aggregate-design-canvas)** — the `Task`
   aggregate: state transitions, invariants, corrective policies, commands,
   events.
-- **[Domain Events](/contexts/fulfillment-execution/domain-events)** — the nine past-tense domain events,
-  which are actually on the wire today, and who consumes them.
+- **[Domain Events](/contexts/fulfillment-execution/domain-events)** — the thirteen past-tense domain events,
+  the three that are actually on the wire today, and who consumes them.
 - **[Async API](/contexts/fulfillment-execution/async-api)** — the Kafka integration, narrative form,
-  including the shared fan-out topic two different downstream consumers
-  both read.
+  including the shared fan-out topic three different downstream consumers
+  read.
 
 ## Elsewhere
 
 - **Repository** — [github.com/claudioed/fulfillment-execution](https://github.com/claudioed/fulfillment-execution)
 - **Docs site** — the service's own Docusaurus site, published from
   `docs/docs/**/*.md` in that repository (the source this page set is
-  built from), including its full nineteen-entry ADR trail
+  built from), including its full twenty-six-entry ADR trail
 - **[Generated API Reference](/api-reference/async/fulfillment-execution)**
   — AsyncAPI reference generated from the real `apis/asyncapi.yaml`

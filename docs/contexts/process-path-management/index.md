@@ -14,7 +14,11 @@ slug: /contexts/process-path-management
 process paths (`PICK`, `PACK`, `REBIN`, `SLAM`, …) — a path's canonical
 identity, the `matchPrefix` rule downstream consumers use to resolve a
 caller-supplied id to a path family, whether it is `Direct`, and the
-capabilities a station/associate must hold to work it.
+capabilities a station/associate must hold to work it. Since
+[ADR 0010](https://github.com/claudioed/process-path-management/blob/develop/docs/docs/adr/0010-fulfillment-capability-contract.md)
+each path also declares a p95 cycle time and eligibility rules, and the
+context owns a second aggregate — a site-scoped **CPT schedule** — so
+`order-management` can derive its delivery promise from path capability.
 
 It replaces a static YAML file
 (`warehouse-infra/config/process-paths/sortable-fc.yaml`) that
@@ -23,12 +27,14 @@ each independently boot-loaded — three unowned copies of the same fact,
 revisable only by a coordinated redeploy of all three. This service is the
 single, auditable source of truth in its place.
 
-:::note[All three intended consumers are wired]
-This context publishes real, tested domain events, and, as of the
-fleet's bounded-context wiring plan, all three of its intended downstream
-consumers have a Kafka consumer wired to them. It also now ships its own
-analytics data product (ADR 0007), the last of the fleet's 8 backend
-contexts to do so. See [Domain Events](/contexts/process-path-management/domain-events) and
+:::note[Four live consumers, zero outbound calls]
+This context publishes real, tested domain events. The three original
+catalogue consumers (`fulfillment-execution`, `wes-work-planning`,
+`workforce-management`) replay its topic into a local cache (ADR 0002),
+and `order-management` consumes the same topic for cycle time,
+eligibility and `CPTScheduleChanged` (ADR 0010). It calls no sibling
+context at all — REST, MCP or Kafka. It also ships its own analytics data
+product (ADR 0007). See [Domain Events](/contexts/process-path-management/domain-events) and
 [Async API](/contexts/process-path-management/async-api) for the full picture.
 :::
 
@@ -37,13 +43,16 @@ contexts to do so. See [Domain Events](/contexts/process-path-management/domain-
 - **[Business Context](/contexts/process-path-management/business-context)** — why extracting the catalogue
   beats three services each owning a copy of the same YAML file.
 - **[Ubiquitous Language](/contexts/process-path-management/ubiquitous-language)** — ProcessPath, PathId,
-  Capability, MatchPrefix, Direct, Status.
+  Capability, MatchPrefix, Direct, DestinationLocationRole, CycleTimeP95,
+  Eligibility, CPTSchedule, Status.
 - **[Bounded Context Canvas](/contexts/process-path-management/bounded-context-canvas)** — the full
   ddd-crew canvas: purpose, strategic classification, roles, inbound/outbound
   communication, business decisions, open questions.
 - **[Aggregate Design Canvas](/contexts/process-path-management/aggregate-design-canvas)** — the `ProcessPath`
-  aggregate: state transitions, invariants, commands, events.
-- **[Domain Events](/contexts/process-path-management/domain-events)** — `ProcessPathCreated/Updated/Deactivated`.
+  aggregate (plus the smaller `CPTSchedule` aggregate): state transitions,
+  invariants, commands, events.
+- **[Domain Events](/contexts/process-path-management/domain-events)** — `ProcessPathCreated/Updated/Deactivated`
+  and `CPTScheduleChanged`.
 - **[Async API](/contexts/process-path-management/async-api)** — the Kafka integration, narrative form.
 
 ## Elsewhere

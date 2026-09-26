@@ -26,10 +26,17 @@ for the full justification.
 Order Management is the **missing upstream Open Host Service** for the
 `warehouse-systems` fleet. It owns **Order** and **OrderLine** as
 first-class, validated aggregates: intake, per-line stock allocation (via
-`inventory-storage`), promise-date calculation, release of allocated work
-(now choreographed over Kafka to `wes-work-planning`, per
+`inventory-storage`), a delivery promise derived from fulfillment capability
+(a CPT window, per
+[ADR-0014](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0014-promise-derived-from-fulfillment-capability.md),
+re-promised when fulfillment reports a missed CPT per
+[ADR-0018](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0018-repromise-order-consumer-and-order-repromised.md)),
+release of allocated work (now choreographed over Kafka to `wes-work-planning`, per
 [ADR-0005](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0005-choreographed-release-via-kafka.md)),
-and cancellation up to the release boundary.
+and cancellation up to the release boundary. Since
+[ADR-0020](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md)
+it also accepts **held**, deadline-constrained orders from
+`network-fulfillment` (allocate now, release or cancel later).
 
 Before it existed, "an order" was not a modelled thing anywhere in this
 platform — it was an unowned, unvalidated string, independently reinvented
@@ -43,8 +50,8 @@ identity and becomes the upstream that supplies it to the others.
 - **[Business Context](/contexts/order-management/business-context)** — the domain vision and
   problem this context solves, in business language.
 - **[Ubiquitous Language](/contexts/order-management/ubiquitous-language)** — the exact vocabulary
-  this context uses: Order, OrderLine, Status, Allocation, Release, Promise
-  date, Backordered, FulfillmentClass.
+  this context uses: Order, OrderLine, Status, Allocation, Release, Promise,
+  Hold, Backordered, FulfillmentClass.
 - **[Bounded Context Canvas](/contexts/order-management/bounded-context-canvas)** — the full
   [ddd-crew Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas):
   purpose, strategic classification, domain roles, inbound/outbound
@@ -54,8 +61,8 @@ identity and becomes the upstream that supplies it to the others.
   [ddd-crew Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas)
   for the `Order` aggregate: state transitions, invariants, commands,
   events, throughput, size.
-- **[Domain Events](/contexts/order-management/domain-events)** — the eight past-tense events this
-  context raises, and which two are forwarded to Kafka.
+- **[Domain Events](/contexts/order-management/domain-events)** — the ten past-tense events this
+  context raises, and which three are forwarded to Kafka as integration events.
 
 ## Elsewhere
 

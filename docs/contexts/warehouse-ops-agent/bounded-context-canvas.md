@@ -20,27 +20,31 @@ rather than papered over.
 
 ## Purpose
 
-To correlate read-only signals fanned out from five upstream bounded
-contexts (`order-management`, `inventory-storage`, `wes-work-planning`,
-`fulfillment-execution`, `workforce-management`, `facility-layout`) into
-two products: a synthesized cross-path, cross-site **DailyBrief** with
-ranked open exceptions, and a stitched **Order Lifecycle** read model
-serving the operator console's Backend-for-Frontend. It exists so that no
+To correlate read-only signals fanned out from the fleet's upstream
+bounded contexts into three products: a synthesized cross-path,
+cross-site **DailyBrief** with ranked open exceptions (plus the on-demand
+E1 **FlowBalanceException** and ADR 0009 **explain_travel_factor**
+correlations), a stitched **Order Lifecycle** read model and WMS/WES
+report dashboards serving the operator console's Backend-for-Frontend,
+and a **runtime-signals** report classifying each backend service's
+Istio error rate / p99 latency (Prometheus) and error-log counts (Loki). It exists so that no
 single upstream context is forced to own cross-context correlation logic
 that would blur its own boundary, and so the console's one genuinely
 cross-cutting screen has a single, coherent home instead of being
 assembled client-side.
 
-The "five upstream contexts" above is the population of contexts this
-agent's E1/E2/E3 use cases and console-BFF fan-out actually *call* and
-*correlate*. It is a distinct count from this agent's full outbound MCP
-**client** surface, which is now eight bounded contexts (the fleet's
-entire backend minus this agent itself): the five above, live and
-consumed since this repo's founding, plus three more —
-`order-management`, `labor-performance`, `process-path-management` —
-whose MCP clients were wired into the composition root in a later change
-(ADR 0007) but were not, at that point, called by any use case. Since ADR
-0008, `labor-performance` is a partial exception: `FlowBalanceAdvisory`
+This agent's outbound MCP **client** surface covers eight bounded
+contexts: the five original ones (`inventory-storage`,
+`wes-work-planning`, `fulfillment-execution`, `workforce-management`,
+`facility-layout`) plus three second-wave clients — `order-management`,
+`labor-performance`, `process-path-management` — wired into the
+composition root by
+[ADR 0007](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0007-second-wave-outbound-mcp-clients.md) but not,
+at that point, called by any use case. (`network-fulfillment`, the
+fleet's newest context, exposes no MCP server and is not a collaborator
+of this agent.) Since
+[ADR 0008](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0008-labor-utilization-advisory-correlation.md),
+`labor-performance` is a partial exception: `FlowBalanceAdvisory`
 (E1) now also calls its `get_task_type_utilization` tool to correlate
 observed idleness with queue depth, so `labor-performance` is both a
 "wired but unconsumed" entry (its other three tools) and a live,
@@ -71,7 +75,7 @@ Per Alberto Brandolini's [Bounded Context Archetypes](https://github.com/ddd-cre
 the closest fit is an **analysis context**: a context whose job is to
 observe and synthesize facts other contexts already own, producing a
 diagnosis or recommendation rather than protecting an invariant of its
-own. The console-BFF half of this repo (`GET
+own. The console-BFF part of this repo (`GET
 /console/orders/{id}/lifecycle`, `GET /console/reports/*`) is, in the
 same vocabulary, a pure **read model** — assembling other contexts'
 published facts into a UI-shaped projection, with zero policy layered on
@@ -85,7 +89,7 @@ The justification, directly from the source repo's own reasoning:
   `TaskType.Valid()`) is *input validation at an untrusted boundary*, not
   a business invariant about a domain concept this repo owns.
 - It persists no state. Restart it and it has forgotten nothing, because
-  it never knew anything that wasn't re-derivable from its five upstream
+  it never knew anything that wasn't re-derivable from its upstream
   reads.
 
 If a future slice ever needs one of those three things — an aggregate,
@@ -98,17 +102,27 @@ policy layer.
 
 | Collaborator | Contract type | Description |
 | --- | --- | --- |
-| Console browser (`warehouse-console`) | HTTP REST | `GET /daily-brief` — the full synthesized DailyBrief for an operator dashboard. |
+| Console browser (`warehouse-console`) | HTTP REST | `GET /daily-brief` — the full synthesized DailyBrief (the console's floor screen polls it). |
 | Console browser (`warehouse-console`) | HTTP REST | `GET /console/orders/{id}/lifecycle` — the console-BFF Order Lifecycle read model, stitched from four upstream contexts' REST APIs. |
-| Console browser (`warehouse-console`) | HTTP REST | `GET /console/reports/wms`, `GET /console/reports/wes` — dashboard read models fanned out to seven contexts' `/reports/*` analytics endpoints. |
-| Console browser (`warehouse-console`) | HTTP REST | `GET /flow-balance/{pathId}` — the E1 FlowBalanceException correlation for one path. |
-| Agentic/LLM host | MCP tool call (`get_daily_brief`) | Returns the full synthesized DailyBrief, read scope. |
-| Agentic/LLM host | MCP tool call (`list_open_exceptions`) | Lists open exceptions, optionally filtered by minimum severity; read scope. |
-| Agentic/LLM host | MCP tool call (`get_flow_balance_exception`) | Correlates E1 signals for one `pathId` into a ranked FlowBalanceException; read scope. |
+| Console browser (`warehouse-console`) | HTTP REST | `GET /console/reports/wms`, `GET /console/reports/wes` — dashboard read models fanned out to seven contexts' `/reports/*` analytics endpoints (optional `from`/`to` RFC3339 window, default trailing 24 h). |
+| HTTP client (e.g. the `e2e-tests` harness) | HTTP REST | `GET /flow-balance/{pathId}?buildingId=&shiftId=` — the E1 FlowBalanceException correlation for one path, optionally arbitrated by the ADR 0004 LLM reasoner (`LLM_MODE`, default `off`) and enriched by the ADR 0008 utilization overlay. |
+| HTTP client | HTTP REST | `GET /explain-travel-factor?pathId=&fromLocationCode=&toLocationCode=` — ADR 0009 travel-distance classification for two REQUIRED, caller-supplied location codes (400 if either is missing). |
+| HTTP client | HTTP REST | `GET /runtime-signals` — per-service Istio 5xx rate / p99 latency (Prometheus) plus error-log counts (Loki) over a 10-minute window, classified `normal`/`warning`/`critical`. |
+| Platform (probes) | HTTP REST | `GET /healthz`. |
+| Agentic/LLM host | MCP tool call (`get_daily_brief`) | Returns the full synthesized DailyBrief. |
+| Agentic/LLM host | MCP tool call (`list_open_exceptions`) | Lists open exceptions, optionally filtered by minimum severity (an unknown severity is rejected, never defaulted). |
+| Agentic/LLM host | MCP tool call (`get_flow_balance_exception`) | Correlates E1 signals for one `pathId` into a ranked FlowBalanceException. |
+| Agentic/LLM host | MCP tool call (`explain_travel_factor`) | Same as the REST route above: classifies a facility-layout travel-distance reading for two caller-supplied location codes; never infers them. |
 
-All three MCP tools are annotated `ReadOnlyHint: true`. This agent's own
-inbound MCP server has **zero write tools** — there is no method to call
-a write even by mistake, because none exists in the codebase.
+REST (eight `GET` routes) and MCP (Streamable HTTP at `/mcp`, four tools)
+are both **unauthenticated by deliberate decision** — fleet-wide auth was
+removed by
+[ADR 0006](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0006-fleet-wide-auth-removal.md), superseding the
+static-bearer-key design of ADR 0005, and `TestNoAuthMiddlewareReintroduced`
+guards against it creeping back. All four MCP tools are annotated
+`ReadOnlyHint: true`. This agent's own inbound MCP server has **zero write
+tools** — there is no method to call a write even by mistake, because
+none exists in the codebase.
 
 ## Outbound Communication
 
@@ -122,20 +136,25 @@ upstream services.
 | Collaborator | Contract type | Relationship pattern | Description |
 | --- | --- | --- | --- |
 | `order-management` | HTTP REST (`GET /orders/{id}`) | Conformist, read-only | Console-BFF: order header for the Order Lifecycle screen. |
-| `inventory-storage` | MCP tool calls (`check_availability`, `get_bin_occupancy`) | Conformist, read-only | E1/E2 correlation inputs: usable-stock and bin-occupancy facts. |
+| `inventory-storage` | MCP tool calls (`check_availability`, `get_bin_occupancy`) | Conformist, read-only — **called only by the E2 use case, which is not wired to any inbound adapter** | E2 correlation inputs: usable-stock and bin-occupancy facts. |
 | `inventory-storage` | HTTP REST (`GET /reservations?demandRef=`) | Conformist, read-only | Console-BFF: reservation stage of the Order Lifecycle screen. |
-| `wes-work-planning` | MCP tool calls (`get_backlog_telemetry`, `get_rebalance_recommendation`) | Conformist, read-only | E1/E3 correlation inputs: backlog telemetry and rebalance recommendation. |
+| `wes-work-planning` | MCP tool calls (`get_backlog_telemetry`, `get_rebalance_recommendation`) | Conformist, read-only | E3 (`get_backlog_telemetry`) and E1 (`get_rebalance_recommendation`) correlation inputs. |
 | `wes-work-planning` | HTTP REST (`GET /work-units?reference=`) | Conformist, read-only | Console-BFF: work-unit stage; also discovers each line's WorkUnit id to key the fulfillment-execution hop. |
-| `fulfillment-execution` | MCP tool calls (`get_queue_status`, `find_claimable_work`, `diagnose_stuck_tasks`) | Conformist, read-only | E1/E3 correlation inputs: queue depth and stuck-task diagnostics. |
+| `fulfillment-execution` | MCP tool calls (`get_queue_status`, `find_claimable_work`, `diagnose_stuck_tasks`) | Conformist, read-only | E3 (`get_queue_status`, `diagnose_stuck_tasks`) and E1 (`diagnose_stuck_tasks`) correlation inputs; `find_claimable_work` is implemented on the client but called by no use case. |
 | `fulfillment-execution` | HTTP REST (`GET /tasks?orderRef=`) | Conformist, read-only | Console-BFF: task stage, keyed by each WorkUnit's composite id (`<orderId>-line-<lineNo>`), not the plain order id. |
-| `workforce-management` | MCP tool calls (`get_staffing_gap`, `propose_path_heads`) | Conformist, read-only | E1/E3 correlation inputs: staffing gap. Not part of the console-BFF fan-out. |
-| `facility-layout` | MCP tool calls (`list_sites`, `get_site_layout`, `get_zone_grid`) | Conformist, read-only | E3 daily-brief grouping: site/zone structure. Not part of the console-BFF fan-out. |
+| `workforce-management` | MCP tool calls (`get_staffing_gap`, `propose_path_heads`) | Conformist, read-only | E1/E3 correlation input: `get_staffing_gap` (`propose_path_heads` is implemented but uncalled). No OLTP REST call; its `/reports/labor` feeds the WES dashboard (row below). |
+| `facility-layout` | MCP tool calls (`list_sites`, `get_site_layout`, `get_zone_grid`, `estimate_travel_distance`) | Conformist, read-only | E3 daily-brief site grouping (`list_sites`) and, since [ADR 0009](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0009-explain-travel-factor.md), `explain_travel_factor` (`estimate_travel_distance`). `get_site_layout`/`get_zone_grid` are implemented but uncalled. No OLTP REST call; its `/reports/catalog-growth` feeds the WMS dashboard. |
 | `order-management`, `inventory-storage`, `wes-work-planning`, `fulfillment-execution`, `workforce-management`, `facility-layout`, `labor-performance` | HTTP REST (`GET /reports/*`, `GET /reports/*/freshness`) | Conformist, read-only | Console-BFF dashboards (`GET /console/reports/wms`, `/wes`): each context's own analytical reports reader, on a separate base URL from its OLTP API. |
-| `order-management` | MCP tool call (`get_order`) | Conformist, read-only — **wired, not yet consumed by any use case** | Client and port added in ADR 0007 (PR #44), mirroring the existing `InventoryStorageClient` precedent of wiring an upstream ahead of any consumer. Not called by `DailyBrief`, `FlowBalanceAdvisory`, or the console-BFF's `GET /orders/{id}` REST fan-out above, which is a separate adapter family. |
-| `labor-performance` | MCP tool calls (`get_associate_scorecard`, `get_task_type_performance`, `get_labor_standard`, `get_task_type_utilization`) | Conformist, read-only — **`get_task_type_utilization` live and consumed since ADR 0008; the other three remain wired, not yet consumed** | The first three: same ADR 0007 / PR #44 change, full unit-test coverage, zero callers among existing use cases. `get_task_type_utilization`: added in ADR 0008 (PR #45) — `FlowBalanceAdvisory` now calls it and feeds the result into `internal/domain/policy.CorrelateUtilization`, producing an additive `Decision.Utilization` field (`claim_flow_problem`, `starvation`, or `staffing_gap_confirmed`) alongside the existing `wesSignal`. See [Business Context](./business-context.md#what-flow-balance-exception-correlation-means-operationally). |
-| `process-path-management` | MCP tool calls (`get_process_path`, `list_process_paths`, `get_catalogue_growth_report`) | Conformist, read-only — **wired, not yet consumed by any use case** | Same ADR 0007 / PR #44 change. |
+| `order-management` | MCP tool call (`get_order`) | Conformist, read-only — **wired, not yet consumed by any use case** | Client and port added in ADR 0007, mirroring the existing `InventoryStorageClient` precedent of wiring an upstream ahead of any consumer. Not called by `DailyBrief`, `FlowBalanceAdvisory`, or the console-BFF's `GET /orders/{id}` REST fan-out above, which is a separate adapter family. |
+| `labor-performance` | MCP tool calls (`get_associate_scorecard`, `get_task_type_performance`, `get_labor_standard`, `get_task_type_utilization`) | Conformist, read-only — **`get_task_type_utilization` live and consumed since ADR 0008; the other three remain wired, not yet consumed** | The first three: same ADR 0007 change, full unit-test coverage, zero callers among existing use cases. `get_task_type_utilization`: added in ADR 0008 — `FlowBalanceAdvisory` now calls it and feeds the result into `internal/domain/policy.CorrelateUtilization`, producing an additive `Decision.Utilization` field (`claim_flow_problem`, `starvation`, or `staffing_gap_confirmed`) alongside the existing `wesSignal`. See [Business Context](./business-context.md#what-flow-balance-exception-correlation-means-operationally). |
+| `process-path-management` | MCP tool calls (`get_process_path`, `list_process_paths`) | Conformist, read-only — **wired, not yet consumed by any use case** | Same ADR 0007 change. |
+| Prometheus / Loki (`warehouse-infra` observability, not bounded contexts) | HTTP (`/api/v1/query`, `/loki/api/v1/query_range`) | Read-only telemetry source | `GET /runtime-signals`: Istio `istio_requests_total` 5xx fraction and `istio_request_duration_milliseconds_bucket` p99 per service, plus error/fatal lines scoped to `RUNTIME_SIGNALS_NAMESPACE`. A failing query (or unset `LOKI_URL`) is listed in `unavailableSources`, never a request failure; unset `PROMETHEUS_URL` falls back to a stub reader (metrics read as zero). |
+| Anthropic Messages API (external, optional) | HTTP (tool use) | Behind the policy layer — **off by default** | ADR 0004 LLM reasoner for `GET /flow-balance/{pathId}` only when `LLM_MODE=shadow` or `on` (requires `ANTHROPIC_API_KEY`). The model's only actuators are the allow-listed MCP read tools (`LLM_TOOL_ALLOWLIST`, default the five read tools the deterministic path already uses); the deterministic `policy.Decide` always runs first and is the fallback. |
 
-This agent is a **Conformist** on every one of these edges: it accepts
+Every outbound MCP and REST call carries **no credentials** — the upstream
+servers are unauthenticated fleet-wide (ADR 0006).
+
+This agent is a **Conformist** on every bounded-context edge: it accepts
 each upstream's published shape exactly as given, translates nothing
 into a shared model, and has no negotiating power over any of their
 contracts — appropriate for a pure read-side aggregator that must never
@@ -147,8 +166,9 @@ See [Ubiquitous Language](./ubiquitous-language.md) for the full glossary
 — the terms this agent coins for its own correlation policies
 (`DailyBrief`, `FlowBalanceException`, `StrandedReservation`,
 `OpenException`, `Evidence trail`, `Blast radius`, `Partial` /
-`MissingSignals`, `PathTarget`, `Recommended action`) and the terms it
-borrows unredefined from its five upstream contexts.
+`MissingSignals`, `PathTarget`, `TravelFactorCorrelation`,
+`RuntimeSignalsReport`, `Recommended action`) and the terms it borrows
+unredefined from its upstream contexts.
 
 ## Business Decisions
 
@@ -161,10 +181,12 @@ borrows unredefined from its five upstream contexts.
   this repo: the agentic use cases (E1/E2/E3), the Order Lifecycle
   read model, and the report dashboards.
 - **Zero write tools, by construction, not by runtime check.** This
-  agent's outbound adapters implement only the five contexts' *read*
+  agent's outbound adapters implement only the upstream contexts' *read*
   ports — there is no `AssignLabor`, `ReleaseNextWork`, or
   `RevokeReservation` method anywhere in the codebase to call even by
-  mistake. The same discipline that keeps "no cross-repo Go dependency"
+  mistake — and `internal/architecture/zerowrite/zerowrite_test.go` fails
+  CI if an outbound client gains a mutating HTTP method or an inbound MCP
+  tool is registered without `ReadOnlyHint: true`. The same discipline that keeps "no cross-repo Go dependency"
   a property `go.mod` enforces by construction is applied to the write
   surface: nothing exists to misuse.
 - **Correlate, don't alert on one metric.** The daily-brief rule flags a
@@ -186,13 +208,24 @@ borrows unredefined from its five upstream contexts.
 - **This agent writes to a bounded context only through that context's
   own already-published write MCP tool, never around it** — a rule
   recorded ahead of any write capability actually existing, so that when
-  a write-capable slice lands it inherits a separate `:write` auth scope
-  and mandatory human confirmation as already-decided guardrails, not
-  open design questions.
+  a write-capable slice lands it inherits two already-decided guardrails:
+  a **re-introduced authorization gate** distinguishing read-only from
+  write-capable callers (the old static-bearer read/read-write scopes were
+  removed fleet-wide by ADR 0006, so the act slice must pick a replacement
+  mechanism) and mandatory human confirmation before the write executes.
+- **Model output never bypasses the policy layer.** The ADR 0004 LLM
+  reasoner is off by default; when enabled, it may only call allow-listed
+  MCP read tools and answer through a `submit_plan` schema that
+  `policy.ValidatePlan` checks against the closed action vocabulary. An
+  unrecognized `LLM_MODE` is a startup error, never a silent `off`.
+- **Never infer a fact there is no evidence for.** `explain_travel_factor`
+  (ADR 0009) requires both location codes from the caller, because no
+  published tool anywhere in the fleet binds a stuck task or path to two
+  location codes.
 
 ## Assumptions
 
-- The five upstream contexts' MCP Open Host Services and REST APIs
+- The upstream contexts' MCP Open Host Services and REST APIs
   remain stable, read-only-safe integration points that this agent can
   poll synchronously at request time without needing its own database.
 - The upstream enums this agent hand-mirrors (`RebalanceAction`,
@@ -206,17 +239,29 @@ borrows unredefined from its five upstream contexts.
   console-BFF routes, and an agentic/LLM host is the only consumer of
   the MCP routes — the two use-case families are not expected to
   converge.
+- Prometheus and Loki (from `warehouse-infra`'s observability stack)
+  remain reachable for `GET /runtime-signals`; if not, the report
+  degrades per source rather than failing.
 
 ## Verification Metrics
 
-- **Zero cross-repo Go imports** on any of the five upstream contexts —
-  enforced by `internal/architecture/architecture_test.go`'s
+- **Zero cross-repo Go imports** on any upstream context —
+  enforced for the five original contexts' module paths by
+  `internal/architecture/architecture_test.go`'s
   `TestNoDirectDependencyOnBoundedContexts`, which fails the build if one
   is ever introduced.
-- **Zero write tools registered** on this agent's own inbound MCP
-  server — verifiable by inspecting `internal/adapters/inbound/mcp`'s
-  tool registrations and confirming all three are
-  `mcp.ToolAnnotations{ReadOnlyHint: true}`.
+- **Zero write capability**, CI-enforced by
+  `internal/architecture/zerowrite/zerowrite_test.go`
+  (`TestNoMutatingHTTPMethodInOutboundClients`,
+  `TestNoMutatingToolAnnotationInMCPServer`): all four inbound MCP tools
+  must be `mcp.ToolAnnotations{ReadOnlyHint: true}`.
+- **No auth middleware reintroduced** — `TestNoAuthMiddlewareReintroduced`
+  (`internal/architecture/fitness_test.go`) keeps the ADR 0006 removal
+  honest.
+- **Tier-1 metrics only** — per
+  [ADR 0010](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0010-standard-metrics-convention.md), this agent
+  carries the fleet's mandatory runtime + HTTP RED baseline but is exempt
+  from Tier-2 business metrics (no aggregate to measure against).
 - **A decision is never returned without at least one evidence entry** —
   every `Decision`, `StrandedReservationException`, and `OpenException`
   this agent's policy layer produces carries a non-empty evidence trail;
@@ -226,8 +271,10 @@ borrows unredefined from its five upstream contexts.
   `Partial`/absent rather than the request failing outright — exercised
   by this repo's own unit tests simulating upstream unavailability.
 - **`make check` / `make check-all`**: the same fast pre-commit bundle
-  (fmt-check, vet, build, lint, test) and pre-push architecture-test gate
-  every sibling context in the fleet runs.
+  (fmt-check, vet, build, lint, test) and pre-push coverage (90% gate) +
+  architecture-test gate every sibling context in the fleet runs, plus
+  `make mutation-fast` (gremlins over `./internal/domain`) as CI's
+  blocking mutation job.
 
 ## Open Questions
 
@@ -235,15 +282,15 @@ borrows unredefined from its five upstream contexts.
   unconsumed; the third graduated in ADR 0008.**
   `order-management` and `process-path-management` clients exist in the
   composition root (`internal/adapters/outbound/mcpclient/`), each with a
-  typed port interface and full unit-test coverage, since ADR 0007 (PR
-  #44). Neither is called by `DailyBrief`, `FlowBalanceAdvisory`, or any
+  typed port interface and full unit-test coverage, since ADR 0007.
+  Neither is called by `DailyBrief`, `FlowBalanceAdvisory`, or any
   other existing use case — this documentation pass states that plainly
   rather than implying a T2/T3-style order-lifecycle correlation or
   process-path-aware routing decision already consumes them. The same
   tradeoff the pre-existing `InventoryStorageClient` precedent already
   accepted: two more Go types and two more env vars exist with no current
-  caller. `labor-performance`'s client is the exception: ADR 0008 (PR
-  #45) wired `GetTaskTypeUtilization` into `FlowBalanceAdvisory`, so that
+  caller. `labor-performance`'s client is the exception: ADR 0008
+  wired `GetTaskTypeUtilization` into `FlowBalanceAdvisory`, so that
   one specific method is now live and consumed — the other three methods
   on the same client (`get_associate_scorecard`, `get_task_type_performance`,
   `get_labor_standard`) remain unconsumed.
@@ -267,14 +314,19 @@ borrows unredefined from its five upstream contexts.
   transitions or invariants over.
 - **Why this context has no Domain Events or AsyncAPI page.** This agent
   has no Kafka integration at all — it reads exclusively via synchronous
-  MCP tool calls and REST calls at request time. It does not subscribe
-  to any of the five upstream contexts' domain events, and it publishes
-  none of its own. `internal/adapters/outbound/telemetry` exists as a
-  stub for a possible future telemetry-backed slice (reading OTel/
-  Prometheus directly), but nothing in that direction is built. A
-  Domain Events page or generated AsyncAPI reference would therefore
-  describe capabilities that do not exist; this canvas records that
-  absence here instead.
+  MCP tool calls, REST calls, and Prometheus/Loki queries at request
+  time. It does not subscribe to any upstream context's domain events,
+  and it publishes none of its own. (`internal/adapters/outbound/telemetry`
+  is now a real Prometheus HTTP API reader backing `GET /runtime-signals`,
+  with a stub fallback when `PROMETHEUS_URL` is unset — a read of
+  telemetry, not an event stream.) A Domain Events page or generated
+  AsyncAPI reference would therefore describe capabilities that do not
+  exist; this canvas records that absence here instead.
+- **`explain_travel_factor` cannot resolve location codes itself.** Per
+  ADR 0009, no published tool in the fleet binds a slow path's work to
+  two location codes (fulfillment-execution's `Station.locationCode` is
+  persisted but not published on any MCP tool), so the caller must supply
+  both. Automatic resolution is deferred until such a tool exists.
 - **The console-BFF's report-dashboard fan-out is sequential vs.
   concurrent, inconsistently, by deliberate choice.** The Order
   Lifecycle fan-out is sequential (each hop's join key depends on the

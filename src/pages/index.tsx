@@ -23,6 +23,7 @@ const CONTEXTS: ContextCard[] = [
   {slug: 'process-path-management', name: 'process-path-management', tier: 'Generic'},
   {slug: 'labor-performance', name: 'labor-performance', tier: 'Supporting'},
   {slug: 'warehouse-ops-agent', name: 'warehouse-ops-agent', tier: 'Supporting'},
+  {slug: 'network-fulfillment', name: 'network-fulfillment', tier: 'Supporting'},
 ];
 
 const TIER_CLASS: Record<ContextCard['tier'], string> = {
@@ -69,7 +70,7 @@ function HomepageHeader() {
 function ContextGrid() {
   return (
     <section className="container">
-      <Heading as="h2">The nine bounded contexts</Heading>
+      <Heading as="h2">The ten bounded contexts</Heading>
       <div className={styles.contextGrid}>
         {CONTEXTS.map((ctx) => (
           <Link key={ctx.slug} className={styles.contextCard} to={`/contexts/${ctx.slug}`}>

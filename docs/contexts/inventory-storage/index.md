@@ -10,8 +10,8 @@ description: The WMS-tier authoritative record of what stock is held where, and 
 <span style={{display: 'inline-block', padding: '2px 10px', borderRadius: '999px', background: '#0f766e', color: '#fff', fontSize: '0.85em', fontWeight: 600}}>Core subdomain — WMS tier</span>
 
 **Inventory & Storage** is the WMS-tier authoritative record of *what is held
-where, and what portion of it is usable*. It is one of the platform's nine
-bounded contexts, and it owns the "storing them under chaotic storage" clause
+where, and what portion of it is usable*. It is one of the platform's ten
+backend bounded contexts, and it owns the "storing them under chaotic storage" clause
 of the platform's domain vision — the truth that everything downstream
 depends on.
 
@@ -47,7 +47,16 @@ the `Unlocated` state are all consequences of taking that sentence literally.
 `inventory-storage` is an **Open Host Service** for bin-accurate location and
 usable inventory. `wes-work-planning` is a Customer/Supplier downstream,
 conforming to its Published Language (REST + the two published Kafka
-events) with no write access to any of its aggregates. See the
+events) with no write access to any of its aggregates. `order-management`
+reserves and revokes stock over REST, and `order-management`,
+`wes-work-planning` and `fulfillment-execution` read
+`GET /products/{sku}/classification` (each opt-in via its own
+`PRODUCT_CLASSIFICATION_MODE`). The one sibling topic it consumes is
+`facility-layout`'s `warehouse.facility.events`, into a local
+location-classification cache
+([ADR-0013](https://github.com/claudioed/inventory-storage/blob/develop/docs/docs/adr/0013-location-classification-via-facility-events.md)).
+Every REST and MCP endpoint is unauthenticated by deliberate decision
+([ADR-0015](https://github.com/claudioed/inventory-storage/blob/develop/docs/docs/adr/0015-remove-rest-identity-layer.md)). See the
 [Bounded Context Canvas](/contexts/inventory-storage/bounded-context-canvas) for the full picture of
 who calls in and who is called out to.
 

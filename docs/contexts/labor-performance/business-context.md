@@ -131,7 +131,9 @@ extends all the way through the newer additions to this context:
 
 Automatic pay/bonus calculation, gamification, and coaching workflows are
 explicitly deferred out of scope. This context does not talk to payroll,
-HR, or scheduling systems, and it never calls `fulfillment-execution` or
-`workforce-management` synchronously — see
+HR, or scheduling systems, and it never calls `fulfillment-execution`,
+`workforce-management` or any other sibling context over REST or MCP
+(even a standard's travel component is caller-supplied rather than looked
+up in facility-layout, ADR 0015) — see
 [Bounded Context Canvas](./bounded-context-canvas) for the full
 strategic picture.

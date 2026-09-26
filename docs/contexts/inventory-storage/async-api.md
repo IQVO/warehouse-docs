@@ -40,9 +40,10 @@ Only **two** of this context's eleven domain events are actually published:
 `StockReserved` and `ReservationRevoked`. Everything else hits the Kafka
 adapter's `default: return nil` branch and stays in-process. This is a
 deliberate, small public surface — the internal model can evolve freely
-because the wire contract only exposes two events, not ten. See [Domain
-Events](./domain-events) for the complete catalog and which of the other nine
-are in-process only.
+because the wire contract only exposes two events, not all ten messages the
+AsyncAPI catalog documents (`ProductClassified` is not in the catalog at
+all). See [Domain Events](/contexts/inventory-storage/domain-events) for the
+complete catalog and which of the other nine are in-process only.
 
 ## The envelope
 
@@ -105,7 +106,7 @@ CloudEvents, is not present in the flat envelope at all.
 
 ## The `type` convention
 
-Identical across all five platform services:
+The platform-wide convention (the target envelope, not what the adapter emits today):
 
 ```text
 com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>
@@ -194,7 +195,7 @@ sequenceDiagram
   the honest behaviour today, though it couples request success to broker
   availability; a transactional outbox would decouple them and is not built.
 
-## Building a sixth consumer
+## Building another consumer
 
 1. Read `apis/asyncapi.yaml`, not this page — it is the linted contract.
 2. Only two events are on the wire; the document's other eight messages are

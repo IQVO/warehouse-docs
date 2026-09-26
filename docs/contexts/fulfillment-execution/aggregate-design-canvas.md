@@ -87,6 +87,7 @@ expiry deterministic and testable with a fixed clock instead of
 | `RenewLease(taskId, stationId)` | `usecases.RenewLease` | Extends the current lease's expiry from now — owner only |
 | `CompleteTask(taskId, stationId)` | `usecases.CompleteTask` | Transitions to `Completed` — owner only, validated |
 | `ExpireLeases(now)` | `usecases.ExpireLeases` | Sweeps every `Claimed` task, frees any past its lease expiry |
+| `SweepCPTMisses(now)` | `usecases.SweepCPTMisses` | Reports every task still open (Pending or Claimed) at or past its CPT. **Never mutates the `Task`** — a CPT miss is a fact reported upstream, not a lifecycle transition ([ADR-0025](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0025-cpt-missed-sweep-and-package-manifested.md)) |
 
 ## Created Events
 
@@ -95,11 +96,16 @@ expiry deterministic and testable with a fixed clock instead of
 | `TaskCreated` | `CreateTask` puts a new unit of work in the pool | `TaskId` |
 | `TaskClaimed` | `ClaimNext` leases a task to a station | `TaskId`, `StationId` |
 | `LeaseExpired` | `ExpireLeases` frees a task whose lease lapsed | `TaskId` |
-| `TaskCompleted` | `CompleteTask` succeeds | `TaskId`, `StationId` (enriched off-aggregate with `WorkUnitId`, `AssociateId`, `DurationSeconds` at publish time) |
+| `TaskCompleted` | `CompleteTask` succeeds | `TaskId`, `StationId` (enriched off-aggregate with `WorkUnitId`, `AssociateId`, `DurationSeconds`, `TaskType` at publish time) |
+| `TaskCPTMissed` | `SweepCPTMisses` finds the task open past its CPT (re-fires every pass while overdue) | `TaskId`, `OrderRef`, `TaskType`, `CPT` |
 | `ItemPicked` | *(defined in the catalogue; not raised by any use case today — the Pick path is modelled at task granularity, not item granularity)* | `TaskId` |
 
-Events are deliberately thin — every one carries only identifiers.
-Enrichment for the wire (`work_unit_id`, `associate_id`, `duration_seconds`)
+Events are deliberately thin — most carry only identifiers; `TaskCPTMissed`
+carries the few facts order-management needs to re-promise without calling
+back. `TaskCompleted` and `TaskCPTMissed` are published on
+`warehouse.fulfillment.events`; the other `Task` events stay in process.
+Enrichment for the wire (`work_unit_id`, `associate_id`, `duration_seconds`,
+`task_type`)
 happens in the outbound Kafka adapter via repository lookups, never on the
 event itself, so a downstream consumer's correlation need never reshapes
 the domain model.
@@ -115,7 +121,9 @@ the domain model.
   nothing to keep in sync, at the cost of a full scan per read.
 - **`ExpireLeases` scans all claimed tasks** (`FindAllClaimed`), an
   unindexed-by-expiry full scan. Documented as fine at current scale; it
-  would need an expiry index to scale further.
+  would need an expiry index to scale further. `SweepCPTMisses`
+  (`FindOpenPastCPT`) has the same externally-triggered, scan-per-call
+  shape.
 - Concurrent `claimNext` calls **race by design** — two stations may select
   the same earliest-CPT candidate simultaneously. Correctness under
   concurrency depends entirely on the at-most-once guarantee inside

@@ -2,12 +2,16 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: One topic out, nothing in — the Kafka integration between workforce-management and wes-work-planning, narrative form.
+description: One integration topic out, two opt-in sibling topics in — the Kafka integrations of workforce-management, narrative form.
 ---
 
 # Async API
 
-One topic out. Nothing in. No synchronous call to any sibling.
+One integration topic out (plus an internal analytics topic). Two sibling
+topics in, both opt-in and both feeding in-memory caches only. The
+synchronous calls this context makes (`fulfillment-execution`'s installed
+capacity, and optionally `labor-performance` over HTTP) are covered on the
+[Bounded Context Canvas](./bounded-context-canvas).
 
 ## What is published
 
@@ -31,8 +35,12 @@ Supporting one, and a labor-service outage would become a planning outage.
 If this service called Work Planning, a Supporting context would need a
 client, retries, and knowledge of the consumer's availability — and would
 gain a reason to fail a `CommitShiftPlan` that already succeeded in its own
-domain. Publishing to Kafka and forgetting avoids both: this service has no
-consumer group, no inbound adapter, and no synchronous call to any sibling.
+domain. Publishing to Kafka and forgetting avoids both: nothing in this
+edge needs a client, a retry, or knowledge of the consumer. (This context
+does consume two *other* sibling topics and does make one fail-loud
+synchronous read at commit time — see below and the
+[Bounded Context Canvas](./bounded-context-canvas) — but neither involves
+`wes-work-planning`.)
 
 ## Selecting the publisher
 
@@ -47,6 +55,16 @@ the difference.
 
 The default keeps local runs and the whole test suite free of any broker
 dependency.
+
+With `EVENT_PUBLISHER=kafka`, delivery goes through a **transactional
+outbox** ([ADR 0016](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0016-transactional-outbox.md)):
+the use case writes the already-encoded messages for both the integration
+topic and the analytics topic (`warehouse.workforce.analytics`, all ten
+events, consumed only by this service's own `cmd/workforce-projector`) into
+`outbox_events` in the same Postgres transaction as the aggregate. A relay
+goroutine drains that table onto Kafka every `OUTBOX_RELAY_INTERVAL`
+(default `1s`). Store and topics cannot diverge; delivery is
+at-least-once, per-key ordered.
 
 ## The fan-out
 
@@ -134,7 +152,7 @@ shape. It has not been scheduled.
   flat envelope). Do not switch on `subject`/`source` or on payload shape.
 - **Tolerate unknown types.** The catalog will grow — see
   [Domain Events](./domain-events) for the nine events currently cataloged
-  but not yet wired to this publisher.
+  but not forwarded to this integration topic.
 - **Expect N messages per commit** for `ShiftPlanCommitted`, one per path
   line.
 - **Assume at-least-once delivery.** Kafka redelivers; consumers must be
@@ -155,11 +173,23 @@ roster or break events today.
 
 ## What is consumed
 
-**Nothing.** This service has no inbound Kafka adapter and no consumer
-group — a real architectural property, not a to-do. With no inbound event
-stream there is no idempotency machinery to get right, no `processed_events`
-table, and no redelivery semantics to reason about. `wes-work-planning`,
-which does consume, carries all of that.
+Two sibling topics, both **opt-in**, both used only to build an in-memory
+cache that `cmd/workforce` rebuilds from the earliest offset on every
+start:
+
+| Topic | Events | Adapter | Selected by | Feeds |
+| --- | --- | --- | --- | --- |
+| `warehouse.process-path-management.events` | `ProcessPathCreated`/`Updated`/`Deactivated` | `internal/adapters/outbound/kafkacatalog` | `PATH_CATALOGUE_SOURCE=kafka` (default `file`) | Path-id validation on propose, commit, assign and staffing-gap ([ADR 0013](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0013-process-path-catalogue-validation.md)) |
+| `warehouse.labor-performance.events` | `TaskPerformanceRecorded` (incl. the nullable `idle_seconds_before`) | `internal/adapters/outbound/laborperformancecache` | `LABOR_PERFORMANCE_MODE=kafka-cache` (default `permissive`) | Measured rates for `ProposePathPlan` ([ADR 0019](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0019-labor-performance-cache-consumer.md)); observed idle share for `GetStaffingGap` and the `ProposePathPlan` trim ([ADR 0020](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0020-idle-share-staffing-signal.md)) |
+
+Both consumers use a **per-process-unique consumer group** (prefix + host +
+PID + timestamp), so every process replays the full history, and each waits
+up to 60s for the replay to catch up before serving traffic. Both require
+`KAFKA_BROKERS`; the `warehouse-infra` kind cluster turns both on. Neither
+writes to Postgres, so there is no `processed_events` table on the OLTP
+side — the only dedupe table (`analytics_processed_events`) belongs to the
+analytics projector, which consumes this service's own analytics topic
+under the fixed group `workforce-analytics`.
 
 ## Generated reference
 

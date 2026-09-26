@@ -12,7 +12,7 @@ Generated directly from
 via the official [AsyncAPI Generator](https://github.com/asyncapi/generator)
 (`@asyncapi/html-template`). Regenerate with `npm run gen-async-docs:all`.
 
-For the narrative version — the eight events, their payloads, the type
+For the narrative version — the twelve events, their payloads, the type
 convention, and who consumes what — see
 [facility-layout's Domain Events](/contexts/facility-layout/domain-events).
 

@@ -75,7 +75,16 @@ three of its intended consumers (`fulfillment-execution`,
 into a local catalogue cache instead of reading the old static file —
 verified live, with a newly-defined path reaching all three running
 consumers with no restart, and a deactivation propagating the same way.
-This context also now ships its own analytics data product (ADR 0007),
-the last of the fleet's 8 backend contexts to do so. See the
+A fourth consumer, `order-management`, now reads the same topic too: since
+[ADR 0010](https://github.com/claudioed/process-path-management/blob/develop/docs/docs/adr/0010-fulfillment-capability-contract.md)
+each path declares a p95 cycle time and eligibility rules and this context
+owns a site-scoped CPT schedule (`CPTScheduleChanged`), from which
+`order-management` derives its delivery promise instead of an
+environment-variable lead time. The catalogue has also grown beyond the
+original four families: ADR 0008 added `PREP`, `PROBLEM_SOLVE`,
+`WATER_SPIDER`, `AMNESTY`, `RETURNS`, `TRANSFER` and `DAMAGE` as ordinary
+data under the same model, and ADR 0009 added an optional, declarative
+destination location role. This context also ships its own analytics data
+product (ADR 0007). See the
 [Bounded Context Canvas](./bounded-context-canvas) and
 [Domain Events](./domain-events) for the current, live state.

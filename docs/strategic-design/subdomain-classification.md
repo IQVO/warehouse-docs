@@ -10,7 +10,7 @@ description: Core, Supporting, or Generic — every bounded context, with the ju
 Domain-Driven Design splits a domain into **Core**, **Supporting**, and
 **Generic** subdomains by competitive differentiation — not by size,
 difficulty, or how interesting the code is. Below is the verdict for all
-nine bounded contexts, each traceable to that context's own
+ten bounded contexts, each traceable to that context's own
 `docs/docs/ddd/subdomain-classification.md` (or equivalent) and to the
 platform's shared reference model.
 
@@ -23,8 +23,9 @@ platform's shared reference model.
 | `workforce-management` | <span class="badge-supporting">Supporting</span> | Allocates workforce to workload against process-path capability requirements; important and non-trivial, but industry-common. |
 | `labor-performance` | <span class="badge-supporting">Supporting</span> | Scores actual-vs-standard performance; useful and shipped by real WMS/WES vendors as a first-class feature, but does not define the work itself — a pure downstream observer. |
 | `warehouse-ops-agent` | <span class="badge-supporting">Supporting</span> | An agentic aggregation/read-side layer (daily brief, exception correlation, console BFF); valuable operationally but owns no domain aggregate of its own. |
+| `network-fulfillment` | <span class="badge-supporting">Supporting</span> | Integrating with an external retail network is necessary to sell capability but is not itself the differentiator; the context is Conformist to the network upstream and an Anti-Corruption Layer for the fleet (network-fulfillment ADR 0001). |
 | `facility-layout` | <span class="badge-generic">Generic</span> | Physical warehouse structure (site/zone/aisle/location) is a well-understood, industry-standard concern — the same bucket the reference model places Cartonization and WCS equipment control in. |
-| `process-path-management` | <span class="badge-generic">Generic</span> | The process-path catalogue is a well-understood configuration concern, extracted once because three other contexts needed the identical `PathId`/capability model rather than each re-inventing it. |
+| `process-path-management` | <span class="badge-generic">Generic</span> | The process-path catalogue is a well-understood configuration concern, extracted once because several other contexts needed the identical `PathId`/capability model rather than each re-inventing it. |
 
 ## The "extract once, don't duplicate" pattern
 

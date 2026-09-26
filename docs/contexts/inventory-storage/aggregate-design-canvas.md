@@ -1,14 +1,16 @@
 ---
 title: Aggregate Design Canvas
 sidebar_label: Aggregate Design Canvas
-description: The full ddd-crew Aggregate Design Canvas for StockUnit and Reservation — two separate aggregate roots in inventory-storage.
+description: The full ddd-crew Aggregate Design Canvas for StockUnit and Reservation — two of the four aggregate roots in inventory-storage.
 ---
 
 # Aggregate Design Canvas
 
 Following the [ddd-crew Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas)
-template. This context has **three** aggregate roots — `StockUnit`, `Bin`,
-and `Reservation` — each loaded, changed, and saved through its own
+template. This context has **four** aggregate roots — `StockUnit`, `Bin`,
+`Reservation`, and `ProductClassification` (SKU master data,
+[ADR-0009](https://github.com/claudioed/inventory-storage/blob/develop/docs/docs/adr/0009-product-classification-as-sku-master-data.md))
+— each loaded, changed, and saved through its own
 repository port, referencing each other **by identity, not by pointer** (a
 `Reservation` never holds a `*StockUnit`, and a `StockUnit` never holds a
 `*Bin`). The two canvases below cover the aggregate at the centre of the

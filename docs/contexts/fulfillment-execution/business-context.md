@@ -20,6 +20,11 @@ decision arrives as a `WorkReleased` event and becomes a `Task` in this
 service's pool. From there the task must find a station that can do it, be
 performed, and be confirmed. When the confirmation lands, the loop closes:
 `TaskCompleted` goes back to Work Planning so its own plan can advance.
+The same topic also tells `order-management` when work has missed its CPT
+(`TaskCPTMissed`) or a package has been manifested (`PackageManifested`), so
+the customer promise can be re-computed from what actually happened on the
+floor
+([ADR-0025](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0025-cpt-missed-sweep-and-package-manifested.md)).
 
 **"Make it impossible to lose a unit of work"** — this is the harder half. A
 warehouse floor is not a reliable network. Scanners die mid-pick, associates
@@ -165,6 +170,11 @@ headcount, a shared **published language**, never a shared Go type.
   `inventory-storage`'s job.
 - **It does not decide how much work to release.** Only how a released unit
   completes.
+- **It does not own location.** A `Station` may carry an optional
+  facility-layout `locationCode`, checked (opt-in, fail-open) against a
+  WorkCenter role at registration
+  ([ADR-0024](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0024-station-location-code-and-workcenter-role-check.md)),
+  but a `Task` still says *what* and *by when*, never *where*.
 - **It does not drive PLCs.** WCS is a Generic Subdomain in this platform —
   buy, don't build — and would sit behind an Anti-Corruption Layer if and
   when that edge is ever wired.

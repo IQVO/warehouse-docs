@@ -2,7 +2,7 @@
 id: domain-events
 title: Domain Events
 sidebar_label: Domain Events
-description: All ten past-tense domain events workforce-management raises, what publishes them, and the one that actually leaves the process today.
+description: All ten past-tense domain events workforce-management raises, what publishes them, and the one that reaches another bounded context today.
 ---
 
 # Domain Events
@@ -27,9 +27,19 @@ and throughout this documentation.
 | `PathUnderstaffed` | `GetStaffingGap` use case | In-process only — surfaces through the `GetStaffingGap` response, not a topic | None (a human, reading the response) |
 | `AssociateShiftEnded` | `AssociateShift` | In-process only | None |
 
-**Only `ShiftPlanCommitted` leaves the process today.** Every other event is
-raised, published through the `EventPublisher` port, and consumed
-in-process by the log/buffered publisher.
+**Only `ShiftPlanCommitted` reaches another bounded context.** It is the
+only event the integration publisher (`internal/adapters/outbound/kafka/publisher.go`)
+forwards to `warehouse.workforce.events`. With `EVENT_PUBLISHER=kafka`, all
+ten events *also* go to this service's own analytics topic,
+`warehouse.workforce.analytics`, consumed only by its own
+`cmd/workforce-projector` for the labor report (ADR 0010) — an internal
+data product, not a sibling contract. Both topics are fed from one
+`outbox_events` table written in the same Postgres transaction as the
+aggregate and drained by a relay (transactional outbox,
+[ADR 0016](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0016-transactional-outbox.md)),
+so delivery is at-least-once. With the default `EVENT_PUBLISHER=log`,
+events are consumed in-process by the log/buffered publisher. The diagram
+below shows the integration path only.
 
 ```mermaid
 flowchart LR

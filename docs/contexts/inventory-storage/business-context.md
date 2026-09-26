@@ -137,8 +137,8 @@ interleaving, and labour policy all change weekly, but stock truth must not.
 | Physical delivery fails routinely | A revoked reservation returns quantity to usable; reservations expire on a timeout. |
 | Only usable stock constrains release | Usable = on-hand − reserved − held/unlocated, exposed as a first-class read model. |
 | Loss must be visible, never silent | `Unlocated`, discrepancy detection, and cycle-count completion events all say so explicitly. |
-| WES needs stock reality, not write access | Integration events publish stock reality; no inbound writes are accepted from any sibling context. |
+| WES needs stock reality, not write access | Integration events publish stock reality; no sibling context gets write access to an aggregate — callers such as `order-management` can only issue commands (reserve, revoke) that run through this service's own invariants. |
 
-See [Ubiquitous Language](./ubiquitous-language) for the exact vocabulary
-behind these rules, and the [Bounded Context Canvas](./bounded-context-canvas)
+See [Ubiquitous Language](/contexts/inventory-storage/ubiquitous-language) for the exact vocabulary
+behind these rules, and the [Bounded Context Canvas](/contexts/inventory-storage/bounded-context-canvas)
 for how this context communicates with the rest of the platform.

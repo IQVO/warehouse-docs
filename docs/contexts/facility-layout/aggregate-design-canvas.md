@@ -117,7 +117,8 @@ input, not an output, of this service's own use cases today.
 | Site → Zone → Aisle chain resolves to existing aggregates | `RegisterLocationSlot` use case | `ErrSiteNotFound` / `ErrZoneNotFound` / `ErrAisleNotFound` → 404 |
 | Every link in that chain is `Active` | `RegisterLocationSlot` use case | `ErrSiteNotActive` / `ErrZoneNotActive` / `ErrAisleNotActive` → 409 |
 | Supplied zone attributes match the code's own `ZoneID()` | `slot.NewLocationSlot` | `ErrZoneMismatch` → 422 — the caller cannot hand in one zone's attributes while registering a slot in another |
-| Capacity envelope (weight, volume) strictly positive | `shared.NewCapacity` | `ErrInvalidMaxWeight` / `ErrInvalidMaxVolume` → 422 |
+| Capacity envelope (weight, volume) strictly positive — when the LocationType's role requires capacity (`Storage`/`Staging`/`Drop`/`Consolidation`, ADR 0016) | `shared.NewCapacity` | `ErrInvalidMaxWeight` / `ErrInvalidMaxVolume` → 422 |
+| Functional attributes match the role: a `Dock` slot needs a `dockFlow`, a `WorkCenter` slot at least one activity, no other role may carry either (ADR 0016) | `NewFunctionalAttributes` | `ErrDockFlowRequired` / `ErrWorkCenterActivitiesRequired` / `ErrFunctionalAttributesNotAllowed` |
 | Satisfies every applicable `PlacementRule` | `slot.NewLocationSlot` via `RuleSet.Check` | `placement.ErrPlacementRuleViolated` → 422, always naming the specific rule violated |
 | Cannot decommission twice | `LocationSlot.Decommission` | `ErrAlreadyDecommissioned` → 409 |
 | A decommissioned code is never resurrected by re-registration | `RegisterLocationSlot` use case | `ErrDuplicateLocationCode` → 409 |
@@ -153,10 +154,11 @@ after the fact. The corrective mechanisms that do exist sit one layer up:
 | `RegisterLocationSlot(code, locationType, capacityOverride?)` | Code well-formed; Site/Zone/Aisle chain exists and is Active; code not already registered; LocationType exists; PlacementRules satisfied | `LocationSlot` created, `Active` |
 | `DecommissionLocationSlot(locationCode)` | Slot exists; not already Decommissioned | `Status` → `Decommissioned` |
 | `ImportFacilityLayout(rows[])` | Same as `RegisterLocationSlot`, applied per row | Each valid row registers a slot (and any missing site/zone/aisle it declares); invalid rows are reported, not applied; one summary event fires regardless |
+| `SetLocationGeometry(locationCode, position, dimensions, pickSequence?)` | Slot exists and is not Decommissioned (`ErrSlotDecommissioned`); pick sequence non-negative | Optional geometry set (ADR 0017) |
 
-`GetSiteLayout` and `GetZoneGrid` are **not** commands against this
-aggregate — they are read-model assemblers that never write and never
-publish.
+`GetSiteLayout`, `GetZoneGrid`, `GetZoneTravelGraph` and
+`EstimateTravelDistance` are **not** commands against this aggregate — they
+are read-model assemblers that never write and never publish.
 
 ## Created Events
 
@@ -165,10 +167,12 @@ publish.
 | `LocationSlotRegistered` | A `RegisterLocationSlot` (or a successful row of `ImportFacilityLayout`) succeeds. |
 | `LocationSlotDecommissioned` | A `DecommissionLocationSlot` succeeds. |
 | `FacilityLayoutImported` | Once per `ImportFacilityLayout` call, summarising rows submitted/imported/rejected — in addition to, not instead of, the per-slot `LocationSlotRegistered` events for each successful row. |
+| `LocationGeometryUpdated` | A `SetLocationGeometry` succeeds (ADR 0017). |
 
 See [Domain events](./domain-events.md) for full payload shapes and the
-other five events raised by this context's other aggregates (`Site`,
-`Zone`, `Aisle`, `LocationType`, `PlacementRule`).
+other eight events raised by this context's other aggregates (`Site`,
+`Zone`, `Aisle`, `LocationType`, `PlacementRule`, `CrossAisle`,
+`FixedStructure`).
 
 ## Throughput
 
@@ -192,8 +196,9 @@ acceptable at the volumes involved.
 ## Size
 
 A `LocationSlot` is small and flat: a `LocationCode` (seven short string
-segments), a `LocationType` name, a `Capacity` (two floats), and a `Status`
-enum. It holds no collection, no child entities, and no reference to
+segments), a `LocationType` name, its `role` and role-specific functional
+attributes, a `Capacity` (two floats), a `Status` enum, and optional
+geometry (position, dimensions, pick sequence). It holds no collection, no child entities, and no reference to
 sibling slots. All hierarchy and cross-slot reasoning is external to the
 aggregate — resolved by the use case (chain-of-custody lookups) or by the
 read-model assemblers (`GetSiteLayout`, `GetZoneGrid`), never by the

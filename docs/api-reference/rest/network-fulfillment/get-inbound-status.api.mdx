@@ -1,0 +1,65 @@
+---
+id: get-inbound-status
+title: "Is the inbound polling leg alive?"
+description: "Counters for the poller plus the size of the unanswered working set. This exists because a stalled poller is SILENT: no orders, no errors, a healthy liveness probe, and an acknowledgement window closing regardless."
+sidebar_label: "Is the inbound polling leg alive?"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "get api-method"
+info_path: api-reference/rest/network-fulfillment/network-fulfillment-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Is the inbound polling leg alive?"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/inbound-status"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Counters for the poller plus the size of the unanswered working set. This exists because a stalled poller is SILENT: no orders, no errors, a healthy liveness probe, and an acknowledgement window closing regardless.
+
+`polls` climbing with `since` advancing means the leg is working and the network simply has nothing for us. `polls` climbing while `since` stays put means every pass is failing. `since` absent after real uptime means no pass has ever succeeded.
+
+`overdue` above zero is the fact worth alerting on: demand whose 24-hour window has already closed unanswered.
+
+
+<ParamsDetails>
+  
+</ParamsDetails>
+
+<RequestSchema
+  title={"Body"}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  responses={{"200":{"description":"Current inbound state.","content":{"application/json":{"schema":{"type":"object","required":["networkMode","polls","received","failed","unanswered","overdue"],"properties":{"networkMode":{"type":"string","description":"The gateway mode actually in force, echoed so it can be verified rather than assumed. `stub` reaches no external network and needs no credentials.\n","enum":["stub","sandbox","live"]},"polls":{"type":"integer","description":"Poll passes attempted since start."},"received":{"type":"integer","description":"Units of demand successfully processed since start."},"failed":{"type":"integer","description":"Units that failed and will be re-fetched. A failure deliberately does not advance the watermark, so nothing is skipped; processing is idempotent on `networkRef`, which is what makes the retry safe.\n"},"since":{"type":"string","format":"date-time","description":"The watermark the next poll will use. ABSENT before any pass has completed cleanly — which after real uptime is itself the signal that no poll has ever succeeded.\n"},"unanswered":{"type":"integer","description":"Orders currently in `NEW`."},"overdue":{"type":"integer","description":"Of those, how many have already missed their acknowledgement window. Above zero is worth alerting on.\n"}},"title":"InboundStatus"}}}},"500":{"description":"An RFC 7807 problem document.","content":{"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 problem details.","required":["type","title","status"],"properties":{"type":{"type":"string","format":"uri","example":"https://errors.network-fulfillment.warehouse-systems.dev/network-order-not-found"},"title":{"type":"string","example":"Network order not found"},"status":{"type":"integer","example":404},"detail":{"type":"string","example":"network order not found"},"instance":{"type":"string","example":"/network-orders/po-4711"}},"title":"Problem"}}}}}}
+>
+  
+</StatusCodes>
+
+
+      

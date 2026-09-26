@@ -25,6 +25,7 @@ source of truth that inevitably drifts, exactly what
 | process-path-management | [process-path-management ADRs](https://github.com/claudioed/process-path-management/tree/develop/docs/docs/adr) |
 | labor-performance | [labor-performance ADRs](https://github.com/claudioed/labor-performance/tree/develop/docs/docs/adr) |
 | warehouse-ops-agent | [warehouse-ops-agent ADRs](https://github.com/claudioed/warehouse-ops-agent/tree/develop/docs/docs/adr) |
+| network-fulfillment | [network-fulfillment ADRs](https://github.com/claudioed/network-fulfillment/tree/develop/docs/adr) (companion to order-management ADR 0020) |
 
 ## Cross-cutting decisions worth reading first
 
@@ -44,27 +45,27 @@ than one context's own docs:
   `facility-layout`) records its own adoption ADR referencing it back.
 - **MCP inbound adapter governance** — each context exposing an MCP server
   (`facility-layout`, `fulfillment-execution`, `inventory-storage`,
-  `wes-work-planning`, `workforce-management`, and, since the fleet's
-  bounded-context wiring plan, `order-management`, `labor-performance`,
-  `process-path-management`) documents the same static bearer key +
-  read/read-write scope posture; most record it in their own
-  `docs/docs/mcp/governance-charter.md` (`process-path-management`
-  instead documents its MCP adapter in its own ADR 0006). That is 8 of
-  the fleet's 9 backend-context repos — `warehouse-ops-agent` is the
-  ninth, and is a Customer of these eight's MCP surfaces rather than an
-  Open Host Service with one of its own to govern the same way (it runs
+  `wes-work-planning`, `workforce-management`, `order-management`,
+  `labor-performance`, `process-path-management`) documents its tool
+  surface and review gate in its own `docs/docs/mcp/governance-charter.md`
+  (`process-path-management` instead documents its MCP adapter in its own
+  ADR 0006). The charters' original static bearer key + read/read-write
+  scope requirements no longer describe the running code — see the auth
+  bullet below. `warehouse-ops-agent` is a Customer of these eight MCP
+  surfaces rather than an Open Host Service governed the same way (it runs
   its own separate inbound MCP server for agentic/LLM callers of its own
-  read models — see its [API surface](/api-reference/warehouse-ops-agent)).
-- **REST identity: static bearer keys + read/read-write scopes** —
-  decided fleet-wide on 2026-09-07 and recorded canonically in
-  [`warehouse-ops-agent` ADR-0005](https://github.com/claudioed/warehouse-ops-agent/tree/develop/docs/docs/adr).
-  Every REST surface adopts the exact posture the MCP adapters already
-  carry (same `Authenticator` seam, same Kubernetes-Secret-sourced keys,
-  `GET`=read / mutations=read-write, `/healthz` open), rolled out with an
-  `AUTH_MODE=log` observation window before `enforce`. No IdP: the seam is
-  deliberately OAuth 2.1-ready, and this is the one place a real identity
-  provider would slot in later. Each context records a one-paragraph
-  adoption ADR pointing back here.
+  read models — see its [API surface](/api-reference/warehouse-ops-agent)),
+  and `network-fulfillment` has no MCP server.
+- **REST and MCP identity: adopted, then removed** — static bearer keys +
+  read/read-write scopes were decided fleet-wide on 2026-09-07
+  ([`warehouse-ops-agent` ADR-0005](https://github.com/claudioed/warehouse-ops-agent/tree/develop/docs/docs/adr))
+  and rolled out to every REST and MCP surface, then **fully removed**
+  fleet-wide ([`warehouse-ops-agent` ADR-0006](https://github.com/claudioed/warehouse-ops-agent/tree/develop/docs/docs/adr),
+  plus one superseding ADR per context, e.g. order-management ADR-0012,
+  inventory-storage ADR-0015, wes-work-planning ADR-0016,
+  fulfillment-execution ADR-0022). Every REST and MCP endpoint is currently
+  unauthenticated by deliberate decision, pending a fresh auth-model
+  decision.
 - **Transactional outbox** — every context that publishes integration or
   analytics events commits the event in the same database transaction as
   the aggregate change and relays it to Kafka afterwards, so a store and

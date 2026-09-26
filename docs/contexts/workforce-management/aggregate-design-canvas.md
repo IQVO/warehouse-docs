@@ -58,6 +58,7 @@ aggregate at all; it is advisory and stateless.
 | `plannedHours ≤ plannedHeads × maxHoursPerShift` for every line | Checked before construction, in the domain | `ErrPlannedHoursExceedCapacity` → `409` |
 | At least one `PathPlan` line must be present | Checked before construction | `ErrNoPathPlans` → `400` |
 | Every line needs an installed-station count | Checked before construction | `ErrMissingInstalledStations` → `400` |
+| `plannedHeads(path) ≤ liveInstalledCapacity(path)` for every line — fetched fresh from `fulfillment-execution` on every commit ([ADR 0014](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0014-installed-capacity-ceiling.md)) | Checked in the domain against a value the use case fetches through `InstalledCapacityClient` | `ErrExceedsInstalledCapacity` → `409`; fetch failure `ErrInstalledCapacityUnavailable` → `503` (whole commit rejected, no fallback) |
 | Validation is all-or-nothing | `CommitShiftPlan` validates every line before constructing anything | (no partial commit possible) |
 
 The `plannedHeads ≤ installedStations` rule is enforced **independently** of
@@ -69,8 +70,9 @@ commitment rather than trusting an upstream check it does not control.
 
 There is no automated corrective policy on this aggregate. A rejected
 `CommitShiftPlan` call simply fails with a typed domain error mapped to an
-HTTP status; the caller (a human, via the HTTP or MCP adapter) corrects the
-input and resubmits. No retry, no compensation, no saga — a shift plan is a
+HTTP status; the caller (a human, via the HTTP adapter — the MCP adapter
+has no commit tool) corrects the input and resubmits, or, on a `503`
+installed-capacity failure, retries later. No retry, no compensation, no saga — a shift plan is a
 single atomic human decision, not a long-running process.
 
 ### Handled Commands
@@ -78,7 +80,7 @@ single atomic human decision, not a long-running process.
 | Command | Preconditions | Result |
 | --- | --- | --- |
 | `ProposePathPlan(buildingId, charge, plannedRate)` | None — pure computation | Returns proposed heads; persists nothing; raises `ShiftPlanProposed` |
-| `CommitShiftPlan(buildingId, shiftId, lines[], installedStations[])` | Every line passes both invariants above; at least one line present | Constructs and persists a new `ShiftPlan`; raises `ShiftPlanCommitted` |
+| `CommitShiftPlan(buildingId, shiftId, lines[], installedStations[])` | Every line passes the invariants above, including the live installed-capacity ceiling; at least one line present | Constructs and persists a new `ShiftPlan`; raises `ShiftPlanCommitted` |
 
 ### Created Events
 
@@ -176,8 +178,10 @@ first interval automatically.
 | `LaborAssigned` | An associate is placed on a path for the first time (no prior active interval) |
 | `LaborReassigned` | An active assignment is closed in favour of a new path (`fromPathId`, `toPathId` both carried — a move is one event, not a close/open pair a consumer has to correlate) |
 
-Both events are raised **in-process only** — neither is published to Kafka.
-Publishing individual assignment moves would let a downstream context
+Neither event is published to the integration topic — no sibling receives
+them. (Like every domain event, they do reach this service's own internal
+analytics topic for the labor report, ADR 0010.) Publishing individual
+assignment moves to another context would let a downstream context
 reconstruct a per-associate location picture, exactly what the path
 boundary exists to withhold. See [Domain Events](./domain-events).
 
