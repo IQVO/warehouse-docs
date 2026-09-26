@@ -64,8 +64,11 @@ than one context's own docs:
   plus one superseding ADR per context, e.g. order-management ADR-0012,
   inventory-storage ADR-0015, wes-work-planning ADR-0016,
   fulfillment-execution ADR-0022). Every REST and MCP endpoint is currently
-  unauthenticated by deliberate decision, pending a fresh auth-model
-  decision.
+  unauthenticated by deliberate, reaffirmed decision (last reviewed
+  2026-09-26) — this is a personal DDD/Kubernetes study project, not a
+  production system, and auth was intentionally rolled back fleet-wide on
+  2026-09-11 after being fully implemented. Revisiting this would require an
+  explicit new decision from the project owner, not an assumed default.
 - **Transactional outbox** — every context that publishes integration or
   analytics events commits the event in the same database transaction as
   the aggregate change and relays it to Kafka afterwards, so a store and
