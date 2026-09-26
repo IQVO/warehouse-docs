@@ -56,7 +56,7 @@ flowchart TB
         RN["<b>retail-network</b><br/>Open Host Service · plays the role<br/>of an external retail network<br/>(PLANNED, not yet built)"]
     end
 
-    RN -.->|"Vendor API: GET /vendor/purchase-orders, POST /vendor/acknowledgements,<br/>POST /vendor/inventory, PUT /vendor/nodes/{id}/profile, ...<br/>Open Host Service; network-fulfillment is Conformist + ACL<br/>PLANNED — ADR 0001/0002 Proposed, no repo yet"| NF
+    RN -.->|"Vendor API: GET /vendor/purchase-orders, POST /vendor/acknowledgements,<br/>POST /vendor/inventory, PUT /vendor/nodes/{id}/profile, ...<br/>Open Host Service; network-fulfillment is Conformist + ACL<br/>PLANNED — ADR 0001/0002 Accepted, no repo yet"| NF
     NF ==>|"HTTP POST /orders (held) · POST /orders/{id}/release<br/>DELETE /orders/{id}<br/>Customer/Supplier"| OM
     OM ==>|"HTTP POST /reservations<br/>HTTP DELETE /reservations/{id}<br/>GET /products/{sku}/classification<br/>Customer/Supplier"| INV
     OM ==>|"warehouse.order-management.events<br/>OrderAllocated · OrderPartiallyAllocated<br/>OHS + Published Language"| WP
@@ -114,7 +114,7 @@ code but is not enabled in the cluster, so it is drawn dashed.
 no sandbox or live network gateway is built yet. The dashed green edge
 from `retail-network` is **planned, not live**: no such repository exists
 yet (see the dedicated section below) — it is drawn on this diagram
-because its shape is already decided (ADR 0001/0002, both Proposed) and
+because its shape is already decided (ADR 0001/0002, both Accepted) and
 a reader should see where it will attach once built, not because any
 code calls it today.
 
@@ -159,7 +159,7 @@ altogether.
 | Edge | Pattern | Direction |
 | --- | --- | --- |
 | `network-fulfillment` → `order-management` | Customer/Supplier | network-fulfillment is Customer (and Conformist to the external network upstream, Anti-Corruption Layer for everything downstream); order-management is Supplier. It places network-originated demand as a **held** order and later releases or cancels it (order-management ADR 0020, network-fulfillment ADR 0001). No Kafka on this edge yet |
-| `retail-network` → `network-fulfillment` | Open-Host Service, Conformist downstream | **Planned, not live** (ADR 0001/0002, both Proposed). `retail-network` is a *separate organization*, not a tenth fleet context — see the dedicated section below |
+| `retail-network` → `network-fulfillment` | Open-Host Service, Conformist downstream | **Planned, not live** (ADR 0001/0002, both Accepted). `retail-network` is a *separate organization*, not a tenth fleet context — see the dedicated section below |
 | `order-management` → `inventory-storage` | Customer/Supplier | OM is Customer; inventory-storage is Supplier/OHS (reservations, plus the opt-in product-classification lookup) |
 | `order-management` → `wes-work-planning` | Open-Host Service + Published Language | Since order-management ADR 0005, release is choreographed: OM publishes `OrderAllocated`/`OrderPartiallyAllocated`, wes-work-planning consumes them. There is no longer a synchronous HTTP call on this edge |
 | `wes-work-planning` → `order-management` | Open-Host Service + Published Language | `PathCapacityChanged` feeds OM's capability-derived promise (order-management ADR 0015) |
@@ -296,9 +296,10 @@ enforcing that it never imports fleet Go packages, never consumes a
 `warehouse.*` Kafka topic, and never reads fleet data by any channel
 other than its own Vendor API.
 
-**Status as of this page: Proposed, not built.** Two companion ADRs
-describe the relationship and are both still `Proposed`, pending
-explicit acceptance:
+**Status as of this page: Accepted, not built.** Two companion ADRs
+describe the relationship and were both accepted 2026-09-26; the code
+(the `retail-network` repository, the live gateway in network-fulfillment)
+has not been built yet — that is Phase 2/3 of the rollout plan:
 
 - `retail-network` ADR 0001 — currently staged inside `network-fulfillment`
   at `docs/planning/retail-network-adr-0001-DRAFT-for-new-repo.md`
