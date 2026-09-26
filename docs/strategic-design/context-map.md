@@ -2,7 +2,7 @@
 id: context-map
 title: Context Map
 sidebar_label: Context Map
-description: The ten bounded contexts, what is actually wired between them, and the ddd-crew strategic relationship pattern on every edge.
+description: The ten bounded contexts, what is actually wired between them, the ddd-crew strategic relationship pattern on every edge, and the planned upstream retail-network organization.
 ---
 
 # Context Map
@@ -13,7 +13,9 @@ bounded contexts, labels each edge with its strategic relationship pattern
 (Open-Host Service, Published Language, Customer/Supplier, Conformist,
 Partnership), and — matching the honesty convention every context's own
 docs already use — states plainly which integrations are **live, running
-code** and which relationships are **deliberately absent**.
+code**, which relationships are **deliberately absent**, and which
+upstream organization is **planned but not yet built** (`retail-network`
+— see its own dedicated section below).
 
 ## The whole platform
 
@@ -50,6 +52,11 @@ flowchart TB
         NF["<b>network-fulfillment</b><br/>Supporting · ACL to an external<br/>retail fulfillment network"]
     end
 
+    subgraph EXTERNAL["Upstream — separate organization, NOT part of this platform"]
+        RN["<b>retail-network</b><br/>Open Host Service · plays the role<br/>of an external retail network<br/>(PLANNED, not yet built)"]
+    end
+
+    RN -.->|"Vendor API: GET /vendor/purchase-orders, POST /vendor/acknowledgements,<br/>POST /vendor/inventory, PUT /vendor/nodes/{id}/profile, ...<br/>Open Host Service; network-fulfillment is Conformist + ACL<br/>PLANNED — ADR 0001/0002 Proposed, no repo yet"| NF
     NF ==>|"HTTP POST /orders (held) · POST /orders/{id}/release<br/>DELETE /orders/{id}<br/>Customer/Supplier"| OM
     OM ==>|"HTTP POST /reservations<br/>HTTP DELETE /reservations/{id}<br/>GET /products/{sku}/classification<br/>Customer/Supplier"| INV
     OM ==>|"warehouse.order-management.events<br/>OrderAllocated · OrderPartiallyAllocated<br/>OHS + Published Language"| WP
@@ -88,10 +95,12 @@ flowchart TB
     classDef supp fill:#6d28d9,stroke:#4c1d95,color:#fff;
     classDef gen fill:#475569,stroke:#94a3b8,color:#fff;
     classDef ops fill:#7c2d12,stroke:#431407,color:#fff;
+    classDef upstream fill:#065f46,stroke:#022c22,color:#fff,stroke-dasharray: 5 5;
     class INV,WP,FE core;
     class WFM,LP,OM ops;
     class FL,PPM gen;
     class OA,NF ops;
+    class RN upstream;
 ```
 
 **Synchronous `*_MODE` edges are opt-in.** Every consumer binary defaults
@@ -102,7 +111,12 @@ actually switches on (`warehouse-infra/terraform/locals.tf`,
 against `facility-layout` (`LOCATION_ROLE_MODE`, its ADR 0024) exists in
 code but is not enabled in the cluster, so it is drawn dashed.
 `network-fulfillment` runs against a stub network only (`NETWORK_MODE`);
-no sandbox or live network gateway is built yet.
+no sandbox or live network gateway is built yet. The dashed green edge
+from `retail-network` is **planned, not live**: no such repository exists
+yet (see the dedicated section below) — it is drawn on this diagram
+because its shape is already decided (ADR 0001/0002, both Proposed) and
+a reader should see where it will attach once built, not because any
+code calls it today.
 
 **Bold edges are live** — a real publisher and a real consumer, verified
 against each context's own `CLAUDE.md` and adapter code, or a real HTTP
@@ -145,6 +159,7 @@ altogether.
 | Edge | Pattern | Direction |
 | --- | --- | --- |
 | `network-fulfillment` → `order-management` | Customer/Supplier | network-fulfillment is Customer (and Conformist to the external network upstream, Anti-Corruption Layer for everything downstream); order-management is Supplier. It places network-originated demand as a **held** order and later releases or cancels it (order-management ADR 0020, network-fulfillment ADR 0001). No Kafka on this edge yet |
+| `retail-network` → `network-fulfillment` | Open-Host Service, Conformist downstream | **Planned, not live** (ADR 0001/0002, both Proposed). `retail-network` is a *separate organization*, not a tenth fleet context — see the dedicated section below |
 | `order-management` → `inventory-storage` | Customer/Supplier | OM is Customer; inventory-storage is Supplier/OHS (reservations, plus the opt-in product-classification lookup) |
 | `order-management` → `wes-work-planning` | Open-Host Service + Published Language | Since order-management ADR 0005, release is choreographed: OM publishes `OrderAllocated`/`OrderPartiallyAllocated`, wes-work-planning consumes them. There is no longer a synchronous HTTP call on this edge |
 | `wes-work-planning` → `order-management` | Open-Host Service + Published Language | `PathCapacityChanged` feeds OM's capability-derived promise (order-management ADR 0015) |
@@ -265,6 +280,78 @@ at least once:
   only through `order-management`'s REST API; its use cases emit domain
   events through a publisher port that is wired to a log-only publisher, so
   nothing reaches Kafka.
+
+## Upstream: retail-network (planned, separate organization)
+
+`retail-network` is **not** one of this platform's ten bounded contexts
+and is drawn outside the main diagram's fleet subgraphs on purpose. It is
+the ecosystem's own stand-in for an external retail network — a new
+service built to play the structural role a real e-commerce retailer's
+fulfillment network would play (poll-driven purchase orders, a 24-hour
+fill-or-kill acknowledgement window, asynchronous submission-then-
+reconciliation), **not an integration with any real external company**.
+It is a genuinely separate organization from this fleet: its own repo
+(once created), its own Postgres, its own CI, and a fitness test
+enforcing that it never imports fleet Go packages, never consumes a
+`warehouse.*` Kafka topic, and never reads fleet data by any channel
+other than its own Vendor API.
+
+**Status as of this page: Proposed, not built.** Two companion ADRs
+describe the relationship and are both still `Proposed`, pending
+explicit acceptance:
+
+- `retail-network` ADR 0001 — currently staged inside `network-fulfillment`
+  at `docs/planning/retail-network-adr-0001-DRAFT-for-new-repo.md`
+  (the `retail-network` repository does not exist yet; that file moves
+  verbatim into `retail-network`'s own `docs/docs/adr/` once it is
+  scaffolded).
+- [`network-fulfillment` ADR 0002](https://github.com/claudioed/network-fulfillment/blob/develop/docs/adr/0002-retail-network-not-amazon-counterpart.md) —
+  amends `network-fulfillment`'s own ADR 0001 to name `retail-network` as
+  the concrete counterpart, rename the ACL adapter package, and tighten
+  the PII rule to zero ship-to data reaching `network-fulfillment` at
+  all.
+
+**The relationship, once built:** `retail-network` is an **Open Host
+Service** with its own Published Language (`poNumber`, `listingId`,
+`nodeId`, its own reason codes — deliberately different from this
+fleet's vocabulary). `network-fulfillment` is **Conformist** upstream to
+it and an **Anti-Corruption Layer** for everything downstream in this
+fleet — exactly the same relationship shape `network-fulfillment`'s own
+ADR 0001 already established for "an external retail fulfillment
+network," now naming the concrete counterpart. The only channel between
+the two is `retail-network`'s Vendor API
+(`GET /vendor/purchase-orders`, `POST /vendor/acknowledgements`,
+`POST /vendor/inventory`, `PUT /vendor/nodes/{nodeId}/profile`,
+`POST /vendor/shipping-labels`, `POST /vendor/shipment-confirmations`,
+`GET /vendor/transactions/{transactionId}`,
+`GET /vendor/nodes/{nodeId}/scorecard`) — never a shared Kafka topic,
+never a shared database.
+
+**Why this exists as a real service instead of staying a stub.**
+`network-fulfillment`'s `StubGateway` cannot exercise the failure modes
+its own crash-safety work needs to survive (a crash mid-poll, an
+unacknowledged purchase order expiring, a submission that never
+reconciles). `retail-network` is designed to fail, delay, rate-limit and
+redeliver on purpose via configurable simulation knobs
+(`TX_PROCESSING_DELAY`, `TX_FAILURE_RATE`, `RATE_LIMIT_RPS`,
+`PO_REDELIVERY_RATE`), all defaulting to "well-behaved." Owning both
+sides also closes two gaps a real external integration could never
+close: capability can be genuinely **declared** (a `FulfillmentNode`
+profile of cutoffs/handling time/timezone) as well as measured, and the
+customer promise's missing half (`deliverBy = shipBy + transit(zone)`)
+gets a real owner.
+
+**PII stays inside `retail-network`.** The (synthetic) shopper's
+ship-to name, address and phone live in `retail-network`'s own
+`CustomerOrder` aggregate and are never forwarded to
+`network-fulfillment` — a stronger boundary than a real external
+network integration could achieve, and the reason `network-fulfillment`
+itself needs no auth for PII reasons under this design.
+
+**Not part of the warehouse data mesh.** As a separate organization,
+`retail-network` gets no analytics projector and no
+`analytics_services` entry in `warehouse-infra` were it to exist today —
+its own scorecard is its read model.
 
 ## Transactional outbox: fleet-wide rollout, one repo still open
 
