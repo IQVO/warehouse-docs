@@ -1,0 +1,61 @@
+---
+id: metrics
+title: "Prometheus metrics"
+description: "Prometheus text-format exposition, including `circuit_breaker_state` (ADR 0004) -- one time series per outbound dependency guarded by a circuit breaker, labelled `dependency`, with gobreaker's own state numbering verbatim (0=closed, 1=half-open, 2=open)."
+sidebar_label: "Prometheus metrics"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "get api-method"
+info_path: api-reference/rest/network-fulfillment/network-fulfillment-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Prometheus metrics"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/metrics"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Prometheus text-format exposition, including `circuit_breaker_state` (ADR 0004) -- one time series per outbound dependency guarded by a circuit breaker, labelled `dependency`, with gobreaker's own state numbering verbatim (0=closed, 1=half-open, 2=open).
+
+
+<ParamsDetails>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./metrics.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./metrics.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

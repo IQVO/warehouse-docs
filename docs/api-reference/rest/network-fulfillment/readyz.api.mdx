@@ -1,0 +1,61 @@
+---
+id: readyz
+title: "Readiness probe"
+description: "Readiness, separate from liveness (`/healthz`, above): reports `ready` until graceful shutdown begins, at which point it flips to `not_ready` as the FIRST step of the shutdown sequence (ADR 0004) -- before the HTTP server stops accepting connections -- so a Kubernetes `readinessProbe` pointed here gets a window to stop routing new traffic before the drain that follows. `/healthz` stays a pure liveness signal and is never flipped by this."
+sidebar_label: "Readiness probe"
+hide_title: true
+hide_table_of_contents: true
+api: eJztV9tuI7kR/ZUCX8YWWpKz2QAL7ZN2xrMxxrEN29kLZgZjNlmt5ppN9rCq3aMxDOQj8oX5kqDIli2vk7wGAeIXS1SxrqdOFe9V7DFpdjGcWLVSCbXdflWVYr0htXr/9DOpj5WySCa5Xr6rlbpEbV1AogoIe500IzQpduDdHco5HNwsW9Se2683Feg63uHhChL2MTHBTTZ2A0Ng52GTtMFm8EDtwDaOAWrcuEAVaIaxdaaFPrrA4Bga73oCjnATIn+a1GgCbhHenlxeXQMx9hCbfPKokPDzgMEgHKzfXMLR0dG3hzCfQ41NTJhF/3x9fQGE6Q4TEMeeQBuDPbuwARNDQJNTIbcogoZ3Q40pIOMUTc7GRYo13hRv0UKLCWGDTKBhdMHGUTwX7ZDikFUHHIGTbhpn9r2xSbsA3GqGJnofR1rAU0KBWG9FaT8kfEo5uU3QHnSw4AgCSiiSrx4t1Fvg1tHiQ1CVSkh9DISkVvfqm6Mj+feyvltxNqFBd4c7HxeqUiYGxsBySfe9dyaDZPkbyc17RabFTssn3vaoVirWv6HhbPbz4BJaARex5iEDq08CNHbFm+n86TZxcmGjKoVfdNd73CFVPeS/Sv3p6I8v/T+LDFlM6vUSX47ABehT3CQkWsD6ZQ1jLWCQEknegNo4ePuydhITEmdIZsE+2u9B+2x8jsS69o5atM9ApBPCEHTToGG0pSj/9bQ+NtSU2odKdchtFHLYoFjqNbdqpZaPVFH6RdjiXg3Jq5VqmfvVcumj0b6NxKvvjo6Olrp3y4A8xnQ7bwbfOO87ifX3tHIq1+DWBQvGD8SYKuA2xWHT5rZ4F8MGNppx1Fv1UP0Ho98dvVD+xiU0XEETE2jIwpCGoB4+VsqFJubsOM65OCvOwtsnZ2F9caIqJfEWfX9YHC1eWrluEdaB3fx1TGnIp3Cqt5igRh4RwwQTr7mJqcvdqgPgF8Yk3ZuQtfOwlyWYMgcH605/jeEVwRV6Lwi80IkDJnGtgp8w2JighLnv+eECThjiGAhmsymy82QxzWYrsNiJC5lqdEruDm1h8jgwOYtgdEpbMabBorbeBYQRwToLITKYNkbCCooSBB1oxCQScSxctnO/3u6r2P+FkBcfwocwm13nXhtSow1Kl14er9/Mz89Of90Z0CzHokfYDiwaJ+WApLnFJAJB0hk7R3K+mM3gTYkQA2Oikv3ca19YXLo4Pz09OfvxmT8iXm8lvFYCR0+4eiYQm0Z0DQQhQj9QW+WhEMoUcYH1LQIGW8bWmKmjRtBAaGKwFTQuM4H24EIdh2BBegtGx62oNHEQb3udeCIqO+QLCxB8xeAznYcN0GDajJ+dMZONtTEgsd+K1YGkpDEV1hPSyKyGxFPxn4pHPNS7/npF0DiPc0K0aKGLFuHg5uz4+ufzy3efro6P33x6e3J6fHO4YzuwEamUSOKIA0OfkDHYbC+WDPQpcjTR54JfRRinkuKXPtJuZjqC8x+uji9/Wl+fnJ9VE6gKGSPwGCGzbuHSAGVTkbY2PGjvt9BqAjvkGzqAC8ZZDLyCWTYn2BVwovfP615np4dkWk0IUXoEfpmV/Mxc2TJ2BfO4AS2zd1aKUkoLneaMsxqNHqjgvI/eY5KEaudlZOdkCtKdz1vJP/72d0lNFisZLCtIg2xymQsCMOMtu0WVfMSUYqLCIdBjknki0ec9YQv7K9jYOl+8+ebbeRsHSdZtiKNHu8FMM8ZHcwu3iD0JL4acvI12gRhGLalyHcqsnPyMA+tNDkMHuDpdQ51Qm7bKtCAd6vVWNg/Npp3a+/VAHDtMcHFyMoXowrOWlIa9al0/5whBd0Is1sqQzkH2guu88BScyFmIY/4sXfqobUev1SQCu5XnUcJGM5SwhfUycLErlZzg8IqEM2GWsMEkZaIZHDimR4DMC0DC0NUyqOSnTG1PF8rh1L6QMegah4kOYX15vMN89Qwse8iWrXm3K+QO0LXHx+YShzNyuI0SWNG+zUqyZ6USGYCYKIZchLeoydXOO94+bYkmdv2w21gX8HOLmU336Npo2cqhw8K/dItWluxsZ97poAuIXuVoO0cZ9M5sq2mBz9NnGjKO2w7ZmUxK4t7YRo+PNfv+OUdruqVK9tCYbOnAO0zWySQvs1MSQ8/72IiwCxu/fdqttMm7lYDq3wz4g6uhl/eJAP8H6XG08Lp4UcH69alw2L8Y1ZPVQ/VQKe8MBsI9Q385uVbV3p5Cq+Uy9hgoDsngIqbNcrpES5GVtauPxJ0Oe1oe31uS3hp/v3XcP22P/3+a/U8/zab1XDC37L12QVCV0XM/rd/vdy/1j5WSZVdO7u9rTfjX5B8e5PjzgGmrVu8/VupOJyesId8eKtWitpjyvn6LW7VS65xJ2Wu1H8Tyi7eHrMeP74AfjwWh/wT3Scmb
+sidebar_class_name: "get api-method"
+info_path: api-reference/rest/network-fulfillment/network-fulfillment-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Readiness probe"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/readyz"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Readiness, separate from liveness (`/healthz`, above): reports `ready` until graceful shutdown begins, at which point it flips to `not_ready` as the FIRST step of the shutdown sequence (ADR 0004) -- before the HTTP server stops accepting connections -- so a Kubernetes `readinessProbe` pointed here gets a window to stop routing new traffic before the drain that follows. `/healthz` stays a pure liveness signal and is never flipped by this.
+
+
+<ParamsDetails>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./readyz.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./readyz.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

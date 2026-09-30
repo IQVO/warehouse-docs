@@ -44,8 +44,42 @@ const sidebar: SidebarsConfig = {
         },
         {
           type: "doc",
+          id: "api-reference/rest/network-fulfillment/readyz",
+          label: "Readiness probe",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/network-fulfillment/metrics",
+          label: "Prometheus metrics",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
           id: "api-reference/rest/network-fulfillment/get-inbound-status",
           label: "Is the inbound polling leg alive?",
+          className: "api-method get",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "reports",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/network-fulfillment/reports",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/network-fulfillment/get-acknowledgement-report",
+          label: "Network Order Acknowledgement & Translation report",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/network-fulfillment/get-acknowledgement-report-freshness",
+          label: "How far the report lags real time",
           className: "api-method get",
         },
       ],
