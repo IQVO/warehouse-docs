@@ -1,0 +1,61 @@
+---
+id: get-acknowledgement-report-freshness
+title: "How far the report lags real time"
+description: "Seconds between now and the `occurredAt` of the most recently projected domain event. Matches every sibling data product's `/freshness` convention exactly: it is how an operator tells 'the report is caught up' from 'the projector is stuck or the topic is stalled' without reading projector logs."
+sidebar_label: "How far the report lags real time"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "get api-method"
+info_path: api-reference/rest/network-fulfillment/network-fulfillment-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"How far the report lags real time"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/reports/acknowledgement/freshness"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Seconds between now and the `occurredAt` of the most recently projected domain event. Matches every sibling data product's `/freshness` convention exactly: it is how an operator tells "the report is caught up" from "the projector is stuck or the topic is stalled" without reading projector logs.
+
+
+<ParamsDetails>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./get-acknowledgement-report-freshness.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./get-acknowledgement-report-freshness.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

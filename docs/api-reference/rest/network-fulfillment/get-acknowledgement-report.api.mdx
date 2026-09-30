@@ -1,0 +1,73 @@
+---
+id: get-acknowledgement-report
+title: "Network Order Acknowledgement & Translation report"
+description: "Bucketed by day: how much demand arrived, how it was answered, and how fast. `ordersRejected` is split by cause — `ordersRejectedUntranslatableSku` (a catalogue gap: the Anti- Corruption Layer had no SKU mapping) is a different operational signal from `ordersRejectedDomain` (order-management's promise policy could not meet the deadline) or `acknowledgementDeadlinesMissed` (the 24-hour window closed with no answer ever sent — an operational failure, not a business decision)."
+sidebar_label: "Network Order Acknowledgement & Translation report"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "get api-method"
+info_path: api-reference/rest/network-fulfillment/network-fulfillment-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Network Order Acknowledgement & Translation report"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/reports/acknowledgement"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Bucketed by day: how much demand arrived, how it was answered, and how fast. `ordersRejected` is split by cause — `ordersRejectedUntranslatableSku` (a catalogue gap: the Anti- Corruption Layer had no SKU mapping) is a different operational signal from `ordersRejectedDomain` (order-management's promise policy could not meet the deadline) or `acknowledgementDeadlinesMissed` (the 24-hour window closed with no answer ever sent — an operational failure, not a business decision).
+
+Served by the `netfulfil-reports` deployable, reading a Postgres read model that `netfulfil-projector` maintains from this context's own domain events. Never the OLTP database.
+
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./get-acknowledgement-report.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./get-acknowledgement-report.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./get-acknowledgement-report.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      
