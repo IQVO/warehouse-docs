@@ -199,11 +199,9 @@ sibling's. Full glossary: [Ubiquitous Language](./ubiquitous-language).
   `GET /paths/{pathId}/rebalance`. Continuous monitoring is a gap this
   context accepts knowingly rather than embed a scheduler in the core
   domain.
-- **The running wire format still lags the published contract.**
-  `apis/asyncapi.yaml` documents a CloudEvents 1.0 structured-mode
-  envelope; the running adapters still write the platform's earlier,
-  simpler `{event_id, event_type, occurred_at, source, data}` shape, and
-  sibling consumers expect that simpler shape today. See
+- **CloudEvents 1.0 is the only envelope.** Every adapter writes and
+  reads CloudEvents 1.0 structured mode (the [Event Standard](/strategic-design/event-standard-cloudevents));
+  the earlier dual-envelope migration (ADR-0021) is superseded. See
   [Async API](./async-api).
 - **`order-management`'s fire-and-forget enqueue has no reply event.**
   order-management does not learn from Kafka whether or when its lines

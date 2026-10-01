@@ -22,6 +22,7 @@ Domain-Driven Design modelling tools referenced throughout this fleet's own
 | [Subdomain Classification](/strategic-design/subdomain-classification) | (companion to core-domain-charts) | Core / Supporting / Generic, per bounded context, with the justification. |
 | [Context Map](/strategic-design/context-map) | [context-mapping](https://github.com/ddd-crew/context-mapping) | How do the ten bounded contexts relate — Partnership, Customer/Supplier, Open-Host Service, Conformist, ACL? |
 | [Domain Message Flow Modelling](/strategic-design/domain-message-flows) | [domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling) | How do commands, events, and queries actually flow between contexts for the platform's key business processes? |
+| [Event Standard (CloudEvents 1.0)](/strategic-design/event-standard-cloudevents) | (fleet standard) | The one mandatory envelope on every Kafka topic, the subdomain table, and the cross-service `type` catalogue. |
 | [Ubiquitous Language](/strategic-design/ubiquitous-language) | (companion to [welcome-to-ddd](https://github.com/ddd-crew/welcome-to-ddd)) | The shared vocabulary spanning every context, and where it's defined. |
 
 ## Method note

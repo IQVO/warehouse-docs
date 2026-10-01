@@ -259,9 +259,6 @@ path boundary explicitly.
   context's entire non-decision-making posture (`PathUnderstaffed` as a
   flag) and its non-relationship with `fulfillment-execution` are the first
   things that would need revisiting.
-- The AsyncAPI catalog documents a CloudEvents 1.0 envelope as the target
-  contract, while the shipped Kafka adapter still writes the older flat
-  cross-service envelope. Both are documented explicitly (see
-  [Async API](./async-api)), but the migration itself — moving
-  `wes-work-planning`'s consumer to `type`-based routing and dropping the
-  flat shape — has not been scheduled.
+- CloudEvents 1.0 is the only envelope on the wire (the
+  [Event Standard](/strategic-design/event-standard-cloudevents); see
+  [Async API](./async-api)); consumers route on the full `type`.

@@ -75,7 +75,7 @@ intended model, and removing it would lose that intent.
   needs a repo lookup: every field comes straight off the domain event.
 
 All three consumers subscribe to the identical `warehouse.fulfillment.events`
-topic and each filters on `event_type` independently — one publisher, one
+topic and each filters on the full CloudEvents `type` independently — one publisher, one
 topic, three unrelated readers.
 Neither downstream context's needs reshaped the domain event itself; both
 enrichment fields are additive, resolved in the adapter, and both degrade
@@ -135,9 +135,8 @@ com.warehouse.wes.fulfillment-execution.task.TaskCompleted
 com.warehouse.wes.fulfillment-execution.package.PackageDiverted
 ```
 
-See [Async API](./async-api) for the full envelope and the documented
-divergence between this naming convention (the target AsyncAPI contract)
-and what the live Kafka publisher writes today.
+See [Async API](./async-api) for the full envelope; CloudEvents 1.0 is the
+only envelope on the wire (the [Event Standard](/strategic-design/event-standard-cloudevents)).
 
 ## Why the events stay thin
 

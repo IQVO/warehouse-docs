@@ -125,7 +125,7 @@ packing-care hints that never gate claiming, and both are explicitly unlike
   Postgres.
 - `labor-performance` and `order-management` read the same
   `warehouse.fulfillment.events` topic `wes-work-planning` already consumes
-  from, each filtering by `event_type` — this service publishes once, to one
+  from, each filtering by the full CloudEvents `type` — this service publishes once, to one
   topic, for all three consumers.
 - Every `path_id` on `WorkReleased` resolves in the process-path catalogue
   (longest `matchPrefix` wins); an unknown id is a hard error, not a silent
@@ -153,13 +153,10 @@ packing-care hints that never gate claiming, and both are explicitly unlike
 - **The WCS anti-corruption layer is not built.** `ports.EquipmentCommandPort`
   exists but has no adapter and no callable methods — the boundary is real
   in the type system, but no equipment integration has been scoped yet.
-- **The AsyncAPI contract and the live publisher diverge.** `apis/asyncapi.yaml`
-  specifies a CloudEvents 1.0 structured envelope on channel
-  `warehouse.fulfillment-execution.events`; the running Kafka publisher
-  writes the older flat platform envelope to
-  `warehouse.fulfillment.events`. Both the channel name and the envelope
-  shape differ, and migrating is outstanding work both producer and
-  consumer sides would need to do together.
+- **CloudEvents 1.0 is the only envelope.** Publisher and consumers on
+  `warehouse.fulfillment.events` use CloudEvents 1.0 structured mode
+  exclusively (the [Event Standard](/strategic-design/event-standard-cloudevents)); the
+  earlier dual-envelope migration (ADR-0027) is superseded.
 - **No dead-letter queue on the inbound consumer.** A message that fails to
   process is logged and dropped; because idempotency is marked *before*
   task creation, an event whose task creation fails is treated as

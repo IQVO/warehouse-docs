@@ -72,8 +72,10 @@ The spec documents three channels and five messages: the consumed
 `LaborStandardRevised` and `TaskPerformanceRecorded` on
 `warehouse.labor-performance.analytics`; and
 `TaskPerformanceRecordedIntegration` — the SAME `TaskPerformanceRecorded`
-domain event in the plain integration envelope (no `schema_version`,
-keyed by `AssociateId`) — on `warehouse.labor-performance.events`.
+domain event with the integration `dataschema`
+(`urn:warehouse:labor-performance:events:TaskPerformanceRecorded:v1`,
+keyed by `AssociateId`; every channel is CloudEvents 1.0 per the
+[Event Standard](/strategic-design/event-standard-cloudevents)) — on `warehouse.labor-performance.events`.
 
 ## Published, but not (yet) integration events for anyone else
 

@@ -204,6 +204,11 @@ misreading:
   topics so that adding a report never changes a contract another context
   depends on.
 
+Both families carry exactly one envelope: CloudEvents 1.0 in structured
+content mode, with `content-type: application/cloudevents+json;
+charset=UTF-8` on every message — see the
+[Event Standard](/strategic-design/event-standard-cloudevents).
+
 ## What this diagram does not show
 
 - **Replica counts and autoscaling.** Those live in `warehouse-infra`'s Helm

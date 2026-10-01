@@ -9,8 +9,10 @@ description: The narrative Kafka integration for Fulfillment Execution — topic
 
 This page is the narrative companion to the
 [generated AsyncAPI reference](/api-reference/async/fulfillment-execution) —
-what this context actually does with Kafka, in prose, including the gaps
-between the published contract and the live wire format.
+what this context actually does with Kafka, in prose. Every message is a
+CloudEvents 1.0 event (structured mode, header
+`content-type: application/cloudevents+json; charset=UTF-8`) per the
+fleet-wide, mandatory [Event Standard](/strategic-design/event-standard-cloudevents).
 
 ## Topics
 
@@ -28,14 +30,18 @@ Postgres.
 
 ## Consuming: `WorkReleased`
 
-The flat platform envelope shared across the fleet's integrating services:
+The CloudEvents 1.0 envelope shared by every service in the fleet:
 
 ```json
 {
-  "event_id": "uuid-v4",
-  "event_type": "WorkReleased",
-  "occurred_at": "2026-08-21T22:00:00Z",
-  "source": "wes-work-planning",
+  "specversion": "1.0",
+  "id": "uuid-v4",
+  "source": "/warehouse/wes-work-planning",
+  "type": "com.warehouse.wes.work-planning.workunit.WorkReleased",
+  "subject": "wu-8a1f",
+  "time": "2026-08-21T22:00:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:wes-work-planning:events:WorkReleased:v1",
   "data": {
     "path_id": "pick-zone-a",
     "work_unit_id": "wu-8a1f",
@@ -49,8 +55,11 @@ The flat platform envelope shared across the fleet's integrating services:
 
 `fragile` and `gift_wrap` are optional packing hints (default `false`).
 
-The consumer filters on `event_type == "WorkReleased"` and silently ignores
-everything else on the topic, then translates at the boundary (the
+The consumer validates the CloudEvent, filters on the full
+`type == "com.warehouse.wes.work-planning.workunit.WorkReleased"` and
+silently ignores every other type on the topic (a message that is not a
+valid CloudEvent is a poison message: logged and skipped, never parsed as a
+legacy shape), then translates at the boundary (the
 Anti-Corruption Layer) rather than deserialising into a shared type:
 
 | From `WorkReleased.data` | Becomes | Via |
@@ -71,7 +80,7 @@ The retired prefix-guessing convention is gone.
 
 The consumer then calls the **existing** `CreateTask` use case — no
 parallel code path exists for the Kafka-originated flow. Idempotency:
-`ProcessedEvents.MarkProcessed(ctx, event_id)` runs before task creation,
+`ProcessedEvents.MarkProcessed(ctx, id)` (the CloudEvents `id`) runs before task creation,
 returning `true` only if this call newly recorded the id, so redelivery
 (Kafka is at-least-once) produces no duplicate task. A handling error is
 logged and the loop continues — there is no dead-letter queue today, a
@@ -83,10 +92,14 @@ process on the shared broker must set a unique value.
 
 ```json
 {
-  "event_id": "uuid-v4",
-  "event_type": "TaskCompleted",
-  "occurred_at": "2026-08-22T14:04:00Z",
-  "source": "fulfillment-execution",
+  "specversion": "1.0",
+  "id": "uuid-v4",
+  "source": "/warehouse/fulfillment-execution",
+  "type": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+  "subject": "task-8a1f",
+  "time": "2026-08-22T14:04:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
   "data": {
     "task_id": "task-8a1f",
     "station_id": "station-03",
@@ -115,12 +128,12 @@ task) — both degrade gracefully rather than failing the publish.
 Added by
 [ADR-0025](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0025-cpt-missed-sweep-and-package-manifested.md)
 as this service's half of order-management's promise feedback loop. Same
-topic, same flat envelope, same publisher:
+topic, same CloudEvents envelope, same publisher:
 
-| `event_type` | `data` | Raised when |
+| `type` | `data` | Raised when |
 | --- | --- | --- |
-| `TaskCPTMissed` | `task_id`, `order_ref`, `task_type`, `cpt` | `POST /tasks/sweep-cpt-misses` finds a task still open (Pending or Claimed) at or past its CPT; re-fires every pass while overdue. Nothing inside this service schedules the sweep. |
-| `PackageManifested` | `package_id`, `order_ref` | SLAM passes, alongside `LabelApplied` |
+| `com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed` | `task_id`, `order_ref`, `task_type`, `cpt` | `POST /tasks/sweep-cpt-misses` finds a task still open (Pending or Claimed) at or past its CPT; re-fires every pass while overdue. Nothing inside this service schedules the sweep. |
+| `com.warehouse.wes.fulfillment-execution.package.PackageManifested` | `package_id`, `order_ref` | SLAM passes, alongside `LabelApplied` |
 
 Every field comes straight off the domain event — no repository enrichment.
 `order-management`'s `RepromiseOrder` consumer keys on `order_ref`.
@@ -138,13 +151,13 @@ integration and analytics topics
 
 `warehouse.fulfillment.events` is published to **once**, but read by
 **three different bounded contexts**, each subscribing independently and
-each filtering by `event_type`:
+each filtering by the full CloudEvents `type`:
 
 ```mermaid
 flowchart LR
     FE["fulfillment-execution<br/>publishes once"] ==> T[("warehouse.fulfillment.events<br/>TaskCompleted · TaskCPTMissed · PackageManifested")]
-    T ==>|"filters event_type == TaskCompleted<br/>reads work_unit_id"| WP["wes-work-planning<br/>RecordCompletion(workUnitId)"]
-    T ==>|"filters event_type == TaskCompleted<br/>reads associate_id, duration_seconds"| LP["labor-performance<br/>scores actual-vs-standard"]
+    T ==>|"filters type …task.TaskCompleted<br/>reads work_unit_id"| WP["wes-work-planning<br/>RecordCompletion(workUnitId)"]
+    T ==>|"filters type …task.TaskCompleted<br/>reads associate_id, duration_seconds"| LP["labor-performance<br/>scores actual-vs-standard"]
     T ==>|"filters TaskCPTMissed / PackageManifested<br/>reads order_ref"| OM["order-management<br/>RepromiseOrder"]
 ```
 
@@ -167,28 +180,19 @@ already have to read keeps the coupling one-way and event-driven — this
 service publishes what it knows, once, at the moment it knows it, and each
 downstream reader takes only the fields it needs.
 
-## CloudEvents target contract vs. the live wire format
-
-:::warning[Contract vs. current wire format]
-`apis/asyncapi.yaml` specifies the CloudEvents 1.0 structured envelope
-(`specversion` / `id` / `source` / `type` / `subject` / `time` /
-`datacontenttype` / `data`) on channel
-`warehouse.fulfillment-execution.events`, with `type` following:
+## The `type` convention
 
 ```
 com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>
 ```
 
-e.g. `com.warehouse.wes.fulfillment-execution.task.TaskCompleted`.
-
-The Kafka publisher in `internal/adapters/outbound/kafka/publisher.go`
-today writes the **older flat platform envelope** shown above to topic
-**`warehouse.fulfillment.events`** — and that is what `wes-work-planning`,
-`labor-performance` and `order-management` actually read. The AsyncAPI
-document describes the target contract; the code has not migrated to it
-yet. Both the channel name and the envelope shape differ. This is stated
-plainly rather than papered over.
-:::
+e.g. `com.warehouse.wes.fulfillment-execution.task.TaskCompleted`, on topic
+`warehouse.fulfillment.events`. The same `type` names the occurrence on the
+analytics topic `warehouse.fulfillment.analytics`; `dataschema`
+(`urn:warehouse:fulfillment-execution:<events|analytics>:<EventName>:v1`)
+names the payload shape. The earlier dual-envelope migration (ADR-0027) is
+superseded: the publisher emits only CloudEvents and every consumer accepts
+only CloudEvents.
 
 ## See also
 

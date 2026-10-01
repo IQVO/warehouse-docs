@@ -41,9 +41,10 @@ update), not onto the fleet's Kafka bus.
 From the repository's `.claude/rules/integration-events.md`:
 
 - One broker for the whole fleet; topic naming
-  `warehouse.<context>.events`; CloudEvents-style envelopes with
-  `com.warehouse.<subdomain>.network-fulfillment.<entity>.<EventName>`
-  types.
+  `warehouse.<context>.events`; CloudEvents 1.0 envelopes (mandatory,
+  see the [Event Standard](/strategic-design/event-standard-cloudevents)) with
+  `com.warehouse.wes.network-fulfillment.networkorder.<EventName>` types
+  and `source=/warehouse/network-fulfillment`.
 - **Nothing network-shaped crosses into a published event** — no
   purchase-order numbers as fleet identities, no ASINs, no network status
   codes, and no customer PII.

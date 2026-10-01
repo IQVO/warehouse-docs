@@ -154,11 +154,10 @@ Real, disclosed gaps from this context's own documentation — not invented:
   timeout is enforced only lazily (`Confirm` refuses an expired reservation),
   so a reservation nobody revokes keeps holding quantity out of usable
   indefinitely until something issues `DELETE /reservations/{id}`.
-- **Two envelopes coexist on the wire.** The Kafka adapter emits the legacy
-  flat envelope (`event_id`/`event_type`/`occurred_at`/`source`/`data`) while
-  `apis/asyncapi.yaml` documents the CloudEvents 1.0 target the platform is
-  standardising on. Migrating the adapter to emit CloudEvents natively is
-  outstanding work.
+- **CloudEvents 1.0 is the only envelope.** The Kafka adapter emits, and
+  the facility-layout cache consumer accepts, only CloudEvents 1.0
+  structured mode (the [Event Standard](/strategic-design/event-standard-cloudevents));
+  there is no legacy flat envelope.
 - **Publish failures fail the request.** A broker outage surfaces as a `500`
   on the triggering HTTP call; a transactional outbox would decouple request
   success from broker availability and is not built (the Postgres `events`

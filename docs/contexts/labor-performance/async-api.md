@@ -22,7 +22,7 @@ independently under its own group.
 **Consumer group id:** `labor-performance` (default, configurable via
 `KAFKA_CONSUMER_GROUP`).
 
-**Filter:** only `event_type == "TaskCompleted"` is acted on. Every other
+**Filter:** only `type == "com.warehouse.wes.fulfillment-execution.task.TaskCompleted"` is acted on. Every other
 event type on this shared topic — `fulfillment-execution` now also
 publishes `TaskCPTMissed` and `PackageManifested` there — is silently
 skipped, **not an error**, mirroring
@@ -40,15 +40,22 @@ this context's own private mirror of the wire shape.
 
 ### The envelope
 
-The identical CloudEvents-like shape every warehouse-systems publisher
-uses:
+CloudEvents 1.0, structured content mode — the fleet-wide, mandatory
+[Event Standard](/strategic-design/event-standard-cloudevents) every warehouse-systems publisher uses (Kafka header
+`content-type: application/cloudevents+json; charset=UTF-8`). The consumer
+dispatches on the full `type`, ignores unknown types, and skips (never
+parses) anything that is not a valid CloudEvent:
 
 ```json
 {
-  "event_id": "uuid-v4",
-  "event_type": "TaskCompleted",
-  "occurred_at": "2026-08-29T22:00:00Z",
-  "source": "fulfillment-execution",
+  "specversion": "1.0",
+  "id": "uuid-v4",
+  "source": "/warehouse/fulfillment-execution",
+  "type": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+  "subject": "...",
+  "time": "2026-08-29T22:00:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
   "data": {
     "task_id": "...",
     "station_id": "...",
@@ -82,12 +89,12 @@ against a `LaborStandard` and never listed under `GetTaskTypePerformance`
 
 The same event also drives idleness (ADR 0014): the gap between an
 associate's previous completion and this task's claim instant
-(`occurred_at − duration_seconds`) is recorded as an `IdlePeriod`, with no
+(`time − duration_seconds`) is recorded as an `IdlePeriod`, with no
 additional upstream field required.
 
 ### Idempotency
 
-Keyed on the envelope's own `event_id`, **not** `TaskId` — a `TaskId`
+Keyed on the CloudEvents `id`, **not** `TaskId` — a `TaskId`
 could in principle be reused after a very long time. Unlike some sibling
 services' use of the same `ProcessedEvents` idempotency-gate pattern
 (which gates only an additive analytics side-projection), here it gates
@@ -137,12 +144,14 @@ rows — see [Domain Events](./domain-events)). `LaborStandardDefined` and
 contract to include them is a purely additive future change, not done
 speculatively here.
 
-**Envelope:** the plain, fleet-wide flat envelope (`event_id`,
-`event_type`, `occurred_at`, `source`, `data`) — the SAME shape this
-service consumes on `warehouse.fulfillment.events`, deliberately **not**
-the `AnalyticsEnvelope` variant (which carries an extra `schema_version`)
-the analytics topic below uses, since this is a Published Language
-contract for external consumers, not the internal analytics stream.
+**Envelope:** CloudEvents 1.0 — the SAME envelope this service consumes
+on `warehouse.fulfillment.events` and publishes on the analytics topic
+below. `type` is
+`com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded`
+on both topics; `dataschema` tells them apart
+(`urn:warehouse:labor-performance:events:TaskPerformanceRecorded:v1` here,
+`…:analytics:…` on the analytics topic). The old analytics
+`schema_version` field is gone.
 
 **Partition key:** `AssociateId` — not `TaskType`, which the analytics
 publisher keys on. The intended consumer (workforce-management's

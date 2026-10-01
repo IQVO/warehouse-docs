@@ -2,7 +2,7 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: The Kafka integration in narrative form — the shared envelope, topics published and consumed, real payload examples, and idempotency behaviour.
+description: The Kafka integration in narrative form — the CloudEvents 1.0 envelope, topics published and consumed, real payload examples, and idempotency behaviour.
 ---
 
 # Async API
@@ -12,61 +12,62 @@ Every warehouse-systems service shares **one Kafka broker**
 connects to the shared one via `github.com/segmentio/kafka-go` (pure Go, no
 cgo).
 
-## The shared envelope
+## The envelope: CloudEvents 1.0 (mandatory)
 
-Every service exchanges the same outer shape:
+Every service exchanges CloudEvents 1.0 in structured content mode — the
+fleet-wide, mandatory [Event Standard](/strategic-design/event-standard-cloudevents). Every message carries the Kafka header
+`content-type: application/cloudevents+json; charset=UTF-8`:
 
 ```json
 {
-  "event_id": "uuid-v4",
-  "event_type": "WorkReleased",
-  "occurred_at": "2026-08-21T22:00:00Z",
-  "source": "wes-work-planning",
+  "specversion": "1.0",
+  "id": "uuid-v4",
+  "source": "/warehouse/wes-work-planning",
+  "type": "com.warehouse.wes.work-planning.workunit.WorkReleased",
+  "subject": "...",
+  "time": "2026-08-21T22:00:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:wes-work-planning:events:WorkReleased:v1",
   "data": { }
 }
 ```
 
-`event_id` is a UUID v4 generated at publish time and is also the Kafka
-**message key**. `occurred_at` comes from the **domain clock**, not from
-publish time. `source` is always the publishing service's own name. `data`
-is event-type-specific.
+`id` is a UUID v4 minted once per domain event and persisted with the
+outbox row, so a redelivery carries the same `id`; `(source, id)` is the
+consumer idempotency key. `time` comes from the **domain clock**, not from
+publish time. `subject` is the aggregate instance id. `dataschema`
+distinguishes the integration payload (`…:events:…`) from the analytics
+payload (`…:analytics:…`) of the same occurrence. `data` is
+event-type-specific.
 
-The envelope struct lives in each service's own
-`internal/adapters/kafka/envelope` package and is **duplicated by
-agreement** rather than extracted into a shared library — a shared library
-would make the envelope a versioned dependency, and bumping it would force
-coordinated redeploys, reintroducing exactly the coupling the async
-boundary exists to avoid. The cost is that the definition is copied across
-services and could drift; the mitigation is that it is tiny, stable, and
-each service's contract is published and linted.
-
-:::note[Envelope vs. the published AsyncAPI spec]
-`apis/asyncapi.yaml` documents a **CloudEvents 1.0 structured-mode**
-envelope as the platform's published target contract — reverse-DNS `type`
-naming (`com.warehouse.wes.work-planning.workunit.WorkReleased`), `id`,
-`source`, `subject`, `time`. The **running adapters still write the simpler
-envelope above**, and the sibling consumers expect that simpler shape. Both
-are recorded, and this gap is stated rather than papered over: code against
-the JSON block above if you are writing a consumer today. See the
+Events are built, validated and (un)marshalled with the official
+`github.com/cloudevents/sdk-go/v2/event` package, behind each service's own
+`internal/adapters/kafka/cloudevents/` helper (transport stays
+`segmentio/kafka-go`). Consumers dispatch on the **full** `type` string,
+ignore unknown types, and DLQ/skip — never parse — anything that is not a
+valid CloudEvent. There is no flat envelope and no envelope toggle. See the
 [generated reference](/api-reference/async/wes-work-planning) for the full
-CloudEvents-shaped spec document.
-:::
+spec document.
 
 ## Published
 
 ### Topic `warehouse.work-planning.events`
 
-| `event_type` | `data` | Published when | Consumed by |
+| `type` (suffix after `com.warehouse.wes.work-planning.`) | `data` | Published when | Consumed by |
 |---|---|---|---|
-| `WorkReleased` | `{"path_id","work_unit_id","cpt","ref"}` (+ optional `required_capabilities`, `fragile`, `gift_wrap`) | `ReleaseNextWork` releases a unit | **`fulfillment-execution`** → creates a `Task` |
-| `PathCapacityChanged` | `{"path_id","cutoff_at","remaining_units","known"}` | `SampleBacklog` is called with `cutoffAt` set (`GET /paths/{pathId}/telemetry?cutoffAt=…`, ADR-0018) | **`order-management`** — its `kafkapathcapacity` adapter (own per-process consumer group, filters for this one event type) caches remaining capacity keyed by path and cutoff instant |
+| `workunit.WorkReleased` | `{"path_id","work_unit_id","cpt","ref"}` (+ optional `required_capabilities`, `fragile`, `gift_wrap`) | `ReleaseNextWork` releases a unit | **`fulfillment-execution`** → creates a `Task` |
+| `workpool.PathCapacityChanged` | `{"path_id","cutoff_at","remaining_units","known"}` | `SampleBacklog` is called with `cutoffAt` set (`GET /paths/{pathId}/telemetry?cutoffAt=…`, ADR-0018) | **`order-management`** — its `kafkapathcapacity` adapter (own per-process consumer group, filters for this one event type) caches remaining capacity keyed by path and cutoff instant |
 
 ```json
 {
-  "event_id": "1d7e4b90-3c58-4d22-9a6f-8b1c0e5d7a23",
-  "event_type": "WorkReleased",
-  "occurred_at": "2026-08-21T22:12:30Z",
-  "source": "wes-work-planning",
+  "specversion": "1.0",
+  "id": "1d7e4b90-3c58-4d22-9a6f-8b1c0e5d7a23",
+  "source": "/warehouse/wes-work-planning",
+  "type": "com.warehouse.wes.work-planning.workunit.WorkReleased",
+  "subject": "wu-10231",
+  "time": "2026-08-21T22:12:30Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:wes-work-planning:events:WorkReleased:v1",
   "data": {
     "path_id": "pick-to-tote",
     "work_unit_id": "wu-10231",
@@ -87,8 +88,8 @@ The other eight domain events are also written to this topic by the
 outbound adapter with a `{"path_id": ...}`-shaped payload, but nothing
 consumes them today — see [Domain Events](./domain-events). (Separately,
 with `EVENT_PUBLISHER=kafka` a second publisher writes every domain event,
-in a richer envelope, to `warehouse.wes.analytics` for the analytics data
-product —
+as CloudEvents with an `…:analytics:…` `dataschema`, to
+`warehouse.wes.analytics` for the analytics data product —
 [ADR-0011](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0011-analytical-data-product.md).)
 
 Set `EVENT_PUBLISHER=kafka` (with `KAFKA_BROKERS`) to publish here; the
@@ -119,8 +120,14 @@ process-path-management's topic — see the last section below.
 
 ```json
 {
-  "event_id": "...", "event_type": "ShiftPlanCommitted",
-  "occurred_at": "...", "source": "workforce-management",
+  "specversion": "1.0",
+  "id": "...",
+  "source": "/warehouse/workforce-management",
+  "type": "com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted",
+  "subject": "...",
+  "time": "...",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:workforce-management:events:ShiftPlanCommitted:v1",
   "data": {
     "building_id": "BLD1", "shift_id": "S1", "path_id": "pick-a",
     "planned_heads": 7, "planned_rate": 95.5, "planned_hours": 8
@@ -139,8 +146,14 @@ different bounded context.
 
 ```json
 {
-  "event_id": "...", "event_type": "StockReserved",
-  "occurred_at": "...", "source": "inventory-storage",
+  "specversion": "1.0",
+  "id": "...",
+  "source": "/warehouse/inventory-storage",
+  "type": "com.warehouse.wms.inventory-storage.reservation.StockReserved",
+  "subject": "...",
+  "time": "...",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:inventory-storage:events:StockReserved:v1",
   "data": {"sku": "SKU-8891", "quantity": 4, "demand_ref": "order-88421"}
 }
 ```
@@ -156,8 +169,14 @@ SKU-scoped and a SKU-to-path mapping does not exist in the domain. Read at
 
 ```json
 {
-  "event_id": "...", "event_type": "TaskCompleted",
-  "occurred_at": "...", "source": "fulfillment-execution",
+  "specversion": "1.0",
+  "id": "...",
+  "source": "/warehouse/fulfillment-execution",
+  "type": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+  "subject": "...",
+  "time": "...",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
   "data": {"task_id": "t-551", "station_id": "pack-3", "work_unit_id": "wu-10231"}
 }
 ```
@@ -171,8 +190,14 @@ feedback edge: WIP drops, and the next release call can proceed.
 
 ```json
 {
-  "event_id": "...", "event_type": "OrderAllocated",
-  "occurred_at": "...", "source": "order-management",
+  "specversion": "1.0",
+  "id": "...",
+  "source": "/warehouse/order-management",
+  "type": "com.warehouse.wes.order-management.order.OrderAllocated",
+  "subject": "...",
+  "time": "...",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:order-management:events:OrderAllocated:v1",
   "data": {
     "order_id": "order-1", "promise_date": "2026-08-22T02:00:00Z",
     "lines": [{"line_no": 1, "sku": "SKU-1", "path_id": "pick-a", "gift_wrap": false}]
@@ -211,14 +236,15 @@ integration-event consumer path is idempotent by construction:
 
 ```mermaid
 flowchart LR
-    M["message arrives"] --> P{"insert event_id into<br/>processed_events"}
+    M["message arrives"] --> P{"insert CloudEvents id into<br/>processed_events"}
     P -->|"primary-key collision<br/>(already processed)"| SKIP["skip the effect<br/><b>ack anyway</b>"]
     P -->|"inserted"| APPLY["apply the effect<br/>(projection or use case)"]
     APPLY --> ACK["ack"]
 ```
 
 - **Postgres**: table `processed_events (event_id TEXT PRIMARY KEY,
-  processed_at TIMESTAMPTZ)`. The primary-key violation *is* the duplicate
+  processed_at TIMESTAMPTZ)` — the column keeps its name and is populated
+  from the CloudEvents `id`. The primary-key violation *is* the duplicate
   check — no read-then-write race between two consumers processing the same
   redelivery.
 - **In-memory**: a mutex-guarded `map[string]struct{}` with identical
@@ -238,7 +264,7 @@ at) (alreadyProcessed bool, err error)`.
 The `TaskCompleted` case matters operationally beyond the dedup table
 itself: `WorkUnit.Complete` already rejects double-completion with
 `ErrAlreadyCompleted`, so the aggregate would be safe regardless. But
-without the `event_id` check, every redelivery would surface a domain error
+without the `id` check, every redelivery would surface a domain error
 from a perfectly normal Kafka behaviour — deduplicating first keeps
 `ErrAlreadyCompleted` meaning what it says, rather than becoming an error
 nobody reads.
