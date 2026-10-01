@@ -32,6 +32,12 @@ source of truth that inevitably drifts, exactly what
 A handful of ADRs establish fleet-wide conventions, referenced from more
 than one context's own docs:
 
+- **CloudEvents 1.0 as the mandatory event envelope** — every Kafka-using
+  context records the same decision as its own ADR (superseding
+  fulfillment-execution ADR-0027 and wes-work-planning ADR-0021); the
+  fleet-level text, subdomain table and cross-service `type` catalogue are
+  on the [Event Standard](/strategic-design/event-standard-cloudevents)
+  page.
 - **Hexagonal ports & adapters** — every context's own ADR-0001 adopts the
   identical layering (`domain` depends on nothing; `application` depends on
   `domain`; `adapters` depend on `application`/`domain`).

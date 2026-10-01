@@ -79,43 +79,18 @@ whole plan. The domain event carries only the `ShiftPlan`'s identity
 `ShiftPlanRepo` to expand it, keeping fan-out an integration concern — the
 domain has no opinion about message granularity.
 
-## The envelope on the wire today
+## The envelope: CloudEvents 1.0 (mandatory)
 
-The shipped Kafka adapter writes the **flat cross-service envelope** every
-`warehouse-systems` service shares, exactly as specified in this repo's own
-`INTEGRATION.md`:
-
-```json
-{
-  "event_id": "uuid-v4",
-  "event_type": "ShiftPlanCommitted",
-  "occurred_at": "2026-08-21T22:00:00Z",
-  "source": "workforce-management",
-  "data": {
-    "building_id": "bldg-1",
-    "shift_id": "shift-1",
-    "path_id": "pack",
-    "planned_heads": 3,
-    "planned_rate": 30,
-    "planned_hours": 24
-  }
-}
-```
-
-`event_id` is a UUID v4 generated at publish time; `source` is always this
-service's own name; `occurred_at` is RFC 3339 UTC.
-
-:::caution[The documented catalog and the wire format differ today]
-`apis/asyncapi.yaml` documents this channel's **target** contract as a
-CloudEvents 1.0 structured-mode envelope — `specversion`/`id`/`source`/
-`type`/`subject`/`time`/`datacontenttype` at the top level, with a
+Every message is a CloudEvents 1.0 event in structured content mode, per
+the fleet-wide, mandatory [Event Standard](/strategic-design/event-standard-cloudevents), with Kafka header
+`content-type: application/cloudevents+json; charset=UTF-8` and the
 reverse-DNS `type` convention:
 
 ```
 com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>
 ```
 
-So a committed shift plan's CloudEvents form would be:
+A committed shift plan's path line on the wire:
 
 ```json
 {
@@ -126,6 +101,7 @@ So a committed shift plan's CloudEvents form would be:
   "subject": "BLD1/SHIFT1",
   "time": "2026-08-21T22:00:00Z",
   "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:workforce-management:events:ShiftPlanCommitted:v1",
   "data": {
     "building_id": "BLD1",
     "shift_id": "SHIFT1",
@@ -137,27 +113,24 @@ So a committed shift plan's CloudEvents form would be:
 }
 ```
 
-The shipped adapter still writes the **flat envelope** shown above, because
-that is what `wes-work-planning`'s consumer parses today. The `data`
-payloads are identical between the two forms — only the surrounding context
-attributes differ. This divergence is documented explicitly rather than
-papered over; the migration path is to emit CloudEvents alongside the flat
-envelope, move the consumer onto `type`-based routing, then drop the flat
-shape. It has not been scheduled.
-:::
+`id` is a UUID v4 minted once per domain event and persisted with the
+outbox row (stable across redelivery); `time` is the domain occurred-at,
+RFC 3339 UTC. The `data` payload is unchanged from the earlier flat
+envelope, which no longer exists anywhere in the fleet (no dual-write, no
+envelope toggle).
 
 ## Consuming this channel
 
-- **Route on `type`** (once on CloudEvents) or `event_type` (on the current
-  flat envelope). Do not switch on `subject`/`source` or on payload shape.
+- **Route on the full `type`** string. Do not switch on `subject`/`source`
+  or on payload shape. Reject (skip, never parse) anything that is not a
+  valid CloudEvent.
 - **Tolerate unknown types.** The catalog will grow — see
   [Domain Events](./domain-events) for the nine events currently cataloged
   but not forwarded to this integration topic.
 - **Expect N messages per commit** for `ShiftPlanCommitted`, one per path
   line.
 - **Assume at-least-once delivery.** Kafka redelivers; consumers must be
-  idempotent. `event_id` (or `id`, once on CloudEvents) is the
-  deduplication key — `wes-work-planning` uses exactly this, backed by a
+  idempotent. The CloudEvents `id` is the deduplication key — `wes-work-planning` uses exactly this, backed by a
   `processed_events` table keyed by event id.
 
 ## What is deliberately not published

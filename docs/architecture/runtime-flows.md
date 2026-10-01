@@ -102,7 +102,7 @@ sequenceDiagram
     DB-)K: outbox relay drains warehouse.work-planning.events
 
     K->>+FE: WorkReleased
-    FE->>FE: dedupe on event_id (at-least-once delivery)
+    FE->>FE: dedupe on CloudEvents id (at-least-once delivery)
     FE->>FE: resolve pathId via the local process-path catalogue cache
     FE->>FE: CreateTask(taskType, cpt, orderRef, requiredCapabilities)
     FE-->>-K: Task is now Pending and claimable

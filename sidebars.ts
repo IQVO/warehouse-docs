@@ -32,6 +32,7 @@ const sidebars: SidebarsConfig = {
         'strategic-design/subdomain-classification',
         'strategic-design/context-map',
         'strategic-design/domain-message-flows',
+        'strategic-design/event-standard-cloudevents',
         'strategic-design/ubiquitous-language',
       ],
     },

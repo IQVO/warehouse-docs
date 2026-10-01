@@ -74,8 +74,12 @@ Kafka — no Kafka consumer in v1 for this event either.
   `fulfillment-execution`'s fan-out topic, consumed ONLY for
   `TaskCPTMissed`/`PackageManifested` under the stable consumer group
   `order-management-repromise`.
-- **Envelope:** `{event_id, event_type, occurred_at, source, data}` —
-  matches the platform-wide shape used by `inventory-storage`
+- **Envelope:** CloudEvents 1.0, structured mode (`specversion`, `id`,
+  `source=/warehouse/order-management`,
+  `type=com.warehouse.wes.order-management.order.<EventName>`, `subject` =
+  order id, `time`, `datacontenttype`, `dataschema`), Kafka header
+  `content-type: application/cloudevents+json; charset=UTF-8` — the
+  fleet-wide, mandatory [Event Standard](/strategic-design/event-standard-cloudevents)
 - **`data` shape** for `OrderAllocated`/`OrderPartiallyAllocated`
   (frozen — shared verbatim with `wes-work-planning`'s Kafka consumer):
 
@@ -125,8 +129,9 @@ adds a second, wider event fan-out on **`warehouse.order-management.analytics`**
 carrying all ten domain events (including
 `OrderAllocationPartiallyFailed` and, since
 [ADR-0019](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0019-promise-kpis-on-order-funnel.md),
-`OrderRepromised`) under the shared Envelope v1 wrapper (keyed by
-`OrderId`) for
+`OrderRepromised`) as CloudEvents with an
+`urn:warehouse:order-management:analytics:<EventName>:v1` `dataschema`
+(keyed by `OrderId`) for
 the [Order Funnel & Allocation Health report](https://github.com/claudioed/order-management/blob/develop/docs/docs/analytics/order-funnel-report.md),
 consumed only by this context's own `cmd/order-projector`. This topic is
 untouched by, and does not widen, the integration contract above.

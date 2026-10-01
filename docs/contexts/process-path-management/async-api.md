@@ -2,7 +2,7 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: Kafka integration for process-path-management — topics, envelope, the four event types, and the live consumer state of this integration today.
+description: Kafka integration for process-path-management — topics, CloudEvents envelope, the four event types, and the live consumer state of this integration today.
 ---
 
 # Async API
@@ -34,22 +34,31 @@ every event goes through the transactional outbox (ADR 0003), relayed to
 Kafka by an in-process relay, and each domain event enqueues one row per
 topic in the same transaction as the aggregate change.
 
-The topic carries four event types, filtered by consumers on
-`event_type`: `ProcessPathCreated`, `ProcessPathUpdated`,
-`ProcessPathDeactivated` (keyed by `path_id`), and `CPTScheduleChanged`
+The topic carries four event types, filtered by consumers on the full
+CloudEvents `type`:
+`com.warehouse.wes.process-path-management.processpath.ProcessPathCreated`,
+`…processpath.ProcessPathUpdated`, `…processpath.ProcessPathDeactivated`
+(keyed and `subject`ed by `path_id`), and
+`com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged`
 (keyed by `site_id`, ADR 0010).
 
 ## The envelope
 
-Every warehouse-systems publisher uses the same CloudEvents-like shape.
-Here it is for `ProcessPathCreated`:
+Every warehouse-systems publisher emits CloudEvents 1.0 in structured
+content mode (Kafka header
+`content-type: application/cloudevents+json; charset=UTF-8`) — the
+fleet-wide, mandatory [Event Standard](/strategic-design/event-standard-cloudevents). Here it is for `ProcessPathCreated`:
 
 ```json
 {
-  "event_id": "uuid-v4",
-  "event_type": "ProcessPathCreated",
-  "occurred_at": "2026-09-06T00:00:00Z",
-  "source": "process-path-management",
+  "specversion": "1.0",
+  "id": "uuid-v4",
+  "source": "/warehouse/process-path-management",
+  "type": "com.warehouse.wes.process-path-management.processpath.ProcessPathCreated",
+  "subject": "PICK",
+  "time": "2026-09-06T00:00:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:process-path-management:events:ProcessPathCreated:v1",
   "data": {
     "path_id": "PICK",
     "match_prefix": "pick",
@@ -62,8 +71,7 @@ Here it is for `ProcessPathCreated`:
 
 `data` may also carry an optional `destination_location_role` (ADR 0009;
 omitted when unset) and an `eligibility` object (ADR 0010).
-`ProcessPathUpdated` and `ProcessPathDeactivated` share the same envelope
-shape, with `data` carrying the fields relevant to each transition —
+`ProcessPathUpdated` and `ProcessPathDeactivated` share the same envelope, with `data` carrying the fields relevant to each transition —
 `ProcessPathDeactivated` carries only `path_id`. `CPTScheduleChanged`
 carries a full schedule snapshot (`site_id`, `timezone`, `cutoffs[]`),
 never a diff. See

@@ -126,8 +126,8 @@ here rather than papered over.
 **In-process:** bare past-tense names — `"StockReserved"`, `"ItemStowed"` —
 the domain's own vocabulary, carrying no transport or platform naming.
 
-**On the wire (target):** reverse-DNS CloudEvents `type`, the platform-wide
-convention:
+**On the wire:** reverse-DNS CloudEvents `type` (CloudEvents 1.0 is
+mandatory fleet-wide, see the [Event Standard](/strategic-design/event-standard-cloudevents)), the platform-wide convention:
 
 ```text
 com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>

@@ -44,7 +44,8 @@ never copies).
 docs/
   strategic-design/            domain vision, Core Domain Chart, subdomain
                                 classification, context map, message-flow
-                                modelling, fleet ubiquitous language
+                                modelling, fleet ubiquitous language, the
+                                fleet Event Standard (CloudEvents 1.0)
                                 (modelled on ddd-crew's strategic templates)
   contexts/<context>/          one dir per bounded context: business
                                 context, ubiquitous language, Bounded
@@ -96,6 +97,40 @@ does have events) get handled per their actual repo shape — check
 `docusaurus.config.ts`'s `CONTEXTS` array before assuming a context needs
 both files; `warehouse-ops-agent` has neither (it's a Customer, not an
 Open Host Service, no `apis/` dir of its own — see its own CLAUDE.md).
+
+## Events: CloudEvents 1.0 is MANDATORY
+
+Every Kafka message any warehouse-systems service produces or consumes
+(integration `warehouse.<ctx>.events` AND analytics `warehouse.<ctx>.analytics`)
+is a CloudEvents 1.0 event in structured content mode. This is a hard fleet
+rule, and every page on this site must document it that way:
+
+- Never document a flat envelope (`event_id`/`event_type`/`occurred_at`/
+  `source`/`data`), a dual-write/dual-read migration, an analytics
+  `schema_version`, or an envelope toggle env var (`EVENT_ENVELOPE_MODE` is
+  gone) as current behaviour. No "the AsyncAPI is the target, the wire is
+  still flat" caveats — the wire IS CloudEvents.
+- Wire format to show in examples: Kafka header
+  `content-type: application/cloudevents+json; charset=UTF-8`; attributes
+  `specversion=1.0`, `id` (UUID, stable across outbox redelivery),
+  `source=/warehouse/<repo>`, `type`, `subject` (aggregate id), `time`
+  (occurred-at, UTC), `datacontenttype=application/json`,
+  `dataschema=urn:warehouse:<repo>:<events|analytics>:<EventName>:v<N>`;
+  payload under `data`, unchanged.
+- `type` = `com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`
+  (`wms` for facility-layout / inventory-storage, `wes` for the rest;
+  wes-work-planning's segment is `work-planning`). Breaking payload change =>
+  new `.v2` type + new dataschema version.
+- Consumers dispatch on the FULL `type`, ignore unknown types, dedupe on
+  `id`, and DLQ/skip (never parse a legacy shape) anything that fails
+  CloudEvents validation.
+- `apis/<ctx>/asyncapi.yaml` here are COPIES: fix envelope drift in the
+  owning service repo, then re-sync — never hand-edit the copy.
+
+Full standard, subdomain table and the fleet's cross-service type
+catalogue: `docs/strategic-design/event-standard-cloudevents.md` (each
+service repo also carries it as its own "CloudEvents 1.0 as the mandatory
+event envelope" ADR under `docs/docs/adr/`).
 
 ## Key Commands
 
