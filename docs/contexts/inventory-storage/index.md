@@ -40,7 +40,7 @@ the `Unlocated` state are all consequences of taking that sentence literally.
 - does not pick, pack, ship, or route associates — that is `fulfillment-execution` and `wes-work-planning`;
 - does not plan labour or headcount — that is `workforce-management`;
 - does not model the physical building (site, area, zone, aisle, bay, level, position) — that is `facility-layout`, a separate Generic subdomain;
-- does not create bins over HTTP — bin provisioning is seed data / infrastructure, not an exposed operation.
+- does not own bin existence as a place-in-the-building fact — `facility-layout` owns that; a `Bin` here is a flat, declaratively-registered capacity record, created/resized by inventory control via `PUT /bins/{binId}` (ADR-0025), not a node in the warehouse map.
 
 ## Where this fits in the platform
 

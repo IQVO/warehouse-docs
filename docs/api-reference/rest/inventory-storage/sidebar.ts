@@ -88,6 +88,18 @@ const sidebar: SidebarsConfig = {
       items: [
         {
           type: "doc",
+          id: "api-reference/rest/inventory-storage/register-bin",
+          label: "Register a bin, or converge an existing bin to a capacity",
+          className: "api-method put",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/inventory-storage/get-bin",
+          label: "Get a bin's capacity and occupancy",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
           id: "api-reference/rest/inventory-storage/run-cycle-count",
           label: "Record a physical cycle count for a bin",
           className: "api-method post",
