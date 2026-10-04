@@ -10,6 +10,7 @@ import processPathManagementSidebar from './docs/api-reference/rest/process-path
 import laborPerformanceSidebar from './docs/api-reference/rest/labor-performance/sidebar';
 import laborPerformanceReportsSidebar from './docs/api-reference/rest/labor-performance-reports/sidebar';
 import networkFulfillmentSidebar from './docs/api-reference/rest/network-fulfillment/sidebar';
+import warehousePlanningSidebar from './docs/api-reference/rest/warehouse-planning/sidebar';
 
 /**
  * Five independent sidebars, one per navbar item:
@@ -188,6 +189,19 @@ const sidebars: SidebarsConfig = {
         'contexts/network-fulfillment/domain-events',
       ],
     },
+    {
+      type: 'category',
+      label: 'warehouse-planning',
+      link: {type: 'doc', id: 'contexts/warehouse-planning/index'},
+      items: [
+        'contexts/warehouse-planning/business-context',
+        'contexts/warehouse-planning/ubiquitous-language',
+        'contexts/warehouse-planning/bounded-context-canvas',
+        'contexts/warehouse-planning/aggregate-design-canvas',
+        'contexts/warehouse-planning/domain-events',
+        'contexts/warehouse-planning/async-api',
+      ],
+    },
   ],
 
   apiSidebar: [
@@ -245,6 +259,11 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'network-fulfillment',
       items: [...networkFulfillmentSidebar],
+    },
+    {
+      type: 'category',
+      label: 'warehouse-planning',
+      items: [...warehousePlanningSidebar, 'api-reference/async/warehouse-planning'],
     },
   ],
 };

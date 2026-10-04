@@ -122,6 +122,12 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          warehousePlanning: {
+            specPath: 'apis/warehouse-planning/openapi.yaml',
+            outputDir: 'docs/api-reference/rest/warehouse-planning',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],
@@ -200,6 +206,7 @@ const config: Config = {
             {label: 'labor-performance', href: 'https://github.com/claudioed/labor-performance'},
             {label: 'warehouse-ops-agent', href: 'https://github.com/claudioed/warehouse-ops-agent'},
             {label: 'network-fulfillment', href: 'https://github.com/claudioed/network-fulfillment'},
+            {label: 'warehouse-planning', href: 'https://github.com/IQVO/warehouse-planning'},
           ],
         },
         {

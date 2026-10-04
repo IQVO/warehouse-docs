@@ -1,0 +1,875 @@
+openapi: 3.0.3
+info:
+  title: warehouse-planning
+  description: >
+    Can this warehouse process the demand assigned to it, given its
+    current labor, location, equipment, station, conveyor and buffer
+    constraints? Phase 1 exposes native ProcessCapacity registration and
+    the computed effective rate; Phase 2 the normalized ProcessPath
+    capacity; Phase 4 CapacityPlans (assigned demand vs. path capacity,
+    shortage, bottleneck) whose lifecycle events leave through a
+    transactional outbox (see asyncapi.yaml). Station capacity: stations
+    tallied from facility-layout have no throughput of their own; an
+    operator-declared StationStandard (throughput per station) is composed
+    with LABOR and the other constraints AT READ TIME (docs/adr/0002), and
+    the storage positions / station counts of a site are a read model.
+  version: "0.1.0"
+  contact:
+    name: warehouse-planning maintainers
+    url: https://github.com/IQVO/warehouse-planning
+  license:
+    name: UNLICENSED
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: process-capacities
+    description: Native and effective ProcessCapacity registration (Phase 1).
+  - name: process-paths
+    description: ProcessPath registration and normalized ProcessPathCapacity (Phase 2).
+  - name: capacity-plans
+    description: CapacityPlan creation, publication and lookup (Phase 4).
+  - name: station-capacity
+    description: Operator-declared station standards and the storage/station read model of a site (ADR 0002).
+paths:
+  /process-capacities:
+    post:
+      operationId: registerProcessCapacityConstraint
+      summary: Register (or upsert) one capacity constraint
+      tags: [process-capacities]
+      description: >
+        Upserts one named constraint (LABOR, LOCATION, EQUIPMENT, STATION,
+        CONVEYOR, BUFFER or REPLENISHMENT) on the ProcessCapacity identified
+        by (process_type, location, window_start, window_end), creating the
+        aggregate on first registration. Returns the recomputed effective
+        rate (the minimum across every registered constraint) and which
+        constraint is binding. The window is the aggregate's identity: this
+        endpoint (like GET /process-capacities) uses EXACT-key semantics.
+        When path capacity or a capacity plan is computed, a registered
+        window applies to the requested planning window if it COVERS it
+        (docs/adr/0003).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterConstraintRequest"
+      responses:
+        "201":
+          description: Constraint registered; effective capacity recomputed.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EffectiveCapacityResponse"
+        "400":
+          description: Malformed request body or window.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "409":
+          description: Constraint rate unit does not match the aggregate's established native unit.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "422":
+          description: Negative quantity or non-positive period.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+    get:
+      operationId: getEffectiveProcessCapacity
+      summary: Get the effective capacity for a process, location and window
+      tags: [process-capacities]
+      description: >
+        Returns the effective rate (the minimum across every registered
+        constraint), which constraint is binding, and the full list of
+        registered constraints for the ProcessCapacity identified by
+        (process_type, location, window_start, window_end). This lookup keeps
+        EXACT-key semantics (it reads one registered aggregate; it does NOT
+        match by coverage -- path capacity and capacity plans do, see
+        docs/adr/0003). 404 if nothing has been registered for that
+        identity yet.
+      parameters:
+        - name: process_type
+          in: query
+          required: true
+          schema:
+            type: string
+          example: PICK
+        - name: location
+          in: query
+          required: true
+          schema:
+            type: string
+          example: PICK-ZONE-A
+        - name: window_start
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+        - name: window_end
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date-time
+      responses:
+        "200":
+          description: Effective capacity for this process, location and window.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EffectiveCapacityResponse"
+        "400":
+          description: Malformed window_start/window_end.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: No ProcessCapacity registered for this process, location and window.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+  /process-paths:
+    post:
+      operationId: registerProcessPath
+      summary: Register (seed) a ProcessPath read model
+      tags: [process-paths]
+      description: >
+        Seeds a ProcessPath read model (id, name, an ordered non-empty list
+        of step process types) directly, since there is no event-driven
+        sync from process-path-management yet (a later phase). Re-posting
+        an existing id replaces the stored path wholesale.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RegisterProcessPathRequest"
+      responses:
+        "201":
+          description: ProcessPath registered.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessPathResponse"
+        "400":
+          description: Malformed request body.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "422":
+          description: Empty step list.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+  /process-paths/{id}/capacity:
+    get:
+      operationId: getProcessPathCapacity
+      summary: Get a ProcessPath's normalized, end-to-end capacity
+      tags: [process-paths]
+      description: >
+        Loads the ProcessPath identified by id, loads each of its steps'
+        ProcessCapacity for the given location and window (matched by
+        COVERAGE, see below), normalizes each
+        step's effective rate into ORDER/period via the WorkloadProfile
+        factors supplied on the request (Phase 2 simplification: there is
+        no dedicated WorkloadProfile persistence yet), and returns the
+        minimum normalized rate plus which step is the bottleneck.
+
+        Each step's candidate constraints are (a) the constraints of the
+        ProcessCapacity aggregates of (process, location) whose window
+        COVERS [window_start, window_end) -- registered window start <=
+        window_start AND registered window end >= window_end, so an equal
+        window covers it -- taking, per constraint type, the one from the
+        covering window with the LATEST start (tie: the narrower window);
+        older or wider covering windows' constraints of the same type are
+        shadowed, other types still apply (docs/adr/0003), and (b)
+        a DERIVED STATION constraint = the stations facility-layout tallied
+        across the zones of the site (zone ids starting with `<location>-`) x
+        the declared StationStandard, when both a station count above zero
+        and a standard exist. EVERY candidate is normalized to ORDER/hour
+        before the minimum is taken. With stations but no declared standard
+        the step uses (a) only and `warnings` says so. `step_breakdown` and
+        `warnings` are additive fields.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: pick-rebin-pack
+        - name: location
+          in: query
+          required: true
+          schema:
+            type: string
+          example: PATH-ZONE-A
+        - name: window_start
+          in: query
+          required: true
+          description: Planning window start; a registered window applies to a step when it covers [window_start, window_end).
+          schema:
+            type: string
+            format: date-time
+        - name: window_end
+          in: query
+          required: true
+          description: Planning window end (exclusive); must be after window_start.
+          schema:
+            type: string
+            format: date-time
+        - name: units_per_order
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+            exclusiveMinimum: true
+            minimum: 0
+          example: 2.5
+        - name: packages_per_order
+          in: query
+          required: false
+          schema:
+            type: number
+            format: double
+            exclusiveMinimum: true
+            minimum: 0
+          example: 1
+      responses:
+        "200":
+          description: Normalized ProcessPathCapacity and bottleneck step.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProcessPathCapacityResponse"
+        "400":
+          description: Malformed window_start/window_end/units_per_order/packages_per_order, or a window whose end is not after its start.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: No ProcessPath registered under id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "422":
+          description: >
+            A path step has neither a registered ProcessCapacity whose window covers
+            the requested window at this location nor a derived STATION constraint, or the WorkloadProfile is missing a needed
+            conversion factor / has an invalid one / cannot normalize a
+            step's native unit.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+  /capacity-plans:
+    post:
+      operationId: createCapacityPlan
+      summary: Create a DRAFT CapacityPlan and compute its shortage
+      tags: [capacity-plans]
+      description: >
+        Evaluates the ProcessPath path_id against assigned_demand (orders)
+        for the warehouse's location over [window_start, window_end):
+        loads each step's ProcessCapacity, normalizes it with the
+        WorkloadProfile factors supplied in the body (same shape and
+        validation as GET /process-paths/{id}/capacity -- there is no
+        WorkloadProfile persistence yet), and computes path_capacity
+        (ORDER per HOUR), bottleneck_step, capacity_over_window
+        (path_capacity x window hours) and shortage
+        (max(0, assigned_demand - capacity_over_window), never negative).
+        The window is both the plan's planning window AND the window every
+        step's ProcessCapacity is looked up for: a registered window applies
+        to a step when it COVERS [window_start, window_end), exactly as in
+        GET /process-paths/{id}/capacity (docs/adr/0003). The plan stores
+        its own requested window.
+        assigned_demand arrives in the request -- a documented Phase 4
+        simplification (the final demand ingestion from order-management /
+        network-fulfillment is a later decision; this context never makes a
+        live cross-context call). The plan is saved and its
+        CapacityPlanCreated event is queued in the transactional outbox in
+        ONE database transaction.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateCapacityPlanRequest"
+      responses:
+        "201":
+          description: Plan created (status DRAFT).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacityPlanResponse"
+        "400":
+          description: Malformed JSON body, malformed window_start/window_end, or a window whose end is not after its start.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "404":
+          description: No ProcessPath registered under path_id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "422":
+          description: >
+            A path step has no ProcessCapacity registered for this
+            location/window; a WorkloadProfile factor is missing, not
+            positive, or cannot normalize a step's unit; assigned_demand is
+            absent or negative; or warehouse_id/location/path_id is blank.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+  /capacity-plans/{id}:
+    get:
+      operationId: getCapacityPlan
+      summary: Get a CapacityPlan
+      tags: [capacity-plans]
+      description: >
+        Returns the stored plan, including its computed shortage, status, the
+        constraint type binding the bottleneck step and the composition
+        warnings.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: 0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10
+      responses:
+        "200":
+          description: The plan.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacityPlanResponse"
+        "404":
+          description: No CapacityPlan exists under id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+  /capacity-plans/{id}/publish:
+    post:
+      operationId: publishCapacityPlan
+      summary: Publish a DRAFT CapacityPlan
+      tags: [capacity-plans]
+      description: >
+        Moves the plan DRAFT -> PUBLISHED, saves it and queues, in the same
+        database transaction, CapacityPlanPublished plus -- only when the
+        plan has a shortage -- CapacityShortageDetected and
+        BottleneckDetected in the transactional outbox. A relay publishes
+        them to Kafka as CloudEvents (see asyncapi.yaml). Publishing twice
+        is never silent: the second call is a 409 and queues nothing.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          example: 0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10
+      responses:
+        "200":
+          description: Plan published.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CapacityPlanResponse"
+        "404":
+          description: No CapacityPlan exists under id.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "409":
+          description: The plan is already PUBLISHED.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+  /station-standards/{location}/{process_type}:
+    put:
+      operationId: declareStationStandard
+      summary: Declare the throughput of ONE station of a process at a site
+      tags: [station-capacity]
+      description: >
+        Upserts the StationStandard keyed by (location, process_type): the
+        throughput of a single station in the process's natural unit, e.g.
+        180 PACKAGE per 3600 s for PACK at SIM1. The count of stations comes
+        from facility-layout; count x standard is composed with the step's
+        registered constraints when a path capacity or capacity plan is
+        computed (nothing derived is stored, so a late declaration applies on
+        the next read). `location` is the site (building) code, the first
+        dash-separated segment of the facility zone ids.
+      parameters:
+        - name: location
+          in: path
+          required: true
+          schema:
+            type: string
+          example: SIM1
+        - name: process_type
+          in: path
+          required: true
+          schema:
+            type: string
+          example: PACK
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeclareStationStandardRequest"
+      responses:
+        "200":
+          description: An existing standard was replaced.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StationStandardResponse"
+        "201":
+          description: A new standard was declared.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StationStandardResponse"
+        "400":
+          description: Malformed request body.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+        "422":
+          description: >
+            Invalid declaration: non-positive or negative quantity, non-positive
+            period, or a unit that cannot be normalized to ORDER (only UNIT,
+            PACKAGE and ORDER are accepted).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+  /station-standards:
+    get:
+      operationId: listStationStandards
+      summary: List the declared station standards
+      tags: [station-capacity]
+      description: The standards of one site, or every standard when `location` is omitted, ordered by location then process type.
+      parameters:
+        - name: location
+          in: query
+          required: false
+          schema:
+            type: string
+          example: SIM1
+      responses:
+        "200":
+          description: The declared standards (possibly empty).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StationStandardsResponse"
+  /storage-capacity:
+    get:
+      operationId: getStorageCapacity
+      summary: Storage positions and stations of a site (read model)
+      tags: [station-capacity]
+      description: >
+        The facility-layout tally of one site: storage positions per zone and
+        locationType and work-center station counts per zone and activity,
+        over the zones whose id starts with `<location>-`. It is a READ MODEL,
+        not a throughput (storage positions are not process capacity), and it
+        has no "consumed" figure: stock is never read from inventory-storage.
+        200 with empty lists when nothing is tallied for the site.
+      parameters:
+        - name: location
+          in: query
+          required: true
+          schema:
+            type: string
+          example: SIM1
+      responses:
+        "200":
+          description: The site's storage positions and station counts.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StorageCapacityResponse"
+        "400":
+          description: location is missing.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetail"
+components:
+  schemas:
+    DeclareStationStandardRequest:
+      type: object
+      required:
+        - quantity
+        - unit
+        - period_seconds
+      properties:
+        quantity:
+          type: number
+          format: double
+          exclusiveMinimum: true
+          minimum: 0
+          description: Throughput of ONE station per period.
+          example: 180
+        unit:
+          type: string
+          enum: [UNIT, PACKAGE, ORDER]
+          example: PACKAGE
+        period_seconds:
+          type: number
+          format: double
+          exclusiveMinimum: true
+          minimum: 0
+          description: The period the quantity is measured over, in seconds (3600 = per hour).
+          example: 3600
+    StationStandardResponse:
+      type: object
+      properties:
+        location:
+          type: string
+          example: SIM1
+        process_type:
+          type: string
+          example: PACK
+        quantity:
+          type: number
+          format: double
+          example: 180
+        unit:
+          type: string
+          example: PACKAGE
+        period_seconds:
+          type: number
+          format: double
+          example: 3600
+    StationStandardsResponse:
+      type: object
+      properties:
+        location:
+          type: string
+          description: The location filter, when one was given.
+        standards:
+          type: array
+          items:
+            $ref: "#/components/schemas/StationStandardResponse"
+    StorageCapacityResponse:
+      type: object
+      properties:
+        location:
+          type: string
+          example: SIM1
+        storage_positions:
+          type: array
+          items:
+            type: object
+            properties:
+              zone_id:
+                type: string
+                example: SIM1-STOR-AMB
+              location_type:
+                type: string
+                example: SimShelf
+              positions:
+                type: integer
+                example: 24
+        stations:
+          type: array
+          items:
+            type: object
+            properties:
+              zone_id:
+                type: string
+                example: SIM1-OPS-WC
+              activity:
+                type: string
+                example: PACK
+              stations:
+                type: integer
+                example: 11
+    RegisterConstraintRequest:
+      type: object
+      required:
+        - process_type
+        - location
+        - window_start
+        - window_end
+        - constraint_type
+        - quantity
+        - unit
+        - period_seconds
+      properties:
+        process_type:
+          type: string
+          example: PICK
+        location:
+          type: string
+          example: PICK-ZONE-A
+        window_start:
+          type: string
+          format: date-time
+          example: "2026-10-05T08:00:00Z"
+          description: Start of the registered window (part of the aggregate's identity; exact key).
+        window_end:
+          type: string
+          format: date-time
+          example: "2026-10-05T09:00:00Z"
+          description: End of the registered window (exclusive; part of the aggregate's identity).
+        constraint_type:
+          type: string
+          enum: [LABOR, LOCATION, EQUIPMENT, STATION, CONVEYOR, BUFFER, REPLENISHMENT]
+        quantity:
+          type: number
+          format: double
+          minimum: 0
+          example: 3500
+        unit:
+          type: string
+          enum: [UNIT, LINE, ORDER, PACKAGE]
+        period_seconds:
+          type: number
+          format: double
+          exclusiveMinimum: true
+          minimum: 0
+          example: 3600
+    EffectiveCapacityResponse:
+      type: object
+      properties:
+        effective_rate:
+          type: number
+          format: double
+          example: 3500
+        effective_unit:
+          type: string
+          example: UNIT
+        binding_constraint:
+          type: string
+          example: LOCATION
+        constraints:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConstraintEntry"
+    ConstraintEntry:
+      type: object
+      properties:
+        constraint_type:
+          type: string
+        quantity:
+          type: number
+          format: double
+        unit:
+          type: string
+        period_seconds:
+          type: number
+          format: double
+    ProblemDetail:
+      type: object
+      description: RFC 7807 problem detail.
+      properties:
+        type:
+          type: string
+          format: uri
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+    RegisterProcessPathRequest:
+      type: object
+      required:
+        - id
+        - name
+        - steps
+      properties:
+        id:
+          type: string
+          example: pick-rebin-pack
+        name:
+          type: string
+          example: Pick-Rebin-Pack
+        steps:
+          type: array
+          minItems: 1
+          items:
+            type: string
+          example: ["PICK", "REBIN", "PACK"]
+    ProcessPathResponse:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        steps:
+          type: array
+          items:
+            type: string
+    ProcessPathCapacityResponse:
+      type: object
+      properties:
+        normalized_rate:
+          type: number
+          format: double
+          example: 1000
+        normalized_unit:
+          type: string
+          example: ORDER
+        bottleneck_step:
+          type: string
+          example: REBIN
+        step_breakdown:
+          type: array
+          description: Additive. Each step's composed capacity in path order.
+          items:
+            type: object
+            properties:
+              step:
+                type: string
+                example: PACK
+              normalized_rate:
+                type: number
+                format: double
+                description: The step's effective rate, ORDER per HOUR.
+                example: 1800
+              binding_constraint:
+                type: string
+                enum: [LABOR, LOCATION, EQUIPMENT, STATION, CONVEYOR, BUFFER, REPLENISHMENT]
+                example: STATION
+        warnings:
+          type: array
+          description: Additive. Composition warnings (never null), e.g. stations tallied but no station standard declared.
+          items:
+            type: string
+    CreateCapacityPlanRequest:
+      type: object
+      required:
+        - warehouse_id
+        - location
+        - window_start
+        - window_end
+        - path_id
+        - assigned_demand
+      properties:
+        warehouse_id:
+          type: string
+          example: WH-1
+        location:
+          type: string
+          description: The ProcessCapacity location every path step is looked up under.
+          example: PATH-ZONE-A
+        window_start:
+          type: string
+          format: date-time
+          example: "2026-10-05T08:00:00Z"
+          description: Plan window start. A registered capacity window applies when it covers [window_start, window_end).
+        window_end:
+          type: string
+          format: date-time
+          example: "2026-10-05T16:00:00Z"
+          description: Plan window end (exclusive); must be after window_start.
+        path_id:
+          type: string
+          description: id of a registered ProcessPath.
+          example: pick-rebin-pack
+        assigned_demand:
+          type: number
+          format: double
+          minimum: 0
+          description: Orders assigned to the window (request-carried in Phase 4).
+          example: 12000
+        units_per_order:
+          type: number
+          format: double
+          description: WorkloadProfile factor (UNIT per ORDER); needed only if a step is measured in UNIT.
+          example: 2.5
+        packages_per_order:
+          type: number
+          format: double
+          description: WorkloadProfile factor (PACKAGE per ORDER); needed only if a step is measured in PACKAGE.
+          example: 1
+    CapacityPlanResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: UUID.
+          example: 0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10
+        warehouse_id:
+          type: string
+          example: WH-1
+        location:
+          type: string
+          example: PATH-ZONE-A
+        window_start:
+          type: string
+          format: date-time
+        window_end:
+          type: string
+          format: date-time
+        path_id:
+          type: string
+          example: pick-rebin-pack
+        assigned_demand:
+          type: number
+          format: double
+          example: 12000
+        status:
+          type: string
+          enum: [DRAFT, PUBLISHED]
+        path_capacity:
+          type: number
+          format: double
+          description: Normalized path capacity, ORDER per HOUR.
+          example: 1000
+        bottleneck_step:
+          type: string
+          example: REBIN
+        capacity_over_window:
+          type: number
+          format: double
+          description: path_capacity x window hours, in orders.
+          example: 8000
+        shortage:
+          type: number
+          format: double
+          description: max(0, assigned_demand - capacity_over_window), in orders.
+          example: 4000
+        created_at:
+          type: string
+          format: date-time
+        published_at:
+          type: string
+          format: date-time
+          description: Present only once PUBLISHED.
+        bottleneck_constraint:
+          type: string
+          description: >
+            Additive. The constraint type binding the bottleneck step (e.g.
+            LABOR or STATION); empty for plans created before it was recorded.
+          example: STATION
+        warnings:
+          type: array
+          description: Additive. Composition warnings raised when the plan was created (never null).
+          items:
+            type: string

@@ -26,6 +26,7 @@ const CONTEXTS = [
   'facility-layout',
   'process-path-management',
   'labor-performance',
+  'warehouse-planning',
 ];
 
 const asyncapiBin = path.join(root, 'tools', 'asyncapi-gen', 'node_modules', '.bin', 'asyncapi');

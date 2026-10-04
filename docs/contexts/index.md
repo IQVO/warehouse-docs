@@ -2,7 +2,7 @@
 id: index
 title: Bounded Contexts
 sidebar_label: Bounded Contexts
-description: The ten bounded contexts, each with its full tactical DDD artifact set.
+description: The eleven bounded contexts, each with its full tactical DDD artifact set.
 slug: /contexts
 ---
 
@@ -30,6 +30,7 @@ Every bounded context below has the same document set, following the
 | [labor-performance](/contexts/labor-performance) | Supporting | Downstream observer |
 | [warehouse-ops-agent](/contexts/warehouse-ops-agent) | Supporting | Operator tooling, no aggregate |
 | [network-fulfillment](/contexts/network-fulfillment) | Supporting | External network edge (anti-corruption layer) |
+| [warehouse-planning](/contexts/warehouse-planning) | Core | WES — capacity planning |
 
-See [Strategic Design](/strategic-design) for how these ten relate to each
+See [Strategic Design](/strategic-design) for how these eleven relate to each
 other at the fleet level.
