@@ -20,7 +20,7 @@ standard may carry an optional, caller-supplied travel-time component. It
 was the fleet's eighth bounded-context Go service, added after
 `order-management`, `inventory-storage`, `wes-work-planning`,
 `workforce-management`, `fulfillment-execution`, `facility-layout`, and
-`warehouse-ops-agent` (the fleet has since grown to ten backend contexts).
+`warehouse-ops-agent` (the fleet has since grown to eleven backend contexts).
 
 :::info[One input, zero outbound calls]
 This context has exactly **one input**: it is a Kafka **Customer** of

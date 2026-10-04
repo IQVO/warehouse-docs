@@ -10,7 +10,7 @@ description: Core, Supporting, or Generic — every bounded context, with the ju
 Domain-Driven Design splits a domain into **Core**, **Supporting**, and
 **Generic** subdomains by competitive differentiation — not by size,
 difficulty, or how interesting the code is. Below is the verdict for all
-ten bounded contexts, each traceable to that context's own
+eleven bounded contexts, each traceable to that context's own
 `docs/docs/ddd/subdomain-classification.md` (or equivalent) and to the
 platform's shared reference model.
 
@@ -19,6 +19,7 @@ platform's shared reference model.
 | `wes-work-planning` | <span class="badge-core">Core</span> | The conductor — waveless release and continuous flow balancing across process paths. Continuous re-planning to the fastest/cheapest path is the platform's central differentiator. |
 | `fulfillment-execution` | <span class="badge-core">Core</span> | The Pick/Pack/SLAM task lifecycle; throughput and accuracy at scale is where a fulfillment operation wins or loses. |
 | `inventory-storage` | <span class="badge-core">Core</span> | Chaotic-storage inventory truth with bin-accurate location is a genuine operational innovation and the backbone of pick-path efficiency. |
+| `warehouse-planning` | <span class="badge-core">Core</span> | Answers "can this warehouse process the demand assigned to it" — a normalized, cross-process effective capacity and forward-looking shortage that no other context computes (warehouse-planning ADR 0001, which introduces it as a new Core Domain). |
 | `order-management` | <span class="badge-generic">Generic</span>/<span class="badge-supporting">Supporting</span> | Order intake, allocation, and release is a commodity integration surface (Generic per the reference model's "Order Management / ERP interface" bucket) but sits in a Supporting operational role as the platform's upstream front door. |
 | `workforce-management` | <span class="badge-supporting">Supporting</span> | Allocates workforce to workload against process-path capability requirements; important and non-trivial, but industry-common. |
 | `labor-performance` | <span class="badge-supporting">Supporting</span> | Scores actual-vs-standard performance; useful and shipped by real WMS/WES vendors as a first-class feature, but does not define the work itself — a pure downstream observer. |

@@ -129,6 +129,7 @@ Subdomain and bounded-context segments (authoritative):
 | inventory-storage        | wms       | inventory-storage        | /warehouse/inventory-storage |
 | order-management         | wes       | order-management         | /warehouse/order-management |
 | process-path-management  | wes       | process-path-management  | /warehouse/process-path-management |
+| warehouse-planning       | wes       | warehouse-planning       | /warehouse/warehouse-planning |
 | network-fulfillment      | wes       | network-fulfillment      | /warehouse/network-fulfillment |
 | labor-performance        | wes       | labor-performance        | /warehouse/labor-performance |
 | workforce-management     | wes       | workforce-management     | /warehouse/workforce-management |
@@ -140,6 +141,7 @@ Entity segments for repos that had no catalogue yet:
 - order-management: every `Order*` event → `order`
 - process-path-management: `ProcessPath*` → `processpath`; `CPTScheduleChanged` → `cptschedule`
 - network-fulfillment: `NetworkOrder*` → `networkorder`
+- warehouse-planning: `CapacityPlan*` / `CapacityShortageDetected` / `BottleneckDetected` → `capacityplan`
 - labor-performance: `LaborStandardDefined`/`LaborStandardRevised` → `standard`; `TaskPerformanceRecorded` → `performance`
 
 Repos that already have an AsyncAPI catalogue keep the entity segments
@@ -153,8 +155,8 @@ a suffix match) and these must be byte-identical on both sides:
 
 | `type` | consumed by |
 | --- | --- |
-| `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | inventory-storage |
-| `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | inventory-storage |
+| `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | inventory-storage, warehouse-planning |
+| `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | inventory-storage, warehouse-planning |
 | `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | inventory-storage |
 | `com.warehouse.wms.inventory-storage.reservation.StockReserved` | wes-work-planning |
 | `com.warehouse.wms.inventory-storage.reservation.ReservationRevoked` | wes-work-planning |
@@ -166,12 +168,16 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated` | same four |
 | `com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged` | order-management |
 | `com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded` | workforce-management (and labor-performance itself) |
-| `com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted` | wes-work-planning |
+| `com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted` | wes-work-planning, warehouse-planning |
 | `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` | wes-work-planning, labor-performance |
 | `com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed` | order-management |
 | `com.warehouse.wes.fulfillment-execution.package.PackageManifested` | order-management |
 | `com.warehouse.wes.work-planning.workunit.WorkReleased` | fulfillment-execution |
 | `com.warehouse.wes.work-planning.workpool.PathCapacityChanged` | order-management |
+| `com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanCreated` | (published contract; no live consumer — order-management is planned / in progress) |
+| `com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanPublished` | (published contract; no live consumer — order-management is planned / in progress) |
+| `com.warehouse.wes.warehouse-planning.capacityplan.CapacityShortageDetected` | (published contract; no live consumer — order-management is planned / in progress) |
+| `com.warehouse.wes.warehouse-planning.capacityplan.BottleneckDetected` | (published contract; no live consumer — order-management is planned / in progress) |
 
 ## 5. Consumer rules
 

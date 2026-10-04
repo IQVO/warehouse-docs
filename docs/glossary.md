@@ -19,7 +19,10 @@ for terms deliberately reused across contexts with different meanings.
 | --- | --- | --- |
 | AssociateShift | `workforce-management` | Who is on shift, their certifications, breaks, logged hours. |
 | Bin | `inventory-storage` | A coded slot within a pod/shelf; the unit of location for a StockUnit. |
+| Bottleneck | `warehouse-planning` | The constraint or process-path step currently limiting end-to-end flow. |
 | Capability | `process-path-management` | A named qualification (`pick`, `pack`, `hazmat`) a station/associate must hold to work a path. |
+| CapacityPlan | `warehouse-planning` | Assigned demand for a location and window versus the path capacity available to serve it, with shortage and bottleneck; `DRAFT` then `PUBLISHED`. |
+| CapacityWindow | `warehouse-planning` | The `[start, end)` period a capacity value is valid for; a registered window applies to a planning window when it covers it. |
 | Certification | `workforce-management` | A named qualification an associate holds, gating `LaborAssignment`. |
 | Charge | `wes-work-planning` | The volume that must clear a process path, bucketed by CPT. |
 | claimNext | `fulfillment-execution` | Pull-based dispatch: returns the highest-priority pending task a station is certified/equipped for. |
@@ -39,15 +42,18 @@ for terms deliberately reused across contexts with different meanings.
 | PathPlan | `workforce-management` | One line of a ShiftPlan: pathId, plannedHeads, plannedRate, plannedHours. |
 | PathUnderstaffed | `workforce-management` | A flag (not a decision): planned heads not currently met by active assignments. |
 | PlacementRule | `facility-layout` | Declares which LocationTypes are legal in which Zones. |
-| ProcessPath | `process-path-management` | The aggregate root: the operator-configurable definition of one process path. |
+| ProcessCapacity | `warehouse-planning` | The usable throughput of one process at one location for one window: the minimum across its registered constraints. |
+| ProcessPath | `process-path-management` | The aggregate root: the operator-configurable definition of one process path. (`warehouse-planning` keeps its own, differently modelled ProcessPath: an ordered step sequence.) |
 | Reservation | `inventory-storage` | A revocable hold against usable inventory for a demand reference. |
 | ShiftPlan | `workforce-management` | The committed split of headcount across paths for one shift. |
 | Site | `facility-layout` | A physical facility/building; the root of the location hierarchy. |
 | StockUnit | `inventory-storage` | A quantity of a SKU at a specific bin; the aggregate root of inventory truth. |
 | Standard | `labor-performance` | The engineered expected time for a task type, frozen at completion time. |
 | Station | `fulfillment-execution` | A work position with a capability set; one occupant at a time. |
+| StationStandard | `warehouse-planning` | The operator-declared throughput of one station of a process at a site; multiplied by the tallied station count at read time. |
 | Task | `fulfillment-execution` | A unit of physical work: type, CPT, order reference, required capabilities, Fragile flag. |
 | Usable Inventory | `inventory-storage` | Stock available to allocate — on-hand minus reserved. |
 | Work Pool | `wes-work-planning` | The queue for exactly one process path: backlog depth, arrival rate, service rate. |
+| WorkloadProfile | `warehouse-planning` | Per-warehouse conversion factors (units/packages per order) that normalize different processes' native rates into orders per hour. |
 | WorkUnit | `wes-work-planning` | A releasable unit of work; carries a CPT; distinct from `fulfillment-execution`'s Task. |
 | Zone | `facility-layout` | A behavioral classification scoped to a Site; carries TemperatureClass and Hazmat flag. |

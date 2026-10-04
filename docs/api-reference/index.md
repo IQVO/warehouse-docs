@@ -28,12 +28,14 @@ for the sync procedure. Nothing under this section is transcribed by hand.
 
 order-management · inventory-storage · wes-work-planning ·
 fulfillment-execution · workforce-management · facility-layout ·
-process-path-management · labor-performance (+ a dedicated `reports` API)
+process-path-management · labor-performance (+ a dedicated `reports` API) ·
+warehouse-planning
 
 ## Contexts with an Async (Kafka) API
 
 inventory-storage · wes-work-planning · fulfillment-execution ·
 workforce-management · process-path-management · labor-performance ·
+warehouse-planning ·
 order-management publishes no Kafka events in v1 (local log publisher only —
 see [order-management's domain events](/contexts/order-management/domain-events)).
 `facility-layout` publishes no events consumed by anyone yet, and has no

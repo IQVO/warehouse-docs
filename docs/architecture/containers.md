@@ -138,6 +138,7 @@ in `warehouse-console` carries a freshness badge rather than hiding staleness.
 | `facility-layout` | `cmd/facility` | `cmd/mcp` | `cmd/facility-projector` | `cmd/facility-reports` | 2 |
 | `process-path-management` | `cmd/pathmgmt` | `cmd/mcp` | `cmd/pathmgmt-projector` | `cmd/pathmgmt-reports` | 2 |
 | `labor-performance` | `cmd/labor` | `cmd/mcp` | `cmd/labor-projector` | `cmd/labor-reports` | 2 |
+| `warehouse-planning` | `cmd/api` | `cmd/mcp` | — *(no analytics stream yet)* | — | 1 *(OLTP only)* |
 | `warehouse-ops-agent` | `cmd/agent` | *(serves its own MCP on `/mcp` in-process)* | — | — | **0** |
 
 `warehouse-ops-agent` is the deliberate exception on every axis. It has one

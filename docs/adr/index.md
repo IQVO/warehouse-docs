@@ -26,6 +26,7 @@ source of truth that inevitably drifts, exactly what
 | labor-performance | [labor-performance ADRs](https://github.com/claudioed/labor-performance/tree/develop/docs/docs/adr) |
 | warehouse-ops-agent | [warehouse-ops-agent ADRs](https://github.com/claudioed/warehouse-ops-agent/tree/develop/docs/docs/adr) |
 | network-fulfillment | [network-fulfillment ADRs](https://github.com/claudioed/network-fulfillment/tree/develop/docs/adr) (companion to order-management ADR 0020) |
+| warehouse-planning | [warehouse-planning ADRs](https://github.com/IQVO/warehouse-planning/tree/develop/docs/adr) — [0001](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0001-warehouse-planning-bounded-context.md) new Core bounded context (with its upstream-contract Addendum), [0002](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0002-station-capacity-composition.md) station capacity composed at read time, [0003](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0003-window-coverage-semantics.md) window coverage semantics (kept under `docs/adr/`, not `docs/docs/adr/`) |
 
 ## Cross-cutting decisions worth reading first
 
@@ -37,7 +38,9 @@ than one context's own docs:
   fulfillment-execution ADR-0027 and wes-work-planning ADR-0021); the
   fleet-level text, subdomain table and cross-service `type` catalogue are
   on the [Event Standard](/strategic-design/event-standard-cloudevents)
-  page.
+  page. (`warehouse-planning`, the newest context, carries the rule in its
+  `CLAUDE.md` and `.claude/rules/integration-events.md` rather than in a
+  dedicated ADR — its three ADRs cover other decisions.)
 - **Hexagonal ports & adapters** — every context's own ADR-0001 adopts the
   identical layering (`domain` depends on nothing; `application` depends on
   `domain`; `adapters` depend on `application`/`domain`).
@@ -61,7 +64,9 @@ than one context's own docs:
   surfaces rather than an Open Host Service governed the same way (it runs
   its own separate inbound MCP server for agentic/LLM callers of its own
   read models — see its [API surface](/api-reference/warehouse-ops-agent)),
-  and `network-fulfillment` has no MCP server.
+  and `network-fulfillment` has no MCP server. `warehouse-planning` also
+  exposes an MCP server (10 tools, documented in its own
+  `.claude/rules/mcp.md`); `warehouse-ops-agent` does not call it yet.
 - **REST and MCP identity: adopted, then removed** — static bearer keys +
   read/read-write scopes were decided fleet-wide on 2026-09-07
   ([`warehouse-ops-agent` ADR-0005](https://github.com/claudioed/warehouse-ops-agent/tree/develop/docs/docs/adr))
@@ -83,7 +88,9 @@ than one context's own docs:
   [`process-path-management` ADR-0003](https://github.com/claudioed/process-path-management/tree/develop/docs/docs/adr);
   `labor-performance` (ADR 0010), `workforce-management` (ADR 0016),
   `wes-work-planning` (ADR 0014), and `fulfillment-execution` (ADR 0020)
-  each adopted the identical pattern with their own ADR. `order-management`
+  each adopted the identical pattern with their own ADR; `warehouse-planning`
+  uses the same shape as `workforce-management` (documented in its
+  `.claude/rules/integration-events.md`, not in a dedicated ADR). `order-management`
   and `inventory-storage` do **not** have a working outbox — each
   explicitly documents the gap as an accepted, scoped-down tradeoff in its
   own ADR (order-management ADR-0005, inventory-storage ADR-0004): a

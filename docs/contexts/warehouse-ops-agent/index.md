@@ -91,4 +91,4 @@ in the repo's own docs for the full placement rationale.
   [0008](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0008-labor-utilization-advisory-correlation.md),
   [0009](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0009-explain-travel-factor.md) and
   [0010](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0010-standard-metrics-convention.md)
-- Fleet-wide [Strategic Design](/strategic-design) — how all ten backend contexts relate
+- Fleet-wide [Strategic Design](/strategic-design) — how all eleven backend contexts relate

@@ -2,7 +2,7 @@
 id: ubiquitous-language
 title: Ubiquitous Language (Fleet Overview)
 sidebar_label: Ubiquitous Language
-description: How the shared vocabulary is organized across ten bounded contexts, and where "same word, different model" deliberately occurs.
+description: How the shared vocabulary is organized across eleven bounded contexts, and where "same word, different model" deliberately occurs.
 ---
 
 # Ubiquitous Language — Fleet Overview
@@ -31,6 +31,7 @@ For a single alphabetical index across every context, see [Glossary](/glossary).
 | `labor-performance` | [Standard, Scorecard, Coaching Flag](/contexts/labor-performance/ubiquitous-language) |
 | `warehouse-ops-agent` | [DailyBrief, FlowBalanceException, StrandedReservation](/contexts/warehouse-ops-agent/ubiquitous-language) |
 | `network-fulfillment` | [NetworkOrder, Acknowledgement deadline, Held order, ACL dictionary](/contexts/network-fulfillment/ubiquitous-language) |
+| `warehouse-planning` | [ProcessCapacity, CapacityWindow, StationStandard, WorkloadProfile, CapacityPlan, Bottleneck](/contexts/warehouse-planning/ubiquitous-language) |
 
 ## Same word, different model (the traps)
 
@@ -62,6 +63,13 @@ never silently assumed. The known cases:
   contexts agree on the *value* by convention (today, from the same
   predecessor static YAML file; going forward, from
   `process-path-management`'s Published Language) without sharing code.
+- **`warehouse-planning` is the deliberate exception to "referenced
+  identically".** Its `ProcessPath` is a *different model*: an ordered
+  sequence of process types (e.g. Pick → Rebin → Pack), declared locally by an
+  operator, because `process-path-management`'s `ProcessPath` carries routing
+  and capability metadata and no physical step sequence. It does not consume
+  `process-path-management`'s events; the two share the `path_id` string only
+  as a loose human cross-reference (warehouse-planning ADR 0001 Addendum).
 
 ### "WorkUnit" vs "Task"
 
