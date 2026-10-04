@@ -21,7 +21,7 @@ C4Context
     Person(planner, "Workforce Planner", "Commits the shift plan: how many heads on which process path.")
     Person(configurator, "Operations Engineer", "Configures the facility layout and the process-path catalogue.")
 
-    System(wh, "warehouse-systems", "Warehouse fulfillment platform. Ten bounded contexts covering order intake, inventory, work planning and release, execution, workforce, facility layout, process paths, labor performance, operator tooling, and the external-network edge.")
+    System(wh, "warehouse-systems", "Warehouse fulfillment platform. Eleven bounded contexts covering order intake, inventory, work planning and release, execution, workforce, facility layout, process paths, labor performance, capacity planning, operator tooling, and the external-network edge.")
 
     System_Ext(upstream, "Upstream order source", "Whatever places orders — a storefront, an ERP, or the e2e-tests harness. Calls POST /orders.")
     System_Ext(carrier, "Carrier / shipping", "Receives sealed, SLAM-labelled packages. Modelled as the downstream edge of fulfillment; not integrated in code.")

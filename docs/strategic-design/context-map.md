@@ -2,13 +2,13 @@
 id: context-map
 title: Context Map
 sidebar_label: Context Map
-description: The ten bounded contexts, what is actually wired between them, the ddd-crew strategic relationship pattern on every edge, and the planned upstream retail-network organization.
+description: The eleven bounded contexts, what is actually wired between them, the ddd-crew strategic relationship pattern on every edge, and the planned upstream retail-network organization.
 ---
 
 # Context Map
 
 Following [ddd-crew's context-mapping](https://github.com/ddd-crew/context-mapping)
-patterns, this page draws every real integration between the platform's ten
+patterns, this page draws every real integration between the platform's eleven
 bounded contexts, labels each edge with its strategic relationship pattern
 (Open-Host Service, Published Language, Customer/Supplier, Conformist,
 Partnership), and — matching the honesty convention every context's own
@@ -29,6 +29,7 @@ flowchart TB
         WP["<b>wes-work-planning</b><br/>Core · the conductor<br/>waveless release, flow balancing"]
         FE["<b>fulfillment-execution</b><br/>Core · Pick/Pack/SLAM<br/>pull-based claimNext + leases"]
         WFM["<b>workforce-management</b><br/>Supporting · shift headcount,<br/>certification-gated assignment"]
+        PLN["<b>warehouse-planning</b><br/>Core · capacity plans, shortage<br/>and bottleneck detection"]
     end
 
     subgraph FRONT["Upstream front door"]
@@ -70,6 +71,10 @@ flowchart TB
     WFM ==>|"GET /capacity/{capability}<br/>Customer/Supplier"| FE
     INV ==>|"warehouse.inventory.events<br/>StockReserved · ReservationRevoked<br/>OHS + Published Language"| WP
     WFM ==>|"warehouse.workforce.events<br/>ShiftPlanCommitted<br/>OHS + Published Language"| WP
+    WFM ==>|"warehouse.workforce.events<br/>ShiftPlanCommitted<br/>OHS + Published Language"| PLN
+    FL ==>|"warehouse.facility.events<br/>LocationSlotRegistered/Decommissioned<br/>OHS + Published Language"| PLN
+    %% PLANNED EDGE: warehouse-planning -> order-management is in progress, NOT live. When the order-management consumer ships, flip "-.->" to "==>" and drop the PLANNED wording here, in the edge table below and in contexts/warehouse-planning/*.
+    PLN -.->|"warehouse.warehouse-planning.events<br/>CapacityShortageDetected · CapacityPlanPublished<br/>OHS + Published Language<br/>PLANNED / in progress, NOT live"| OM
     WP ==>|"warehouse.work-planning.events<br/>WorkReleased<br/>OHS + Published Language"| FE
     FE ==>|"warehouse.fulfillment.events<br/>TaskCompleted<br/>Partnership (closed loop back to WP)"| WP
     FE ==>|"warehouse.fulfillment.events<br/>TaskCompleted (same fan-out topic)<br/>Customer/Supplier, Conformist"| LP
@@ -96,7 +101,7 @@ flowchart TB
     classDef gen fill:#475569,stroke:#94a3b8,color:#fff;
     classDef ops fill:#7c2d12,stroke:#431407,color:#fff;
     classDef upstream fill:#065f46,stroke:#022c22,color:#fff,stroke-dasharray: 5 5;
-    class INV,WP,FE core;
+    class INV,WP,FE,PLN core;
     class WFM,LP,OM ops;
     class FL,PPM gen;
     class OA,NF ops;
@@ -118,6 +123,18 @@ because its shape is already decided (ADR 0001/0002, both Accepted) and
 a reader should see where it will attach once built, not because any
 code calls it today.
 
+**`warehouse-planning` → `order-management` is also dashed, and also
+planned / in progress — NOT live.** `warehouse-planning` (the eleventh
+context) really publishes its `capacityplan` events on
+`warehouse.warehouse-planning.events`, but no context consumes them yet:
+`order-management` consuming them is a separate change in its own repository,
+in progress, and `warehouse-ops-agent` and `warehouse-console` do not use
+`warehouse-planning` yet either. The two edges flowing *into*
+`warehouse-planning` (`ShiftPlanCommitted` from `workforce-management`;
+`LocationSlotRegistered` / `LocationSlotDecommissioned` from
+`facility-layout`) are live Kafka consumers, drawn bold. This is the edge to
+flip to bold when the order-management consumer ships.
+
 **Bold edges are live** — a real publisher and a real consumer, verified
 against each context's own `CLAUDE.md` and adapter code, or a real HTTP
 client calling a real endpoint. **Dashed edges labeled `GET`/`cross-service
@@ -125,8 +142,9 @@ fan-out`** are `warehouse-ops-agent`'s read-only REST fan-out — live reads
 that never write into another context. **Dashed edges labeled `MCP:`** are
 a *different contract type*: `warehouse-ops-agent`'s outbound MCP
 tool-call surface, reaching eight backend bounded contexts (`warehouse-ops-agent`
-itself is the Customer, not an Open Host Service, and `network-fulfillment`
-has no MCP server).
+itself is the Customer, not an Open Host Service, `network-fulfillment`
+has no MCP server, and `warehouse-planning`'s own MCP server is not called
+by it yet).
 Six of those eight (`inventory-storage`, `wes-work-planning`,
 `fulfillment-execution`, `workforce-management`, `facility-layout`, and now
 `labor-performance`) are **live and actually called** by the E1/E2/E3 use
@@ -159,7 +177,7 @@ altogether.
 | Edge | Pattern | Direction |
 | --- | --- | --- |
 | `network-fulfillment` → `order-management` | Customer/Supplier | network-fulfillment is Customer (and Conformist to the external network upstream, Anti-Corruption Layer for everything downstream); order-management is Supplier. It places network-originated demand as a **held** order and later releases or cancels it (order-management ADR 0020, network-fulfillment ADR 0001). No Kafka on this edge yet |
-| `retail-network` → `network-fulfillment` | Open-Host Service, Conformist downstream | **Planned, not live** (ADR 0001/0002, both Accepted). `retail-network` is a *separate organization*, not a tenth fleet context — see the dedicated section below |
+| `retail-network` → `network-fulfillment` | Open-Host Service, Conformist downstream | **Planned, not live** (ADR 0001/0002, both Accepted). `retail-network` is a *separate organization*, not a fleet context — see the dedicated section below |
 | `order-management` → `inventory-storage` | Customer/Supplier | OM is Customer; inventory-storage is Supplier/OHS (reservations, plus the opt-in product-classification lookup) |
 | `order-management` → `wes-work-planning` | Open-Host Service + Published Language | Since order-management ADR 0005, release is choreographed: OM publishes `OrderAllocated`/`OrderPartiallyAllocated`, wes-work-planning consumes them. There is no longer a synchronous HTTP call on this edge |
 | `wes-work-planning` → `order-management` | Open-Host Service + Published Language | `PathCapacityChanged` feeds OM's capability-derived promise (order-management ADR 0015) |
@@ -176,7 +194,12 @@ altogether.
 | `fulfillment-execution` → `labor-performance` | Customer/Supplier, Conformist | labor-performance is a pure Conformist downstream reader of the same `TaskCompleted` event, zero write access |
 | `labor-performance` → `workforce-management` | Open-Host Service + Published Language, Conformist downstream | **Live.** workforce-management maintains a local, in-memory running-mean cache of `TaskPerformanceRecorded` fed by labor-performance's `warehouse.labor-performance.events` topic, replacing `ProposePathPlan`'s per-request synchronous `GET /task-types/{taskType}/performance` call. Same event-fed-cache-replacing-sync-call pattern as the two edges above, mirroring workforce-management's own existing `kafkacatalog` consumer of process-path-management's events byte-for-byte (per-process-unique consumer group, `FirstOffset` replay, `Ready()`/`WaitReady()` gate). The old sync HTTP client is retained as the configured rollback (`LABOR_PERFORMANCE_MODE=http`; a third mode, `permissive`, also still exists as a no-op fail-open default). Selected via `LABOR_PERFORMANCE_MODE=kafka-cache`. **This is one event-fed cache now carrying two derived signals, not two integrations:** since labor-performance ADR 0014 added an additive, nullable `idle_seconds_before` to the same `TaskPerformanceRecorded` message, the SAME `laborperformancecache.Consumer` instance also keeps a running idle-share total per `TaskType` (sum+count, mirroring its existing running-mean strategy byte-for-byte) alongside the pre-existing measured-rate mean — no new topic, no new consumer group, no new Kafka read. `GetStaffingGap` surfaces the result as `observedIdlePct` (nil when unwired or unobserved), and `ProposePathPlan` trims its proposed heads (floored at 1) when the observed idle share exceeds `IDLE_SHARE_TRIM_THRESHOLD` (default 0.30), returning an auditable `trimReason`; it fails open (no trim) whenever idle data is unavailable. See labor-performance ADR 0013 / ADR 0014, workforce-management ADR 0019 / ADR 0020 |
 | `facility-layout` → `inventory-storage` | Open-Host Service + Published Language, Conformist downstream | **Live.** inventory-storage maintains a local read model of location classifications fed by `warehouse.facility.events`, replacing the per-stow synchronous call. Verified with facility-layout scaled to **zero replicas**: stows are still classified correctly from the cache. The old sync `GET /locations/{code}/classification` is retained as the configured rollback (`LOCATION_LOOKUP_MODE=http`), not deleted. See inventory-storage ADR 0013 / facility-layout ADR 0013 |
-| `facility-layout` → WES tier | Open-Host Service (REST only) | The WES tier reads facility-layout synchronously, not from its topic: `wes-work-planning` calls `GET /distance`, and `fulfillment-execution` has an opt-in `GET /locations/{code}` lookup (see rows above). No WES-tier context consumes `warehouse.facility.events` |
+| `facility-layout` → WES tier | Open-Host Service (REST), plus Published Language on the topic for `warehouse-planning` | `wes-work-planning` and `fulfillment-execution` read facility-layout synchronously, not from its topic: `wes-work-planning` calls `GET /distance`, and `fulfillment-execution` has an opt-in `GET /locations/{code}` lookup (see rows above). The one WES-tier consumer of `warehouse.facility.events` is `warehouse-planning` (next rows) |
+| `workforce-management` → `warehouse-planning` | Open-Host Service + Published Language | **Live.** `warehouse-planning` consumes `ShiftPlanCommitted` from `warehouse.workforce.events` (one message per `PathPlan` line) and registers a `LABOR` capacity constraint on `Location = building_id` for `[event time, + planned_hours)`. No live cross-context call: the event is the only channel. Per warehouse-planning ADR 0001 this is a Published Language relationship via Kafka. Same topic and event `wes-work-planning` already consumes |
+| `facility-layout` → `warehouse-planning` | Open-Host Service + Published Language | **Live.** `warehouse-planning` consumes `LocationSlotRegistered` / `LocationSlotDecommissioned` from `warehouse.facility.events` into a storage-position and work-center-station tally (the consumer registers no capacity itself); station capacity is composed at read time with an operator-declared `StationStandard` (warehouse-planning ADR 0002). Per ADR 0001 a Published Language relationship via Kafka. Second consumer of the topic, after `inventory-storage` |
+| `warehouse-planning` → `order-management` | Open-Host Service + Published Language | **PLANNED / IN PROGRESS — NOT LIVE.** `warehouse-planning` publishes `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected` and `BottleneckDetected` on `warehouse.warehouse-planning.events` (live publisher), and ADR 0001 names `order-management` as the intended consumer of its shortage/capacity events "in a later, separate change". That change is in a parallel, in-progress effort in the `order-management` repository; no consumer exists yet. Flip this row and the dashed edge on the diagram when it ships |
+| `warehouse-planning` → `warehouse-ops-agent`, `warehouse-console` | Open-Host Service (REST/MCP read-only queries, per ADR 0001) | **Not consumed yet.** Neither calls `warehouse-planning` today |
+| `process-path-management` ⇢ `warehouse-planning` | *(no edge)* | **Deliberately absent** — see Deliberate non-integrations below. ADR 0001's original sketch of a Conformist identity edge was superseded by its Addendum |
 | `process-path-management` → WES tier and `order-management` | Open-Host Service + Published Language, Conformist downstreams | **Live.** `fulfillment-execution`, `wes-work-planning`, `workforce-management` and `order-management` each replay `ProcessPathCreated/Updated/Deactivated` into a local catalogue cache and gate readiness on that replay. The predecessor static YAML (`warehouse-infra/config/process-paths/sortable-fc.yaml`) is frozen and SUPERSEDED, kept only as the rollback target. Verified live: a newly-defined path reached the three original running consumers with **no restart**, and a deactivation propagated the same way. See process-path-management ADR 0002 |
 | `warehouse-ops-agent` → `order-management`, `inventory-storage`, `wes-work-planning`, `fulfillment-execution` | Conformist (read-only fan-out) | The console BFF stitches one order's cross-service lifecycle; each stage degrades independently, never a write |
 
@@ -185,7 +208,9 @@ altogether.
 `warehouse-ops-agent` is a Customer of eight other backend bounded
 contexts' published MCP Open Host Services, and the only Customer, not an
 Open Host Service, on this surface (`network-fulfillment`, the tenth
-context, exposes no MCP server). MCP calls carry no credentials: the
+context, exposes no MCP server; `warehouse-planning`, the eleventh, exposes
+one with 10 tools, but `warehouse-ops-agent` has no client for it yet, so it
+is not in the table below). MCP calls carry no credentials: the
 fleet's REST and MCP auth layer was removed (warehouse-ops-agent ADR 0006). This is a separate contract type from the REST
 fan-out table above (MCP tool calls, not `GET` requests) and from the
 Kafka edges on the diagram (synchronous request/response, not
@@ -264,11 +289,21 @@ at least once:
   `fulfillment-execution`, `wes-work-planning`, `workforce-management`,
   `order-management`. inventory-storage has no notion of a process path
   and needs none.
-- **No WES-tier context consumes `warehouse.facility.events`.**
+- **`wes-work-planning` and `fulfillment-execution` do not consume
+  `warehouse.facility.events`.**
   `facility-layout`'s full Published Language is available on the topic,
-  but the WES tier only needs point lookups (travel distance, a station's
-  location role), which it makes over REST. The topic's only consumer is
-  `inventory-storage`.
+  but those two WES-tier contexts only need point lookups (travel distance,
+  a station's location role), which they make over REST. The topic has two
+  consumers: `inventory-storage` (location classification) and
+  `warehouse-planning` (a storage-position and work-center-station tally,
+  composed with labor at read time; its ADR 0002).
+- **`warehouse-planning` does not consume process-path events.** The
+  catalogue stays consumed by exactly four contexts (above).
+  `process-path-management`'s `ProcessPath` carries routing and capability
+  metadata, never an ordered physical step sequence, so `warehouse-planning`
+  owns its own, operator-declared `ProcessPath` and shares only the `path_id`
+  string as a loose cross-reference (warehouse-planning ADR 0001 Addendum). No
+  edge is drawn between the two.
 - **Nothing calls back into `process-path-management`**, and it calls
   nobody. It is the *source* of the process-path language and never a
   consumer of anyone else's; its build fails if an outbound HTTP client to
@@ -283,7 +318,7 @@ at least once:
 
 ## Upstream: retail-network (planned, separate organization)
 
-`retail-network` is **not** one of this platform's ten bounded contexts
+`retail-network` is **not** one of this platform's eleven bounded contexts
 and is drawn outside the main diagram's fleet subgraphs on purpose. It is
 the ecosystem's own stand-in for an external retail network — a new
 service built to play the structural role a real e-commerce retailer's
@@ -359,11 +394,14 @@ its own scorecard is its read model.
 This page previously stated "no outbox" as a uniform fleet-wide gap. That
 is now out of date — the outbox pattern (commit the event's wire form to
 an outbox table in the SAME transaction as the aggregate change, with an
-in-process relay draining it to Kafka) has rolled out to **five of the
-eight** backend contexts with a Kafka publisher, each with its own ADR.
+in-process relay draining it to Kafka) has rolled out to **six of the
+nine** backend contexts with a Kafka publisher; five have their own ADR and
+`warehouse-planning` (the newest, same shape as `workforce-management`)
+documents it in its `.claude/rules/integration-events.md`.
 The remaining three have each recorded the gap explicitly rather than
 leaving it undocumented — verified against the real `migrations/` on
-`origin/develop`, where exactly those five carry an outbox migration:
+`origin/develop`, where exactly those six carry an outbox migration
+(`warehouse-planning`'s is `0003_capacity_plan_and_outbox`):
 
 | Context | ADR |
 | --- | --- |
@@ -372,6 +410,7 @@ leaving it undocumented — verified against the real `migrations/` on
 | `workforce-management` | [ADR 0016](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0016-transactional-outbox.md) |
 | `wes-work-planning` | [ADR 0014](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0014-transactional-outbox.md) |
 | `fulfillment-execution` | [ADR 0020](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0020-transactional-outbox.md) |
+| `warehouse-planning` | No dedicated ADR — shaped after workforce-management's ADR 0016; see [`integration-events.md`](https://github.com/IQVO/warehouse-planning/blob/develop/.claude/rules/integration-events.md) ("Publishing: the transactional outbox") |
 | `order-management` | Documented as an accepted, scoped-down gap in [ADR 0005](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0005-choreographed-release-via-kafka.md) — no outbox table; a publish failure after the repository commit still fails the whole request today |
 | `inventory-storage` | Documented as an accepted, scoped-down gap in [ADR 0004](https://github.com/claudioed/inventory-storage/blob/develop/docs/docs/adr/0004-kafka-integration-events.md) — same shape as order-management, no outbox table |
 
@@ -383,11 +422,11 @@ adapter instead, bypassing that unused table entirely. Its own docs state
 the no-outbox `Save`-then-`Publish` gap applies to it plainly (see its
 Bounded Context Canvas Open Questions).
 
-The operational consequence for the five outbox contexts is real and
+The operational consequence for the six outbox contexts is real and
 already proven: `process-path-management`'s Postgres store and its Kafka
 topic were once found diverged in both directions at once, with its REST
 listing looking perfectly healthy — exactly the failure mode the pattern
-now closes for those five. For the two contexts that only documented the
+now closes for those six. For the two contexts that only documented the
 gap (`order-management`, `inventory-storage`) and the one still using a
 direct publish with an unused outbox table (`facility-layout`), the same
 class of divergence remains possible today; each has explicitly recorded

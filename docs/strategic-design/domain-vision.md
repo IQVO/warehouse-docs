@@ -40,7 +40,7 @@ Everything else in the platform — physical location structure
 (`labor-performance`) — exists to feed that orchestration loop trustworthy,
 current facts, never to make decisions on its own.
 
-## The ten bounded contexts, one sentence each
+## The eleven bounded contexts, one sentence each
 
 | Context | One-sentence purpose |
 | --- | --- |
@@ -54,6 +54,7 @@ current facts, never to make decisions on its own.
 | `labor-performance` | Scores actual-vs-standard task performance per associate; a pure downstream observer. |
 | `warehouse-ops-agent` | An agentic read-side aggregator (daily brief, exception correlation) and the console's BFF; owns no domain aggregate. |
 | `network-fulfillment` | The anti-corruption layer to an external retail fulfillment network: polls network demand, places it with `order-management` as a held order, and owns the acknowledgement deadline. |
+| `warehouse-planning` | Answers whether the warehouse can process the demand assigned to it: composes labor, station and other constraints into path capacity and records capacity plans with shortage and bottleneck detection. |
 
 See [Subdomain Classification](./subdomain-classification) for the
 Core/Supporting/Generic verdict on each, and [Context Map](./context-map)
@@ -68,7 +69,7 @@ actual inbound and outbound value streams described in Amazon's own public
 material and industry trade coverage. This table is that flow, stage by
 stage, against what this platform actually implements — so "which of these
 is real code, and which is deliberately out of scope" is answerable in one
-place instead of scattered across ten repos' own docs.
+place instead of scattered across eleven repos' own docs.
 
 | Real Amazon FC stage | What physically happens | Built here? |
 | --- | --- | --- |

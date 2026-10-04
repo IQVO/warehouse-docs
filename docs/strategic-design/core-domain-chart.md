@@ -2,7 +2,7 @@
 id: core-domain-chart
 title: Core Domain Chart
 sidebar_label: Core Domain Chart
-description: Plotting the ten bounded contexts by business differentiation vs. complexity, per ddd-crew's Core Domain Charts method.
+description: Plotting the eleven bounded contexts by business differentiation vs. complexity, per ddd-crew's Core Domain Charts method.
 ---
 
 # Core Domain Chart
@@ -26,6 +26,7 @@ quadrantChart
     "wes-work-planning": [0.72, 0.88]
     "fulfillment-execution": [0.68, 0.82]
     "inventory-storage": [0.6, 0.78]
+    "warehouse-planning": [0.55, 0.74]
     "workforce-management": [0.5, 0.45]
     "labor-performance": [0.4, 0.35]
     "order-management": [0.35, 0.3]
@@ -37,13 +38,18 @@ quadrantChart
 
 ## Reading the chart
 
-- **Quadrant 1 (Core)** — `wes-work-planning`, `fulfillment-execution`, and
-  `inventory-storage` cluster here. This matches the reference model's
+- **Quadrant 1 (Core)** — `wes-work-planning`, `fulfillment-execution`,
+  `inventory-storage` and `warehouse-planning` cluster here. This matches
+  the reference model's
   identification of **Fulfillment Orchestration & Optimization**,
   **Picking** (the execution side), and **Inventory & Slotting** as the
   genuine differentiators: continuous re-planning to the fastest/cheapest
   path, and bin-accurate chaotic storage, are where a real fulfillment
-  operation wins or loses.
+  operation wins or loses. `warehouse-planning` is the newest Core context
+  (its ADR 0001 classifies it Core: a normalized, cross-process capacity
+  answer no other context provides); its exact position on the chart is
+  this page's own judgement, drawn just below `inventory-storage`, not a
+  measurement.
 - **Quadrant 4 (Supporting)** — `workforce-management`, `labor-performance`,
   `order-management`, `warehouse-ops-agent` and `network-fulfillment` sit here: necessary,
   non-trivial, but not what a competitor would copy first. Order intake and

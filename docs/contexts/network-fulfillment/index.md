@@ -10,7 +10,7 @@ slug: /contexts/network-fulfillment
 
 <span class="badge-supporting">Supporting Subdomain</span>
 
-**Network Fulfillment** is the fleet's tenth and newest backend bounded
+**Network Fulfillment** is the fleet's tenth backend bounded
 context: the **Anti-Corruption Layer** between `warehouse-systems` and an
 external retail fulfillment network. Its learning target is Amazon's
 Selling Partner API, Vendor Direct Fulfillment program — the network sends
@@ -77,4 +77,4 @@ remote, and its own docs site. See
   — generated from the real `apis/openapi.yaml` (there is no AsyncAPI
   reference: this context has no Kafka integration)
 - Fleet-wide [Context Map](/strategic-design/context-map) — where this
-  context sits among the ten backend contexts
+  context sits among the eleven backend contexts

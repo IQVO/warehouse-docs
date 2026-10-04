@@ -2,7 +2,7 @@
 
 Fleet-wide documentation for the **warehouse-systems** ecosystem: strategic
 and tactical Domain-Driven Design artifacts, generated REST and AsyncAPI
-references, and business context for all ten bounded contexts. Built with
+references, and business context for all eleven bounded contexts. Built with
 [Docusaurus](https://docusaurus.io/) and published to **GitHub Pages** via
 GitHub Actions.
 
@@ -38,7 +38,8 @@ branch). Refresh them with:
 cd ..   # warehouse-systems/ (siblings checked out)
 for repo in order-management inventory-storage wes-work-planning \
             fulfillment-execution workforce-management facility-layout \
-            process-path-management labor-performance network-fulfillment; do
+            process-path-management labor-performance network-fulfillment \
+            warehouse-planning; do
   git -C "$repo" show origin/develop:apis/openapi.yaml \
     > "warehouse-docs/apis/$repo/openapi.yaml" 2>/dev/null
   git -C "$repo" show origin/develop:apis/asyncapi.yaml \
@@ -72,11 +73,11 @@ Actions** (Settings → Pages).
 
 ## Scope
 
-This site documents the platform's **ten backend bounded contexts**:
+This site documents the platform's **eleven backend bounded contexts**:
 `order-management`, `inventory-storage`, `wes-work-planning`,
 `fulfillment-execution`, `workforce-management`, `facility-layout`,
-`process-path-management`, `labor-performance`, `warehouse-ops-agent`, and
-`network-fulfillment`.
+`process-path-management`, `labor-performance`, `warehouse-ops-agent`,
+`network-fulfillment`, and `warehouse-planning`.
 The frontend repositories (`warehouse-console`, `warehouse-ui-kit`) and the
 deployment repository (`warehouse-infra`) are referenced where relevant but
 are not bounded contexts in the Evans/Vernon sense and are out of scope for
