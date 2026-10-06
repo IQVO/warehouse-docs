@@ -8,7 +8,7 @@ slug: /contexts/workforce-management
 
 # Workforce Management
 
-<span class="badge-supporting">Supporting Subdomain</span>
+<span className="badge-supporting">Supporting Subdomain</span>
 
 **Workforce Management** makes the labor picture of a shift legible and
 enforceable: it records who is on shift and what they are qualified for,
@@ -27,31 +27,58 @@ source of truth about task dispatch. Its one synchronous dependency is a
 fail-loud read of `fulfillment-execution`'s installed station capacity on
 every `CommitShiftPlan` (ADR 0014) — a count, not tasks.
 
-## On this page set
+## This context's pages
 
-- **[Business Context](/contexts/workforce-management/business-context)** — the domain vision, the two
-  planning horizons, and why stopping at the path boundary is a deliberate
-  scope limit rather than a gap.
-- **[Ubiquitous Language](/contexts/workforce-management/ubiquitous-language)** — `ShiftPlan`, `PathPlan`,
-  `AssociateShift`, `LaborAssignment`, `Certification`, `PathUnderstaffed`,
-  `Process path`, and more, with the definitions the code implements.
-- **[Bounded Context Canvas](/contexts/workforce-management/bounded-context-canvas)** — the full ddd-crew
-  canvas: purpose, strategic classification, roles, inbound/outbound
-  communication, business decisions, assumptions, open questions.
-- **[Aggregate Design Canvas](/contexts/workforce-management/aggregate-design-canvas)** — the
-  `ShiftPlan` and `LaborAssignment` aggregates: state transitions,
-  invariants, corrective policies, commands, events.
-- **[Domain Events](/contexts/workforce-management/domain-events)** — all ten events, what raises them,
-  and the one that reaches another bounded context today.
-- **[Async API](/contexts/workforce-management/async-api)** — the Kafka integration to
-  `wes-work-planning`, plus the two opt-in sibling topics it consumes,
-  narrative form.
+- [Business Context](/contexts/workforce-management/business-context): the
+  domain vision, the two planning horizons, and why stopping at the path
+  boundary is a deliberate scope limit rather than a gap.
+- [Ubiquitous Language](/contexts/workforce-management/ubiquitous-language):
+  `ShiftPlan`, `PathPlan`, `AssociateShift`, `LaborAssignment`,
+  `Certification`, `PathUnderstaffed`, `Process path` and more, with the
+  definitions the code implements.
+- [Core Domain Chart](/contexts/workforce-management/core-domain-chart)
+  ([ddd-crew core-domain-charts](https://github.com/ddd-crew/core-domain-charts)):
+  why this context is Supporting.
+- [Bounded Context Canvas](/contexts/workforce-management/bounded-context-canvas)
+  ([ddd-crew bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas)):
+  purpose, strategic classification, roles, inbound and outbound
+  communication, business decisions, assumptions and open questions.
+- [Context Map](/contexts/workforce-management/context-map)
+  ([ddd-crew context-mapping](https://github.com/ddd-crew/context-mapping)):
+  every upstream and downstream relationship with its pattern, technology
+  and status.
+- [Aggregate Design Canvas](/contexts/workforce-management/aggregate-design-canvas)
+  ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
+  the `ShiftPlan` and `LaborAssignment` aggregates, with their state
+  transitions, invariants, corrective policies, commands and events.
+- [Domain Events](/contexts/workforce-management/domain-events): all ten
+  events and what raises them. Only one, `ShiftPlanCommitted`, reaches
+  other contexts (`wes-work-planning` and `warehouse-planning`), published
+  as one message per `PathPlan` line.
+- [Domain Message Flow](/contexts/workforce-management/domain-message-flow)
+  ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):
+  key scenarios as commands, events and queries.
+- [EventStorming](/contexts/workforce-management/eventstorming)
+  ([ddd-crew eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet)):
+  process-level boards.
+- [Class Diagram](/contexts/workforce-management/class-diagram): the domain
+  model as it exists in the code.
+- [Entity Relationship](/contexts/workforce-management/entity-relationship):
+  the persisted tables.
+- [Sequence Diagrams](/contexts/workforce-management/sequence-diagrams):
+  the main runtime interactions.
+- [Async API](/contexts/workforce-management/async-api): the Kafka
+  integration in narrative form. It covers `ShiftPlanCommitted` to
+  `wes-work-planning` and `warehouse-planning`, and the two opt-in sibling
+  topics it consumes (`process-path-management` and `labor-performance`).
+
+Every page above except the Business Context and the Async API narrative
+is synced from the `workforce-management` repository.
 
 ## Elsewhere
 
-- **Repository** — [github.com/claudioed/workforce-management](https://github.com/claudioed/workforce-management)
-- **Docs site** — the service's own Docusaurus site, published from
-  `docs/docs/**/*.md` in that repository (the source this page set is
-  built from)
-- **[Generated API Reference](/api-reference/async/workforce-management)**
-  — AsyncAPI reference generated from the real `apis/asyncapi.yaml`
+- **Repository**: [github.com/IQVO/workforce-management](https://github.com/IQVO/workforce-management)
+- [ADR index](/adr): links to this context's own decision records.
+- Generated references on this site:
+  [REST](/api-reference/rest/workforce-management/workforce-management-api)
+  and [AsyncAPI](/api-reference/async/workforce-management).

@@ -12,7 +12,7 @@ description: Order Management — the missing upstream Open Host Service for the
 (Generic/Supporting Bounded Context — order intake, allocation,
 release)."**
 
-<span class="badge-generic">Generic</span>/<span class="badge-supporting">Supporting</span> — a rare acknowledgment in this fleet that DDD's
+<span className="badge-generic">Generic</span>/<span className="badge-supporting">Supporting</span> — a rare acknowledgment in this fleet that DDD's
 three-way split is a spectrum. The reference model's **Order Management /
 ERP interface** capability is Generic (a commodity integration surface most
 WMS platforms ship similarly), but this context also plays a Supporting
@@ -28,13 +28,13 @@ Order Management is the **missing upstream Open Host Service** for the
 first-class, validated aggregates: intake, per-line stock allocation (via
 `inventory-storage`), a delivery promise derived from fulfillment capability
 (a CPT window, per
-[ADR-0014](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0014-promise-derived-from-fulfillment-capability.md),
+[ADR-0014](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0014-promise-derived-from-fulfillment-capability.md),
 re-promised when fulfillment reports a missed CPT per
-[ADR-0018](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0018-repromise-order-consumer-and-order-repromised.md)),
+[ADR-0018](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0018-repromise-order-consumer-and-order-repromised.md)),
 release of allocated work (now choreographed over Kafka to `wes-work-planning`, per
-[ADR-0005](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0005-choreographed-release-via-kafka.md)),
+[ADR-0005](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0005-choreographed-release-via-kafka.md)),
 and cancellation up to the release boundary. Since
-[ADR-0020](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md)
+[ADR-0020](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md)
 it also accepts **held**, deadline-constrained orders from
 `network-fulfillment` (allocate now, release or cancel later).
 
@@ -45,27 +45,56 @@ three different ways: `demandRef` on `inventory-storage`'s `Reservation`,
 `fulfillment-execution`'s `Task`. This context makes `OrderId` a real
 identity and becomes the upstream that supplies it to the others.
 
-## On this page's siblings
+## This context's pages
 
-- **[Business Context](/contexts/order-management/business-context)** — the domain vision and
-  problem this context solves, in business language.
-- **[Ubiquitous Language](/contexts/order-management/ubiquitous-language)** — the exact vocabulary
-  this context uses: Order, OrderLine, Status, Allocation, Release, Promise,
-  Hold, Backordered, FulfillmentClass.
-- **[Bounded Context Canvas](/contexts/order-management/bounded-context-canvas)** — the full
-  [ddd-crew Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas):
-  purpose, strategic classification, domain roles, inbound/outbound
-  communication, business decisions, assumptions, verification metrics,
+- [Business Context](/contexts/order-management/business-context): the
+  domain vision and the problem this context solves, in business language.
+- [Ubiquitous Language](/contexts/order-management/ubiquitous-language):
+  the exact vocabulary this context uses, including Order, OrderLine,
+  Status, Allocation, Release, Promise, Hold, Backordered and
+  FulfillmentClass.
+- [Core Domain Chart](/contexts/order-management/core-domain-chart)
+  ([ddd-crew core-domain-charts](https://github.com/ddd-crew/core-domain-charts)):
+  why this context sits between Generic and Supporting.
+- [Bounded Context Canvas](/contexts/order-management/bounded-context-canvas)
+  ([ddd-crew bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas)):
+  purpose, strategic classification, domain roles, inbound and outbound
+  communication, business decisions, assumptions, verification metrics and
   open questions.
-- **[Aggregate Design Canvas](/contexts/order-management/aggregate-design-canvas)** — the full
-  [ddd-crew Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas)
-  for the `Order` aggregate: state transitions, invariants, commands,
-  events, throughput, size.
-- **[Domain Events](/contexts/order-management/domain-events)** — the ten past-tense events this
-  context raises, and which three are forwarded to Kafka as integration events.
+- [Context Map](/contexts/order-management/context-map)
+  ([ddd-crew context-mapping](https://github.com/ddd-crew/context-mapping)):
+  every upstream and downstream relationship with its pattern, technology
+  and status.
+- [Aggregate Design Canvas](/contexts/order-management/aggregate-design-canvas)
+  ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
+  the `Order` aggregate, with its state transitions, invariants, commands,
+  events, throughput and size.
+- [Domain Events](/contexts/order-management/domain-events): the ten
+  past-tense events this context declares. Three of them
+  (`OrderAllocated`, `OrderPartiallyAllocated` and `OrderRepromised`) go to
+  the integration topic `warehouse.order-management.events`. The page also
+  covers the ten CloudEvents types it consumes from four sibling contexts.
+- [Domain Message Flow](/contexts/order-management/domain-message-flow)
+  ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):
+  key scenarios as commands, events and queries.
+- [EventStorming](/contexts/order-management/eventstorming)
+  ([ddd-crew eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet)):
+  process-level boards.
+- [Class Diagram](/contexts/order-management/class-diagram): the domain
+  model as it exists in the code.
+- [Entity Relationship](/contexts/order-management/entity-relationship):
+  the persisted tables.
+- [Sequence Diagrams](/contexts/order-management/sequence-diagrams): the
+  main runtime interactions.
+
+Every page above except the Business Context is synced from the
+`order-management` repository. This context has no Async API narrative
+page. Its generated AsyncAPI reference is linked below.
 
 ## Elsewhere
 
-- **Repository:** [github.com/claudioed/order-management](https://github.com/claudioed/order-management)
-- **Own docs site:** [claudioed.github.io/order-management](https://claudioed.github.io/order-management/)
+- **Repository:** [github.com/IQVO/order-management](https://github.com/IQVO/order-management)
+- **Own docs site:** [iqvo.github.io/order-management](https://iqvo.github.io/order-management/)
+- **Generated references on this site:** [REST](/api-reference/rest/order-management/order-management-api) and [AsyncAPI](/api-reference/async/order-management)
+- [ADR index](/adr): links to this context's own decision records.
 - **Fleet context map:** [Context Map](/strategic-design/context-map)
