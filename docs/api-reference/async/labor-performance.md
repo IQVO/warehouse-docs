@@ -8,7 +8,7 @@ description: Generated AsyncAPI (Kafka) documentation for labor-performance, emb
 # labor-performance — Async API
 
 Generated directly from
-[`apis/labor-performance/asyncapi.yaml`](https://github.com/claudioed/labor-performance/blob/develop/apis/asyncapi.yaml)
+[`apis/labor-performance/asyncapi.yaml`](https://github.com/IQVO/labor-performance/blob/develop/apis/asyncapi.yaml)
 via the official [AsyncAPI Generator](https://github.com/asyncapi/generator)
 (`@asyncapi/html-template`). Regenerate with `npm run gen-async-docs:all`.
 

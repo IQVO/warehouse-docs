@@ -1,38 +1,60 @@
 # warehouse-docs
 
-Fleet-wide documentation for the **warehouse-systems** ecosystem: strategic
-and tactical Domain-Driven Design artifacts, generated REST and AsyncAPI
-references, and business context for all eleven bounded contexts. Built with
-[Docusaurus](https://docusaurus.io/) and published to **GitHub Pages** via
-GitHub Actions.
+Fleet-wide documentation for the **warehouse-systems** ecosystem. It holds
+the strategic and tactical Domain-Driven Design artifacts, the generated REST
+and AsyncAPI references, and the business context for all eleven backend
+bounded contexts. Built with [Docusaurus](https://docusaurus.io/) and
+published to **GitHub Pages** through GitHub Actions.
 
-Live site: https://claudioed.github.io/warehouse-docs/
+Live site: https://iqvo.github.io/warehouse-docs/
 
 ## What's here
 
-- **Strategic Design** (`docs/strategic-design/`) — domain vision, Core
-  Domain Chart, subdomain classification, context map, domain message flow
-  modelling, and fleet ubiquitous language. Modelled on the open
-  [ddd-crew](https://github.com/ddd-crew) collection of DDD strategic-design
-  templates.
-- **Bounded Contexts** (`docs/contexts/<context>/`) — one directory per
-  bounded context, each with business context, ubiquitous language, a full
-  [Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas),
-  a full [Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas),
-  domain events, and an async-API narrative.
-- **API Reference** (`docs/api-reference/`) — generated REST docs
+- **Strategic Design** (`docs/strategic-design/`): the fleet-wide artifacts,
+  modelled on the open [ddd-crew](https://github.com/ddd-crew) templates.
+  - The DDD Starter Modelling Process walkthrough (`ddd-starter-modelling-process.md`)
+  - Domain vision
+  - Core Domain Chart
+  - Subdomain classification
+  - Big Picture EventStorming (`eventstorming-big-picture.md`)
+  - Context map
+  - Domain message flows
+  - The fleet CloudEvents 1.0 Event Standard
+  - Fleet ubiquitous language
+- **Architecture** (`docs/architecture/`): C4 levels 1–3 plus fleet
+  summaries of the domain model, data model and runtime flows. These link to
+  each context's detailed pages.
+- **Bounded Contexts** (`docs/contexts/<context>/`): one directory per
+  context.
+  - `business-context.md` and `index.md`, written here.
+  - The ddd-crew artifact pack, **synced** from the context repository's
+    `develop` (`core-domain-chart`, `bounded-context-canvas`, `context-map`,
+    `aggregate-design-canvas`, `domain-message-flow`, `eventstorming`,
+    `ubiquitous-language`, `class-diagram`, `entity-relationship`,
+    `sequence-diagrams`, `domain-events`). Each synced page has a
+    "Synced from" note. Edit those pages upstream, never here.
+  - `async-api.md`, a Kafka narrative written here, for the contexts that
+    have one.
+
+  The Bounded Contexts sidebar is generated from the `CONTEXTS` and
+  `CONTEXT_PAGES` arrays in `sidebars.ts`.
+- **API Reference** (`docs/api-reference/`): generated REST docs
   ([`docusaurus-plugin-openapi-docs`](https://github.com/PaloAltoNetworks/docusaurus-openapi-docs))
   and generated AsyncAPI docs ([`@asyncapi/html-template`](https://github.com/asyncapi/html-template)),
-  both from specs synced from each context's own repository.
-- **ADRs** (`docs/adr/`) — an index linking to each context's own ADR trail
-  (never copied, so it never drifts).
+  both built from specs synced from each context's own repository.
+  `warehouse-ops-agent` has no spec, so its surface is documented in prose.
+- **ADRs** (`docs/adr/`): an index that links to each context's own ADR
+  trail. ADRs are never copied, so the index never drifts.
+
+Every Kafka message in the fleet is a CloudEvents 1.0 event in structured
+content mode. REST and MCP surfaces are unauthenticated fleet-wide. All
+source repositories live in the [IQVO](https://github.com/IQVO) organization.
 
 ## Syncing API specs from the fleet
 
 The `apis/<context>/{openapi,asyncapi}.yaml` files in this repository are
-**copies** of the source of truth in each context's own repository
-(`apis/openapi.yaml` / `apis/asyncapi.yaml` on that repo's `develop`
-branch). Refresh them with:
+**copies**. The source of truth is `apis/openapi.yaml` / `apis/asyncapi.yaml`
+on each context repository's `develop` branch. Refresh the copies with:
 
 ```bash
 cd ..   # warehouse-systems/ (siblings checked out)
@@ -49,27 +71,31 @@ git -C labor-performance show origin/develop:apis/openapi-reports.yaml \
   > "warehouse-docs/apis/labor-performance/openapi-reports.yaml" 2>/dev/null
 ```
 
-Then regenerate the API reference pages (see below) and commit both the
-refreshed specs and the regenerated docs.
+`warehouse-ops-agent` has no `apis/` directory. All ten other contexts
+ship both an `openapi.yaml` and an `asyncapi.yaml`.
+
+Next, regenerate the API reference pages (see below). Commit the refreshed
+specs and the regenerated docs together. If a spec is wrong, fix it in the
+owning repository and re-sync. Never hand-edit the copy.
 
 ## Local development
 
 ```bash
-npm install
+npm ci
 npm run gen-api-docs:all     # regenerate REST reference from apis/*/openapi.yaml
 npm run gen-async-docs:all   # regenerate AsyncAPI static HTML from apis/*/asyncapi.yaml
+npm run validate:mermaid     # parse and render every Mermaid diagram in a real browser
 npm start                    # dev server at http://localhost:3000
 ```
 
-`npm run build` runs both generation steps automatically before building the
-static site.
+`npm run build` runs both generation steps before it builds the static site.
 
 ## Deployment
 
-Pushing to `main` triggers `.github/workflows/docs.yml`, which builds the
-site and publishes it to GitHub Pages via `actions/deploy-pages`. GitHub
-Pages must be configured for this repository with **Source: GitHub
-Actions** (Settings → Pages).
+Pushing to `main` triggers `.github/workflows/docs.yml`. The workflow builds
+the site and publishes it to GitHub Pages with `actions/deploy-pages`. GitHub
+Pages must be set to **Source: GitHub Actions** for this repository
+(Settings → Pages).
 
 ## Scope
 
@@ -79,9 +105,9 @@ This site documents the platform's **eleven backend bounded contexts**:
 `process-path-management`, `labor-performance`, `warehouse-ops-agent`,
 `network-fulfillment`, and `warehouse-planning`.
 The frontend repositories (`warehouse-console`, `warehouse-ui-kit`) and the
-deployment repository (`warehouse-infra`) are referenced where relevant but
-are not bounded contexts in the Evans/Vernon sense and are out of scope for
-DDD artifacts.
+deployment repository (`warehouse-infra`) are referenced where relevant.
+They are not bounded contexts in the Evans/Vernon sense, so they have no DDD
+artifacts here.
 
 ## Study-project disclosure
 

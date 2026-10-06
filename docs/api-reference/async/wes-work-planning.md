@@ -8,7 +8,7 @@ description: Generated AsyncAPI (Kafka) documentation for wes-work-planning, emb
 # wes-work-planning — Async API
 
 Generated directly from
-[`apis/wes-work-planning/asyncapi.yaml`](https://github.com/claudioed/wes-work-planning/blob/develop/apis/asyncapi.yaml)
+[`apis/wes-work-planning/asyncapi.yaml`](https://github.com/IQVO/wes-work-planning/blob/develop/apis/asyncapi.yaml)
 via the official [AsyncAPI Generator](https://github.com/asyncapi/generator)
 (`@asyncapi/html-template`). Regenerate with `npm run gen-async-docs:all`.
 

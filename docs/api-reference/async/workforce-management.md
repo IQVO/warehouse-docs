@@ -8,7 +8,7 @@ description: Generated AsyncAPI (Kafka) documentation for workforce-management, 
 # workforce-management — Async API
 
 Generated directly from
-[`apis/workforce-management/asyncapi.yaml`](https://github.com/claudioed/workforce-management/blob/develop/apis/asyncapi.yaml)
+[`apis/workforce-management/asyncapi.yaml`](https://github.com/IQVO/workforce-management/blob/develop/apis/asyncapi.yaml)
 via the official [AsyncAPI Generator](https://github.com/asyncapi/generator)
 (`@asyncapi/html-template`). Regenerate with `npm run gen-async-docs:all`.
 

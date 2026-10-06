@@ -8,7 +8,7 @@ description: Generated AsyncAPI (Kafka) documentation for inventory-storage, emb
 # inventory-storage — Async API
 
 Generated directly from
-[`apis/inventory-storage/asyncapi.yaml`](https://github.com/claudioed/inventory-storage/blob/develop/apis/asyncapi.yaml)
+[`apis/inventory-storage/asyncapi.yaml`](https://github.com/IQVO/inventory-storage/blob/develop/apis/asyncapi.yaml)
 via the official [AsyncAPI Generator](https://github.com/asyncapi/generator)
 (`@asyncapi/html-template`). Regenerate with `npm run gen-async-docs:all`.
 
