@@ -26,6 +26,28 @@ const sidebar: SidebarsConfig = {
           label: "Get one network order",
           className: "api-method get",
         },
+        {
+          type: "doc",
+          id: "api-reference/rest/network-fulfillment/confirm-network-order-shipment",
+          label: "Confirm shipment of one network order",
+          className: "api-method post",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "capability-offers",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/network-fulfillment/capability-offers",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/network-fulfillment/list-capability-offers",
+          label: "List every currently-advertised capability offer",
+          className: "api-method get",
+        },
       ],
     },
     {

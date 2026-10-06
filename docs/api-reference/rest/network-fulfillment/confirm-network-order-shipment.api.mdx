@@ -1,0 +1,75 @@
+---
+id: confirm-network-order-shipment
+title: "Confirm shipment of one network order"
+description: "The one write endpoint of this context (ADR 0014). Tells the network that the order has shipped (`submitShipmentConfirmations`), moves the order to `CONFIRMED` and publishes `NetworkOrderShipmentConfirmed`. Takes no request body."
+sidebar_label: "Confirm shipment of one network order"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "post api-method"
+info_path: api-reference/rest/network-fulfillment/network-fulfillment-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Confirm shipment of one network order"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"post"}
+  path={"/network-orders/{networkRef}/shipment-confirmation"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+The one write endpoint of this context (ADR 0014). Tells the network that the order has shipped (`submitShipmentConfirmations`), moves the order to `CONFIRMED` and publishes `NetworkOrderShipmentConfirmed`. Takes no request body.
+
+The trigger is an explicit call naming the `networkRef` rather than a `PackageManifested` correlation, because no persisted mapping from a work unit back to a `networkRef` exists (ADR 0014).
+
+Idempotent: an order already `CONFIRMED` is returned unchanged with 204, without re-submitting to the network or re-publishing the event. The route is registered only when the shipment-confirmation use case is wired.
+
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  {...require("./confirm-network-order-shipment.ParamsDetails.json")}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./confirm-network-order-shipment.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./confirm-network-order-shipment.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

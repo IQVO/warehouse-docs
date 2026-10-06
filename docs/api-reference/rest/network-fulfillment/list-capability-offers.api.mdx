@@ -1,0 +1,63 @@
+---
+id: list-capability-offers
+title: "List every currently-advertised capability offer"
+description: "The figure this context would tell the network it can ship for each (SKU, site) it knows about: `min(physicalAvailable, throughputFeasibleBefore(nextCutoff))` (ADR 0001 §8). Offers are persisted by the recompute loop; they are not yet submitted to the network."
+sidebar_label: "List every currently-advertised capability offer"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "get api-method"
+info_path: api-reference/rest/network-fulfillment/network-fulfillment-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"List every currently-advertised capability offer"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/capability-offers"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+The figure this context would tell the network it can ship for each (SKU, site) it knows about: `min(physicalAvailable, throughputFeasibleBefore(nextCutoff))` (ADR 0001 §8). Offers are persisted by the recompute loop; they are not yet submitted to the network.
+
+Registered only when `CAPABILITY_OFFER_ENABLED` is set; otherwise the route does not exist and the API answers 404.
+
+
+<ParamsDetails>
+  
+</ParamsDetails>
+
+<RequestSchema
+  {...require("./list-capability-offers.RequestSchema.json")}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  {...require("./list-capability-offers.StatusCodes.json")}
+>
+  
+</StatusCodes>
+
+
+      

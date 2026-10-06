@@ -92,7 +92,7 @@ it to a different subject:
 | `process-path-management` | A **site's departure schedule.** A `CPTSchedule` per site holds recurring `Cutoff`s (local time, days of week, ship method, eligible path ids). "A CPT is a property of a departure, not of a path." |
 | `order-management` | A **promise window** (`CPTWindow`). A promise may only use a window at or before the caller's `requiredShipBy`. |
 | `wes-work-planning` | A **value object on work.** It is the last moment a parcel can be manifested and still make its truck, and release priority derives from it. A **Cutoff** here is the CPT instant that a remaining-capacity report refers to. |
-| `fulfillment-execution` | A **task deadline.** A task still open at or past its CPT is *CPT missed*. That is reported on every sweep, never enforced. Its `apis/openapi.yaml` expands CPT as "Committed Processing Time" in three descriptions, a prose-only discrepancy. |
+| `fulfillment-execution` | A **task deadline.** A task still open at or past its CPT is *CPT missed*. That is reported on every sweep, never enforced. Its `apis/openapi.yaml` now says "Critical Pull Time" too (it used to say "Committed Processing Time"). |
 | `network-fulfillment` | The site's **next cutoff**, and the paths eligible for it. It feeds the capability offer. |
 
 ### "Reference"
@@ -205,7 +205,7 @@ it to a different subject:
 | `warehouse-planning` | **StationStandard** | The operator-declared **throughput** of one station of a process at a site, in `UNIT`, `PACKAGE` or `ORDER` per period. |
 | `process-path-management` | **Cycle Time p95** | An operator-declared end-to-end **cycle time** from release to manifest. It is a declared standard, not a measured value. |
 | `wes-work-planning` | **Rate** | A service rate in units per hour. |
-| `workforce-management` | **Planned rate** and **Measured rate** | Planned rate is throughput per head per hour. Measured rate is labor-performance's `MeanActualSeconds`, a duration in seconds. The proposal divides by either one in the same way, which is a known unit mismatch. |
+| `workforce-management` | **Planned rate** and **Measured rate** | Planned rate is throughput per head per hour. Measured rate is labor-performance's `MeanActualSeconds`, a duration in seconds, converted to a per-hour rate (3600 / seconds, ADR 0033) before the headcount proposal uses it. |
 
 ### "Held order" and "Acknowledge"
 

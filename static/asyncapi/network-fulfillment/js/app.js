@@ -4,10 +4,10 @@
   "info": {
     "title": "Network Fulfillment Events",
     "version": "2.0.0",
-    "description": "Domain-event catalog for **Network Fulfillment**, a Supporting bounded\ncontext in the WES (Warehouse Execution Systems) subdomain: the\nanti-corruption layer between the warehouse-systems fleet and an\nexternal retail fulfillment network. One aggregate raises every event\ndocumented here:\n\n- `NetworkOrder` (package `internal/domain/networkorder`) — one network\n  purchase order and its acknowledgement lifecycle. Raises\n  `NetworkOrderReceived`, `NetworkOrderAcknowledged`,\n  `NetworkOrderRejected` and `NetworkOrderShipmentConfirmed`.\n\n**Envelope (mandatory, ADR 0008).** Every message on every channel of\nthis service is a CloudEvents 1.0 event in *structured content mode*\n(Kafka protocol binding): the Kafka message value is the JSON event\nformat, content type `application/cloudevents+json`, and every message\ncarries the Kafka header\n`content-type: application/cloudevents+json; charset=UTF-8`. There is no\nother envelope. All of `specversion`, `id`, `source`, `type`, `subject`,\n`time`, `datacontenttype` and `dataschema` are REQUIRED. W3C trace\ncontext, when present, travels in Kafka headers, never as extension\nattributes. The Kafka message key is the network order reference\n(`networkRef`, identical to `subject`), so every event for one order\nlands on the same partition.\n\n**Type naming.** `type` is\n`com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`. For\nthis context the subdomain is `wes`, the bounded context is\n`network-fulfillment` and the entity is `networkorder`, e.g.\n`com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderReceived`.\nThe SAME `type` is used for the occurrence on the integration and on\nthe analytics channel; `dataschema`\n(`urn:warehouse:network-fulfillment:<events|analytics>:<EventName>:v1`)\nnames the payload shape. A breaking payload change gets a new `.v2`\ntype and a new dataschema version, never a mutation of these.\n\n**Consumers** must dispatch on the full `type`, ignore unknown types,\ndedupe on `id` (stable across outbox redelivery), and dead-letter or\nskip — never parse as a legacy shape — anything that fails CloudEvents\nvalidation.\n",
+    "description": "Domain-event catalog for **Network Fulfillment**, a Supporting bounded\ncontext in the WES (Warehouse Execution Systems) subdomain: the\nanti-corruption layer between the warehouse-systems fleet and an\nexternal retail fulfillment network. One aggregate raises every event\ndocumented here:\n\n- `NetworkOrder` (package `internal/domain/networkorder`) — one network\n  purchase order and its acknowledgement lifecycle. Raises\n  `NetworkOrderReceived`, `NetworkOrderAcknowledged`,\n  `NetworkOrderRejected`, `NetworkOrderShipmentConfirmed` and (from the\n  acknowledgement sweep, without a state transition)\n  `AcknowledgementDeadlineAtRisk`.\n\n**Envelope (mandatory, ADR 0008).** Every message on every channel of\nthis service is a CloudEvents 1.0 event in *structured content mode*\n(Kafka protocol binding): the Kafka message value is the JSON event\nformat, content type `application/cloudevents+json`, and every message\ncarries the Kafka header\n`content-type: application/cloudevents+json; charset=UTF-8`. There is no\nother envelope. All of `specversion`, `id`, `source`, `type`, `subject`,\n`time`, `datacontenttype` and `dataschema` are REQUIRED. W3C trace\ncontext, when present, travels in Kafka headers, never as extension\nattributes. The Kafka message key is the network order reference\n(`networkRef`, identical to `subject`), so every event for one order\nlands on the same partition.\n\n**Type naming.** `type` is\n`com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`. For\nthis context the subdomain is `wes`, the bounded context is\n`network-fulfillment` and the entity is `networkorder`, e.g.\n`com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderReceived`.\nThe SAME `type` is used for the occurrence on the integration and on\nthe analytics channel; `dataschema`\n(`urn:warehouse:network-fulfillment:<events|analytics>:<EventName>:v1`)\nnames the payload shape. A breaking payload change gets a new `.v2`\ntype and a new dataschema version, never a mutation of these.\n\n**Consumers** must dispatch on the full `type`, ignore unknown types,\ndedupe on `id` (stable across outbox redelivery), and dead-letter or\nskip — never parse as a legacy shape — anything that fails CloudEvents\nvalidation.\n",
     "contact": {
-      "name": "Network Fulfillment — claudioed",
-      "url": "https://github.com/claudioed/network-fulfillment",
+      "name": "Network Fulfillment — IQVO",
+      "url": "https://github.com/IQVO/network-fulfillment",
       "email": "claudioed.oliveira@gmail.com"
     },
     "license": {
@@ -281,7 +281,7 @@
               "name": "NetworkOrderAcknowledged",
               "title": "Network order acknowledged",
               "summary": "We committed to fulfilling the network order in full and raised a local order in order-management.",
-              "description": "Raised by the `NetworkOrder` aggregate once the network has been told yes and a held order exists in order-management (`localOrderId`). `receivedAt` is carried so consumers can compute acknowledgement latency (`at - receivedAt`) without a second lookup — the analytics projection does exactly that.\n\n`type`: `com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderAcknowledged` — `dataschema`: `urn:warehouse:network-fulfillment:events:NetworkOrderAcknowledged:v1`.\n",
+              "description": "Raised by the `NetworkOrder` aggregate once the network has been told yes and a held order exists in order-management (`localOrderId`). `receivedAt` is carried so consumers can compute acknowledgement latency (`at - receivedAt`) without a second lookup — the analytics projection does exactly that.\n\n**Timing.** This event is published when the order moves to `SUBMITTED` — the acknowledgement has been submitted to the network but NOT yet reconciled against its transaction-status record (ADR 0001 §5). The later `SUBMITTED -> ACKNOWLEDGED` settlement raises no event, and a failed reconciliation is signalled by `NetworkOrderRejected` with `reason=SUBMISSION_FAILED`. A consumer must therefore not treat this event as a settled commitment.\n\n`type`: `com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderAcknowledged` — `dataschema`: `urn:warehouse:network-fulfillment:events:NetworkOrderAcknowledged:v1`.\n",
               "contentType": "application/cloudevents+json",
               "headers": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].headers",
               "bindings": {
@@ -507,7 +507,7 @@
               "name": "NetworkOrderShipmentConfirmed",
               "title": "Network order shipment confirmed",
               "summary": "A shipment was confirmed back to the network, closing the order.",
-              "description": "Raised by the `NetworkOrder` aggregate when its shipment is confirmed to the network. The publisher is wired for it; no use case calls `ConfirmShipment()` yet (the inbound leg observing a real shipment is not built), so this message does not appear on the wire today.\n\n`type`: `com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderShipmentConfirmed` — `dataschema`: `urn:warehouse:network-fulfillment:events:NetworkOrderShipmentConfirmed:v1`.\n",
+              "description": "Raised by the `NetworkOrder` aggregate when its shipment is confirmed to the network, by `ConfirmNetworkOrderShipment` (`POST /network-orders/{networkRef}/shipment-confirmation`, ADR 0014). The use case saves the order as `CONFIRMED` and publishes this event in one atomic scope, then submits the confirmation to the network.\n\n`type`: `com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderShipmentConfirmed` — `dataschema`: `urn:warehouse:network-fulfillment:events:NetworkOrderShipmentConfirmed:v1`.\n",
               "contentType": "application/cloudevents+json",
               "headers": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].headers",
               "bindings": {
@@ -721,7 +721,7 @@
       }
     },
     "warehouse.network-fulfillment.analytics": {
-      "description": "The internal analytics topic (the `AnalyticsTopic` constant in\n`internal/adapters/outbound/kafka/analytics_publisher.go`). Carries the\nsame occurrences with the same `type` and payload, but a distinct\n`id` per occurrence and dataschema\n`urn:warehouse:network-fulfillment:analytics:<EventName>:v1`. There is\nno `schema_version` field. Consumed by this service's own analytics\nprojector (`internal/adapters/inbound/kafka/analytics_consumer.go`),\nwhich handles `NetworkOrderReceived`, `NetworkOrderAcknowledged` and\n`NetworkOrderRejected`, ignores other types, and dead-letters to\n`warehouse.network-fulfillment.analytics.dlq` anything that is not a\nvalid CloudEvent.\n",
+      "description": "The internal analytics topic (the `AnalyticsTopic` constant in\n`internal/adapters/outbound/kafka/analytics_publisher.go`). Carries the\nsame five occurrences with the same `type` and payload, but a distinct\n`id` per occurrence and dataschema\n`urn:warehouse:network-fulfillment:analytics:<EventName>:v1`. There is\nno `schema_version` field. Consumed by this service's own analytics\nprojector (`internal/adapters/inbound/kafka/analytics_consumer.go`),\nwhich handles `NetworkOrderReceived`, `NetworkOrderAcknowledged` and\n`NetworkOrderRejected`, ignores other types (`NetworkOrderShipmentConfirmed`\nand `AcknowledgementDeadlineAtRisk` today), and dead-letters to\n`warehouse.network-fulfillment.analytics.dlq` anything that is not a\nvalid CloudEvent.\n",
       "subscribe": {
         "operationId": "consumeNetworkFulfillmentAnalytics",
         "summary": "Consume Network Fulfillment analytics events.",
@@ -812,7 +812,7 @@
               "name": "NetworkOrderAcknowledgedAnalytics",
               "title": "Network order acknowledged (analytics)",
               "summary": "We committed to fulfilling the network order in full and raised a local order in order-management.",
-              "description": "Raised by the `NetworkOrder` aggregate once the network has been told yes and a held order exists in order-management (`localOrderId`). `receivedAt` is carried so consumers can compute acknowledgement latency (`at - receivedAt`) without a second lookup — the analytics projection does exactly that. Consumed by the analytics projector.\n\n`type`: `com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderAcknowledged` — `dataschema`: `urn:warehouse:network-fulfillment:analytics:NetworkOrderAcknowledged:v1`.\n",
+              "description": "Raised by the `NetworkOrder` aggregate once the network has been told yes and a held order exists in order-management (`localOrderId`). `receivedAt` is carried so consumers can compute acknowledgement latency (`at - receivedAt`) without a second lookup — the analytics projection does exactly that. Consumed by the analytics projector. Published at `SUBMITTED`, before reconciliation; `SUBMITTED -> ACKNOWLEDGED` raises no event (see the integration-channel message for the full timing note).\n\n`type`: `com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderAcknowledged` — `dataschema`: `urn:warehouse:network-fulfillment:analytics:NetworkOrderAcknowledged:v1`.\n",
               "contentType": "application/cloudevents+json",
               "headers": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].headers",
               "bindings": {
@@ -959,7 +959,7 @@
               "name": "NetworkOrderShipmentConfirmedAnalytics",
               "title": "Network order shipment confirmed (analytics)",
               "summary": "A shipment was confirmed back to the network, closing the order.",
-              "description": "Raised by the `NetworkOrder` aggregate when its shipment is confirmed to the network. The publisher is wired for it; no use case calls `ConfirmShipment()` yet (the inbound leg observing a real shipment is not built), so this message does not appear on the wire today. Not used by the analytics projector today (ignored as an unknown type).\n\n`type`: `com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderShipmentConfirmed` — `dataschema`: `urn:warehouse:network-fulfillment:analytics:NetworkOrderShipmentConfirmed:v1`.\n",
+              "description": "Raised by the `NetworkOrder` aggregate when its shipment is confirmed to the network, by `ConfirmNetworkOrderShipment` (`POST /network-orders/{networkRef}/shipment-confirmation`, ADR 0014). Not used by the analytics projector today (ignored as an unknown type).\n\n`type`: `com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderShipmentConfirmed` — `dataschema`: `urn:warehouse:network-fulfillment:analytics:NetworkOrderShipmentConfirmed:v1`.\n",
               "contentType": "application/cloudevents+json",
               "headers": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].headers",
               "bindings": {
@@ -1027,6 +1027,79 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "AcknowledgementDeadlineAtRiskAnalytics",
+              "title": "Acknowledgement deadline at risk (analytics)",
+              "summary": "An order's 24h acknowledgement window has closed with no answer — a reported fact, not a state transition.",
+              "description": "Raised by `SweepAcknowledgementDeadlines` for every order found still `NEW` past its `acknowledgeBy` instant (ADR 0001 §6), and published on the analytics topic like every other event (the composition root's fan-out publishes each event to both topics). Re-fires on every sweep pass while the condition holds — not edge-triggered. Not used by the analytics projector today (ignored as an unknown type).\n\n`type`: `com.warehouse.wes.network-fulfillment.networkorder.AcknowledgementDeadlineAtRisk` — `dataschema`: `urn:warehouse:network-fulfillment:analytics:AcknowledgementDeadlineAtRisk:v1`.\n",
+              "contentType": "application/cloudevents+json",
+              "headers": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].headers",
+              "bindings": {
+                "kafka": {
+                  "key": {
+                    "type": "string",
+                    "description": "Network order reference (networkRef), identical to `subject`."
+                  }
+                }
+              },
+              "tags": [
+                {
+                  "name": "networkorder"
+                },
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": {
+                "title": "AcknowledgementDeadlineAtRisk CloudEvent (analytics)",
+                "allOf": [
+                  "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.network-fulfillment.networkorder.AcknowledgementDeadlineAtRisk",
+                        "x-parser-schema-id": "<anonymous-schema-64>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:network-fulfillment:analytics:AcknowledgementDeadlineAtRisk:v1",
+                        "x-parser-schema-id": "<anonymous-schema-65>"
+                      },
+                      "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[4].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-63>"
+                  }
+                ],
+                "x-parser-schema-id": "AcknowledgementDeadlineAtRiskAnalyticsEvent"
+              },
+              "examples": [
+                {
+                  "name": "acknowledgementDeadlineAtRiskAnalytics",
+                  "summary": "Network order po-1's acknowledgement window has closed unanswered.",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "5b6c7d8e-9f0a-4b1c-8d2e-3f4a5b6c7d8e",
+                    "source": "/warehouse/network-fulfillment",
+                    "type": "com.warehouse.wes.network-fulfillment.networkorder.AcknowledgementDeadlineAtRisk",
+                    "subject": "po-1",
+                    "time": "2026-09-24T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:network-fulfillment:analytics:AcknowledgementDeadlineAtRisk:v1",
+                    "data": {
+                      "networkRef": "po-1",
+                      "siteId": "site-1",
+                      "acknowledgeBy": "2026-09-24T08:00:00Z",
+                      "at": "2026-09-24T08:00:00Z"
+                    }
+                  }
+                }
+              ]
             }
           ]
         }
@@ -1043,7 +1116,8 @@
       "NetworkOrderReceivedAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[0]",
       "NetworkOrderAcknowledgedAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[1]",
       "NetworkOrderRejectedAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[2]",
-      "NetworkOrderShipmentConfirmedAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[3]"
+      "NetworkOrderShipmentConfirmedAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[3]",
+      "AcknowledgementDeadlineAtRiskAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[4]"
     },
     "schemas": {
       "KafkaHeaders": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].headers",
@@ -1061,7 +1135,8 @@
       "NetworkOrderReceivedAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[0].payload",
       "NetworkOrderAcknowledgedAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[1].payload",
       "NetworkOrderRejectedAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[2].payload",
-      "NetworkOrderShipmentConfirmedAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[3].payload"
+      "NetworkOrderShipmentConfirmedAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[3].payload",
+      "AcknowledgementDeadlineAtRiskAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[4].payload"
     }
   },
   "x-parser-spec-parsed": true,
