@@ -2,60 +2,152 @@
 id: domain-events
 title: Domain Events
 sidebar_label: Domain Events
-description: ProcessPathCreated, ProcessPathUpdated, ProcessPathDeactivated, CPTScheduleChanged — when each is published, and who consumes them today.
+description: Every event process-path-management publishes and consumes — full CloudEvents type, topic, partition key, payload fields, producer use case and known consumers.
 ---
 
 # Domain Events
 
-Four past-tense, business-meaningful events, all published on
-`warehouse.process-path-management.events` (path events keyed by
-`path_id`, `CPTScheduleChanged` keyed by `site_id`), and (since ADR 0007)
-fanned out a second time onto the separate analytics topic
-`warehouse.process-path-management.analytics`. See the
-[Aggregate Design Canvas](./aggregate-design-canvas) for the commands that
-trigger them and [Async API](./async-api) for the wire envelope.
+:::info[Synced from process-path-management]
+This page is a copy of [`docs/docs/ddd/domain-events.md`](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/ddd/domain-events.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-| Event | When published | Consumed by |
+
+Every event this context publishes, with its full CloudEvents 1.0 `type`,
+topic, partition key, payload, producing use case and known consumers.
+Part of the [DDD artifact pack](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/ddd/ddd-artifacts.md).
+
+## Envelope (all events)
+
+Every message is a CloudEvents 1.0 event in **structured content mode**
+(the Kafka value is the JSON event; ADR 0016), built only by
+`internal/adapters/kafka/cloudevents.New`:
+
+| Attribute | Value |
+| --- | --- |
+| `specversion` | `1.0` |
+| `id` | UUID minted once per occurrence (`uuid.NewString`), shared by the integration and analytics copies and stable across outbox redelivery |
+| `source` | `/warehouse/process-path-management` |
+| `type` | `com.warehouse.wes.process-path-management.<entity>.<EventName>` |
+| `subject` | aggregate id — `path_id` or `site_id`; equal to the Kafka key |
+| `time` | the domain event's `At`, UTC |
+| `datacontenttype` | `application/json` |
+| `dataschema` | `urn:warehouse:process-path-management:events:<EventName>:v1` (integration) or `urn:warehouse:process-path-management:analytics:<EventName>:v1` (analytics) |
+| Kafka header | `content-type: application/cloudevents+json; charset=UTF-8` (the only header set) |
+
+Topics: `warehouse.process-path-management.events` (integration) and
+`warehouse.process-path-management.analytics` (analytics, ADR 0007). Every
+event is written to **both** — in one outbox transaction when
+`DATABASE_URL` is set, or by the `FanOutPublisher` from `NewSharedIdFanOut` direct to Kafka otherwise.
+Writers use the `kafkago.Hash` balancer (ADR 0013), so all events with the
+same key land on the same partition.
+
+## Published events
+
+| Event | Full CloudEvents `type` | Partition key / `subject` | Producer use case | Known consumers |
+| --- | --- | --- | --- | --- |
+| ProcessPathCreated | `com.warehouse.wes.process-path-management.processpath.ProcessPathCreated` | `path_id` | `usecases.DefinePath` | fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment; own `pathmgmt-projector` (analytics) |
+| ProcessPathUpdated | `com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated` | `path_id` | `usecases.RevisePath` (only when `Revise` returns `changed=true`) | same five; own projector |
+| ProcessPathDeactivated | `com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated` | `path_id` | `usecases.DeactivatePath` (only on an Active path) | same five; own projector |
+| CPTScheduleChanged | `com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged` | `site_id` | `usecases.DefineCPTSchedule` (first define, or a revise with `changed=true`) | order-management, network-fulfillment; own projector skips it |
+
+### ProcessPathCreated / ProcessPathUpdated — `data`
+
+Go type `kafka.ProcessPathData` (`internal/adapters/outbound/kafka/publisher.go`);
+schema `ProcessPathData` in `apis/asyncapi.yaml`.
+
+| Field | Type | Notes |
 | --- | --- | --- |
-| **ProcessPathCreated** | A new `ProcessPath` is successfully defined via `Define` | `fulfillment-execution`, `wes-work-planning`, `workforce-management`, `order-management` (integration topic, live); this context's own `cmd/pathmgmt-projector` (analytics topic, live) |
-| **ProcessPathUpdated** | A `Revise` call actually changes `MatchPrefix`, `RequiredCapabilities`, `CycleTimeP95` or `Eligibility` (never published for a byte-for-byte-identical revision) | Same as above |
-| **ProcessPathDeactivated** | A `ProcessPath` transitions from `Active` to `Deactivated` (never republished on a redundant deactivate call against an already-deactivated path); payload carries only `path_id` | Same as above |
-| **CPTScheduleChanged** | `DefineCPTSchedule` first defines a site's CPT schedule, or a revision actually changes it; carries the full schedule snapshot, not a diff (ADR 0010) | `order-management` only (integration topic, live). The three WES-tier consumers ignore it; the analytics projector ignores it too |
+| `path_id` | string | always present |
+| `match_prefix` | string | `omitempty` |
+| `direct` | boolean | `omitempty` — **absent when `false`**; consumers must default it to `false` |
+| `required_capabilities` | string array | `omitempty` |
+| `destination_location_role` | string | `Drop` / `WorkCenter` / `Shipping`; absent when unset (ADR 0009) |
+| `cycle_time_p95` | string | Go duration, e.g. `2h0m0s` (ADR 0010) |
+| `eligibility` | object | always present on Created/Updated, `{}` when fully permissive |
+| `eligibility.max_units_per_line` | integer | absent = unbounded |
+| `eligibility.required_product_attributes` | string array | `omitempty` |
+| `eligibility.excluded_product_attributes` | string array | `omitempty` |
+| `eligibility.non_sortable` | boolean | `omitempty` |
 
-## The honest state of consumption
+`ProcessPathUpdated` carries the full current definition (not a diff);
+`destination_location_role` is repeated unchanged because it is never
+revisable.
 
-`fulfillment-execution`, `wes-work-planning`, and `workforce-management`
-are this context's three original Conformist consumers on the integration
-topic — each previously boot-loaded the process-path catalogue from a
-static YAML file this service replaced. All three now have a live Kafka
-consumer wired (ADR 0002; verified: a newly-defined path reached all three
-running consumers with no restart, and a deactivation propagated the same
-way). Their binaries still default to `PATH_CATALOGUE_SOURCE=file`;
-`warehouse-infra` sets `kafka`. They decode the `ProcessPath*` events
-only — none of them reads `destination_location_role`,
-`cycle_time_p95`/`eligibility`, or `CPTScheduleChanged` today.
+### ProcessPathDeactivated — `data`
 
-`order-management` is the fourth Conformist consumer (ADR 0010): two
-separate consumers on the same topic — a catalogue consumer decoding each
-path's `cycle_time_p95` and `eligibility`, and a CPT-schedule consumer
-decoding `CPTScheduleChanged` — from which it derives its delivery
-promise. Its binary defaults to `PATH_CATALOGUE_SOURCE=none`;
-`warehouse-infra` sets `kafka`. See the
-[Bounded Context Canvas](./bounded-context-canvas) and the platform-level
-[Context Map](/strategic-design/context-map) for the full picture.
+Only `path_id`. Every definition field is omitted, not zeroed.
 
-The analytics topic's one consumer, this context's own
-`cmd/pathmgmt-projector`, is also live (it projects the three
-`ProcessPath*` event types and ignores `CPTScheduleChanged`) — see
-[Bounded Context Canvas](./bounded-context-canvas)'s Outbound
-Communication for the analytics data product this feeds.
+### CPTScheduleChanged — `data`
 
-## What consumers do once wired
+Go type `kafka.CPTScheduleData`; built from `cptschedule.ToSnapshot`.
 
-- Maintain their own local read model/cache derived from this event
-  stream, rather than reading a live value from this service on every
-  dispatch decision.
-- Treat `ProcessPathDeactivated` as "stop accepting new work against this
-  path", never as a command to cancel work already in flight.
-- Never need to diff an unchanged payload: `ProcessPathUpdated` is only
-  published when a `Revise` call produces a real change.
+| Field | Type | Notes |
+| --- | --- | --- |
+| `site_id` | string | |
+| `timezone` | string | IANA zone |
+| `cutoffs[]` | array | full snapshot, never a diff |
+| `cutoffs[].cpt_id` | string | unique within the site |
+| `cutoffs[].local_time` | string | `HH:MM` |
+| `cutoffs[].days_of_week` | string array | `Mon`..`Sun` |
+| `cutoffs[].ship_method` | string | |
+| `cutoffs[].eligible_path_ids` | string array | Active paths at write time |
+
+## Events NOT raised
+
+- A no-op `PUT /process-paths/{pathId}` (identical `matchPrefix`,
+  `requiredCapabilities`, `cycleTimeP95`, `eligibility`) raises nothing.
+- `DELETE` on an already-deactivated path raises nothing (204).
+- A `PUT /sites/{siteId}/cpt-schedule` identical to the stored schedule
+  raises nothing.
+- Read operations (REST `GET`, every MCP tool) never raise events.
+
+## Consumed events
+
+This context consumes **no other context's events**. Its only consumer,
+`internal/adapters/inbound/kafka.AnalyticsConsumer` (run by
+`cmd/pathmgmt-projector`, group `process-path-management-analytics`,
+`StartOffset: FirstOffset`), reads its **own** analytics topic:
+
+| Type | Effect |
+| --- | --- |
+| `...processpath.ProcessPathCreated` | `catalogue_growth_rollup.paths_defined += 1` for the UTC day bucket |
+| `...processpath.ProcessPathUpdated` | `paths_revised += 1` |
+| `...processpath.ProcessPathDeactivated` | `paths_deactivated += 1` |
+| `...cptschedule.CPTScheduleChanged` and any unknown type | committed and skipped |
+| non-CloudEvents message | dead-lettered to `warehouse.process-path-management.analytics.dlq`, then committed |
+| projecting type whose dedupe or projection still fails after `maxAnalyticsHandlerAttempts` (3) | dead-lettered to the same DLQ, then committed (ADR 0012) |
+
+Dedupe is on the CloudEvents `id`, twice: `analytics_consumed_events`
+(consumer gate) and `analytics_processed_events` (claimed inside the
+projection transaction).
+
+## Delivery guarantees
+
+- **Atomic with state** (Postgres mode): `OutboxPublisher.Publish` inserts
+  one `outbox_events` row per topic inside the use case's `UnitOfWork`
+  transaction (ADR 0003).
+- **At-least-once to Kafka**: `OutboxRelay` sends rows in `id` order with
+  `RequiredAcks: RequireAll` and marks them published afterwards; a crash
+  between send and mark re-sends with the same `id`.
+- **Per-aggregate order**: same key → same partition (Hash balancer); the
+  relay stops a pass at the first failed send so later rows never
+  overtake it.
+
+Source: `internal/domain/shared/events.go`,
+`internal/domain/cptschedule/events.go`,
+`internal/adapters/outbound/kafka/publisher.go`,
+`internal/adapters/outbound/kafka/analytics_publisher.go`,
+`internal/adapters/outbound/kafka/writer_config.go`,
+`internal/adapters/kafka/cloudevents/cloudevents.go`,
+`internal/adapters/kafka/cloudevents/types.go`,
+`internal/adapters/outbound/postgres/outbox_publisher.go`,
+`internal/adapters/outbound/postgres/outbox_relay.go`,
+`internal/adapters/inbound/kafka/analytics_consumer.go`,
+`apis/asyncapi.yaml`.
+
+:::note[Spec vs code]
+`apis/asyncapi.yaml` states that W3C trace context travels in
+`traceparent`/`tracestate` Kafka headers; the publishers set only the
+`content-type` header today. The spec also does not mention that
+`direct: false` is omitted from the payload.
+:::

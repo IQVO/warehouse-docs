@@ -1,186 +1,164 @@
 ---
+id: bounded-context-canvas
 title: Bounded Context Canvas
 sidebar_label: Bounded Context Canvas
-description: The full ddd-crew Bounded Context Canvas for inventory-storage — purpose, strategic classification, domain roles, communication, business decisions, assumptions, verification metrics, and open questions.
+description: The ddd-crew Bounded Context Canvas v5 for inventory-storage — purpose, strategic classification, domain roles, every inbound and outbound message with its real channel, business decisions, assumptions, verification metrics and open questions.
 ---
 
 # Bounded Context Canvas
 
+:::info[Synced from inventory-storage]
+This page is a copy of [`docs/docs/ddd/bounded-context-canvas.md`](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/ddd/bounded-context-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
+
+
 Following the [ddd-crew Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas)
-template, sourced entirely from `inventory-storage`'s own docs and `CLAUDE.md`.
+(v5). Every message row maps to a real REST route, MCP tool or Kafka topic
+and CloudEvents `type` in the code on `develop`; the relationship column uses
+the [Context Map](/contexts/inventory-storage/context-map) vocabulary.
 
 ## Name
 
-**Inventory & Storage** (`inventory-storage`)
+**Inventory & Storage** — repository `inventory-storage`, CloudEvents
+subdomain `wms`, `source=/warehouse/inventory-storage`.
 
 ## Purpose
 
-The WMS-tier authoritative record of *what is held where, and what portion of
-it is usable*. It answers, authoritatively and instantly, the two questions
-everything downstream depends on: **where** is a SKU (bin-accurate, not just
-"in the building"), and **how much** of it can actually be promised (usable,
-not on-hand). It implements chaotic (random) stow with mandatory dual
-scanning, and models allocation as a revocable, expiring reservation so
-physical delivery failures never strand an order.
+The WMS-tier authoritative record of **what is held where, and what portion
+of it is usable**. It answers the two questions everything downstream depends
+on: *where* a SKU physically is (bin-accurate, under chaotic stow with
+mandatory item + location scan) and *how much* of it can be promised
+(usable, not on-hand). Allocation is a revocable, expiring reservation, so a
+failed physical delivery never strands an order. It is also the source of
+truth for SKU handling classification (hazmat, temperature, DOT class).
 
 ## Strategic Classification
 
 | Dimension | Classification | Justification |
 | --- | --- | --- |
-| **Domain** | **Core** | Maps to the reference model's "Inventory & Slotting" subdomain: "Random stow + bin-accurate tracking is a genuine operational innovation and the backbone of pick-path efficiency." `warehouse-systems-ddd.md` agrees from the platform side — WMS is the Core Domain because it "owns inventory truth and order fulfillment — the actual business differentiator." |
-| **Business Model** | **Revenue enabler / operational differentiator** | This context does not sell anything directly, but every promise the platform makes to a customer ("6 units will ship") is only as good as this service's usable-inventory answer. Over-promising or stranding orders here directly costs revenue and SLA credibility. |
-| **Evolution** | **Product (Wardley: moving toward Product/Rental)** | The chaotic-storage and revocable-reservation model is now stable, well-understood, and heavily invested in (≈99% domain coverage, mutation testing, arch-go fitness tests, godog acceptance specs) — the hallmarks of a mature, hardened core rather than a still-experimenting Genesis/Custom-Built stage. It is not yet a commodity/utility because its invariants remain the platform's competitive edge, not an interchangeable off-the-shelf capability. |
+| **Domain** | **Core** | Matches [Subdomain Classification](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/ddd/subdomain-classification.md) and the [Core Domain Chart](/contexts/inventory-storage/core-domain-chart): "Inventory & Slotting" is Core in the reference model; four aggregates and 30 tested invariants. |
+| **Business Model** | **Revenue enabler** | Sells nothing directly, but every customer promise ("6 units will ship") rests on the usable answer; over-promising or stranding orders costs revenue and SLA credibility. |
+| **Evolution** | **Custom-built, moving towards Product** | Hand-built, heavily tested and still gaining capabilities (ADRs 0017-0026); its REST and event contracts are already versioned Published Language that several contexts consume unchanged. |
 
 ## Domain Roles
 
-| Role | This context's stance |
+| Role | Stance |
 | --- | --- |
-| **Core Domain** | Yes — see Strategic Classification above. |
-| **Open Host Service** | Yes, for two things: bin-accurate location and usable inventory. Its Published Language has two surfaces — REST (`apis/openapi.yaml`) for synchronous queries/commands, and Events (`apis/asyncapi.yaml`, topic `warehouse.inventory.events`) for asynchronous facts. Both are versioned, Spectral-linted artefacts, which is what lets a new consumer integrate from the spec without this repo changing. |
-| **System of record** | Yes — for `StockUnit`, `Bin`, `Reservation`, and `ProductClassification`. No other bounded context has write access to any of these aggregates. |
+| **System of record** | For `StockUnit`, `Bin`, `Reservation` and `ProductClassification`. No other context has write access to any of them. |
+| **Open Host Service** | For bin-accurate location, usable inventory and product classification, with a Published Language on two surfaces: REST (`apis/openapi.yaml`) and events (`apis/asyncapi.yaml`). |
+| **Enforcer** | Runs every invariant on every write — capacity, usable, no double-consume, placement, DOT segregation — whoever the caller is. |
+| **Analytics data-product owner** | Owns its own analytical data product (Flow & Accuracy report, ADR 0011), fed only by its own events. |
 
 ## Inbound Communication
 
-| Collaborator | Interaction | Pattern |
-| --- | --- | --- |
-| `order-management` | `POST /reservations` (allocation), `DELETE /reservations/{id}` (cancellation), `GET /products/{sku}/classification` (eligibility-driven path selection) | Customer/Supplier — `order-management` is the Customer; every call runs through this service's own invariants (reserve against usable, revoke returns to usable). Gated on the caller side by `INVENTORY_STORAGE_MODE` / `PRODUCT_CLASSIFICATION_MODE` (both default `permissive`; the cluster sets `http`). |
-| `wes-work-planning`, `fulfillment-execution` | `GET /products/{sku}/classification` | Read-only Customer/Supplier lookups, each opt-in via the caller's own `PRODUCT_CLASSIFICATION_MODE` (default `permissive` = no network call). |
-| Any HTTP caller (operator tooling, `inventory-mfe`) | `POST /stock/receive`, `POST /stock/stow`, `POST /reservations`, `DELETE /reservations/{id}`, `POST /reservations/{id}/confirm-pick`, `GET /inventory/{sku}/usable`, `PUT`/`GET /bins/{binId}` (declarative bin registration, ADR-0025), `POST /bins/{binId}/cycle-count`, `PUT`/`GET /products/{sku}/classification`, `GET /reservations?demandRef=` | Synchronous HTTP command/query — this service runs its own invariants on every write; no sibling context is ever granted a bypass. |
-| `warehouse-ops-agent`'s console BFF, and this service's own `inventory-mfe` remote | `GET /reservations?demandRef=` | Read-only, side-effect-free fan-out; closes a join-key gap for the fleet's Order Lifecycle console screen. Never 404s on an unknown `demandRef` (200 + empty array). |
-| AI agents / MCP clients (incl. `warehouse-ops-agent`) | `check_availability`, `get_bin_occupancy` (read), `revoke_reservation` (write, annotated destructive), plus the read-only `get_inventory_flow_accuracy_report` when `REPORTS_BASE_URL` is set; one resource template (`inventory://{sku}/usable`) and one prompt (`triage_low_stock`) — via a `cmd/mcp` Streamable HTTP server | Curated, intent-level MCP tools calling the *same* use cases as the HTTP adapter — never a parallel code path. Unauthenticated, like the REST API: the bearer-key layer of [ADR-0014](https://github.com/claudioed/inventory-storage/blob/develop/docs/docs/adr/0014-rest-identity-adoption.md) was removed by [ADR-0015](https://github.com/claudioed/inventory-storage/blob/develop/docs/docs/adr/0015-remove-rest-identity-layer.md). |
-| `facility-layout` (Kafka) | **Inbound consumer** — `internal/adapters/outbound/facilitycache/` replays `warehouse.facility.events` (`ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned`) into a local, in-memory location-classification cache on every process start (per-instance-unique consumer group, FirstOffset replay, readiness gated on catch-up). Selected by `LOCATION_LOOKUP_MODE=kafka` — the deployed cluster's configuration; the binary's own default is still `permissive` (no lookup) ([ADR-0013](https://github.com/claudioed/inventory-storage/blob/develop/docs/docs/adr/0013-location-classification-via-facility-events.md)). | Conformist to facility-layout's Published Language; an anti-corruption read model keyed the way `StowStock`'s placement check needs. Verified live with facility-layout scaled to zero replicas. |
+| Collaborator | Message | Type | Channel | Relationship |
+| --- | --- | --- | --- | --- |
+| `order-management` | ReserveStock | Command | REST `POST /reservations` (header `Idempotency-Key`) | C/S, caller-side ACL |
+| `order-management` | RevokeReservation | Command | REST `DELETE /reservations/{id}` | C/S, caller-side ACL |
+| `order-management`, `wes-work-planning`, `fulfillment-execution` | GetProductClassification | Query | REST `GET /products/{sku}/classification` | OHS/PL, caller-side ACL |
+| `network-fulfillment` | GetUsable | Query | REST `GET /inventory/{sku}/usable` | OHS/PL, caller-side ACL |
+| `warehouse-ops-agent` (console BFF) | GetReservationsByDemandRef | Query | REST `GET /reservations?demandRef=` | OHS/PL, Conformist |
+| `warehouse-ops-agent` | Flow & Accuracy report | Query | REST `GET /reports/flow-accuracy`, `GET /reports/flow-accuracy/freshness` (`cmd/inventory-reports`) | OHS/PL, Conformist |
+| `warehouse-ops-agent` (agent) | check availability | Query | MCP tool `check_availability` (`cmd/mcp`, Streamable HTTP) | OHS |
+| `warehouse-ops-agent` (agent) | bin occupancy | Query | MCP tool `get_bin_occupancy` | OHS |
+| Any MCP host | revoke reservation | Command | MCP tool `revoke_reservation` (annotated destructive) | OHS — no sibling calls it today |
+| Any MCP host | Flow & Accuracy report | Query | MCP tool `get_inventory_flow_accuracy_report` (only when `REPORTS_BASE_URL` is set); resource `inventory://{sku}/usable`; prompt `triage_low_stock` | OHS |
+| `facility-layout` | ZoneRegistered | Event | Kafka `warehouse.facility.events`, `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | Conformist |
+| `facility-layout` | LocationSlotRegistered | Event | Kafka `warehouse.facility.events`, `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | Conformist |
+| `facility-layout` | LocationSlotDecommissioned | Event | Kafka `warehouse.facility.events`, `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | Conformist |
+| Inventory control (operator, `e2e-tests` simulator) | RegisterBin | Command | REST `PUT /bins/{binId}` | OHS |
+| Inbound dock (operator, simulator) | ReceiveStock | Command | REST `POST /stock/receive` (header `Idempotency-Key`) | OHS |
+| Inbound dock (operator, simulator) | StowStock | Command | REST `POST /stock/stow` | OHS |
+| Inventory control (operator, simulator) | RunCycleCount | Command | REST `POST /bins/{binId}/cycle-count` | OHS |
+| Catalogue owner (operator, simulator) | ClassifyProduct | Command | REST `PUT /products/{sku}/classification` | OHS |
+| Picking (operator, simulator) | ConfirmPick | Command | REST `POST /reservations/{id}/confirm-pick` | OHS — no sibling context calls it |
+| Operator, `inventory-mfe` | GetBin, GetUsable | Query | REST `GET /bins/{binId}`, `GET /inventory/{sku}/usable` | OHS |
+| Kubernetes | liveness / readiness | Query | REST `GET /healthz`, `GET /readyz` | — |
 
 ## Outbound Communication
 
-| Collaborator | Interaction | Pattern |
-| --- | --- | --- |
-| `wes-work-planning` | Publishes `StockReserved` / `ReservationRevoked` on `warehouse.inventory.events` (Kafka, `EVENT_PUBLISHER=kafka`, default `log`) | Fire-and-forget integration event; Open Host Service, Work Planning is a **Conformist** downstream with no write access. |
-| `facility-layout` | Event-fed local cache (primary, `LOCATION_LOOKUP_MODE=kafka`, ADR-0013) with synchronous `GET /locations/{locationCode}/classification` retained as the configured rollback (`LOCATION_LOOKUP_MODE=http`; `permissive` = no-op remains the code default). Either way the check is **scoped**: only fires for SKUs classified `Hazmat` or `TemperatureSensitive`. | Conformist downstream of facility-layout's Published Language. Fail-open on unknown location; fail-closed (blocks the stow) only when the lookup path itself errors, and only for classified, rule-relevant SKUs. |
-| this service's own `cmd/inventory-projector` (analytics) | Publishes the full flow/accuracy event set to a **separate** topic `warehouse.inventory.analytics` (same `EVENT_PUBLISHER=kafka` switch), consumed only by this service's own projector ([ADR-0011](https://github.com/claudioed/inventory-storage/blob/develop/docs/docs/adr/0011-analytical-data-product.md)) | Internal data-mesh pattern — not a cross-context read; kept fully separate from the integration topic so widening analytics never risks the integration contract. |
+| Collaborator | Message | Type | Channel | Relationship |
+| --- | --- | --- | --- | --- |
+| `wes-work-planning` | StockReserved | Event | Kafka `warehouse.inventory.events`, `com.warehouse.wms.inventory-storage.reservation.StockReserved` (key = reservation id) | OHS/PL; downstream Conformist |
+| `wes-work-planning` | ReservationRevoked | Event | Kafka `warehouse.inventory.events`, `com.warehouse.wms.inventory-storage.reservation.ReservationRevoked` (key = reservation id) | OHS/PL; downstream Conformist |
+| own projector (`cmd/inventory-projector`) | StockReceived, ItemStowed, ItemUnlocated, StockReserved, StockPicked, ReservationExpired, ReservationRevoked, CycleCountCompleted, DiscrepancyDetected | Event | Kafka `warehouse.inventory.analytics`, `com.warehouse.wms.inventory-storage.<stock, reservation or bin>.<EventName>` | internal |
+| `facility-layout` | location classification | Query | REST `GET /locations/{locationCode}/classification` — only with `LOCATION_LOOKUP_MODE=http`, behind a circuit breaker | ACL; wired but unused (rollback) |
+| `facility-layout` (DLQ) | invalid facility message | Event | Kafka `warehouse.facility.events.dlq` (raw payload + `x-dlq-*` headers) | — |
 
-**warehouse-ops-agent read-only fan-out (detail):** `warehouse-ops-agent`'s
-BFF calls `GET /reservations?demandRef=` as one leg of its cross-service
-Order Lifecycle correlation. This is a caller of this service's *existing*
-REST surface, not a new dependency this service takes on — no client-side
-call ever goes the other way (this service never calls
-`warehouse-ops-agent`, `order-management`, or any WES-tier service directly).
+All Kafka messages are CloudEvents 1.0 structured mode. With Postgres and
+`EVENT_PUBLISHER=kafka` they leave through the transactional outbox and the
+relay in `cmd/inventory` (ADR 0017).
 
 ## Ubiquitous Language
 
-Short glossary: **StockUnit** (a quantity of a SKU at a specific bin),
-**Bin/Location** (a coded slot with capacity), **Stow** (item-scan +
-location-scan into a bin), **Usable inventory** (on-hand − reserved −
-held/unlocated), **Reservation** (a revocable, expiring, SKU-scoped claim
-against usable), **Allocation** (a line recording what a reservation drew
-from which `StockUnit`), **Unlocated** (the explicit lost state),
-**ProductClassification** (SKU-level handling/hazmat/temperature master
-data). Full table: [Ubiquitous Language](/contexts/inventory-storage/ubiquitous-language).
+Full glossary: [Ubiquitous Language](/contexts/inventory-storage/ubiquitous-language).
+The terms that carry the model:
+
+| Term | Meaning |
+| --- | --- |
+| **StockUnit** | A quantity of a SKU at one bin — every item has one known bin or is Unlocated. |
+| **Bin** | A coded slot with a capacity; any SKU may use any free bin. |
+| **Stow** | Item scan + location scan; the only way a StockUnit is created. |
+| **Usable inventory** | On-hand minus reserved minus unlocated/removed — what constrains release. |
+| **Reservation** | A revocable, expiring claim against usable, with allocations and pick locations. |
+| **Revoke / Expire / Confirm pick** | The three ways a reservation is resolved. |
+| **Cycle count** | Verifying a bin; shortfall marks units Unlocated, overage is reported. |
+| **ProductClassification** | SKU handling master data: handling tags, temperature class, DOT hazard class. |
+| **Demand reference** | The caller's opaque order+line key; replay-guard and lookup key. |
 
 ## Business Decisions
 
-The invariants below are this context's actual Definition of Done — each has
-a dedicated failing-path unit test, use-case test, and Gherkin scenario:
-
-1. **A stow requires both an item-scan and a location-scan.** A `StockUnit`
-   refuses to exist rather than record a half-truth; the aggregate returns a
-   typed error mapped to `400 Bad Request`.
-2. **Chaotic storage: no SKU affinity anywhere in the model.** `Bin` has an
-   id, a capacity, and an occupancy — deliberately no SKU field. Any SKU may
-   occupy any bin with room; a full bin rejects the stow (`409 Conflict`)
-   rather than silently overflowing into a neighbouring bin unscanned.
-3. **Reservations are revocable, not hard allocations.** `Reservation.Revoke()`
-   is the compensable step — no distributed transaction, no lock held across
-   the physical operation. Revoking returns quantity to usable immediately,
-   to exactly the `StockUnit`s it came from.
-4. **Reserved quantity never exceeds usable quantity, at reserve time.**
-   Checked twice — once summed across the SKU in the use case, once again
-   per-unit inside the aggregate — before anything is mutated.
-5. **Usable inventory = on-hand minus reserved minus held/unlocated,** exposed
-   explicitly as `GET /inventory/{sku}/usable` rather than left for callers to
-   derive. `UNLOCATED`/`REMOVED` stock always contributes zero.
-6. **No double-consume.** `ACTIVE` is the only reservation status with
-   outgoing transitions; revoking, confirming, or expiring an
-   already-resolved reservation is rejected (`409`), because doing so twice
-   would return quantity to usable twice — inventing stock.
-7. **Loss is explicit, never silent.** A cycle-count shortfall marks the
-   affected `StockUnit`s `UNLOCATED` and emits `DiscrepancyDetected`; an
-   overage is reported but never auto-reconciled upward, because inventing
-   stock to match an overage would corrupt the ledger.
+| Decision | Source |
+| --- | --- |
+| Chaotic (random) stow, no fixed slotting; a stow needs both scans. | ADR 0002, `stock.ErrStowRequiresItemAndLocation` |
+| Reserve against **usable**, SKU-scoped and first-fit across bins; never bin-scoped. | ADR 0003, `ReserveStock.allocate` |
+| Reservations are revocable and expire after a timeout (default 30 min); expiry is lazy, on the next read. | ADR 0003, `DefaultReservationTimeout`, `expireIfDue` |
+| A retry for the same `(demandRef, sku, quantity)` returns the existing ACTIVE reservation. | `isReplayOf` |
+| Cycle-count shortfall marks whole units Unlocated; overage is reported, never auto-reconciled. | `RunCycleCount` |
+| This context owns product classification; placement rules are fail-open for unclassified SKUs and unknown bins, fail-closed only when a classified SKU's lookup fails. | ADR 0009 |
+| DOT segregation uses a 9 × 9 class-level matrix with four documented simplifications. | ADR 0010, `product.Incompatible` |
+| Bins are registered declaratively over REST; registration raises no event. | ADR 0025 |
+| Only `StockReserved` and `ReservationRevoked` are integration events. | `kafka.Publisher.Encode`, `apis/asyncapi.yaml` |
+| Zone data comes from facility-layout's events into a local cache, not a per-stow call. | ADR 0013 |
+| No authentication on REST or MCP. | ADR 0015 |
 
 ## Assumptions
 
-- `facility-layout`'s `LocationCode` values and this service's `BinId` values
-  identify the same physical location when they share the same string
-  (`A-1-1`) — a documented simplification, not a guaranteed permanent
-  contract; a future divergence between the two contexts' coding schemes
-  would silently degrade into unexplained fail-opens.
-- Kafka delivery is at-least-once and unordered (no partition key); every
-  consumer is assumed to deduplicate on `(source, id)` / `event_id` and to
-  tolerate reordering.
-- `wes-work-planning` will remain a pure Conformist to this service's
-  Published Language and never request write access to a `StockUnit`, `Bin`,
-  or `Reservation`.
-- Bins are registered declaratively over REST by inventory control
-  (`PUT /bins/{binId}`, ADR-0025) rather than created implicitly by the
-  first stow; there is no assumption that `facility-layout` validates
-  bin existence for anything other than the narrow hazmat/temperature
-  placement check.
+- A `BinId` is directly usable as a facility-layout `LocationCode`
+  (documented simplification in `ports.LocationClassificationLookup`).
+- `demandRef` identifies one order line; the caller keeps it stable across
+  retries (order-management derives its `Idempotency-Key` from order id and
+  line number).
+- Downstream consumers dedupe on the CloudEvents `id` and tolerate
+  at-least-once, per-reservation-ordered delivery (ADR 0021).
+- Reservation read traffic is high enough that lazy expiry reclaims stale
+  holds in practice.
+- facility-layout publishes every zone and slot change; an empty cache means
+  every stow fails open.
+- A `StockUnit` never changes bin, so `Allocation.BinID` stays valid.
 
 ## Verification Metrics
 
-- **≥90% domain + application test coverage**, enforced as a blocking CI gate.
-- **A `gremlins` mutation-testing pass over `internal/domain/...`** — a fast
-  subset blocking in CI, an exhaustive pass scheduled.
-- **Zero arch-go fitness-test violations** (the hexagonal dependency rule,
-  checked as an executable test on every push).
-- **Every one of the four named invariants** (stow requires item+location,
-  bin-capacity rejection, reservation ≤ usable, revoke returns to usable) has
-  a passing failing-path test at both the domain and use-case level, plus a
-  black-box Gherkin scenario.
-- **p95 event-to-report lag < 30s** for the analytical Inventory Flow &
-  Accuracy projection (the freshness SLA the analytics side is held to).
-- **`api-lint` (Spectral) passing** against both `apis/openapi.yaml` and
-  `apis/asyncapi.yaml` on every push and pull request.
-- **Standard fleet telemetry** — Go-runtime metrics, HTTP RED metrics and
-  the `inventory.reservations` business counter (attribute `outcome`); this
-  service is the reference implementation of the fleet-wide convention
-  ([ADR-0016](https://github.com/claudioed/inventory-storage/blob/develop/docs/docs/adr/0016-standard-metrics-convention.md)).
+| Metric | Source |
+| --- | --- |
+| `inventory.reservations` counter by `outcome` (`created`, `revoked`) | `internal/adapters/outbound/telemetry/metrics.go` |
+| `http.server.request.duration`, `http.server.active_requests` | `otelchimetric` middleware (ADR 0016) |
+| `circuit_breaker.state` gauge per dependency | `telemetry/circuit_breaker_metrics.go` (ADR 0020) |
+| Flow & Accuracy counters per SKU/bin/hour — `discrepanciesDetected`, `unlocatedCount`, `reservationsExpired` vs `reservationsCreated` | `GET /reports/flow-accuracy` |
+| Projection freshness `lagSeconds` | `GET /reports/flow-accuracy/freshness` |
+| Quality gates: 90% coverage on domain + application, blocking `mutation-fast`, `arch-test`, `bdd`, `contract` | `.github/workflows/ci.yml` |
 
 ## Open Questions
 
-Real, disclosed gaps from this context's own documentation — not invented:
-
-- **No expiry sweeper.** `Reservation.Expire()` and the `ReservationExpired`
-  event are modelled and unit-tested, but nothing calls them on a timer. The
-  timeout is enforced only lazily (`Confirm` refuses an expired reservation),
-  so a reservation nobody revokes keeps holding quantity out of usable
-  indefinitely until something issues `DELETE /reservations/{id}`.
-- **CloudEvents 1.0 is the only envelope.** The Kafka adapter emits, and
-  the facility-layout cache consumer accepts, only CloudEvents 1.0
-  structured mode (the [Event Standard](/strategic-design/event-standard-cloudevents));
-  there is no legacy flat envelope.
-- **Publish failures fail the request.** A broker outage surfaces as a `500`
-  on the triggering HTTP call; a transactional outbox would decouple request
-  success from broker availability and is not built (the Postgres `events`
-  table written in `log` mode has no relay to Kafka).
-- **No authentication on any surface.** REST and MCP are unauthenticated by
-  deliberate decision since ADR-0015, which removed ADR-0014's bearer-key
-  layer; re-adopting auth means adopting the fleet's next iteration of that
-  decision.
-- **The `BinId`-as-`LocationCode` simplification is undocumented anywhere in
-  code** — only in the ADR and this canvas. If the two contexts' coding
-  schemes ever diverge, the hazmat/temperature placement check would silently
-  start consulting the wrong location.
-- **Explosives sub-compatibility (49 CFR §177.848(f) groups A-L/S) is not
-  modelled.** The same-bin DOT segregation check treats Class 1 (explosives)
-  as incompatible with *every* class, including another Class 1 of a
-  genuinely compatible group — conservative, but strictly more restrictive
-  than the real regulation for warehouses that need fine-grained
-  co-storage.
-- **`ClassifyProduct`'s idempotent-replace has no audit trail.**
-  Re-classifying a SKU simply overwrites its prior classification; there is
-  no history of what a SKU used to be classified as.
-- **General location validity against `facility-layout` is not built.**
-  `StowStock`'s location-scan check still only confirms the bin exists in
-  this service's own `LocationRepo`; the one live cross-context read is
-  narrowly scoped to hazmat/temperature placement for classified SKUs only.
+- Should a background job reclaim reservations that time out and are never
+  read again? Today they hold quantity until read or revoked.
+- Should `ProductClassified` be published so siblings stop polling
+  `GET /products/{sku}/classification`?
+- Should `StowStock` validate a bin against facility-layout's slot catalogue,
+  not only against its own `LocationRepo`?
+- Who should call `POST /reservations/{id}/confirm-pick` in production?
+  No sibling context does.
+- Should the reservation replay guard become a database constraint, closing
+  the concurrent first-attempt race?
+- Placement rules for `Fragile`, `Oversized` and `HighValue` are unbuilt —
+  in this context or in facility-layout's `PlacementRule`?

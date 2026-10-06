@@ -1,126 +1,170 @@
 ---
 id: domain-events
-title: Domain Events
-sidebar_label: Domain Events
-description: The three past-tense domain events this context creates from its own scoring — LaborStandardDefined, LaborStandardRevised, TaskPerformanceRecorded — and who actually consumes them today.
+title: Domain events
+sidebar_label: Domain events
+description: Every event Labor Performance publishes and consumes — full CloudEvents type, topic, partition key, dataschema, payload fields, producing use case and known consumers.
 ---
 
-# Domain Events
+# Domain events
 
-Labor Performance publishes three past-tense domain events, all raised
-from two of its aggregates (`LaborStandard` and `TaskPerformance`; the
-third aggregate, `IdlePeriod`, raises no event of its own — its gap
-travels on `TaskPerformanceRecorded`, below). None
-of them is triggered by anything this context consumes from Kafka in
-turn — they are the *output* of scoring, not an echo of the input.
+:::info[Synced from labor-performance]
+This page is a copy of [`docs/docs/ddd/domain-events.md`](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/ddd/domain-events.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-## The catalogue
 
-| Event | Raised by | When published | Consumed by |
-| --- | --- | --- | --- |
-| `LaborStandardDefined` | `LaborStandard` aggregate | The **first** `DefineStandard` call for a `TaskType` that has never had an active standard before. | No other bounded context today. Reaches `warehouse.labor-performance.analytics` (ADR-0007) once `EVENT_PUBLISHER=kafka` is set, feeding this service's own analytical projector. |
-| `LaborStandardRevised` | `LaborStandard` aggregate | A `DefineStandard` call for a `TaskType` that **already** has an active standard — closes the prior record's effective range and opens a new one. | Same as above — own analytics projector only. |
-| `TaskPerformanceRecorded` | `TaskPerformance` aggregate | Every successful `RecordTaskPerformance` call, **including** unscorable (`EfficiencyPct = nil`) and unmeasurable (`ActualSeconds = 0`) rows — the event fires whether or not the task was scoreable, because "recorded" and "scored" are different facts. | Reaches `warehouse.labor-performance.analytics` (this service's own projector) as above, **and**, since ADR 0013, also reaches a second, dedicated integration topic — `warehouse.labor-performance.events` — this context's first Open-Host-Service Published Language for another bounded context. `workforce-management` is the intended and actual first consumer, building an event-fed local cache for `ProposePathPlan`'s measured-rate enrichment. |
+Every Kafka message this service produces or consumes is a **CloudEvents
+1.0 event in structured content mode** (ADR 0021): the whole event —
+attributes and `data` — is the JSON message value, and the Kafka header
+`content-type` is `application/cloudevents+json; charset=UTF-8`. Events
+are built and decoded only by `internal/adapters/kafka/cloudevents`
+(sdk-go v2 `event`); transport is kafka-go. There is no flat envelope and
+no binary mode.
 
-## Additive field: `IdleSecondsBefore` (ADR 0014)
+Attributes set on every published event (`cloudevents.New`):
 
-Since [ADR 0014](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0014-labor-utilization-idleness.md),
-`TaskPerformanceRecorded` carries one more field on the SAME event, the SAME
-topics, with no new event type and no new topic: `IdleSecondsBefore *int64`
-(`idle_seconds_before` on the wire) — the measured idle gap between the
-associate's previous completion and this task's claim instant, derived
-entirely from data this service already consumes (`ClaimedAt = CompletedAt −
-DurationSeconds` on the existing `TaskCompleted` payload).
+| Attribute | Value |
+|---|---|
+| `specversion` | `1.0` |
+| `id` | a fresh UUID per encoded message — the consumer's dedupe key |
+| `source` | `/warehouse/labor-performance` |
+| `type` | `com.warehouse.wes.labor-performance.<entity>.<EventName>` |
+| `subject` | the aggregate instance (see each event) — never empty |
+| `time` | the domain event's `OccurredAt`, UTC |
+| `datacontenttype` | `application/json` |
+| `dataschema` | `urn:warehouse:labor-performance:<stream>:<EventName>:v1`, stream = `analytics` or `events` |
 
-This mirrors `EfficiencyPct`'s existing nullable-pointer discipline exactly:
-`nil` is a real business fact, never a fabricated `0`, and it means one of
-three distinct things —
+The domain event is raised inside the use case's unit of work. With
+`EVENT_PUBLISHER=kafka` and `DATABASE_URL` set it is encoded into
+`outbox_events` in the same transaction and published by the outbox
+relay (ADR 0010); with `EVENT_PUBLISHER=kafka` and no database it is
+written straight to Kafka; by default (`EVENT_PUBLISHER=log`) it is only
+logged.
 
-- **no prior completion** — this associate's first-ever observation, so
-  there is nothing to measure a gap from;
-- **a negative or zero gap** — routine under Kafka's unordered,
-  at-least-once delivery (a "next" claim landing at or before the previous
-  completion is normal, not exceptional), so the observation is skipped
-  rather than recorded as a nonsensical negative idle time;
-- **an empty `AssociateId`** — a robot-occupied station, which this service
-  already treats as a legitimate, non-error case elsewhere.
+## Published
 
-A recorded (non-nil) gap is capped at `IDLE_GAP_CAP_SECONDS` (default 3600)
-so a gap spanning a shift boundary cannot silently poison a downstream
-running total, without this context modeling shifts itself. This is
-strictly additive on the wire: the field is opt-in for any consumer, exactly
-as `EfficiencyPct` was when it shipped, and the existing
-`warehouse.fulfillment.events` inbound consumption contract is unchanged.
-`workforce-management`'s `laborperformancecache` (ADR 0019 / ADR 0020) is
-the live first consumer of the field, feeding a running idle-share signal
-alongside its pre-existing measured-rate mean.
+### LaborStandardDefined
 
-## Additive field: `TravelComponentSeconds` (ADR 0015)
+| | |
+|---|---|
+| CE type | `com.warehouse.wes.labor-performance.standard.LaborStandardDefined` |
+| Topic | `warehouse.labor-performance.analytics` only |
+| Partition key | `task_type` |
+| `subject` | the new `standard_id` |
+| `dataschema` | `urn:warehouse:labor-performance:analytics:LaborStandardDefined:v1` |
+| Producer | `DefineStandard` when no standard was open for the task type |
+| Consumers | this repo's `cmd/labor-projector` (counts `standards_defined`) |
 
-Since [ADR 0015](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0015-optional-travel-component-on-labor-standard.md),
-`LaborStandardDefined` and `LaborStandardRevised` carry an optional,
-caller-supplied travel-time breakdown of the standard
-(`travel_component_seconds` on the analytics topic), omitted entirely —
-never defaulted to `0` — when none was declared. It is the value the
-caller supplied to `DefineStandard`; this service never computes or
-validates it against facility-layout or any other live lookup.
+| Field | Type | Notes |
+|---|---|---|
+| `standard_id` | string | `shared.StandardId` |
+| `task_type` | string | `PICK`, `PACK` or `SLAM` |
+| `expected_seconds` | integer | > 0 |
+| `effective_from` | RFC 3339 timestamp | |
+| `travel_component_seconds` | integer | **omitted** when the standard declares none (ADR 0015) |
 
-## How this maps to `apis/asyncapi.yaml`
+### LaborStandardRevised
 
-The spec documents three channels and five messages: the consumed
-`TaskCompleted` on `warehouse.fulfillment.events`; `LaborStandardDefined`,
-`LaborStandardRevised` and `TaskPerformanceRecorded` on
-`warehouse.labor-performance.analytics`; and
-`TaskPerformanceRecordedIntegration` — the SAME `TaskPerformanceRecorded`
-domain event with the integration `dataschema`
-(`urn:warehouse:labor-performance:events:TaskPerformanceRecorded:v1`,
-keyed by `AssociateId`; every channel is CloudEvents 1.0 per the
-[Event Standard](/strategic-design/event-standard-cloudevents)) — on `warehouse.labor-performance.events`.
+| | |
+|---|---|
+| CE type | `com.warehouse.wes.labor-performance.standard.LaborStandardRevised` |
+| Topic | `warehouse.labor-performance.analytics` only |
+| Partition key | `task_type` |
+| `subject` | the new `standard_id` |
+| `dataschema` | `urn:warehouse:labor-performance:analytics:LaborStandardRevised:v1` |
+| Producer | `DefineStandard` when an open standard was closed |
+| Consumers | this repo's `cmd/labor-projector` (counts `standards_revised`) |
 
-## Published, but not (yet) integration events for anyone else
+| Field | Type | Notes |
+|---|---|---|
+| `standard_id` | string | the **new** standard's id |
+| `task_type` | string | |
+| `previous_expected_seconds` | integer | from the closed standard |
+| `expected_seconds` | integer | the new value (`NewExpectedSeconds` in Go) |
+| `effective_from` | RFC 3339 timestamp | also the instant the prior standard closed |
+| `travel_component_seconds` | integer | the new standard's value; omitted when none |
 
-`LaborStandardDefined` and `LaborStandardRevised` are published via a
-**log publisher by default** — the default `EVENT_PUBLISHER` setting
-emits them to structured logs only, not to Kafka. Setting
-`EVENT_PUBLISHER=kafka` additionally fans them out to a **dedicated
-analytics topic**, `warehouse.labor-performance.analytics`, consumed by
-this service's **own** `cmd/labor-projector` binary — never by another
-bounded context.
+### TaskPerformanceRecorded (analytics)
 
-`TaskPerformanceRecorded` is different, as of ADR 0013: it is the ONE
-event this service now publishes onto a **second, dedicated integration
-topic** — `warehouse.labor-performance.events` — kept strictly separate
-from the analytics topic above so the two streams (an Open-Host-Service
-Published Language for other bounded contexts, vs. an internal feed for
-this repo's own projector) evolve independently. Before this topic
-existed, `labor-performance` was the fleet's **only pure event sink**:
-every other bounded context both consumed AND published at least one
-integration event; this one consumed `TaskCompleted` and published
-nothing any sibling service could subscribe to. That is no longer true.
-Publishing to the integration topic is opt-in via `EVENT_PUBLISHER=kafka`,
-the same flag that gates the analytics topic — this is strictly additive
-and does not touch the inbound `warehouse.fulfillment.events` consumption
-contract.
+| | |
+|---|---|
+| CE type | `com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded` |
+| Topic | `warehouse.labor-performance.analytics` |
+| Partition key | `task_type` (empty string when unclassified) |
+| `subject` | `associate_id`, or `task_id` when there is no associate |
+| `dataschema` | `urn:warehouse:labor-performance:analytics:TaskPerformanceRecorded:v1` |
+| Producer | `RecordTaskPerformance` (Kafka-driven only) |
+| Consumers | this repo's `cmd/labor-projector` |
 
-`workforce-management` is `warehouse.labor-performance.events`'s live,
-actual first consumer (ADR 0019 on that repo), replacing what was
-previously a synchronous `GET /task-types/{taskType}/performance` call
-from `ProposePathPlan` with a local, event-fed running-mean cache.
+### TaskPerformanceRecorded (integration)
 
-## Why the events stay thin, and why the analytical read model doesn't fabricate numbers
+| | |
+|---|---|
+| CE type | `com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded` (same type) |
+| Topic | `warehouse.labor-performance.events` (ADR 0013) |
+| Partition key | `associate_id` (empty string for a robot station) |
+| `subject` | `associate_id`, or `task_id` when there is no associate |
+| `dataschema` | `urn:warehouse:labor-performance:events:TaskPerformanceRecorded:v1` |
+| Producer | `RecordTaskPerformance` |
+| Consumers | `workforce-management` (`internal/adapters/outbound/laborperformancecache/consumer.go`, `LABOR_PERFORMANCE_MODE=kafka-cache`) |
 
-`TaskPerformanceRecorded` carries the same discipline the aggregate
-itself enforces: it does not average a `null` `EfficiencyPct` into a
-zero, and the downstream analytical read model (the "Labor Performance
-Report," per `TaskType` × UTC-hour bucket) tracks `tasksRecorded`,
-`tasksScored`, and `tasksMeasured` as **separate** counters rather than
-one, so "an hour with tasks but nothing scorable" reports as `null`, not
-`0.0`. This is ADR-0004's never-fabricate-a-number rule restated on the
-publishing and analytics side. See
-[ADR 0007](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0007-analytical-data-product.md)
-for the full analytical data product design.
+Both `TaskPerformanceRecorded` messages carry the same `data`, but each is
+a separate CloudEvent with its own `id`:
 
-See [Async API](./async-api) for the one live, *inbound* Kafka
-integration this context has — consuming `TaskCompleted` from
-`fulfillment-execution` — which is a separate topic and a separate
-direction from the events on this page.
+| Field | Type | Notes |
+|---|---|---|
+| `task_id` | string | `fulfillment-execution`'s task id |
+| `associate_id` | string | empty when the station had no checked-in occupant |
+| `task_type` | string | `PICK`, `PACK`, `SLAM` or empty (unclassified) |
+| `efficiency_pct` | number or null | null when unscorable — never 0 |
+| `actual_seconds` | integer | the upstream `duration_seconds`; 0 when unmeasurable |
+| `idle_seconds_before` | integer or null | additive (ADR 0014); null on first observation, empty associate or out-of-order gap |
+| `completed_at` | RFC 3339 timestamp | the consumed event's `time` |
+
+## Consumed
+
+### TaskCompleted (from fulfillment-execution)
+
+| | |
+|---|---|
+| CE type | `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` |
+| Topic | `warehouse.fulfillment.events` (shared, fan-out with `wes-work-planning`) |
+| Consumer group | `labor-performance` (`KAFKA_CONSUMER_GROUP`) |
+| Dedupe | CloudEvents `id`, via `processed_events` |
+| Handler | `inbound/kafka.Consumer.handleFulfillmentEvent` → `RecordTaskPerformance` |
+| Failure | invalid CloudEvent, or 3 failed attempts → `warehouse.fulfillment.events.dlq` |
+
+| Field read | Maps to |
+|---|---|
+| `id` (attribute) | `KafkaEventId` |
+| `time` (attribute) | `CompletedAt` |
+| `data.task_id` | `TaskId` |
+| `data.associate_id` | `AssociateId` (empty allowed) |
+| `data.duration_seconds` | `ActualSeconds` (0 allowed) |
+| `data.task_type` | `TaskType` via `shared.ParseTaskTypeLenient` |
+
+`data.station_id` and `data.work_unit_id` are decoded but unused. Every
+other CloudEvents type on the shared topic is committed and ignored.
+
+### Own analytics events (projector)
+
+`cmd/labor-projector` consumes `warehouse.labor-performance.analytics`
+with group `labor-performance-analytics` from the earliest offset, and
+folds the three types above into `labor_performance_rollup`. It reads
+`task_type`, `expected_seconds`, `effective_from`, `actual_seconds`,
+`efficiency_pct` and `completed_at`; an empty `task_type` becomes
+`UNCLASSIFIED`.
+
+## Dead-letter topic
+
+`warehouse.fulfillment.events.dlq` receives the **original** message
+bytes and headers plus `x-dlq-source-topic`, `x-dlq-error` and
+`x-dlq-failed-at` (ADR 0017). It is not a CloudEvent of its own and has
+no consumer in the fleet.
+
+Source: `internal/domain/shared/events.go`,
+`internal/adapters/kafka/cloudevents/cloudevents.go`,
+`internal/adapters/outbound/kafka/analytics_publisher.go`,
+`internal/adapters/outbound/kafka/integration_publisher.go`,
+`internal/adapters/inbound/kafka/consumer.go`,
+`internal/adapters/inbound/kafka/analytics_consumer.go`,
+`apis/asyncapi.yaml`, `cmd/labor/main.go`.

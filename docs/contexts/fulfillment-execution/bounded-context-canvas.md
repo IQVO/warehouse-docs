@@ -1,176 +1,171 @@
 ---
 id: bounded-context-canvas
-title: Bounded Context Canvas
-sidebar_label: Bounded Context Canvas
-description: The full ddd-crew Bounded Context Canvas for Fulfillment Execution — purpose, strategic classification, domain roles, inbound/outbound communication, business decisions, assumptions, verification metrics, open questions.
+title: Bounded context canvas
+sidebar_label: Bounded context canvas
+description: The ddd-crew Bounded Context Canvas v5 for Fulfillment Execution — purpose, strategic classification, domain roles, every inbound and outbound message mapped to a real route, MCP tool or Kafka topic, business decisions, assumptions and open questions.
 ---
 
-# Bounded Context Canvas
+# Bounded context canvas
 
-Following the [ddd-crew Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas)
-template.
+:::info[Synced from fulfillment-execution]
+This page is a copy of [`docs/docs/ddd/bounded-context-canvas.md`](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/ddd/bounded-context-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
+
+
+[ddd-crew Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas).
+Every message row maps to a real route in
+`internal/adapters/inbound/http/router.go`, a real MCP tool in
+`internal/adapters/inbound/mcp/`, or a real Kafka topic and CloudEvents type
+in the consumers and publishers.
 
 ## Name
 
-**Fulfillment Execution**
+**Fulfillment Execution** (`fulfillment-execution`, CloudEvents subdomain
+`wes`, `source` `/warehouse/fulfillment-execution`).
 
 ## Purpose
 
-Turn released work into completed physical operations, and make it
-impossible to lose a unit of work in the process. Owns the **task
-lifecycle** for Pick, Pack, Rebin, and SLAM — from a released work unit
-becoming a claimable `Task`, through a station claiming and completing it,
-to the completion fact flowing back to the context that released the work.
+Turn released work into physically completed work on the warehouse floor.
+Each released work unit becomes a `Task` (Pick, Rebin, Pack or SLAM) that a
+station **pulls** when it is free; the context guarantees that a task is
+held by at most one station at a time (a time-boxed lease), that it is done
+by a station with the right capabilities, and that the earliest CPT is
+served first. It also seals packages (with DOT hazard segregation), runs the
+SLAM weigh-check, consolidates an order's lines at Rebin, and reports
+completions and missed CPTs back to planning, labour and order management.
 
 ## Strategic Classification
 
-| Dimension | Verdict | Justification |
+| Dimension | Value | Why |
 | --- | --- | --- |
-| **Domain** | Core | This platform builds and tunes its own execution layer — there is no vendor WES behind an anti-corruption layer here. The reference model is explicit: the WES tier is Core *if* operational efficiency is your differentiator, Supporting/Generic if you consume a vendor WES at arm's length. This platform chose to build `claimNext`, which is only justified under a Core classification. |
-| **Model maturity** | Established | Twenty-six ADRs (one superseded), a documented ubiquitous language, invariant-level failing-path tests, and an executable architecture-fitness suite (`arch-go`) — the deepest decision trail of any context in this fleet. |
-| **Business risk / criticality** | High | Every invariant here — at-most-once claiming, capability matching, lease expiry ordering, no double-complete, seal-requires-contents, SLAM weigh-check tolerance — has a real, expensive-to-unwind failure mode (a duplicate physical pick, a mis-shipped package) if it is wrong. |
-| **Team topology** | Stream-aligned, sole owner | One team owns `internal/domain/`, `internal/application/`, and both inbound/outbound adapters end to end. No shared aggregate with any other context. |
-
-The reference model gives a second, independent line of reasoning that also
-lands on Core: `amazon-fulfillment-ddd.md`'s subdomain table classifies
-**Picking** (task generation, pick-to-light, robot-to-picker) as Core
-outright — "directly drives throughput and accuracy at scale" — while
-classifying Packing and Shipping/SLAM as Supporting. This context spans
-Picking (Core) plus the execution slices of Packing and SLAM (Supporting),
-and is classified by its most valuable part: the task lifecycle and
-dispatch that drive throughput.
+| **Domain** | **Core** | Pull-based dispatch with lease semantics is the throughput differentiator; see [Subdomain classification](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/ddd/subdomain-classification.md) and [Core domain chart](/contexts/fulfillment-execution/core-domain-chart). Pack and SLAM slices are Supporting and kept thin. |
+| **Business model** | **Cost reduction / operational efficiency** | It earns nothing directly; it raises units per hour and on-time-to-CPT shipment, measured by the throughput and on-time-to-CPT reports ([ADR-0026](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0026-on-time-to-cpt-kpi.md)). |
+| **Evolution** | **Custom-built** | Built in-house, still gaining behaviour (claim compare-and-set, Rebin, package read model are recent ADRs). |
 
 ## Domain Roles
 
-| Role | This context's fit |
-| --- | --- |
-| **Execution engine** | Owns a real-time dispatch and claim mechanism (`claimNext`, lease-based at-most-once claiming) — not a passthrough, not a CRUD layer. |
-| **Anti-corruption gateway** | Translates `WorkReleased` at its inbound boundary into its own vocabulary (`task.Type`, `shared.OrderRef`, `shared.CPT`, `shared.CapabilitySet`) — no upstream struct crosses the line. |
-| **Feedback publisher** | Closes the drum-buffer-rope loop back to `wes-work-planning` via `TaskCompleted` — without this edge the conductor releases work into a void — and feeds `order-management`'s promise loop via `TaskCPTMissed` / `PackageManifested`. |
+- **Execution context** — owns the task lifecycle (Pending → Claimed →
+  Completed) and the claim/lease rules.
+- **Enforcer** — enforces at-most-once claiming, capability matching, DOT
+  segregation and the SLAM weigh tolerance.
+- **Gateway to the floor (strategic)** — the only context that would talk to
+  equipment (WCS), behind a deliberately empty anti-corruption seam
+  ([ADR-0015](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0015-wcs-equipment-anti-corruption-seam.md)).
+- **Analysis context (side role)** — owns its own throughput and
+  on-time-to-CPT read model (`cmd/fulfillment-projector`,
+  `cmd/fulfillment-reports`).
 
 ## Inbound Communication
 
-| From | Event / Call | Effect here |
-| --- | --- | --- |
-| `wes-work-planning` | `WorkReleased` (Kafka, `warehouse.work-planning.events`) | Translated via the Anti-Corruption Layer and passed to the existing `CreateTask` use case — a released unit becomes a `Task` in the pool. Idempotent on `event_id` via `ProcessedEvents.MarkProcessed`. |
-| `warehouse-ops-agent` | `GET /tasks?orderRef=` (HTTP, read-only) | A read-only fan-out query backing the fleet's cross-service Order Lifecycle console screen. Side-effect-free; this service is one of several the agent stitches together per order, and each stage degrades independently. |
-| `workforce-management` | `GET /capacity/{capability}` (HTTP, read-only) | Returns how many registered stations can serve a capability, so shift plans are bounded by physical station count ([ADR-0018](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0018-installed-capacity-read-endpoint.md)). An Open Host read of the `Station` pool — no shared type, no roster. |
-| `process-path-management` | `ProcessPathCreated` / `Updated` / `Deactivated` (Kafka, `warehouse.process-path-management.events`) — **only with `PATH_CATALOGUE_SOURCE=kafka`** (default `file` loads the same catalogue from YAML) | Replayed into the in-memory process-path catalogue the `WorkReleased` ACL resolves `path_id` against ([ADR-0017](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0017-process-path-catalogue-as-configuration.md)). |
-| Any REST / MCP caller | REST API and MCP tools (e.g. `find_claimable_work`, `get_queue_status`, `diagnose_stuck_tasks`, `complete_task`, `get_fulfillment_throughput_report`, `get_on_time_to_cpt`) | **Unauthenticated by deliberate decision** — the static-bearer layer was removed and ADR-0021 superseded ([ADR-0022](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0022-remove-rest-mcp-auth.md)). |
+| Collaborator | Message | Type | Channel | Relationship |
+| --- | --- | --- | --- | --- |
+| `wes-work-planning` | `WorkReleased` | Event | Kafka `warehouse.work-planning.events`, `com.warehouse.wes.work-planning.workunit.WorkReleased` | Customer/Supplier, ACL on this side |
+| `process-path-management` (opt-in) | `ProcessPathCreated` / `ProcessPathUpdated` / `ProcessPathDeactivated` | Event | Kafka `warehouse.process-path-management.events`, `com.warehouse.wes.process-path-management.processpath.*` (only with `PATH_CATALOGUE_SOURCE=kafka`) | Conformist on a Published Language |
+| Station client / console | Create task | Command | REST `POST /tasks` (`Idempotency-Key` with Postgres) | OHS |
+| Station client / console | Register station | Command | REST `POST /stations` | OHS |
+| Station client | Claim next task | Command | REST `POST /stations/{stationId}/claim-next` | OHS |
+| Station client | Check in / check out | Command | REST `POST /stations/{stationId}/check-in`, `POST /stations/{stationId}/check-out` | OHS |
+| Station client | Renew lease | Command | REST `POST /tasks/{id}/renew-lease` | OHS |
+| Station client | Complete task | Command | REST `POST /tasks/{id}/complete` | OHS |
+| Pack station | Seal package | Command | REST `POST /tasks/{id}/seal-package` | OHS |
+| SLAM station | Run SLAM weigh-check | Command | REST `POST /packages/{id}/slam` | OHS |
+| Rebin station | Record arrival at Rebin | Command | REST `POST /rebin/arrivals` | OHS |
+| Scheduler (external) | Expire leases | Command | REST `POST /tasks/expire-leases` | OHS |
+| Scheduler (external) | Sweep CPT misses | Command | REST `POST /tasks/sweep-cpt-misses` | OHS |
+| `warehouse-ops-agent` / console BFF | Tasks for an order | Query | REST `GET /tasks?orderRef=` | OHS |
+| SLAM client / console | Package by id, packages for an order | Query | REST `GET /packages/{id}`, `GET /packages?orderRef=` | OHS |
+| Any client | Queue depth | Query | REST `GET /queues/{taskType}/depth` | OHS |
+| `workforce-management` | Installed capacity | Query | REST `GET /capacity/{capability}` | OHS |
+| `warehouse-ops-agent` | Queue status, claimable work, stuck tasks | Query | MCP `get_queue_status`, `find_claimable_work`, `diagnose_stuck_tasks`; resource `queue://fulfillment/{type}/status`; prompt `triage_backlog` | OHS |
+| `warehouse-ops-agent` | Complete task | Command | MCP `complete_task` | OHS |
+| `warehouse-ops-agent` | Throughput / on-time-to-CPT report | Query | MCP `get_fulfillment_throughput_report`, `get_on_time_to_cpt` (when `REPORTS_BASE_URL` is set), served by REST `GET /reports/throughput` on `cmd/fulfillment-reports` | OHS |
 
 ## Outbound Communication
 
-| To | Event / Call | Status |
-| --- | --- | --- |
-| `wes-work-planning` | `TaskCompleted` (Kafka, `warehouse.fulfillment.events`) | **Wired.** Enriched at the adapter with `work_unit_id` (via a `TaskRepo` lookup of `OrderRef()`) so Work Planning can call `RecordCompletion(workUnitId)` directly. |
-| `labor-performance` | `TaskCompleted` (Kafka, **same** `warehouse.fulfillment.events` fan-out topic) | **Wired**, as a second, independent Conformist consumer of the identical event — enriched additionally with `associate_id` and `duration_seconds`, resolved at publish time via `StationRepo` and `Task.ClaimedAt()`, plus `task_type` read off the task ([ADR-0023](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0023-task-type-on-wire.md)). |
-| `order-management` | `TaskCPTMissed`, `PackageManifested` (Kafka, **same** topic) | **Wired.** Its `RepromiseOrder` consumer closes the promise feedback loop. `TaskCPTMissed` is raised by `POST /tasks/sweep-cpt-misses` for every task still open at or past its CPT; `PackageManifested` alongside `LabelApplied` on a SLAM pass ([ADR-0025](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0025-cpt-missed-sweep-and-package-manifested.md)). |
-| `inventory-storage` | `GET /products/{sku}/classification` (HTTP, at seal time) | **Opt-in** (`PRODUCT_CLASSIFICATION_MODE=http`; default `permissive` skips the lookup). Supplies each scanned SKU's DOT hazard class for package segregation ([ADR-0010](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0010-package-segregation-and-sort-lane.md)). |
-| `facility-layout` | `GET /locations/{locationCode}` (HTTP, at `RegisterStation`) | **Opt-in** (`LOCATION_ROLE_MODE=http`; default `permissive` records a supplied `locationCode` unchecked). Rejects a station whose location resolves to a **known** non-WorkCenter role; fails open on everything else ([ADR-0024](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0024-station-location-code-and-workcenter-role-check.md)). |
-| WCS / equipment | Device commands (divert, label-print, weigh-check) | **Planned, not wired.** `ports.EquipmentCommandPort` exists as a structural, deliberately empty outbound port — no adapter, no callable methods — so the documented refusal to drive equipment directly is a compile-time seam, not only prose in `openapi.yaml` and the context map. |
+| Collaborator | Message | Type | Channel | Relationship |
+| --- | --- | --- | --- | --- |
+| `wes-work-planning` | `TaskCompleted` | Event | Kafka `warehouse.fulfillment.events`, `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` | Customer/Supplier feedback edge |
+| `labor-performance` | `TaskCompleted` (with `associate_id`, `duration_seconds`, `task_type`) | Event | Kafka `warehouse.fulfillment.events`, `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` | Published Language |
+| `order-management` | `TaskCPTMissed` | Event | Kafka `warehouse.fulfillment.events`, `com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed` | Published Language |
+| `order-management` | `PackageManifested` | Event | Kafka `warehouse.fulfillment.events`, `com.warehouse.wes.fulfillment-execution.package.PackageManifested` | Published Language |
+| own analytics read side | 10 analytics events (`TaskCreated`, `TaskClaimed`, `LeaseExpired`, `TaskCompleted`, `ItemPicked`, `PackageSealed`, `WeightDiscrepancyDetected`, `PackageDiverted`, `LabelApplied`, `PackageManifested`) | Event | Kafka `warehouse.fulfillment.analytics`, `com.warehouse.wes.fulfillment-execution.<task or package>.<Event>` | internal (same context) |
+| `inventory-storage` (opt-in) | Product classification lookup | Query | REST `GET /products/{sku}/classification` (`PRODUCT_CLASSIFICATION_MODE=http`) | Customer/Supplier, ACL on this side |
+| `facility-layout` (opt-in) | Location role lookup | Query | REST `GET /locations/{locationCode}` (`LOCATION_ROLE_MODE=http`) | Conformist behind ACL |
+| `wes-work-planning` (operators) | Poison or failed `WorkReleased` | Event | Kafka `warehouse.work-planning.events.dlq` (`EVENT_PUBLISHER=kafka`) | — |
+| WCS / equipment | none | — | none — `ports.EquipmentCommandPort` has no methods | strategic only |
 
 ## Ubiquitous Language
 
-See the dedicated [Ubiquitous Language](/contexts/fulfillment-execution/ubiquitous-language) page for the
-full glossary (Task, `claimNext`, Lease, Station, Fragile, Gift wrap, and
-the rest). The single most important entry on that page is the careful,
-deliberate distinction between **Fragile** (sourced from
-`inventory-storage`'s `ProductClassification`, stamped by `wes-work-planning`
-at release time) and **Gift wrap** (a caller-stated fact about the released
-work itself, with no product-classification origin at all) — both are
-packing-care hints that never gate claiming, and both are explicitly unlike
-**Hazmat**, which is a real station-capability gate.
+The full glossary is on [Ubiquitous language](/contexts/fulfillment-execution/ubiquitous-language).
+Top terms:
+
+- **Task** — a unit of physical work with a type, a CPT and required
+  capabilities.
+- **claimNext** — pull dispatch: the station asks, the context answers with
+  the earliest-CPT task it can do.
+- **Lease** — a time-boxed claim (5 minutes by default) that returns the task
+  to the pool on expiry.
+- **CPT** — Critical Pull Time, the deadline that sets priority.
+- **Station / Capability** — a work position and what it is certified and
+  equipped for.
+- **Package / Seal / SLAM** — the Pack output, closing it, and the
+  weigh-check that labels or diverts it.
+- **Rebin / OrderConsolidation** — fan-in of an order's lines before Pack.
 
 ## Business Decisions
 
-- **Lease-based at-most-once claiming, not a hard lock.** A claim is a
-  time-boxed, renewable lease rather than a database row lock held for the
-  duration of physical work. A hard lock's lifetime would be a
-  transaction's lifetime, and the work here takes minutes of physical
-  activity — holding a transaction open across a human walking down an
-  aisle is not viable, and it fails outright under the in-memory adapter.
-  Default duration 5 minutes; renewal is a first-class operation, not an
-  escape hatch.
-- **Pull dispatch (`claimNext`), never push (`assign`).** The system never
-  names a station in advance. Selection policy — earliest-CPT-first,
-  filtered by capability match — lives entirely in one repository query,
-  which is deliberate: it is the one place any future dispatch
-  sophistication has to be expressed.
-- **Fragile / Hazmat / Gift wrap handling flags, each a different category
-  of concern.** Fragile and Gift wrap are packing-care hints that never
-  gate claiming. Hazmat is a real capability gate enforced through the
-  existing, unmodified `CapabilitySet.HasAll` mechanism — no new structural
-  code path was needed for it. Package-level DOT hazard segregation is
-  looked up **live**, per scanned SKU, at seal time — not stamped on `Task`
-  at release time — because a Pack task's actual contents are only known at
-  the scan station.
-- **Domain events stay deliberately thin.** Almost every event carries only
-  aggregate identifiers (the ADR-0025 pair add just the `order_ref`,
-  `task_type` and `cpt` order-management needs). Integration-specific enrichment (`work_unit_id`,
-  `associate_id`, `duration_seconds`) happens in the outbound Kafka adapter
-  via repository lookups, never on the domain event itself — so a
-  downstream consumer's correlation need never reshapes the domain model.
-- **A structural, unimplemented ACL seam for WCS**, rather than either
-  leaving the boundary as prose-only or speculatively designing a rich
-  equipment command API with no real hardware to validate it against.
+- Dispatch is **pull, never push** — there is no `assign(task, station)`
+  ([ADR-0002](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0002-pull-based-claimnext-dispatch.md),
+  [Why pull, not push](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/business-context/why-pull-not-push.md)).
+- Priority is **earliest CPT first**, nothing else.
+- A task is claimed **at most once at a time**; a lapsed lease silently
+  returns it to the pool
+  ([ADR-0003](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0003-lease-based-at-most-once-claiming.md)).
+- Capabilities are read from the **registered station**, not from the
+  request.
+- A weigh-check outside **±0.05** of the expected weight **diverts** the
+  package — a domain outcome, not an error.
+- Items with incompatible **DOT hazard classes** may not share a package
+  ([ADR-0010](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0010-package-segregation-and-sort-lane.md)).
+- A missed CPT is **reported, not enforced**, and re-reported on every sweep
+  ([ADR-0025](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0025-cpt-missed-sweep-and-package-manifested.md)).
+- The PACK task for a multi-line order is created **once, when the last
+  line reaches Rebin** ([ADR-0016](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0016-rebin-and-order-consolidation.md)).
 
 ## Assumptions
 
-- `wes-work-planning` continues to be the sole producer of `WorkReleased`
-  on `warehouse.work-planning.events`, and continues to encode `path_id`,
-  `work_unit_id`, and `cpt` in the documented shapes.
-- The shared platform broker (in the `warehouse-infra` kind cluster,
-  `localhost:9092` from the host) is reachable at `KAFKA_BROKERS`; this
-  repository's own `docker-compose.yml` intentionally provisions only
-  Postgres.
-- `labor-performance` and `order-management` read the same
-  `warehouse.fulfillment.events` topic `wes-work-planning` already consumes
-  from, each filtering by the full CloudEvents `type` — this service publishes once, to one
-  topic, for all three consumers.
-- Every `path_id` on `WorkReleased` resolves in the process-path catalogue
-  (longest `matchPrefix` wins); an unknown id is a hard error, not a silent
-  `PICK` ([ADR-0017](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0017-process-path-catalogue-as-configuration.md)).
-- Both outbound HTTP lookups default to `permissive` (no network call); the
-  deployed cluster sets the real modes.
-- With `EVENT_PUBLISHER=kafka` and a `DATABASE_URL`, published events are
-  written to an outbox table in the same transaction as the aggregate and
-  relayed to both the integration and analytics topics by an in-process
-  relay ([ADR-0020](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0020-transactional-outbox.md)).
+- `wes-work-planning` releases work at the right rate; this context does not
+  throttle intake.
+- An external scheduler calls `POST /tasks/expire-leases` and
+  `POST /tasks/sweep-cpt-misses`; nothing in this repository schedules them.
+- `WorkReleased.data.work_unit_id` is a stable correlation key, reused as
+  `orderRef` and returned as `work_unit_id` on `TaskCompleted`.
+- Hazard classification and location roles fail open: if the lookup is
+  disabled or unavailable, sealing and registration proceed.
+- Downstream consumers deduplicate on the CloudEvents `id` (outbox retries
+  reuse it) and on their own business key for `TaskCPTMissed`.
 
 ## Verification Metrics
 
-| Discipline | Where enforced |
+| Metric | Where |
 | --- | --- |
-| Every invariant has a failing-path unit test | `internal/domain/**/*_test.go` |
-| The hexagonal dependency rule is executable, not just documented | `internal/architecture/architecture_test.go` (arch-go, 5 rules) |
-| Business rules are readable by non-developers | `features/*.feature`, run by godog |
-| Both published contracts (`openapi.yaml`, `asyncapi.yaml`) are linted in CI | Spectral, `api-lint` CI job |
-| Mutation testing on the domain | `gremlins`, on the claim/dispatch path |
-| Idempotent redelivery on the `WorkReleased` consumer | A unit test feeds the same `event_id` twice and asserts exactly one task exists |
+| Completions, lease expiries, weigh-check diverts, claim-to-complete seconds per task type, station and hour | `throughput_rollup` (analytics DB), `GET /reports/throughput` |
+| On-time-to-CPT: packages manifested on time vs late | `throughput_rollup.packages_on_time_cpt` / `packages_late_cpt`, MCP `get_on_time_to_cpt` |
+| Queue depth per task type | `GET /queues/{taskType}/depth`, MCP `get_queue_status` |
+| Report freshness | `GET /reports/throughput/freshness` |
+| OpenTelemetry metrics (task completions, HTTP, Kafka) | `internal/observability/metrics.go` ([ADR-0019](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0019-standard-metrics-convention.md)) |
 
 ## Open Questions
 
-- **The WCS anti-corruption layer is not built.** `ports.EquipmentCommandPort`
-  exists but has no adapter and no callable methods — the boundary is real
-  in the type system, but no equipment integration has been scoped yet.
-- **CloudEvents 1.0 is the only envelope.** Publisher and consumers on
-  `warehouse.fulfillment.events` use CloudEvents 1.0 structured mode
-  exclusively (the [Event Standard](/strategic-design/event-standard-cloudevents)); the
-  earlier dual-envelope migration (ADR-0027) is superseded.
-- **No dead-letter queue on the inbound consumer.** A message that fails to
-  process is logged and dropped; because idempotency is marked *before*
-  task creation, an event whose task creation fails is treated as
-  already-processed on redelivery.
-- **Nothing schedules the sweeps.** `POST /tasks/expire-leases` and
-  `POST /tasks/sweep-cpt-misses` are Clock-driven but externally
-  triggered; their cadence is whatever caller invokes them, and
-  `TaskCPTMissed` re-fires on every pass while a task stays overdue
-  ([ADR-0025](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0025-cpt-missed-sweep-and-package-manifested.md)).
-- **`POST /rebin/arrivals` is on the router but not in `apis/openapi.yaml`**,
-  so generated API docs and drift checks cannot see it — a spec gap still
-  to close.
-- **`AssociateId` on `TaskCompleted` can be stale.** It reflects whichever
-  occupant is checked in *at publish time*, not necessarily whoever
-  performed the task's entire duration — a worker could check out mid-task
-  and a replacement could check in, and the replacement would get
-  attributed. Accepted as a known limitation of a best-effort fact.
+- Should a station have to be **checked in** before it can claim? Today
+  `ClaimNext` ignores occupancy.
+- Should `ItemPicked` be raised (item-level Pick), or removed from the
+  catalogue?
+- Should `ItemArrivedAtRebin` and `OrderConsolidated` be published, and to
+  whom?
+- Who owns the **schedule** for the lease and CPT sweeps in production?
+- When does the WCS seam get its first method, and which vendor protocol
+  does it translate?
+- MCP governance: authentication was removed fleet-wide
+  ([ADR-0022](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0022-remove-rest-mcp-auth.md)); the governance charter
+  §7–§8 remain unmet.

@@ -2,178 +2,154 @@
 id: bounded-context-canvas
 title: Bounded Context Canvas
 sidebar_label: Bounded Context Canvas
-description: The full ddd-crew Bounded Context Canvas for labor-performance — purpose, strategic classification, domain roles, inbound/outbound communication, business decisions, assumptions, verification metrics, open questions.
+description: The ddd-crew Bounded Context Canvas v5 for Labor Performance — purpose, classification, roles, every inbound and outbound message, language, decisions and open questions.
 ---
 
 # Bounded Context Canvas
 
-Following the [ddd-crew Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas)
-template.
+:::info[Synced from labor-performance]
+This page is a copy of [`docs/docs/ddd/bounded-context-canvas.md`](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/ddd/bounded-context-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
+
+
+Following the [ddd-crew Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas).
+Every message row below maps to a real REST route
+(`internal/adapters/inbound/http/server.go`,
+`internal/adapters/inbound/http/reports_handler.go`), MCP tool
+(`internal/adapters/inbound/mcp/tools.go`) or Kafka topic + CloudEvents
+type (`internal/adapters/kafka/cloudevents/cloudevents.go`).
 
 ## Name
 
-**Labor Performance**
+**Labor Performance** (`labor-performance`, CloudEvents subdomain `wes`,
+`source` = `/warehouse/labor-performance`).
 
 ## Purpose
 
-Answer, for the fleet, "how long does a task type actually take, and how
-does one associate's completed task compare to the engineered standard
-for it?" — nothing more. It defines and revises `LaborStandard`, scores
-every completed task it hears about into a `TaskPerformance` row, and
-serves that scoring back as read models (`Scorecard`,
-`TaskTypePerformance`, and — since ADR 0014 — idle-gap / utilization). It is a pure downstream observer of work that
-happens elsewhere: it never decides what work gets done, never gates
-whether an associate may keep working, and never talks to payroll, HR, or
-scheduling.
+Tell a warehouse how long each kind of task *should* take and how long it
+*actually* took. The context holds the engineered labor standard per
+`TaskType` ("a PICK should take 45 s"), scores every completed task
+against the standard that was in force when it finished, measures the idle
+gap before each task, and turns those facts into per-associate
+scorecards, fleet-wide task-type performance, utilization and an hourly
+analytical report — without ever influencing how the work is executed.
 
 ## Strategic Classification
 
-| Dimension | Value | Justification |
-| --- | --- | --- |
-| **Domain** | Supporting | It does not define the fulfillment work itself — it only measures how well it was executed against a standard someone else configures. Genuinely useful (both Manhattan Active Labor Management and Blue Yonder Workforce & Labor Management ship it as a first-class capability) but not what differentiates a fulfillment operation the way `fulfillment-execution`'s task lifecycle or `inventory-storage`'s chaotic-storage truth do. |
-| **Business Model** | Differentiator-adjacent, not itself a differentiator | Engineered labor standards are a real, competitor-validated capability, not a commodity integration surface — but this fleet's actual edge is the real-time WMS/WES orchestration loop this context feeds facts into, never drives. |
-| **Evolution** | Product (custom-built) | Custom-built to this fleet's own `TaskCompleted` wire shape and this fleet's own standards model; not a commodity or a utility. |
-
-Classifying it Supporting (not Core, not Generic) means it still carries
-the fleet's full quality rigor — BDD-adjacent table-driven tests, 90%+
-domain/application coverage, arch-fitness discipline — because
-"Supporting" is a business-differentiation classification, not a quality
-bar.
+| Dimension | Value | Evidence |
+|---|---|---|
+| **Domain** | **Supporting** | [ADR 0002](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0002-new-bounded-context-not-extension-of-workforce-or-fulfillment.md), [Subdomain classification](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/ddd/subdomain-classification.md), [Core Domain Chart](/contexts/labor-performance/core-domain-chart) |
+| **Business Model** | **Compliance / cost reduction** — makes labor productivity visible so staffing (in `workforce-management`) and coaching (by a human) can act on it; it earns no revenue and enforces nothing itself | ADR 0005 ("visibility, not enforcement"), ADR 0013 |
+| **Evolution** | **Product** — engineered labor standards are an off-the-shelf WMS/LMS module | [Domain vision](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/business-context/domain-vision.md) |
 
 ## Domain Roles
 
-**Analysis context** candidate was considered and rejected in favor of a
-plain **Supporting subdomain with a real aggregate** — unlike
-`warehouse-ops-agent` (which genuinely owns no aggregate and is
-documented as an analysis-context-shaped BFF), `labor-performance` owns
-two real, invariant-bearing aggregates (`LaborStandard`,
-`TaskPerformance`) with their own persistence and lifecycle. It is
-better classified as a **Supporting subdomain that also plays the role of
-an "engagement/scoring" context**: its read models
-(`Scorecard`, `TaskTypePerformance`) are analytical in *character* —
-derived views over recorded facts, never a source of new commands into
-the rest of the fleet — but the underlying write model is a normal
-DDD aggregate, not an analysis-only projection. The honest label is
-**Supporting subdomain, Customer role downstream of a Core Open Host
-Service**, not "analysis context" in the `warehouse-ops-agent` sense.
+- **Analysis context** (primary) — it observes another context's facts
+  and derives scores, trends and utilization from them.
+- **Specification context** (secondary) — it owns one piece of reference
+  data the rest of the fleet can rely on: the engineered labor standard
+  per `TaskType`.
+- **Downstream observer / gateway of none** — it has no command path back
+  into execution and calls no sibling (ADR 0003).
 
 ## Inbound Communication
 
-| From | Relationship | Integration | Notes |
-| --- | --- | --- | --- |
-| `fulfillment-execution` | Customer/Supplier — this context is a **Conformist** downstream | Kafka, topic `warehouse.fulfillment.events`, event `TaskCompleted` | `fulfillment-execution` is the Open Host Service; this context subscribes to its Published Language and never gets write access to `Task` or `Station`. Own consumer group id `labor-performance`. Only `event_type == "TaskCompleted"` is acted on; every other event type on the shared, fan-out topic is silently skipped. |
-
-That is this context's **only input**. Every other relationship is a
-sibling reading this context's own Open Host Services (listed under
-Outbound Communication, since data flows out) — this context never
-initiates a call to anyone. `workforce-management` never sends this
-service anything; it is, since ADR 0013, an *outbound* Kafka Customer of
-this service (see below).
+| Collaborator | Message | Type | Channel | Relationship |
+|---|---|---|---|---|
+| `fulfillment-execution` | `TaskCompleted` | Event | Kafka `warehouse.fulfillment.events`, CE type `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` (group `labor-performance`) → `RecordTaskPerformance` | Conformist to upstream OHS/PL |
+| Operator via `warehouse-console` (`labor_mfe`) | `DefineStandard` | Command | REST `POST /standards` (requires `Idempotency-Key` when Postgres is configured) | OHS |
+| Operator via `warehouse-console` (`labor_mfe`) | `GetAssociateScorecard` | Query | REST `GET /associates/{associateId}/scorecard` | OHS |
+| Operator via `warehouse-console` (`labor_mfe`); `workforce-management` (http mode) | `GetTaskTypePerformance` | Query | REST `GET /task-types/{taskType}/performance` | OHS |
+| Any REST client | `GetStandard` | Query | REST `GET /standards/{taskType}` | OHS |
+| Any REST client | `GetUtilization.ForTaskType` | Query | REST `GET /task-types/{taskType}/utilization?window=` | OHS |
+| Any REST client | `GetUtilization.ForAssociate` | Query | REST `GET /associates/{associateId}/utilization?window=` | OHS |
+| `warehouse-ops-agent` | `GetAssociateScorecard` | Query | MCP tool `get_associate_scorecard`; resource template `scorecard://labor/{associateId}` | OHS |
+| `warehouse-ops-agent` | `GetTaskTypePerformance` | Query | MCP tool `get_task_type_performance` | OHS |
+| `warehouse-ops-agent` | `GetStandard` | Query | MCP tool `get_labor_standard` | OHS |
+| `warehouse-ops-agent` | `GetUtilization.ForTaskType` | Query | MCP tool `get_task_type_utilization` | OHS |
+| `warehouse-console` (reports page), `warehouse-ops-agent` | Labor Performance Report | Query | REST (reports, `cmd/labor-reports` :8092) `GET /reports/performance?from=&to=&taskType=&granularity=` | OHS |
+| `warehouse-console` (reports page), `warehouse-ops-agent` | Report freshness | Query | REST (reports) `GET /reports/performance/freshness` | OHS |
+| this context (`cmd/labor`) → `cmd/labor-projector` | `LaborStandardDefined`, `LaborStandardRevised`, `TaskPerformanceRecorded` | Event | Kafka `warehouse.labor-performance.analytics` (group `labor-performance-analytics`, earliest offset) | internal — same context |
 
 ## Outbound Communication
 
-| To | Relationship | Integration | Notes |
-| --- | --- | --- | --- |
-| `workforce-management` | Open-Host Service + Published Language — this context is the **Supplier**, `workforce-management` a Conformist downstream | Kafka, topic `warehouse.labor-performance.events`, event `TaskPerformanceRecorded` | **Live** (ADR 0013). This context's first Open-Host-Service Published Language for another bounded context — before this, `labor-performance` was the fleet's only pure event sink. `workforce-management` consumes it into a local, event-fed running-mean cache, replacing a synchronous HTTP call (`LABOR_PERFORMANCE_MODE=kafka-cache`, that repo's ADR 0019 — opt-in: its binary defaults to `permissive`, the kind cluster sets `kafka-cache`), and reads the additive `idle_seconds_before` as a staffing signal (its ADR 0020). Publish-and-forget: no reply, no confirmation loop. |
-| `warehouse-console` (the `labor_mfe` remote) | Open Host Service | OLTP REST (`apis/openapi.yaml`, 7 operations) — the remote calls `POST /standards`, `GET /associates/{associateId}/scorecard` and `GET /task-types/{taskType}/performance`; the API also serves `GET /standards/{taskType}`, `GET /task-types/{taskType}/utilization` and `GET /associates/{associateId}/utilization` (ADR 0014) | **Live.** `web/` is this repo's Module Federation remote (`labor_mfe`), mounted by the console shell at `/labor`. CORS via `CORS_ALLOWED_ORIGINS`. |
-| `warehouse-ops-agent` | Open Host Service (MCP, read-only) | MCP (`cmd/mcp`, ADR 0009) — tools `get_associate_scorecard`, `get_task_type_performance`, `get_labor_standard`, `get_task_type_utilization`; resource template `scorecard://labor/{associateId}`; prompt `review_associate_performance` | **Live.** The agent calls `get_associate_scorecard` and `get_task_type_utilization` (the latter feeding its flow-balance advisory). This service knows nothing about the agent. |
-| Analytics consumers (WES Dashboard via `warehouse-ops-agent`) | Open Host Service, separate analytics surface | REST — `GET /reports/performance`, `GET /reports/performance/freshness` via `cmd/labor-reports` (`apis/openapi-reports.yaml`, 3 operations incl. `/healthz`), fed by a dedicated `warehouse.labor-performance.analytics` Kafka topic | Fleet-parity analytical data product (ADR-0007): a separate writer/reader/database triad, never touching the OLTP path. |
+| Collaborator | Message | Type | Channel | Relationship |
+|---|---|---|---|---|
+| `workforce-management` | `TaskPerformanceRecorded` | Event | Kafka `warehouse.labor-performance.events`, CE type `com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded`, key `associate_id` | OHS + Published Language; WFM is Conformist |
+| own `cmd/labor-projector` | `LaborStandardDefined` | Event | Kafka `warehouse.labor-performance.analytics`, CE type `com.warehouse.wes.labor-performance.standard.LaborStandardDefined`, key `task_type` | internal |
+| own `cmd/labor-projector` | `LaborStandardRevised` | Event | Kafka `warehouse.labor-performance.analytics`, CE type `com.warehouse.wes.labor-performance.standard.LaborStandardRevised`, key `task_type` | internal |
+| own `cmd/labor-projector` | `TaskPerformanceRecorded` | Event | Kafka `warehouse.labor-performance.analytics`, CE type `com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded`, key `task_type` | internal |
+| operations (no consumer) | undecodable or repeatedly failing `TaskCompleted` | Event (dead letter) | Kafka `warehouse.fulfillment.events.dlq` (original bytes + `x-dlq-*` headers) | — |
 
-This context makes **no outbound REST or MCP call** to any other bounded
-context (ADR 0003; restated for facility-layout by
-[ADR 0015](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0015-optional-travel-component-on-labor-standard.md)).
-Everything the OLTP side needs (`AssociateId`, `TaskType`,
-`DurationSeconds`) already travels on the one Kafka event it consumes, and
-everything `workforce-management` needs from this context travels on the
-one Kafka event it publishes. None of its REST, reports or MCP surfaces is
-authenticated — a deliberate decision
-([ADR 0012](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0012-remove-rest-auth-layer.md)
-removed ADR 0011's static bearer-key layer).
+There is **no outbound command or query**: no REST or MCP client to any
+sibling exists (ADR 0003).
 
 ## Ubiquitous Language
 
-See [Ubiquitous Language](./ubiquitous-language) for the full glossary —
-`LaborStandard`, `TaskPerformance`, `StandardSecondsAtCompletion`,
-`EfficiencyPct`, `MeanActualSeconds`, `TaskType`, `Scorecard`, `Trend`,
-`Coaching Flag`, `TaskTypePerformance`, `IdlePeriod`, `Utilization`,
-`TravelComponentSeconds`.
+Full glossary with code identifiers: [Ubiquitous language](/contexts/labor-performance/ubiquitous-language).
+Top terms:
+
+- **LaborStandard** — the expected seconds for one `TaskType`, with an
+  append-only effective range.
+- **TaskPerformance** — one completed task, scored and frozen.
+- **StandardSecondsAtCompletion** — the standard in force *as of* the
+  completion instant, copied onto the row.
+- **EfficiencyPct** — `100 × standard ÷ actual`; `null` when either is
+  not positive.
+- **Idle Gap** (`IdlePeriod`) — previous completion → next claim.
+- **Utilization** — task time ÷ (task time + idle time), as a percent.
+- **Scorecard**, **Trend**, **CoachingFlag** — per-associate read model
+  and its two signals.
 
 ## Business Decisions
 
-- **A standard is frozen at completion time, never recomputed
-  retroactively.** `StandardSecondsAtCompletion` is resolved exactly
-  once, as of the task's `CompletedAt` instant, and stored redundantly on
-  the `TaskPerformance` row — a later standard revision never rewrites an
-  already-scored historical fact, even under Kafka's at-least-once,
-  possibly-out-of-order delivery. See
-  [ADR 0004](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0004-standard-frozen-at-completion-time-not-recomputed.md).
-- **`MeanActualSeconds` is independent of any standard ever existing.**
-  It is computed directly from `ActualSeconds` on every recorded row
-  (excluding only `ActualSeconds<=0`), with zero dependency on
-  `EfficiencyPct` or `LaborStandard` — closing the circularity where an
-  operator who has never defined a standard yet would otherwise get
-  nothing back from the very service meant to help them define one
-  intelligently. See
-  [ADR 0006](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0006-mean-actual-seconds-independent-of-standard.md).
-- **Idempotency is keyed on the Kafka message's `event_id`, not
-  `TaskId`.** A `TaskId` could in principle be reused after a very long
-  time; the envelope's own de-duplication key gates the entire OLTP write
-  path, since consuming `TaskCompleted` is this service's whole job, not
-  a side effect of it.
-- **Idleness is derived, never requested upstream.** An associate's
-  between-task gap (`IdlePeriod`) is computed from data already on
-  `TaskCompleted` (previous completion to this claim instant), capped at
-  `IDLE_GAP_CAP_SECONDS` (default 3600), and published additively as
-  `idle_seconds_before` on `TaskPerformanceRecorded`. See
-  [ADR 0014](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0014-labor-utilization-idleness.md).
-- **A standard's travel component is declared, never looked up.**
-  `TravelComponentSeconds` is optional and caller-supplied at
-  `DefineStandard` (`0 <= t <= ExpectedSeconds`); this service never calls
-  facility-layout to compute or validate it. See
-  [ADR 0015](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0015-optional-travel-component-on-labor-standard.md).
-- **Visibility, not enforcement.** No score this context computes ever
-  gates or blocks an associate's ability to claim tasks in
-  `fulfillment-execution`. `CoachingFlag` is a signal a human reads, never
-  an automated action.
+- A standard revision **closes** the prior standard and opens a new one;
+  it never overwrites (ADR 0004). At most one open standard per
+  `TaskType` (partial unique index, ADR 0022).
+- A task is scored against the standard active **as of** its completion
+  time, not the one active at ingestion; the value is frozen (ADR 0004).
+- No number is ever fabricated: unscorable/unmeasurable rows yield `null`
+  efficiency/means, never `0` (ADR 0006, CLAUDE.md non-negotiable 3).
+- Unknown or absent `task_type` and empty `associate_id` are recorded,
+  not rejected (`ParseTaskTypeLenient`).
+- Idle gaps are capped at `IDLE_GAP_CAP_SECONDS` (default 3600) and
+  flagged `capped`; out-of-order gaps are skipped, not failed (ADR 0014).
+- Trend needs at least 3 scored recent tasks and a 5-point move; the
+  coaching flag needs the last 3 scored tasks under 85 % (ADR 0005). The
+  flag is a signal for a human, never an action.
+- `TaskPerformance` is written only by the Kafka consumer; there is no
+  REST write for it (CLAUDE.md non-negotiable 4).
 
 ## Assumptions
 
-- `fulfillment-execution`'s `TaskCompleted` payload now carries
-  `task_type` (its ADR-0023); a value this context does not model (e.g.
-  `REBIN`) or an older payload without it still resolves `TaskType` as
-  `""` (unclassified) — recorded, never scored.
-- The 5-percentage-point `Trend` band and the 85% `CoachingFlag` floor are
-  judgment calls, not derived from real production traffic (this context
-  has none yet) — explicitly revisitable constants.
-- Kafka delivery is at-least-once and may reorder or redeliver; every
-  invariant in this context is designed to be correct under that
-  assumption, not merely under the common case.
+- `fulfillment-execution` keeps publishing `TaskCompleted` with a
+  meaningful `time` (completion instant) and `duration_seconds` (claim →
+  completion); the idle-gap derivation depends on both.
+- `TaskType` stays the closed set `PICK`, `PACK`, `SLAM` mirrored from
+  `fulfillment-execution`'s `task.Type`; any other value is "unclassified".
+- One associate does one task at a time, so previous completion → next
+  claim is a meaningful idle gap.
+- Shifts are not modelled here; the cap stands in for shift boundaries.
 
 ## Verification Metrics
 
-- 90%+ test coverage gate on `internal/domain/...` and
-  `internal/application/...`.
-- Every named invariant (idempotent `event_id`, never-divide-by-zero
-  `EfficiencyPct`, append-only `LaborStandard` history, frozen
-  `StandardSecondsAtCompletion`) has a dedicated failing-path,
-  table-driven test.
-- A build-tagged Kafka consumer integration test
-  (`consumer_integration_test.go`) that starts its own broker via
-  Testcontainers, alongside the fake-reader unit test used for the common
-  case.
-- Target: p95 event-to-report lag under 30 seconds for the analytical
-  data product (ADR-0007), matching the fleet's sibling contexts.
+- Business counter `labor_performance.standards.defined`, split by
+  outcome accepted/rejected (`internal/adapters/outbound/telemetry/metrics.go`,
+  ADR 0008).
+- Outbox lag gauge `labor_performance.outbox.lag_seconds`, registered by
+  `postgres.RegisterOutboxLagGauge`
+  (`internal/adapters/outbound/postgres/outbox_metrics.go`).
+- Report freshness lag from `GET /reports/performance/freshness`
+  (`lagSeconds`).
+- HTTP RED metrics (`http.server.request.duration`) and Kafka
+  consume/publish spans exported over OTLP.
 
 ## Open Questions
 
-- **Backfilling unclassified history.** `task_type` is now on the wire,
-  but rows recorded before it arrived stay `""` (unclassified) — there is
-  no synchronous fallback lookup to repair them, by design.
-- **A declared travel component can drift from reality.** If a zone is
-  re-slotted, nothing here notices until someone re-runs
-  `DefineStandard` with an updated number — the deliberate price of the
-  zero-outbound-call boundary (ADR 0015).
-- **Automatic pay-for-performance and coaching workflows** remain
-  explicitly out of scope; if the business ever wants to act on
-  `CoachingFlag` automatically, that decision belongs to a different,
-  not-yet-designed context — this one only ever surfaces the number.
+- Who sets standards in practice? Today any unauthenticated REST client
+  can `POST /standards` (ADR 0012 removed auth).
+- The integration topic is keyed by `associate_id`; robot-station
+  completions all share the empty key and therefore one partition.
+- `warehouse.fulfillment.events.dlq` has no consumer or replay tooling.
+- Utilization for robot stations is out of scope (no associate, no idle
+  gap) — is that a gap someone needs filled?

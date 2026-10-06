@@ -1,230 +1,477 @@
 ---
+id: aggregate-design-canvas
 title: Aggregate Design Canvas
 sidebar_label: Aggregate Design Canvas
-description: The full ddd-crew Aggregate Design Canvas for StockUnit and Reservation — two of the four aggregate roots in inventory-storage.
+description: The ddd-crew Aggregate Design Canvas v1.1 for each of the four aggregate roots — state transitions, enforced invariants with their Err values and failing-path tests, handled commands, created events, throughput and size.
 ---
 
 # Aggregate Design Canvas
 
+:::info[Synced from inventory-storage]
+This page is a copy of [`docs/docs/ddd/aggregate-design-canvas.md`](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/ddd/aggregate-design-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
+
+
 Following the [ddd-crew Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas)
-template. This context has **four** aggregate roots — `StockUnit`, `Bin`,
-`Reservation`, and `ProductClassification` (SKU master data,
-[ADR-0009](https://github.com/claudioed/inventory-storage/blob/develop/docs/docs/adr/0009-product-classification-as-sku-master-data.md))
-— each loaded, changed, and saved through its own
-repository port, referencing each other **by identity, not by pointer** (a
-`Reservation` never holds a `*StockUnit`, and a `StockUnit` never holds a
-`*Bin`). The two canvases below cover the aggregate at the centre of the
-domain (`StockUnit`) and the aggregate that carries the context's central
-consistency decision (`Reservation`).
+(v1.1), one canvas per aggregate root found in `internal/domain/`. There
+are **four**: `StockUnit`, `Bin`, `Reservation`, `ProductClassification`.
+Every invariant below is enforced **in the domain layer** (or, where noted,
+in the use case that owns the cross-aggregate rule) and has a failing-path
+test.
 
-## Aggregate: StockUnit
+Aggregates reference each other **by identity, never by pointer**: a
+`Reservation` holds `Allocation{StockUnitID, BinID}` values, a `StockUnit`
+holds a `BinId`. Each aggregate is loaded, changed and saved through its own
+repository port, and every `Save` is version-guarded (ADR 0019). A use case
+that touches several aggregates (stow, revoke, confirm-pick, expiry) keeps
+them consistent inside one `UnitOfWork` transaction (ADR 0017) — the one
+place this context deliberately trades "one aggregate per transaction" for
+a single database transaction.
 
-### Name
+Throughput and size figures are **estimates** for a single mid-size
+fulfilment centre, not measurements — the service has no production
+traffic.
 
-`StockUnit`
+---
 
-### Description
+## StockUnit
 
-A quantity of a SKU at a **specific bin** — the core aggregate of the
-context. Every physical item has exactly one known bin, or is flagged
-`Unlocated`. Total stock for a SKU is a *sum across* `StockUnit`s; there is
-deliberately no single "SKU balance" aggregate to contend on, so a SKU's
-stock is naturally partitioned across many `StockUnit`s with no single hot
-row.
+### 1. Name
+
+`StockUnit` — `internal/domain/stock.StockUnit`
+
+### 2. Description
+
+A quantity of one SKU at one bin, with a reserved portion and a lifecycle
+state. It is the core aggregate of the context: every physical item has
+exactly one known bin, or is flagged `UNLOCATED`. Total stock for a SKU is a
+sum across units; there is deliberately no "SKU balance" aggregate to
+contend on.
 
 | Field | Meaning |
 | --- | --- |
 | `id` | Identity, minted by `StockRepo.NextID` |
 | `sku` | Item scan |
-| `binID` | Location scan |
+| `binID` | Location scan — never changes after creation |
 | `quantity` | On-hand at this bin |
 | `reserved` | Portion bound to demand |
 | `state` | `AVAILABLE` / `RESERVED` / `PICKED` / `REMOVED` / `UNLOCATED` |
+| `version` | Optimistic-concurrency metadata, never read by business logic |
 
-### State Transitions
+### 3. State Transitions
 
 ```mermaid
 stateDiagram-v2
-    [*] --> AVAILABLE: NewStockUnit<br/>(stow: item + location)
+    [*] --> AVAILABLE: NewStockUnit, stow with item and location scan
     AVAILABLE --> RESERVED: Reserve(qty)
-    RESERVED --> AVAILABLE: ReleaseReservation<br/>(reserved reaches 0)
-    RESERVED --> PICKED: Pick(qty)<br/>quantity remains
-    RESERVED --> REMOVED: Pick(qty)<br/>quantity reaches 0
+    RESERVED --> RESERVED: Reserve(qty) again
+    RESERVED --> AVAILABLE: ReleaseReservation, reserved reaches 0
+    RESERVED --> PICKED: Pick(qty), quantity remains
+    RESERVED --> REMOVED: Pick(qty), quantity reaches 0
     PICKED --> RESERVED: Reserve(qty)
-    AVAILABLE --> UNLOCATED: MarkUnlocated<br/>(cycle-count shortfall)
+    PICKED --> REMOVED: Pick(qty), quantity reaches 0
+    AVAILABLE --> UNLOCATED: MarkUnlocated, cycle-count shortfall
     RESERVED --> UNLOCATED: MarkUnlocated
     PICKED --> UNLOCATED: MarkUnlocated
     REMOVED --> [*]
 ```
 
+Source: `internal/domain/stock/state.go`, `internal/domain/stock/stock_unit.go`.
+Omitted: `ReleaseReservation` on a `PICKED` unit (state stays `PICKED`);
+`Pick` performs no state check of its own, so a still-reserved `UNLOCATED`
+unit can be picked into `PICKED`/`REMOVED` — the guard is that
+`RunCycleCount` only marks units it can count.
+
 `MarkUnlocated` is deliberately unconditional — it takes no error return. A
-cycle count that finds stock missing must always be able to say so; refusing
-the transition because the unit happened to be reserved would leave the
-system claiming stock it cannot produce.
+cycle count that finds stock missing must always be able to say so.
 
-### Enforced Invariants
+### 4. Enforced Invariants
 
-| # | Invariant | Enforcement |
+| # | Invariant | Enforced by | Failing-path test |
+| --- | --- | --- | --- |
+| S1 | A stow requires both an item scan and a location scan | `NewStockUnit` → `stock.ErrStowRequiresItemAndLocation` | `TestNewStockUnit_RequiresSKU`, `TestNewStockUnit_RequiresBin` |
+| S2 | Quantity is never negative | `shared.NewQuantity` / `Quantity.Sub` → `shared.ErrNegativeQuantity` | `TestNewQuantity_RejectsNegative`, `TestQuantity_Sub_RejectsNegativeResult` |
+| S3 | A stow of zero or fewer units is invalid | `NewStockUnit` → `shared.ErrZeroQuantity` | `TestNewStockUnit_RejectsZeroQuantity` |
+| S4 | Reserved never exceeds usable — no negative usable | `Reserve` → `stock.ErrInsufficientUsable` | `TestStockUnit_Reserve_ExceedsUsable_Rejected` |
+| S5 | Unlocated or removed stock is never reservable and contributes 0 usable | `Reserve` → `stock.ErrUnitUnlocated`; `Usable()` returns 0 | `TestStockUnit_Reserve_UnlocatedUnit_Rejected`, `TestStockUnit_Usable_RemovedState_IsZero` |
+| S6 | A pick cannot exceed what was reserved, nor what is on hand | `Pick` → `stock.ErrInsufficientReserved` | `TestStockUnit_Pick_ExceedsReserved_Rejected`, `TestStockUnit_Pick_ExceedsOnHandQuantity_Rejected` |
+| S7 | Release cannot return more than was reserved | `ReleaseReservation` → `stock.ErrInsufficientReserved` | `TestStockUnit_ReleaseReservation_ExceedsReserved_Rejected` |
+| S8 | No lost update | `postgres.StockRepo.Save` version guard → `usecases.ErrConcurrentModification` | `optimistic_concurrency_integration_test.go` |
+
+### 5. Corrective Policies
+
+- **Revoke / expiry release.** When a reservation is revoked or lazily
+  expired, `releaseAllocations` calls `ReleaseReservation` on every unit it
+  drew from, in the same transaction.
+- **Cycle-count shortfall.** `RunCycleCount` marks whole units `UNLOCATED`
+  until the shortfall is covered, so lost stock stops counting toward usable
+  at once. Overage is not corrected here — it is reported for a separate
+  receiving/audit process.
+- **Concurrent modification.** A lost version race surfaces as `409`; the
+  caller re-fetches and retries.
+
+### 6. Handled Commands
+
+| Command | Method | Use case / entry point |
 | --- | --- | --- |
-| S1 | A stow requires both an item-scan and a location-scan. | `NewStockUnit` returns `ErrStowRequiresItemAndLocation` when `sku == ""` or `binID == ""`. |
-| S2 | Quantity is never negative. | `Quantity` refuses negative construction and negative arithmetic results. |
-| S3 | A stow of zero or fewer units is invalid. | `NewStockUnit` returns `ErrZeroQuantity`. |
-| S4 | Reserved never exceeds usable — no negative usable. | `Reserve` returns `ErrInsufficientUsable` when `qty > Usable()`. |
-| S5 | Unlocated or removed stock is never reservable. | `Reserve` returns `ErrUnitUnlocated`; `Usable()` returns 0 for those states. |
-| S6 | A pick cannot exceed what was reserved, nor what is on hand. | `Pick` returns `ErrInsufficientReserved`. |
-| S7 | Release cannot return more than was reserved. | `ReleaseReservation` returns `ErrInsufficientReserved`. |
+| Stow | `NewStockUnit` | `StowStock` — `POST /stock/stow` |
+| Reserve | `Reserve` | `ReserveStock` — `POST /reservations` |
+| Release reservation | `ReleaseReservation` | `RevokeReservation` (`DELETE /reservations/{id}`, MCP `revoke_reservation`), lazy expiry |
+| Pick | `Pick` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick` |
+| Mark unlocated | `MarkUnlocated` | `RunCycleCount` — `POST /bins/{binId}/cycle-count` |
 
-### Corrective Policies
+### 7. Created Events
 
-- A **cycle-count shortfall** (counted < system) is the only corrective path
-  that moves a `StockUnit` sideways rather than forward: `MarkUnlocated` is
-  unconditional and marks the *whole* unit `UNLOCATED` rather than splitting
-  located from lost portions — a deliberate, conservative simplification that
-  under-reports usable rather than over-reporting it.
-- A **cycle-count overage** (counted > system) is never auto-reconciled
-  against this aggregate — inventing a `StockUnit` to match would corrupt the
-  ledger, so it is raised as `DiscrepancyDetected` for a separate
-  receiving/audit process instead.
-- There is **no compensating transaction inside this aggregate for a failed
-  pick** — that correction happens one level up, on `Reservation` (see
-  below): a revoke calls `ReleaseReservation` on every `StockUnit` a
-  reservation drew from.
+The aggregate itself raises nothing; the use cases build these from it
+(`internal/domain/shared/events.go`).
 
-### Handled Commands
+| Event | Full CloudEvents `type` | Raised by |
+| --- | --- | --- |
+| StockReceived | `com.warehouse.wms.inventory-storage.stock.StockReceived` | `ReceiveStock` (no unit exists yet) |
+| ItemStowed | `com.warehouse.wms.inventory-storage.stock.ItemStowed` | `StowStock` |
+| LocationRecorded | not published (would be `...stock.LocationRecorded`) | `StowStock` |
+| ItemUnlocated | `com.warehouse.wms.inventory-storage.stock.ItemUnlocated` | `RunCycleCount` |
 
-| Command | Result |
-| --- | --- |
-| `NewStockUnit(id, sku, binId, qty)` | Brings the aggregate into existence (via `StowStock`) |
-| `Reserve(qty)` | Increases `reserved`, may transition `AVAILABLE → RESERVED` |
-| `ReleaseReservation(qty)` | Decreases `reserved` (via `RevokeReservation`), may transition back to `AVAILABLE` |
-| `Pick(qty)` | Decrements both `reserved` and `quantity` (via `ConfirmPick`), transitions to `PICKED` or `REMOVED` |
-| `MarkUnlocated()` | Unconditional transition to `UNLOCATED` (via `RunCycleCount`) |
+### 8. Throughput (estimate)
 
-### Created Events
+High. Every stow creates one unit; every reservation, revoke, pick and
+expiry touches one or more units of a SKU. Contention concentrates on fast
+movers whose few units are drawn by many concurrent reservations — the
+reason `Save` is version-guarded.
 
-`ItemStowed`, `LocationRecorded` (both from `StowStock`), `ItemUnlocated`
-(from `RunCycleCount`'s shortfall path). `StockReceived` is raised
-pre-location by `ReceiveStock`, before any `StockUnit` exists.
+### 9. Size (estimate)
 
-### Throughput
-
-Read-heavy relative to writes: every `GetUsable` and every `ReserveStock`
-fans out to `StockRepo.FindBySKU` and sums `Usable()` across every
-`StockUnit` for that SKU — "how much SKU-1 do we have" means summing every
-unit rather than reading one row. Writes happen once per stow, once per
-reserve/revoke/pick touching that unit, and once per cycle count of its bin.
-A single `ReserveStock` call may write to several `StockUnit`s at once (see
-`Reservation`, below), since a reservation may span multiple bins.
-
-### Size
-
-Small and deliberately narrow — five fields, five behavioural methods
-(`Usable`, `Reserve`, `ReleaseReservation`, `Pick`, `MarkUnlocated`). Kept
-small so it stays fully unit-testable and so the aggregate boundary matches
-exactly the invariant it protects (one bin's holding of one SKU), rather than
-growing into a "SKU balance" god-object.
+Small: seven fields. A unit lives from stow until `REMOVED` or
+`UNLOCATED` — typically a few to a few dozen state changes over hours to
+weeks, depending on how many reservations draw from it.
 
 ---
 
-## Aggregate: Reservation
+## Bin
 
-### Name
+### 1. Name
 
-`Reservation`
+`Bin` — `internal/domain/location.Bin`
 
-### Description
+### 2. Description
 
-A **revocable** binding of a quantity to demand, with a timeout — the
-central storage/consistency decision of the context. Physical delivery can
-fail (pod blocked, tote lost, chute jam, short pick), so a reservation must
-be releasable and re-allocatable against a different holding. SKU-scoped, not
-bin-scoped: a single reservation may span several `StockUnit`s across several
-bins, recorded as `Allocation`s so a revoke is exact.
+A coded slot in chaotic storage: an id, a capacity and an occupancy. Any SKU
+may occupy any free bin; the only hard constraint is
+`sum(stock in bin) <= capacity`. The `Bin` has **no SKU field and no SKU
+affinity** — that absence is what makes storage chaotic rather than
+fixed-slot. It knows nothing about zones or aisles (that is
+`facility-layout`).
+
+| Field | Meaning |
+| --- | --- |
+| `id` | Bin code, e.g. `A-1-1` |
+| `capacity` | Maximum units the slot holds |
+| `occupied` | Units currently stowed |
+| `version` | Optimistic-concurrency metadata |
+
+### 3. State Transitions
+
+`Bin` has no status enum; the states below are derived from `occupied`
+and `IsFull()`.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Empty: NewBin(id, capacity), RegisterBin creates
+    Empty --> PartlyOccupied: Occupy(qty) below capacity
+    Empty --> Full: Occupy(qty) equal to capacity
+    PartlyOccupied --> PartlyOccupied: Occupy or Release
+    PartlyOccupied --> Full: Occupy(qty) reaches capacity
+    Full --> PartlyOccupied: Release(qty) or Resize up
+    PartlyOccupied --> Empty: Release(qty) to 0
+    Full --> Empty: Release(qty) of everything
+    PartlyOccupied --> Full: Resize down to occupancy
+```
+
+Source: `internal/domain/location/bin.go`, `internal/application/usecases/register_bin.go`.
+Omitted: rejected transitions (they return errors and leave state unchanged);
+a bin is never deleted.
+
+### 4. Enforced Invariants
+
+| # | Invariant | Enforced by | Failing-path test |
+| --- | --- | --- | --- |
+| B1 | `occupied <= capacity`; a full bin rejects a stow | `Occupy` → `location.ErrBinFull` | `TestBin_Occupy_ExceedsCapacity_Rejected`, `TestStowStock_ExceedsBinCapacity_Rejected` |
+| B2 | Capacity must be positive | `NewBin` / `Resize` → `location.ErrInvalidCapacity` | `TestNewBin_RejectsInvalidCapacity` |
+| B3 | A bin needs an id | `NewBin` → `shared.ErrEmptyBinID` | `TestNewBin_RejectsEmptyID` |
+| B4 | A bin can never be resized below what it holds (exactly to occupancy is allowed) | `Resize` → `location.ErrCapacityBelowOccupancy` | `TestBin_Resize`, `TestRegisterBin`, `TestRegisterBin_Endpoint` |
+| B5 | You cannot release more than is occupied | `Release` → `location.ErrReleaseExceedsOccupancy` | `TestBin_Release_ExceedsOccupancy_Rejected` |
+| B6 | Occupying or releasing zero units is meaningless | `Occupy` / `Release` → `shared.ErrZeroQuantity` | `TestBin_Occupy_RejectsZeroQuantity`, `TestBin_Release_RejectsZeroQuantity` |
+| B7 | A resize racing a stow never clobbers occupancy | `postgres.LocationRepo.Save` version guard → `usecases.ErrConcurrentModification` | `optimistic_concurrency_integration_test.go` |
+
+### 5. Corrective Policies
+
+- **Pick frees capacity.** `ConfirmPick` calls `Bin.Release` for each
+  allocation in the same transaction as the `StockUnit.Pick`.
+- **Declarative convergence.** `RegisterBin` is idempotent: repeating it
+  with the same capacity is a no-op, so an inventory-control client can
+  safely re-send its whole bin list.
+
+### 6. Handled Commands
+
+| Command | Method | Use case / entry point |
+| --- | --- | --- |
+| Register / resize | `NewBin`, `Resize` | `RegisterBin` — `PUT /bins/{binId}` |
+| Occupy | `Occupy` | `StowStock` — `POST /stock/stow` |
+| Release | `Release` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick` |
+
+### 7. Created Events
+
+`RegisterBin` raises **no** event (ADR 0025). The cycle-count facts are
+grouped under the `bin` entity because they are about a bin, though
+`RunCycleCount` reads `StockUnit`s and never loads the `Bin` aggregate:
+
+| Event | Full CloudEvents `type` |
+| --- | --- |
+| CycleCountCompleted | `com.warehouse.wms.inventory-storage.bin.CycleCountCompleted` |
+| DiscrepancyDetected | `com.warehouse.wms.inventory-storage.bin.DiscrepancyDetected` |
+
+### 8. Throughput (estimate)
+
+High on stow and pick (every stow and every confirmed allocation writes its
+bin), low on registration (layout changes). Hot spots are bins near the
+receive dock under chaotic stow.
+
+### 9. Size (estimate)
+
+Tiny: four fields. Long-lived — a bin exists as long as the physical slot,
+accumulating one change per stow and per picked allocation (thousands over
+its life), but each change only moves two integers.
+
+---
+
+## Reservation
+
+### 1. Name
+
+`Reservation` — `internal/domain/reservation.Reservation`
+
+### 2. Description
+
+A **revocable**, expiring binding of a quantity of a SKU to a demand. It
+records `Allocation`s — which `StockUnit` it drew from, the pick location
+(`BinID`, ADR 0025) and how much — so a revoke returns exactly that
+quantity and a confirm-pick consumes exactly it. Nothing binds a future
+reservation to the same holding: that is what makes a failed pick
+recoverable (ADR 0003).
 
 | Field | Meaning |
 | --- | --- |
 | `id` | Identity, minted by `ReservationRepo.NextID` |
 | `sku`, `quantity` | What is claimed |
-| `demandRef` | Opaque upstream reference (order id, work-unit ref) |
-| `allocations` | Which `StockUnit`s it drew from, and how much from each |
+| `demandRef` | Opaque upstream reference (order + line); replay-guard and lookup key |
+| `allocations` | `[]Allocation{StockUnitID, BinID, Quantity}` |
 | `status` | `ACTIVE` / `CONFIRMED` / `REVOKED` / `EXPIRED` |
-| `createdAt`, `expiresAt` | `expiresAt = createdAt + timeout` (default 30 minutes) |
+| `createdAt`, `expiresAt` | `expiresAt = createdAt + timeout` (default 30 min) |
+| `version` | Optimistic-concurrency metadata |
 
-### State Transitions
+### 3. State Transitions
 
 ```mermaid
 stateDiagram-v2
-    [*] --> ACTIVE: ReserveStock<br/>(qty ≤ usable)
-    ACTIVE --> CONFIRMED: ConfirmPick<br/>(before expiry)
-    ACTIVE --> REVOKED: RevokeReservation<br/>→ qty back to usable
-    ACTIVE --> EXPIRED: Expire()<br/>modelled, no sweeper yet
+    [*] --> ACTIVE: New, ReserveStock against usable
+    ACTIVE --> CONFIRMED: Confirm(now) before expiresAt
+    ACTIVE --> REVOKED: Revoke
+    ACTIVE --> EXPIRED: Expire, lazy expiry on next read
     CONFIRMED --> [*]
     REVOKED --> [*]
     EXPIRED --> [*]
-
-    note right of ACTIVE
-        The only status from which
-        a transition is legal.
-    end note
 ```
 
-### Enforced Invariants
+Source: `internal/domain/reservation/reservation.go`,
+`internal/application/usecases/reservation_expiry.go`.
+Omitted: the rejected transitions — any call on a non-`ACTIVE` reservation
+returns `ErrAlreadyResolved`.
 
-| # | Invariant | Enforcement |
+### 4. Enforced Invariants
+
+| # | Invariant | Enforced by | Failing-path test |
+| --- | --- | --- | --- |
+| R1 | Reserved quantity ≤ usable quantity at reserve time | `ReserveStock.allocate` → `usecases.ErrInsufficientUsable`; `StockUnit.Reserve` re-checks per unit | `TestReserveStock_ExceedsUsable_Rejected` |
+| R2 | Revoke returns quantity to usable | `RevokeReservation` → `releaseAllocations` → `StockUnit.ReleaseReservation` | `TestRevokeReservation_ReturnsQuantityToUsable`, `TestStockUnit_ReleaseReservation_ReturnsToUsable` |
+| R3 | No double-consume: only `ACTIVE` may transition | `Revoke` / `Confirm` / `Expire` → `reservation.ErrAlreadyResolved` | `TestReservation_Revoke_Twice_Rejected`, `TestReservation_Confirm_Twice_Rejected`, `TestReservation_Expire_Twice_Rejected`, `TestConfirmPick_AfterRevoke_Rejected` |
+| R4 | Expires after a timeout; never confirmed late | `IsExpired(now)`; `Confirm` → `reservation.ErrExpired` | `TestReservation_IsExpired`, `TestReservation_Confirm_AfterExpiry_Rejected` |
+| R5 | Must allocate against something | `New` → `reservation.ErrNoAllocations` | `TestNew_RequiresAtLeastOneAllocation` |
+| R6 | One active reservation per (demandRef, SKU, quantity) — best effort | `ReserveStock.activeReservationFor` / `isReplayOf` (use case, not DB-enforced) | `reserve_stock_multi_line_test.go` |
+| R7 | Empty `demandRef` is rejected | HTTP handler → `400 missing-demand-ref` | `server_test.go` |
+
+### 5. Corrective Policies
+
+- **Lazy expiry.** `expireIfDue` runs on every read path
+  (`GetReservationsByDemandRef`, `ReserveStock`'s replay guard,
+  `RevokeReservation`, `ConfirmPick`): a timed-out `ACTIVE` reservation is
+  released, set `EXPIRED` and `ReservationExpired` is raised in one
+  transaction. There is no background sweeper.
+- **Revoke as compensation.** A failed physical pick is compensated by
+  `DELETE /reservations/{id}`; deciding what to do next is
+  `wes-work-planning`'s or `order-management`'s call, not this context's.
+
+### 6. Handled Commands
+
+| Command | Method | Use case / entry point |
 | --- | --- | --- |
-| R1 | Reserved quantity ≤ usable quantity at reserve time. | `ReserveStock` sums usable across the SKU and returns `ErrInsufficientUsable`; `StockUnit.Reserve` re-checks per unit. |
-| R2 | Revoke returns quantity to usable. | `RevokeReservation` walks `allocations` and calls `ReleaseReservation` on each unit. |
-| R3 | No double-consume. | `Revoke`/`Confirm`/`Expire` return `ErrAlreadyResolved` unless status is `ACTIVE`. |
-| R4 | Expires after a timeout. | `IsExpired(now)`; `Confirm` returns `ErrExpired` past `expiresAt`. Time is supplied by the `Clock` port, never read inside the aggregate, so this is deterministic under test. |
-| R5 | A reservation must allocate against something. | `New` returns `ErrNoAllocations` for an empty allocation list. |
+| Reserve | `New` | `ReserveStock` — `POST /reservations` (Idempotency-Key) |
+| Revoke | `Revoke` | `RevokeReservation` — `DELETE /reservations/{id}`, MCP `revoke_reservation` |
+| Confirm pick | `Confirm` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick` |
+| Expire | `Expire` | lazy, inside the four read paths above |
 
-### Corrective Policies
+### 7. Created Events
 
-- **Revoke is the compensation.** There is no distributed transaction and no
-  lock held across the physical pick/pack operation — `Revoke()` is the one
-  and only corrective action, and it is exact: it walks the reservation's own
-  recorded `Allocation`s and returns precisely what was taken to precisely
-  the units it came from.
-- **No automatic re-allocation on failure.** This aggregate/use-case makes
-  recovery *possible* (the quantity becomes usable again); it does not decide
-  what happens next. Re-releasing the work against a different holding,
-  re-prioritising, or splitting the order is a WES-tier decision that belongs
-  to `wes-work-planning`.
-- **Known gap — no scheduled corrective sweep.** `Expire()` exists as a
-  corrective transition but nothing calls it on a timer; the only corrective
-  path exercised in production today is an explicit `DELETE
-  /reservations/{id}` (revoke), even for reservations that are, in effect,
-  timed out.
+| Event | Full CloudEvents `type` | Topics |
+| --- | --- | --- |
+| StockReserved | `com.warehouse.wms.inventory-storage.reservation.StockReserved` | integration + analytics |
+| ReservationRevoked | `com.warehouse.wms.inventory-storage.reservation.ReservationRevoked` | integration + analytics |
+| ReservationExpired | `com.warehouse.wms.inventory-storage.reservation.ReservationExpired` | analytics only |
+| StockPicked | `com.warehouse.wms.inventory-storage.reservation.StockPicked` | analytics only |
 
-### Handled Commands
+### 8. Throughput (estimate)
 
-| Command | Result |
+Highest of the four: one reservation per order line, plus one revoke or
+confirm each, plus reads by `demandRef` from the Order Lifecycle console.
+Each reservation is written by one caller at a time, so per-instance
+contention is low; contention moves to the `StockUnit`s it draws from.
+
+### 9. Size (estimate)
+
+Small: a handful of fields plus usually one to three allocations. Short
+lifetime — two to three events (created, then confirmed / revoked /
+expired) within the 30-minute default timeout. Rows are never deleted.
+
+---
+
+## ProductClassification
+
+### 1. Name
+
+`ProductClassification` — `internal/domain/product.ProductClassification`
+
+### 2. Description
+
+SKU-level master data, independent of any `StockUnit` or bin, describing how
+an item must be handled. This context is the **source of truth** (ADR 0009):
+a closed set of `HandlingTag`s, a `TemperatureClass` required only for
+`TemperatureSensitive` SKUs, and an optional US DOT hazard class meaningful
+only for `Hazmat` SKUs (ADR 0010). `StowStock` enforces placement and
+same-bin segregation from it; three sibling contexts read it over REST.
+
+| Field | Meaning |
 | --- | --- |
-| `New(sku, quantity, demandRef, allocations, createdAt, timeout)` | Constructs the aggregate in `ACTIVE` status (via `ReserveStock`) |
-| `Revoke()` | `ACTIVE → REVOKED` (via `RevokeReservation`) |
-| `Confirm(now)` | `ACTIVE → CONFIRMED`, refuses if expired (via `ConfirmPick`) |
-| `Expire()` | `ACTIVE → EXPIRED` — modelled and unit-tested, **never invoked by any use case today** |
+| `sku` | The classified SKU (identity) |
+| `handlingTags` | Set of `Hazmat` / `Fragile` / `TemperatureSensitive` / `Oversized` / `HighValue` |
+| `temperatureClass` | `Ambient` / `Chilled` / `Frozen`, or empty |
+| `dotHazardClass` | `1`-`9`, or `0` (`DOTHazardClassUnspecified`) |
 
-### Created Events
+### 3. State Transitions
 
-`StockReserved` (on successful `New`/reserve), `ReservationRevoked` (on
-`Revoke`), `StockPicked` (on `Confirm`, raised by `ConfirmPick`),
-`ReservationExpired` (modelled on `Expire()` — **defined but never raised in
-practice**, since nothing calls `Expire()`).
+No status enum: a classification either does not exist or is current, and
+re-classifying replaces it wholesale.
 
-### Throughput
+```mermaid
+stateDiagram-v2
+    [*] --> Unclassified
+    Unclassified --> Classified: ClassifyProduct, product.New
+    Classified --> Classified: ClassifyProduct replaces
+```
 
-Low-to-moderate write volume relative to `StockUnit`: one reservation per
-demand, but each reservation write fans out into writes on every `StockUnit`
-it allocated from (`ConfirmPick` touches three aggregates — `Reservation`,
-`StockUnit`, and `Bin` — through three separate repositories). Reads are
-dominated by the demand-lookup path, `GET /reservations?demandRef=`, added
-for the fleet's console.
+Source: `internal/domain/product/classification.go`,
+`internal/application/usecases/classify_product.go`.
+Omitted: there is no delete or unclassify operation.
 
-### Size
+### 4. Enforced Invariants
 
-Small: five scalar/value fields plus an append-only list of `Allocation`
-value objects (one per `StockUnit` it drew from). A reservation is expected
-to hold at most a handful of allocations in practice, since chaotic storage
-means a SKU's stock is rarely fragmented across more than a few bins for any
-single reasonable demand quantity.
+| # | Invariant | Enforced by | Failing-path test |
+| --- | --- | --- | --- |
+| P1 | At least one handling tag | `New` → `product.ErrNoHandlingTags` | `TestNew_TableDriven/no_tags_rejected` |
+| P2 | `HandlingTag` is a closed enum | `ParseHandlingTag` / `New` → `product.ErrUnknownHandlingTag` | `TestParseHandlingTag/unknown`, `TestNew_TableDriven/unknown_tag_rejected` |
+| P3 | Tags form a set | `New` → `product.ErrDuplicateHandlingTag` | `TestNew_TableDriven/duplicate_tag_rejected` |
+| P4 | `TemperatureSensitive` requires a valid `TemperatureClass` | `New` → `product.ErrTemperatureClassRequired` / `product.ErrUnknownTemperatureClass` | `TestNew_TableDriven/temperature_sensitive_without_class_rejected` |
+| P5 | No `TemperatureClass` without `TemperatureSensitive` | `New` → `product.ErrTemperatureClassNotApplicable` | `TestNew_TableDriven/temperature_class_without_temperature_sensitive_tag_rejected` |
+| P6 | `DOTHazardClass` only with `Hazmat` | `New` → `product.ErrDOTHazardClassNotApplicable` | `TestNew_TableDriven/dot_hazard_class_without_hazmat_tag_rejected` |
+| P7 | `DOTHazardClass` in 1-9 | `ParseDOTHazardClass` / `New` → `product.ErrInvalidDOTHazardClass` | `TestNew_TableDriven/dot_hazard_class_out_of_range_rejected` |
+| P8 | `Hazmat` never requires a DOT class | `New` accepts `DOTHazardClassUnspecified` | `TestNew_TableDriven/hazmat_alone_succeeds` |
+
+Rules this aggregate's data drives, enforced in `StowStock` (they span a
+classification, a bin's occupants and facility-layout's zone data):
+
+| Rule | Error |
+| --- | --- |
+| Hazmat SKU needs a hazmat-rated zone | `usecases.ErrHazmatZoneRequired` |
+| Temperature-sensitive SKU needs a matching zone temperature class | `usecases.ErrTemperatureClassMismatch` |
+| Zone lookup failed for a classified SKU (fail-closed) | `usecases.ErrLocationClassificationUnavailable` |
+| Incompatible DOT classes may not share a bin (49 CFR §177.848, four simplifications) | `usecases.ErrHazmatClassIncompatible` via `product.Incompatible` |
+
+Unclassified SKUs, unknown bins and unclassified occupants are **fail-open**.
+
+### 5. Corrective Policies
+
+- **Re-classification replaces.** `ClassifyProduct` is idempotent by SKU;
+  correcting a wrong classification is just another `PUT`.
+- None for already-stowed stock: re-classifying a SKU does not re-check
+  bins it already occupies.
+
+### 6. Handled Commands
+
+| Command | Method | Use case / entry point |
+| --- | --- | --- |
+| Classify / re-classify | `product.New` | `ClassifyProduct` — `PUT /products/{sku}/classification` |
+
+### 7. Created Events
+
+| Event | Full CloudEvents `type` | Topics |
+| --- | --- | --- |
+| ProductClassified | not published (would be `com.warehouse.wms.inventory-storage.product.ProductClassified`) | none — goes through `EventPublisher`, but neither Kafka encoder maps it |
+
+### 8. Throughput (estimate)
+
+Low writes (catalogue changes), high reads: every classified-SKU stow and
+every sibling's `GET /products/{sku}/classification`.
+
+### 9. Size (estimate)
+
+Tiny: four fields. Lives as long as the SKU; a handful of re-classifications
+over its life.
+
+---
+
+## Read models and projections (not aggregates)
+
+| Read model | Where | Built from |
+| --- | --- | --- |
+| Usable inventory per SKU | `usecases.GetUsable` → `UsableInventory` | Σ `StockUnit.Usable()` at read time — never stored |
+| Bin occupancy (MCP `get_bin_occupancy`) | `inbound/mcp` → `toBinOccupancy` | `StockRepo.FindByBin` at read time |
+| Bin capacity view | `usecases.GetBin` | the `Bin` aggregate, read-only |
+| Reservations by demand ref | `usecases.GetReservationsByDemandRef` | `ReservationRepo.FindByDemandRef` (with lazy expiry) |
+| Facility location cache | `outbound/facilitycache.Consumer` | `warehouse.facility.events`, in memory, rebuilt on every start |
+| Inventory Flow & Accuracy report | `internal/analytics/report`, table `flow_accuracy_rollup` | `warehouse.inventory.analytics`, written only by `cmd/inventory-projector` |
+
+## Value objects (`internal/domain/shared`)
+
+| Type | Rule | Errors |
+| --- | --- | --- |
+| `SKU` | Non-empty | `ErrEmptySKU` |
+| `BinId` | Non-empty | `ErrEmptyBinID` |
+| `Quantity` | Non-negative; every arithmetic operation that would go negative errors rather than clamping. `NewPositiveQuantity` also rejects zero. | `ErrNegativeQuantity`, `ErrZeroQuantity` |
+
+`Quantity.Sub` is the workhorse of the "no negative usable" rule and is
+where boundary tests were added during mutation testing.
+
+## The four named invariants
+
+`CLAUDE.md` singles out four as the Definition of Done for the context:
+
+| Invariant | Domain test | Use-case test |
+| --- | --- | --- |
+| Bin-capacity rejection | `TestBin_Occupy_ExceedsCapacity_Rejected` | `TestStowStock_ExceedsBinCapacity_Rejected` |
+| Stow requires item + location | `TestNewStockUnit_RequiresSKU` / `_RequiresBin` | — |
+| Reservation ≤ usable | `TestStockUnit_Reserve_ExceedsUsable_Rejected` | `TestReserveStock_ExceedsUsable_Rejected` |
+| Revoke returns to usable | `TestStockUnit_ReleaseReservation_ReturnsToUsable` | `TestRevokeReservation_ReturnsQuantityToUsable` |
+
+All four are also covered as black-box Gherkin scenarios under `features/`,
+driven through the real HTTP router. See the
+[class diagram](/contexts/inventory-storage/class-diagram) for the types and the
+[sequence diagrams](/contexts/inventory-storage/sequence-diagrams) for how the use cases drive these
+aggregates.

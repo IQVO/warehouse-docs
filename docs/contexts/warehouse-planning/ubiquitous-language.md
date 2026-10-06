@@ -1,41 +1,60 @@
 ---
 id: ubiquitous-language
-title: Ubiquitous Language
-sidebar_label: Ubiquitous Language
-description: ProcessCapacity, CapacityConstraint, CapacityRate, CapacityWindow, WorkloadProfile, ProcessPath, StationStandard, Station count, Site, ProcessPathCapacity, CapacityPlan, Bottleneck — from the repository's own domain-model rules.
+title: Ubiquitous language
+sidebar_label: Ubiquitous language
 ---
 
-# Ubiquitous Language
+# Ubiquitous language
 
-The definitions below come from this context's own
-`.claude/rules/domain-model.md` and its ADRs
-([0001](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0001-warehouse-planning-bounded-context.md),
-[0002](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0002-station-capacity-composition.md),
-[0003](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0003-window-coverage-semantics.md)),
-not reinvented for this page.
+:::info[Synced from warehouse-planning]
+This page is a copy of [`docs/docs/ddd/ubiquitous-language.md`](https://github.com/IQVO/warehouse-planning/blob/develop/docs/docs/ddd/ubiquitous-language.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-| Term | Definition |
-| --- | --- |
-| **ProcessCapacity** | The usable throughput of one warehouse process at one location for one time window; the minimum across its registered constraints. An aggregate, identified by `(ProcessType, Location, CapacityWindow)`. |
-| **CapacityConstraint** | One named limiting factor (type + rate) attached to a ProcessCapacity. Types: `LABOR`, `LOCATION`, `EQUIPMENT`, `STATION`, `CONVEYOR`, `BUFFER`, `REPLENISHMENT`. |
-| **CapacityRate** | A quantity + native unit + period, e.g. `4000 UNIT / HOUR`. Never compared across differing units without going through a WorkloadProfile first. |
-| **CapacityWindow** | The `[start, end)` period a capacity value is valid for; a capacity number with no window is incomplete by definition. A window `C` **covers** a planning window `W` when `C.start <= W.start` and `C.end >= W.end` (a window covers itself) — the rule by which a registered constraint applies to a requested window (ADR 0003). The window is also part of the ProcessCapacity's identity, which stays an exact key. |
-| **WorkloadProfile** | The per-warehouse conversion factors (units per order, packages per order) used to normalize different processes' native rates into one comparable flow unit. Today carried on the request, not persisted. |
-| **ProcessPath** | An ordered sequence of process types a workload must flow through (e.g. Pick → Rebin → Pack). **Locally owned by this context** and operator-declared via `POST /process-paths` — not a Conformist copy of `process-path-management`'s aggregate, which carries no physical step sequence. The two share the `path_id` string only as a loose human cross-reference. |
-| **StationStandard** | The operator-declared throughput of **one** station of a process at a site, keyed `(location, process type)` and valued as a CapacityRate in the process's natural unit (e.g. `180 PACKAGE / hour` for PACK at `SIM1`). A planning parameter owned by this context; no upstream publishes it. |
-| **Station count** | How many work-center stations `facility-layout` tallied for an activity across the zones of a site. A count has no throughput of its own — only `count x StationStandard` does. |
-| **Site / location** | A planning `location` is a site (building) code such as `SIM1`: the labor consumer's `building_id` and the first dash-separated segment of the facility zone ids of that site (`SIM1-OPS-WC`). A zone whose id has no matching site contributes nothing. |
-| **ProcessPathCapacity** | The normalized, end-to-end throughput of a ProcessPath: the minimum of its steps' effective capacities after WorkloadProfile normalization, plus which step is the bottleneck and which constraint type binds it. A domain service result, not a stored aggregate. |
-| **Step composition** | For a path step with process `P` at location `L` and window `W`: candidates are the constraints of the covering ProcessCapacity aggregates (per constraint type the latest window start wins) plus a **derived STATION constraint** `stationCount(L, P) x StationStandard(L, P)`; every candidate is normalized to orders per hour, the minimum is the step's rate, and the binding constraint type is reported. Stations with no declared standard produce a warning, never an invented throughput. |
-| **CapacityPlan** | The aggregate that ties assigned demand for a location and planning window to the ProcessPathCapacity available to serve it, and the resulting shortage (if any). Lifecycle: `DRAFT` → `PUBLISHED`. |
-| **Shortage** | `max(0, assigned demand - capacity over window)`; never negative. Demand exactly equal to capacity is not a shortage. |
-| **Bottleneck** | The constraint or process-path step currently limiting end-to-end flow. |
 
-`ProcessCapacityRegistered` and `ProcessCapacityChanged` exist as domain
-vocabulary only — nothing raises or publishes them yet.
+Use these exact names in code, API and conversation. The repository's
+`.claude/rules/domain-model.md` is the agent-facing source; every term below
+maps to a code identifier. Terms whose code name differs from the spoken name
+are flagged in the last column.
 
-See the [Glossary](/glossary) for how these terms sit alongside every other
-bounded context's vocabulary, and
-[Ubiquitous Language](/strategic-design/ubiquitous-language) at the platform
-level — "Process Path" is one of the documented same-word, different-model
-cases.
+| Term | Meaning | Code identifier | Name differs? |
+| --- | --- | --- | --- |
+| **ProcessCapacity** | The usable throughput of one warehouse process at one site for one time window; the minimum across its registered constraints. | `processcapacity.ProcessCapacity` | no |
+| **CapacityConstraint** | One named limiting factor (type + rate) attached to a ProcessCapacity: `LABOR`, `LOCATION`, `EQUIPMENT`, `STATION`, `CONVEYOR`, `BUFFER`, `REPLENISHMENT`. | `processcapacity.ConstraintType` + `CapacityRate`, paired in `ConstraintEntry` | **yes**: no `CapacityConstraint` type exists; the pair is `ConstraintEntry` |
+| **Binding constraint** | The constraint type producing the minimum (of an aggregate, a step or the bottleneck step). | `EffectiveRate()` second result; `StepResult.Binding`; `CapacityPlan.BottleneckConstraint()`; JSON `binding_constraint` / `bottleneck_constraint` | **yes**: `Binding` / `BottleneckConstraint` |
+| **CapacityRate** | A quantity + native unit + period, for example `4000 UNIT / HOUR`. Never compared across units without a WorkloadProfile. | `processcapacity.CapacityRate` | no |
+| **Native unit** | The unit of every constraint on one ProcessCapacity: `UNIT`, `LINE`, `ORDER` or `PACKAGE`. | `processcapacity.CapacityUnit` (`UnitUnit`, `UnitLine`, `UnitOrder`, `UnitPackage`) | **yes**: `CapacityUnit` |
+| **CapacityWindow** | The `[start, end)` period a capacity is valid for. A capacity with no window is incomplete by definition. | `processcapacity.CapacityWindow` | no |
+| **Covers** | Window `C` covers planning window `W` when `C.start <= W.start` and `C.end >= W.end`; a window covers itself (ADR 0003). | `CapacityWindow.Covers`; `ProcessCapacityRepository.FindCovering` | no |
+| **WorkloadProfile** | Per-warehouse conversion factors (units per order, packages per order) used to normalize native rates into ORDER. Supplied on each request. | `processcapacity.WorkloadProfile`, `NormalizeToOrderRate`; JSON `units_per_order`, `packages_per_order` | no |
+| **ProcessType** | A warehouse process step such as `PICK`, `REBIN`, `PACK`. | `processcapacity.ProcessType` and `processpath.ProcessType` (two string types, to avoid an import cycle) | no |
+| **ProcessPath** | An ordered, non-empty sequence of process types a workload flows through. Locally owned and operator-declared (ADR 0001 Addendum). | `processpath.ProcessPath` | no |
+| **ProcessPathCapacity** | The normalized end-to-end throughput of a ProcessPath: the minimum of its steps, plus the bottleneck step and its binding constraint. | `processcapacity.PathCapacityResult` from `ComposeProcessPathCapacity` | **yes**: `PathCapacityResult` |
+| **Step composition** | A step's candidates (covering constraints, newest window start per type, plus the derived STATION constraint) normalized to ORDER; the minimum wins. | `processcapacity.ComposeStepCapacity`, `StepInput`, `StepResult` | no |
+| **StationStandard** | Operator-declared throughput of ONE station of a process at a site, in `UNIT`, `PACKAGE` or `ORDER`. | `processcapacity.StationStandard` | no |
+| **Station count** | How many work-center stations `facility-layout` tallied for an activity across a site's zones. Has no throughput of its own. | `StorageTallyReader.StationCount`; table `location_slot_tally` (`tally_type = 'STATION'`) | **yes**: a tally bucket, not a type |
+| **Storage positions** | Storage slots per zone and location type; a read model, not a throughput. | `tally.Bucket`; `GetStorageCapacity`; JSON `storage_positions` | **yes**: `Bucket` |
+| **Site / location** | A planning `location` is a site (building) code such as `SIM1`, also the first dash-separated segment of that site's facility zone ids. | the `location` string on every type; `building_id` in the labor payload | **yes**: `building_id` upstream |
+| **CapacityPlan** | Assigned demand for a site and window, compared with the ProcessPathCapacity; yields shortage and bottleneck. Lifecycle `DRAFT` then `PUBLISHED`. | `capacityplan.CapacityPlan`, `StatusDraft`, `StatusPublished` | no |
+| **Assigned demand** | The orders a plan must serve in its window, stated or defaulted from expected demand. | `CapacityPlan.AssignedDemand()`; JSON `assigned_demand` | no |
+| **DemandSource** | Where the assigned demand came from: `request` or `orders`. | `capacityplan.DemandSource` (`DemandSourceRequest`, `DemandSourceOrders`) | no |
+| **Capacity over window** | Path capacity (ORDER per hour) times the window's hours. | `CapacityPlan.CapacityOverWindow()`; JSON `capacity_over_window` | no |
+| **Shortage** | `max(0, assigned demand - capacity over window)`, in orders. Equal is not a shortage. | `CapacityPlan.Shortage()` | no |
+| **Bottleneck** | The process-path step limiting end-to-end flow, and the constraint type binding it. | `PathCapacityResult.BottleneckStep`; `CapacityPlan.BottleneckStep()`; event `BottleneckDetected` | no |
+| **Expected demand** | Orders order-management has promised at a site, counted by promise cutoff in `[start, end)`. Zero orders means *no data*. | `demand.Order`, `demand.Summary`, `GetExpectedDemand`; table `order_demand` | no |
+| **Promise cutoff** | The instant by which an order is promised; decides which window it counts in. | `demand.Order.PromiseAt()`; upstream `promise_date` | **yes**: `promise_date` upstream, `promise_at` here |
+| **Released lines** | Lines released by an order's latest allocation pass. NOT units. | `demand.Order.ReleasedLines()`; JSON `released_lines` | no |
+
+## Vocabulary only (not implemented)
+
+`ProcessCapacityRegistered` (a native constraint was registered) and
+`ProcessCapacityChanged` (the effective rate changed) exist as domain-model
+vocabulary. Nothing raises or publishes them.
+
+## Stale wording in code comments
+
+The package comment of `internal/domain/processpath` and the doc comment of
+`processcapacity.ProcessType` still describe `ProcessPath` as a *Conformist,
+read-only copy* of `process-path-management`'s concept. That predates the ADR
+0001 Addendum: the path is locally owned and operator-declared, and nothing is
+consumed from `process-path-management`. The ubiquitous language above follows
+the ADR.

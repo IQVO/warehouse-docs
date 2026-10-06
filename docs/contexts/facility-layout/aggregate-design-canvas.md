@@ -2,206 +2,557 @@
 id: aggregate-design-canvas
 title: Aggregate Design Canvas
 sidebar_label: Aggregate Design Canvas
-description: The full ddd-crew Aggregate Design Canvas for LocationSlot, the leaf aggregate, plus its place in the Site to Zone to Aisle structural hierarchy.
+description: The ddd-crew Aggregate Design Canvas v1.1 for each of Facility Layout's eight aggregate roots — state transitions, enforced invariants, commands, events, throughput and size.
 ---
 
 # Aggregate Design Canvas
 
-Following the [ddd-crew Aggregate Design
-Canvas](https://github.com/ddd-crew/aggregate-design-canvas) template, for
-this context's most interesting aggregate: **LocationSlot**, the coded leaf
-location.
+:::info[Synced from facility-layout]
+This page is a copy of [`docs/docs/ddd/aggregate-design-canvas.md`](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/ddd/aggregate-design-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-## Where LocationSlot sits in the hierarchy
 
-`LocationSlot` is the leaf of a strict four-level structural hierarchy. Three
-parent aggregates — `Site`, `Zone`, `Aisle` — are simpler versions of the
-same shape (identity, `status`, a `Decommission()` behaviour, and a
-uniqueness/parent-active check enforced at the use-case layer, not inside
-the aggregate itself, since a single aggregate cannot see its siblings).
-`LocationSlot` is where all of that hierarchy, plus `LocationType` and
-`PlacementRule`, actually gets evaluated together — which is why it is this
-canvas's subject rather than any of its ancestors.
+Following the [ddd-crew Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas),
+one section per aggregate root. An aggregate root here is a domain type with
+its **own repository port** in `internal/application/ports/ports.go` — there
+are eight. The narrative companions are [Aggregates](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/ddd/aggregates.md) (the
+hierarchy and identities) and [Invariants](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/ddd/invariants.md) (the
+chain-of-custody flow and the full invariant table).
 
-```
-Site  --scopes-->  Zone  --scopes-->  Aisle  --scopes-->  LocationSlot
-                     |                                         ^
-                     |                                         |
-              TemperatureClass, Hazmat                  LocationType, Capacity
-                     |                                         |
-                     `------ read by PlacementRule ------------'
-                              (evaluated once, at LocationSlot
-                               construction, passed in — never
-                               queried by the aggregate itself)
-```
+Conventions on this page:
 
-- **Site** — identity `SiteCode`. Root of the hierarchy.
-- **Zone** — identity `Site-Area-Zone` (e.g. `WH1-STOR-AMB`). Carries
-  `TemperatureClass` and `Hazmat`, the fields every `PlacementRule`
-  predicate matches on.
-- **Aisle** — identity `ZoneID-Aisle` (e.g. `WH1-STOR-AMB-A07`). Carries
-  `SequenceHint` (walk order) and `Direction`.
-- **LocationSlot** (this canvas) — identity is the full `LocationCode`
-  itself (e.g. `WH1-STOR-AMB-A07-03-02-B`).
+- CloudEvents types are written in full; all share the prefix
+  `com.warehouse.wms.facility-layout.` (`internal/domain/shared/events.go`).
+- HTTP status in brackets is the RFC 7807 mapping in
+  `internal/adapters/inbound/http/errors.go`.
+- **Throughput** and **Size** are **estimates**, reasoned from the domain
+  (a warehouse map changes slowly), not measured.
+- `Rehydrate*` constructors are persistence-only and skip invariants; they are
+  not commands.
 
-## Name
+Read models and projections are **not** aggregates — see
+[Read models and projections](#read-models-and-projections-not-aggregates) at
+the end.
 
-**LocationSlot**
+## Site
 
-## Description
+### 1. Name
 
-The leaf aggregate: one coded physical storage slot. Its identity **is** its
-`LocationCode` — a seven-segment value object, not a surrogate key. A
-`LocationSlot` cannot be constructed until the Site → Zone → Aisle chain of
-custody its code implies resolves to existing, `Active` parents, and until
-every applicable `PlacementRule` for its Zone is satisfied. Once it exists,
-every field is immutable except `Status`, which can transition exactly once,
-one-way, to `Decommissioned`.
+`site.Site` — `internal/domain/site/site.go`. Identity: `SiteCode` (e.g. `WH1`).
 
-The most interesting property of this aggregate is what it is handed rather
-than what it looks up: it never reaches outside itself to a repository.
-Zone attributes and the applicable rule set are *passed in* by the use case
-at construction time — Vernon's "aggregates don't reach outside themselves"
-discipline applied literally.
+### 2. Description
 
-```go
-func NewLocationSlot(
-    code shared.LocationCode,
-    locationType placement.LocationType,
-    capacityOverride shared.Capacity,
-    attrs placement.ZoneAttributes,
-    rules placement.RuleSet,
-) (*LocationSlot, error)
+A physical facility/building; the root of the location hierarchy. Its code is
+the first segment of every `LocationCode` inside it.
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: NewSite via RegisterSite
+    Active --> Decommissioned: Decommission
+    UnderMaintenance --> Decommissioned: Decommission
+    Decommissioned --> Decommissioned: Decommission rejected ErrAlreadyDecommissioned
+    note right of UnderMaintenance
+        Reachable only by rehydrating a persisted row.
+        No use case sets it.
+    end note
 ```
 
-## State Transitions
+Source: `internal/domain/site/site.go`, `internal/domain/shared/enums.go`.
+Omitted: `RehydrateSite`. No use case calls `Site.Decommission` today.
 
-```
-        NewLocationSlot()
-              |
-              v
-      ┌───────────────┐
-      │     Active     │──── external data load only, no use case sets it ────┐
-      └───────┬────────┘                                                       │
-              │                                                                v
-              │ Decommission()                                       ┌──────────────────┐
-              v                                                       │ UnderMaintenance  │
-      ┌───────────────┐                                               └─────────┬─────────┘
-      │ Decommissioned │◄──────────────── Decommission() ────────────────────────┘
-      └───────────────┘
-              │
-              │ Decommission() again
-              v
-        ErrAlreadyDecommissioned (409)
-```
+### 4. Enforced Invariants
 
-| From | Event / Command | To | Notes |
-|---|---|---|---|
-| *(none)* | `RegisterLocationSlot` | **Active** | Only reachable state at construction. Requires full chain-of-custody resolution and PlacementRule satisfaction. |
-| **Active** | `DecommissionLocationSlot` | **Decommissioned** | One-way. Terminal. |
-| **UnderMaintenance** | `DecommissionLocationSlot` | **Decommissioned** | A slot in `UnderMaintenance` can still be decommissioned. |
-| **Decommissioned** | *(re-registration of the same code)* | *(rejected)* | `ErrDuplicateLocationCode` (409) — never resurrects the slot. There is no reactivation use case in v1. |
-| *(any)* | `RegisterLocationSlot` with an already-registered code | *(rejected)* | `ErrDuplicateLocationCode` (409), regardless of the existing slot's status. |
-
-`UnderMaintenance` is a legal persisted state the read models render — e.g.
-loaded from an external facility-management system — but v1 exposes no use
-case that *transitions a slot into it*. It exists in the state machine as an
-input, not an output, of this service's own use cases today.
-
-## Enforced Invariants
-
-| Invariant | Enforced in | Failure |
-|---|---|---|
-| `LocationCode` is exactly 7 valid `[A-Z0-9]` segments | `shared.NewLocationCode` / `ParseLocationCode` | `ErrMalformedLocationCode` / `ErrEmptyLocationSegment` / `ErrInvalidLocationSegment` → 400 |
-| `LocationCode` globally unique (it **is** the identity) | `RegisterLocationSlot` use case | `ErrDuplicateLocationCode` → 409 |
-| Site → Zone → Aisle chain resolves to existing aggregates | `RegisterLocationSlot` use case | `ErrSiteNotFound` / `ErrZoneNotFound` / `ErrAisleNotFound` → 404 |
-| Every link in that chain is `Active` | `RegisterLocationSlot` use case | `ErrSiteNotActive` / `ErrZoneNotActive` / `ErrAisleNotActive` → 409 |
-| Supplied zone attributes match the code's own `ZoneID()` | `slot.NewLocationSlot` | `ErrZoneMismatch` → 422 — the caller cannot hand in one zone's attributes while registering a slot in another |
-| Capacity envelope (weight, volume) strictly positive — when the LocationType's role requires capacity (`Storage`/`Staging`/`Drop`/`Consolidation`, ADR 0016) | `shared.NewCapacity` | `ErrInvalidMaxWeight` / `ErrInvalidMaxVolume` → 422 |
-| Functional attributes match the role: a `Dock` slot needs a `dockFlow`, a `WorkCenter` slot at least one activity, no other role may carry either (ADR 0016) | `NewFunctionalAttributes` | `ErrDockFlowRequired` / `ErrWorkCenterActivitiesRequired` / `ErrFunctionalAttributesNotAllowed` |
-| Satisfies every applicable `PlacementRule` | `slot.NewLocationSlot` via `RuleSet.Check` | `placement.ErrPlacementRuleViolated` → 422, always naming the specific rule violated |
-| Cannot decommission twice | `LocationSlot.Decommission` | `ErrAlreadyDecommissioned` → 409 |
-| A decommissioned code is never resurrected by re-registration | `RegisterLocationSlot` use case | `ErrDuplicateLocationCode` → 409 |
-
-## Corrective Policies
-
-There is no self-healing or compensating-transaction machinery inside this
-aggregate — by design, because every invariant above is checked *before*
-the aggregate is allowed to exist, so there is no invalid state to correct
-after the fact. The corrective mechanisms that do exist sit one layer up:
-
-- **Bulk import is atomic per row, never all-or-nothing.**
-  `ImportFacilityLayout` applies every invariant to each row independently;
-  a failing row is reported with its index, its location code, and the
-  exact error, while the other rows still commit. There is no
-  saga/rollback across rows — each row's success or failure is fully
-  independent.
-- **Rule changes are not retroactively enforced.** If a `PlacementRule` is
-  added *after* a conflicting slot already exists, that slot is not
-  automatically found or fixed. The available mitigation is manual:
-  `GET /sites/{siteCode}/layout` returns every slot with its zone and type,
-  so an audit against the current rule set is a read plus a comparison. A
-  first-class "revalidate" use case is deliberately not in v1 — see [Open
-  Questions](./bounded-context-canvas.md#open-questions).
-- **Decommission has no compensating action.** It is one-way by design;
-  there is no policy to reverse it. A consumer that needs a location back
-  must register a new code.
-
-## Handled Commands
-
-| Command | Preconditions | Outcome |
-|---|---|---|
-| `RegisterLocationSlot(code, locationType, capacityOverride?)` | Code well-formed; Site/Zone/Aisle chain exists and is Active; code not already registered; LocationType exists; PlacementRules satisfied | `LocationSlot` created, `Active` |
-| `DecommissionLocationSlot(locationCode)` | Slot exists; not already Decommissioned | `Status` → `Decommissioned` |
-| `ImportFacilityLayout(rows[])` | Same as `RegisterLocationSlot`, applied per row | Each valid row registers a slot (and any missing site/zone/aisle it declares); invalid rows are reported, not applied; one summary event fires regardless |
-| `SetLocationGeometry(locationCode, position, dimensions, pickSequence?)` | Slot exists and is not Decommissioned (`ErrSlotDecommissioned`); pick sequence non-negative | Optional geometry set (ADR 0017) |
-
-`GetSiteLayout`, `GetZoneGrid`, `GetZoneTravelGraph` and
-`EstimateTravelDistance` are **not** commands against this aggregate — they
-are read-model assemblers that never write and never publish.
-
-## Created Events
-
-| Event | When |
+| Invariant | Enforced by |
 |---|---|
-| `LocationSlotRegistered` | A `RegisterLocationSlot` (or a successful row of `ImportFacilityLayout`) succeeds. |
-| `LocationSlotDecommissioned` | A `DecommissionLocationSlot` succeeds. |
-| `FacilityLayoutImported` | Once per `ImportFacilityLayout` call, summarising rows submitted/imported/rejected — in addition to, not instead of, the per-slot `LocationSlotRegistered` events for each successful row. |
-| `LocationGeometryUpdated` | A `SetLocationGeometry` succeeds (ADR 0017). |
+| Code non-empty | `ErrEmptySiteCode` [400] — `NewSite` |
+| Code is `[A-Z0-9]` only | `ErrInvalidSiteCode` [400] — `validateSiteCode` |
+| Name non-empty | `ErrEmptySiteName` [400] — `NewSite` |
+| Code unique | `usecases.ErrDuplicateSite` [409] — `RegisterSite` (an aggregate cannot see its siblings) |
+| Decommission is one-way | `site.ErrAlreadyDecommissioned` [409] |
 
-See [Domain events](./domain-events.md) for full payload shapes and the
-other eight events raised by this context's other aggregates (`Site`,
-`Zone`, `Aisle`, `LocationType`, `PlacementRule`, `CrossAisle`,
-`FixedStructure`).
+### 5. Corrective Policies
 
-## Throughput
+None inside the aggregate. A duplicate code is refused, not merged.
+`ImportFacilityLayout.ensureSite` reuses an existing Active site instead of
+re-registering it, and rejects the row with `ErrSiteNotActive` otherwise.
 
-This is a **slow-changing reference catalogue**, not a high-frequency
-transactional stream — the same characterisation this context's own
-analytics work makes explicit (its Kafka analytics topic buckets events by
-**day**, not by hour, unlike the fulfillment-execution pilot's hourly
-report). A slot is registered once and read — via `GET
-/locations/{locationCode}`, the layout/grid read models, or the
-classification endpoint — potentially millions of times over its lifetime.
-This read:write asymmetry is the explicit justification for enforcing
-PlacementRules at registration time rather than on every read: whatever is
-paid per-write is paid at the best possible ratio; whatever would be paid
-per-read is avoided entirely.
+### 6. Handled Commands
 
-Bulk import (`ImportFacilityLayout`) is the one write-heavy path — hundreds
-of rows in a single call when a real building's layout is loaded — and is
-the one place the per-zone rule-set lookup is repeated work across rows,
-acceptable at the volumes involved.
+`RegisterSite` (`POST /sites`), and implicitly `ImportFacilityLayout`
+(`POST /locations/import`) for a site seen for the first time.
 
-## Size
+### 7. Created Events
 
-A `LocationSlot` is small and flat: a `LocationCode` (seven short string
-segments), a `LocationType` name, its `role` and role-specific functional
-attributes, a `Capacity` (two floats), a `Status` enum, and optional
-geometry (position, dimensions, pick sequence). It holds no collection, no child entities, and no reference to
-sibling slots. All hierarchy and cross-slot reasoning is external to the
-aggregate — resolved by the use case (chain-of-custody lookups) or by the
-read-model assemblers (`GetSiteLayout`, `GetZoneGrid`), never by the
-aggregate holding a reference to its parents or siblings. This keeps the
-aggregate boundary exactly at "one coded slot," which is what makes it
-fully unit-testable with zero test doubles.
+`com.warehouse.wms.facility-layout.site.SiteRegistered`
+
+### 8. Throughput (estimate)
+
+A handful of writes per site lifetime; reads (layout, chain-of-custody
+lookups) far outnumber writes. No concurrency hotspot.
+
+### 9. Size (estimate)
+
+One event per instance (`SiteRegistered`); lives for years; three fields.
+
+## Zone
+
+### 1. Name
+
+`zone.Zone` — `internal/domain/zone/zone.go`. Identity: `SITE-AREA-ZONE`
+(e.g. `WH1-STOR-AMB`), the first three `LocationCode` segments.
+
+### 2. Description
+
+A behavioural classification scoped to a Site, bundling the Area and Zone
+segments. Its `TemperatureClass` and `Hazmat` flag are what placement rules
+match on. Optional `bayPitchM` / `levelPitchM` feed the travel graph's
+estimated-distance fallback.
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: NewZone via RegisterZone
+    Active --> Active: SetPitch
+    Active --> Decommissioned: Decommission
+    UnderMaintenance --> Decommissioned: Decommission
+    Decommissioned --> Decommissioned: Decommission rejected ErrAlreadyDecommissioned
+```
+
+Source: `internal/domain/zone/zone.go`, `internal/application/usecases/register_zone.go`.
+Omitted: `RehydrateZone`; `SetPitch` is only called during `RegisterZone`.
+No use case calls `Zone.Decommission` today.
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+|---|---|
+| Scoped to a site | `zone.ErrEmptySiteCode` [400] |
+| Area and zone codes present, `[A-Z0-9]` | `ErrEmptyAreaCode`, `ErrEmptyZoneCode`, `ErrInvalidCode` [400] |
+| Temperature class is Ambient / Chilled / Frozen | `shared.ErrUnknownTemperatureClass` [422] |
+| Bay and level pitch both > 0 when set | `ErrInvalidPitch` [422] — `SetPitch` |
+| Parent site exists and is Active | `usecases.ErrSiteNotFound` [404], `ErrSiteNotActive` [409] — `RegisterZone` |
+| Zone id unique within the site | `usecases.ErrDuplicateZone` [409]; DB `UNIQUE (site_code, area_code, zone_code)` |
+| Decommission is one-way | `zone.ErrAlreadyDecommissioned` [409] |
+
+### 5. Corrective Policies
+
+Unset pitch falls back to `DefaultBayPitchM` (1.2 m) and `DefaultLevelPitchM`
+(1.5 m) — `BayPitchM()` / `LevelPitchM()`.
+
+### 6. Handled Commands
+
+`RegisterZone` (`POST /sites/{siteCode}/zones`), `ImportFacilityLayout`.
+
+### 7. Created Events
+
+`com.warehouse.wms.facility-layout.zone.ZoneRegistered`
+
+### 8. Throughput (estimate)
+
+Tens of writes per site lifetime. Read on every slot registration (chain of
+custody) and every travel-graph build.
+
+### 9. Size (estimate)
+
+One event per instance; lives as long as its site; eight fields.
+
+## Aisle
+
+### 1. Name
+
+`aisle.Aisle` — `internal/domain/aisle/aisle.go`. Identity:
+`ZoneID-AISLE` (e.g. `WH1-STOR-AMB-A07`).
+
+### 2. Description
+
+A physical corridor scoped to a Zone. `SequenceHint` is the walk order;
+`Direction` (`OneWay` / `TwoWay`) shapes the travel graph; an optional
+`centreline` Segment gives real distances.
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: NewAisle via RegisterAisle
+    Active --> Active: SetCentreline via SetAisleGeometry
+    UnderMaintenance --> UnderMaintenance: SetCentreline
+    Active --> Decommissioned: Decommission
+    UnderMaintenance --> Decommissioned: Decommission
+    Decommissioned --> Decommissioned: SetCentreline rejected ErrAisleDecommissioned
+```
+
+Source: `internal/domain/aisle/aisle.go`, `internal/application/usecases/set_aisle_geometry.go`.
+Omitted: `RehydrateAisle`; the `ErrAlreadyDecommissioned` self-loop. No use
+case calls `Aisle.Decommission` today.
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+|---|---|
+| Scoped to a zone | `ErrEmptyZoneID` [400] |
+| Aisle code present, `[A-Z0-9]` | `ErrEmptyAisleCode`, `ErrInvalidAisleCode` [400] |
+| `sequenceHint` ≥ 0 | `ErrNegativeSequenceHint` [422]; DB `CHECK (sequence_hint >= 0)` |
+| Direction is OneWay / TwoWay | `shared.ErrUnknownDirection` [422] |
+| Parent zone exists and is Active | `usecases.ErrZoneNotFound` [404], `ErrZoneNotActive` [409] — `RegisterAisle` |
+| Aisle code unique within the zone | `usecases.ErrDuplicateAisle` [409] |
+| Centreline is a real segment with distinct ends | `shared.ErrSegmentEndpointsNotReal`, `ErrSegmentStartEndEqual` [422] — `shared.NewSegment` |
+| No geometry change once decommissioned | `ErrAisleDecommissioned` [409] |
+
+### 5. Corrective Policies
+
+With no centreline, adjacent-bay distance falls back to the zone's bay pitch
+and the travel edge is flagged `Estimated` (`travel.bayDistance`).
+
+### 6. Handled Commands
+
+`RegisterAisle` (`POST /zones/{zoneId}/aisles`), `SetAisleGeometry`
+(`PUT /zones/{zoneId}/aisles/{aisleCode}/geometry`), `ImportFacilityLayout`.
+
+### 7. Created Events
+
+`com.warehouse.wms.facility-layout.aisle.AisleRegistered`,
+`com.warehouse.wms.facility-layout.aisle.AisleGeometryUpdated`
+
+### 8. Throughput (estimate)
+
+Tens to low hundreds of writes per zone lifetime, mostly at commissioning.
+Not versioned: geometry is the aisle's only mutator
+([ADR 0025](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0025-optimistic-concurrency-version-column.md)).
+
+### 9. Size (estimate)
+
+1 + n events per instance (registration plus each centreline change);
+small, fixed-size state.
+
+## CrossAisle
+
+### 1. Name
+
+`aisle.CrossAisle` — `internal/domain/aisle/cross_aisle.go`. Identity:
+`(zoneId, fromAisle, toAisle, atBay)` — the table's composite primary key.
+
+### 2. Description
+
+A walkable connection between two aisles of one zone at a bay ordinal, giving
+the travel graph a shortcut between aisles (ADR 0017).
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: NewCrossAisle via RegisterCrossAisle
+    Active --> Decommissioned: Decommission
+    Decommissioned --> Decommissioned: Decommission rejected ErrCrossAisleAlreadyDecommissioned
+```
+
+Source: `internal/domain/aisle/cross_aisle.go` (its own private
+`crossAisleStatus` enum: `Active`, `Decommissioned` — no `UnderMaintenance`).
+No use case calls `CrossAisle.Decommission` today.
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+|---|---|
+| Zone, from-aisle, to-aisle and bay present | `ErrCrossAisleEmptyZoneID`, `ErrCrossAisleEmptyFromAisle`, `ErrCrossAisleEmptyToAisle`, `ErrCrossAisleEmptyBay` [400] |
+| Two distinct aisles | `ErrCrossAisleSameAisle` [422]; DB `CHECK (from_aisle <> to_aisle)` |
+| Zone exists | `usecases.ErrZoneNotFound` [404] |
+| Both aisles belong to that zone | `usecases.ErrCrossAisleAisleMismatch` [422] |
+| One connection per pair and bay, either direction | `usecases.ErrDuplicateCrossAisle` [409] — `CrossAisleRepo.FindByAisles` |
+
+### 5. Corrective Policies
+
+A cross-aisle whose bay is not a waypoint on both aisles is silently skipped
+by `travel.Build`. Every cross-aisle edge is estimated from the zone's bay
+pitch (`travel.crossAisleDistance`).
+
+### 6. Handled Commands
+
+`RegisterCrossAisle` (`POST /zones/{zoneId}/cross-aisles`).
+
+### 7. Created Events
+
+`com.warehouse.wms.facility-layout.crossaisle.CrossAisleRegistered`
+
+### 8. Throughput (estimate)
+
+A few per zone, at commissioning.
+
+### 9. Size (estimate)
+
+One event per instance; five fields.
+
+## LocationSlot
+
+### 1. Name
+
+`slot.LocationSlot` — `internal/domain/slot/location_slot.go`. Identity: its
+`LocationCode` (e.g. `WH1-STOR-AMB-A07-03-02-B`).
+
+### 2. Description
+
+The coded leaf location — the heart of this context. Owns whether a code
+exists, is active, what it is **for** (`role`, plus `FunctionalAttributes`
+for Dock / WorkCenter), its capacity envelope and optional geometry
+(position, dimensions, pick-sequence override). Never what is stored in it.
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active: NewLocationSlot via RegisterLocationSlot
+    Active --> Active: SetGeometry and SetPickSequence via SetLocationGeometry
+    UnderMaintenance --> UnderMaintenance: SetGeometry and SetPickSequence
+    Active --> Decommissioned: Decommission via DecommissionLocationSlot
+    UnderMaintenance --> Decommissioned: Decommission
+    Decommissioned --> Decommissioned: any change rejected
+    Decommissioned --> [*]
+```
+
+Source: `internal/domain/slot/location_slot.go`,
+`internal/application/usecases/decommission_location_slot.go`,
+`set_location_geometry.go`. Omitted: `RehydrateLocationSlot`. A
+decommissioned code is never re-registered (`ErrDuplicateLocationCode`).
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+|---|---|
+| Code has 7 `[A-Z0-9]` segments | `shared.ErrMalformedLocationCode`, `ErrEmptyLocationSegment`, `ErrInvalidLocationSegment` [400] |
+| Code globally unique, even after decommission | `usecases.ErrDuplicateLocationCode` [409] |
+| Site, zone and aisle exist and are Active (no orphan slots) | `ErrSiteNotFound` / `ErrZoneNotFound` / `ErrAisleNotFound` [404], `ErrSiteNotActive` / `ErrZoneNotActive` / `ErrAisleNotActive` [409] — `RegisterLocationSlot.resolveChain` |
+| Location type exists | `usecases.ErrLocationTypeNotFound` [404] |
+| Type present, code present | `ErrMissingLocationType`, `ErrMissingLocationCode` [400] |
+| Zone attributes match the code's zone | `ErrZoneMismatch` [422] |
+| Capacity present when the role requires it | `shared.ErrInvalidMaxWeight` [422] |
+| Placement rules satisfied, naming the rule | `placement.ErrPlacementRuleViolated` [422] — `RuleSet.Check` |
+| Dock needs a dockFlow; WorkCenter at least one activity; no other role may carry either | `ErrDockFlowRequired`, `ErrWorkCenterActivitiesRequired`, `ErrFunctionalAttributesNotAllowed`, `ErrUnknownDockFlow`, `ErrUnknownActivity` [422] — `NewFunctionalAttributes` |
+| Geometry: z ≥ 0, dimensions > 0, all-or-nothing | `shared.ErrInvalidZ`, `ErrInvalidDimensions` [422]; DB `location_slots_geometry_all_or_nothing` |
+| Pick sequence ≥ 0 | `ErrNegativePickSequence` [422] |
+| No change once decommissioned | `ErrAlreadyDecommissioned`, `ErrSlotDecommissioned` [409] |
+| No write from a stale read | `ports.ErrConcurrentModification` [409] — Postgres `SlotRepo.Save` version check ([ADR 0025](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0025-optimistic-concurrency-version-column.md)) |
+
+### 5. Corrective Policies
+
+- No capacity override → the type's default envelope is used.
+- Duplicate activities are de-duplicated and sorted (`dedupeActivities`).
+- Rule changes never retroactively invalidate an existing slot.
+- A concurrent-modification `409` tells the caller to re-fetch and retry.
+
+### 6. Handled Commands
+
+`RegisterLocationSlot` (`POST /locations`), `DecommissionLocationSlot`
+(`POST /locations/{locationCode}/decommission`), `SetLocationGeometry`
+(`PUT /locations/{locationCode}/geometry`), `ImportFacilityLayout`
+(`POST /locations/import`).
+
+### 7. Created Events
+
+`com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered`,
+`com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned`,
+`com.warehouse.wms.facility-layout.locationslot.LocationGeometryUpdated`.
+`com.warehouse.wms.facility-layout.locationslot.FacilityLayoutImported`
+shares the entity segment but describes a whole import, not one slot.
+
+### 8. Throughput (estimate)
+
+The busiest aggregate: thousands to tens of thousands of registrations per
+site, in bursts during commissioning or bulk import; then a trickle of
+geometry updates and decommissions. Read on every stow check that uses the
+REST fallback.
+
+### 9. Size (estimate)
+
+Typically 2–4 events per instance over a multi-year lifetime (registered,
+maybe geometry, maybe decommissioned). State is about 20 scalar fields.
+
+## LocationType
+
+### 1. Name
+
+`placement.LocationType` — `internal/domain/placement/placement.go`.
+Identity: its name (e.g. `PalletRack`).
+
+### 2. Description
+
+A reusable slot shape/kind with a `LocationRole` and a default capacity
+envelope. Well-known names (`PalletRack`, `Shelf`, `ToteWall`, `BulkFloor`,
+`Staging`, `Amnesty`) are constants, not an enum.
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Registered: NewLocationType via RegisterLocationType
+    note right of Registered
+        No status field and no mutator.
+        Immutable once registered.
+    end note
+```
+
+Source: `internal/domain/placement/placement.go`, `role.go`.
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+|---|---|
+| Name non-empty | `ErrEmptyLocationTypeName` [400] |
+| Role is one of the nine `LocationRole` values | `ErrUnknownLocationRole` [422] |
+| Capacity required when `role.RequiresCapacity()` | `shared.ErrInvalidMaxWeight` [422] |
+| Capacity, when given, has weight and volume > 0 | `shared.ErrInvalidMaxWeight`, `ErrInvalidMaxVolume` [422] — `shared.NewCapacity` |
+| Name unique | `usecases.ErrDuplicateLocationType` [409] |
+
+### 5. Corrective Policies
+
+Missing role defaults to `Storage` at the API edge and in the
+`0002_location_roles` migration default.
+
+### 6. Handled Commands
+
+`RegisterLocationType` (`POST /location-types`).
+
+### 7. Created Events
+
+`com.warehouse.wms.facility-layout.locationtype.LocationTypeRegistered`
+
+### 8. Throughput (estimate)
+
+Single digits to tens per platform; reference data.
+
+### 9. Size (estimate)
+
+One event per instance.
+
+## PlacementRule
+
+### 1. Name
+
+`placement.PlacementRule` — `internal/domain/placement/placement.go`.
+Identity: a caller-supplied rule id.
+
+### 2. Description
+
+Declares a `LocationType` as **Allow** or **Deny** in every zone matching a
+`ZonePredicate` (zone code, temperature class, hazmat — AND semantics).
+Evaluated by `RuleSet.Check` at slot registration: Deny wins; any matching
+Allow turns the zone into an allow-list.
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Defined: NewPlacementRule via DefinePlacementRule
+    note right of Defined
+        No status field and no mutator.
+        There is no delete or update use case.
+    end note
+```
+
+Source: `internal/domain/placement/placement.go`, `rules.go`,
+`internal/application/usecases/define_placement_rule.go`.
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+|---|---|
+| Id non-empty | `ErrEmptyRuleID` [400] |
+| References a location type | `ErrEmptyRuleLocationType` [400] |
+| Referenced location type exists | `usecases.ErrLocationTypeNotFound` [404]; DB FK `placement_rules.location_type` |
+| Effect is Allow / Deny | `ErrUnknownEffect` [422] |
+| Predicate constrains at least one dimension | `ErrEmptyPredicate` [422] |
+| Id unique | `usecases.ErrDuplicatePlacementRule` [409] |
+
+### 5. Corrective Policies
+
+None: a rule is either valid or refused. Violations at slot time name the
+rule (`PlacementRule.Describe`).
+
+### 6. Handled Commands
+
+`DefinePlacementRule` (`POST /placement-rules`).
+
+### 7. Created Events
+
+`com.warehouse.wms.facility-layout.placementrule.PlacementRuleDefined`
+
+### 8. Throughput (estimate)
+
+Tens per platform; read in full (`PlacementRuleRepo.List`) on every slot
+registration.
+
+### 9. Size (estimate)
+
+One event per instance.
+
+## FixedStructure
+
+### 1. Name
+
+`structure.FixedStructure` — `internal/domain/structure/fixed_structure.go`.
+Identity: an opaque id minted by the use case.
+
+### 2. Description
+
+A site-scoped physical obstacle — `Wall`, `Column`, `Office`, `Conveyor` or
+`Other` — with a rectangular footprint and a label, drawn on the floor plan.
+Not a location stock can occupy.
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Registered: NewFixedStructure via RegisterFixedStructure
+    note right of Registered
+        No status field and no mutator.
+    end note
+```
+
+Source: `internal/domain/structure/fixed_structure.go`.
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+|---|---|
+| Id, site and label present | `ErrEmptyID`, `ErrEmptySiteCode`, `ErrEmptyLabel` [400] |
+| Kind is one of the five | `ErrUnknownKind` [422] |
+| Footprint is real | `ErrEmptyFootprint` [422]; `shared.NewRect`, `NewDimensions` |
+| Site exists | `usecases.ErrSiteNotFound` [404] |
+| Id unique | `usecases.ErrDuplicateFixedStructure` [409] |
+
+### 5. Corrective Policies
+
+None.
+
+### 6. Handled Commands
+
+`RegisterFixedStructure` (`POST /sites/{siteCode}/structures`).
+
+### 7. Created Events
+
+`com.warehouse.wms.facility-layout.structure.FixedStructureRegistered`
+
+### 8. Throughput (estimate)
+
+Tens per site, at commissioning.
+
+### 9. Size (estimate)
+
+One event per instance.
+
+## Read models and projections (not aggregates)
+
+| Read model | Built by | Stored? |
+|---|---|---|
+| Site layout (zones → aisles → slots) | `GetSiteLayout` | No — assembled from repositories per request; also the MCP resource `layout://facility/{siteCode}` |
+| Zone grid (level × aisle/bay) | `GetZoneGrid` | No |
+| Zone travel graph | `GetZoneTravelGraph` → `travel.Build` | No |
+| Travel distance | `EstimateTravelDistance` → `travel.Graph.Distance` or `crossZoneBeeline` | No |
+| Locations by role | `ListLocationsByRole` | No |
+| Location classification (zone hazmat / temperature) | `GetLocationClassification` | No |
+| Layout Catalog Growth & Change | `cmd/facility-projector` → `catalog_growth_rollup` (analytics DB) | Yes, analytics database only ([ADR 0010](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0010-analytical-data-product.md)) |
+
+`travel.Graph` is a pure-domain **service object**, not an aggregate: it is
+built per request from Zone, Aisle, LocationSlot and CrossAisle state and
+never persisted.

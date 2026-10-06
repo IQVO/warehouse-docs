@@ -2,197 +2,234 @@
 id: aggregate-design-canvas
 title: Aggregate Design Canvas
 sidebar_label: Aggregate Design Canvas
-slug: /contexts/order-management/aggregate-design-canvas
-description: The full ddd-crew Aggregate Design Canvas for the Order aggregate — state transitions, invariants, commands, events, throughput, size.
+description: "ddd-crew Aggregate Design Canvas v1.1 for the Order aggregate — state transitions, every enforced invariant with the error that enforces it, corrective policies, handled commands, created events, throughput and size."
 ---
 
 # Aggregate Design Canvas
 
-The full [ddd-crew Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas)
-for this context's one aggregate root, `Order`.
+:::info[Synced from order-management]
+This page is a copy of [`docs/docs/ddd/aggregate-design-canvas.md`](https://github.com/IQVO/order-management/blob/develop/docs/docs/ddd/aggregate-design-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-## Name
 
-**Order**
+This page follows the
+[ddd-crew Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
+It replaces the former "Aggregates & Invariants" page: everything that page
+said about invariants, BR3 and BR6 is kept here, re-checked against
+`internal/domain/order` on `develop`.
 
-## Description
+`internal/domain` has exactly **one aggregate root**, `order.Order`, with one
+entity inside it, `order.OrderLine`. Everything else in the domain package is
+a value object, a policy or a read model — see
+[Not aggregates](#not-aggregates-read-models-and-policies) at the end.
 
-The aggregate root of the `order-management` bounded context. Owns
-`OrderId`, an `OrderLine[]` collection (one entity per requested item),
-`AllowPartialShipment bool`, a `Status` that is always derived rather than
-stored, the promise (`PromiseDate`, `PromiseCptId`, `PromiseBasis` =
-`Capability` / `LeadTime` / `Network`, and per-shipment-group
-`PromiseGroups` — ADR-0014/0017), and — since
-[ADR-0020](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md)
-— the hold flag (`ReleaseOnAllocation()`, stored inversely as
-`heldAtIntake`) and an optional `RequiredShipBy`. A hold is deliberately
-not a new `Status`: a held order is simply allocated and not yet
-released. It is the single consistency
-boundary across which allocation, release, and cancellation are enforced —
-one aggregate root, one entity type (`OrderLine`), one value-object
-package (`internal/domain/shared`).
+## Order
+
+### 1. Name
+
+**Order** (`internal/domain/order.Order`), with its entity **OrderLine**
+(`order.OrderLine`). Identity: `shared.OrderId`, minted by
+`ports.OrderRepo.NextID` (`ord-<uuid>` in Postgres, `ord-<n>` in memory).
+
+### 2. Description
+
+The unit of consistency for intake, allocation, release, hold and
+cancellation of one customer order. It records what was asked for (lines:
+SKU, quantity, gift wrap), which process path each line resolved to, which
+inventory-storage reservation backs each allocated line, the delivery
+promise (per shipment group), and whether the order was held at intake or
+carries an external ship-by deadline. Every line mutation goes through an
+`Order` method, so no invariant can be bypassed from outside: `order.New`
+stores its own copy of each `OrderLine`, so the caller's pointers do not
+alias the aggregate's entities. Persisted state comes back through one
+entry point, `order.Rehydrate(OrderSnapshot)`, which does not re-run
+construction invariants.
+
+Key state (`order.go`): `id`, `lines []*OrderLine`, `allowPartialShipment`,
+`promiseDate`/`promiseCptId`/`promiseBasis` (a "latest cutoff" summary of
+`promiseGroups`), `promiseGroups []PromiseGroup`, `heldAtIntake` (the
+inverse of `ReleaseOnAllocation()`), `requiredShipBy`, and `version`
+(optimistic-concurrency metadata only, ADR 0024).
+
+### 3. State Transitions
+
+The aggregate stores **line** states; the order-level `Status` is derived on
+every call (`Order.Status()`), never stored.
+
+**Line lifecycle** — `order.LineStatus` and the `Order` methods that move it:
 
 ```mermaid
-classDiagram
-  class Order {
-    <<Aggregate Root>>
-    -id OrderId
-    -lines OrderLine[]
-    -allowPartialShipment bool
-    -promiseDate *time.Time
-    -promiseCptId *string
-    -promiseBasis *PromiseBasis
-    -promiseGroups PromiseGroup[]
-    -heldAtIntake bool
-    -requiredShipBy *time.Time
-    +Status() Status
-    +FulfillmentClass() FulfillmentClass
-    +Allocate(lineNo, reservationId) error
-    +RetryAllocate(lineNo, reservationId) error
-    +MarkBackordered(lineNo) error
-    +Release(lineNo) error
-    +Hold()
-    +Cancel() error
-    +EnsureReleasable() error
-    +EnsureCancellable() error
-  }
-  class OrderLine {
-    <<Entity>>
-    -lineNo int
-    -sku SKU
-    -quantity int
-    -pathId PathId
-    -giftWrap bool
-    -status LineStatus
-    -reservationId *string
-  }
-  Order "1" *-- "1..*" OrderLine : lines
+stateDiagram-v2
+    [*] --> Pending: NewOrderLine
+    Pending --> Allocated: Allocate
+    Pending --> Backordered: MarkBackordered
+    Backordered --> Backordered: MarkBackordered on a failed retry
+    Backordered --> Allocated: RetryAllocate
+    Allocated --> Allocated: ReconfirmReservation
+    Allocated --> Backordered: LoseReservation
+    Allocated --> Released: Release
+    Pending --> Cancelled: Cancel
+    Backordered --> Cancelled: Cancel
+    Allocated --> Cancelled: Cancel
+    Released --> [*]
+    Cancelled --> [*]
 ```
 
-## State Transitions
+Source: `internal/domain/order/order.go` (`Allocate`, `RetryAllocate`,
+`ReconfirmReservation`, `LoseReservation`, `MarkBackordered`, `Release`,
+`Cancel`), `internal/domain/order/status.go`, `internal/domain/order/order_line.go`.
+Omits: the error returned by each illegal transition (listed under
+invariants below). `Cancel` moves **every** line at once and is refused if
+any line is `Released`.
 
-`Order.Status()` is computed fresh from line statuses on every call —
-never stored on the aggregate or in the `orders` table.
+**Order status** — derived by `Order.Status()` in this precedence order:
 
 ```mermaid
 stateDiagram-v2
     [*] --> Received: ReceiveOrder
     Received --> Allocated: every line Allocated
-    Received --> PartiallyAllocated: allowPartialShipment=true,<br/>mixed Allocated/Backordered
-    Received --> Backordered: allowPartialShipment=false (BR3),<br/>any line Backordered
-    Allocated --> Released: every line Released
-    PartiallyAllocated --> PartiallyReleased: some lines Released
+    Received --> PartiallyAllocated: some lines Allocated, rest Pending
+    Received --> PartiallyAllocated: partial shipment allowed, some Allocated, some Backordered
+    Received --> Backordered: any line Backordered, ship-complete or nothing Allocated
     Backordered --> Allocated: RetryAllocation clears every backorder
-    Received --> Cancelled: CancelOrder (pre-release)
-    Allocated --> Cancelled: CancelOrder (pre-release)
-    Backordered --> Cancelled: CancelOrder (pre-release)
-    Released --> [*]: cancellation no longer legal (BR6)
+    Backordered --> PartiallyAllocated: retry clears some lines, partial shipment allowed
+    Allocated --> Backordered: LoseReservation at reconfirm, ship-complete
+    Allocated --> Released: every line Released
+    Allocated --> PartiallyReleased: some lines Released
+    PartiallyAllocated --> PartiallyReleased: allocated lines Released
+    PartiallyReleased --> Released: remaining lines Released
+    Received --> Cancelled: CancelOrder
+    Allocated --> Cancelled: CancelOrder
+    PartiallyAllocated --> Cancelled: CancelOrder
+    Backordered --> Cancelled: CancelOrder
+    Released --> [*]
+    Cancelled --> [*]
 ```
 
-`OrderLine.LineStatus` moves `Pending` → `Allocated` | `Backordered` →
-`Released` | `Cancelled`, with `Backordered` → `Allocated` reachable
-**only** via `RetryAllocation` — no other use case touches a
-`Backordered` line's status.
+Source: `Order.Status()` in `internal/domain/order/order.go`. Omits: a held
+order (`releaseOnAllocation=false`) is deliberately **not** a separate
+status — it reads `Allocated` until `ReleaseHeldOrder` runs (ADR 0020).
 
-## Enforced Invariants
+### 4. Enforced Invariants
 
-| Invariant | Enforcement |
-| --- | --- |
-| Cannot allocate the same line twice. | `Allocate` rejects a line not in `Pending` or `Backordered`. |
-| Cannot release a line that isn't `Allocated`. | `Release` rejects any other line status. |
-| Cannot cancel once ANY line is `Released` (BR6). | `EnsureCancellable` returns `ErrOrderAlreadyReleased`. |
-| Order-level `Status` is always computed from line statuses, never stored redundantly. | `Status()` derives the value on every call; there is no backing field. |
-| `Quantity` must be > 0. | Rejected at construction (`ReceiveOrder`). |
-| `SKU` must be non-empty. | Rejected at construction. |
-| A `Backordered` line may transition back to `Allocated` ONLY via `RetryAllocation`. | No other use case touches a `Backordered` line's status. |
-| BR3 — a ship-complete order releases nothing while any line is unallocated. | Checked on the aggregate itself, `Order.EnsureReleasable()` → `ErrShipCompleteBlocked`; there is no route to release that can skip it. |
-| A held order must be ship-complete. | `ErrHeldOrderMustBeShipComplete` (422) at intake when `releaseOnAllocation=false` and `allowPartialShipment=true` (ADR-0020). |
+| Invariant | Enforced by | Error |
+| --- | --- | --- |
+| An order has at least one line | `order.New` | `order.ErrNoLines` |
+| An order has an id | `order.New`, `shared.NewOrderId` | `shared.ErrEmptyOrderID` |
+| SKU is non-empty | `order.NewOrderLine`, `shared.NewSKU` | `shared.ErrEmptySKU` |
+| Quantity is greater than zero | `order.NewOrderLine` | `shared.ErrNonPositiveQuantity` |
+| A line number addresses a real line | `Order.line` (every mutator) | `order.ErrLineNotFound` |
+| A line cannot be allocated twice | `Order.Allocate`, `Order.MarkBackordered` | `order.ErrLineAlreadyAllocated` |
+| Only a `Pending` line is allocated by the first pass — a `Backordered` line comes back only through retry | `Order.Allocate` | `order.ErrLineNotPending` |
+| Only a `Backordered` line can be retried | `Order.RetryAllocate` | `order.ErrLineNotBackordered` |
+| Only an `Allocated` line can be released, reconfirmed or lose its reservation | `Order.Release`, `Order.ReconfirmReservation`, `Order.LoseReservation` | `order.ErrLineNotAllocated` |
+| **BR3** — a ship-complete order releases nothing while any line is unallocated | `Order.EnsureReleasable` | `order.ErrShipCompleteBlocked` |
+| **BR6** — no cancellation once any line is `Released` | `Order.EnsureCancellable`, `Order.Cancel` | `order.ErrOrderAlreadyReleased` |
+| A held order must be ship-complete (ADR 0020) | `order.ValidateIntakeIntent` | `order.ErrHeldOrderMustBeShipComplete` |
+| Order `Status` is derived from lines, never stored | `Order.Status()` (no backing field) | — |
+| The promise summary always describes the group with the latest cutoff | `Order.SetPromiseGroups` | — |
+| No lost update between concurrent read-modify-save | `postgres.OrderRepo.Save` (`WHERE id AND version`) | `ports.ErrConcurrentModification` |
 
-## Corrective Policies
+Checked in the use case, before the aggregate is persisted:
 
-**One reactive policy, no sweepers.** The only automated correction is
-`RepromiseOrder`
-([ADR-0018](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0018-repromise-order-consumer-and-order-repromised.md)):
-when `fulfillment-execution` reports `TaskCPTMissed`/`PackageManifested`
-for a line, the affected shipment group's promise is recomputed with the
-existing `PromisePolicy` and, if it moved, saved and announced as
-`OrderRepromised` (idempotent on the inbound `event_id`). It corrects the
-*promise*, never line state. Beyond that, this context does not run a
-scheduler, sweeper, or automated retry over stuck aggregates — nothing
-expires an orphaned hold either (ADR-0020). A `Backordered` order stays backordered until
-a human or caller explicitly issues `RetryAllocation` — that is the
-honest v1 position, documented as such rather than an oversight (per
-ADR-0003's Consequences: "a stuck backorder needs a human or a scheduler
-... nothing in v1 retries automatically"). Likewise, a hard failure
-mid-allocation persists whatever genuinely succeeded rather than being
-auto-compensated: deleting/compensating partial reservations was
-considered and rejected, because it would move the failure risk to a
-second, itself-fallible `DELETE` call and discard state a retry could use.
+| Rule | Enforced by | Error |
+| --- | --- | --- |
+| Each line's resolved path is active in the catalogue (ADR 0013) | `ReceiveOrder.buildDomainLines` | `shared.ErrUnknownProcessPath` |
+| Some active path admits the line's attributes (ADR 0016/0021) | `PathSelectionPolicy.Select` via `buildDomainLines` | `shared.ErrLineIneligibleForResolvedPath` |
+| Retry needs a backordered line | `RetryAllocation.Execute` | `usecases.ErrNoBackorderedLines` |
+| Release-on-demand only for a held order | `ReleaseHeldOrder.Execute` | `usecases.ErrOrderNotHeld` |
 
-## Handled Commands
+**BR2 (fail closed on ambiguity)** lives at the port boundary: only
+`ports.ErrInsufficientStock` (inventory-storage's `409`) backorders a line;
+any other error aborts the pass (`allocateLines` in
+`internal/application/usecases/allocation.go`). **BR3** in practice:
+`releaseAllocatedLines` checks `EnsureReleasable` and, when it fails,
+releases nothing and returns no error — so the HTTP caller sees `200`/`201`
+with a `Backordered` order, never `409 ship-complete-blocked`.
 
-| Command | Effect |
-| --- | --- |
-| `ReceiveOrder(lines[], allowPartialShipment, releaseOnAllocation, requiredShipBy)` | Validates every line, resolves each line's path via `PathSelectionPolicy` (unknown path 400, ineligible line 422 — both before anything persists, ADR-0013/0016), mints an `OrderId`, persists the order in `Received` status, publishes `OrderReceived` unconditionally, then attempts `allocateAndRelease` best-effort in the same call. A hard failure in that best-effort step never fails `ReceiveOrder` itself. With `releaseOnAllocation=false` the pass stops after allocation (a hold, ADR-0020); with `requiredShipBy` the promise is the latest feasible CPT window at or before that deadline (`PromiseBasis=Network`), or none at all. |
-| `AllocateOrder`/`RetryAllocation` (shared `allocateAndRelease`) | Calls `inventory-storage`'s `POST /reservations` per eligible line. A `409` marks that line `Backordered` (business fact) and continues; anything else hard-fails the whole pass. On success, checks `EnsureReleasable()` (BR3) and releases every currently-`Allocated` line via the pure domain transition. `RetryAllocation` re-attempts only `Backordered` lines and is the sole sanctioned route back to `Allocated`; unlike `ReceiveOrder`, a hard failure here DOES propagate to the caller. |
-| `ReleaseOrder` (as a domain transition, `Order.Release`) | No longer a standalone public use case (ADR-0005) — folded into `allocateAndRelease`, run automatically right after a successful allocation pass. |
-| `ReleaseHeldOrder(orderId)` | ADR-0020. Releases a held order's allocated lines through `allocateAndRelease`'s release leg (same BR3 gate, same promise recompute, same events). Idempotent for a held order; `ErrOrderNotHeld` (409) for an order that was never held. |
-| `RepromiseOrder` (Kafka-driven, not HTTP) | ADR-0018. Recomputes the affected line's shipment-group promise after an inbound `TaskCPTMissed`/`PackageManifested` and raises `OrderRepromised` if it moved. |
-| `CancelOrder(orderId)` | Rejects with `ErrOrderAlreadyReleased` if any line is already `Released`, checked BEFORE any reservation is revoked. A legal cancellation revokes every allocated line's reservation via `DELETE /reservations/{id}`, then cancels every line. A failed revoke fails the whole cancellation; nothing is marked cancelled. |
-| `GetOrder(orderId)` | Read-only. Returns current `Order` state with `status` computed at read time. |
+### 5. Corrective Policies
 
-## Created Events
+| Situation | Corrective policy | Code |
+| --- | --- | --- |
+| A line was backordered (409) | Operator or caller retries: `POST /orders/{id}/retry-allocation` re-reserves only the backordered lines | `usecases.RetryAllocation` |
+| A reservation lapsed upstream before release | Reconfirm every previously allocated line right before release; a 409 now moves the line back to `Backordered` (`LoseReservation`) and, for a ship-complete order, blocks the release | `reconfirmAllocatedLines`, `reconfirmBeforeRelease` |
+| Hard failure part-way through allocation | Keep the lines that did allocate (their reservations are real), save, and raise `OrderAllocationPartiallyFailed` | `salvageAllocationFailure` |
+| The building missed a CPT or manifested a package | Recompute the line's shipment group; if the promise moved, save and raise `OrderRepromised` | `usecases.RepromiseOrder` |
+| Customer or network partner withdraws before release | Revoke every allocated reservation, then cancel every line | `usecases.CancelOrder` |
+| Concurrent writers | Second save fails with `ErrConcurrentModification` (HTTP 409, Kafka consumer retries then DLQ) | `postgres.OrderRepo.Save` |
 
-Ten domain events — see the dedicated
-[Domain Events](/contexts/order-management/domain-events) page for the full
-catalog, timing, and Kafka-forwarding detail:
+Not corrected (documented gaps): an orphaned hold is never swept; released
+work is never clawed back after cancellation (ADR 0004, ADR 0020).
 
-`OrderReceived`, `OrderLineAllocated`, `OrderLineBackordered`,
-`OrderAllocated`, `OrderPartiallyAllocated`, `OrderLineReleased`,
-`OrderReleased`, `OrderCancelled`, `OrderRepromised` (ADR-0018) — plus the
-operational-visibility event `OrderAllocationPartiallyFailed`, raised when a
-hard failure hits partway through an allocation pass that already
-succeeded on at least one line.
+### 6. Handled Commands
 
-## Throughput
+| Command | Entry point | Aggregate methods |
+| --- | --- | --- |
+| ReceiveOrder | `POST /orders` | `order.New`, `ValidateIntakeIntent`, `Hold`, `SetRequiredShipBy`, then the allocation pass below |
+| Allocation pass (internal, `allocateAndRelease`) | inside ReceiveOrder, RetryAllocation, ReleaseHeldOrder | `Allocate` / `RetryAllocate` / `MarkBackordered`, `SetPromiseGroups`, `ReconfirmReservation` / `LoseReservation`, `EnsureReleasable`, `Release` |
+| RetryAllocation | `POST /orders/{id}/retry-allocation` | `RetryAllocate`, `MarkBackordered`, then release as above |
+| ReleaseHeldOrder | `POST /orders/{id}/release` | `ReconfirmReservation` / `LoseReservation`, `EnsureReleasable`, `Release` |
+| CancelOrder | `DELETE /orders/{id}` | `EnsureCancellable`, `Cancel` |
+| RepromiseOrder | Kafka `warehouse.fulfillment.events` | `SetPromiseGroups` |
 
-`Order` is a **single-writer aggregate scoped per order** — every command
-above (`ReceiveOrder`, `allocateAndRelease`, `CancelOrder`) loads, mutates,
-and saves exactly one `Order` instance identified by its own `OrderId`.
-There is no cross-order locking and no shared mutable state between
-aggregate instances, so throughput scales horizontally with the number of
-concurrent distinct orders rather than being bottlenecked by a single
-hot aggregate. The per-instance ceiling is set by the outbound
-Supplier calls, not by the aggregate itself: `allocateAndRelease` issues
-one `POST /reservations` call to `inventory-storage` per line
-sequentially, so an N-line order's allocation latency is dominated by N
-sequential HTTP round-trips (bounded timeouts per ADR-0002, no
-parallelization documented). A single order's own commands are
-effectively serialized in practice (one write path, one HTTP conversation
-at a time) — this is by design, not a documented performance target, and
-the docs make no throughput claim beyond "orders having thousands of
-lines" being the point at which deriving `Status()` on every read would
-start to matter enough to add a projection alongside the derivation.
+### 7. Created Events
 
-## Size
+All events are built in `internal/domain/shared/events.go` and published as
+CloudEvents 1.0 with `type = com.warehouse.wes.order-management.order.<EventName>`
+(`internal/adapters/kafka/cloudevents`):
 
-Per instance, the event count scales with the order's own line count and
-how many allocation/retry passes it takes to clear:
+| Event | Full CloudEvents type | Raised by |
+| --- | --- | --- |
+| OrderReceived | `com.warehouse.wes.order-management.order.OrderReceived` | ReceiveOrder |
+| OrderLineAllocated | `com.warehouse.wes.order-management.order.OrderLineAllocated` | allocation pass |
+| OrderLineBackordered | `com.warehouse.wes.order-management.order.OrderLineBackordered` | allocation pass, reconfirm |
+| OrderAllocated | `com.warehouse.wes.order-management.order.OrderAllocated` | allocation pass (status Allocated or Released) |
+| OrderPartiallyAllocated | `com.warehouse.wes.order-management.order.OrderPartiallyAllocated` | allocation pass (status PartiallyAllocated or PartiallyReleased) |
+| OrderAllocationPartiallyFailed | `com.warehouse.wes.order-management.order.OrderAllocationPartiallyFailed` | `salvageAllocationFailure` |
+| OrderCancelled | `com.warehouse.wes.order-management.order.OrderCancelled` | CancelOrder |
+| OrderRepromised | `com.warehouse.wes.order-management.order.OrderRepromised` | RepromiseOrder |
+| OrderLineReleased | `com.warehouse.wes.order-management.order.OrderLineReleased` | declared, **never raised** today |
+| OrderReleased | `com.warehouse.wes.order-management.order.OrderReleased` | declared, **never raised** today |
 
-- **Minimum (happy path, all lines allocate first try):** 1 `OrderReceived`
-  + 1 `OrderLineAllocated` per line + 1 `OrderAllocated` + 1
-  `OrderLineReleased` per line + 1 `OrderReleased` — for a 2-line order,
-  that is 7 events.
-- **With a backorder and one retry:** add 1 `OrderLineBackordered` per
-  backordered line, plus another `OrderLineAllocated`/`OrderAllocated`
-  pass from `RetryAllocation`.
-- **With a hard mid-pass failure:** add 1 `OrderAllocationPartiallyFailed`.
-- **If cancelled pre-release:** replace the release-side events with a
-  single `OrderCancelled`.
+Topic routing and payloads are on [Domain Events](/contexts/order-management/domain-events).
 
-There is no fixed cap — a ship-complete order can accumulate a
-`RetryAllocation` pass's worth of events every time it is retried — but
-the *state* held per instance stays small and bounded: one `Order` with a
-handful of `OrderLine` entities, no growing collection, no unbounded
-history kept on the aggregate itself (event history lives in the
-publisher/log, not on `Order`).
+### 8. Throughput
+
+*Estimate, not measured.* Writes per order are a handful: one intake
+transaction plus one allocation transaction per `POST /orders` (both joined
+into the idempotency middleware's outer transaction when Postgres is on), one
+more per retry, hold release or cancellation, and one per re-promise that
+actually moves the promise. Concurrent writes to the **same** order are
+rare — a retry racing a cancel, or a re-promise racing a release — and are
+caught by the `version` guard rather than locks. Contention is per order,
+so throughput scales with order volume, not with the size of any single
+aggregate.
+
+### 9. Size
+
+*Estimate, not measured.* An order holds `N` lines (no upper bound in
+code), up to `N` promise groups, and one reservation id per allocated line.
+Over its lifetime it typically produces `N + 2` events for a clean
+ship-complete flow (`OrderReceived`, one `OrderLineAllocated` per line —
+the reconfirm step writes no event — and one `OrderAllocated`), plus one
+`OrderLineBackordered` per 409, one `OrderRepromised` per moved promise and
+one `OrderCancelled` if withdrawn. Lifetime runs from intake to `Released`
+or `Cancelled` — minutes to hours for a released order; a held order lives
+until its caller releases or cancels it (no sweeper, see above).
+
+## Not aggregates: read models and policies
+
+These live in `internal/domain` (or feed it) but have no lifecycle of their
+own and enforce no cross-entity invariant, so they are **not** aggregates:
+
+| Type | Kind | Notes |
+| --- | --- | --- |
+| `order.PlannedCapacityWindow` | Read model (ADR 0031) | Local copy of warehouse-planning's CapacityPlan, last-writer-wins per `PlanID` (`Supersedes`), validated by `Validate` (`order.ErrInvalidPlannedCapacity`); table `planned_capacity_windows`. Only annotates order responses (`order.CapacityConstraints`). |
+| `kafkacatalog.Consumer`, `kafkacptschedule.Consumer`, `kafkapathcapacity.Consumer` | In-memory read models | Full-replay caches of process-path catalogue, CPT schedule and path capacity behind `ports.ProcessPathCatalogue`, `ports.CPTScheduleCache`, `ports.PathCapacity`. |
+| `report.Row` (`funnel_rollup`, `repromise_rollup`) | Analytics projection (ADR 0006/0019) | Written only by `cmd/order-projector`. |
+| `order.PromisePolicy`, `order.LeadTimePolicy`, `order.PathSelectionPolicy` | Domain policies | Stateless; compute promises and routing for the `Order`. |
+| `order.Promise`, `order.PromiseGroup`, `order.CPTWindow`, `order.FulfillmentClass`, `shared.Eligibility`, `shared.OrderId`, `shared.SKU`, `shared.PathId` | Value objects | Immutable values. `FulfillmentClass` (`SINGLE`, `SAME_SKU_MULTI`, `MULTI_LINE_MULTI`) is derived on every call, never stored. |
+
+See the [class diagrams](/contexts/order-management/class-diagram) for their shapes and the
+[ER diagram](/contexts/order-management/entity-relationship) for how the aggregate maps onto
+tables.

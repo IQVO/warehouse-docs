@@ -2,70 +2,92 @@
 id: ubiquitous-language
 title: Ubiquitous Language
 sidebar_label: Ubiquitous Language
-slug: /contexts/order-management/ubiquitous-language
 description: The exact vocabulary of the Order Management bounded context, with definitions and where each term lives in code.
 ---
 
 # Ubiquitous Language
 
+:::info[Synced from order-management]
+This page is a copy of [`docs/docs/business-context/ubiquitous-language.md`](https://github.com/IQVO/order-management/blob/develop/docs/docs/business-context/ubiquitous-language.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
+
+
 These are the terms this bounded context uses, with the definitions it
-uses them with (per this repo's own `docs/docs/business-context/ubiquitous-language.md`
-and `CLAUDE.md`'s "Ubiquitous Language" section). They are not synonyms
-for the same English words used in `inventory-storage` or
-`wes-work-planning` — see [Words that mean something different
-elsewhere](#words-that-mean-something-different-elsewhere) below.
+uses them with. Every term maps to a Go identifier on `develop`. They are
+not interchangeable with the same English words used in inventory-storage,
+wes-work-planning or fulfillment-execution — see
+[the last table](#words-that-mean-something-different-elsewhere).
 
 ## Core terms
 
-| Term | Definition | Code reference |
+| Term | Definition | Code |
 | --- | --- | --- |
-| **Order** | The aggregate root. Carries `OrderId`, `OrderLine[]`, `AllowPartialShipment bool`, `Status`, the promise (`PromiseDate`, `PromiseCptId`, `PromiseBasis`, per-shipment-group `PromiseGroups` — ADR-0014/0017), and ADR-0020's `ReleaseOnAllocation()` (stored inversely as `heldAtIntake`) plus optional `RequiredShipBy`. | `internal/domain/order.Order` |
-| **OrderLine** | A single requested item within an `Order`. Carries `SKU`, `Quantity`, `PathId` (always the internal default `"pick"` — never caller-supplied since ADR-0005), `GiftWrap bool`, `LineStatus` (`Pending`/`Allocated`/`Backordered`/`Released`/`Cancelled`), and `ReservationId *string` (set once allocated; needed to cancel). | `internal/domain/order.OrderLine` |
-| **Status** (order-level) | Always derived from line statuses — never a redundant field that can drift out of sync. `Received` → `Allocated` \| `PartiallyAllocated` \| `Backordered` → `Released` \| `PartiallyReleased` → `Cancelled` (only reachable from a pre-release state). | Computed on every read; no backing field on the aggregate or the `orders` table. |
-| **Allocation** | Reserving stock for one line via `inventory-storage`'s `POST /reservations`. This service does **not** model a local `Reservation` aggregate — it only stores the `ReservationId` reference. `inventory-storage` remains the sole owner/source-of-truth for reservation state. | `internal/application/usecases.allocateLines` / `allocateAndRelease`, called from `ReceiveOrder` and `RetryAllocation` — no longer a standalone public use case (ADR-0005). |
-| **Release** | Marking an allocated line `Released` (`Order.Release`, a pure domain transition) once it clears BR3's `EnsureReleasable` check, then announcing that fact on the enriched `OrderAllocated`/`OrderPartiallyAllocated` Kafka integration event. No longer a synchronous call to `wes-work-planning` (ADR-0005) — folded into the same `allocateAndRelease` flow as Allocation, never a public verb of its own. | `internal/application/usecases.allocateAndRelease`, `internal/adapters/outbound/kafka` |
-| **Promise** | Computed at allocation time by `PromisePolicy` (ADR-0014): a CPT window derived from process-path capability (cycle time, eligibility, site CPT schedule) and `wes-work-planning` path capacity, `PromiseBasis=Capability`. Falls back to the configurable per-path lead time (`PromiseBasis=LeadTime`) when those caches are cold or `PATH_CATALOGUE_SOURCE=none`. With `AllowPartialShipment=true` lines are promised per shipment group (ADR-0017). An order with `RequiredShipBy` uses `PromisePolicy.FeasibleBy` — the latest window at or before the deadline, `PromiseBasis=Network`, and no promise (never a lead-time fallback) when the deadline cannot be met (ADR-0020). Re-promised by `RepromiseOrder` when fulfillment reports a missed CPT (ADR-0018). No live carrier integration exists. | `internal/domain/order.PromisePolicy`, `order.LeadTimePolicy` |
-| **Hold** | `releaseOnAllocation=false` at intake: the order allocates and stops ("allocated, not released" — deliberately NOT a new status) until `ReleaseHeldOrder` commits it or `CancelOrder` rejects it. A held order must be ship-complete (`ErrHeldOrderMustBeShipComplete`). ADR-0020. | `internal/domain/order.Order.Hold()`, `usecases.ReleaseHeldOrder` |
-| **Backordered** | A line-level state set when `inventory-storage`'s `POST /reservations` returns `409` (insufficient usable stock). A **business fact**, distinct from a transport/5xx error, which is NOT a business fact and must fail the call outright rather than silently marking a line backordered (fail-closed on ambiguity). | `order.LineStatusBackordered` |
-| **FulfillmentClass** | The order's demand-shape classifier — `SINGLE`, `SAME_SKU_MULTI`, or `MULTI_LINE_MULTI` — derived from line count and per-line quantity, never stored. A fact about the shipment's composition, not an identity; carries no opinion about which process path any line is dispatched to downstream (ADR-0008). Propagated additively on `shared.ReleasedLine` and the `OrderAllocated`/`OrderPartiallyAllocated` Kafka payload's `fulfillment_class` field, the same mechanism `GiftWrap` already uses. | `internal/domain/order.Order.FulfillmentClass()` |
+| **Order** | The aggregate root: one customer's demand, its lines, its delivery promise and its hold/deadline intent. | `order.Order` |
+| **Order line** | One requested SKU and quantity within an order, with its resolved process path, gift-wrap flag, line status and (once allocated) reservation id. | `order.OrderLine` |
+| **Order status** | Derived on every read from line statuses, never stored: `Received`, `Allocated`, `PartiallyAllocated`, `Backordered`, `Released`, `PartiallyReleased`, `Cancelled`. | `order.Status`, `Order.Status()` |
+| **Line status** | `Pending`, `Allocated`, `Backordered`, `Released`, `Cancelled`. | `order.LineStatus` |
+| **Allocation** | Reserving stock for one line through inventory-storage's `POST /reservations`. No local `Reservation` model — only the id is kept. | `usecases.allocateLines` |
+| **Backordered** | A line inventory-storage answered `409` for (insufficient usable stock). A business fact, unlike a transport or 5xx error, which fails the pass instead (BR2, fail closed). | `order.LineStatusBackordered`, `ports.ErrInsufficientStock` |
+| **Retry allocation** | The only path from `Backordered` back to `Allocated`. | `usecases.RetryAllocation`, `Order.RetryAllocate` |
+| **Reconfirm** | Re-reserving a line allocated in an earlier pass right before it is released, so a lapsed reservation is caught. | `Order.ReconfirmReservation`, `reconfirmAllocatedLines` |
+| **Lost reservation** | A reconfirm that `409`s: the line moves `Allocated` → `Backordered`. | `Order.LoseReservation` |
+| **Release** | Marking allocated lines `Released` (a pure domain transition) once BR3 allows, and announcing them on `OrderAllocated`/`OrderPartiallyAllocated`. Not a call to wes-work-planning (ADR 0005). | `Order.Release`, `releaseAllocatedLines` |
+| **Ship-complete** | An order with `allowPartialShipment=false` (the default): nothing is released while any line is unallocated (BR3). | `Order.EnsureReleasable`, `ErrShipCompleteBlocked` |
+| **Partial shipment** | `allowPartialShipment=true`: allocated lines release even if others are backordered, possibly in several shipment groups. | `Order.AllowPartialShipment()` |
+| **Cancellation boundary** | An order can be cancelled until any line is released (BR6). | `Order.EnsureCancellable`, `ErrOrderAlreadyReleased` |
+| **Held order** | Received with `releaseOnAllocation=false`: it allocates, then waits for `POST /orders/{id}/release` or a cancel. Must be ship-complete. Not a status. | `Order.Hold`, `Order.ReleaseOnAllocation()`, `usecases.ReleaseHeldOrder` |
+| **Required ship-by** | A caller's deadline; the promise may only use a CPT window at or before it. | `Order.SetRequiredShipBy`, `PromisePolicy.FeasibleBy` |
 
-## Value objects
+## Promise terms
 
-| Term | Definition | Code reference |
+| Term | Definition | Code |
 | --- | --- | --- |
-| `OrderId` | The order's identity — this bounded context's contribution to the platform. | `internal/domain/shared` |
-| `SKU` | Non-empty string identifying a stock keeping unit. | `internal/domain/shared` |
-| `PathId` | Non-empty string identifying the `wes-work-planning` process path a line's work is enqueued onto. Always the internal default (`pick`) — never caller-supplied on intake (ADR-0005); resolved by `PathSelectionPolicy` and validated against the live process-path catalogue and its eligibility (ADR-0013/0016). | `internal/domain/shared` |
-| `Quantity` | Must be > 0 for every requested line. | `internal/domain/order.OrderLine` |
+| **CPT** (critical pull time) | A site's carrier cutoff: work must be done by then to leave on that departure. | `order.CPTWindow` |
+| **Promise** | The CPT window (or lead-time date) an order, or a shipment group, is promised to leave by. | `order.Promise` |
+| **Promise basis** | Which policy produced a promise: `Capability` (catalogue cycle time, CPT schedule, path capacity), `LeadTime` (per-path fallback), or `Network` (a window chosen to meet `requiredShipBy`). | `order.PromiseBasis` |
+| **Promise group** / **shipment group** | The lines that ship together under one promise; one per order when ship-complete, possibly several with partial shipment. | `order.PromiseGroup` |
+| **Promise date** | On the order, the latest cutoff across its promise groups. | `Order.PromiseDate()` |
+| **Re-promise** | Recomputing a line's group promise after fulfillment-execution reports `TaskCPTMissed` or `PackageManifested`; raises `OrderRepromised` if it moved. | `usecases.RepromiseOrder` |
+| **Fulfillment class** | Demand-shape classifier `SINGLE`, `SAME_SKU_MULTI`, `MULTI_LINE_MULTI`, derived from line count and quantity, never stored (ADR 0008). | `order.FulfillmentClass` |
 
-## States
+## Routing terms
 
-### `OrderLine.LineStatus`
-
-| Status | Meaning | Code reference |
+| Term | Definition | Code |
 | --- | --- | --- |
-| `Pending` | Received but not yet allocated. | `order.LineStatusPending` |
-| `Allocated` | `inventory-storage` reserved stock for this line; `ReservationId` is set. | `order.LineStatusAllocated` |
-| `Backordered` | `inventory-storage` returned `409` — no usable stock right now. | `order.LineStatusBackordered` |
-| `Released` | The line was released as work and announced on the `OrderAllocated`/`OrderPartiallyAllocated` Kafka event for `wes-work-planning`'s consumer (ADR-0005). Fire-and-forget: this context never learns whether the consumer processed it. | `order.LineStatusReleased` |
-| `Cancelled` | The line was cancelled before release. | `order.LineStatusCancelled` |
+| **Process path** | The building workflow a line's work is dispatched to (`pick`, ...). Owned by process-path-management; cached here. | `shared.PathId`, `processpath.PathDefinition` |
+| **Default path** | `pick`, used when no catalogue is wired or nothing better is eligible. | `shared.DefaultPathId` |
+| **Eligibility** | A path's admission rules: max units per line, required and excluded product attributes, non-sortable. | `shared.Eligibility` |
+| **Path selection** | Choosing, per line, the eligible active path with the shortest known `CycleTimeP95`, ties to the lower `PathId` (ADR 0021). Never caller-supplied. | `order.PathSelectionPolicy` |
+| **Product classification** | inventory-storage's attribute tags for a SKU, used only as a routing hint (fail-open). | `ports.ProductClassificationLookup` |
+| **Work unit id** | `{orderId}-line-{lineNo}`, derived identically here and in wes-work-planning; never transmitted. | `usecases.WorkUnitID`, `ParseWorkUnitID` |
 
-A `Backordered` line may transition back to `Allocated` **only** via
-`RetryAllocation` — no other path.
+## Planned capacity terms (ADR 0031)
 
-`Order.Status` follows from the line statuses above; the full transition
-diagram is on the [Aggregate Design Canvas](/contexts/order-management/aggregate-design-canvas).
+| Term | Definition | Code |
+| --- | --- | --- |
+| **Planned capacity window** | A local copy of one warehouse-planning capacity plan: location, path, time window, demand, capacity, shortage, `DRAFT`/`PUBLISHED`. | `order.PlannedCapacityWindow` |
+| **Capacity constraint** | A published shortage window the order's promise overlaps; shown on the order response, never changes the promise. | `order.CapacityConstraints`, `capacityConstraint` |
+
+## Infrastructure terms the domain relies on
+
+| Term | Definition | Code |
+| --- | --- | --- |
+| **Idempotency key** | Required header on `POST /orders` with Postgres; replays return the stored response (ADR 0023). | `RequireIdempotencyKey`, table `idempotency_keys` |
+| **Outbox** | Events written in the same transaction as the order and relayed to Kafka (ADR 0022). | `postgres.OutboxPublisher`, `OutboxRelay` |
+| **Version** | Optimistic-concurrency counter on `orders`; a stale save is `ErrConcurrentModification` (ADR 0024). | `Order.Version()` |
 
 ## Words that mean something different elsewhere
 
 | Word | Here (Order Management) | Elsewhere |
 | --- | --- | --- |
-| **Reservation** | *Not modelled* — only a `ReservationId` reference is held. | `inventory-storage`: the aggregate itself, a revocable binding of quantity to demand. |
-| **Release** | Enqueuing allocated lines as work units (now via Kafka choreography, not a direct call). | `wes-work-planning`: the act of accepting and scheduling a `WorkUnit`. |
-| **Status** | Order-level, always derived from line statuses. | `inventory-storage`'s `Reservation.Status` (`ACTIVE`/`CONFIRMED`/`REVOKED`/`EXPIRED`) is a completely different state machine on a completely different aggregate. |
-| **Order reference string** | This context's real `OrderId`. | Previously: `demandRef` on `inventory-storage`'s `Reservation`, `reference` on `wes-work-planning`'s `WorkUnit`, `Reference` on `fulfillment-execution`'s `Task` — three independently-reinvented strings this context now supplies as one real identity. |
+| **Reservation** | *Not modelled* — only a `reservationId` reference is held | inventory-storage: the aggregate itself, with `ACTIVE`/`CONFIRMED`/`REVOKED`/`EXPIRED` |
+| **Release** | Marking allocated lines `Released` and announcing them on Kafka | wes-work-planning: accepting and scheduling a `WorkUnit` |
+| **Status** | Order-level, always derived from line statuses | inventory-storage's `Reservation.Status` is a different state machine on a different aggregate |
+| **Capacity** | Path capacity (`PathCapacityChanged`, remaining units per cutoff) feeds the promise; planned capacity (warehouse-planning) only annotates | warehouse-planning: the plan itself, with demand and bottleneck steps |
+| **Order reference** | This context's real `OrderId` | `demandRef` on inventory-storage's `Reservation`; `order_ref` on fulfillment-execution's tasks (a work-unit id, not a bare order id) |
 
 Do not share a DTO or type across those boundaries. Translate at the
-outbound adapter (the Anti-Corruption Layer) instead — see
-[Bounded Context Canvas](/contexts/order-management/bounded-context-canvas)'s Outbound
-Communication section.
+anti-corruption layer instead — see
+[ADR 0002](https://iqvo.github.io/order-management/docs/adr/0002-http-consumer-of-inventory-and-wes-not-shared-code).
+The full state diagrams are on the
+[Aggregate Design Canvas](/contexts/order-management/aggregate-design-canvas).

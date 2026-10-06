@@ -1,178 +1,198 @@
 ---
 id: aggregate-design-canvas
-title: Aggregate Design Canvas — ProcessPath
+title: Aggregate Design Canvas
 sidebar_label: Aggregate Design Canvas
-description: The full ddd-crew Aggregate Design Canvas for the ProcessPath aggregate (plus the smaller CPTSchedule aggregate) — state transitions, invariants, commands, events.
+description: ddd-crew Aggregate Design Canvas v1.1 for the ProcessPath and CPTSchedule aggregates — state transitions, enforced invariants, corrective policies, commands, events, throughput and size.
 ---
 
-# Aggregate Design Canvas — ProcessPath
+# Aggregate Design Canvas
 
-Following the [ddd-crew Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas).
-`ProcessPath` is the primary aggregate root in this domain. Since
-[ADR 0010](https://github.com/claudioed/process-path-management/blob/develop/docs/docs/adr/0010-fulfillment-capability-contract.md)
-there is a second, smaller one — `CPTSchedule` — summarised at the end of
-this page.
+:::info[Synced from process-path-management]
+This page is a copy of [`docs/docs/ddd/aggregate-design-canvas.md`](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/ddd/aggregate-design-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-## Name
 
-**ProcessPath**
+Following the [ddd-crew Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
+Part of the [DDD artifact pack](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/ddd/ddd-artifacts.md). The domain package
+(`internal/domain/**`) has exactly **two aggregate roots**:
+`processpath.ProcessPath` and `cptschedule.CPTSchedule`. The narrative
+"why" behind the invariants lives in
+[Aggregates & Invariants](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/ddd/aggregates-and-invariants.md).
 
-## Description
+## ProcessPath
 
-The operator-configurable definition of one process path. Fields:
-`PathId` (immutable identity), `MatchPrefix` (revisable), `Direct`
-(immutable), `RequiredCapabilities` (revisable), optional
-`DestinationLocationRole` (immutable, ADR 0009), `CycleTimeP95` and
-`Eligibility` (revisable, ADR 0010), `Status` (`Active`/`Deactivated`),
-`CreatedAt`/`UpdatedAt`. Identity is permanent
-once constructed — a deactivated id is never re-issued.
+### 1. Name
 
-## State Transitions
+`ProcessPath` (`internal/domain/processpath/process_path.go`), identity
+`shared.PathId`.
 
-There is no "draft" state: a `ProcessPath` is `Active` the instant it is
-defined. The only transition is one-way and terminal.
+### 2. Description
+
+The operator-configurable definition of one process path: its canonical
+id, the `matchPrefix` rule consumers use to resolve caller-supplied ids,
+whether it is `Direct`, the capabilities required to work it, an optional
+destination location role, and its fulfillment capability contract
+(`cycleTimeP95`, `eligibility`). Persisted by natural key; never deleted.
+
+### 3. State Transitions
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Active: Define
-    Active --> Active: Revise (matchPrefix / requiredCapabilities / cycleTimeP95 / eligibility)
-    Active --> Deactivated: Deactivate
-    Deactivated --> Deactivated: Deactivate (idempotent no-op)
-    Deactivated --> [*]
-    note right of Deactivated
-        Terminal. Revise here
-        returns ErrPathDeactivated.
-        No path back to Active.
+    [*] --> ACTIVE : Define
+    ACTIVE --> ACTIVE : Revise - changed or no-op
+    ACTIVE --> DEACTIVATED : Deactivate
+    DEACTIVATED --> DEACTIVATED : Deactivate - idempotent no-op
+    note right of DEACTIVATED
+        Revise returns ErrPathDeactivated
+        No transition back to ACTIVE
+        Row is never deleted
     end note
 ```
 
-## Enforced Invariants
+Source: `processpath.Status` (`StatusActive = "ACTIVE"`,
+`StatusDeactivated = "DEACTIVATED"`), `Define`, `(*ProcessPath).Revise`,
+`(*ProcessPath).Deactivate`. Omits: `Rehydrate` (reconstruction, not a
+transition).
 
-Verbatim from the source domain code's own documentation:
+### 4. Enforced Invariants
 
-1. **Non-empty, lower-case `MatchPrefix`.** Enforced identically at
-   `Define` and at `Revise` time (`validate` is a single shared function,
-   not duplicated logic that could drift). Rejected with a typed sentinel
-   (`ErrEmptyMatchPrefix` / `ErrMatchPrefixNotLowercase`) rather than
-   silently coerced — persisted data is exactly what was validated, never
-   a silently-lower-cased value the caller didn't actually send.
-
-   ```go
-   if matchPrefix == "" {
-       return ErrEmptyMatchPrefix
-   }
-   if matchPrefix != strings.ToLower(matchPrefix) {
-       return ErrMatchPrefixNotLowercase
-   }
-   ```
-
-2. **Non-empty `RequiredCapabilities`.** Must contain at least one
-   capability. A process path with zero required capabilities is not a
-   meaningful business fact — every real path (`PICK`, `PACK`, `SLAM`,
-   `REBIN`) requires at least the capability named after itself. Enforced
-   by the same shared `validate` function, at both `Define` and `Revise`
-   time.
-
-3. **Strictly positive `CycleTimeP95`; closed `DestinationLocationRole`
-   set.** Every write rejects a zero or negative cycle time with
-   `ErrInvalidCycleTime` (ADR 0010), and `Define` rejects any non-empty
-   destination role other than `Drop`/`WorkCenter`/`Shipping`
-   (`ErrInvalidDestinationLocationRole`, ADR 0009) — validated locally,
-   never against a live facility-layout call.
-
-4. **Deactivation is terminal and idempotent.** Once a `ProcessPath`
-   transitions to `Deactivated`, it is a closed historical record:
-   - **Terminal.** `Revise` on a Deactivated path returns
-     `ErrPathDeactivated` — there is no path back to `Active`. Re-using a
-     deactivated id is refused (`ErrPathAlreadyExists`), never silently
-     reopened.
-   - **Idempotent.** Calling `Deactivate` on an already-deactivated path is
-     a no-op success, not an error — matching this fleet's established
-     "duplicate/redelivered command is a no-op, not an error" convention.
-     Enforced one layer up, in the `DeactivatePath` use case, this also
-     means `ProcessPathDeactivated` is never republished a second time.
-
-   ```go
-   func (p *ProcessPath) Deactivate(now time.Time) {
-       if p.status == StatusDeactivated {
-           return
-       }
-       p.status = StatusDeactivated
-       p.updatedAt = now
-   }
-   ```
-
-## Corrective Policies
-
-- **Deactivation carries no position on in-flight work.** This aggregate
-  takes no stance on work already assigned to a path in a downstream
-  context at the moment it is deactivated — that is each consumer's own
-  operational concern. `ProcessPathDeactivated` tells consumers to stop
-  accepting NEW work against this path; it is not a command to cancel
-  anything already in flight.
-- **Revision is a real no-op, not a spurious event.** `Revise` returns a
-  `changed` boolean. When the caller's request is byte-for-byte identical
-  to the path's current `MatchPrefix`, `RequiredCapabilities`,
-  `CycleTimeP95` and `Eligibility`, `changed` is `false` and the `RevisePath` use case does not republish
-  `ProcessPathUpdated` — consumers never have to diff two identical
-  payloads to notice nothing changed.
-
-## Handled Commands
-
-| Command | Precondition | Result |
-| --- | --- | --- |
-| **Define** | `PathId` not already in use (active or deactivated) | New `ProcessPath`, `Status = Active`; publishes `ProcessPathCreated` |
-| **Revise** | Path exists and is `Active` | `MatchPrefix`/`RequiredCapabilities`/`CycleTimeP95`/`Eligibility` updated if changed; publishes `ProcessPathUpdated` only when `changed = true` |
-| **Deactivate** | Path exists | `Status = Deactivated`; idempotent — a no-op, not an error, if already deactivated; publishes `ProcessPathDeactivated` only on the actual transition |
-
-## Created Events
-
-| Event | Published when |
+| Invariant | Enforced by |
 | --- | --- |
-| `ProcessPathCreated` | A new path is successfully defined |
-| `ProcessPathUpdated` | A `Revise` call actually changes `MatchPrefix`, `RequiredCapabilities`, `CycleTimeP95` or `Eligibility` |
-| `ProcessPathDeactivated` | A path transitions from `Active` to `Deactivated` (never republished on a redundant deactivate call) |
+| `pathId` non-empty | `processpath.ErrEmptyPathId` in `Define` |
+| `matchPrefix` non-empty | `processpath.ErrEmptyMatchPrefix` in `validate` (Define + Revise) |
+| `matchPrefix` lower-case, never coerced | `processpath.ErrMatchPrefixNotLowercase` in `validate` |
+| at least one required capability | `processpath.ErrNoRequiredCapabilities` in `validate` |
+| `destinationLocationRole` empty or Drop/WorkCenter/Shipping | `shared.ErrInvalidDestinationLocationRole` via `shared.ParseDestinationLocationRole` |
+| `cycleTimeP95` strictly positive | `processpath.ErrInvalidCycleTime` in `validate` (also returned by the HTTP adapter for an unparsable duration) |
+| only an Active path can be revised | `processpath.ErrPathDeactivated` in `Revise` |
+| `pathId`, `direct`, `destinationLocationRole` immutable | `Revise` has no parameter for them |
+| an id is never re-defined, active or deactivated | `usecases.ErrPathAlreadyExists` in `DefinePath` (use case, needs the repo; a read-then-write check — see the concurrent-define hotspot on the [EventStorming](/contexts/process-path-management/eventstorming) page) |
+| no lost update between load and save | `ports.ErrConcurrentModification` from the version-guarded upsert in `postgres.ProcessPathRepo.Save` (ADR 0017) |
 
-See [Domain Events](./domain-events) for the full consumer picture (four
-live consumers on the integration topic).
+### 5. Corrective Policies
 
-## Throughput
+- Invalid input is rejected synchronously (422 RFC 7807); nothing is
+  persisted or published — no compensating action is needed.
+- `409 concurrent-modification`: the client reloads and retries.
+- Deactivation is not a compensating action for anything downstream:
+  this context only publishes `ProcessPathDeactivated`, and each consumer
+  applies it to its own local catalogue (for example the
+  `applyDeactivated` handlers in the sibling `kafkacatalog` /
+  `processpathcache` consumers). What happens to work already in flight
+  is each consumer's decision.
+- A CPT schedule naming a path that is later deactivated is **not**
+  corrected automatically — only the next schedule write re-checks
+  eligibility (see Hotspots on the [EventStorming](/contexts/process-path-management/eventstorming)
+  page).
 
-**Low-frequency, operator-driven.** Path definitions change rarely relative
-to how often they would be read by a wired consumer — an operator revises
-or deactivates a path perhaps a few times a day, not per-request. This is
-the load-bearing argument for Kafka-event propagation over synchronous
-read-through: a local, event-maintained cache in each consumer is the
-natural fit for data that is written this infrequently but would otherwise
-need to be read on every high-frequency dispatch decision
-(`claimNext`/dispatch in `fulfillment-execution`, in particular). There is
-no burst-write scenario this aggregate needs to withstand — command volume
-is bounded by how often a human operator acts.
+### 6. Handled Commands
 
-## Size
+| Command | Entry point | Use case |
+| --- | --- | --- |
+| Define path | `POST /process-paths` | `usecases.DefinePath` → `processpath.Define` |
+| Revise path | `PUT /process-paths/{pathId}` | `usecases.RevisePath` → `(*ProcessPath).Revise` |
+| Deactivate path | `DELETE /process-paths/{pathId}` | `usecases.DeactivatePath` → `(*ProcessPath).Deactivate` |
 
-**Small.** A handful of scalar/short-list fields (`PathId`, `MatchPrefix`,
-`Direct`, `RequiredCapabilities`, `DestinationLocationRole`,
-`CycleTimeP95`, `Status`) plus the flat `Eligibility` value object and two
-timestamps. No child entities and no nested aggregates. The original five
-fields were a like-for-like migration of the YAML file it replaces; the
-later ones were added by ADRs 0009 and 0010.
+### 7. Created Events
 
-## Second aggregate — CPTSchedule
+- `com.warehouse.wes.process-path-management.processpath.ProcessPathCreated`
+- `com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated` (only when `changed`)
+- `com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated` (only from ACTIVE)
 
-A site-scoped, recurring Critical Pull Time schedule (ADR 0010),
-identified by `SiteId`: an IANA `timezone` plus one or more `Cutoffs`
-(`cptId`, `localTime` `HH:MM`, `daysOfWeek`, `shipMethod`,
-`eligiblePathIds`).
+### 8. Throughput
 
-- **Invariants (domain):** valid IANA timezone, at least one cutoff,
-  `cptId`s unique within the site, and each cutoff well-formed
-  (`NewCutoff`: non-empty id, `HH:MM` time, valid non-empty days,
-  non-empty ship method, non-empty `eligiblePathIds`).
-- **Cross-aggregate rule (use case):** every `eligiblePathId` must
-  reference an Active `ProcessPath` — enforced in `DefineCPTSchedule`
-  (`ErrIneligiblePathId`, 422), not by the domain or a foreign key.
-- **Command:** `DefineCPTSchedule` (`PUT /sites/{siteId}/cpt-schedule`)
-  defines or wholesale-revises the schedule; `Revise` returns `changed`,
-  and `CPTScheduleChanged` — a full snapshot, keyed by `site_id` — is
-  published only on a first definition or a real change.
+*Estimate.* Operator-driven configuration: tens of commands per day at
+most, close to zero concurrency per instance. Reads (`GET`, MCP) dominate
+writes; consumers do not read over REST at all.
+
+### 9. Size
+
+*Estimate.* Lifetime of years. Roughly 1 Created + a handful of Updated +
+at most 1 Deactivated event per instance (under ~20). State is a few
+hundred bytes; the catalogue holds tens of paths, not thousands.
+
+## CPTSchedule
+
+### 1. Name
+
+`CPTSchedule` (`internal/domain/cptschedule/cpt_schedule.go`), identity
+`shared.SiteId`; child entity `Cutoff` (local identity `cptId`).
+
+### 2. Description
+
+A site's recurring Critical Pull Time schedule: an IANA timezone and one
+or more cutoffs (`cptId`, `localTime`, `daysOfWeek`, `shipMethod`,
+`eligiblePathIds`). Modelled once per site because a CPT belongs to a
+departure, not to a path (ADR 0010). Always replaced wholesale.
+
+### 3. State Transitions
+
+The aggregate has **no status enum**; it exists or it does not.
+
+```mermaid
+stateDiagram-v2
+    [*] --> Defined : Define - first PUT for a site
+    Defined --> Defined : Revise - changed raises CPTScheduleChanged
+    Defined --> Defined : Revise - identical, no-op
+    note right of Defined
+        No delete and no deactivation
+        Revise replaces timezone and cutoffs wholesale
+    end note
+```
+
+Source: `cptschedule.Define`, `(*CPTSchedule).Revise`,
+`usecases.DefineCPTSchedule`. Omits: `Rehydrate`.
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+| --- | --- |
+| timezone non-empty | `cptschedule.ErrEmptyTimezone` |
+| timezone is a valid IANA zone | `cptschedule.ErrInvalidTimezone` (`time.LoadLocation`) |
+| at least one cutoff | `cptschedule.ErrNoCutoffs` |
+| `cptId` unique within the schedule | `cptschedule.ErrDuplicateCptId` |
+| `cptId` non-empty | `cptschedule.ErrEmptyCptId` (`NewCutoff`) |
+| `localTime` present and strict `HH:MM` | `cptschedule.ErrEmptyLocalTime`, `cptschedule.ErrInvalidLocalTime` |
+| `daysOfWeek` non-empty, each `Mon`..`Sun` | `cptschedule.ErrNoDaysOfWeek`, `cptschedule.ErrInvalidDayOfWeek` |
+| `shipMethod` non-empty | `cptschedule.ErrEmptyShipMethod` |
+| `eligiblePathIds` non-empty | `cptschedule.ErrNoEligiblePathIds` |
+| every eligible path id is an Active ProcessPath (cross-aggregate) | `usecases.ErrIneligiblePathId` in `DefineCPTSchedule.validateEligiblePathIds` |
+| no lost update | `ports.ErrConcurrentModification` from `postgres.CPTScheduleRepo.Save` |
+
+### 5. Corrective Policies
+
+- Invalid schedule → 422, nothing stored or published.
+- Concurrent writer → 409, reload and retry.
+- Consumers compute concrete cutoff instants themselves from
+  `(local_time, days_of_week, timezone)`; this context never publishes
+  absolute timestamps.
+
+### 6. Handled Commands
+
+| Command | Entry point | Use case |
+| --- | --- | --- |
+| Define or revise CPT schedule | `PUT /sites/{siteId}/cpt-schedule` | `usecases.DefineCPTSchedule` → `cptschedule.Define` or `(*CPTSchedule).Revise` |
+
+### 7. Created Events
+
+- `com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged` — full snapshot, on first define and on every real revision.
+
+### 8. Throughput
+
+*Estimate.* One schedule per site, revised when carrier departures change
+— a few writes per site per week.
+
+### 9. Size
+
+*Estimate.* Lifetime of the site. Tens of cutoffs per schedule; one event
+per revision, so a few hundred events per instance over years.
+
+## Not aggregates
+
+| Type | What it is |
+| --- | --- |
+| `shared.Eligibility`, `shared.DestinationLocationRole`, `shared.PathId`, `shared.SiteId`, `shared.Capability`, `cptschedule.Weekday` | Value objects / identity types |
+| `cptschedule.Cutoff` | Entity inside `CPTSchedule` |
+| `report.CatalogueReport`, `report.Row` (`internal/analytics/report`) | Read model of the analytics projection — built by `pathmgmt-projector`, served by `pathmgmt-reports` |
+| `processPathResponse`, `cptScheduleResponse`, MCP DTOs | Adapter DTOs |
+| Consumer catalogue caches in sibling repos | Their read models, not part of this context |

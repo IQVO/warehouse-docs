@@ -1,236 +1,429 @@
 ---
 id: aggregate-design-canvas
-title: Aggregate Design Canvas — WorkPool
-sidebar_label: Aggregate Design Canvas
-description: The full ddd-crew Aggregate Design Canvas for WorkPool, the release-admission aggregate at the heart of the conductor, with WorkUnit as its sibling aggregate.
+title: Aggregate design canvas
+sidebar_label: Aggregate design canvas
+description: "ddd-crew Aggregate Design Canvas v1.1 for every aggregate root in internal/domain: state transitions, enforced invariants, commands, events, throughput and size."
 ---
 
-# Aggregate Design Canvas — `WorkPool`
+# Aggregate design canvas
 
-Following the [ddd-crew Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas)
-template. `WorkPool` is the aggregate documented here because it is where
-this context's defining decisions live: priority, WIP backpressure, and
-feed-mode-dependent enforceability. `WorkUnit` is its sibling aggregate — a
-separate consistency boundary referenced by identity, not a child entity —
-and is covered in its own short section at the end of this page.
+:::info[Synced from wes-work-planning]
+This page is a copy of [`docs/docs/ddd/aggregate-design-canvas.md`](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/ddd/aggregate-design-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-## Name
 
-**`WorkPool`** (`internal/domain/release`)
+One [ddd-crew Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas)
+(v1.1) per aggregate root in `internal/domain`. There are **four aggregate
+roots** — `ChargeForecast`, `ShiftPlan`, `WorkPool`, `WorkUnit` — plus one
+domain service (`ReleasePolicy`) and five shared value objects. Every
+invariant below is enforced inside the domain layer and has a failing-path
+unit test next to it (`*_test.go` in the same package).
 
-## Description
+Read models are **not** aggregates and are listed separately at the
+[end of this page](#not-aggregates-read-models-and-views).
 
-The queue for exactly one process path: backlog depth, arrival rate,
-service rate, and the admission bookkeeping that hands entries out **at
-most once**, in **earliest-CPT** order. A `WorkPool` holds entry records
-keyed by work-unit id — never `WorkUnit` objects — because the pool's
-release bookkeeping and a unit's lifecycle are different consistency
-boundaries that happen to be updated in the same use case.
+## Shared value objects (`internal/domain/shared`)
+
+| Value object | Constraint | Error on violation |
+|---|---|---|
+| `CPT` | wraps a `time.Time`; ordering is the domain operation (`Before`, `Equals`) | — (always valid) |
+| `Rate` | units/hour, must be **positive** | `ErrInvalidRate` |
+| `PathId` | must be **non-empty** | `ErrInvalidPathId` |
+| `Quantity` | must be **non-negative** | `ErrInvalidQuantity` |
+| `StationCount` | **non-negative** and at most `math.MaxInt32`; comparable (`LessThan`, `GreaterThan`) | `ErrInvalidStationCount` |
+
+`hours` on a path plan is a plain `float64` validated to be positive
+(`shared.ErrInvalidHours`). These exist so an illegal value cannot be
+constructed at all: a negative quantity never becomes a `Quantity`.
+
+Every aggregate is **one row (plus child rows) per process path or per work
+unit**, and every aggregate-changing use case saves the aggregate and inserts
+its events into the transactional outbox in one Postgres transaction
+(`UnitOfWork`, [ADR-0014](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0014-transactional-outbox.md)).
+
+---
+
+## ChargeForecast
+
+### 1. Name
+
+`ChargeForecast` — `internal/domain/charge/forecast.go`. Identity: the
+`PathId` (one forecast per path; `charge_forecasts.path_id` is the primary
+key).
+
+### 2. Description
+
+The volume that must clear one process path this shift, bucketed by CPT
+(`[]CPTBucket`, each a `CPT` plus a `Quantity`). It is an **input fact**, not
+a decision: receiving a revised forecast replaces the previous one.
+
+### 3. State transitions
+
+`ChargeForecast` has no status enum. Its only lifecycle is "created" and
+"replaced by a newer forecast for the same path" (the Postgres repo upserts
+on `path_id`).
+
+```mermaid
+stateDiagram-v2
+    [*] --> Received: NewChargeForecast with at least one bucket
+    [*] --> Rejected: NewChargeForecast with no buckets returns ErrNoBuckets
+    Received --> Received: ReceiveChargeForecast again for the same path replaces it
+    Rejected --> [*]
+```
+
+Source: `internal/domain/charge/forecast.go`,
+`internal/application/usecases/receive_charge_forecast.go`,
+`internal/adapters/outbound/postgres/charge_repo.go`. Omits: the HTTP
+validation of each bucket (`malformed-request-body`, `invalid-quantity`)
+that happens before the aggregate is constructed.
+
+### 4. Enforced invariants
+
+| # | Invariant | Enforced by |
+|---|---|---|
+| C1 | A forecast has **at least one CPT bucket** | `NewChargeForecast` → `charge.ErrNoBuckets` |
+| C2 | Querying a CPT that has no bucket is an error, not a zero | `QuantityForCPT` → `charge.ErrUnknownCPT` |
+| C3 | The bucket slice is never shared with callers | `NewChargeForecast` and `Buckets()` copy the slice |
+
+C2 matters: "nothing is due at 18:00" and "I have no idea what is due at
+18:00" are operationally different answers.
+
+### 5. Corrective policies
+
+None. A wrong forecast is corrected by posting a new one for the path.
+
+### 6. Handled commands
+
+| Command | Entry point |
+|---|---|
+| `ReceiveChargeForecast` | `POST /paths/{pathId}/charge` |
+
+### 7. Created events
+
+| Event | Full CloudEvents type |
+|---|---|
+| `ChargeForecastReceived` | `com.warehouse.wes.work-planning.charge.ChargeForecastReceived` |
+
+### 8. Throughput (estimate)
+
+Estimate: low — one write per path per planning cycle (a handful per path
+per shift). No concurrency control beyond the upsert; last writer wins.
+
+### 9. Size (estimate)
+
+Estimate: one event per instance per revision; a forecast carries one
+bucket per CPT wave of the shift (tens, not thousands). Lifetime: until
+replaced.
+
+---
+
+## ShiftPlan
+
+### 1. Name
+
+`ShiftPlan` — `internal/domain/plan/shift_plan.go`, composed of
+`PathPlan` values (`internal/domain/plan/path_plan.go`). Identity: the
+`PathId` it is saved under (`PlanRepo.Save(ctx, pathId, shiftPlan)`;
+`shift_plans.path_id` is the primary key).
+
+### 2. Description
+
+This service's **committed** split of headcount across process paths:
+`rate × plannedHeads × hours` per path. Not `workforce-management`'s
+`ShiftPlan` — that one arrives as `LaborPlanObserved`, a read model
+([ADR-0006](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0006-labor-plan-view-not-shift-plan.md)). Today
+`CommitShiftPlan` always builds a single-`PathPlan` `ShiftPlan`.
+
+### 3. State transitions
+
+No status enum. A plan either fails construction or is committed; a later
+commit for the same path replaces it (upsert on `path_id`).
+
+```mermaid
+stateDiagram-v2
+    [*] --> Committed: NewPathPlan and NewShiftPlan succeed
+    [*] --> Rejected: heads above stations, hours not positive, throughput not finite, or no path plans
+    Committed --> Committed: CommitShiftPlan again for the same path replaces it
+    Rejected --> [*]
+```
+
+Source: `internal/domain/plan/path_plan.go`, `internal/domain/plan/shift_plan.go`,
+`internal/application/usecases/commit_shift_plan.go`. Omits: the optional
+travel-distance enrichment (it never changes state validity).
+
+### 4. Enforced invariants
+
+| # | Invariant | Enforced by |
+|---|---|---|
+| P1 | **`plannedHeads ≤ installedStations`** | `NewPathPlan` → `plan.ErrHeadsExceedStations` |
+| P2 | `hours` must be **positive** | `NewPathPlan` → `shared.ErrInvalidHours` |
+| P3 | Planned throughput must be finite | `NewPathPlan` → `plan.ErrThroughputNotFinite` |
+| P4 | A shift plan has **at least one path plan** | `NewShiftPlan` → `plan.ErrNoPathPlans` |
+
+P1 is the headline invariant: you cannot staff more people than there are
+places to stand, and enforcing it at construction means an invalid plan
+never exists even transiently.
+
+### 5. Corrective policies
+
+- **Drift reconciliation** ([ADR-0019](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0019-labor-plan-committed-shift-plan-reconciliation.md)):
+  inside the same transaction, `CommitShiftPlan` compares the new
+  `PathPlan.PlannedHeads` with Workforce's `LaborPlanObserved` for the path
+  (if one exists), stores the signed difference on the view and raises
+  `PathPlanDriftDetected` when it is non-zero. `ObserveLaborPlan` runs the
+  same comparison when Workforce commits second.
+- **Travel-distance hint** ([ADR-0017](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0017-travel-distance-lookup-on-commit-shift-plan.md)):
+  fail-open; a failed lookup simply omits the hint.
+
+### 6. Handled commands
+
+| Command | Entry point |
+|---|---|
+| `CommitShiftPlan` | `POST /paths/{pathId}/plan` |
+
+### 7. Created events
+
+| Event | Full CloudEvents type |
+|---|---|
+| `ShiftPlanCommitted` | `com.warehouse.wes.work-planning.plan.ShiftPlanCommitted` |
+| `PathPlanDriftDetected` (only on drift) | `com.warehouse.wes.work-planning.pathplan.PathPlanDriftDetected` |
+
+### 8. Throughput (estimate)
+
+Estimate: low — a few commits per path per shift. Last writer wins.
+
+### 9. Size (estimate)
+
+Estimate: one or two events per commit; one `PathPlan` per instance today.
+Lifetime: until the next commit for the path.
+
+---
+
+## WorkPool
+
+### 1. Name
+
+`WorkPool` — `internal/domain/release/work_pool.go`. Identity: `PathId`
+(exactly one pool per path; `work_pools.path_id`, with child rows in
+`work_pool_entries`). Carries an optimistic-concurrency `version`
+([ADR-0029](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0029-work-pool-optimistic-concurrency.md)).
+
+### 2. Description
+
+The queue for one process path: entries keyed by work unit id, each with a
+CPT and an entry state, plus the feed mode (`ReleaseFed` or `FlowFed`), the
+WIP limit and the alarm threshold. Backlog depth, WIP and remaining capacity
+are **computed from the entries on demand**, never stored.
+
+### 3. State transitions
+
+The pool itself has no status; its entries do (`entryState`: `pending`,
+`released`, `completed`).
+
+```mermaid
+stateDiagram-v2
+    [*] --> pending: Enqueue - duplicate id returns ErrDuplicateEntry
+    pending --> released: ReleaseNext picks earliest CPT, or Release by id
+    pending --> pending: ReleaseFed pool at WIP limit returns ErrWIPLimitReached
+    released --> released: Release again returns ErrAlreadyReleased
+    released --> completed: Complete, or Reconcile with unit completed
+    pending --> completed: Reconcile with unit completed
+    pending --> released: Reconcile with unit released
+    completed --> completed: Complete again is a no-op
+```
+
+Source: `internal/domain/release/work_pool.go`,
+`internal/domain/release/errors.go`. Omits: `RestoreEntry`, which only
+rehydrates stored rows in the repository adapter, and the pool-level
+`ErrEmptyPool` / `ErrUnknownEntry` failures.
+
+### 4. Enforced invariants
+
+| # | Invariant | Enforced by |
+|---|---|---|
+| W1 | **At-most-once handout** of an entry | `Release` → `release.ErrAlreadyReleased`; `ReleaseNext` only considers `pending` entries |
+| W2 | **WIP limit is a hard invariant on a release-fed pool** | `ReleaseNext` / `Release` when `WIP() ≥ wipLimit` and mode is `ReleaseFed` → `release.ErrWIPLimitReached` |
+| W3 | No duplicate entries | `Enqueue` / `RestoreEntry` → `release.ErrDuplicateEntry` |
+| W4 | Releasing from an empty pool is an error | `ReleaseNext` → `release.ErrEmptyPool` |
+| W5 | Releasing, completing or reconciling an unknown id is an error | `Release` / `Complete` / `Reconcile` → `release.ErrUnknownEntry` |
+| W6 | An entry completes only after it was released | `Complete` → `release.ErrNotReleased` |
+| W7 | **Earliest CPT first** — the priority function | `nextPendingIndex` |
+| W8 | Concurrent saves never silently overwrite each other | `WorkPoolRepo.Save` matches `version`; zero rows → `ports.ErrConcurrentModification`, retried up to 12 times by `retryOnPoolConflict`, then HTTP 409 `concurrent-modification` |
+
+W2 is conditional by design: on a **flow-fed** pool the WIP limit is not
+enforced and only `alarmThreshold` applies (`IsOverAlarmThreshold`). You can
+only enforce a limit on an input you control
+([ADR-0003](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0003-flow-balancing-as-domain-service.md)).
+
+### 5. Corrective policies
+
+- **Stale-entry healing on release**: if `ReleasePolicy.Apply` picks an entry
+  whose `WorkUnit` is already Released or Completed, `ReleaseNextWork` calls
+  `Reconcile` and picks again, instead of wedging the path.
+- **Completion frees the WIP slot**: `RecordCompletion` reconciles the pool
+  entry to `completed` in the same transaction as the `WorkUnit` save.
+- **Flow balancing** ([ADR-0003](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0003-flow-balancing-as-domain-service.md)):
+  `RebalanceDecision` recommends `ThrottleUpstream` (flow-fed, over alarm
+  threshold) or `ReassignLabor` (release-fed, at WIP limit with backlog).
+- **Optimistic-concurrency retry** (W8).
+
+### 6. Handled commands
+
+| Command | Entry points | Pool method |
+|---|---|---|
+| `EnqueueWorkUnit` | `POST /paths/{pathId}/work-units` (`Idempotency-Key` with Postgres); `ApplyOrderAllocated` from Kafka | `Enqueue` (creates the pool on first enqueue: `ReleaseFed`, WIP limit and alarm threshold 1000) |
+| `ReleaseNextWork` | `POST /paths/{pathId}/release`; MCP `release_next_work` | `ReleasePolicy.Apply` → `ReleaseNext`, plus `Reconcile` |
+| `RecordCompletion` | `POST /work-units/{id}/complete`; `ApplyTaskCompleted` from Kafka | `Reconcile` |
+| `SampleBacklog` | `GET /paths/{pathId}/telemetry`; MCP `get_backlog_telemetry` | read-only: `BacklogDepth`, `WIP`, `IsOverAlarmThreshold`, `RemainingCapacity` |
+| `RebalanceDecision` | `GET /paths/{pathId}/rebalance`; MCP `get_rebalance_recommendation` | read-only |
+
+### 7. Created events
+
+| Event | Full CloudEvents type | Raised by |
+|---|---|---|
+| `BacklogThresholdBreached` | `com.warehouse.wes.work-planning.workpool.BacklogThresholdBreached` | `SampleBacklog`, when backlog depth exceeds the alarm threshold |
+| `PathCapacityChanged` | `com.warehouse.wes.work-planning.workpool.PathCapacityChanged` | `SampleBacklog`, only when `cutoffAt` is supplied ([ADR-0018](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md)) |
+| `PathThrottled` | `com.warehouse.wes.work-planning.workpool.PathThrottled` | `RebalanceDecision` |
+| `LaborReassignmentFlagged` | `com.warehouse.wes.work-planning.workpool.LaborReassignmentFlagged` | `RebalanceDecision` |
+| `RateDeviationDetected` | `com.warehouse.wes.work-planning.workpool.RateDeviationDetected` | **declared only — no use case raises it** |
+
+`WorkUnitCreated` and `WorkReleased` are raised in the same use cases that
+change the pool, but they describe the `WorkUnit` and are typed under
+`workunit`.
+
+### 8. Throughput (estimate)
+
+Estimate: the hottest aggregate. Every enqueue, release and completion on a
+path writes the same pool row, so contention scales with per-path release
+rate (on the order of one write per unit handled on that path). This is
+exactly why ADR-0029 added the `version` guard and bounded retry.
+
+### 9. Size (estimate)
+
+Estimate: one entry per work unit ever enqueued on the path — entries are
+never deleted, and `WorkPoolRepo.Save` rewrites every entry row. Lifetime:
+unbounded (the life of the path). Pool growth is a known scaling hotspot;
+see [EventStorming](/contexts/wes-work-planning/eventstorming).
+
+---
+
+## WorkUnit
+
+### 1. Name
+
+`WorkUnit` — `internal/domain/workunit/work_unit.go`. Identity: the
+caller-supplied `id` (or `{order_id}-line-{line_no}` when created from
+`OrderAllocated`).
+
+### 2. Description
+
+A releasable unit of work with a deadline: `pathId`, `cpt`, `reference`
+(the external source, e.g. an order id), optional `sku` and `giftWrap`, and
+its lifecycle timestamps `releasedAt` / `completedAt`. Not the downstream
+`Task` of `fulfillment-execution`.
+
+### 3. State transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Pending: NewWorkUnit with non-empty id and reference
+    Pending --> Released: Release at time
+    Released --> Completed: Complete at time
+    Pending --> Pending: Complete returns ErrNotReleased
+    Released --> Released: Release returns ErrAlreadyReleased
+    Completed --> Completed: Complete returns ErrAlreadyCompleted, Release returns ErrAlreadyReleased
+    Completed --> [*]
+```
+
+Source: `internal/domain/workunit/work_unit.go`,
+`internal/domain/workunit/errors.go`. Omits: `SetSKU` / `SetGiftWrap`, which
+set optional characteristics at enqueue time and do not change state.
+
+### 4. Enforced invariants
+
+| # | Invariant | Enforced by |
+|---|---|---|
+| U1 | **At most one active assignment** — released only from `Pending` | `Release` → `workunit.ErrAlreadyReleased` |
+| U2 | **No double-complete** | `Complete` → `workunit.ErrAlreadyCompleted` |
+| U3 | Must be released before completing | `Complete` → `workunit.ErrNotReleased` |
+| U4 | Id must be non-empty | `NewWorkUnit` → `workunit.ErrEmptyId` |
+| U5 | Reference must be non-empty | `NewWorkUnit` → `workunit.ErrEmptyReference` |
+
+U2 matters beyond tidiness: completion arrives over Kafka as `TaskCompleted`,
+which is at-least-once. `ApplyTaskCompleted` deduplicates on the CloudEvents
+`id` atomically with the effect
+([ADR-0028](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0028-processed-event-mark-atomic-with-handling.md)) *and*
+the aggregate rejects a second completion — defence in depth.
+
+### 5. Corrective policies
+
+- An unknown `work_unit_id` on `TaskCompleted` (for example a PACK task keyed
+  by order id) is an INFO-logged, processed skip (`TaskCompletedUnknownWorkUnit`).
+- A line of `OrderAllocated` that is already enqueued (`ErrDuplicateEntry`)
+  is skipped as a benign no-op ([ADR-0031](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0031-order-allocated-choreography.md)).
+
+### 6. Handled commands
+
+| Command | Entry points |
+|---|---|
+| `EnqueueWorkUnit` | `POST /paths/{pathId}/work-units`; `ApplyOrderAllocated` |
+| `ReleaseNextWork` | `POST /paths/{pathId}/release`; MCP `release_next_work` |
+| `RecordCompletion` | `POST /work-units/{id}/complete`; `ApplyTaskCompleted` |
+
+### 7. Created events
+
+| Event | Full CloudEvents type |
+|---|---|
+| `WorkUnitCreated` | `com.warehouse.wes.work-planning.workunit.WorkUnitCreated` |
+| `WorkReleased` | `com.warehouse.wes.work-planning.workunit.WorkReleased` |
+| `WorkUnitCompleted` | `com.warehouse.wes.work-planning.workunit.WorkUnitCompleted` |
+
+### 8. Throughput (estimate)
+
+Estimate: high volume, low contention — one unit per order line, each
+written about three times in its life by different use cases.
+
+### 9. Size (estimate)
+
+Estimate: exactly three events per instance in the happy path (created,
+released, completed). Lifetime: minutes to hours, bounded by the CPT.
+
+---
+
+## ReleasePolicy — domain service
 
 ```go
-type WorkPool struct {   // aggregate root
-    pathId         shared.PathId
-    mode           FeedMode  // ReleaseFed | FlowFed
-    wipLimit       int       // enforced only when mode == ReleaseFed
-    alarmThreshold int       // informative only, when mode == FlowFed
-    entries        []poolEntry
+type ReleasePolicy struct{}
+
+func (ReleasePolicy) Apply(pool *WorkPool) (string, error) {
+    return pool.ReleaseNext()
 }
 ```
 
-## State Transitions
+Deliberately thin today and deliberately a separate object: release
+admission is the decision most likely to change (customer tiering, cold
+chain, aisle batching), and naming it means changing one object rather than
+the pool aggregate ([ADR-0002](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0002-waveless-continuous-release.md)).
 
-A pool entry moves through a small, one-way lifecycle, mirrored by (but
-distinct from) the `WorkUnit` state machine it references:
+## Aggregate boundaries: what is *not* one aggregate
 
-```mermaid
-stateDiagram-v2
-    [*] --> Pending: Enqueue(id)
-    Pending --> Released: Release(id) / ReleaseNext()
-    Pending --> Pending: Enqueue(same id) → ErrDuplicateEntry
-    Pending --> Pending: Release(unknown id) → ErrUnknownEntry
-    Released --> Released: Release(id) again → ErrAlreadyReleased
-```
+- **`WorkPool` and `WorkUnit` are separate.** The pool holds entry records
+  keyed by work unit id, not `WorkUnit` objects. They are updated in the same
+  use case and the same transaction, but each has its own invariants.
+- **`ChargeForecast` and `ShiftPlan` are separate.** Charge is an input fact;
+  the plan is a decision.
 
-`nextPendingIndex()` selects the pending entry with the **earliest CPT** on
-every call — priority is never fixed at enqueue time, it is recomputed on
-every release. That single rule is the entire priority function: the drum,
-expressed in code.
+## Not aggregates: read models and views
 
-## Enforced Invariants
+These are plain structs with exported fields and no invariants, because the
+facts belong to someone else or are computed on read. See
+[Read models](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/ddd/read-models.md).
 
-| # | Invariant | Failing path |
+| Type | Package | Kind |
 |---|---|---|
-| W1 | **At-most-once handout.** An entry is released at most once. | `Release(id)` on an already-released entry → `ErrAlreadyReleased` |
-| W2 | **WIP limit is enforceable on release-fed pools.** | `ReleaseNext()` / `Release()` when `WIP() ≥ wipLimit` and `mode == ReleaseFed` → `ErrWIPLimitReached` |
-| W3 | **No duplicate entries.** | `Enqueue(id)` for an id already in the pool → `ErrDuplicateEntry` |
-| W4 | Releasing from an empty pool is an error. | `ReleaseNext()` with no pending entries → `ErrEmptyPool` |
-| W5 | Releasing an unknown id is an error. | `Release(unknownId)` → `ErrUnknownEntry` |
-
-**W2 is conditional by design.** On a **flow-fed** pool the WIP limit is
-*not* enforced and `alarmThreshold` is used instead, exposed as
-`IsOverAlarmThreshold()`. You can only enforce a limit on an input you
-control; a conveyor does not ask permission.
-
-`BacklogDepth()` (pending count) and `WIP()` (released count) are
-**computed on demand from `entries`**, never stored — see
-[Read models](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/ddd/read-models.md)
-in the source repository.
-
-## Corrective Policies
-
-Two domain services act on a `WorkPool`, and neither is a method on the
-aggregate itself — both need context beyond what a single `WorkPool`
-instance can compute about itself.
-
-- **`ReleasePolicy`** — `Apply(pool) (string, error)` calls
-  `pool.ReleaseNext()`. Deliberately thin today and deliberately a
-  **separate object**: admission is the rule most likely to change
-  (customer tiering, cold-chain handling, aisle batching), and naming it
-  separately means changing it is replacing one object, not editing the
-  aggregate.
-- **`RebalanceDecision`** — a synchronous decision evaluated on read over a
-  pool snapshot (feed mode, backlog depth, WIP, WIP limit, alarm
-  threshold). It **recommends**, never acts:
-
-  | Feed mode | Condition | Recommendation | Event |
-  |---|---|---|---|
-  | Flow-fed | `backlogDepth > alarmThreshold` | `ThrottleUpstream` | `PathThrottled` |
-  | Release-fed | `WIP ≥ wipLimit` **and** `backlogDepth > 0` | `ReassignLabor` | `LaborReassignmentFlagged` |
-  | either | otherwise | `NoActionNeeded` | — |
-
-  A release-fed pool at its WIP limit is *already* exercising its lever
-  fully — further throttling would push on a control already fully
-  pressed, so the constraint named is capacity, not admission.
-
-## Handled Commands
-
-| Command | Effect |
-|---|---|
-| `EnqueueWorkUnit(pathId, cpt, ref)` | Creates a `WorkUnit` (see below) and adds a `Pending` entry to this path's `WorkPool`, keyed by the unit's id. |
-| `ReleaseNextWork(pathId)` | Applies `ReleasePolicy` to the pool: hands out the pending entry with the earliest CPT, subject to W1–W5. |
-| `RecordCompletion(workUnitId)` | Transitions the referenced `WorkUnit` to `Completed`; the pool's `WIP()` projection drops accordingly on the next read (no counter is decremented on the pool itself — see Read models). |
-| `SampleBacklog(pathId, cutoffAt?)` | Not a mutation — computes the telemetry read model from `entries` and may raise `BacklogThresholdBreached`. When the caller supplies the optional `cutoffAt`, it also reads `RemainingCapacity()` and raises `PathCapacityChanged` (ADR-0018); both events commit atomically in one call. |
-| `RebalanceDecision(pathId)` | Not a mutation — computes the flow-balancing recommendation from the same snapshot. |
-
-## Created Events
-
-| Event | Raised by | Payload fields |
-|---|---|---|
-| `WorkUnitCreated` | `EnqueueWorkUnit` | `PathId`, `WorkUnitId` |
-| **`WorkReleased`** | `ReleaseNextWork` | `PathId`, `WorkUnitId` (enriched at the outbound adapter with `cpt`, `ref`) |
-| `WorkUnitCompleted` | `RecordCompletion` | `PathId`, `WorkUnitId` |
-| `BacklogThresholdBreached` | `SampleBacklog` (flow-fed pool over threshold) | `PathId` |
-| `PathThrottled` | `RebalanceDecision` (flow-fed, over alarm threshold) | `PathId` |
-| `LaborReassignmentFlagged` | `RebalanceDecision` (release-fed, saturated with backlog remaining) | `PathId` |
-| **`PathCapacityChanged`** | `SampleBacklog` (only when `cutoffAt` is supplied) | `PathId`, `CutoffAt`, `RemainingUnits`, `Known` |
-
-Two of these events are consumed by sibling services today:
-`WorkReleased` — `fulfillment-execution` turns it into a `Task` — and
-`PathCapacityChanged` — `order-management` caches remaining capacity per
-(path, cutoff). The rest are published for observability and future
-subscribers.
-
-`RemainingCapacity()` is a pure read over existing pool state, not new
-stored state: `max(0, wipLimit − WIP())` with `known=true` on a
-release-fed pool with `wipLimit > 0`; `known=false` (and `0`) on a flow-fed
-pool or an unprovisioned release-fed pool, because an alarm threshold is
-not an admission ceiling
-([ADR-0018](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md)).
-
-## Throughput
-
-This is a Core aggregate with real concurrency and throughput discussion in
-its own right, because it sits directly on the admission path:
-
-- **`ReleaseNext` is called once per unit, not once per wave** — a direct,
-  deliberate trade against wave-based release's lower call volume, accepted
-  because each call is pure in-memory domain logic over a pool snapshot
-  with no I/O and no clock, so the per-call cost is small.
-- **The WIP limit is the throughput governor for a release-fed pool.**
-  `PathPlan.PlannedThroughput()` (`rate × plannedHeads × hours`) sets the
-  target; the WIP limit is the enforceable ceiling on outstanding work that
-  keeps the floor from being flooded beyond what that planned throughput
-  can actually clear.
-- **The control loop closes through `TaskCompleted`.** Without the feedback
-  edge from `fulfillment-execution`, WIP would only ever grow and a
-  release-fed pool would deadlock at its limit after `wipLimit` releases —
-  the loop, not the pool alone, is what makes the WIP limit a meaningful
-  throughput control rather than a one-way valve.
-- **Kafka redelivery does not distort throughput accounting.** Every
-  consumer path is idempotent by `event_id` (`processed_events` primary-key
-  check), so a redelivered `TaskCompleted` does not free WIP twice, and a
-  redelivered `StockReserved` does not double-decrement usable inventory.
-  Using the primary-key violation *as* the check — rather than
-  read-then-write — removes the race between two consumers processing the
-  same redelivery concurrently.
-- **Publishing cannot diverge from the saved pool.** With Kafka and
-  Postgres both configured, the events a use case raises are written to
-  `outbox_events` in the same transaction as the `WorkPool`/`WorkUnit`
-  change and relayed afterwards
-  ([ADR-0014](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0014-transactional-outbox.md)),
-  so a released unit is never missing its `WorkReleased` or vice versa.
-- **The Release Throughput & Backlog Health analytical report** (per
-  path × hour: `workReleased`, `workUnitCompleted`,
-  `backlogThresholdBreached`, `pathThrottled`, `rateDeviationDetected`) is
-  the operational lens onto this aggregate's actual behaviour over time,
-  built from its own domain events on a separate topic
-  (`warehouse.wes.analytics`) so a runaway analytical query can never
-  contend with the transactional release path.
-
-## Size
-
-- **Small, deliberately.** Four fields on the aggregate root
-  (`pathId`, `mode`, `wipLimit`/`alarmThreshold`, `entries`), one value
-  type per entry (`poolEntry`), and no nested aggregates.
-- **One pool per process path, always** — not a global task list. Size
-  scales with backlog depth on a single path's queue, not with the whole
-  floor's work, which is why computing `BacklogDepth()`/`WIP()` as a slice
-  scan on read is the right trade at this size (see
-  [Read models](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/ddd/read-models.md)
-  for the explicit reasoning against a stored counter).
-- Collection getters (`entries`) are never handed out directly; callers get
-  copies, so an external caller cannot mutate the pool's admission
-  bookkeeping behind its own back.
-
----
-
-## Sibling aggregate: `WorkUnit`
-
-`WorkUnit` (`internal/domain/workunit`) is a **separate aggregate root**,
-not an entity inside `WorkPool` — the pool references it only by id.
-
-```go
-type State int
-const (
-    Pending State = iota
-    Released
-    Completed
-)
-```
-
-```mermaid
-stateDiagram-v2
-    [*] --> Pending: NewWorkUnit(id, pathId, cpt, reference)
-    Pending --> Released: Release(at)
-    Released --> Completed: Complete(at)
-    Pending --> Pending: Release again → ErrAlreadyReleased
-    Pending --> Pending: Complete → ErrNotReleased
-    Released --> Released: Release again → ErrAlreadyReleased
-    Completed --> Completed: Complete again → ErrAlreadyCompleted
-    Completed --> Completed: Release → ErrAlreadyReleased
-```
-
-**Invariants:** at most one active assignment (`U1`), no double-complete
-(`U2`), must be released before completing (`U3`), non-empty id (`U4`),
-non-empty reference (`U5`). **`U2` matters beyond tidiness**: completion
-arrives over Kafka from `fulfillment-execution` as `TaskCompleted`, and
-Kafka is at-least-once — the inbound adapter deduplicates by `event_id`
-*and* the aggregate independently rejects the second completion, defence in
-depth by deliberate design.
-
-Why two aggregates and not one: a pool's admission bookkeeping and a unit's
-lifecycle are updated in the same use case but are not one
-transaction-shaped object. Merging them would couple a queueing concern
-(where is this unit in the release order) to a lifecycle concern (has this
-unit been completed) that genuinely change for different reasons and at
-different rates.
+| `LaborPlanObserved` (+ `Drift`) | `internal/domain/laborview` | Kafka projection of Workforce's `ShiftPlanCommitted`, persisted in `labor_plan_view` |
+| `UsableInventoryObserved` | `internal/domain/inventoryview` | Kafka projection of `StockReserved` / `ReservationRevoked`, persisted in `usable_inventory_view` |
+| `ProductClassificationView` | `internal/domain/productclassificationview` | synchronous REST read from inventory-storage at release, never persisted |
+| `TravelDistanceView` | `internal/domain/traveldistanceview` | synchronous REST read from facility-layout at plan commit, never persisted |
+| `PathDefinition` / `Catalogue` | `internal/domain/pathcatalog` | in-memory copy of process-path-management's catalogue |
+| `BacklogSnapshot`, `RebalanceRecommendation` | `internal/application/usecases` | computed on read from a `WorkPool` |
