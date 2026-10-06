@@ -49,19 +49,19 @@ The standards of one site, or every standard when `location` is omitted, ordered
 </Heading>
 
 <ParamsDetails
-  {...require("./list-station-standards.ParamsDetails.json")}
+  parameters={[{"name":"location","in":"query","required":false,"schema":{"type":"string"},"example":"SIM1"}]}
 >
   
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./list-station-standards.RequestSchema.json")}
+  title={"Body"}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./list-station-standards.StatusCodes.json")}
+  responses={{"200":{"description":"The declared standards (possibly empty).","content":{"application/json":{"schema":{"type":"object","properties":{"location":{"type":"string","description":"The location filter, when one was given."},"standards":{"type":"array","items":{"type":"object","properties":{"location":{"type":"string","example":"SIM1"},"process_type":{"type":"string","example":"PACK"},"quantity":{"type":"number","format":"double","example":180},"unit":{"type":"string","example":"PACKAGE"},"period_seconds":{"type":"number","format":"double","example":3600}},"title":"StationStandardResponse"}}},"title":"StationStandardsResponse"}}}}}}
 >
   
 </StatusCodes>
