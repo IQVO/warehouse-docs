@@ -2,104 +2,233 @@
 id: ubiquitous-language
 title: Ubiquitous Language (Fleet Overview)
 sidebar_label: Ubiquitous Language
-description: How the shared vocabulary is organized across eleven bounded contexts, and where "same word, different model" deliberately occurs.
+description: How the vocabulary is organised across the eleven bounded contexts, which terms are genuinely shared, and which words mean different things in different contexts.
 ---
 
-# Ubiquitous Language — Fleet Overview
+# Ubiquitous Language: Fleet Overview
 
-Each bounded context maintains its **own** ubiquitous language page — its own
-vocabulary is authoritative only within that context's boundary, matching
-Evans' original DDD guidance that a term's meaning is scoped to its bounded
-context, not global. This page indexes where each context's glossary lives
-and calls out the handful of terms that are **deliberately reused with a
-different meaning** across contexts — the traps this fleet's own docs are
-careful to name rather than let confuse a reader.
+Each bounded context owns its own ubiquitous language. A term's meaning
+holds only inside that context's boundary, which follows Evans' guidance
+that a term is scoped to its bounded context and is not global. This page
+has three parts:
 
-For a single alphabetical index across every context, see [Glossary](/glossary).
+1. an index of where each context's glossary lives,
+2. the few terms that really are **shared**, meaning the same thing
+   wherever they appear,
+3. the words that mean **different things in different contexts**. These
+   are the homonyms and false friends that trip up a reader who moves
+   between contexts.
+
+Every definition below is taken from the context glossaries, which are
+synced from each repository's `develop` branch and grounded in its code.
+Where this page and a context glossary disagree, the context glossary
+wins. For one alphabetical index across every context, see
+[Glossary](/glossary).
 
 ## Per-context ubiquitous language
 
-| Context | Ubiquitous language page |
+| Context | Key terms | Glossary |
+| --- | --- | --- |
+| `order-management` | Order, Order line, Allocation, Backordered, Release, Held order, Ship-complete, Promise, Re-promise, Planned capacity window | [Ubiquitous Language](/contexts/order-management/ubiquitous-language) |
+| `inventory-storage` | StockUnit, ProductClassification, Bin, Stow, Usable inventory, Reservation, Allocation, Cycle count, Unlocated, Demand reference | [Ubiquitous Language](/contexts/inventory-storage/ubiquitous-language) |
+| `wes-work-planning` | Charge, CPT, Process path, Work pool, Work unit, Shift plan and path plan, Release, Flow balancing, Remaining capacity, Drift | [Ubiquitous Language](/contexts/wes-work-planning/ubiquitous-language) |
+| `fulfillment-execution` | Task, Task type, claimNext, Lease, Station, Capability, Package, SLAM, Manifested, CPT missed, OrderRef | [Ubiquitous Language](/contexts/fulfillment-execution/ubiquitous-language) |
+| `workforce-management` | ShiftPlan, PathPlan, AssociateShift, LaborAssignment, Certification, PathUnderstaffed, Installed stations and installed capacity, Measured rate, Idle share | [Ubiquitous Language](/contexts/workforce-management/ubiquitous-language) |
+| `facility-layout` | Site, Zone, Aisle, LocationType, LocationRole, LocationSlot, PlacementRule, LocationCode, Travel graph | [Ubiquitous Language](/contexts/facility-layout/ubiquitous-language) |
+| `process-path-management` | Process Path, Path Id, Match Prefix, Capability, Cycle Time p95, Eligibility, CPT Schedule, Cutoff | [Ubiquitous Language](/contexts/process-path-management/ubiquitous-language) |
+| `labor-performance` | LaborStandard, Expected seconds, TaskPerformance, EfficiencyPct, Idle Gap, Utilization, Scorecard, Coaching flag | [Ubiquitous Language](/contexts/labor-performance/ubiquitous-language) |
+| `warehouse-ops-agent` | FlowBalanceException, StrandedReservation, DailyBrief, OpenException, Blast radius, PathTarget, Capacity outlook | [Ubiquitous Language](/contexts/warehouse-ops-agent/ubiquitous-language) |
+| `network-fulfillment` | NetworkOrder, NetworkRef, NetworkProductId, Product translation, Acknowledgement window, Held order, Shipment confirmation, CapabilityOffer | [Ubiquitous Language](/contexts/network-fulfillment/ubiquitous-language) |
+| `warehouse-planning` | ProcessCapacity, CapacityConstraint, CapacityWindow, WorkloadProfile, ProcessPath, StationStandard, CapacityPlan, Shortage, Bottleneck | [Ubiquitous Language](/contexts/warehouse-planning/ubiquitous-language) |
+
+## Shared terms
+
+These terms carry the **same meaning** in every context that uses them.
+Contexts agree on the *value* by convention or through a Published
+Language. No context imports another's Go types. This is "same identity,
+no Shared Kernel".
+
+| Term | Shared meaning | Owner | Also used by |
+| --- | --- | --- | --- |
+| **SKU** | Our product identity: a non-empty string. | `inventory-storage` | order-management, wes-work-planning, fulfillment-execution, network-fulfillment (a SKU is only ever the *output* of translating a `NetworkProductId`), warehouse-ops-agent |
+| **Path id** | The canonical identity of a process path, for example `PICK`, `PACK`, `REBIN` or `SLAM`. A plain string, because the valid set is operator-configurable. | `process-path-management` | fulfillment-execution `task.Type`, wes-work-planning `WorkPool.PathId`, workforce-management `PathPlan.PathId`, order-management `shared.PathId` (each keeps a local catalogue cache) |
+| **Match prefix** | A caller-supplied id belongs to a path family when it equals the lower-case prefix, or starts with the prefix plus `-`. The longest prefix wins. | `process-path-management` | workforce-management, wes-work-planning and fulfillment-execution catalogue lookups |
+| **Capability / Certification** | A named qualification such as `pick`, `pack` or `hazmat`. `process-path-management` declares which capabilities a path requires. `fulfillment-execution` gates a station's claim with `Station.Capability`, and `workforce-management` gates an associate's assignment with `Certification`. Each enforces its own half independently, and neither reads the other's data. | `process-path-management` (required set) | fulfillment-execution, workforce-management |
+| **Work unit id** | `orderId-line-lineNo`, derived the same way by `order-management` and `wes-work-planning` and never transmitted by order-management. `fulfillment-execution` receives it as `work_unit_id` and stores it as `OrderRef`. | `wes-work-planning` | order-management, fulfillment-execution, warehouse-ops-agent |
+| **Usable inventory** | On-hand minus active reservations minus held, damaged or unlocated stock. Only usable stock constrains release. | `inventory-storage` | wes-work-planning (`UsableInventoryObserved`, a projection by SKU), network-fulfillment ("physical available") |
+| **TemperatureClass** | `Ambient`, `Chilled` or `Frozen`. The concept is deliberately duplicated rather than shared (inventory-storage ADR 0009). It applies to what a zone can hold in facility-layout, and to what a SKU needs in inventory-storage. | facility-layout and inventory-storage | — |
+| **DOT hazard class** | The top-level US DOT hazard class, 1 to 9. Compatibility follows a class-level matrix derived from 49 CFR §177.848. It is checked per **bin** in inventory-storage and per **package** in fulfillment-execution. | `inventory-storage` (product master data) | fulfillment-execution (looked up at seal time) |
+| **CloudEvents `id`** | The dedupe key for every consumed event. It stays stable across outbox redelivery. labor-performance calls it `KafkaEventId`. | every producer | every consumer |
+
+## Same word, different model
+
+DDD allows the same English word to mean different things in different
+bounded contexts, as long as each context's model is consistent inside
+its own boundary and the overlap is written down. The fleet uses this on
+purpose. Before you carry a word from one context to another, check this
+table.
+
+### "Process path"
+
+The fleet's most overloaded word. Seven contexts use it:
+
+| Context | What a "process path" is |
 | --- | --- |
-| `order-management` | [Order, OrderLine, Allocation, Release, Backordered](/contexts/order-management/ubiquitous-language) |
-| `inventory-storage` | [StockUnit, Bin, Reservation, Usable Inventory](/contexts/inventory-storage/ubiquitous-language) |
-| `wes-work-planning` | [Charge, CPT, Process Path, Work Pool, WorkUnit, ShiftPlan/PathPlan](/contexts/wes-work-planning/ubiquitous-language) |
-| `fulfillment-execution` | [Task, claimNext, Lease, Station, Fragile, Gift wrap](/contexts/fulfillment-execution/ubiquitous-language) |
-| `workforce-management` | [ShiftPlan, PathPlan, AssociateShift, LaborAssignment, Certification, PathUnderstaffed](/contexts/workforce-management/ubiquitous-language) |
-| `facility-layout` | [Site, Zone, Aisle, LocationType, LocationSlot, PlacementRule, LocationCode](/contexts/facility-layout/ubiquitous-language) |
-| `process-path-management` | [ProcessPath, PathId, Capability, MatchPrefix, Direct, Status](/contexts/process-path-management/ubiquitous-language) |
-| `labor-performance` | [Standard, Scorecard, Coaching Flag](/contexts/labor-performance/ubiquitous-language) |
-| `warehouse-ops-agent` | [DailyBrief, FlowBalanceException, StrandedReservation](/contexts/warehouse-ops-agent/ubiquitous-language) |
-| `network-fulfillment` | [NetworkOrder, Acknowledgement deadline, Held order, ACL dictionary](/contexts/network-fulfillment/ubiquitous-language) |
-| `warehouse-planning` | [ProcessCapacity, CapacityWindow, StationStandard, WorkloadProfile, CapacityPlan, Bottleneck](/contexts/warehouse-planning/ubiquitous-language) |
+| `process-path-management` | **The authoritative catalogue entry.** An operator-configurable aggregate with an identity, a match prefix, required capabilities, a declared `CycleTimeP95`, eligibility rules and an `ACTIVE` or `DEACTIVATED` status. There is no draft state. |
+| `wes-work-planning` | A named station that owns a **queue** (a work pool), with a service rate and a staffed capacity. Not a workflow step. |
+| `workforce-management` | A named station type that owns a queue, for example `pack`, `pick`, `stow` or `SLAM`. It is the finest granularity this context staffs. |
+| `fulfillment-execution` | A **task type**: `PICK`, `PACK`, `REBIN` or `SLAM`, used as a named queue. It is `taskType` in REST, `task_type` on events and `processPath` in MCP arguments, which accept only `PICK`, `PACK` and `SLAM`. |
+| `order-management` | The building workflow a line's work is dispatched to. It is selected per line as the eligible active path with the shortest `CycleTimeP95` (ADR 0021). The default is `pick`. |
+| `warehouse-planning` | **A different model.** It is an ordered sequence of process types (for example `PICK`, then `REBIN`, then `PACK`), declared locally by an operator. It does not consume `process-path-management`'s events and shares the `path_id` string only as a loose human cross-reference (warehouse-planning ADR 0001 Addendum). |
+| `warehouse-ops-agent` | Has no definition of its own. Its `PathTarget` configuration binds each upstream's name for "the same" path, and is never inferred. |
 
-## Same word, different model (the traps)
+### "CPT"
 
-DDD explicitly permits — and this fleet deliberately uses — the same English
-word to mean different things in different bounded contexts, as long as each
-context's own model is internally consistent and the overlap is documented,
-never silently assumed. The known cases:
+Every context expands CPT as **Critical Pull Time**, but each one attaches
+it to a different subject:
+
+| Context | CPT is attached to |
+| --- | --- |
+| `process-path-management` | A **site's departure schedule.** A `CPTSchedule` per site holds recurring `Cutoff`s (local time, days of week, ship method, eligible path ids). "A CPT is a property of a departure, not of a path." |
+| `order-management` | A **promise window** (`CPTWindow`). A promise may only use a window at or before the caller's `requiredShipBy`. |
+| `wes-work-planning` | A **value object on work.** It is the last moment a parcel can be manifested and still make its truck, and release priority derives from it. A **Cutoff** here is the CPT instant that a remaining-capacity report refers to. |
+| `fulfillment-execution` | A **task deadline.** A task still open at or past its CPT is *CPT missed*. That is reported on every sweep, never enforced. Its `apis/openapi.yaml` expands CPT as "Committed Processing Time" in three descriptions, a prose-only discrepancy. |
+| `network-fulfillment` | The site's **next cutoff**, and the paths eligible for it. It feeds the capability offer. |
+
+### "Reference"
+
+| Context | Term | What it refers to |
+| --- | --- | --- |
+| `order-management` | Order reference | Its own real `OrderId`. |
+| `wes-work-planning` | **Reference** (`ref` on `WorkReleased`) | The external identifier a work unit points back at, for example an order id. |
+| `fulfillment-execution` | **OrderRef** | Despite the name, a work-planning **WorkUnit id** (`orderId-line-n`), not an order id. It appears as `order_ref` on `TaskCPTMissed` and `PackageManifested`. |
+| `inventory-storage` | **Demand reference** (`demandRef`) | An opaque string for what a reservation is for. It is stored and echoed, never parsed. That opacity is the anti-corruption boundary. |
+| `network-fulfillment` | **NetworkRef** | The external network's own purchase-order number. It is the primary key, never parsed. `LocalOrderId` maps it to order-management's `OrderId`. |
 
 ### "ShiftPlan"
 
-- In **`workforce-management`**: the committed split of headcount across
-  paths for one shift, one per building per shift, containing `PathPlan`
-  lines. This is the **source of truth**, committed by a human.
-- In **`wes-work-planning`**: a **local read model** (`LaborPlanObserved`)
-  built by consuming `workforce-management`'s `ShiftPlanCommitted` event.
-  `wes-work-planning` does not commit shift plans — it only observes the
-  committed fact to weigh into flow balancing.
+- In **`workforce-management`**, `ShiftPlan` is the labor commitment: one
+  per building per shift, made of `PathPlan` lines, proposed by the
+  software and committed by a human.
+- In **`wes-work-planning`**, `ShiftPlan` is **its own aggregate**. It is a
+  committed split of rate × heads × hours per path, with the invariant
+  `plannedHeads ≤ installedStations`. It is committed through
+  `POST /paths/{pathId}/plan`.
+- workforce-management's `ShiftPlanCommitted` is **not** fed into
+  wes-work-planning's aggregate. It is projected into a separate read model,
+  `LaborPlanObserved`. The two are compared (`PathPlanDriftDetected`),
+  never merged (wes-work-planning ADR 0006 and ADR 0019).
+- Two CloudEvents types share the name:
+  `com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted` and
+  `com.warehouse.wes.work-planning.plan.ShiftPlanCommitted`. Consumers must
+  dispatch on the full `type`.
 
-### "Process Path" / "PathId"
+### "Release"
 
-- Defined once, authoritatively, by **`process-path-management`** as the
-  operator-configurable catalogue (canonical identity, match rule, required
-  capabilities).
-- Referenced identically by `fulfillment-execution`'s `task.Type`,
-  `wes-work-planning`'s `WorkPool.PathId`, and `workforce-management`'s
-  `PathPlan.PathId` — but **each context keeps its own local copy of the
-  identity as a plain string**, never importing `process-path-management`'s
-  Go types. This is the textbook "same identity, no Shared Kernel" pattern:
-  contexts agree on the *value* by convention (today, from the same
-  predecessor static YAML file; going forward, from
-  `process-path-management`'s Published Language) without sharing code.
-- **`warehouse-planning` is the deliberate exception to "referenced
-  identically".** Its `ProcessPath` is a *different model*: an ordered
-  sequence of process types (e.g. Pick → Rebin → Pack), declared locally by an
-  operator, because `process-path-management`'s `ProcessPath` carries routing
-  and capability metadata and no physical step sequence. It does not consume
-  `process-path-management`'s events; the two share the `path_id` string only
-  as a loose human cross-reference (warehouse-planning ADR 0001 Addendum).
+| Context | What "release" means |
+| --- | --- |
+| `order-management` | A pure domain transition. Allocated lines are marked `Released` once ship-complete rules allow, and announced on `OrderAllocated` or `OrderPartiallyAllocated`. It is not a call to wes-work-planning (ADR 0005). |
+| `wes-work-planning` | Continuous, priority-ordered, waveless admission of a work unit into its pool (`ReleaseNextWork`), which publishes `WorkReleased`. |
+| `network-fulfillment` | Committing the held order to the floor (`POST /orders/{id}/release` on order-management) after the network reports `SUCCESS`. |
 
-### "WorkUnit" vs "Task"
+### "Allocation" and "Reservation"
 
-- **`wes-work-planning`**'s `WorkUnit` is a releasable unit of work with a
-  CPT — the WES-tier planning representation.
-- **`fulfillment-execution`**'s `Task` is created **from** a consumed
-  `WorkReleased` event but is a **different aggregate with a different
-  model** (claim/lease/completion lifecycle, station capability matching).
-  `wes-work-planning`'s own ubiquitous-language page states this explicitly:
-  *"Not the downstream Task in fulfillment-execution."*
+- **`inventory-storage`**: a `Reservation` is a revocable, time-limited
+  aggregate (`ACTIVE`, `CONFIRMED`, `REVOKED` or `EXPIRED`). An
+  `Allocation` is a line *inside* it that records which `StockUnit` and
+  which bin the units came from.
+- **`order-management`**: *Allocation* means reserving stock for one order
+  line by calling inventory-storage's `POST /reservations`. No local
+  `Reservation` model exists, only the id.
+- **`wes-work-planning`** never holds a reservation. It only observes the
+  effect through `StockReserved` and `ReservationRevoked`.
 
-### "Certification" / "Capability"
+### "Capacity"
 
-- **`workforce-management`**'s `Certification` (a named qualification an
-  associate holds) and **`fulfillment-execution`**'s `Station.Capability`
-  (a named qualification a station is equipped for) are the **same
-  vocabulary by convention**, gating two different aggregates
-  (`LaborAssignment` vs `Task.Claim`) independently. Neither context reads
-  the other's data to enforce its own gate — each enforces its own half of
-  what is conceptually one requirement (e.g. `hazmat`).
+| Context | What "capacity" means |
+| --- | --- |
+| `facility-layout` | The **static envelope** of a slot: max weight and max volume. |
+| `inventory-storage` | A bin's **dynamic** room: how much of the bin's capacity is still free right now. A full bin rejects a stow. |
+| `wes-work-planning` | **Remaining capacity**: `max(0, wipLimit − WIP)` for a release-fed pool, reported per CPT cutoff on `PathCapacityChanged`. It is unknown for a flow-fed pool. |
+| `fulfillment-execution` | **Installed capacity**: how many registered stations hold a capability, regardless of occupancy. |
+| `workforce-management` | Two ceilings on planned heads. **Installed stations** is caller-supplied. **Installed capacity** is read live from fulfillment-execution at commit time. |
+| `warehouse-planning` | **ProcessCapacity**: the usable throughput of one process at one site for one window, which is the minimum across its constraints. A **CapacityPlan** compares assigned demand with it. |
+| `order-management` | Remaining path capacity feeds the promise. Planned capacity from warehouse-planning only annotates the order (ADR 0031). |
+| `network-fulfillment` | **Throughput feasible**: remaining capacity summed over the paths eligible for the next cutoff. |
 
-## Why this fleet does not have one global glossary as the source of truth
+### "Classification"
 
-A single global glossary would either (a) force every context into one
-model — destroying the local precision each context's own page provides
-(e.g. `fulfillment-execution`'s careful distinction between `Fragile` and
-`Gift wrap` handling hints), or (b) become a lowest-common-denominator
-summary nobody actually uses to write code against. Each context's own
-`docs/docs/business-context/ubiquitous-language.md` (or equivalent) remains
-the source of truth for that context; this page and the
-[Glossary](/glossary) index exist only to help a fleet-wide reader navigate
-and to flag the handful of places where naming overlap could genuinely
-confuse someone moving between contexts.
+- **`facility-layout`** classifies **space**. It returns the `hazmat` and
+  `temperatureClass` pair of a slot's zone at
+  `GET /locations/{locationCode}/classification`.
+- **`inventory-storage`** classifies **product**. Its
+  `ProductClassification` is SKU master data with a closed tag set:
+  `Hazmat`, `Fragile`, `TemperatureSensitive`, `Oversized`, `HighValue`.
+- The two meet at stow time, when a placement check validates that a
+  hazmat or temperature-sensitive SKU is stowed in a matching zone.
+- **`wes-work-planning`**'s `ProductClassificationView` is a synchronous,
+  unpersisted read of inventory-storage's classification. It is made once
+  at release, to stamp `fragile` on `WorkReleased`.
+
+### "Location", "Site" and "Zone"
+
+| Word | facility-layout | Elsewhere |
+| --- | --- | --- |
+| **Location** | A `LocationSlot`: one coded slot (`Site-Area-Zone-Aisle-Bay-Level-Position`) with a type, role and status. This covers structural identity and legality, not contents. | inventory-storage: a `Bin`, which is an id, a capacity and an occupancy. fulfillment-execution: an optional opaque `locationCode` on a station. warehouse-planning: a planning `location` that is a site code such as `SIM1`. |
+| **Site** | `Site`, the physical building, identified by `SiteCode`. | process-path-management: `SiteId` on a CPT schedule, never validated against facility-layout. workforce-management: `BuildingId`. network-fulfillment: `SiteId` is the destination site. |
+| **Zone** | A behavioural classification of space (temperature class and hazmat flag) and the source of truth for placement rules. | The WES ubiquitous language uses zone for congestion and travel reasoning, consumed as a read-only fact. |
+
+### "Task" and "Work unit"
+
+- **`wes-work-planning`**'s `WorkUnit` is *releasable volume with a
+  deadline*. It is assigned at most once and cannot complete twice.
+- **`fulfillment-execution`**'s `Task` is *claimable work with a lease*. It
+  is created **from** a consumed `WorkReleased`, but it is a different
+  aggregate with its own claim, lease and completion lifecycle. The
+  `WorkReleased` consumer is the translation point.
+- `inventory-storage`, `workforce-management` and `facility-layout` have no
+  task model at all.
+
+### "Pick"
+
+- **`fulfillment-execution`**: the physical PICK task lifecycle of claim,
+  lease and complete.
+- **`inventory-storage`**: `ConfirmPick` is the *accounting* consequence.
+  It consumes the reservation and removes on-hand quantity. No sibling
+  context calls it today.
+
+### "Standard" and "Rate"
+
+| Context | Term | Meaning and unit |
+| --- | --- | --- |
+| `labor-performance` | **LaborStandard** | The engineered expected **duration** of one task type, in seconds, with an effective range. Its revisions never re-score past tasks (ADR 0004). |
+| `warehouse-planning` | **StationStandard** | The operator-declared **throughput** of one station of a process at a site, in `UNIT`, `PACKAGE` or `ORDER` per period. |
+| `process-path-management` | **Cycle Time p95** | An operator-declared end-to-end **cycle time** from release to manifest. It is a declared standard, not a measured value. |
+| `wes-work-planning` | **Rate** | A service rate in units per hour. |
+| `workforce-management` | **Planned rate** and **Measured rate** | Planned rate is throughput per head per hour. Measured rate is labor-performance's `MeanActualSeconds`, a duration in seconds. The proposal divides by either one in the same way, which is a known unit mismatch. |
+
+### "Held order" and "Acknowledge"
+
+- **`order-management`**: a *held order* is received with
+  `releaseOnAllocation=false`. It allocates, must be ship-complete, and
+  waits for `POST /orders/{id}/release` or a cancel. It is not a status.
+- **`network-fulfillment`** sees the same order through its
+  `FulfillmentPlanner` port and calls the order-management id its
+  `LocalOrderId`. Its own "acknowledged" has a trap: the
+  `NetworkOrderAcknowledged` event is raised at **submission** (state
+  `SUBMITTED`), not when the network confirms and the order reaches
+  `ACKNOWLEDGED`.
+
+## Why there is no single global glossary as the source of truth
+
+A single global glossary would do one of two things. It would force every
+context into one model and destroy the local precision each context's own
+page gives. Or it would become a lowest-common-denominator summary that
+nobody writes code against. For example, fulfillment-execution separates
+`Fragile`, a product-derived hint, from `Gift wrap`, a caller-stated
+request. A shared "handling flag" type would erase that difference.
+
+Each context's own ubiquitous-language page stays the source of truth for
+that context. This page and the [Glossary](/glossary) only help a
+fleet-wide reader find their way, and they flag the places where shared
+words could confuse someone who moves between contexts.
