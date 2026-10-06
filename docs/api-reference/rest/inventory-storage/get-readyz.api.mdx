@@ -46,13 +46,13 @@ Returns 200 `{"status":"ready"}` while the process is accepting traffic, and 503
 </ParamsDetails>
 
 <RequestSchema
-  title={"Body"}
+  {...require("./get-readyz.RequestSchema.json")}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  responses={{"200":{"description":"Service is ready to receive traffic.","content":{"application/json":{"schema":{"type":"object","properties":{"status":{"type":"string","example":"ready"}},"example":{"status":"ready"}}}}},"503":{"description":"Service is shutting down and must not receive new traffic.","content":{"application/json":{"schema":{"type":"object","properties":{"status":{"type":"string","example":"not_ready"}},"example":{"status":"not_ready"}}}}}}}
+  {...require("./get-readyz.StatusCodes.json")}
 >
   
 </StatusCodes>
