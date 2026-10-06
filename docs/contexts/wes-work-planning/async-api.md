@@ -33,7 +33,7 @@ fleet-wide, mandatory [Event Standard](/strategic-design/event-standard-cloudeve
 ```
 
 `id` is a UUID v4 minted once per domain event and persisted with the
-outbox row, so a redelivery carries the same `id`; `(source, id)` is the
+outbox row, so a redelivery carries the same `id`; the CloudEvents `id` is the
 consumer idempotency key. `time` comes from the **domain clock**, not from
 publish time. `subject` is the aggregate instance id. `dataschema`
 distinguishes the integration payload (`…:events:…`) from the analytics
@@ -56,7 +56,7 @@ spec document.
 | `type` (suffix after `com.warehouse.wes.work-planning.`) | `data` | Published when | Consumed by |
 |---|---|---|---|
 | `workunit.WorkReleased` | `{"path_id","work_unit_id","cpt","ref"}` (+ optional `required_capabilities`, `fragile`, `gift_wrap`) | `ReleaseNextWork` releases a unit | **`fulfillment-execution`** → creates a `Task` |
-| `workpool.PathCapacityChanged` | `{"path_id","cutoff_at","remaining_units","known"}` | `SampleBacklog` is called with `cutoffAt` set (`GET /paths/{pathId}/telemetry?cutoffAt=…`, ADR-0018) | **`order-management`** — its `kafkapathcapacity` adapter (own per-process consumer group, filters for this one event type) caches remaining capacity keyed by path and cutoff instant |
+| `workpool.PathCapacityChanged` | `{"path_id","cutoff_at","remaining_units","known"}` | `SampleBacklog` is called with `cutoffAt` set (`GET /paths/{pathId}/telemetry?cutoffAt=…`, ADR-0018) | **`order-management`** — its `kafkapathcapacity` adapter (own per-process consumer group, filters for this one event type) caches remaining capacity keyed by path and cutoff instant. Also **`network-fulfillment`** (`pathcapacitycache`), wired but unused: it starts only with `CAPABILITY_OFFER_ENABLED=true`, which the reference deployment does not set |
 
 ```json
 {
@@ -82,15 +82,15 @@ spec document.
 cutoff **timestamp** rather than process-path-management's `cptId`.
 `known=false` for a flow-fed path or a release-fed path with no WIP limit
 provisioned. See
-[ADR-0018](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md).
+[ADR-0018](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md).
 
-The other eight domain events are also written to this topic by the
-outbound adapter with a `{"path_id": ...}`-shaped payload, but nothing
-consumes them today — see [Domain Events](./domain-events). (Separately,
+The other nine domain events are also written to this topic by the
+outbound adapter, with small payloads (most carry only `path_id`), but
+nothing consumes them today — see [Domain Events](./domain-events). (Separately,
 with `EVENT_PUBLISHER=kafka` a second publisher writes every domain event,
 as CloudEvents with an `…:analytics:…` `dataschema`, to
 `warehouse.wes.analytics` for the analytics data product —
-[ADR-0011](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0011-analytical-data-product.md).)
+[ADR-0011](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0011-analytical-data-product.md).)
 
 Set `EVENT_PUBLISHER=kafka` (with `KAFKA_BROKERS`) to publish here; the
 default `log` publisher writes the same events to the log instead. Both
@@ -99,7 +99,7 @@ cannot tell which is wired. With `kafka` **and** `DATABASE_URL` set, the
 publishers act only as encoders inside the use case's transaction: one
 `outbox_events` row per event per topic, drained onto Kafka by an
 in-process relay
-([ADR-0014](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0014-transactional-outbox.md)).
+([ADR-0014](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0014-transactional-outbox.md)).
 Without `DATABASE_URL` events are published directly.
 
 ## Consumed
@@ -224,7 +224,7 @@ the beginning under its **own per-process consumer group** — not
 `KAFKA_CONSUMER_GROUP` — folding `ProcessPathCreated`,
 `ProcessPathUpdated` and `ProcessPathDeactivated` into the in-memory
 catalogue that validates every `pathId`
-([ADR-0012](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0012-process-path-catalogue-validation.md)).
+([ADR-0012](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0012-process-path-catalogue-validation.md)).
 Startup blocks until the replay has caught up, then the consumer keeps
 following the topic live. It is a state rebuild, not an effect, so it does
 not use `processed_events`.
@@ -232,7 +232,12 @@ not use `processed_events`.
 ## Idempotency
 
 Kafka is at-least-once, so redelivery is normal, not exceptional. Every
-integration-event consumer path is idempotent by construction:
+integration-event consumer path is idempotent by construction. The
+`processed_events` mark commits atomically with the effect
+([ADR-0028](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0028-processed-event-mark-atomic-with-handling.md)).
+A message that is not a valid CloudEvent goes straight to `<topic>.dlq`; a
+handler error is tried 3 times in total with exponential backoff and then
+dead-lettered to `<topic>.dlq`; unknown types are ignored.
 
 ```mermaid
 flowchart LR
