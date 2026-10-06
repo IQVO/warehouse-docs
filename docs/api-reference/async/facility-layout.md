@@ -8,7 +8,7 @@ description: Generated AsyncAPI (Kafka) documentation for facility-layout, embed
 # facility-layout — Async API
 
 Generated directly from
-[`apis/facility-layout/asyncapi.yaml`](https://github.com/claudioed/facility-layout/blob/develop/apis/asyncapi.yaml)
+[`apis/facility-layout/asyncapi.yaml`](https://github.com/IQVO/facility-layout/blob/develop/apis/asyncapi.yaml)
 via the official [AsyncAPI Generator](https://github.com/asyncapi/generator)
 (`@asyncapi/html-template`). Regenerate with `npm run gen-async-docs:all`.
 

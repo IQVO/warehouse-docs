@@ -61,7 +61,7 @@ value is entirely in giving that same fact **one auditable owner**:
   change on its own cadence, without a synchronous dependency on this
   service's availability.
 
-See [ADR 0001](https://github.com/claudioed/process-path-management/blob/develop/docs/docs/adr/0001-process-path-management-bounded-context.md)
+See [ADR 0001](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0001-process-path-management-bounded-context.md)
 in the source repository for the full decision record, including why
 propagation is exclusively asynchronous (Kafka) rather than synchronous
 HTTP read-through.
@@ -76,7 +76,7 @@ into a local catalogue cache instead of reading the old static file —
 verified live, with a newly-defined path reaching all three running
 consumers with no restart, and a deactivation propagating the same way.
 A fourth consumer, `order-management`, now reads the same topic too: since
-[ADR 0010](https://github.com/claudioed/process-path-management/blob/develop/docs/docs/adr/0010-fulfillment-capability-contract.md)
+[ADR 0010](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0010-fulfillment-capability-contract.md)
 each path declares a p95 cycle time and eligibility rules and this context
 owns a site-scoped CPT schedule (`CPTScheduleChanged`), from which
 `order-management` derives its delivery promise instead of an

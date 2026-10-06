@@ -8,7 +8,7 @@ description: Generated AsyncAPI (Kafka) documentation for fulfillment-execution,
 # fulfillment-execution — Async API
 
 Generated directly from
-[`apis/fulfillment-execution/asyncapi.yaml`](https://github.com/claudioed/fulfillment-execution/blob/develop/apis/asyncapi.yaml)
+[`apis/fulfillment-execution/asyncapi.yaml`](https://github.com/IQVO/fulfillment-execution/blob/develop/apis/asyncapi.yaml)
 via the official [AsyncAPI Generator](https://github.com/asyncapi/generator)
 (`@asyncapi/html-template`). Regenerate with `npm run gen-async-docs:all`.
 

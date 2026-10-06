@@ -38,6 +38,12 @@ const sidebar: SidebarsConfig = {
       items: [
         {
           type: "doc",
+          id: "api-reference/rest/warehouse-planning/list-process-paths",
+          label: "List the registered ProcessPaths",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
           id: "api-reference/rest/warehouse-planning/register-process-path",
           label: "Register (seed) a ProcessPath read model",
           className: "api-method post",
@@ -58,6 +64,12 @@ const sidebar: SidebarsConfig = {
         id: "api-reference/rest/warehouse-planning/capacity-plans",
       },
       items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/warehouse-planning/list-capacity-plans",
+          label: "List the most recent CapacityPlans",
+          className: "api-method get",
+        },
         {
           type: "doc",
           id: "api-reference/rest/warehouse-planning/create-capacity-plan",
@@ -102,6 +114,56 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/rest/warehouse-planning/get-storage-capacity",
           label: "Storage positions and stations of a site (read model)",
+          className: "api-method get",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "demand",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/warehouse-planning/demand",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/warehouse-planning/get-expected-demand",
+          label: "Expected demand of a site over a window (order-management read model)",
+          className: "api-method get",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "reports",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/warehouse-planning/reports",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/warehouse-planning/get-bottleneck-frequency-report",
+          label: "How often each bottleneck step (and binding constraint) bound a PUBLISHED plan, by site",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/warehouse-planning/get-shortage-trend-report",
+          label: "Published plans with shortage and total shortage by site per day",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/warehouse-planning/get-plan-throughput-report",
+          label: "Plans created vs published per day, and create-to-publish latency by site",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/warehouse-planning/get-reports-freshness",
+          label: "How far the analytics projection is behind",
           className: "api-method get",
         },
       ],

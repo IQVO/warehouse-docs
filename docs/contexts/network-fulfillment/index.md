@@ -2,79 +2,122 @@
 id: index
 title: Network Fulfillment
 sidebar_label: Network Fulfillment
-description: The Anti-Corruption Layer between the fleet and an external retail fulfillment network — a Supporting subdomain that owns NetworkOrder, polls network demand in stub mode, and asks order-management whether each deadline is feasible. No Kafka, no MCP yet.
+description: The Anti-Corruption Layer between the fleet and an external retail fulfillment network — a Supporting subdomain that owns NetworkOrder and CapabilityOffer, polls network demand (stub only), asks order-management whether each deadline is feasible, and publishes five CloudEvents types.
 slug: /contexts/network-fulfillment
 ---
 
 # Network Fulfillment
 
-<span class="badge-supporting">Supporting Subdomain</span>
+<span className="badge-supporting">Supporting Subdomain</span>
 
-**Network Fulfillment** is the fleet's tenth backend bounded
-context: the **Anti-Corruption Layer** between `warehouse-systems` and an
-external retail fulfillment network. Its learning target is Amazon's
-Selling Partner API, Vendor Direct Fulfillment program — the network sends
-purchase orders to a warehouse it does not own, and that warehouse must
-acknowledge each one **in full or not at all** within 24 hours.
+**Network Fulfillment** is the fleet's **Anti-Corruption Layer** between
+`warehouse-systems` and an external retail fulfillment network. The
+network sends purchase orders to a warehouse it does not own, and that
+warehouse must acknowledge each one **in full or not at all** within 24
+hours. Since
+[ADR 0009](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0009-retail-network-not-amazon-counterpart.md)
+the counterpart is the fleet's own `retail-network` service, which plays
+the network's role. The original learning target was a large retailer's
+public Selling Partner API.
 
-It owns one aggregate, **NetworkOrder**: demand that arrived from outside
-carrying a deadline we did not choose, and the answer we owe the network
-by a deadline the network set. It is **Conformist** to the network
-upstream, an **Anti-Corruption Layer** for the fleet, and a **Customer**
-of `order-management`, which it asks — synchronously, over REST — whether
-each deadline is feasible.
+It owns the **NetworkOrder** aggregate: demand that arrived from outside
+with a deadline we did not choose, and the answer we owe the network by a
+deadline the network set. It also owns **CapabilityOffer**, the
+throughput-constrained quantity it would advertise (opt-in with
+`CAPABILITY_OFFER_ENABLED=true`). It is **Conformist** to the network
+upstream and an **Anti-Corruption Layer** for the fleet. It is also a
+**Customer** of `order-management`, which it asks over REST whether each
+deadline is feasible.
 
-:::warning[Study project, stub-only, not yet released]
-This context is part of a personal DDD learning exercise. It is **not
-affiliated with, endorsed by, or representative of Amazon** or any other
-company; the Selling Partner API is a public API used as a learning
-target. On `develop` it runs **only against a stub network**
-(`NETWORK_MODE=stub`); `sandbox` and `live` refuse to boot with "not
-implemented yet". It has no `main` branch and no release yet.
+:::warning[Study project, stub network only]
+This context is part of a DDD learning exercise. It is **not affiliated
+with, endorsed by, or representative of** any real retailer. The network
+gateway runs only against a stub: `NETWORK_MODE` defaults to `stub`, and
+`live` refuses to boot until a real adapter exists.
 :::
 
-:::info[What is built, and what is not]
-**Built:** the `NetworkOrder` aggregate; a poller-driven inbound leg feeding
-`ReceiveNetworkDemand`; the `SweepAcknowledgementDeadlines` ticker; a
-read-only REST surface (`GET /healthz`, `/inbound-status`,
-`/network-orders`, `/network-orders/{networkRef}`); Postgres or in-memory
-persistence; the product-translation file and stub-demand seed file; a
-Helm chart deployed to the kind cluster (Kong route
-`/api/network-fulfillment`).
+:::info[What its own pages describe]
+- **Inbound:** a poller feeds network demand to `ReceiveNetworkDemand`. A
+  read-only REST surface (`/network-orders`, `/inbound-status`, and
+  `/capability-offers` when enabled), a shipment-confirmation command
+  (`POST /network-orders/{networkRef}/shipment-confirmation`, ADR 0014),
+  read-only MCP tools, and a `web/` remote in `warehouse-console`
+  (ADR 0010).
+- **Outbound:** REST to `order-management` (raise, release and cancel a
+  held order; live), and an opt-in REST read of `inventory-storage` usable
+  stock.
+- **Events:** with `EVENT_PUBLISHER=kafka`, five CloudEvents types
+  (`com.warehouse.wes.network-fulfillment.networkorder.*`) go to
+  `warehouse.network-fulfillment.events` and to
+  `warehouse.network-fulfillment.analytics`, through a transactional outbox
+  when a database is configured. No other fleet context consumes the
+  integration topic yet. The context consumes
+  `process-path-management`'s catalogue and CPT schedule and
+  `wes-work-planning`'s `PathCapacityChanged` into opt-in caches.
 
-**Not built:** `CapabilityOffer` (throughput-constrained advertised
-availability — the headline idea of ADR 0001), the shipment-confirmation
-leg, transaction-status reconciliation, `AcknowledgementDeadlineAtRisk`,
-customer PII, any Kafka publisher or consumer, an MCP server, a `web/`
-remote, and its own docs site. See
-[Domain Events](/contexts/network-fulfillment/domain-events).
+See the [Bounded Context Canvas](/contexts/network-fulfillment/bounded-context-canvas)
+and [Context Map](/contexts/network-fulfillment/context-map) for every
+edge and its status.
 :::
 
-## On this page set
+## This context's pages
 
-- **[Business Context](/contexts/network-fulfillment/business-context)** — why "selling capability to a
-  network" is a domain problem, not a REST mapping, and why this is its own
-  context rather than an adapter inside `order-management`.
-- **[Ubiquitous Language](/contexts/network-fulfillment/ubiquitous-language)** — NetworkOrder, NetworkRef,
-  NetworkProductId vs. SKU, LocalOrderId, requiredShipBy, acknowledgeBy,
-  held order, and the planned CapabilityOffer.
-- **[Bounded Context Canvas](/contexts/network-fulfillment/bounded-context-canvas)** — the full ddd-crew
-  canvas: purpose, classification, roles, inbound/outbound communication,
-  business decisions, open questions.
-- **[Aggregate Design Canvas](/contexts/network-fulfillment/aggregate-design-canvas)** — the `NetworkOrder`
-  aggregate: states, invariants, commands.
-- **[Domain Events](/contexts/network-fulfillment/domain-events)** — honestly: none typed yet, no Kafka
-  topic; what ADR 0001 plans and the rules for when Kafka arrives.
+- [Business Context](/contexts/network-fulfillment/business-context): why
+  "selling capability to a network" is a domain problem rather than a REST
+  mapping, and why this is its own context rather than an adapter inside
+  `order-management`.
+- [Ubiquitous Language](/contexts/network-fulfillment/ubiquitous-language):
+  NetworkOrder, NetworkRef, NetworkProductId vs. SKU, LocalOrderId,
+  requiredShipBy, acknowledgeBy, held order, CapabilityOffer.
+- [Core Domain Chart](/contexts/network-fulfillment/core-domain-chart)
+  ([ddd-crew core-domain-charts](https://github.com/ddd-crew/core-domain-charts)):
+  why this context is Supporting.
+- [Bounded Context Canvas](/contexts/network-fulfillment/bounded-context-canvas)
+  ([ddd-crew bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas)):
+  purpose, classification, roles, inbound and outbound communication,
+  business decisions and open questions.
+- [Context Map](/contexts/network-fulfillment/context-map)
+  ([ddd-crew context-mapping](https://github.com/ddd-crew/context-mapping)):
+  every upstream and downstream relationship with its pattern, technology
+  and status.
+- [Aggregate Design Canvas](/contexts/network-fulfillment/aggregate-design-canvas)
+  ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
+  the `NetworkOrder` aggregate, with its states, invariants and commands.
+- [Domain Events](/contexts/network-fulfillment/domain-events): the five
+  published events (`NetworkOrderReceived`, `NetworkOrderAcknowledged`,
+  `NetworkOrderRejected`, `NetworkOrderShipmentConfirmed`,
+  `AcknowledgementDeadlineAtRisk`), the three consumed topics, and the
+  spec-vs-code discrepancies found.
+- [Domain Message Flow](/contexts/network-fulfillment/domain-message-flow)
+  ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):
+  key scenarios as commands, events and queries.
+- [EventStorming](/contexts/network-fulfillment/eventstorming)
+  ([ddd-crew eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet)):
+  process-level boards.
+- [Class Diagram](/contexts/network-fulfillment/class-diagram): the domain
+  model as it exists in the code.
+- [Entity Relationship](/contexts/network-fulfillment/entity-relationship):
+  the persisted tables.
+- [Sequence Diagrams](/contexts/network-fulfillment/sequence-diagrams):
+  the main runtime interactions.
+- [Async API](/contexts/network-fulfillment/async-api): the Kafka
+  integration in narrative form.
+
+Every page above except the Business Context and the Async API narrative
+is synced from the `network-fulfillment` repository (its `docs/ddd/`
+directory).
 
 ## Elsewhere
 
-- **Repository** — [github.com/claudioed/network-fulfillment](https://github.com/claudioed/network-fulfillment)
-  (no Docusaurus site of its own; this page set is built from its README,
-  `AGENTS.md`, `.claude/rules/*.md`, ADR 0001 and the code on `develop`)
-- **[ADR 0001 — Network Fulfillment as a bounded context](https://github.com/claudioed/network-fulfillment/blob/develop/docs/adr/0001-network-fulfillment-bounded-context.md)**
-  — and its companion, [order-management ADR 0020](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md)
-- **[Generated REST API Reference](/api-reference/rest/network-fulfillment/network-fulfillment-api)**
-  — generated from the real `apis/openapi.yaml` (there is no AsyncAPI
-  reference: this context has no Kafka integration)
-- Fleet-wide [Context Map](/strategic-design/context-map) — where this
-  context sits among the eleven backend contexts
+- **Repository**: [github.com/IQVO/network-fulfillment](https://github.com/IQVO/network-fulfillment).
+  Its ADRs live under `docs/adr/`, not `docs/docs/adr/`.
+- **[ADR 0001: Network Fulfillment as a bounded context](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0001-network-fulfillment-bounded-context.md)**,
+  and its companion
+  [order-management ADR 0020](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md).
+- [ADR index](/adr): links to this context's own decision records.
+- Generated references on this site:
+  [REST](/api-reference/rest/network-fulfillment/network-fulfillment-api)
+  and [AsyncAPI](/api-reference/async/network-fulfillment), generated from
+  the real `apis/openapi.yaml` and `apis/asyncapi.yaml`.
+- The fleet-wide [Context Map](/strategic-design/context-map) shows where
+  this context sits among the eleven backend contexts.

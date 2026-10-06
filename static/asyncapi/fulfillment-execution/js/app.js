@@ -3,8 +3,8 @@
   "asyncapi": "2.6.0",
   "info": {
     "title": "Fulfillment Execution Events API",
-    "version": "1.0.0",
-    "description": "Integration (domain) events published by the **Fulfillment Execution** bounded context — the task-lifecycle core of the WES subdomain that turns released work into completed physical operations (Pick, Pack, and SLAM — Scan, Label, Apply, Manifest).\n\nEvery message on this API is a **CloudEvents 1.0** envelope in the *structured* content mode (the whole event, envelope + data, is the message payload as JSON). The CloudEvents `type` attribute encodes the DDD coordinates of the fact as `com.warehouse.<subdomain>.<bounded-context>.<entity>.<Event>`, e.g. `com.warehouse.wes.fulfillment-execution.task.TaskClaimed`. This lets any consumer route or filter purely on `type` without opening `data`.\n\nAggregates that raise these events: **Task** (Pick | Pack | SLAM; Pending -> Claimed(leased) -> Completed) and **Package** (Pack-path output; the SLAM weigh-check labels or diverts a carton). Read models such as queue depth by task type are projections built downstream from these events, never state on an aggregate.\n\nThis document is the full domain-event catalog for the bounded context. Of these, **TaskCompleted**, **TaskCPTMissed**, and **PackageManifested** are currently wired to the outbound Kafka adapter (topic `warehouse.fulfillment.events`) — `TaskCompleted` enriched with `work_unit_id`, `associate_id`, `duration_seconds`, and `task_type`; `TaskCPTMissed` and `PackageManifested` (ADR-0025, the fulfillment-execution half of order-management ADR 0014 §5's promise feedback loop) need no repo enrichment — every field comes straight off the domain event — per the service's Cross-service Integration contract. See each message's description for its current publication status.\n",
+    "version": "2.0.0",
+    "description": "Kafka events produced and consumed by the **Fulfillment Execution** bounded context (WES subdomain).\n\nEvery message — integration topic and analytics topic alike — is a **CloudEvents 1.0** event in the Kafka protocol binding's *structured* content mode (ADR-0032): the Kafka message value is the JSON event, and every message carries the Kafka header `content-type: application/cloudevents+json; charset=UTF-8` plus W3C `traceparent`/`tracestate`. There is no other envelope.\n\nRequired attributes: `specversion` (`1.0`), `id` (UUID v4, stable across outbox redelivery; the consumer idempotency key), `source` (`/warehouse/fulfillment-execution` for this service), `type` (`com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`), `subject` (aggregate id, equal to the Kafka key), `time` (occurred-at, UTC), `datacontenttype` (`application/json`) and `dataschema` (`urn:warehouse:<repo>:<events|analytics>:<EventName>:v<N>`). `data` uses snake_case keys.\n\nThe same `type` names an occurrence on both the integration and analytics topics; `dataschema` names the payload shape. A breaking payload change ships as a new `.v2` type with a new dataschema version.",
     "contact": {
       "name": "Fulfillment Execution Team",
       "url": "https://github.com/claudioed/fulfillment-execution",
@@ -22,32 +22,40 @@
     },
     {
       "name": "task",
-      "description": "Events raised by the Task aggregate (Pick | Pack | SLAM lifecycle)."
+      "description": "Events raised by the Task aggregate."
     },
     {
       "name": "package",
-      "description": "Events raised by the Package aggregate (Pack output and SLAM weigh-check)."
+      "description": "Events raised by the Package aggregate."
     },
     {
       "name": "promise-feedback",
-      "description": "Events closing the promise feedback loop with order-management (ADR 0014 §5, this service's own ADR-0025) — a missed CPT and a completed SLAM pass, both of which order-management's future RepromiseOrder consumer reacts to.\n"
+      "description": "Events closing the promise feedback loop with order-management (ADR-0025)."
+    },
+    {
+      "name": "analytics",
+      "description": "Internal analytics stream for the throughput data product (ADR-0012)."
+    },
+    {
+      "name": "consumed",
+      "description": "Events published by sibling contexts and consumed by this service."
     }
   ],
   "servers": {
     "production": {
       "url": "kafka.warehouse-systems.internal:9092",
       "protocol": "kafka",
-      "description": "Shared Kafka broker for warehouse-systems integration events. Configured per service via the KAFKA_BROKERS environment variable.\n"
+      "description": "Shared Kafka broker for warehouse-systems. Configured per service via KAFKA_BROKERS."
     }
   },
   "defaultContentType": "application/cloudevents+json",
   "channels": {
-    "warehouse.fulfillment-execution.events": {
-      "description": "All integration events emitted by the Fulfillment Execution service, keyed by aggregate id. Consumers subscribe here and demultiplex on the CloudEvents `type` attribute.\n",
+    "warehouse.fulfillment.events": {
+      "description": "Integration events published by Fulfillment Execution, keyed by aggregate id. Consumers dispatch on the full CloudEvents `type`.",
       "subscribe": {
-        "operationId": "consumeFulfillmentExecutionEvents",
-        "summary": "Consume Fulfillment Execution domain events.",
-        "description": "Receive every CloudEvents-wrapped domain event published by this bounded context. Route on the `type` attribute described in each message.\n",
+        "operationId": "consumeFulfillmentIntegrationEvents",
+        "summary": "Consume Fulfillment Execution integration events.",
+        "description": "Receive the TaskCompleted, TaskCPTMissed and PackageManifested CloudEvents this bounded context publishes.",
         "tags": [
           {
             "name": "fulfillment-execution"
@@ -56,272 +64,10 @@
         "message": {
           "oneOf": [
             {
-              "name": "TaskCreated",
-              "title": "Task Created",
-              "summary": "A new task entered the pool.",
-              "description": "Raised when a new task (Pick | Pack | SLAM) is enqueued into the work pool. Not yet wired to the outbound Kafka adapter — documented here as part of the domain-event catalog, in-process only today.\n",
-              "contentType": "application/cloudevents+json",
-              "tags": [
-                {
-                  "name": "task"
-                }
-              ],
-              "payload": {
-                "allOf": [
-                  {
-                    "type": "object",
-                    "description": "CloudEvents 1.0 context attributes common to every message on this API.",
-                    "required": [
-                      "specversion",
-                      "id",
-                      "source",
-                      "type"
-                    ],
-                    "properties": {
-                      "specversion": {
-                        "type": "string",
-                        "description": "The version of the CloudEvents specification the event uses.",
-                        "enum": [
-                          "1.0"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-1>"
-                      },
-                      "id": {
-                        "type": "string",
-                        "description": "Unique identifier of the event (UUID v4), unique per source.",
-                        "format": "uuid",
-                        "x-parser-schema-id": "<anonymous-schema-2>"
-                      },
-                      "source": {
-                        "type": "string",
-                        "description": "The context in which the event happened (the producing service).",
-                        "format": "uri-reference",
-                        "example": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-3>"
-                      },
-                      "type": {
-                        "type": "string",
-                        "description": "DDD-coordinate event type `com.warehouse.<subdomain>.<bounded-context>.<entity>.<Event>`.\n",
-                        "x-parser-schema-id": "<anonymous-schema-4>"
-                      },
-                      "subject": {
-                        "type": "string",
-                        "description": "The aggregate instance id this event is about.",
-                        "x-parser-schema-id": "<anonymous-schema-5>"
-                      },
-                      "time": {
-                        "type": "string",
-                        "description": "Timestamp of when the occurrence happened (RFC 3339).",
-                        "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-6>"
-                      },
-                      "datacontenttype": {
-                        "type": "string",
-                        "description": "Content type of the `data` value.",
-                        "enum": [
-                          "application/json"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-7>"
-                      }
-                    },
-                    "x-parser-schema-id": "CloudEventBase"
-                  },
-                  {
-                    "type": "object",
-                    "required": [
-                      "type",
-                      "data"
-                    ],
-                    "properties": {
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "com.warehouse.wes.fulfillment-execution.task.TaskCreated"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-9>"
-                      },
-                      "data": {
-                        "type": "object",
-                        "required": [
-                          "taskId"
-                        ],
-                        "properties": {
-                          "taskId": {
-                            "type": "string",
-                            "description": "Identifier of the created task.",
-                            "x-parser-schema-id": "<anonymous-schema-11>"
-                          }
-                        },
-                        "x-parser-schema-id": "<anonymous-schema-10>"
-                      }
-                    },
-                    "x-parser-schema-id": "<anonymous-schema-8>"
-                  }
-                ],
-                "x-parser-schema-id": "TaskCreatedEvent"
-              },
-              "examples": [
-                {
-                  "name": "taskCreated",
-                  "payload": {
-                    "specversion": "1.0",
-                    "id": "0f2a1c7e-8b3d-4f6a-9c21-1a2b3c4d5e6f",
-                    "source": "/warehouse/fulfillment-execution",
-                    "type": "com.warehouse.wes.fulfillment-execution.task.TaskCreated",
-                    "subject": "task-8a1f",
-                    "time": "2026-08-22T14:00:00Z",
-                    "datacontenttype": "application/json",
-                    "data": {
-                      "taskId": "task-8a1f"
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "name": "TaskClaimed",
-              "title": "Task Claimed",
-              "summary": "A station pulled a task from the pool.",
-              "description": "Raised when a station claims (leases) the highest-priority matching pending task. Not yet wired to the outbound Kafka adapter — documented here as part of the domain-event catalog, in-process only today.\n",
-              "contentType": "application/cloudevents+json",
-              "tags": [
-                {
-                  "name": "task"
-                }
-              ],
-              "payload": {
-                "allOf": [
-                  "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[0].payload.allOf[0]",
-                  {
-                    "type": "object",
-                    "required": [
-                      "type",
-                      "data"
-                    ],
-                    "properties": {
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "com.warehouse.wes.fulfillment-execution.task.TaskClaimed"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-13>"
-                      },
-                      "data": {
-                        "type": "object",
-                        "required": [
-                          "taskId",
-                          "stationId"
-                        ],
-                        "properties": {
-                          "taskId": {
-                            "type": "string",
-                            "description": "Identifier of the claimed task.",
-                            "x-parser-schema-id": "<anonymous-schema-15>"
-                          },
-                          "stationId": {
-                            "type": "string",
-                            "description": "Identifier of the station that claimed the task.",
-                            "x-parser-schema-id": "<anonymous-schema-16>"
-                          }
-                        },
-                        "x-parser-schema-id": "<anonymous-schema-14>"
-                      }
-                    },
-                    "x-parser-schema-id": "<anonymous-schema-12>"
-                  }
-                ],
-                "x-parser-schema-id": "TaskClaimedEvent"
-              },
-              "examples": [
-                {
-                  "name": "taskClaimed",
-                  "payload": {
-                    "specversion": "1.0",
-                    "id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
-                    "source": "/warehouse/fulfillment-execution",
-                    "type": "com.warehouse.wes.fulfillment-execution.task.TaskClaimed",
-                    "subject": "task-8a1f",
-                    "time": "2026-08-22T14:01:00Z",
-                    "datacontenttype": "application/json",
-                    "data": {
-                      "taskId": "task-8a1f",
-                      "stationId": "station-03"
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "name": "LeaseExpired",
-              "title": "Lease Expired",
-              "summary": "An unconfirmed claim's lease timed out; the task returned to the pool.",
-              "description": "Raised when a claim is neither renewed nor completed before its lease expires. Not yet wired to the outbound Kafka adapter — documented here as part of the domain-event catalog, in-process only today.\n",
-              "contentType": "application/cloudevents+json",
-              "tags": [
-                {
-                  "name": "task"
-                }
-              ],
-              "payload": {
-                "allOf": [
-                  "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[0].payload.allOf[0]",
-                  {
-                    "type": "object",
-                    "required": [
-                      "type",
-                      "data"
-                    ],
-                    "properties": {
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "com.warehouse.wes.fulfillment-execution.task.LeaseExpired"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-18>"
-                      },
-                      "data": {
-                        "type": "object",
-                        "required": [
-                          "taskId"
-                        ],
-                        "properties": {
-                          "taskId": {
-                            "type": "string",
-                            "description": "Identifier of the task whose lease expired.",
-                            "x-parser-schema-id": "<anonymous-schema-20>"
-                          }
-                        },
-                        "x-parser-schema-id": "<anonymous-schema-19>"
-                      }
-                    },
-                    "x-parser-schema-id": "<anonymous-schema-17>"
-                  }
-                ],
-                "x-parser-schema-id": "LeaseExpiredEvent"
-              },
-              "examples": [
-                {
-                  "name": "leaseExpired",
-                  "payload": {
-                    "specversion": "1.0",
-                    "id": "2b3c4d5e-6f7a-4b8c-9d0e-1f2a3b4c5d6e",
-                    "source": "/warehouse/fulfillment-execution",
-                    "type": "com.warehouse.wes.fulfillment-execution.task.LeaseExpired",
-                    "subject": "task-8a1f",
-                    "time": "2026-08-22T14:06:00Z",
-                    "datacontenttype": "application/json",
-                    "data": {
-                      "taskId": "task-8a1f"
-                    }
-                  }
-                }
-              ]
-            },
-            {
               "name": "TaskCompleted",
-              "title": "Task Completed",
+              "title": "TaskCompleted",
               "summary": "A station finished a claimed task.",
-              "description": "Raised when the station that holds the active claim completes the task. This is the one event currently wired to the outbound Kafka adapter, published on topic `warehouse.fulfillment.events` enriched with `work_unit_id` (the completed task's order reference) so Work Planning can call RecordCompletion(workUnitId), plus `associate_id`, `duration_seconds`, and `task_type` (see ADR-0014, ADR-0023) for the labor-performance bounded context.\n\nKafka message headers carry W3C trace context, so a consumer that extracts them continues the publishing service's distributed trace instead of starting a new one.\n",
+              "description": "Raised when the station holding the active claim completes the task. Published on `warehouse.fulfillment.events`, keyed (and `subject`-ed) by task id, enriched at publish time with `work_unit_id` (the task's order reference, so Work Planning can call RecordCompletion), and `associate_id`, `duration_seconds`, `task_type` for labor-performance (ADR-0014, ADR-0023). Consumed by wes-work-planning and labor-performance.",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -330,73 +76,161 @@
               ],
               "headers": {
                 "type": "object",
-                "description": "W3C Trace Context, injected as Kafka message headers by the publisher's OpenTelemetry instrumentation.\n",
+                "description": "Kafka message headers carried by every message.",
+                "required": [
+                  "content-type"
+                ],
                 "properties": {
+                  "content-type": {
+                    "type": "string",
+                    "const": "application/cloudevents+json; charset=UTF-8",
+                    "description": "CloudEvents structured-mode media type.",
+                    "x-parser-schema-id": "<anonymous-schema-1>"
+                  },
                   "traceparent": {
                     "type": "string",
-                    "description": "W3C traceparent identifying the publishing span.",
-                    "example": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01",
-                    "x-parser-schema-id": "<anonymous-schema-22>"
+                    "description": "W3C traceparent of the publishing span.",
+                    "x-parser-schema-id": "<anonymous-schema-2>"
                   },
                   "tracestate": {
                     "type": "string",
                     "description": "W3C tracestate, present only when a vendor added entries.",
-                    "x-parser-schema-id": "<anonymous-schema-23>"
+                    "x-parser-schema-id": "<anonymous-schema-3>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-21>"
+                "x-parser-schema-id": "KafkaHeaders"
               },
               "payload": {
                 "allOf": [
-                  "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "description": "CloudEvents 1.0 context attributes; every attribute is required in this fleet.",
+                    "required": [
+                      "specversion",
+                      "id",
+                      "source",
+                      "type",
+                      "subject",
+                      "time",
+                      "datacontenttype",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "specversion": {
+                        "type": "string",
+                        "const": "1.0",
+                        "description": "CloudEvents spec version.",
+                        "x-parser-schema-id": "<anonymous-schema-5>"
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "description": "UUID v4, minted once per occurrence and stable across outbox redelivery.",
+                        "x-parser-schema-id": "<anonymous-schema-6>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "format": "uri-reference",
+                        "description": "Producing service, `/warehouse/<repo>`.",
+                        "x-parser-schema-id": "<anonymous-schema-7>"
+                      },
+                      "type": {
+                        "type": "string",
+                        "description": "`com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`.",
+                        "x-parser-schema-id": "<anonymous-schema-8>"
+                      },
+                      "subject": {
+                        "type": "string",
+                        "minLength": 1,
+                        "description": "Aggregate instance id; equal to the Kafka message key.",
+                        "x-parser-schema-id": "<anonymous-schema-9>"
+                      },
+                      "time": {
+                        "type": "string",
+                        "format": "date-time",
+                        "description": "Domain occurred-at, UTC, RFC 3339.",
+                        "x-parser-schema-id": "<anonymous-schema-10>"
+                      },
+                      "datacontenttype": {
+                        "type": "string",
+                        "const": "application/json",
+                        "description": "Content type of `data`.",
+                        "x-parser-schema-id": "<anonymous-schema-11>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "format": "uri",
+                        "description": "`urn:warehouse:<repo>:<events|analytics>:<EventName>:v<N>`.",
+                        "x-parser-schema-id": "<anonymous-schema-12>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Event payload (snake_case keys).",
+                        "x-parser-schema-id": "<anonymous-schema-13>"
+                      }
+                    },
+                    "x-parser-schema-id": "CloudEvent"
+                  },
                   {
                     "type": "object",
                     "required": [
                       "type",
+                      "source",
+                      "dataschema",
                       "data"
                     ],
                     "properties": {
                       "type": {
                         "type": "string",
-                        "enum": [
-                          "com.warehouse.wes.fulfillment-execution.task.TaskCompleted"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-25>"
+                        "const": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+                        "x-parser-schema-id": "<anonymous-schema-15>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-16>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
+                        "x-parser-schema-id": "<anonymous-schema-17>"
                       },
                       "data": {
                         "type": "object",
                         "required": [
-                          "taskId",
-                          "stationId"
+                          "task_id",
+                          "station_id",
+                          "work_unit_id"
                         ],
                         "properties": {
-                          "taskId": {
+                          "task_id": {
                             "type": "string",
-                            "description": "Identifier of the completed task.",
-                            "x-parser-schema-id": "<anonymous-schema-27>"
+                            "description": "Completed task id.",
+                            "x-parser-schema-id": "<anonymous-schema-19>"
                           },
-                          "stationId": {
+                          "station_id": {
                             "type": "string",
-                            "description": "Identifier of the station that completed the task.",
-                            "x-parser-schema-id": "<anonymous-schema-28>"
+                            "description": "Station that completed the task.",
+                            "x-parser-schema-id": "<anonymous-schema-20>"
                           },
-                          "workUnitId": {
+                          "work_unit_id": {
                             "type": "string",
-                            "description": "The completed task's order reference, carried as work_unit_id on the wire so Work Planning can correlate this event to the WorkUnit it released.\n",
-                            "x-parser-schema-id": "<anonymous-schema-29>"
+                            "description": "The completed task's order reference (empty only when the task can no longer be found at publish time).",
+                            "x-parser-schema-id": "<anonymous-schema-21>"
                           },
-                          "associateId": {
+                          "associate_id": {
                             "type": "string",
-                            "description": "The occupant checked into the completing station at publish time (carried as associate_id on the wire), for the labor-performance bounded context to attribute completed work to a worker (see ADR-0014). Omitted (or empty) when the station has no checked-in occupant — this is an intentionally soft/optional fact, not every station has one (e.g. a robot station never checks anyone in).\n",
-                            "x-parser-schema-id": "<anonymous-schema-30>"
+                            "description": "Occupant checked into the completing station at publish time; omitted when none (e.g. a robot station).",
+                            "x-parser-schema-id": "<anonymous-schema-22>"
                           },
-                          "durationSeconds": {
+                          "duration_seconds": {
                             "type": "integer",
+                            "description": "Seconds between claim and completion; omitted when the claim time is unknown.",
                             "format": "int64",
-                            "description": "Elapsed seconds between the task's claim and its completion (carried as duration_seconds on the wire). Omitted (zero) when the task's claim start time was not recorded — e.g. a task claimed before this field was introduced.\n",
-                            "x-parser-schema-id": "<anonymous-schema-31>"
+                            "x-parser-schema-id": "<anonymous-schema-23>"
                           },
-                          "taskType": {
+                          "task_type": {
                             "type": "string",
                             "enum": [
                               "PICK",
@@ -404,382 +238,41 @@
                               "SLAM",
                               "REBIN"
                             ],
-                            "description": "The completed task's own type (carried as task_type on the wire, see ADR-0023), read directly off the same Task the workUnitId lookup already resolves — no new repo dependency. Lets the labor-performance bounded context bucket utilization/idleness by task type instead of only across all task types combined. Omitted only when the completed task cannot be found at publish time, mirroring associateId/durationSeconds's degrade- gracefully-never-fail behavior.\n",
-                            "x-parser-schema-id": "<anonymous-schema-32>"
+                            "description": "The completed task's own type; omitted only when the task can no longer be found.",
+                            "x-parser-schema-id": "<anonymous-schema-24>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-26>"
+                        "x-parser-schema-id": "<anonymous-schema-18>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-24>"
+                    "x-parser-schema-id": "<anonymous-schema-14>"
                   }
                 ],
-                "x-parser-schema-id": "TaskCompletedEvent"
+                "x-parser-schema-id": "<anonymous-schema-4>"
               },
               "examples": [
                 {
                   "name": "taskCompleted",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
                   "payload": {
                     "specversion": "1.0",
-                    "id": "3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e7f",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
                     "source": "/warehouse/fulfillment-execution",
                     "type": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
                     "subject": "task-8a1f",
-                    "time": "2026-08-22T14:04:00Z",
+                    "time": "2026-09-30T15:00:00Z",
                     "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
                     "data": {
-                      "taskId": "task-8a1f",
-                      "stationId": "station-03",
-                      "workUnitId": "wu-8a1f",
-                      "associateId": "worker-42",
-                      "durationSeconds": 245,
-                      "taskType": "PICK"
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "name": "ItemPicked",
-              "title": "Item Picked",
-              "summary": "A Pick task recorded an item retrieved into a tote.",
-              "description": "Raised when a Pick task records a successful item retrieval. Not yet wired to the outbound Kafka adapter — documented here as part of the domain-event catalog, in-process only today.\n",
-              "contentType": "application/cloudevents+json",
-              "tags": [
-                {
-                  "name": "task"
-                }
-              ],
-              "payload": {
-                "allOf": [
-                  "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[0].payload.allOf[0]",
-                  {
-                    "type": "object",
-                    "required": [
-                      "type",
-                      "data"
-                    ],
-                    "properties": {
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "com.warehouse.wes.fulfillment-execution.task.ItemPicked"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-34>"
-                      },
-                      "data": {
-                        "type": "object",
-                        "required": [
-                          "taskId"
-                        ],
-                        "properties": {
-                          "taskId": {
-                            "type": "string",
-                            "description": "Identifier of the Pick task that recorded the retrieval.",
-                            "x-parser-schema-id": "<anonymous-schema-36>"
-                          }
-                        },
-                        "x-parser-schema-id": "<anonymous-schema-35>"
-                      }
-                    },
-                    "x-parser-schema-id": "<anonymous-schema-33>"
-                  }
-                ],
-                "x-parser-schema-id": "ItemPickedEvent"
-              },
-              "examples": [
-                {
-                  "name": "itemPicked",
-                  "payload": {
-                    "specversion": "1.0",
-                    "id": "4d5e6f7a-8b9c-4d0e-1f2a-3b4c5d6e7f80",
-                    "source": "/warehouse/fulfillment-execution",
-                    "type": "com.warehouse.wes.fulfillment-execution.task.ItemPicked",
-                    "subject": "task-8a1f",
-                    "time": "2026-08-22T14:03:00Z",
-                    "datacontenttype": "application/json",
-                    "data": {
-                      "taskId": "task-8a1f"
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "name": "PackageSealed",
-              "title": "Package Sealed",
-              "summary": "A package's contents were scanned and the carton was sealed.",
-              "description": "Raised when a Pack task seals a package after its contents are scanned. Not yet wired to the outbound Kafka adapter — documented here as part of the domain-event catalog, in-process only today.\n",
-              "contentType": "application/cloudevents+json",
-              "tags": [
-                {
-                  "name": "package"
-                }
-              ],
-              "payload": {
-                "allOf": [
-                  "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[0].payload.allOf[0]",
-                  {
-                    "type": "object",
-                    "required": [
-                      "type",
-                      "data"
-                    ],
-                    "properties": {
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "com.warehouse.wes.fulfillment-execution.package.PackageSealed"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-38>"
-                      },
-                      "data": {
-                        "type": "object",
-                        "required": [
-                          "packageId"
-                        ],
-                        "properties": {
-                          "packageId": {
-                            "type": "string",
-                            "description": "Identifier of the sealed package.",
-                            "x-parser-schema-id": "<anonymous-schema-40>"
-                          }
-                        },
-                        "x-parser-schema-id": "<anonymous-schema-39>"
-                      }
-                    },
-                    "x-parser-schema-id": "<anonymous-schema-37>"
-                  }
-                ],
-                "x-parser-schema-id": "PackageSealedEvent"
-              },
-              "examples": [
-                {
-                  "name": "packageSealed",
-                  "payload": {
-                    "specversion": "1.0",
-                    "id": "5e6f7a8b-9c0d-4e1f-2a3b-4c5d6e7f8091",
-                    "source": "/warehouse/fulfillment-execution",
-                    "type": "com.warehouse.wes.fulfillment-execution.package.PackageSealed",
-                    "subject": "pkg-1029",
-                    "time": "2026-08-22T14:10:00Z",
-                    "datacontenttype": "application/json",
-                    "data": {
-                      "packageId": "pkg-1029"
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "name": "WeightDiscrepancyDetected",
-              "title": "Weight Discrepancy Detected",
-              "summary": "SLAM found actual weight outside tolerance.",
-              "description": "Raised when the SLAM weigh-check finds the actual package weight outside the accepted tolerance. Not yet wired to the outbound Kafka adapter — documented here as part of the domain-event catalog, in-process only today.\n",
-              "contentType": "application/cloudevents+json",
-              "tags": [
-                {
-                  "name": "package"
-                }
-              ],
-              "payload": {
-                "allOf": [
-                  "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[0].payload.allOf[0]",
-                  {
-                    "type": "object",
-                    "required": [
-                      "type",
-                      "data"
-                    ],
-                    "properties": {
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "com.warehouse.wes.fulfillment-execution.package.WeightDiscrepancyDetected"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-42>"
-                      },
-                      "data": {
-                        "type": "object",
-                        "required": [
-                          "packageId",
-                          "expectedWeight",
-                          "actualWeight"
-                        ],
-                        "properties": {
-                          "packageId": {
-                            "type": "string",
-                            "description": "Identifier of the package under weigh-check.",
-                            "x-parser-schema-id": "<anonymous-schema-44>"
-                          },
-                          "expectedWeight": {
-                            "type": "number",
-                            "format": "double",
-                            "description": "Expected package weight (kg).",
-                            "x-parser-schema-id": "<anonymous-schema-45>"
-                          },
-                          "actualWeight": {
-                            "type": "number",
-                            "format": "double",
-                            "description": "Measured package weight (kg).",
-                            "x-parser-schema-id": "<anonymous-schema-46>"
-                          }
-                        },
-                        "x-parser-schema-id": "<anonymous-schema-43>"
-                      }
-                    },
-                    "x-parser-schema-id": "<anonymous-schema-41>"
-                  }
-                ],
-                "x-parser-schema-id": "WeightDiscrepancyDetectedEvent"
-              },
-              "examples": [
-                {
-                  "name": "weightDiscrepancyDetected",
-                  "payload": {
-                    "specversion": "1.0",
-                    "id": "6f7a8b9c-0d1e-4f2a-3b4c-5d6e7f809112",
-                    "source": "/warehouse/fulfillment-execution",
-                    "type": "com.warehouse.wes.fulfillment-execution.package.WeightDiscrepancyDetected",
-                    "subject": "pkg-1029",
-                    "time": "2026-08-22T14:11:00Z",
-                    "datacontenttype": "application/json",
-                    "data": {
-                      "packageId": "pkg-1029",
-                      "expectedWeight": 2.45,
-                      "actualWeight": 3.1
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "name": "LabelApplied",
-              "title": "Label Applied",
-              "summary": "SLAM passed the weigh-check and applied the shipping label.",
-              "description": "Raised when the SLAM weigh-check passes and a shipping label is applied to the package. Not yet wired to the outbound Kafka adapter — documented here as part of the domain-event catalog, in-process only today.\n",
-              "contentType": "application/cloudevents+json",
-              "tags": [
-                {
-                  "name": "package"
-                }
-              ],
-              "payload": {
-                "allOf": [
-                  "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[0].payload.allOf[0]",
-                  {
-                    "type": "object",
-                    "required": [
-                      "type",
-                      "data"
-                    ],
-                    "properties": {
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "com.warehouse.wes.fulfillment-execution.package.LabelApplied"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-48>"
-                      },
-                      "data": {
-                        "type": "object",
-                        "required": [
-                          "packageId"
-                        ],
-                        "properties": {
-                          "packageId": {
-                            "type": "string",
-                            "description": "Identifier of the labeled package.",
-                            "x-parser-schema-id": "<anonymous-schema-50>"
-                          }
-                        },
-                        "x-parser-schema-id": "<anonymous-schema-49>"
-                      }
-                    },
-                    "x-parser-schema-id": "<anonymous-schema-47>"
-                  }
-                ],
-                "x-parser-schema-id": "LabelAppliedEvent"
-              },
-              "examples": [
-                {
-                  "name": "labelApplied",
-                  "payload": {
-                    "specversion": "1.0",
-                    "id": "7a8b9c0d-1e2f-4a3b-4c5d-6e7f80911223",
-                    "source": "/warehouse/fulfillment-execution",
-                    "type": "com.warehouse.wes.fulfillment-execution.package.LabelApplied",
-                    "subject": "pkg-1029",
-                    "time": "2026-08-22T14:12:00Z",
-                    "datacontenttype": "application/json",
-                    "data": {
-                      "packageId": "pkg-1029"
-                    }
-                  }
-                }
-              ]
-            },
-            {
-              "name": "PackageDiverted",
-              "title": "Package Diverted",
-              "summary": "A package failed the SLAM weigh-check and was routed off the standard path.",
-              "description": "Raised when a package fails the SLAM weigh-check and is diverted instead of labeled. Not yet wired to the outbound Kafka adapter — documented here as part of the domain-event catalog, in-process only today.\n",
-              "contentType": "application/cloudevents+json",
-              "tags": [
-                {
-                  "name": "package"
-                }
-              ],
-              "payload": {
-                "allOf": [
-                  "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[0].payload.allOf[0]",
-                  {
-                    "type": "object",
-                    "required": [
-                      "type",
-                      "data"
-                    ],
-                    "properties": {
-                      "type": {
-                        "type": "string",
-                        "enum": [
-                          "com.warehouse.wes.fulfillment-execution.package.PackageDiverted"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-52>"
-                      },
-                      "data": {
-                        "type": "object",
-                        "required": [
-                          "packageId"
-                        ],
-                        "properties": {
-                          "packageId": {
-                            "type": "string",
-                            "description": "Identifier of the diverted package.",
-                            "x-parser-schema-id": "<anonymous-schema-54>"
-                          }
-                        },
-                        "x-parser-schema-id": "<anonymous-schema-53>"
-                      }
-                    },
-                    "x-parser-schema-id": "<anonymous-schema-51>"
-                  }
-                ],
-                "x-parser-schema-id": "PackageDivertedEvent"
-              },
-              "examples": [
-                {
-                  "name": "packageDiverted",
-                  "payload": {
-                    "specversion": "1.0",
-                    "id": "8b9c0d1e-2f3a-4b4c-5d6e-7f8091122334",
-                    "source": "/warehouse/fulfillment-execution",
-                    "type": "com.warehouse.wes.fulfillment-execution.package.PackageDiverted",
-                    "subject": "pkg-1029",
-                    "time": "2026-08-22T14:13:00Z",
-                    "datacontenttype": "application/json",
-                    "data": {
-                      "packageId": "pkg-1029"
+                      "task_id": "task-8a1f",
+                      "station_id": "station-03",
+                      "work_unit_id": "wu-8a1f",
+                      "associate_id": "worker-42",
+                      "duration_seconds": 245,
+                      "task_type": "PICK"
                     }
                   }
                 }
@@ -787,9 +280,9 @@
             },
             {
               "name": "TaskCPTMissed",
-              "title": "Task CPT Missed",
+              "title": "TaskCPTMissed",
               "summary": "A task is still open (Pending or Claimed) past its CPT deadline.",
-              "description": "Raised by the Clock-driven CPT-missed sweep (`POST /tasks/sweep-cpt-misses`, ADR-0025) for a task that is still open (not Completed) at or past its CPT. This is the fulfillment-execution half of order-management ADR 0014 §5's promise feedback loop: order-management's `RepromiseOrder` consumer reacts to this event to recompute — and, if it moved, re-promise — the affected shipment group's delivery date.\n\n**This event re-fires on every sweep pass** for as long as the task remains open past its CPT — there is no per-task \"already reported\" state. order-management's `RepromiseOrder` is explicitly designed (ADR 0014 §5) to be idempotent on `(orderId, sourceEventId)` because of this; a consumer of this event must dedupe on its own, not assume at-most-once delivery of a distinct fact.\n\nCurrently wired to the outbound Kafka adapter, published on topic `warehouse.fulfillment.events`. No repo enrichment is needed — every field comes directly off the domain event.\n",
+              "description": "Raised by the CPT-missed sweep (`POST /tasks/sweep-cpt-misses`, ADR-0025). Re-fires on every sweep pass while the task stays open past its CPT, so consumers must dedupe on their own (order-management's RepromiseOrder is idempotent by design). Published on `warehouse.fulfillment.events`, keyed by task id. Consumed by order-management.",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -799,42 +292,53 @@
                   "name": "promise-feedback"
                 }
               ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
               "payload": {
                 "allOf": [
-                  "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
                   {
                     "type": "object",
                     "required": [
                       "type",
+                      "source",
+                      "dataschema",
                       "data"
                     ],
                     "properties": {
                       "type": {
                         "type": "string",
-                        "enum": [
-                          "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-56>"
+                        "const": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed",
+                        "x-parser-schema-id": "<anonymous-schema-27>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-28>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:events:TaskCPTMissed:v1",
+                        "x-parser-schema-id": "<anonymous-schema-29>"
                       },
                       "data": {
                         "type": "object",
                         "required": [
-                          "taskId",
-                          "orderRef",
+                          "task_id",
+                          "order_ref",
                           "cpt"
                         ],
                         "properties": {
-                          "taskId": {
+                          "task_id": {
                             "type": "string",
-                            "description": "Identifier of the task still open past its CPT.",
-                            "x-parser-schema-id": "<anonymous-schema-58>"
+                            "description": "Task still open past its CPT.",
+                            "x-parser-schema-id": "<anonymous-schema-31>"
                           },
-                          "orderRef": {
+                          "order_ref": {
                             "type": "string",
-                            "description": "The task's order reference (carried as order_ref on the wire), what order-management's RepromiseOrder consumer (ADR 0014 §5) keys its recompute on.\n",
-                            "x-parser-schema-id": "<anonymous-schema-59>"
+                            "description": "The task's order reference.",
+                            "x-parser-schema-id": "<anonymous-schema-32>"
                           },
-                          "taskType": {
+                          "task_type": {
                             "type": "string",
                             "enum": [
                               "PICK",
@@ -842,40 +346,45 @@
                               "SLAM",
                               "REBIN"
                             ],
-                            "description": "The overdue task's own type (carried as task_type on the wire), so a consumer can reason about which leg missed without a repo lookup back into this service.\n",
-                            "x-parser-schema-id": "<anonymous-schema-60>"
+                            "description": "The overdue task's own type; omitted when unknown.",
+                            "x-parser-schema-id": "<anonymous-schema-33>"
                           },
                           "cpt": {
                             "type": "string",
+                            "description": "The missed CPT deadline.",
                             "format": "date-time",
-                            "description": "The task's CPT deadline that was missed.",
-                            "x-parser-schema-id": "<anonymous-schema-61>"
+                            "x-parser-schema-id": "<anonymous-schema-34>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-57>"
+                        "x-parser-schema-id": "<anonymous-schema-30>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-55>"
+                    "x-parser-schema-id": "<anonymous-schema-26>"
                   }
                 ],
-                "x-parser-schema-id": "TaskCPTMissedEvent"
+                "x-parser-schema-id": "<anonymous-schema-25>"
               },
               "examples": [
                 {
                   "name": "taskCPTMissed",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
                   "payload": {
                     "specversion": "1.0",
-                    "id": "9c0d1e2f-3a4b-4c5d-6e7f-809112233445",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
                     "source": "/warehouse/fulfillment-execution",
                     "type": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed",
                     "subject": "task-8a1f",
-                    "time": "2026-08-22T18:05:00Z",
+                    "time": "2026-09-30T15:00:00Z",
                     "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:events:TaskCPTMissed:v1",
                     "data": {
-                      "taskId": "task-8a1f",
-                      "orderRef": "wu-8a1f",
-                      "taskType": "PICK",
-                      "cpt": "2026-08-22T18:00:00Z"
+                      "task_id": "task-8a1f",
+                      "order_ref": "wu-8a1f",
+                      "task_type": "PICK",
+                      "cpt": "2026-09-30T14:55:00Z"
                     }
                   }
                 }
@@ -883,9 +392,9 @@
             },
             {
               "name": "PackageManifested",
-              "title": "Package Manifested",
+              "title": "PackageManifested",
               "summary": "A package passed its SLAM weigh-check (the \"SLAM pass\").",
-              "description": "Raised alongside `LabelApplied` — additively, never in its place — when the SLAM weigh-check passes (see `RunSlam`, ADR-0025). A diverted package (weight outside tolerance) was NOT manifested and does not raise this event. This is the SLAM-pass half of order-management ADR 0014 §5's promise feedback loop: `RepromiseOrder` reacts to this event the same way it reacts to `TaskCPTMissed`, keyed by `orderRef`.\n\nCurrently wired to the outbound Kafka adapter, published on topic `warehouse.fulfillment.events`. No repo enrichment is needed — every field comes directly off the domain event.\n",
+              "description": "Raised alongside `LabelApplied` when the SLAM weigh-check passes (ADR-0025); a diverted package does not raise it. Published on `warehouse.fulfillment.events`, keyed by package id. Consumed by order-management.",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -895,63 +404,1560 @@
                   "name": "promise-feedback"
                 }
               ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
               "payload": {
                 "allOf": [
-                  "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
                   {
                     "type": "object",
                     "required": [
                       "type",
+                      "source",
+                      "dataschema",
                       "data"
                     ],
                     "properties": {
                       "type": {
                         "type": "string",
-                        "enum": [
-                          "com.warehouse.wes.fulfillment-execution.package.PackageManifested"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-63>"
+                        "const": "com.warehouse.wes.fulfillment-execution.package.PackageManifested",
+                        "x-parser-schema-id": "<anonymous-schema-37>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-38>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:events:PackageManifested:v1",
+                        "x-parser-schema-id": "<anonymous-schema-39>"
                       },
                       "data": {
                         "type": "object",
                         "required": [
-                          "packageId",
-                          "orderRef"
+                          "package_id",
+                          "order_ref"
                         ],
                         "properties": {
-                          "packageId": {
+                          "package_id": {
                             "type": "string",
-                            "description": "Identifier of the manifested (SLAM-passed) package.",
-                            "x-parser-schema-id": "<anonymous-schema-65>"
+                            "description": "Manifested package id.",
+                            "x-parser-schema-id": "<anonymous-schema-41>"
                           },
-                          "orderRef": {
+                          "order_ref": {
                             "type": "string",
-                            "description": "The package's order reference (carried as order_ref on the wire), what order-management's RepromiseOrder consumer keys its recompute on.\n",
-                            "x-parser-schema-id": "<anonymous-schema-66>"
+                            "description": "The package's order reference.",
+                            "x-parser-schema-id": "<anonymous-schema-42>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-64>"
+                        "x-parser-schema-id": "<anonymous-schema-40>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-62>"
+                    "x-parser-schema-id": "<anonymous-schema-36>"
                   }
                 ],
-                "x-parser-schema-id": "PackageManifestedEvent"
+                "x-parser-schema-id": "<anonymous-schema-35>"
               },
               "examples": [
                 {
                   "name": "packageManifested",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
                   "payload": {
                     "specversion": "1.0",
-                    "id": "ad1e2f3a-4b5c-4d6e-7f80-91223344556a",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
                     "source": "/warehouse/fulfillment-execution",
                     "type": "com.warehouse.wes.fulfillment-execution.package.PackageManifested",
                     "subject": "pkg-1029",
-                    "time": "2026-08-22T14:12:00Z",
+                    "time": "2026-09-30T15:00:00Z",
                     "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:events:PackageManifested:v1",
                     "data": {
-                      "packageId": "pkg-1029",
-                      "orderRef": "wu-8a1f"
+                      "package_id": "pkg-1029",
+                      "order_ref": "wu-8a1f"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.fulfillment.analytics": {
+      "description": "Internal analytics stream (ADR-0012), keyed by aggregate id; read by this service's own analytics projector.",
+      "subscribe": {
+        "operationId": "consumeFulfillmentAnalyticsEvents",
+        "summary": "Consume Fulfillment Execution analytics events.",
+        "description": "Receive every analytics CloudEvent (dataschema `urn:warehouse:fulfillment-execution:analytics:*`).",
+        "tags": [
+          {
+            "name": "analytics"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "AnalyticsTaskCreated",
+              "title": "TaskCreated",
+              "summary": "Analytics occurrence of TaskCreated for the throughput data product.",
+              "description": "A task entered the pool. Published on the internal `warehouse.fulfillment.analytics` topic (ADR-0012) and consumed only by this service's own analytics projector (`cmd/fulfillment-projector`).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "task"
+                },
+                {
+                  "name": "analytics"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.fulfillment-execution.task.TaskCreated",
+                        "x-parser-schema-id": "<anonymous-schema-45>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-46>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:analytics:TaskCreated:v1",
+                        "x-parser-schema-id": "<anonymous-schema-47>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "task_id",
+                          "task_type"
+                        ],
+                        "properties": {
+                          "task_id": {
+                            "type": "string",
+                            "description": "Task id.",
+                            "x-parser-schema-id": "<anonymous-schema-49>"
+                          },
+                          "task_type": {
+                            "type": "string",
+                            "enum": [
+                              "",
+                              "PICK",
+                              "PACK",
+                              "SLAM",
+                              "REBIN"
+                            ],
+                            "description": "The task's process path, enriched via a TaskRepo lookup; empty when the task cannot be found.",
+                            "x-parser-schema-id": "<anonymous-schema-50>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-48>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-44>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-43>"
+              },
+              "examples": [
+                {
+                  "name": "analyticsTaskCreated",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.task.TaskCreated",
+                    "subject": "t1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:analytics:TaskCreated:v1",
+                    "data": {
+                      "task_id": "t1",
+                      "task_type": "PICK"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "AnalyticsTaskClaimed",
+              "title": "TaskClaimed",
+              "summary": "Analytics occurrence of TaskClaimed for the throughput data product.",
+              "description": "A station claimed a task (projects into claims). Published on the internal `warehouse.fulfillment.analytics` topic (ADR-0012) and consumed only by this service's own analytics projector (`cmd/fulfillment-projector`).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "task"
+                },
+                {
+                  "name": "analytics"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.fulfillment-execution.task.TaskClaimed",
+                        "x-parser-schema-id": "<anonymous-schema-53>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-54>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:analytics:TaskClaimed:v1",
+                        "x-parser-schema-id": "<anonymous-schema-55>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "task_id",
+                          "task_type",
+                          "station_id"
+                        ],
+                        "properties": {
+                          "task_id": {
+                            "type": "string",
+                            "description": "Task id.",
+                            "x-parser-schema-id": "<anonymous-schema-57>"
+                          },
+                          "task_type": {
+                            "type": "string",
+                            "enum": [
+                              "",
+                              "PICK",
+                              "PACK",
+                              "SLAM",
+                              "REBIN"
+                            ],
+                            "description": "The task's process path, enriched via a TaskRepo lookup; empty when the task cannot be found.",
+                            "x-parser-schema-id": "<anonymous-schema-58>"
+                          },
+                          "station_id": {
+                            "type": "string",
+                            "description": "Station id.",
+                            "x-parser-schema-id": "<anonymous-schema-59>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-56>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-52>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-51>"
+              },
+              "examples": [
+                {
+                  "name": "analyticsTaskClaimed",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.task.TaskClaimed",
+                    "subject": "t1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:analytics:TaskClaimed:v1",
+                    "data": {
+                      "task_id": "t1",
+                      "task_type": "PICK",
+                      "station_id": "s1"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "AnalyticsLeaseExpired",
+              "title": "LeaseExpired",
+              "summary": "Analytics occurrence of LeaseExpired for the throughput data product.",
+              "description": "A claim lease expired (projects into lease expiries). Published on the internal `warehouse.fulfillment.analytics` topic (ADR-0012) and consumed only by this service's own analytics projector (`cmd/fulfillment-projector`).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "task"
+                },
+                {
+                  "name": "analytics"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.fulfillment-execution.task.LeaseExpired",
+                        "x-parser-schema-id": "<anonymous-schema-62>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-63>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:analytics:LeaseExpired:v1",
+                        "x-parser-schema-id": "<anonymous-schema-64>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "task_id",
+                          "task_type"
+                        ],
+                        "properties": {
+                          "task_id": {
+                            "type": "string",
+                            "description": "Task id.",
+                            "x-parser-schema-id": "<anonymous-schema-66>"
+                          },
+                          "task_type": {
+                            "type": "string",
+                            "enum": [
+                              "",
+                              "PICK",
+                              "PACK",
+                              "SLAM",
+                              "REBIN"
+                            ],
+                            "description": "The task's process path, enriched via a TaskRepo lookup; empty when the task cannot be found.",
+                            "x-parser-schema-id": "<anonymous-schema-67>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-65>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-61>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-60>"
+              },
+              "examples": [
+                {
+                  "name": "analyticsLeaseExpired",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.task.LeaseExpired",
+                    "subject": "t1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:analytics:LeaseExpired:v1",
+                    "data": {
+                      "task_id": "t1",
+                      "task_type": "PICK"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "AnalyticsTaskCompleted",
+              "title": "TaskCompleted",
+              "summary": "Analytics occurrence of TaskCompleted for the throughput data product.",
+              "description": "A task was completed (projects into completions). Published on the internal `warehouse.fulfillment.analytics` topic (ADR-0012) and consumed only by this service's own analytics projector (`cmd/fulfillment-projector`).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "task"
+                },
+                {
+                  "name": "analytics"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+                        "x-parser-schema-id": "<anonymous-schema-70>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-71>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:analytics:TaskCompleted:v1",
+                        "x-parser-schema-id": "<anonymous-schema-72>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "task_id",
+                          "task_type",
+                          "station_id"
+                        ],
+                        "properties": {
+                          "task_id": {
+                            "type": "string",
+                            "description": "Task id.",
+                            "x-parser-schema-id": "<anonymous-schema-74>"
+                          },
+                          "task_type": {
+                            "type": "string",
+                            "enum": [
+                              "",
+                              "PICK",
+                              "PACK",
+                              "SLAM",
+                              "REBIN"
+                            ],
+                            "description": "The task's process path, enriched via a TaskRepo lookup; empty when the task cannot be found.",
+                            "x-parser-schema-id": "<anonymous-schema-75>"
+                          },
+                          "station_id": {
+                            "type": "string",
+                            "description": "Station id.",
+                            "x-parser-schema-id": "<anonymous-schema-76>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-73>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-69>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-68>"
+              },
+              "examples": [
+                {
+                  "name": "analyticsTaskCompleted",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+                    "subject": "t1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:analytics:TaskCompleted:v1",
+                    "data": {
+                      "task_id": "t1",
+                      "task_type": "PICK",
+                      "station_id": "s1"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "AnalyticsItemPicked",
+              "title": "ItemPicked",
+              "summary": "Analytics occurrence of ItemPicked for the throughput data product.",
+              "description": "A Pick task recorded an item retrieval. Published on the internal `warehouse.fulfillment.analytics` topic (ADR-0012) and consumed only by this service's own analytics projector (`cmd/fulfillment-projector`).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "task"
+                },
+                {
+                  "name": "analytics"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.fulfillment-execution.task.ItemPicked",
+                        "x-parser-schema-id": "<anonymous-schema-79>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-80>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:analytics:ItemPicked:v1",
+                        "x-parser-schema-id": "<anonymous-schema-81>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "task_id",
+                          "task_type"
+                        ],
+                        "properties": {
+                          "task_id": {
+                            "type": "string",
+                            "description": "Task id.",
+                            "x-parser-schema-id": "<anonymous-schema-83>"
+                          },
+                          "task_type": {
+                            "type": "string",
+                            "enum": [
+                              "",
+                              "PICK",
+                              "PACK",
+                              "SLAM",
+                              "REBIN"
+                            ],
+                            "description": "The task's process path, enriched via a TaskRepo lookup; empty when the task cannot be found.",
+                            "x-parser-schema-id": "<anonymous-schema-84>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-82>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-78>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-77>"
+              },
+              "examples": [
+                {
+                  "name": "analyticsItemPicked",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.task.ItemPicked",
+                    "subject": "t1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:analytics:ItemPicked:v1",
+                    "data": {
+                      "task_id": "t1",
+                      "task_type": "PICK"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "AnalyticsPackageSealed",
+              "title": "PackageSealed",
+              "summary": "Analytics occurrence of PackageSealed for the throughput data product.",
+              "description": "A package was sealed. Published on the internal `warehouse.fulfillment.analytics` topic (ADR-0012) and consumed only by this service's own analytics projector (`cmd/fulfillment-projector`).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "package"
+                },
+                {
+                  "name": "analytics"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.fulfillment-execution.package.PackageSealed",
+                        "x-parser-schema-id": "<anonymous-schema-87>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-88>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:analytics:PackageSealed:v1",
+                        "x-parser-schema-id": "<anonymous-schema-89>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "package_id"
+                        ],
+                        "properties": {
+                          "package_id": {
+                            "type": "string",
+                            "description": "Package id.",
+                            "x-parser-schema-id": "<anonymous-schema-91>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-90>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-86>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-85>"
+              },
+              "examples": [
+                {
+                  "name": "analyticsPackageSealed",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.package.PackageSealed",
+                    "subject": "p1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:analytics:PackageSealed:v1",
+                    "data": {
+                      "package_id": "p1"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "AnalyticsWeightDiscrepancyDetected",
+              "title": "WeightDiscrepancyDetected",
+              "summary": "Analytics occurrence of WeightDiscrepancyDetected for the throughput data product.",
+              "description": "SLAM found the weight out of tolerance (projects into SLAM diverts). Published on the internal `warehouse.fulfillment.analytics` topic (ADR-0012) and consumed only by this service's own analytics projector (`cmd/fulfillment-projector`).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "package"
+                },
+                {
+                  "name": "analytics"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.fulfillment-execution.package.WeightDiscrepancyDetected",
+                        "x-parser-schema-id": "<anonymous-schema-94>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-95>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:analytics:WeightDiscrepancyDetected:v1",
+                        "x-parser-schema-id": "<anonymous-schema-96>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "package_id",
+                          "expected_g",
+                          "actual_g"
+                        ],
+                        "properties": {
+                          "package_id": {
+                            "type": "string",
+                            "description": "Package id.",
+                            "x-parser-schema-id": "<anonymous-schema-98>"
+                          },
+                          "expected_g": {
+                            "type": "number",
+                            "description": "Expected weight.",
+                            "format": "double",
+                            "x-parser-schema-id": "<anonymous-schema-99>"
+                          },
+                          "actual_g": {
+                            "type": "number",
+                            "description": "Measured weight.",
+                            "format": "double",
+                            "x-parser-schema-id": "<anonymous-schema-100>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-97>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-93>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-92>"
+              },
+              "examples": [
+                {
+                  "name": "analyticsWeightDiscrepancyDetected",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.package.WeightDiscrepancyDetected",
+                    "subject": "p1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:analytics:WeightDiscrepancyDetected:v1",
+                    "data": {
+                      "package_id": "p1",
+                      "expected_g": 1000,
+                      "actual_g": 1200
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "AnalyticsLabelApplied",
+              "title": "LabelApplied",
+              "summary": "Analytics occurrence of LabelApplied for the throughput data product.",
+              "description": "SLAM applied the shipping label. Published on the internal `warehouse.fulfillment.analytics` topic (ADR-0012) and consumed only by this service's own analytics projector (`cmd/fulfillment-projector`).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "package"
+                },
+                {
+                  "name": "analytics"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.fulfillment-execution.package.LabelApplied",
+                        "x-parser-schema-id": "<anonymous-schema-103>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-104>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:analytics:LabelApplied:v1",
+                        "x-parser-schema-id": "<anonymous-schema-105>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "package_id"
+                        ],
+                        "properties": {
+                          "package_id": {
+                            "type": "string",
+                            "description": "Package id.",
+                            "x-parser-schema-id": "<anonymous-schema-107>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-106>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-102>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-101>"
+              },
+              "examples": [
+                {
+                  "name": "analyticsLabelApplied",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.package.LabelApplied",
+                    "subject": "p1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:analytics:LabelApplied:v1",
+                    "data": {
+                      "package_id": "p1"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "AnalyticsPackageDiverted",
+              "title": "PackageDiverted",
+              "summary": "Analytics occurrence of PackageDiverted for the throughput data product.",
+              "description": "A package was diverted off the standard path. Published on the internal `warehouse.fulfillment.analytics` topic (ADR-0012) and consumed only by this service's own analytics projector (`cmd/fulfillment-projector`).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "package"
+                },
+                {
+                  "name": "analytics"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.fulfillment-execution.package.PackageDiverted",
+                        "x-parser-schema-id": "<anonymous-schema-110>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-111>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:analytics:PackageDiverted:v1",
+                        "x-parser-schema-id": "<anonymous-schema-112>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "package_id"
+                        ],
+                        "properties": {
+                          "package_id": {
+                            "type": "string",
+                            "description": "Package id.",
+                            "x-parser-schema-id": "<anonymous-schema-114>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-113>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-109>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-108>"
+              },
+              "examples": [
+                {
+                  "name": "analyticsPackageDiverted",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.package.PackageDiverted",
+                    "subject": "p1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:analytics:PackageDiverted:v1",
+                    "data": {
+                      "package_id": "p1"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "AnalyticsPackageManifested",
+              "title": "PackageManifested",
+              "summary": "Analytics occurrence of PackageManifested for the throughput data product.",
+              "description": "A package passed SLAM (projects into the on-time-to-CPT KPI). Published on the internal `warehouse.fulfillment.analytics` topic (ADR-0012) and consumed only by this service's own analytics projector (`cmd/fulfillment-projector`).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "package"
+                },
+                {
+                  "name": "analytics"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.fulfillment-execution.package.PackageManifested",
+                        "x-parser-schema-id": "<anonymous-schema-117>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-118>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:analytics:PackageManifested:v1",
+                        "x-parser-schema-id": "<anonymous-schema-119>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "package_id",
+                          "order_ref",
+                          "task_type",
+                          "station_id",
+                          "on_time",
+                          "resolved"
+                        ],
+                        "properties": {
+                          "package_id": {
+                            "type": "string",
+                            "description": "Package id.",
+                            "x-parser-schema-id": "<anonymous-schema-121>"
+                          },
+                          "order_ref": {
+                            "type": "string",
+                            "description": "The package's order reference.",
+                            "x-parser-schema-id": "<anonymous-schema-122>"
+                          },
+                          "task_type": {
+                            "type": "string",
+                            "enum": [
+                              "",
+                              "PICK",
+                              "PACK",
+                              "SLAM",
+                              "REBIN"
+                            ],
+                            "description": "Originating SLAM task type; empty when unresolved.",
+                            "x-parser-schema-id": "<anonymous-schema-123>"
+                          },
+                          "station_id": {
+                            "type": "string",
+                            "description": "Originating SLAM station; empty when unresolved.",
+                            "x-parser-schema-id": "<anonymous-schema-124>"
+                          },
+                          "on_time": {
+                            "type": "boolean",
+                            "description": "Manifested at or before the originating SLAM task's CPT (ADR-0026).",
+                            "x-parser-schema-id": "<anonymous-schema-125>"
+                          },
+                          "resolved": {
+                            "type": "boolean",
+                            "description": "Whether the originating SLAM task could be resolved; when false the projector skips recording.",
+                            "x-parser-schema-id": "<anonymous-schema-126>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-120>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-116>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-115>"
+              },
+              "examples": [
+                {
+                  "name": "analyticsPackageManifested",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.package.PackageManifested",
+                    "subject": "p1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:analytics:PackageManifested:v1",
+                    "data": {
+                      "package_id": "p1",
+                      "order_ref": "wu-8a1f",
+                      "task_type": "SLAM",
+                      "station_id": "station-09",
+                      "on_time": true,
+                      "resolved": true
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.work-planning.events": {
+      "description": "wes-work-planning's integration topic; this service consumes WorkReleased from it (consumer group `WORK_RELEASED_CONSUMER_GROUP`, default `fulfillment-execution`).",
+      "publish": {
+        "operationId": "receiveWorkReleased",
+        "summary": "Receive WorkReleased from wes-work-planning.",
+        "description": "wes-work-planning publishes WorkReleased here; this service creates a Task for each new CloudEvents id.",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "name": "WorkReleased",
+          "title": "WorkReleased",
+          "summary": "Work Planning released a work unit (consumed).",
+          "description": "Published by wes-work-planning on `warehouse.work-planning.events`; consumed here to create a Task via CreateTask. Dispatch is on the full `type`; dedupe is on the CloudEvents `id`. A message that is not a valid CloudEvents 1.0 event is dead-lettered to `warehouse.work-planning.events.dlq`.",
+          "contentType": "application/cloudevents+json",
+          "tags": [
+            {
+              "name": "consumed"
+            }
+          ],
+          "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+          "payload": {
+            "allOf": [
+              "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+              {
+                "type": "object",
+                "required": [
+                  "type",
+                  "source",
+                  "dataschema",
+                  "data"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "const": "com.warehouse.wes.work-planning.workunit.WorkReleased",
+                    "x-parser-schema-id": "<anonymous-schema-129>"
+                  },
+                  "source": {
+                    "type": "string",
+                    "const": "/warehouse/wes-work-planning",
+                    "x-parser-schema-id": "<anonymous-schema-130>"
+                  },
+                  "dataschema": {
+                    "type": "string",
+                    "const": "urn:warehouse:wes-work-planning:events:WorkReleased:v1",
+                    "x-parser-schema-id": "<anonymous-schema-131>"
+                  },
+                  "data": {
+                    "type": "object",
+                    "required": [
+                      "path_id",
+                      "work_unit_id",
+                      "cpt"
+                    ],
+                    "properties": {
+                      "path_id": {
+                        "type": "string",
+                        "description": "Process path id, resolved against the process-path catalogue.",
+                        "x-parser-schema-id": "<anonymous-schema-133>"
+                      },
+                      "work_unit_id": {
+                        "type": "string",
+                        "description": "Becomes the Task's order reference.",
+                        "x-parser-schema-id": "<anonymous-schema-134>"
+                      },
+                      "cpt": {
+                        "type": "string",
+                        "description": "CPT deadline.",
+                        "format": "date-time",
+                        "x-parser-schema-id": "<anonymous-schema-135>"
+                      },
+                      "ref": {
+                        "type": "string",
+                        "description": "Release reference.",
+                        "x-parser-schema-id": "<anonymous-schema-136>"
+                      },
+                      "fragile": {
+                        "type": "boolean",
+                        "description": "Optional fragile packing hint (default false).",
+                        "x-parser-schema-id": "<anonymous-schema-137>"
+                      },
+                      "gift_wrap": {
+                        "type": "boolean",
+                        "description": "Optional gift-wrap request (default false).",
+                        "x-parser-schema-id": "<anonymous-schema-138>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-132>"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-128>"
+              }
+            ],
+            "x-parser-schema-id": "<anonymous-schema-127>"
+          },
+          "examples": [
+            {
+              "name": "workReleased",
+              "headers": {
+                "content-type": "application/cloudevents+json; charset=UTF-8",
+                "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+              },
+              "payload": {
+                "specversion": "1.0",
+                "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                "source": "/warehouse/wes-work-planning",
+                "type": "com.warehouse.wes.work-planning.workunit.WorkReleased",
+                "subject": "wu-8a1f",
+                "time": "2026-09-30T15:00:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:wes-work-planning:events:WorkReleased:v1",
+                "data": {
+                  "path_id": "pick-zone-a",
+                  "work_unit_id": "wu-8a1f",
+                  "cpt": "2026-09-30T18:00:00Z",
+                  "ref": "release-1"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.process-path-management.events": {
+      "description": "process-path-management's integration topic; this service replays ProcessPath* events into its local catalogue.",
+      "publish": {
+        "operationId": "receiveProcessPathEvents",
+        "summary": "Receive process-path catalogue events.",
+        "description": "process-path-management publishes ProcessPath* CloudEvents here; this service applies them to its in-memory catalogue.",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "ProcessPathCreated",
+              "title": "ProcessPathCreated",
+              "summary": "Process-path catalogue event ProcessPathCreated (consumed).",
+              "description": "Published by process-path-management on `warehouse.process-path-management.events`; replayed from FirstOffset into the in-memory process-path catalogue when `PATH_CATALOGUE_SOURCE=kafka`. A message that is not a valid CloudEvents 1.0 event is logged at WARN and skipped.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathCreated",
+                        "x-parser-schema-id": "<anonymous-schema-141>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/process-path-management",
+                        "x-parser-schema-id": "<anonymous-schema-142>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:process-path-management:events:ProcessPathCreated:v1",
+                        "x-parser-schema-id": "<anonymous-schema-143>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "path_id"
+                        ],
+                        "properties": {
+                          "path_id": {
+                            "type": "string",
+                            "description": "Process path id.",
+                            "x-parser-schema-id": "<anonymous-schema-145>"
+                          },
+                          "match_prefix": {
+                            "type": "string",
+                            "description": "Case-insensitive path_id prefix this path matches.",
+                            "x-parser-schema-id": "<anonymous-schema-146>"
+                          },
+                          "direct": {
+                            "type": "boolean",
+                            "description": "Direct (non-sortable) path.",
+                            "x-parser-schema-id": "<anonymous-schema-147>"
+                          },
+                          "required_capabilities": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "x-parser-schema-id": "<anonymous-schema-149>"
+                            },
+                            "description": "Station capabilities required.",
+                            "x-parser-schema-id": "<anonymous-schema-148>"
+                          },
+                          "destination_location_role": {
+                            "type": "string",
+                            "description": "Optional destination location role.",
+                            "x-parser-schema-id": "<anonymous-schema-150>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-144>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-140>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-139>"
+              },
+              "examples": [
+                {
+                  "name": "processPathCreated",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processpath.ProcessPathCreated",
+                    "subject": "PICK",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:events:ProcessPathCreated:v1",
+                    "data": {
+                      "path_id": "PICK",
+                      "match_prefix": "pick",
+                      "direct": true,
+                      "required_capabilities": [
+                        "pick"
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProcessPathUpdated",
+              "title": "ProcessPathUpdated",
+              "summary": "Process-path catalogue event ProcessPathUpdated (consumed).",
+              "description": "Published by process-path-management on `warehouse.process-path-management.events`; replayed from FirstOffset into the in-memory process-path catalogue when `PATH_CATALOGUE_SOURCE=kafka`. A message that is not a valid CloudEvents 1.0 event is logged at WARN and skipped.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated",
+                        "x-parser-schema-id": "<anonymous-schema-153>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/process-path-management",
+                        "x-parser-schema-id": "<anonymous-schema-154>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:process-path-management:events:ProcessPathUpdated:v1",
+                        "x-parser-schema-id": "<anonymous-schema-155>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "path_id"
+                        ],
+                        "properties": {
+                          "path_id": {
+                            "type": "string",
+                            "description": "Process path id.",
+                            "x-parser-schema-id": "<anonymous-schema-157>"
+                          },
+                          "match_prefix": {
+                            "type": "string",
+                            "description": "Case-insensitive path_id prefix this path matches.",
+                            "x-parser-schema-id": "<anonymous-schema-158>"
+                          },
+                          "direct": {
+                            "type": "boolean",
+                            "description": "Direct (non-sortable) path.",
+                            "x-parser-schema-id": "<anonymous-schema-159>"
+                          },
+                          "required_capabilities": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "x-parser-schema-id": "<anonymous-schema-161>"
+                            },
+                            "description": "Station capabilities required.",
+                            "x-parser-schema-id": "<anonymous-schema-160>"
+                          },
+                          "destination_location_role": {
+                            "type": "string",
+                            "description": "Optional destination location role.",
+                            "x-parser-schema-id": "<anonymous-schema-162>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-156>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-152>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-151>"
+              },
+              "examples": [
+                {
+                  "name": "processPathUpdated",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated",
+                    "subject": "PICK",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:events:ProcessPathUpdated:v1",
+                    "data": {
+                      "path_id": "PICK",
+                      "match_prefix": "pick",
+                      "direct": true,
+                      "required_capabilities": [
+                        "pick",
+                        "hazmat"
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProcessPathDeactivated",
+              "title": "ProcessPathDeactivated",
+              "summary": "Process-path catalogue event ProcessPathDeactivated (consumed).",
+              "description": "Published by process-path-management on `warehouse.process-path-management.events`; replayed from FirstOffset into the in-memory process-path catalogue when `PATH_CATALOGUE_SOURCE=kafka`. A message that is not a valid CloudEvents 1.0 event is logged at WARN and skipped.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated",
+                        "x-parser-schema-id": "<anonymous-schema-165>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/process-path-management",
+                        "x-parser-schema-id": "<anonymous-schema-166>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:process-path-management:events:ProcessPathDeactivated:v1",
+                        "x-parser-schema-id": "<anonymous-schema-167>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "path_id"
+                        ],
+                        "properties": {
+                          "path_id": {
+                            "type": "string",
+                            "description": "Process path id.",
+                            "x-parser-schema-id": "<anonymous-schema-169>"
+                          },
+                          "match_prefix": {
+                            "type": "string",
+                            "description": "Case-insensitive path_id prefix this path matches.",
+                            "x-parser-schema-id": "<anonymous-schema-170>"
+                          },
+                          "direct": {
+                            "type": "boolean",
+                            "description": "Direct (non-sortable) path.",
+                            "x-parser-schema-id": "<anonymous-schema-171>"
+                          },
+                          "required_capabilities": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "x-parser-schema-id": "<anonymous-schema-173>"
+                            },
+                            "description": "Station capabilities required.",
+                            "x-parser-schema-id": "<anonymous-schema-172>"
+                          },
+                          "destination_location_role": {
+                            "type": "string",
+                            "description": "Optional destination location role.",
+                            "x-parser-schema-id": "<anonymous-schema-174>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-168>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-164>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-163>"
+              },
+              "examples": [
+                {
+                  "name": "processPathDeactivated",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated",
+                    "subject": "PICK",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:events:ProcessPathDeactivated:v1",
+                    "data": {
+                      "path_id": "PICK"
                     }
                   }
                 }
@@ -964,31 +1970,27 @@
   },
   "components": {
     "messages": {
-      "TaskCreated": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[0]",
-      "TaskClaimed": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[1]",
-      "LeaseExpired": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[2]",
-      "TaskCompleted": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[3]",
-      "ItemPicked": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[4]",
-      "PackageSealed": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[5]",
-      "WeightDiscrepancyDetected": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[6]",
-      "LabelApplied": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[7]",
-      "PackageDiverted": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[8]",
-      "TaskCPTMissed": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[9]",
-      "PackageManifested": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[10]"
+      "TaskCompleted": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0]",
+      "TaskCPTMissed": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[1]",
+      "PackageManifested": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[2]",
+      "AnalyticsTaskCreated": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[0]",
+      "AnalyticsTaskClaimed": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[1]",
+      "AnalyticsLeaseExpired": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[2]",
+      "AnalyticsTaskCompleted": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[3]",
+      "AnalyticsItemPicked": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[4]",
+      "AnalyticsPackageSealed": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[5]",
+      "AnalyticsWeightDiscrepancyDetected": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[6]",
+      "AnalyticsLabelApplied": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[7]",
+      "AnalyticsPackageDiverted": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[8]",
+      "AnalyticsPackageManifested": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[9]",
+      "WorkReleased": "$ref:$.channels.warehouse.work-planning.events.publish.message",
+      "ProcessPathCreated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0]",
+      "ProcessPathUpdated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[1]",
+      "ProcessPathDeactivated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[2]"
     },
     "schemas": {
-      "CloudEventBase": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[0].payload.allOf[0]",
-      "TaskCreatedEvent": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[0].payload",
-      "TaskClaimedEvent": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[1].payload",
-      "LeaseExpiredEvent": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[2].payload",
-      "TaskCompletedEvent": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[3].payload",
-      "ItemPickedEvent": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[4].payload",
-      "PackageSealedEvent": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[5].payload",
-      "WeightDiscrepancyDetectedEvent": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[6].payload",
-      "LabelAppliedEvent": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[7].payload",
-      "PackageDivertedEvent": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[8].payload",
-      "TaskCPTMissedEvent": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[9].payload",
-      "PackageManifestedEvent": "$ref:$.channels.warehouse.fulfillment-execution.events.subscribe.message.oneOf[10].payload"
+      "KafkaHeaders": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+      "CloudEvent": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]"
     }
   },
   "x-parser-spec-parsed": true,

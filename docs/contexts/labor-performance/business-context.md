@@ -82,7 +82,7 @@ at ingestion — and stores the resolved value redundantly on the
 field nor the derived `EfficiencyPct` is ever recomputed later. A
 `TaskPerformance` row read in a year gives the same answer it gave the
 day it was recorded, no matter how many times the standard has since been
-revised. See [ADR 0004](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0004-standard-frozen-at-completion-time-not-recomputed.md)
+revised. See [ADR 0004](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0004-standard-frozen-at-completion-time-not-recomputed.md)
 in the source repository for the full decision record.
 
 This also means `EfficiencyPct` never divides by zero: an unmeasurable

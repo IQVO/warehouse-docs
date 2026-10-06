@@ -170,7 +170,7 @@ Both are **projections** assembled across the aggregates — not separately
 stored state, so they cannot go stale relative to the aggregates they are
 built from.
 
-Since [ADR 0017](https://github.com/claudioed/facility-layout/blob/develop/docs/docs/adr/0017-geometry-and-travel-graph.md)
+Since [ADR 0017](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0017-geometry-and-travel-graph.md)
 the map can also carry optional physical geometry — slot position and
 dimensions, aisle centrelines, cross-aisles and fixed structures (walls,
 columns, offices, conveyors) — and a pure-domain travel graph per zone

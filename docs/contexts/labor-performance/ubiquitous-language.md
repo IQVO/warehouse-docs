@@ -2,34 +2,75 @@
 id: ubiquitous-language
 title: Ubiquitous Language
 sidebar_label: Ubiquitous Language
-description: LaborStandard, TaskPerformance, Scorecard, TaskType, EfficiencyPct, Trend, Coaching Flag, IdlePeriod, Utilization, and TravelComponentSeconds — pulled from the source repository's own ubiquitous-language page and ADRs.
+description: The Labor Performance glossary — every term mapped to the code identifier that implements it, with the terms whose code name differs flagged.
 ---
 
 # Ubiquitous Language
 
-The definitions below are pulled directly from the source repository's own
-`docs/docs/ddd/subdomain-classification.md` ubiquitous-language table and
-the ADRs that introduced each term (ADR-0004, ADR-0005, ADR-0006,
-ADR-0014, ADR-0015) — not reinvented for this page.
+:::info[Synced from labor-performance]
+This page is a copy of [`docs/docs/ddd/ubiquitous-language.md`](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/ddd/ubiquitous-language.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-| Term | Definition |
-| --- | --- |
-| **LaborStandard** | The aggregate root for "how long a task TYPE should take." Fields: `TaskType`, `ExpectedSeconds` (int64, must be `> 0`), `EffectiveFrom`/`EffectiveTo`. Revision is append-only: `DefineStandard` for a `TaskType` that already has an active standard closes the prior record's effective range rather than overwriting it in place, so already-recorded `TaskPerformance` rows stay historically accurate. Exactly ONE active standard per `TaskType` at any given time. Optionally carries a caller-supplied `TravelComponentSeconds` (below). |
-| **TaskPerformance** | The aggregate root for one scored, already-completed task — an event-sourced fact from Kafka, not something a human edits. Immutable once recorded; idempotent on the Kafka message's `event_id` (not `TaskId`, which could in principle be reused after a very long time). An empty `AssociateId` is legitimate (a robot-station completion), not an error. |
-| **StandardSecondsAtCompletion** | The `LaborStandard.ExpectedSeconds` value that was active **as of** the task's `CompletedAt` instant — resolved exactly once, at ingestion time, and frozen redundantly on the `TaskPerformance` row. Never recomputed later from a since-revised standard. See [ADR 0004](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0004-standard-frozen-at-completion-time-not-recomputed.md). |
-| **EfficiencyPct** | `100 * StandardSecondsAtCompletion / ActualSeconds`, nullable. Yields `null` — never a fabricated number and never a divide-by-zero — when `ActualSeconds<=0` (unmeasurable completion) or `StandardSecondsAtCompletion<=0` (no standard was active for that `TaskType` at completion time). |
-| **MeanActualSeconds** | The mean `ActualSeconds` across every `TaskPerformance` row for a `TaskType` where `ActualSeconds > 0` — computed **independent of** `MeanEfficiencyPct` and independent of any `LaborStandard` ever having existed. Lets an operator bootstrap a first standard from real observed data instead of guessing blind. `nil` iff no measurable row has ever been recorded for that `TaskType`. See [ADR 0006](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0006-mean-actual-seconds-independent-of-standard.md). |
-| **TaskType** | PICK, PACK, or SLAM — mirrors `fulfillment-execution`'s `task.Type` enum exactly; no new values are invented here. Carried on `TaskCompleted` as `task_type` since `fulfillment-execution`'s ADR-0023; an absent or unrecognized value (e.g. `REBIN`) resolves to the empty string, meaning "unclassified" — recorded, never scored (see [Async API](./async-api)). |
-| **Scorecard** | A read model, **not a stored aggregate** — a projection over `TaskPerformance` rows for one associate: task count, mean `EfficiencyPct` across tasks that have one, breakdown by `TaskType`. A 404 means "never recorded a row for this associate," distinct from a 200 with `meanEfficiencyPct: null` ("rows exist, none are scored yet"). |
-| **Trend** | One of `IMPROVING` \| `DECLINING` \| `STABLE` \| `INSUFFICIENT_DATA` — the associate's recent-window (up to 10 most recent) mean `EfficiencyPct` compared against their all-time baseline mean, via the pure domain function `performance.ClassifyTrend`. A ±5 percentage-point band around the baseline is `STABLE` (routine variance, not a real trend); fewer than 3 *scored* recent tasks always yields `INSUFFICIENT_DATA` rather than a fabricated direction from a thin sample. Closes a documented gap against Blue Yonder's "monitor performance trends over time." See [ADR 0005](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0005-associate-trend-and-coaching-flag.md). |
-| **Coaching Flag** (`CoachingFlag`) | A boolean on the `Scorecard` read model — `true` iff an associate's 3 most recent *scored* tasks are ALL below an 85% efficiency floor, via the pure domain function `performance.DetectCoachingFlag`. Unscored rows are skipped entirely when building the window; they carry no signal either way. A signal a human reads, never an automated action — it never gates claiming, never triggers a notification, and never feeds pay/bonus calculation. Closes a documented gap against Blue Yonder's "employee report cards... systematically coach preferred methods" and Manhattan's "Labor Monitoring." See [ADR 0005](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0005-associate-trend-and-coaching-flag.md). |
-| **TaskTypePerformance** | A fleet-wide (all-associates) read model per `TaskType` — task count, mean efficiency, and `MeanActualSeconds` — the "labor monitoring" view competitors surface independent of any one associate. |
-| **IdlePeriod** (Idle Gap) | The aggregate root for one associate's between-task wait, from the previous completion to the next claim (`CompletedAt − ActualSeconds`). Capped at `IDLE_GAP_CAP_SECONDS` (default 3600, `Capped` flag); published as the nullable `idle_seconds_before` on `TaskPerformanceRecorded`. See [ADR 0014](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0014-labor-utilization-idleness.md). |
-| **Utilization** | `1 − idle share` over a trailing window (default 1h), as a nullable percent — `null` when nothing was observed. An associate's still-running **open gap** is computed at read time and never persisted. Served per `TaskType` and per associate over REST and MCP (ADR 0014). |
-| **TravelComponentSeconds** | An optional, caller-supplied travel-time breakdown of a `LaborStandard`'s `ExpectedSeconds`, `0 <= t <= ExpectedSeconds`. Omitted (never `0`) when not declared; never computed or validated against facility-layout or any live lookup. See [ADR 0015](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0015-optional-travel-component-on-labor-standard.md). |
 
-See the [Glossary](/glossary) for how these terms sit alongside every
-other bounded context's vocabulary, and
-[Ubiquitous Language](/strategic-design/ubiquitous-language) at the
-platform level for terms deliberately reused across contexts with
-different meanings.
+Every term below maps to a code identifier. The **Code name differs?**
+column flags terms whose identifier in code is not the business word, so
+a reader grepping for the business word knows what to search for instead.
+
+## Core terms
+
+| Term | Meaning | Code identifier | Code name differs? |
+|---|---|---|---|
+| **LaborStandard** | The engineered expected duration for one task type, with an effective range. | `standard.LaborStandard` (`internal/domain/standard`) | no |
+| **Expected seconds** | How long a task of that type should take. | `LaborStandard.ExpectedSeconds()`; JSON `expectedSeconds`; column `expected_seconds` | no |
+| **Travel component** | Optional part of the expected seconds attributable to travel, supplied by the caller (ADR 0015). | `LaborStandard.TravelComponentSeconds()`; `travelComponentSeconds` | no |
+| **Effective range** | `[effectiveFrom, effectiveTo)` during which a standard is in force; open while `effectiveTo` is null. | `EffectiveFrom()`, `EffectiveTo()`, `IsActiveAt(t)` | no |
+| **Revision** | Replacing the open standard: close the old one, open a new one at the same instant. | `LaborStandard.Close(at)` inside `usecases.DefineStandard`; event `LaborStandardRevised` | **yes** — no `Revise` method; the use case is `DefineStandard` for both first definition and revision |
+| **TaskType** | The kind of task a standard applies to: `PICK`, `PACK`, `SLAM` (mirrors `fulfillment-execution`'s `task.Type`). | `shared.TaskType`, constants `shared.Pick`, `shared.Pack`, `shared.Slam` | no |
+| **Unclassified** | A completion whose task type is absent or not one of the three. Recorded, never scored. | `""` from `shared.ParseTaskTypeLenient`; `UNCLASSIFIED` in the analytics rollup (`report.NormalizeTaskType`) | **yes** — empty string in OLTP, `UNCLASSIFIED` label in analytics |
+| **TaskPerformance** | One completed task, scored and frozen. | `performance.TaskPerformance` (`internal/domain/performance`); table `task_performances` | no |
+| **Actual seconds** | How long the task actually took (claim → completion). | `TaskPerformance.ActualSeconds()`; wire field `duration_seconds` on `TaskCompleted` | **yes** — upstream calls it `duration_seconds` |
+| **StandardSecondsAtCompletion** | The expected seconds of the standard active *as of* completion, copied onto the row and never recomputed (ADR 0004). | `TaskPerformance.StandardSecondsAtCompletion()`; column `standard_seconds_at_completion` | no |
+| **EfficiencyPct** | `100 × StandardSecondsAtCompletion ÷ ActualSeconds`; null when either is not positive. | `TaskPerformance.EfficiencyPct()` (`*float64`), `computeEfficiencyPct` | no |
+| **Scored / Unscored** | Whether a task has an EfficiencyPct. | `EfficiencyPct() != nil`; `tasks_scored` / `TasksUnscored()` in analytics | **yes** — no named type; a nil check |
+| **Measured** | A task whose actual seconds is positive (counts towards mean actual seconds). | `tasks_measured`; `ActualSeconds > 0` filter in `TaskTypePerformanceFor` | **yes** — only named in analytics |
+| **Associate** | The person who completed a task; empty for a station with no checked-in occupant (e.g. a robot). | `shared.AssociateId` | no |
+| **Kafka event id** | The CloudEvents `id` of the consumed `TaskCompleted`; the dedupe key. | `RecordTaskPerformanceRequest.KafkaEventId`, `TaskPerformance.EventId()`, `processed_events.event_id` | **yes** — called `KafkaEventId`/`eventId`, it is the CloudEvents `id` |
+| **Idle Gap** | One associate's wait from finishing a task to claiming the next. | `idleness.IdlePeriod`; table `idle_periods` | **yes** — `IdlePeriod` |
+| **Claim instant** | When the next task was claimed, derived as completion time − actual seconds. | `claimedAt` in `RecordTaskPerformance.recordIdleGap` | no |
+| **Capped** | The idle gap exceeded `IDLE_GAP_CAP_SECONDS` and was clipped. | `IdlePeriod.Capped()`; column `capped` | no |
+| **Open Gap** | Idle time still running right now; computed at read time, never stored. | `openGapSeconds` in `usecases/get_utilization.go`; JSON `openGapSeconds` | no |
+| **Utilization** | Task time ÷ (task time + idle time) over a trailing window, as a percent; null when nothing was observed. | `idleness.UtilizationPct`, `usecases.GetUtilization`, `UtilizationResult.UtilizationPct` | no |
+| **Window** | The trailing period utilization is measured over (default 1 h). | REST query `window` (Go duration), MCP `windowSeconds`; `defaultUtilizationWindow` | no |
+| **Idle seconds before** | The idle gap preceding a task, carried on the published event. | `TaskPerformanceRecorded.IdleSecondsBefore`; wire `idle_seconds_before` | no |
+
+## Read-model terms
+
+| Term | Meaning | Code identifier | Code name differs? |
+|---|---|---|---|
+| **Scorecard** | Per-associate summary: task count, mean efficiency, per-task-type breakdown, trend, coaching flag. | `ports.Scorecard`, `ports.TaskTypeBreakdown`, `usecases.GetAssociateScorecard` | no |
+| **Trend** | `IMPROVING`, `DECLINING`, `STABLE` or `INSUFFICIENT_DATA`: recent mean vs all-time mean, 5-point threshold, at least 3 scored recent tasks (ADR 0005). | `performance.TrendDirection`, `performance.ClassifyTrend` | no |
+| **Coaching flag** | The last 3 scored tasks were all under 85 % efficiency — a conversation prompt, never an action (ADR 0005). | `Scorecard.CoachingFlag`, `performance.DetectCoachingFlag` | no |
+| **Task-type performance** | Fleet-wide task count, mean efficiency and mean actual seconds for one task type. | `ports.TaskTypePerformance`, `usecases.GetTaskTypePerformance` | no |
+| **Mean actual seconds** | Real measured pace, independent of any standard (ADR 0006). | `TaskTypePerformance.MeanActualSeconds` | no |
+| **Labor Performance Report** | Hourly analytical rollup per task type, with totals. | `report.LaborPerformanceReport`, `report.Row`, `report.TaskTypeBar`, `report.Totals` | no |
+| **Hour bucket** | The UTC hour a fact is folded into. | `report.HourBucket`; column `hour_bucket` | no |
+| **Freshness lag** | How far the analytical projection trails the newest applied event. | `ReportStore.FreshnessLag`; JSON `lagSeconds` | no |
+
+## Event names
+
+| Event (business) | Code type | CloudEvents type |
+|---|---|---|
+| Labor standard defined | `shared.LaborStandardDefined` | `com.warehouse.wes.labor-performance.standard.LaborStandardDefined` |
+| Labor standard revised | `shared.LaborStandardRevised` | `com.warehouse.wes.labor-performance.standard.LaborStandardRevised` |
+| Task performance recorded | `shared.TaskPerformanceRecorded` | `com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded` |
+| Task completed (consumed) | `cloudevents.TypeFulfillmentTaskCompleted` (decoded into `taskCompletedData`) | `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` |
+
+Full payloads: [Domain events](/contexts/labor-performance/domain-events).
+
+## Words this context deliberately does not use
+
+- **Shift** — shifts belong to `workforce-management`; the idle-gap cap
+  stands in for a shift boundary (ADR 0014).
+- **Assignment / labor allocation** — `workforce-management`'s language.
+- **Task claim / lease** — `fulfillment-execution` owns the task
+  lifecycle; this context only reads the completion.

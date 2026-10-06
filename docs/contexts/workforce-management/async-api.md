@@ -23,7 +23,7 @@ capacity, and optionally `labor-performance` over HTTP) are covered on the
 | **Trigger** | a successful `CommitShiftPlan` |
 | **Fan-out** | one message per `PathPlan` line |
 | **Adapter** | `internal/adapters/outbound/kafka/publisher.go` |
-| **Consumer** | `wes-work-planning`, into its `LaborPlanObserved` read model, keyed by `path_id` |
+| **Consumers** | `wes-work-planning`, into its `LaborPlanObserved` read model, keyed by `path_id`; `warehouse-planning`, as a `LABOR` capacity constraint per path line (group `warehouse-planning-labor-capacity`). Both live |
 
 ## Why asynchronous, and why one-way
 
@@ -57,7 +57,7 @@ The default keeps local runs and the whole test suite free of any broker
 dependency.
 
 With `EVENT_PUBLISHER=kafka`, delivery goes through a **transactional
-outbox** ([ADR 0016](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0016-transactional-outbox.md)):
+outbox** ([ADR 0016](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0016-transactional-outbox.md)):
 the use case writes the already-encoded messages for both the integration
 topic and the analytics topic (`warehouse.workforce.analytics`, all ten
 events, consumed only by this service's own `cmd/workforce-projector`) into
@@ -130,7 +130,8 @@ envelope toggle).
 - **Expect N messages per commit** for `ShiftPlanCommitted`, one per path
   line.
 - **Assume at-least-once delivery.** Kafka redelivers; consumers must be
-  idempotent. The CloudEvents `id` is the deduplication key — `wes-work-planning` uses exactly this, backed by a
+  idempotent. The CloudEvents `id` is the deduplication key — `wes-work-planning`
+  and `warehouse-planning` both use exactly this, each backed by its own
   `processed_events` table keyed by event id.
 
 ## What is deliberately not published
@@ -152,8 +153,8 @@ start:
 
 | Topic | Events | Adapter | Selected by | Feeds |
 | --- | --- | --- | --- | --- |
-| `warehouse.process-path-management.events` | `ProcessPathCreated`/`Updated`/`Deactivated` | `internal/adapters/outbound/kafkacatalog` | `PATH_CATALOGUE_SOURCE=kafka` (default `file`) | Path-id validation on propose, commit, assign and staffing-gap ([ADR 0013](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0013-process-path-catalogue-validation.md)) |
-| `warehouse.labor-performance.events` | `TaskPerformanceRecorded` (incl. the nullable `idle_seconds_before`) | `internal/adapters/outbound/laborperformancecache` | `LABOR_PERFORMANCE_MODE=kafka-cache` (default `permissive`) | Measured rates for `ProposePathPlan` ([ADR 0019](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0019-labor-performance-cache-consumer.md)); observed idle share for `GetStaffingGap` and the `ProposePathPlan` trim ([ADR 0020](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0020-idle-share-staffing-signal.md)) |
+| `warehouse.process-path-management.events` | `ProcessPathCreated`/`Updated`/`Deactivated` | `internal/adapters/outbound/kafkacatalog` | `PATH_CATALOGUE_SOURCE=kafka` (default `file`) | Path-id validation on propose, commit, assign and staffing-gap ([ADR 0013](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0013-process-path-catalogue-validation.md)) |
+| `warehouse.labor-performance.events` | `TaskPerformanceRecorded` (incl. the nullable `idle_seconds_before`) | `internal/adapters/outbound/laborperformancecache` | `LABOR_PERFORMANCE_MODE=kafka-cache` (default `permissive`) | Measured rates for `ProposePathPlan` ([ADR 0019](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0019-labor-performance-cache-consumer.md)); observed idle share for `GetStaffingGap` and the `ProposePathPlan` trim ([ADR 0020](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0020-idle-share-staffing-signal.md)) |
 
 Both consumers use a **per-process-unique consumer group** (prefix + host +
 PID + timestamp), so every process replays the full history, and each waits

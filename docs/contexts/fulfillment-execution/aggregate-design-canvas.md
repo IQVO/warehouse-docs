@@ -1,144 +1,328 @@
 ---
 id: aggregate-design-canvas
-title: Aggregate Design Canvas
-sidebar_label: Aggregate Design Canvas
-description: The full ddd-crew Aggregate Design Canvas for the Task aggregate — state transitions, enforced invariants, corrective policies, handled commands, created events, throughput, size.
+title: Aggregate design canvas
+sidebar_label: Aggregate design canvas
+description: The ddd-crew Aggregate Design Canvas v1.1 for each of the four aggregate roots in Fulfillment Execution — Task, Station, Package and OrderConsolidation — with state transitions, enforced invariants, handled commands, created events and throughput/size estimates.
 ---
 
-# Aggregate Design Canvas — `Task`
+# Aggregate design canvas
 
-Following the [ddd-crew Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas)
-template, for the aggregate that is the reason this bounded context exists.
+:::info[Synced from fulfillment-execution]
+This page is a copy of [`docs/docs/ddd/aggregate-design-canvas.md`](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/ddd/aggregate-design-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-## Name
 
-**Task**
+One [ddd-crew Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas)
+per aggregate root in `internal/domain/`. The numbered invariants (T1, S1,
+P1, C1, ...) match [Aggregates & invariants](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/ddd/aggregates-and-invariants.md),
+which has the failing-path test for each. Throughput and size figures are
+**estimates** for a single mid-size fulfilment centre, labelled as such —
+the code holds no such numbers.
 
-## Description
+## Task
 
-The unit of physical work. A `Task` is created from a released work unit,
-sits `Pending` in a per-type pool (queue), is claimed under a time-boxed
-lease by exactly one station at a time, and is either completed or has its
-lease lapse and returns to the pool. `Task` and `Package` are linked only
-by `OrderRef` — a value, not a reference; neither aggregate holds a pointer
-to the other, which is what keeps them separate consistency boundaries.
+### 1. Name
 
-## State Transitions
+`task.Task` — `internal/domain/task/task.go`.
+
+### 2. Description
+
+A unit of physical work (`PICK`, `PACK`, `REBIN`, `SLAM`) with a CPT
+deadline, an `orderRef`, required capabilities and two packing hints
+(`fragile`, `giftWrap`). It is the consistency boundary for "who holds this
+work right now": at most one active lease, owned by one station.
+
+### 3. State Transitions
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Pending : CreateTask
-    Pending --> Claimed : Claim(stationId, capabilities, now)\n[capability match; expiry checked first]
-    Claimed --> Completed : Complete(stationId, now)\n[owner only]
-    Claimed --> Pending : ExpireLeaseIfDue(now)\n[lease lapsed — lazy or swept]
-    Claimed --> Claimed : RenewLease(stationId, now)\n[owner only; extends expiry]
-    Completed --> [*]
+    [*] --> PENDING: New - CreateTask
+    PENDING --> CLAIMED: Claim - capabilities match
+    CLAIMED --> CLAIMED: RenewLease - owner, lease active
+    CLAIMED --> PENDING: ExpireLeaseIfDue - lease expired
+    CLAIMED --> COMPLETED: Complete - owner, lease active
+    COMPLETED --> [*]
 ```
 
-Reverse-order note: inside `Claim`, expiry is evaluated **before** the
-already-claimed check. Reversing those two lines would let a stale claim
-permanently block the task — the exact failure the lease exists to
-prevent. This ordering is pinned by a dedicated failing-path test, not left
-to code review.
+Source: `internal/domain/task/task.go` (`Pending`, `Claimed`, `Completed`;
+`Claim`, `RenewLease`, `ExpireLeaseIfDue`, `Complete`). Omits the lazy
+expiry inside `Claim` / `RenewLease` / `Complete` (they run the same
+`CLAIMED → PENDING` edge before deciding) and the read-only predicates
+`IsAvailable` and `IsCPTMissed`.
 
-## Enforced Invariants
+### 4. Enforced Invariants
 
-| # | Invariant | Typed error | HTTP |
-| --- | --- | --- | --- |
-| T1 | **At most one active claim, ever.** A task with an unexpired lease cannot be claimed again. | `task.ErrAlreadyClaimed` | `409` |
-| T2 | **A claim requires matching capabilities.** The claiming station's capability set must contain every required capability. | `task.ErrCapabilityMismatch` | `422` |
-| T3 | **An expired lease frees the task** before any further decision is made on it. | `task.ErrNotClaimed` on renew/complete | `409` |
-| T4 | **No double-complete.** A completed task rejects every further operation. | `task.ErrAlreadyCompleted` | `409` |
-| T5 | **Only the claim owner may renew or complete.** | `task.ErrNotOwner` | `409` |
-| T6 | **Renew/complete require an active claim.** Acting on a `Pending` task is rejected. | `task.ErrNotClaimed` | `409` |
-
-`now` is always a parameter, taken from `ports.Clock` at the application
-layer — no domain method calls `time.Now()`. This is what makes lease
-expiry deterministic and testable with a fixed clock instead of
-`time.Sleep`.
-
-## Corrective Policies
-
-- **Lazy expiry at the point of use.** `Claim` calls `ExpireLeaseIfDue(now)`
-  before checking whether the task is already claimed; `RenewLease` and
-  `Complete` check `lease.expired(now)` and reject with `ErrNotClaimed`. A
-  stale claim therefore cannot block a fresh claim even if no sweep has
-  run.
-- **Eager expiry via a sweep.** `POST /tasks/expire-leases` runs the
-  `ExpireLeases` use case over every `Claimed` task, frees the lapsed ones,
-  publishes `LeaseExpired` for each, and returns the count freed. This is
-  what makes freed work *visible* in the queue-depth read model rather than
-  only becoming visible the next time somebody happens to pull. Nothing
-  inside this service schedules the sweep — an external scheduler (cron, a
-  Kubernetes `CronJob`) must invoke it; correctness does not depend on the
-  sweep running, but timely visibility does.
-- **Renewal, not a longer timeout, absorbs legitimately long work.** Rather
-  than picking one lease duration long enough for the worst-case task, the
-  owning station renews (`POST /tasks/{id}/renew-lease`), extending expiry
-  from *now*. This keeps the default timeout tuned for abandonment-detection
-  latency, not for the longest conceivable task.
-
-## Handled Commands
-
-| Command | Use case | Effect |
+| # | Invariant | Enforced by |
 | --- | --- | --- |
-| `CreateTask(type, cpt, ref, requiredCapabilities, fragile, giftWrap)` | `usecases.CreateTask` | Puts a new unit of work in the pool, `Pending` |
-| `claimNext(stationId, capabilities)` | `usecases.ClaimNext` | Selects the earliest-CPT pending task the station qualifies for and leases it |
-| `RenewLease(taskId, stationId)` | `usecases.RenewLease` | Extends the current lease's expiry from now — owner only |
-| `CompleteTask(taskId, stationId)` | `usecases.CompleteTask` | Transitions to `Completed` — owner only, validated |
-| `ExpireLeases(now)` | `usecases.ExpireLeases` | Sweeps every `Claimed` task, frees any past its lease expiry |
-| `SweepCPTMisses(now)` | `usecases.SweepCPTMisses` | Reports every task still open (Pending or Claimed) at or past its CPT. **Never mutates the `Task`** — a CPT miss is a fact reported upstream, not a lifecycle transition ([ADR-0025](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0025-cpt-missed-sweep-and-package-manifested.md)) |
+| T1 | At most one active claim at a time | `Task.Claim` → `task.ErrAlreadyClaimed`; persisted by `TaskRepo.SaveClaim` compare-and-set ([ADR-0034](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0034-concurrency-control-for-consolidation-and-claim.md)) |
+| T2 | The claiming station must hold every required capability | `Task.Claim` → `task.ErrCapabilityMismatch` (`CapabilitySet.HasAll`) |
+| T3 | An expired lease frees the task before any further decision | `Task.ExpireLeaseIfDue`, called lazily from `Claim`, `RenewLease`, `Complete` |
+| T4 | No double-complete: a completed task rejects every further operation | `Task.Claim` / `RenewLease` / `Complete` → `task.ErrAlreadyCompleted` |
+| T5 | Only the claim owner may renew or complete | `Task.RenewLease` / `Task.Complete` → `task.ErrNotOwner` |
+| T6 | Renew and complete require an active claim | `Task.RenewLease` / `Task.Complete` → `task.ErrNotClaimed` |
 
-## Created Events
+### 5. Corrective Policies
 
-| Event | Raised when | Payload |
+- **Lease expiry sweep** — `ExpireLeases` (`POST /tasks/expire-leases`)
+  frees every lapsed claim and raises `LeaseExpired`.
+- **CPT-miss sweep** — `SweepCPTMisses` (`POST /tasks/sweep-cpt-misses`)
+  reports open tasks at or past CPT as `TaskCPTMissed`; it changes nothing,
+  so `order-management` re-promises.
+- **Claim race** — a station that loses the `SaveClaim` compare-and-set
+  silently moves to the next candidate.
+
+### 6. Handled Commands
+
+`CreateTask` (REST `POST /tasks`, the `WorkReleased` consumer,
+`ArriveAtRebin`), `ClaimNext` (`POST /stations/{stationId}/claim-next`),
+`RenewLease` (`POST /tasks/{id}/renew-lease`), `CompleteTask`
+(`POST /tasks/{id}/complete`, MCP `complete_task`), `ExpireLeases`,
+`SweepCPTMisses` (reads only).
+
+### 7. Created Events
+
+| Event | Full CloudEvents type |
+| --- | --- |
+| `TaskCreated` | `com.warehouse.wes.fulfillment-execution.task.TaskCreated` |
+| `TaskClaimed` | `com.warehouse.wes.fulfillment-execution.task.TaskClaimed` |
+| `LeaseExpired` | `com.warehouse.wes.fulfillment-execution.task.LeaseExpired` |
+| `TaskCompleted` | `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` |
+| `TaskCPTMissed` | `com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed` |
+| `ItemPicked` (defined, never raised) | `com.warehouse.wes.fulfillment-execution.task.ItemPicked` |
+
+### 8. Throughput (estimate)
+
+High. Every unit of work creates a task, and every task is touched by a
+claim, usually a renewal or two, and a completion — **estimate:** thousands
+of commands per hour per site at peak. Contention is per task and short:
+only concurrent `claim-next` calls on the same task type race, and the
+compare-and-set resolves them.
+
+### 9. Size (estimate)
+
+Small and short-lived. **Estimate:** 3–6 events per instance (created,
+claimed, optionally one or two lease expiries and re-claims, completed,
+occasionally CPT-missed), lifetime minutes to hours, one row in `tasks`.
+
+## Station
+
+### 1. Name
+
+`station.Station` — `internal/domain/station/station.go`.
+
+### 2. Description
+
+A work position with a fixed capability set, an optional facility-layout
+`locationCode`, and at most one occupant (an associate or a robot).
+`ClaimNext` reads its capabilities; `CompleteTask`'s published event reads
+its occupant.
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unoccupied: New - RegisterStation
+    Unoccupied --> Occupied: CheckIn
+    Occupied --> Unoccupied: CheckOut
+```
+
+Source: `internal/domain/station/station.go` (`CheckIn`, `CheckOut`,
+`IsOccupied`). There is no status enum: occupancy is the nil-ness of
+`occupant`. Omits re-registration (`RegisterStation` saves a fresh
+`Station` over an existing id).
+
+### 4. Enforced Invariants
+
+| # | Invariant | Enforced by |
 | --- | --- | --- |
-| `TaskCreated` | `CreateTask` puts a new unit of work in the pool | `TaskId` |
-| `TaskClaimed` | `ClaimNext` leases a task to a station | `TaskId`, `StationId` |
-| `LeaseExpired` | `ExpireLeases` frees a task whose lease lapsed | `TaskId` |
-| `TaskCompleted` | `CompleteTask` succeeds | `TaskId`, `StationId` (enriched off-aggregate with `WorkUnitId`, `AssociateId`, `DurationSeconds`, `TaskType` at publish time) |
-| `TaskCPTMissed` | `SweepCPTMisses` finds the task open past its CPT (re-fires every pass while overdue) | `TaskId`, `OrderRef`, `TaskType`, `CPT` |
-| `ItemPicked` | *(defined in the catalogue; not raised by any use case today — the Pick path is modelled at task granularity, not item granularity)* | `TaskId` |
+| S1 | One occupant at a time | `Station.CheckIn` → `station.ErrOccupied` |
+| S2 | Cannot check out an empty station | `Station.CheckOut` → `station.ErrNotOccupied` |
+| S3 | A station can only accept tasks whose required capabilities it holds | `Station.ValidateAccept` → `station.ErrCapabilityMismatch` |
 
-Events are deliberately thin — most carry only identifiers; `TaskCPTMissed`
-carries the few facts order-management needs to re-promise without calling
-back. `TaskCompleted` and `TaskCPTMissed` are published on
-`warehouse.fulfillment.events`; the other `Task` events stay in process.
-Enrichment for the wire (`work_unit_id`, `associate_id`, `duration_seconds`,
-`task_type`)
-happens in the outbound Kafka adapter via repository lookups, never on the
-event itself, so a downstream consumer's correlation need never reshapes
-the domain model.
+Plus an application-level rule at registration: a `locationCode` that
+facility-layout knows must have role `WorkCenter`
+(`usecases.ErrStationLocationNotWorkCenter`,
+[ADR-0024](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0024-station-location-code-and-workcenter-role-check.md)).
 
-## Throughput
+### 5. Corrective Policies
 
-- **Read-heavy on the hot path.** Every `claimNext` call issues a
-  `TaskRepo.FindClaimableByType` query ordered earliest-CPT-first — this
-  *is* the dispatch policy, so it runs once per claim attempt across every
-  station on the floor.
-- **Queue depth is a projection, computed on demand** via
-  `TaskRepo.CountByTypeAndStatus`, never a stored counter — there is
-  nothing to keep in sync, at the cost of a full scan per read.
-- **`ExpireLeases` scans all claimed tasks** (`FindAllClaimed`), an
-  unindexed-by-expiry full scan. Documented as fine at current scale; it
-  would need an expiry index to scale further. `SweepCPTMisses`
-  (`FindOpenPastCPT`) has the same externally-triggered, scan-per-call
-  shape.
-- Concurrent `claimNext` calls **race by design** — two stations may select
-  the same earliest-CPT candidate simultaneously. Correctness under
-  concurrency depends entirely on the at-most-once guarantee inside
-  `Task.Claim`, not on any external locking.
+None. A station left occupied stays occupied until someone checks it out;
+`associate_id` on `TaskCompleted` is best-effort for that reason.
 
-## Size
+### 6. Handled Commands
 
-- A `Task` is small and flat: an id, a type, a status, a CPT, an order
-  reference, a capability set, an optional `*Lease` (station id + expiry),
-  an optional `claimedAt` timestamp, and two boolean packing hints
-  (`fragile`, `giftWrap`).
-- One aggregate instance per unit of released work — disposable once
-  completed, per the reference model's own framing of a WES-tier `Task` as
-  "largely disposable" once its lifecycle ends, unlike a WMS-tier demand
-  signal that persists with its own SLA.
-- No collection fields grow unboundedly on `Task` itself; the one true
-  fan-in collection (an order's arrived Rebin lines) lives on the separate
-  `OrderConsolidation` aggregate, not on `Task`.
+`RegisterStation` (`POST /stations`), `CheckInStation`
+(`POST /stations/{stationId}/check-in`), `CheckOutStation`
+(`POST /stations/{stationId}/check-out`).
+
+### 7. Created Events
+
+None — registration and occupancy are operational state, not domain facts.
+
+### 8. Throughput (estimate)
+
+Low. **Estimate:** a handful of check-ins and check-outs per station per
+shift; registration only when the floor changes. Read on every claim.
+
+### 9. Size (estimate)
+
+Tiny and long-lived: one row in `stations`, no events, lifetime months.
+
+## Package
+
+### 1. Name
+
+`pack.Package` — `internal/domain/package/package.go` (Go package `pack`,
+because `package` is a keyword).
+
+### 2. Description
+
+The Pack output: one sealed carton for one PACK task, with its scanned
+contents, the DOT hazard classes of those contents, two handling flags
+derived from the task, a derived `SortLane`, and the SLAM outcome.
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> OPEN: New - SealPackage
+    OPEN --> OPEN: ScanItemWithClass - segregation ok
+    OPEN --> SEALED: Seal - contents not empty
+    SEALED --> LABELED: Weigh - within tolerance
+    SEALED --> DIVERTED: Weigh - outside tolerance
+    LABELED --> [*]
+    DIVERTED --> [*]
+```
+
+Source: `internal/domain/package/package.go` (`Open`, `Sealed`, `Labeled`,
+`Diverted`; `ScanItemWithClass`, `Seal`, `Weigh`). Omits that the `OPEN`
+state never reaches the database: `SealPackage` builds, scans and seals in
+memory and saves the package already `SEALED`.
+
+### 4. Enforced Invariants
+
+| # | Invariant | Enforced by |
+| --- | --- | --- |
+| P1 | Cannot seal without scanned contents | `Package.Seal` → `pack.ErrNoScannedContents` |
+| P2 | Cannot scan into or re-seal a sealed package | `Package.ScanItemWithClass` / `Seal` → `pack.ErrAlreadySealed` |
+| P3 | SLAM requires a sealed package | `Package.Weigh` → `pack.ErrNotSealed` |
+| P4 | SLAM runs once | `Package.Weigh` → `pack.ErrAlreadyProcessed` |
+| P5 | Outside `WeightTolerance` (0.05) the package is diverted, not labelled | `Package.Weigh` (returns `labelApplied = false`) |
+| P6 | Incompatible DOT hazard classes may not share a package | `Package.ScanItemWithClass` → `pack.ErrPackageSegregationViolation` (`pack.IsSegregationIncompatible`) |
+
+Plus application-level rules in `SealPackage`: the task must be a `PACK`
+task (`usecases.ErrWrongTaskType`) and the caller must be the station named
+on its lease (`task.ErrNotOwner`); one package per task
+(`PackageRepo.FindByTaskId` short-circuit, unique index
+`idx_packages_task_id`).
+
+### 5. Corrective Policies
+
+- A diverted package goes to manual handling; nothing in this context
+  re-weighs it.
+- A hazard lookup failure is treated as "no hazard class" (fail-open), so
+  sealing never blocks on `inventory-storage`.
+
+### 6. Handled Commands
+
+`SealPackage` (`POST /tasks/{id}/seal-package`), `RunSlam`
+(`POST /packages/{id}/slam`). Reads: `GetPackage`, `GetPackagesByOrderRef`.
+
+### 7. Created Events
+
+| Event | Full CloudEvents type |
+| --- | --- |
+| `PackageSealed` | `com.warehouse.wes.fulfillment-execution.package.PackageSealed` |
+| `LabelApplied` | `com.warehouse.wes.fulfillment-execution.package.LabelApplied` |
+| `PackageManifested` | `com.warehouse.wes.fulfillment-execution.package.PackageManifested` |
+| `WeightDiscrepancyDetected` | `com.warehouse.wes.fulfillment-execution.package.WeightDiscrepancyDetected` |
+| `PackageDiverted` | `com.warehouse.wes.fulfillment-execution.package.PackageDiverted` |
+
+### 8. Throughput (estimate)
+
+Medium. **Estimate:** one seal and one SLAM per shipped carton, so
+roughly one package command per PACK task; no contention (one station holds
+the PACK task, one SLAM line weighs the carton).
+
+### 9. Size (estimate)
+
+Small: exactly 3 events per instance (sealed, then labelled + manifested or
+discrepancy + diverted), lifetime minutes, one row in `packages`.
+
+## OrderConsolidation
+
+### 1. Name
+
+`consolidation.OrderConsolidation` —
+`internal/domain/consolidation/order_consolidation.go`.
+
+### 2. Description
+
+Tracks which of an order's required lines have reached Rebin. When the set
+is complete, the order's PACK task is created exactly once. Lines are
+identified by string id only; it holds no reference to `Task`
+([ADR-0016](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0016-rebin-and-order-consolidation.md)).
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Collecting: New - first ArriveAtRebin
+    Collecting --> Collecting: RecordArrival - more lines missing
+    Collecting --> Complete: RecordArrival - last required line
+    Complete --> Complete: RecordArrival - redelivery, no-op
+```
+
+Source: `internal/domain/consolidation/order_consolidation.go`
+(`RecordArrival`, `IsComplete`), `internal/application/usecases/arrive_at_rebin.go`.
+There is no status enum: "complete" is `IsComplete()`. Omits the unknown-line
+rejection, which leaves the state unchanged.
+
+### 4. Enforced Invariants
+
+| # | Invariant | Enforced by |
+| --- | --- | --- |
+| C1 | Only a line in the required set can arrive | `OrderConsolidation.RecordArrival` → `consolidation.ErrUnknownLine` |
+| C2 | Arrivals are idempotent, and the PACK task is created exactly once, on the arrival that completes the set | `RecordArrival` (re-recording is a no-op); `ArriveAtRebin` (`wasAlreadyComplete` check), serialized per order by `FindByOrderRefForUpdate` ([ADR-0034](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0034-concurrency-control-for-consolidation-and-claim.md)) |
+
+### 5. Corrective Policies
+
+Redelivered arrivals are idempotent no-ops. There is no timeout for an
+order whose last line never arrives.
+
+### 6. Handled Commands
+
+`ArriveAtRebin` (`POST /rebin/arrivals`).
+
+### 7. Created Events
+
+`ItemArrivedAtRebin` and `OrderConsolidated` — domain events with **no**
+CloudEvents type: neither encoder's allowlist includes them, so they never
+leave the process. On completion the aggregate's use case also raises
+`TaskCreated` (`com.warehouse.wes.fulfillment-execution.task.TaskCreated`)
+through `CreateTask`.
+
+### 8. Throughput (estimate)
+
+Medium, only for multi-line orders routed through Rebin. **Estimate:** one
+command per line. Contention is per order and serialized by the row lock.
+
+### 9. Size (estimate)
+
+Small: one event per line plus one at completion, lifetime minutes, one
+row in `order_consolidations`.
+
+## Read models and projections (not aggregates)
+
+| Read model | Built from | Served by |
+| --- | --- | --- |
+| Queue depth | `TaskRepo.CountByTypeAndStatus(type, PENDING)` on demand | `GetQueueDepth`, `GET /queues/{taskType}/depth`, MCP `get_queue_status` |
+| Installed capacity | `StationRepo.CountByCapability` on demand | `GetInstalledCapacity`, `GET /capacity/{capability}` |
+| Tasks by order | `TaskRepo.FindByOrderRef` | `GET /tasks?orderRef=` |
+| Package read model | `PackageRepo.FindById`, `FindByOrderRef` | `GET /packages/{id}`, `GET /packages?orderRef=` ([ADR-0033](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0033-package-read-model.md)) |
+| Claimable work / stuck tasks | `TaskRepo` through `mcp.TaskQueries` | MCP `find_claimable_work`, `diagnose_stuck_tasks` |
+| Throughput and on-time-to-CPT rollup | `warehouse.fulfillment.analytics` → `cmd/fulfillment-projector` → `throughput_rollup` | `cmd/fulfillment-reports` `GET /reports/throughput`, MCP report tools |
+
+`pathcatalog.Catalogue` is configuration, not an aggregate: it is loaded
+from YAML or replayed from Kafka and never changed by a command of this
+context.

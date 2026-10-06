@@ -2,56 +2,56 @@
 id: domain-events
 title: Domain events
 sidebar_label: Domain events
-description: The twelve past-tense facts this context publishes to warehouse.facility.events — three consumed live by inventory-storage, the rest available Published Language.
+description: The twelve past-tense facts this context publishes, their CloudEvents type convention, their payload shapes, and who consumes them.
 ---
 
 # Domain events
 
-This bounded context emits twelve past-tense domain events. Together they
-are its **Published Language** — the vocabulary downstream Conformists
-key off. One Conformist is live today: `inventory-storage`'s
-location-classification cache.
+:::info[Synced from facility-layout]
+This page is a copy of [`docs/docs/ddd/domain-events.md`](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/ddd/domain-events.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-:::info[Published over Kafka, with a spec — one live consumer]
-This service ships
-[`apis/asyncapi.yaml`](https://github.com/claudioed/facility-layout/blob/develop/apis/asyncapi.yaml)
-(AsyncAPI 2.6.0) alongside `apis/openapi.yaml` — one channel,
-`warehouse.facility.events`, twelve messages. The Kafka publisher
-(`internal/adapters/outbound/kafka`, selected by `EVENT_PUBLISHER=kafka`,
-ADR-0009) emits **every** domain event to `warehouse.facility.events` —
-the whole Published Language, not a curated subset. In the deployed
-cluster this is the active configuration.
 
-The `EventPublisher` port also has a **log publisher** and a **buffered
-publisher** (tests), and when running against Postgres without
-`EVENT_PUBLISHER=kafka` events are appended to an `events` outbox table —
-those remain the local/dev defaults. Nothing drains that table to Kafka:
-with `EVENT_PUBLISHER=kafka` the adapter publishes inline, at-least-once, and
-a true outbox relay remains a possible future upgrade (ADR-0009).
+This bounded context emits twelve past-tense domain events. Together they are
+its **Published Language** — the vocabulary downstream Conformists key off.
 
-The live consumer is `inventory-storage`
-(`internal/adapters/outbound/facilitycache/`, `LOCATION_LOOKUP_MODE=kafka`,
-its ADR-0013): a local read model of location classifications replacing its
-per-stow synchronous classification call, verified with facility-layout at
-zero replicas. See the generated [Async API
-reference](/api-reference/async/facility-layout) for the full contract.
+:::info[Published to Kafka, specified in AsyncAPI]
+With `EVENT_PUBLISHER=kafka`, every domain event is published to the
+`warehouse.facility.events` integration topic
+([ADR 0009](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0009-kafka-integration-publisher.md)) and, in the same
+call, to the separate `warehouse.facility.analytics` topic that feeds the
+[analytical data product](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/analytics/catalog-growth-report.md)
+([ADR 0010](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0010-analytical-data-product.md)). The integration topic,
+its CloudEvents 1.0 envelope
+([ADR 0024](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0024-cloudevents-mandatory-envelope.md)) and all twelve messages are specified in
+[`apis/asyncapi.yaml`](https://github.com/IQVO/facility-layout/blob/main/apis/asyncapi.yaml)
+(AsyncAPI 2.6.0).
+
+With `DATABASE_URL` **and** `EVENT_PUBLISHER=kafka` set, publishing goes
+through the transactional outbox (`outbox_events`,
+[ADR 0018](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0018-transactional-outbox.md)): the use case writes the
+aggregate row and one outbox row per topic in one transaction, and the
+in-process relay drains them onto Kafka. Without `EVENT_PUBLISHER=kafka`,
+events go to the service log only — whether or not `DATABASE_URL` is set
+(the old `events` table was dropped by migration `0005_outbox`). See
+[Publishers](#publishers) and the [Context map](/contexts/facility-layout/context-map)
+for who consumes what.
 :::
 
 ## The type convention
 
-Identical to the other warehouse-systems services: reverse-DNS, lowercase
-except the final PascalCase event name, and the entity segment carries no
-hyphen even for multi-word aggregate names.
+Identical to the other warehouse-systems services: reverse-DNS,
+lowercase except the final PascalCase event name, and the entity segment
+carries no hyphen even for multi-word aggregate names.
 
 ```
 com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>
 ```
 
 This service's **subdomain segment is `wms`**. "Bin-accurate location" is
-classified WMS-tier in the Amazon-fulfillment reference — the "Inventory &
-Slotting" Core subdomain references it as WMS's Open Host Service — and
-this service is the generalized, multi-consumer version of that same
-concern.
+classified WMS-tier in the e-commerce-fulfillment reference — the "Inventory &
+Slotting" Core subdomain references it as WMS's Open Host Service — and this
+service is the generalized, multi-consumer version of that same concern.
 
 ```
 com.warehouse.wms.facility-layout.site.SiteRegistered
@@ -68,22 +68,228 @@ com.warehouse.wms.facility-layout.structure.FixedStructureRegistered
 com.warehouse.wms.facility-layout.crossaisle.CrossAisleRegistered
 ```
 
+Entity segments in use: `site`, `zone`, `aisle`, `locationtype`,
+`placementrule`, `locationslot`, `structure`, `crossaisle`.
+
+## The DomainEvent interface
+
+```go
+// DomainEvent is a past-tense fact published by an aggregate. Adapters
+// (outbound/events) serialize and publish these; the domain never depends
+// on the publishing mechanism. EventType is this context's Published
+// Language: downstream Conformists key off it.
+type DomainEvent interface {
+	EventName() string
+	EventType() string
+	OccurredAt() time.Time
+}
+```
+
+Every event embeds the same base, serialized as:
+
+```json
+{
+  "eventName": "LocationSlotRegistered",
+  "eventType": "com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered",
+  "occurredAt": "2026-08-22T09:00:00Z"
+}
+```
+
+`OccurredAt` comes from the injected `Clock` port, never from
+`time.Now()` inside the domain — which is what makes event timestamps
+deterministic in tests.
+
 ## The twelve events
 
-| Event | Payload (key fields) | When published | Consumed by |
-|---|---|---|---|
-| **SiteRegistered** | `siteCode`, `siteName` | A physical facility is added to the warehouse map, via `RegisterSite`. | No consumer — available Published Language. |
-| **ZoneRegistered** | `zoneId`, `siteCode`, `areaCode`, `zoneCode`, `temperatureClass`, `hazmat` | A behavioral zone is added inside a Site's area, via `RegisterZone`. | **Live: `inventory-storage`** — its location-classification cache stores the zone's `hazmat`/`temperatureClass`, exactly what its stow-time placement check reads. Candidate for `wes-work-planning`/`fulfillment-execution` travel-path reasoning, deliberately unwired (no use case yet). |
-| **AisleRegistered** | `aisleId`, `zoneId`, `aisleCode`, `sequenceHint`, `direction` | A physical corridor is added inside a Zone, via `RegisterAisle`. | No consumer — available Published Language. `sequenceHint`/`direction` are the concrete travel-distance inputs a future WES-tier consumer would key off. |
-| **LocationTypeRegistered** | `locationType`, `role`, `maxWeightKg`, `maxVolumeM3` (capacity omitted when zero — optional for non-stock roles, [ADR 0016](https://github.com/claudioed/facility-layout/blob/develop/docs/docs/adr/0016-functional-location-roles.md)) | A reusable slot shape/kind is defined, via `RegisterLocationType`. | No consumer — available Published Language. |
-| **PlacementRuleDefined** | `ruleId`, `locationType`, `effect`, `predicate` | A rule constraining which LocationTypes are legal in which Zones is declared, via `DefinePlacementRule`. | No consumer — available Published Language. |
-| **LocationSlotRegistered** | `locationCode`, `aisleId`, `zoneId`, `locationType`, `role`, `dockFlow` (Dock only), `activities` (WorkCenter only), `maxWeightKg`, `maxVolumeM3` | A coded leaf slot now exists on the warehouse map, via `RegisterLocationSlot` or a successful `ImportFacilityLayout` row. `aisleId`/`zoneId` are denormalised so a consumer never has to parse the code. | **Live: `inventory-storage`** — joins the slot to its parent zone's attributes via `zoneId` in its cache; a new slot becomes stow-checkable without any restart. |
-| **LocationSlotDecommissioned** | `locationCode` | A coded slot is permanently retired, via `DecommissionLocationSlot`. One-way; never followed by a reactivation event. | **Live: `inventory-storage`** — evicts the slot from its cache; the stow placement check then fails open for that location, by design. |
-| **FacilityLayoutImported** | `rowsSubmitted`, `slotsImported`, `rowsRejected` | Once per `ImportFacilityLayout` call — a summary distinct from the per-slot `LocationSlotRegistered` events also fired within the same import. | No consumer — available Published Language. |
-| **LocationGeometryUpdated** | `locationCode`, `xM`/`yM`/`zM`, `widthM`/`depthM`/`heightM`, `pickSequence` (optional) | A slot's physical position and size are set, via `SetLocationGeometry` ([ADR 0017](https://github.com/claudioed/facility-layout/blob/develop/docs/docs/adr/0017-geometry-and-travel-graph.md)). | No consumer — available Published Language. |
-| **AisleGeometryUpdated** | `aisleId`, `startXM`/`startYM`/`startZM`, `endXM`/`endYM`/`endZM`, `lengthM` | An aisle's travel centreline is set, via `SetAisleGeometry` (ADR 0017). | No consumer — available Published Language. A candidate input for an event-fed WES-tier travel graph; `wes-work-planning` reads distance synchronously via `GET /distance` instead. |
-| **FixedStructureRegistered** | `structureId`, `siteCode`, `kind` (`Wall`/`Column`/`Office`/`Conveyor`/`Other`), footprint `xM`…`heightM`, `label` | A non-slot physical obstacle is added to a site, via `RegisterFixedStructure` (ADR 0017). | No consumer — available Published Language. |
-| **CrossAisleRegistered** | `zoneId`, `fromAisle`, `toAisle`, `atBay` | A walkable connection between two aisles of the same zone is declared, via `RegisterCrossAisle` (ADR 0017). | No consumer — available Published Language. |
+### SiteRegistered
+
+A physical facility was added to the warehouse map.
+
+| Field | Type |
+|---|---|
+| `siteCode` | string |
+| `siteName` | string |
+
+### ZoneRegistered
+
+A behavioral zone was added inside a Site's area.
+
+| Field | Type |
+|---|---|
+| `zoneId` | string (`WH1-STOR-AMB`) |
+| `siteCode` | string |
+| `areaCode` | string |
+| `zoneCode` | string |
+| `temperatureClass` | `Ambient` \| `Chilled` \| `Frozen` |
+| `hazmat` | boolean |
+
+### AisleRegistered
+
+A physical corridor was added inside a Zone.
+
+| Field | Type |
+|---|---|
+| `aisleId` | string (`WH1-STOR-AMB-A07`) |
+| `zoneId` | string |
+| `aisleCode` | string |
+| `sequenceHint` | integer — walk-order position |
+| `direction` | `OneWay` \| `TwoWay` |
+
+This is the event a travel-path consumer cares about most: `sequenceHint`
+and `direction` are the two structural inputs to walk-order reasoning.
+
+### LocationTypeRegistered
+
+A reusable slot shape/kind was defined.
+
+| Field | Type |
+|---|---|
+| `locationType` | string (`PalletRack`) |
+| `role` | `LocationRole` — `Storage` (default), `Dock`, `Yard`, `WorkCenter`, `Drop`, `Staging`, `QC`, `Consolidation`, `Shipping` |
+| `maxWeightKg` | number — omitted when zero |
+| `maxVolumeM3` | number — omitted when zero |
+
+Capacity is optional for the roles that do not hold stock at rest (`Dock`,
+`Yard`, `WorkCenter`, `QC`, `Shipping`), so the two capacity fields may be
+absent ([ADR 0016](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0016-functional-location-roles.md)).
+
+### PlacementRuleDefined
+
+A rule constraining which LocationTypes are legal in which Zones was
+declared.
+
+| Field | Type |
+|---|---|
+| `ruleId` | string |
+| `locationType` | string |
+| `effect` | `Allow` \| `Deny` |
+| `predicate` | string — the human-readable predicate, e.g. `temperatureClass=Frozen` |
+
+### LocationSlotRegistered
+
+A coded leaf slot now exists on the warehouse map. This is the event
+`inventory-storage` consumes to learn that a new `Bin` location is legal to
+stow into.
+
+| Field | Type |
+|---|---|
+| `locationCode` | string (`WH1-STOR-AMB-A07-03-02-B`) |
+| `aisleId` | string |
+| `zoneId` | string |
+| `locationType` | string |
+| `role` | `LocationRole`, inherited from the LocationType |
+| `dockFlow` | `Inbound` \| `Outbound` \| `Both` — only on a `Dock` slot |
+| `activities` | array of `Pack` \| `Sort` \| `QC` \| `VAS` \| `Deconsolidate` \| `Receive` \| `Kit` — only on a `WorkCenter` slot |
+| `maxWeightKg` | number — omitted when zero |
+| `maxVolumeM3` | number — omitted when zero |
+
+`aisleId` and `zoneId` are denormalised into the payload deliberately: a
+consumer should not have to know how to parse this context's code format to
+route on zone. That is what makes it a *Published Language* rather than a
+leaked internal representation.
+
+### LocationSlotDecommissioned
+
+A coded slot was permanently retired. The signal for a downstream context to
+stop offering that location for new work.
+
+| Field | Type |
+|---|---|
+| `locationCode` | string |
+
+### FacilityLayoutImported
+
+A bulk layout import completed. Emitted **once per import call**; the
+individual `LocationSlotRegistered` events still fire per-slot within the
+same import.
+
+| Field | Type |
+|---|---|
+| `rowsSubmitted` | integer |
+| `slotsImported` | integer |
+| `rowsRejected` | integer |
+
+The summary event exists so that a consumer can distinguish "the building was
+loaded" from a burst of unrelated single registrations, without having to
+infer it from event volume.
+
+### LocationGeometryUpdated
+
+A slot's physical position and size were set
+([ADR 0017](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0017-geometry-and-travel-graph.md)).
+
+| Field | Type |
+|---|---|
+| `locationCode` | string |
+| `xM`, `yM`, `zM` | number — position in metres |
+| `widthM`, `depthM`, `heightM` | number — dimensions in metres |
+| `pickSequence` | integer — optional |
+
+### AisleGeometryUpdated
+
+An aisle's travel centreline was set.
+
+| Field | Type |
+|---|---|
+| `aisleId` | string |
+| `startXM`, `startYM`, `startZM` | number |
+| `endXM`, `endYM`, `endZM` | number |
+| `lengthM` | number |
+
+### FixedStructureRegistered
+
+A non-slot physical obstacle was added to a site.
+
+| Field | Type |
+|---|---|
+| `structureId` | string |
+| `siteCode` | string |
+| `kind` | `Wall` \| `Column` \| `Office` \| `Conveyor` \| `Other` |
+| `xM`, `yM`, `zM`, `widthM`, `depthM`, `heightM` | number — footprint in metres |
+| `label` | string |
+
+### CrossAisleRegistered
+
+A walkable connection between two aisles of the same zone was declared.
+
+| Field | Type |
+|---|---|
+| `zoneId` | string |
+| `fromAisle` | string |
+| `toAisle` | string |
+| `atBay` | string |
+
+## Catalogue at a glance
+
+Every event is published to **both** topics when `EVENT_PUBLISHER=kafka`:
+`warehouse.facility.events` (integration, `dataschema`
+`urn:warehouse:facility-layout:events:<EventName>:v1`) and
+`warehouse.facility.analytics` (analytics, `dataschema`
+`urn:warehouse:facility-layout:analytics:<EventName>:v1`), under the **same**
+CloudEvents `id`. The Kafka key is the partition key; the CloudEvents
+`subject` names the aggregate instance. For the five events in the lower
+half of the table the publisher's `aggregateKey` falls back to the event
+`type` string, so all occurrences of that event share one partition — the
+`subject` still identifies the aggregate.
+
+| CloudEvents `type` | Kafka key (partition) | `subject` | Producer use case(s) | Known consumers |
+|---|---|---|---|---|
+| `com.warehouse.wms.facility-layout.site.SiteRegistered` | `siteCode` | `siteCode` | `RegisterSite`, `ImportFacilityLayout` | own projector |
+| `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | `zoneId` | `zoneId` | `RegisterZone`, `ImportFacilityLayout` | `inventory-storage`, own projector |
+| `com.warehouse.wms.facility-layout.aisle.AisleRegistered` | `aisleId` | `aisleId` | `RegisterAisle`, `ImportFacilityLayout` | own projector |
+| `com.warehouse.wms.facility-layout.locationtype.LocationTypeRegistered` | `locationType` | `locationType` | `RegisterLocationType` | own projector |
+| `com.warehouse.wms.facility-layout.placementrule.PlacementRuleDefined` | `ruleId` | `ruleId` | `DefinePlacementRule` | own projector |
+| `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | `locationCode` | `locationCode` | `RegisterLocationSlot`, `ImportFacilityLayout` | `inventory-storage`, `warehouse-planning`, own projector |
+| `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | `locationCode` | `locationCode` | `DecommissionLocationSlot` | `inventory-storage`, `warehouse-planning`, own projector |
+| `com.warehouse.wms.facility-layout.locationslot.FacilityLayoutImported` | event `type` | `layout-import` | `ImportFacilityLayout` | own projector |
+| `com.warehouse.wms.facility-layout.locationslot.LocationGeometryUpdated` | event `type` | `locationCode` | `SetLocationGeometry`, `ImportFacilityLayout` | none |
+| `com.warehouse.wms.facility-layout.aisle.AisleGeometryUpdated` | event `type` | `aisleId` | `SetAisleGeometry` | none |
+| `com.warehouse.wms.facility-layout.structure.FixedStructureRegistered` | event `type` | `structureId` | `RegisterFixedStructure` | none |
+| `com.warehouse.wms.facility-layout.crossaisle.CrossAisleRegistered` | event `type` | `zoneId/fromAisle-toAisle@atBay` | `RegisterCrossAisle` | none |
+
+Source: `internal/domain/shared/events.go`,
+`internal/adapters/outbound/kafka/publisher.go` (`aggregateKey`,
+`SubjectOf`), `internal/adapters/inbound/kafka/analytics_consumer.go`.
 
 ## Which use case emits what
 
@@ -96,7 +302,7 @@ com.warehouse.wms.facility-layout.crossaisle.CrossAisleRegistered
 | `DefinePlacementRule` | `PlacementRuleDefined` |
 | `RegisterLocationSlot` | `LocationSlotRegistered` |
 | `DecommissionLocationSlot` | `LocationSlotDecommissioned` |
-| `ImportFacilityLayout` | `LocationSlotRegistered` per successful row, plus one `FacilityLayoutImported` |
+| `ImportFacilityLayout` | per row: `SiteRegistered` / `ZoneRegistered` / `AisleRegistered` for each parent it creates on first sight, `LocationSlotRegistered` for each successful slot, `LocationGeometryUpdated` when the row carries geometry; then exactly one `FacilityLayoutImported` for the whole call |
 | `SetLocationGeometry` | `LocationGeometryUpdated` |
 | `SetAisleGeometry` | `AisleGeometryUpdated` |
 | `RegisterFixedStructure` | `FixedStructureRegistered` |
@@ -105,22 +311,36 @@ com.warehouse.wms.facility-layout.crossaisle.CrossAisleRegistered
 
 ## Publishers
 
-| Adapter | Use | Wired to a live consumer? |
-|---|---|---|
-| `outbound/events` — log publisher | Local/dev default. Writes each event to the service log. | No — local/dev only. |
-| `outbound/events` — buffered publisher | Tests. Collects events in memory for assertion. | No — test-only. |
-| `outbound/postgres` — event publisher | Appends to the `events` outbox table when running against Postgres without `EVENT_PUBLISHER=kafka`. Nothing drains it. | No — durable local fallback. |
-| `outbound/kafka` — integration publisher | Publishes every event to `warehouse.facility.events` when `EVENT_PUBLISHER=kafka` — the cluster's active configuration. | **Yes** — `inventory-storage`'s location-classification cache consumes `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` live. |
-| `outbound/kafka` — analytics publisher | Fans the same events to a second, separate `warehouse.facility.analytics` topic, feeding this context's *own* `cmd/facility-projector` (which projects the original eight events) and `cmd/facility-reports`. | Yes — but only to this context's own analytics read side, not to any other bounded context. |
+Which publisher the composition root (`cmd/facility/main.go`,
+`buildAdapters`) wires depends on two switches:
 
-Three of the twelve events have a live external consumer; the other nine
-are **available Published Language** — on the topic and specced in
-`apis/asyncapi.yaml`, with no consumer because no sibling use case needs
-them yet. The denormalised `zoneId`/`aisleId` fields did exactly what they
-were designed for: `inventory-storage`'s cache joins slots to zones without
-ever parsing a `LocationCode`. The WES-tier contexts that need geometry
-and roles (`wes-work-planning`, `fulfillment-execution`) read them
-synchronously over REST (`GET /distance`, `GET /locations/{locationCode}`)
-rather than from this topic. See [Bounded Context
-Canvas](./bounded-context-canvas.md#outbound-communication) for the status
-of every edge.
+| `DATABASE_URL` | `EVENT_PUBLISHER` | Publisher wired | Outbox relay |
+|---|---|---|---|
+| unset | unset | `outbound/events` log publisher | no |
+| unset | `kafka` | `outbound/kafka` `FanOut` — direct publish to both topics, no outbox | no |
+| set | unset | `outbound/events` log publisher | no |
+| set | `kafka` | `outbound/postgres` `OutboxPublisher` — one `outbox_events` row per topic, in the use case's transaction | yes |
+
+| Adapter | Use |
+|---|---|
+| `outbound/kafka` — `Publisher` | Encodes each event as a CloudEvents 1.0 event (structured mode, `source=/warehouse/facility-layout`, `type` = the event type, `subject` = aggregate id, `dataschema=urn:warehouse:facility-layout:events:<EventName>:v1`, `data` = the event's own JSON; [ADR-0024](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0024-cloudevents-mandatory-envelope.md)) for `warehouse.facility.events`. Writer: `kafkago.Hash` balancer ([ADR 0021](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0021-kafka-writer-balancer-hash.md)), `RequireAll` acks with a 10 ms batch timeout ([ADR 0031](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0031-kafka-writer-durability.md)); the W3C trace context of the publishing request is injected into the message headers. |
+| `outbound/kafka` — `AnalyticsPublisher` | The same occurrence (same `type` and `id`) with `dataschema=urn:warehouse:facility-layout:analytics:<EventName>:v1`, for `warehouse.facility.analytics`. |
+| `outbound/kafka` — `FanOut` | No-database + `kafka` mode: mints one id and sends the event through both publishers above. |
+| `outbound/postgres` — `OutboxPublisher` + `OutboxRelay` | Database + `kafka` mode: enqueues both encodings into `outbox_events` inside the use case's `UnitOfWork`; the relay (`OUTBOX_RELAY_INTERVAL`, default 1s, batches of 100, `FOR UPDATE SKIP LOCKED`) sends them through `RelaySink` ([ADR-0018](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0018-transactional-outbox.md)). Published rows are deleted after `OUTBOX_RETENTION` by the housekeeping sweeper ([ADR 0026](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0026-housekeeping-sweeper.md)). |
+| `outbound/events` — log publisher | Default whenever `EVENT_PUBLISHER` is not `kafka`. Writes each event to the service log. |
+| `outbound/events` — buffered publisher | Tests. Collects events in memory for assertion. |
+
+The `EventPublisher` port is one method —
+`Publish(ctx context.Context, event shared.DomainEvent) error` — which is why
+the Kafka adapters were a purely additive change.
+
+## Who consumes them
+
+| Consumer | Topic | Group | Events used |
+|---|---|---|---|
+| `inventory-storage` (`internal/adapters/outbound/facilitycache`, with `LOCATION_LOOKUP_MODE=kafka`) | `warehouse.facility.events` | process-unique group, replays from the first offset | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` — the rest are ignored ([ADR 0013](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0013-first-published-language-consumer.md)) |
+| `warehouse-planning` (`internal/adapters/inbound/kafka/storage_capacity_consumer.go`, started when `KAFKA_BROKERS` is set) | `warehouse.facility.events` | `STORAGE_CAPACITY_CONSUMER_GROUP` (default `warehouse-planning-storage-capacity`) | `LocationSlotRegistered` (Storage and WorkCenter roles), `LocationSlotDecommissioned` — folded into a storage-position / station tally |
+| this repository's `cmd/facility-projector` | `warehouse.facility.analytics` | `facility-analytics` (DLQ `warehouse.facility.analytics.dlq`) | The original eight events (`SiteRegistered` … `FacilityLayoutImported`); the four geometry events are ignored |
+
+No other service consumes either topic today. The geometry, fixed-structure
+and cross-aisle events are Published Language with no consumer yet.

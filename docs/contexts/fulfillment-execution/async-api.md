@@ -20,6 +20,7 @@ fleet-wide, mandatory [Event Standard](/strategic-design/event-standard-cloudeve
 | --- | --- | --- | --- |
 | Consume | `warehouse.work-planning.events` | `WorkReleased` | `internal/adapters/inbound/kafka/consumer.go` |
 | Publish | `warehouse.fulfillment.events` | `TaskCompleted`, `TaskCPTMissed`, `PackageManifested` | `internal/adapters/outbound/kafka/publisher.go` |
+| Publish (internal) | `warehouse.fulfillment.analytics` | ten event types (all but `TaskCPTMissed` and the two Rebin events), consumed only by this service's `cmd/fulfillment-projector` | `internal/adapters/outbound/kafka/analytics_publisher.go` |
 | Consume (opt-in) | `warehouse.process-path-management.events` | process-path catalogue events | `internal/adapters/outbound/kafkacatalog` — only when `PATH_CATALOGUE_SOURCE=kafka` |
 
 Client library on both sides: `github.com/segmentio/kafka-go` (pure Go, no
@@ -58,8 +59,8 @@ The CloudEvents 1.0 envelope shared by every service in the fleet:
 The consumer validates the CloudEvent, filters on the full
 `type == "com.warehouse.wes.work-planning.workunit.WorkReleased"` and
 silently ignores every other type on the topic (a message that is not a
-valid CloudEvent is a poison message: logged and skipped, never parsed as a
-legacy shape), then translates at the boundary (the
+valid CloudEvent is a poison message: never retried, never parsed as a
+legacy shape, dead-lettered), then translates at the boundary (the
 Anti-Corruption Layer) rather than deserialising into a shared type:
 
 | From `WorkReleased.data` | Becomes | Via |
@@ -75,7 +76,7 @@ The catalogue comes from `PATH_CATALOGUE_SOURCE`: `file` (default) loads
 `PATH_CATALOGUE_FILE` once at boot; `kafka` replays
 `warehouse.process-path-management.events` into memory and follows live
 changes
-([ADR-0017](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0017-process-path-catalogue-as-configuration.md)).
+([ADR-0017](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0017-process-path-catalogue-as-configuration.md)).
 The retired prefix-guessing convention is gone.
 
 The consumer then calls the **existing** `CreateTask` use case — no
@@ -83,8 +84,10 @@ parallel code path exists for the Kafka-originated flow. Idempotency:
 `ProcessedEvents.MarkProcessed(ctx, id)` (the CloudEvents `id`) runs before task creation,
 returning `true` only if this call newly recorded the id, so redelivery
 (Kafka is at-least-once) produces no duplicate task. A handling error is
-logged and the loop continues — there is no dead-letter queue today, a
-deliberate simplicity trade at this stage. Consumer group:
+retried in process (3 attempts in total, exponential backoff); after that,
+or immediately for a non-CloudEvent, the raw message is dead-lettered to
+`warehouse.work-planning.events.dlq` with `x-dlq-*` headers when
+`EVENT_PUBLISHER=kafka` wires the DLQ writer, and the loop continues. Consumer group:
 `WORK_RELEASED_CONSUMER_GROUP` (default `fulfillment-execution`); a second
 process on the shared broker must set a unique value.
 
@@ -117,7 +120,7 @@ enriches the wire payload at publish time via repository lookups —
 `StationRepo.FindById(...).Occupant()`, and `duration_seconds` computed
 from the same `Task`'s `ClaimedAt()`, and `task_type` read straight off the
 loaded `Task`
-([ADR-0023](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0023-task-type-on-wire.md)). Message key is the task id, so all
+([ADR-0023](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0023-task-type-on-wire.md)). Message key is the task id, so all
 events for one task land on the same partition and preserve order.
 `associate_id` is omitted when the station has no checked-in occupant;
 `duration_seconds` is `0` when `ClaimedAt()` is `nil` (a pre-migration
@@ -126,7 +129,7 @@ task) — both degrade gracefully rather than failing the publish.
 ## Publishing: `TaskCPTMissed` and `PackageManifested`
 
 Added by
-[ADR-0025](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0025-cpt-missed-sweep-and-package-manifested.md)
+[ADR-0025](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0025-cpt-missed-sweep-and-package-manifested.md)
 as this service's half of order-management's promise feedback loop. Same
 topic, same CloudEvents envelope, same publisher:
 
@@ -139,13 +142,13 @@ Every field comes straight off the domain event — no repository enrichment.
 `order-management`'s `RepromiseOrder` consumer keys on `order_ref`.
 `PackageManifested` is also the evidence for the on-time-to-CPT KPI on this
 service's throughput analytics data product
-([ADR-0026](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0026-on-time-to-cpt-kpi.md)).
+([ADR-0026](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0026-on-time-to-cpt-kpi.md)).
 
 With `EVENT_PUBLISHER=kafka` and a `DATABASE_URL`, all three published
 events go through the transactional outbox — written in the same
 transaction as the aggregate, relayed by an in-process relay to both the
 integration and analytics topics
-([ADR-0020](https://github.com/claudioed/fulfillment-execution/blob/develop/docs/docs/adr/0020-transactional-outbox.md)).
+([ADR-0020](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0020-transactional-outbox.md)).
 
 ## A shared fan-out topic, three independent consumers
 
@@ -190,9 +193,9 @@ e.g. `com.warehouse.wes.fulfillment-execution.task.TaskCompleted`, on topic
 `warehouse.fulfillment.events`. The same `type` names the occurrence on the
 analytics topic `warehouse.fulfillment.analytics`; `dataschema`
 (`urn:warehouse:fulfillment-execution:<events|analytics>:<EventName>:v1`)
-names the payload shape. The earlier dual-envelope migration (ADR-0027) is
-superseded: the publisher emits only CloudEvents and every consumer accepts
-only CloudEvents.
+names the payload shape. The publisher emits only CloudEvents and every
+consumer accepts only CloudEvents; there is no other envelope
+([ADR-0032](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0032-cloudevents-mandatory-envelope.md)).
 
 ## See also
 

@@ -52,19 +52,19 @@ Served by the `netfulfil-reports` deployable, reading a Postgres read model that
 </Heading>
 
 <ParamsDetails
-  {...require("./get-acknowledgement-report.ParamsDetails.json")}
+  parameters={[{"name":"from","in":"query","required":true,"description":"Inclusive start of the window (RFC3339).","schema":{"type":"string","format":"date-time"},"example":"2026-06-01T00:00:00Z"},{"name":"to","in":"query","required":true,"description":"Exclusive end of the window (RFC3339).","schema":{"type":"string","format":"date-time"},"example":"2026-06-08T00:00:00Z"},{"name":"granularity","in":"query","required":false,"description":"Bucket size. Only `day` exists today; omit for the default.","schema":{"type":"string","enum":["day"],"default":"day"}}]}
 >
   
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./get-acknowledgement-report.RequestSchema.json")}
+  title={"Body"}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./get-acknowledgement-report.StatusCodes.json")}
+  responses={{"200":{"description":"The report, one row per day bucket in range.","content":{"application/json":{"schema":{"type":"object","required":["rows"],"properties":{"rows":{"type":"array","items":{"type":"object","description":"One day bucket of the acknowledgement & translation report.","required":["dayBucket","ordersReceived","ordersAcknowledged","ordersRejectedUntranslatableSku","ordersRejectedDomain","acknowledgementDeadlinesMissed","avgAcknowledgementLatencySeconds"],"properties":{"dayBucket":{"type":"string","format":"date-time","description":"The UTC day this row summarizes (RFC3339, midnight)."},"ordersReceived":{"type":"integer","description":"Orders received into this bucket (NetworkOrderReceived)."},"ordersAcknowledged":{"type":"integer","description":"Orders acknowledged in full (NetworkOrderAcknowledged)."},"ordersRejectedUntranslatableSku":{"type":"integer","description":"Rejected because the Anti-Corruption Layer had no SKU mapping for one or more lines — a catalogue gap, not a business refusal.\n"},"ordersRejectedDomain":{"type":"integer","description":"Rejected because order-management's promise policy could not meet the network's requiredShipBy.\n"},"acknowledgementDeadlinesMissed":{"type":"integer","description":"The 24-hour acknowledgement window closed with no answer ever sent (the sweep's own rejection). An operational failure, not a business decision.\n"},"avgAcknowledgementLatencySeconds":{"type":"number","format":"double","description":"Average seconds between an order's receipt and its acknowledgement, over the orders acknowledged in this bucket. Zero when none were acknowledged in the bucket (never NaN).\n"}},"title":"AcknowledgementReportRow"}}},"title":"AcknowledgementReport"}}}},"400":{"description":"An RFC 7807 problem document.","content":{"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 problem details.","required":["type","title","status"],"properties":{"type":{"type":"string","format":"uri","example":"https://errors.network-fulfillment.warehouse-systems.dev/network-order-not-found"},"title":{"type":"string","example":"Network order not found"},"status":{"type":"integer","example":404},"detail":{"type":"string","example":"network order not found"},"instance":{"type":"string","example":"/network-orders/po-4711"}},"title":"Problem"}}}},"500":{"description":"An RFC 7807 problem document.","content":{"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 problem details.","required":["type","title","status"],"properties":{"type":{"type":"string","format":"uri","example":"https://errors.network-fulfillment.warehouse-systems.dev/network-order-not-found"},"title":{"type":"string","example":"Network order not found"},"status":{"type":"integer","example":404},"detail":{"type":"string","example":"network order not found"},"instance":{"type":"string","example":"/network-orders/po-4711"}},"title":"Problem"}}}}}}
 >
   
 </StatusCodes>

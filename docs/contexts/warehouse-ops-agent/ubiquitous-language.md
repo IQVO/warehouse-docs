@@ -1,59 +1,68 @@
 ---
 id: ubiquitous-language
-title: Ubiquitous Language
-sidebar_label: Ubiquitous Language
-description: The exact vocabulary warehouse-ops-agent coins for its own correlation policies, plus the terms it borrows unredefined from its upstream contexts.
+title: Ubiquitous language
+sidebar_label: Ubiquitous language
+description: The exact vocabulary of warehouse-ops-agent, each term mapped to its code identifier, and the terms it borrows from its upstream contexts without redefining them.
 ---
 
-# Ubiquitous Language
+# Ubiquitous language
+
+:::info[Synced from warehouse-ops-agent]
+This page is a copy of [`docs/docs/business-context/ubiquitous-language.md`](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/business-context/ubiquitous-language.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
+
 
 `warehouse-ops-agent` speaks two kinds of vocabulary: terms it coins
 itself for its own correlation policies, and terms it borrows verbatim
-from its upstream contexts because it never redefines a fact
-another context already owns.
+from its upstream contexts because it never redefines a fact another
+context already owns. This glossary is part of the
+[DDD artifact pack](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/ddd/ddd-artifacts.md); every term maps to a code
+identifier, and a ⚠ marks a term whose code name differs from the spoken
+one.
 
 ## Terms this agent coins
 
-| Term | Definition |
-| --- | --- |
-| **DailyBrief (E3)** | The synthesized, cross-path, cross-site operational summary: every monitored path's raw facts (backlog telemetry, staffing gap, queue depth, stuck-task counts) plus the open exceptions derived from them. Grouped by the `facility-layout` site each path belongs to. |
-| **FlowBalanceException (E1)** | The correlation of a `wes-work-planning` rebalance recommendation, a `workforce-management` staffing gap, and a `fulfillment-execution` stuck-task diagnostic for one process path into a single ranked recommendation. Since ADR 0008, also carries an additive `Decision.Utilization` overlay — see the next row. |
-| **Utilization correlation (`claim_flow_problem` / `starvation` / `staffing_gap_confirmed`)** | Three named diagnostic outcomes `CorrelateUtilization` (ADR 0008) can attach to a `FlowBalanceException`'s `Decision`, from `labor-performance`'s `get_task_type_utilization` reading combined with the existing queue-depth signal: `claim_flow_problem` (deep queue + high idleness — a claim/flow problem, not staffing), `starvation` (shallow queue + high idleness — advisory-only, no WES auto-action), `staffing_gap_confirmed` (deep queue + low idleness — corroborates the existing staffing-gap lever). `nil` when the evidence does not clearly support one; never changes `RecommendedAction`. |
-| **TravelFactorCorrelation** | The ADR 0009 classification of a `facility-layout` `estimate_travel_distance` reading between two **caller-supplied** location codes: `travel_significant` above 60 m (`TravelFactorDistanceThresholdMetres`), else `travel_negligible`. Returned by `explain_travel_factor` / `GET /explain-travel-factor`; the agent never infers the location codes itself. |
-| **ServiceSignal / RuntimeSignalsReport** | One service's runtime health (Istio 5xx error rate, p99 latency, recent error-log count) and the report of them from `GET /runtime-signals`, each classified `normal`/`warning`/`critical` by `ClassifyErrorRate` (warning ≥ 1%, critical ≥ 5%) / `ClassifyLatencyP99` (warning ≥ 1000 ms, critical ≥ 3000 ms). Sources that could not be read are listed in `unavailableSources`. |
-| **LLM mode (`off` / `shadow` / `on`)** | The ADR 0004 switch for the optional model-backed reasoner behind `GET /flow-balance/{pathId}`: `off` (default) never calls the model; `shadow` calls it and logs/counts agreement but returns the deterministic decision; `on` lets a schema-valid plan replace action/heads/rationale, with the deterministic decision as fallback. |
-| **StrandedReservation (E2)** | The correlation of `fulfillment-execution`'s expired/expiring task leases with `inventory-storage`'s usable-stock shortfall for the affected SKU, into a `revoke_reservation`-or-`hold` recommendation. Policy exists and is unit tested; not yet wired to a REST route or MCP tool. |
-| **OpenException** | One path's flagged, human-gated exception: which correlation rule fired (`Kind`), how badly (`Severity`), and its full evidence trail. Never a silent recommendation — always shown, always sourced. A path is flagged only when two or more independent signals correlate; a single signal alone is ordinary operating noise. |
-| **Evidence trail / EvidenceEntry** | The mandatory list of `(source, detail)` pairs behind every decision this agent returns, naming exactly which upstream tool call produced each fact used. A decision without at least one evidence entry cannot occur. |
-| **Blast radius** | The mandatory "what would this write touch" readout (SKU, bin, quantity freed, full bin-line snapshot) that must accompany a `revoke_reservation` recommendation before it can be ranked. Built from `inventory-storage.get_bin_occupancy` before any write would execute. |
-| **Partial / MissingSignals** | The typed degrade state a `Decision`, `StrandedReservationException`, or `PathBrief` carries when one or more upstream reads failed. `Partial: true` plus a `MissingSignals` list — never a hard failure, never a guess presented as confident. |
-| **PathTarget** | Deployment-time configuration binding together each upstream context's own naming for "the same" process path: `wes-work-planning`'s `PathId`, `fulfillment-execution`'s `ProcessPath` queue name, `workforce-management`'s `(BuildingId, ShiftId, PathId)` key, grouped under the `facility-layout` `SiteCode` it belongs to. Never inferred by the policy layer — always supplied by config. |
-| **Recommended action** | The closed set of levers a decision can rank: `assign_labor`, `release_next_work`, `revoke_reservation`, or `hold`. `hold` is always the safe default when the evidence does not clearly support a lever. |
-| **Console BFF / Order Lifecycle read model** | The second, unrelated use-case family: `GET /console/orders/{id}/lifecycle` fans out read-only REST calls to four upstream contexts and stitches one order's cross-service lifecycle for the operator console's browser SPA; `GET /console/reports/wms` and `/wes` assemble dashboards from seven contexts' `*-reports` analytics binaries. Not a correlation policy — a pure read-model assembly for a UI. |
+| Term | Code identifier | Meaning |
+|---|---|---|
+| **FlowBalanceException (E1)** ⚠ | `policy.Decision`, built by `policy.Decide`; use case `usecases.FlowBalanceAdvisory` | The correlation of a wes-work-planning rebalance recommendation, a workforce-management staffing gap, and a fulfillment-execution stuck-task diagnostic for one process path into a single ranked recommendation. The spoken name survives in the MCP tool `get_flow_balance_exception`; the Go type is `Decision`. |
+| **StrandedReservation (E2)** ⚠ | `policy.StrandedReservationException`, built by `policy.Evaluate`; use case `usecases.DetectStrandedReservation` | The correlation of fulfillment-execution's expired/expiring task leases with inventory-storage's usable-stock shortfall for the affected SKU into a `revoke_reservation`-or-`hold` recommendation. Exposed as the MCP tool `detect_stranded_reservation`. |
+| **DailyBrief (E3)** | `policy.DailyBrief`, `policy.SiteBrief`, `policy.PathBrief`; `policy.SynthesizePathBrief`; use case `usecases.DailyBrief` | The synthesized, cross-path, cross-site operational summary: every monitored path's raw facts plus the open exceptions derived from them. |
+| **OpenException** | `policy.OpenException` (`Kind`, `Severity`, `Evidence`) | One path's flagged, human-gated exception: which correlation rule fired (`Kind`, today only `flow_balance_risk`), how badly (`Severity`), and its full evidence trail. Raised only when two or more independent signals fire (`deriveExceptions`). |
+| **Severity** | `policy.Severity`: `info`, `warning`, `critical`; plus `SeverityNormal` (`normal`) via the alias `SignalSeverity` | Coarse ranking. Two correlated signals is `warning`, three is `critical`. Runtime signals add `normal`. |
+| **Evidence trail** ⚠ | `policy.FlowBalanceEvidenceEntry` (E1, `Source` / `Detail`), `policy.EvidenceEntry` (E2, `Tool` / `Summary`), `OpenException.Evidence []string` (E3) | The list of facts behind a decision, each naming the upstream tool call that produced it. Three different shapes in code for one spoken concept. |
+| **Blast radius** | `policy.BlastRadius`, `policy.BinLine` | The mandatory "what would this write touch" readout (SKU, bin, reservation, quantity freed, full bin-line snapshot) that must accompany a `revoke_reservation` recommendation. Built from `inventory-storage.get_bin_occupancy`. |
+| **Partial / MissingSignals** ⚠ | `Decision.Partial`, `Decision.MissingSignals` (E1 only); `PathBrief.Unavailable` (E3) | The typed degrade state when an upstream read failed. Only the E1 `Decision` carries `Partial` / `MissingSignals`; a `PathBrief` lists failed sources in `Unavailable`; a `StrandedReservationException` has neither and instead degrades to `hold` with an evidence line naming the missing source. |
+| **PathTarget** | `policy.PathTarget`, `usecases.PathTarget`, `config.PathTarget` (`DAILY_BRIEF_PATH_TARGETS`) | Deployment-time configuration binding each upstream context's own naming for "the same" process path: wes's `PathId`, fulfillment-execution's `ProcessPath` queue name, workforce-management's `(BuildingId, ShiftId, PathId)` key, under a facility-layout `SiteCode`; optionally warehouse-planning's `PlanningPathId` and conversion factors. Never inferred. |
+| **Recommended action** ⚠ | `policy.RecommendedAction` (`assign_labor`, `release_next_work`, `hold` — constant `FlowBalanceActionHold`); `policy.StrandedReservationAction` (`revoke_reservation`, `hold` — constant `ActionHold`) | The closed set of levers a decision can rank, split across two enums in code. `hold` is the safe default when the evidence does not clearly support a lever. |
+| **UtilizationCorrelation** | `policy.UtilizationCorrelation`, `policy.UtilizationCorrelationKind`; `policy.CorrelateUtilization` | The ADR-0008 overlay on a FlowBalanceException: queue depth crossed with labor-performance's measured utilization, yielding `claim_flow_problem`, `starvation` or `staffing_gap_confirmed`, or nil. |
+| **TravelFactorCorrelation** | `policy.TravelFactorCorrelation`, `policy.TravelFactorOutcomeKind`; `policy.CorrelateTravelFactor` | The ADR-0009 classification of a facility-layout travel distance between two caller-supplied locations: `travel_significant` above 60 m, else `travel_negligible`. |
+| **Capacity outlook** | `policy.CapacityOutlook`, `policy.CapacityStepFact`; `policy.SummarizeCapacityOutlook`; use case `usecases.CapacityOutlook` | ADR 0013: warehouse-planning's path capacity (ORDER per hour), bottleneck step and binding constraint over the next `CAPACITY_OUTLOOK_HORIZON`, shown next to a path's facts. Informational and fail-open (`OmittedReason`). |
+| **ServiceSignal / RuntimeSignalsReport** | `policy.ServiceSignal`, `policy.RuntimeSignalsReport`; `policy.ClassifyErrorRate`, `policy.ClassifyLatencyP99` | One service's runtime health (5xx error rate, p99 latency, recent error-log count) and the fleet-wide report of them, each classified `normal` / `warning` / `critical`. |
+| **LLM mode / decision source** | `policy.LLMMode` (`off`, `shadow`, `on`), `policy.DecisionSource` (`deterministic`, `llm`, `fallback`) | ADR 0004: whether a model plan may replace the deterministic decision, and which path actually produced the returned one. |
+| **Plan** ⚠ | `ports.Plan` (from the reasoner), `policy.PlanProposal` (validated view), `policy.Arbitration` | The model's proposal in the closed action vocabulary, submitted through the `submit_plan` tool and gated by `policy.ValidatePlan` / `policy.Arbitrate`. |
 
 ## Terms this agent borrows, unredefined
 
 These originate in an upstream context and are never given a second
 meaning here — this agent's policy layer treats them as opaque facts
 read across an MCP tool-call boundary, validated against the same closed
-enum the upstream context defines, never reinterpreted.
+enum the upstream context defines, never reinterpreted:
 
-| Word | Owning context | What it means there |
-| --- | --- | --- |
-| **RebalanceAction** (`NoActionNeeded`, `ThrottleUpstream`, `ReassignLabor`) | `wes-work-planning` | The action `get_rebalance_recommendation` returns for a path's current flow state. |
-| **TaskType** (`PICK`, `PACK`, `SLAM`) | `fulfillment-execution` | The kind of task a lease belongs to. |
-| **SKU**, **usable stock**, **reservation** | `inventory-storage` | Product identity and stock-state vocabulary; see that context's own ubiquitous language for the full model. |
-| **SiteCode**, **Zone** | `facility-layout` | Physical-structure vocabulary; this agent only ever reads it to group the daily brief, never to reason about placement legality. |
-| **BuildingId**, **ShiftId** | `workforce-management` | Staffing-plan scoping keys. |
-| **Location code**, **travel distance** | `facility-layout` | Seven-segment location codes and the shortest-route length (with a measured-vs-estimated flag) `estimate_travel_distance` returns; read only by `explain_travel_factor`. |
-| **Utilization** (`utilizationPct`) | `labor-performance` | Measured busy-vs-idle time for a task type, from `get_task_type_utilization`; read only by the ADR 0008 overlay. |
+| Word | Owning context | Code identifier here | What it means there |
+|---|---|---|---|
+| **RebalanceAction** (`NoActionNeeded`, `ThrottleUpstream`, `ReassignLabor`) | `wes-work-planning` | `policy.RebalanceAction`, `policy.ParseRebalanceAction` | The action `get_rebalance_recommendation` returns for a path's current flow state. |
+| **TaskType** (`PICK`, `PACK`, `SLAM`) | `fulfillment-execution` | `policy.TaskType`, `TaskType.Valid` | The kind of task a lease belongs to. |
+| **SKU**, **usable stock**, **reservation** | `inventory-storage` | `policy.AvailabilitySignal`, `policy.BinLine`, `ports.Availability`, `ports.BinOccupancy` | Product identity and stock-state vocabulary; see that context's own ubiquitous-language page for the full model. |
+| **SiteCode**, **Zone**, **location code** | `facility-layout` | `PathTarget.SiteCode`, `policy.TravelDistanceReading` | Physical-structure vocabulary; read to group the daily brief and to measure travel, never to reason about placement legality. |
+| **BuildingId**, **ShiftId** | `workforce-management` | `PathTarget.BuildingId`, `PathTarget.ShiftId` | Staffing-plan scoping keys. |
+| **Utilization** | `labor-performance` | `policy.UtilizationSignal`, `ports.TaskTypeUtilization` | Busy versus idle time per task type; a null `utilizationPct` means nothing observed, never 0%. |
+| **Process-path capacity**, **bottleneck step**, **binding constraint** | `warehouse-planning` | `policy.PathCapacityFact`, `ports.ProcessPathCapacity` | Planned throughput of a multi-step path, normalized to ORDER per hour. |
 
 ## Words this agent deliberately does not use about itself
 
-`Aggregate`, `Invariant`, `Domain event`, `Bounded context` (about
-itself). Using any of these words about `warehouse-ops-agent` itself
-would misrepresent what this repo is — it has none of these, and using
-the vocabulary anyway would be exactly the "domain in name only" pattern
-its own [ADR 0001](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0001-warehouse-ops-agent-placement.md)
-warns against. See [Bounded Context Canvas](./bounded-context-canvas.md)
-for how that plays out in its Domain Role classification.
+`Aggregate`, `Invariant`, `Domain event`, `Bounded context`. Per
+[Subdomain classification](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/ddd/subdomain-classification.md), using any
+of these words about `warehouse-ops-agent` itself would misrepresent what
+this repo is. The DDD artifact pack uses them only to record their
+absence (for example the [Aggregate design canvas](/contexts/warehouse-ops-agent/aggregate-design-canvas)
+and [Domain events](/contexts/warehouse-ops-agent/domain-events) pages).

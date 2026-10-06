@@ -63,7 +63,7 @@
   "defaultContentType": "application/cloudevents+json",
   "channels": {
     "warehouse.facility.events": {
-      "description": "The single outbound integration topic for this bounded context, named after the `Topic` constant in `internal/adapters/outbound/kafka/publisher.go` (`warehouse.facility.events`). Every domain event this context raises is published here when `EVENT_PUBLISHER=kafka` — the whole Published Language, not a subset. The one live consumer today is inventory-storage's location-classification cache (ZoneRegistered, LocationSlotRegistered, LocationSlotDecommissioned); everything else is available, unconsumed Published Language. There is a second, separate topic, `warehouse.facility.analytics`, feeding this service's own analytical read model (the Layout Catalog Growth & Change report); it has exactly one consumer — this service's own `cmd/facility-projector` — and is not part of the cross-context integration contract described here. It carries the same CloudEvents (same `type` and `id` per occurrence) with `dataschema=urn:warehouse:facility-layout:analytics:<EventName>:v1`.\n",
+      "description": "The single outbound integration topic for this bounded context, named after the `Topic` constant in `internal/adapters/outbound/kafka/publisher.go` (`warehouse.facility.events`). Every domain event this context raises is published here when `EVENT_PUBLISHER=kafka` — the whole Published Language, not a subset. The one live consumer today is inventory-storage's location-classification cache (ZoneRegistered, LocationSlotRegistered, LocationSlotDecommissioned); everything else is available, unconsumed Published Language.\n",
       "subscribe": {
         "operationId": "onFacilityEvent",
         "summary": "Consume facility-layout's Published Language.",
@@ -1074,6 +1074,30 @@
                 "x-parser-schema-id": "<anonymous-schema-138>"
               }
             }
+          ]
+        }
+      }
+    },
+    "warehouse.facility.analytics": {
+      "description": "The analytics topic of this bounded context (ADR-0010), named after the `AnalyticsTopic` constant in `internal/adapters/outbound/kafka/analytics_publisher.go` (`warehouse.facility.analytics`). The composition root fans EVERY domain event out to it alongside the integration topic when `EVENT_PUBLISHER=kafka` and `analytics.enabled` — same CloudEvent `type` and `id` per occurrence, with `dataschema=urn:warehouse:facility-layout:analytics:<EventName>:v1`. It is NOT part of the cross-context integration contract: it exists so this service's own analytical read model (the \"Layout Catalog Growth & Change\" data product) can evolve independently of the OLTP Published Language. Cross-context consumers should subscribe to `warehouse.facility.events`, not here.\n",
+      "subscribe": {
+        "operationId": "onFacilityAnalyticsEvent",
+        "summary": "Consume facility-layout's analytics stream (internal data product).",
+        "description": "The only supported consumer is this service's own `cmd/facility-projector` (single writer of the analytical database, ADR-0010). It follows the same at-least-once discipline: per-process-unique consumer group, FirstOffset replay, idempotent projection keyed on the CloudEvent `id`, readiness gated on catching up to the high watermark observed at start.\n",
+        "message": {
+          "oneOf": [
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[0]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[1]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[2]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[3]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[4]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[5]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[6]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[7]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[8]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[9]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[10]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[11]"
           ]
         }
       }

@@ -43,8 +43,10 @@ this context's own private mirror of the wire shape.
 CloudEvents 1.0, structured content mode — the fleet-wide, mandatory
 [Event Standard](/strategic-design/event-standard-cloudevents) every warehouse-systems publisher uses (Kafka header
 `content-type: application/cloudevents+json; charset=UTF-8`). The consumer
-dispatches on the full `type`, ignores unknown types, and skips (never
-parses) anything that is not a valid CloudEvent:
+dispatches on the full `type`, ignores unknown types, and never parses
+anything that is not a valid CloudEvent: such a message, like one whose
+handling fails 3 times, is dead-lettered to `warehouse.fulfillment.events.dlq`
+with the original bytes and `x-dlq-*` headers (ADR 0017):
 
 ```json
 {
@@ -106,7 +108,7 @@ service's whole job, not a side effect of it.
 - **No outbound REST or MCP call to any sibling context** —
   `fulfillment-execution`, `workforce-management`, `facility-layout` or
   anyone else (ADR 0003; restated for facility-layout by
-  [ADR 0015](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0015-optional-travel-component-on-labor-standard.md),
+  [ADR 0015](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0015-optional-travel-component-on-labor-standard.md),
   which made a standard's travel component caller-supplied rather than
   looked up). Everything this context needs (`AssociateId`, `TaskType`,
   `DurationSeconds`) already travels on the Kafka event above.
@@ -150,8 +152,7 @@ below. `type` is
 `com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded`
 on both topics; `dataschema` tells them apart
 (`urn:warehouse:labor-performance:events:TaskPerformanceRecorded:v1` here,
-`…:analytics:…` on the analytics topic). The old analytics
-`schema_version` field is gone.
+`…:analytics:…` on the analytics topic).
 
 **Partition key:** `AssociateId` — not `TaskType`, which the analytics
 publisher keys on. The intended consumer (workforce-management's
@@ -180,7 +181,7 @@ that calls this service's REST API, and the kind cluster sets
 `kafka-cache`. Either way the dependency points from
 `workforce-management` to this context.
 
-See [ADR 0013](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0013-labor-performance-integration-events.md)
+See [ADR 0013](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0013-labor-performance-integration-events.md)
 in the source repository for the full decision record.
 
 ## Generated reference
@@ -194,21 +195,22 @@ honest gaps in the current wire contract.
 
 ## A separate reports API exists too
 
-Beyond the OLTP `apis/openapi.yaml` (7 operations: `POST /standards`,
+Beyond the OLTP `apis/openapi.yaml` (8 operations: `POST /standards`,
 `GET /standards/{taskType}`, `GET /associates/{associateId}/scorecard`,
 `GET /task-types/{taskType}/performance`,
 `GET /task-types/{taskType}/utilization`,
-`GET /associates/{associateId}/utilization`, `GET /healthz`), the source
+`GET /associates/{associateId}/utilization`, `GET /healthz`,
+`GET /readyz`), the source
 repository also ships a **separate `openapi-reports.yaml`** covering the
 read-only analytical Reports API served by `cmd/labor-reports` (3
 operations: `GET /reports/performance`,
 `GET /reports/performance/freshness`, `GET /healthz`). Neither API — nor
 the MCP server — is authenticated, by deliberate decision
-([ADR 0012](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0012-remove-rest-auth-layer.md)
+([ADR 0012](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0012-remove-rest-auth-layer.md)
 removed ADR 0011's static bearer-key layer). That API is fed by the
 `warehouse.labor-performance.analytics` Kafka topic described in
 [Domain Events](./domain-events) — a separate publish direction from the
 `TaskCompleted` consumption this page documents, and one this context
 produces for itself rather than consumes from anyone. See
-[ADR 0007](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0007-analytical-data-product.md)
+[ADR 0007](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0007-analytical-data-product.md)
 in the source repository for the full three-process analytics design.

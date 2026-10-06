@@ -3,7 +3,7 @@
   "asyncapi": "2.6.0",
   "info": {
     "title": "warehouse-planning Domain Events",
-    "version": "0.4.0",
+    "version": "0.5.0",
     "contact": {
       "name": "warehouse-planning maintainers",
       "url": "https://github.com/IQVO/warehouse-planning",
@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **warehouse-planning** bounded context (WES\nsubdomain): *can this warehouse process the demand assigned to it?*\n\n**Published (Phase 4).** The `CapacityPlan` aggregate raises four events,\npublished to `warehouse.warehouse-planning.events` through a\n**transactional outbox**: the plan and its already-encoded events are\nwritten in ONE database transaction, and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is persisted with the outbox row, so\na retry republishes the same `id` -- consumers dedupe on it). Per plan:\n`CapacityPlanCreated` on creation; on publication\n`CapacityPlanPublished`, plus `CapacityShortageDetected` and\n`BottleneckDetected` only when the plan has a shortage.\n`ProcessCapacityRegistered`/`ProcessCapacityChanged` are NOT published yet.\n\n**Consumed (Phase 3).** `ShiftPlanCommitted` (workforce-management) and\n`LocationSlotRegistered`/`LocationSlotDecommissioned` (facility-layout) keep\nlocal ProcessCapacity read models current; this context never makes a\nlive cross-context call.\n\n**Envelope (mandatory).** Every message is a CloudEvents 1.0 event in\n*structured content mode* (Kafka value = JSON event format) with the Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`. All of\n`specversion` (`1.0`), `id`, `source` (`/warehouse/warehouse-planning`),\n`type`, `subject`, `time`, `datacontenttype` (`application/json`) and\n`dataschema` are required; the payload sits under `data`. No flat\nenvelope, no toggle.\n\n**Type naming.** `com.warehouse.wes.warehouse-planning.<entity>.<EventName>`\nwhere `<entity>` is the aggregate that raised the event, lowercase, no\nseparators -- here `capacityplan`. **dataschema** =\n`urn:warehouse:warehouse-planning:events:<EventName>:v1`. **subject** and\nthe Kafka message key = the capacity plan id (one plan's events stay\nordered on one partition). A breaking payload change gets a new `.v2`\ntype and dataschema, never a mutation.\n"
+    "description": "Event catalog for the **warehouse-planning** bounded context (WES\nsubdomain): *can this warehouse process the demand assigned to it?*\n\n**Published (Phase 4).** The `CapacityPlan` aggregate raises four events,\npublished to `warehouse.warehouse-planning.events` through a\n**transactional outbox**: the plan and its already-encoded events are\nwritten in ONE database transaction, and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is persisted with the outbox row, so\na retry republishes the same `id` -- consumers dedupe on it). Per plan:\n`CapacityPlanCreated` on creation; on publication\n`CapacityPlanPublished`, plus `CapacityShortageDetected` and\n`BottleneckDetected` only when the plan has a shortage.\n`ProcessCapacityRegistered`/`ProcessCapacityChanged` are NOT published yet.\n\n**Consumed (Phase 3).** `ShiftPlanCommitted` (workforce-management) and\n`LocationSlotRegistered`/`LocationSlotDecommissioned` (facility-layout) keep\nlocal ProcessCapacity read models current; this context never makes a\nlive cross-context call.\n\n**Consumed (ADR 0004, opt-in).** `OrderAllocated` and\n`OrderPartiallyAllocated` (order-management, topic\n`warehouse.order-management.events`) keep a local expected-demand read\nmodel current when `DEMAND_CONSUMER_GROUP` is set (unset = no consumer).\nEach order is counted once, at its latest promise cutoff, and attributed to\nthe ONE configured site (`DEMAND_SITE_ID`): order-management's events carry\nno fulfillment site. `OrderRepromised` and every other type are ignored.\n\n**Analytics stream (ADR 0005).** The same four events are ALSO written to\n`warehouse.warehouse-planning.analytics` in the SAME outbox transaction\n(two outbox rows per event, one per topic), as CloudEvents 1.0 with the\nSAME `type` and the SAME `id` per occurrence but\n`dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`.\nThe integration messages are byte-identical to what they were before the\nstream existed. The analytics payloads are the integration payloads plus\nadditive, analytics-only fields: today `binding_constraint` on\n`CapacityPlanPublished` (the constraint type -- LABOR, STATION, ... --\nbinding the bottleneck step; `\"\"` for a plan created before it was\nrecorded). Only this service's own `planning-projector` consumes it (fixed\nconsumer group, at-least-once, offsets committed after the projection\ncommitted), into a SEPARATE analytical database that\n`planning-reports` serves read-only. Poison messages go to\n`warehouse.warehouse-planning.analytics.dlq`.\n\n**Envelope (mandatory).** Every message is a CloudEvents 1.0 event in\n*structured content mode* (Kafka value = JSON event format) with the Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`. All of\n`specversion` (`1.0`), `id`, `source` (`/warehouse/warehouse-planning`),\n`type`, `subject`, `time`, `datacontenttype` (`application/json`) and\n`dataschema` are required; the payload sits under `data`. No flat\nenvelope, no toggle.\n\n**Type naming.** `com.warehouse.wes.warehouse-planning.<entity>.<EventName>`\nwhere `<entity>` is the aggregate that raised the event, lowercase, no\nseparators -- here `capacityplan`. **dataschema** =\n`urn:warehouse:warehouse-planning:events:<EventName>:v1`. **subject** and\nthe Kafka message key = the capacity plan id (one plan's events stay\nordered on one partition). A breaking payload change gets a new `.v2`\ntype and dataschema, never a mutation.\n"
   },
   "servers": {
     "production": {
@@ -39,6 +39,10 @@
     {
       "name": "consumed",
       "description": "Events produced by sibling contexts that this service consumes (Phase 3)."
+    },
+    {
+      "name": "analytics",
+      "description": "The analytics stream (ADR 0005): the same capacity-plan events on this service's own analytics topic, consumed only by planning-projector."
     }
   ],
   "channels": {
@@ -733,6 +737,295 @@
         }
       }
     },
+    "warehouse.warehouse-planning.analytics": {
+      "description": "This service's analytics topic (`AnalyticsTopic` in\n`internal/adapters/outbound/kafka/analytics_encoder.go`; ADR 0005). Written by\nthe SAME outbox relay, from rows inserted in the same transaction as the\nintegration rows; key = capacity plan id. Consumed ONLY by this service's\n`planning-projector` under a fixed consumer group read from env\n`ANALYTICS_CONSUMER_GROUP` (at-least-once; the offset is committed after the\nprojection and the dedupe mark committed together in the analytical database).\nThe projector dedupes on `id`, ignores unknown types, skips (with a rate-limited\nWARN) anything that is not CloudEvents 1.0, and dead-letters a known type with an\nunusable payload to `warehouse.warehouse-planning.analytics.dlq` (raw bytes plus\n`x-dlq-*` headers). Not an integration contract: other contexts consume the\nintegration topic.\n",
+      "subscribe": {
+        "operationId": "receiveCapacityPlanAnalyticsEvents",
+        "summary": "Receive the CapacityPlan analytics events.",
+        "description": "Route on the full `type`; the payloads are the integration payloads plus\nthe additive analytics-only fields documented per message.\n",
+        "tags": [
+          {
+            "name": "analytics"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "CapacityPlanCreatedAnalytics",
+              "title": "Capacity plan created (analytics stream)",
+              "summary": "The analytics copy of CapacityPlanCreated.",
+              "description": "Same `type`, same `id`, same payload as the integration CapacityPlanCreated;\nonly `dataschema` differs (`urn:warehouse:warehouse-planning:analytics:CapacityPlanCreated:v1`).\nThe projector uses the CloudEvents `time` as the plan's creation instant.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of CapacityPlanCreated on the analytics topic.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanCreated",
+                        "x-parser-schema-id": "<anonymous-schema-65>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:warehouse-planning:analytics:CapacityPlanCreated:v1",
+                        "x-parser-schema-id": "<anonymous-schema-66>"
+                      },
+                      "data": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-64>"
+                  }
+                ],
+                "x-parser-schema-id": "CapacityPlanCreatedAnalyticsEvent"
+              },
+              "examples": [
+                {
+                  "name": "draftPlanWithShortage",
+                  "summary": "Same example as the integration message, analytics dataschema.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2b7e-4c3a-4a1d-9f0b-6c2b8a7d1e33",
+                    "source": "/warehouse/warehouse-planning",
+                    "type": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanCreated",
+                    "subject": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
+                    "time": "2026-10-04T21:15:30Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:warehouse-planning:analytics:CapacityPlanCreated:v1",
+                    "data": {
+                      "plan_id": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
+                      "warehouse_id": "WH-1",
+                      "location": "PATH-ZONE-A",
+                      "path_id": "pick-rebin-pack",
+                      "window_start": "2026-10-05T08:00:00Z",
+                      "window_end": "2026-10-05T16:00:00Z",
+                      "assigned_demand": 12000,
+                      "path_capacity": 1000,
+                      "capacity_over_window": 8000,
+                      "shortage": 4000,
+                      "bottleneck_step": "REBIN",
+                      "status": "DRAFT"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "CapacityPlanPublishedAnalytics",
+              "title": "Capacity plan published (analytics stream)",
+              "summary": "The analytics copy of CapacityPlanPublished, plus binding_constraint.",
+              "description": "Same `type` and `id` as the integration CapacityPlanPublished; the payload adds\n`binding_constraint` (additive, analytics-only): the constraint type binding the\nbottleneck step, which the bottleneck-frequency report groups by. The projector\nuses the CloudEvents `time` as the plan's publication instant.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of CapacityPlanPublished on the analytics topic.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanPublished",
+                        "x-parser-schema-id": "<anonymous-schema-68>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:warehouse-planning:analytics:CapacityPlanPublished:v1",
+                        "x-parser-schema-id": "<anonymous-schema-69>"
+                      },
+                      "data": {
+                        "description": "Payload of CapacityPlanPublished on the analytics topic -- the integration payload plus binding_constraint.",
+                        "allOf": [
+                          "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[1].payload.allOf[1].properties.data",
+                          {
+                            "type": "object",
+                            "required": [
+                              "binding_constraint"
+                            ],
+                            "properties": {
+                              "binding_constraint": {
+                                "type": "string",
+                                "description": "Additive, analytics-only. The constraint type binding the bottleneck step (LABOR, STATION, ...); empty for a plan created before it was recorded.\n",
+                                "example": "STATION",
+                                "x-parser-schema-id": "<anonymous-schema-71>"
+                              }
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-70>"
+                          }
+                        ],
+                        "x-parser-schema-id": "CapacityPlanPublishedAnalyticsData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-67>"
+                  }
+                ],
+                "x-parser-schema-id": "CapacityPlanPublishedAnalyticsEvent"
+              },
+              "examples": [
+                {
+                  "name": "publishedPlan",
+                  "summary": "The published plan, bound by STATION at REBIN.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "9a8d7c6b-5e4f-4a3b-8c2d-1e0f9a8b7c6d",
+                    "source": "/warehouse/warehouse-planning",
+                    "type": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanPublished",
+                    "subject": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
+                    "time": "2026-10-04T21:45:10Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:warehouse-planning:analytics:CapacityPlanPublished:v1",
+                    "data": {
+                      "plan_id": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
+                      "warehouse_id": "WH-1",
+                      "location": "PATH-ZONE-A",
+                      "path_id": "pick-rebin-pack",
+                      "window_start": "2026-10-05T08:00:00Z",
+                      "window_end": "2026-10-05T16:00:00Z",
+                      "assigned_demand": 12000,
+                      "path_capacity": 1000,
+                      "capacity_over_window": 8000,
+                      "shortage": 4000,
+                      "bottleneck_step": "REBIN",
+                      "published_at": "2026-10-04T21:45:10Z",
+                      "binding_constraint": "STATION"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "CapacityShortageDetectedAnalytics",
+              "title": "Capacity shortage detected (analytics stream)",
+              "summary": "The analytics copy of CapacityShortageDetected.",
+              "description": "Same `type`, `id` and payload as the integration CapacityShortageDetected; only\n`dataschema` differs.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of CapacityShortageDetected on the analytics topic.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityShortageDetected",
+                        "x-parser-schema-id": "<anonymous-schema-73>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:warehouse-planning:analytics:CapacityShortageDetected:v1",
+                        "x-parser-schema-id": "<anonymous-schema-74>"
+                      },
+                      "data": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[2].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-72>"
+                  }
+                ],
+                "x-parser-schema-id": "CapacityShortageDetectedAnalyticsEvent"
+              },
+              "examples": [
+                {
+                  "name": "shortageOf4000",
+                  "summary": "Short by 4000, bound by REBIN.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3b2a1c0d-9e8f-4d7c-b6a5-4f3e2d1c0b9a",
+                    "source": "/warehouse/warehouse-planning",
+                    "type": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityShortageDetected",
+                    "subject": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
+                    "time": "2026-10-04T21:45:10Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:warehouse-planning:analytics:CapacityShortageDetected:v1",
+                    "data": {
+                      "plan_id": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
+                      "warehouse_id": "WH-1",
+                      "location": "PATH-ZONE-A",
+                      "path_id": "pick-rebin-pack",
+                      "window_start": "2026-10-05T08:00:00Z",
+                      "window_end": "2026-10-05T16:00:00Z",
+                      "assigned_demand": 12000,
+                      "capacity_over_window": 8000,
+                      "shortage": 4000,
+                      "bottleneck_step": "REBIN"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "BottleneckDetectedAnalytics",
+              "title": "Bottleneck detected (analytics stream)",
+              "summary": "The analytics copy of BottleneckDetected.",
+              "description": "Same `type`, `id` and payload as the integration BottleneckDetected; only\n`dataschema` differs.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of BottleneckDetected on the analytics topic.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.warehouse-planning.capacityplan.BottleneckDetected",
+                        "x-parser-schema-id": "<anonymous-schema-76>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:warehouse-planning:analytics:BottleneckDetected:v1",
+                        "x-parser-schema-id": "<anonymous-schema-77>"
+                      },
+                      "data": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[3].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-75>"
+                  }
+                ],
+                "x-parser-schema-id": "BottleneckDetectedAnalyticsEvent"
+              },
+              "examples": [
+                {
+                  "name": "rebinBottleneck",
+                  "summary": "REBIN limits the path to 1000 ORDER/h.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7e6d5c4b-3a29-4180-9f7e-6d5c4b3a2918",
+                    "source": "/warehouse/warehouse-planning",
+                    "type": "com.warehouse.wes.warehouse-planning.capacityplan.BottleneckDetected",
+                    "subject": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
+                    "time": "2026-10-04T21:45:10Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:warehouse-planning:analytics:BottleneckDetected:v1",
+                    "data": {
+                      "plan_id": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
+                      "warehouse_id": "WH-1",
+                      "location": "PATH-ZONE-A",
+                      "path_id": "pick-rebin-pack",
+                      "window_start": "2026-10-05T08:00:00Z",
+                      "window_end": "2026-10-05T16:00:00Z",
+                      "bottleneck_step": "REBIN",
+                      "path_capacity": 1000
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
     "warehouse.workforce.events": {
       "description": "workforce-management's integration topic (`LaborTopic`). This service\nconsumes it with its own consumer group (env `LABOR_CAPACITY_CONSUMER_GROUP`).\n",
       "publish": {
@@ -767,11 +1060,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted",
-                    "x-parser-schema-id": "<anonymous-schema-65>"
+                    "x-parser-schema-id": "<anonymous-schema-79>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:workforce-management:events:ShiftPlanCommitted:v1",
-                    "x-parser-schema-id": "<anonymous-schema-66>"
+                    "x-parser-schema-id": "<anonymous-schema-80>"
                   },
                   "data": {
                     "type": "object",
@@ -786,41 +1079,41 @@
                       "building_id": {
                         "type": "string",
                         "example": "BLD1",
-                        "x-parser-schema-id": "<anonymous-schema-67>"
+                        "x-parser-schema-id": "<anonymous-schema-81>"
                       },
                       "shift_id": {
                         "type": "string",
                         "example": "SHIFT1",
-                        "x-parser-schema-id": "<anonymous-schema-68>"
+                        "x-parser-schema-id": "<anonymous-schema-82>"
                       },
                       "path_id": {
                         "type": "string",
                         "description": "Becomes the ProcessType (upper-cased) of the LABOR constraint.",
                         "example": "pack",
-                        "x-parser-schema-id": "<anonymous-schema-69>"
+                        "x-parser-schema-id": "<anonymous-schema-83>"
                       },
                       "planned_heads": {
                         "type": "integer",
                         "example": 3,
-                        "x-parser-schema-id": "<anonymous-schema-70>"
+                        "x-parser-schema-id": "<anonymous-schema-84>"
                       },
                       "planned_rate": {
                         "type": "number",
                         "format": "double",
                         "example": 50,
-                        "x-parser-schema-id": "<anonymous-schema-71>"
+                        "x-parser-schema-id": "<anonymous-schema-85>"
                       },
                       "planned_hours": {
                         "type": "number",
                         "format": "double",
                         "example": 8,
-                        "x-parser-schema-id": "<anonymous-schema-72>"
+                        "x-parser-schema-id": "<anonymous-schema-86>"
                       }
                     },
                     "x-parser-schema-id": "ShiftPlanCommittedData"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-64>"
+                "x-parser-schema-id": "<anonymous-schema-78>"
               }
             ],
             "x-parser-schema-id": "ShiftPlanCommittedEvent"
@@ -888,11 +1181,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered",
-                        "x-parser-schema-id": "<anonymous-schema-74>"
+                        "x-parser-schema-id": "<anonymous-schema-88>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:LocationSlotRegistered:v1",
-                        "x-parser-schema-id": "<anonymous-schema-75>"
+                        "x-parser-schema-id": "<anonymous-schema-89>"
                       },
                       "data": {
                         "type": "object",
@@ -906,38 +1199,38 @@
                           "locationCode": {
                             "type": "string",
                             "example": "A-01-01",
-                            "x-parser-schema-id": "<anonymous-schema-76>"
+                            "x-parser-schema-id": "<anonymous-schema-90>"
                           },
                           "zoneId": {
                             "type": "string",
                             "example": "ZONE-A",
-                            "x-parser-schema-id": "<anonymous-schema-77>"
+                            "x-parser-schema-id": "<anonymous-schema-91>"
                           },
                           "locationType": {
                             "type": "string",
                             "example": "BULK",
-                            "x-parser-schema-id": "<anonymous-schema-78>"
+                            "x-parser-schema-id": "<anonymous-schema-92>"
                           },
                           "role": {
                             "type": "string",
                             "description": "Storage (default) tallies storage positions per locationType; WorkCenter tallies stations per activity.",
                             "example": "Storage",
-                            "x-parser-schema-id": "<anonymous-schema-79>"
+                            "x-parser-schema-id": "<anonymous-schema-93>"
                           },
                           "activities": {
                             "type": "array",
                             "description": "Present only when role is WorkCenter.",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-81>"
+                              "x-parser-schema-id": "<anonymous-schema-95>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-80>"
+                            "x-parser-schema-id": "<anonymous-schema-94>"
                           }
                         },
                         "x-parser-schema-id": "LocationSlotRegisteredData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-73>"
+                    "x-parser-schema-id": "<anonymous-schema-87>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotRegisteredEvent"
@@ -988,11 +1281,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned",
-                        "x-parser-schema-id": "<anonymous-schema-83>"
+                        "x-parser-schema-id": "<anonymous-schema-97>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:LocationSlotDecommissioned:v1",
-                        "x-parser-schema-id": "<anonymous-schema-84>"
+                        "x-parser-schema-id": "<anonymous-schema-98>"
                       },
                       "data": {
                         "type": "object",
@@ -1004,13 +1297,13 @@
                           "locationCode": {
                             "type": "string",
                             "example": "A-01-01",
-                            "x-parser-schema-id": "<anonymous-schema-85>"
+                            "x-parser-schema-id": "<anonymous-schema-99>"
                           }
                         },
                         "x-parser-schema-id": "LocationSlotDecommissionedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-82>"
+                    "x-parser-schema-id": "<anonymous-schema-96>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotDecommissionedEvent"
@@ -1038,6 +1331,171 @@
           ]
         }
       }
+    },
+    "warehouse.order-management.events": {
+      "description": "order-management's integration topic (`OrderTopic`). This service consumes\nit with a STABLE consumer group read from env `DEMAND_CONSUMER_GROUP` (no\ndefault; unset means the consumer is not started). Only\n`OrderAllocated` and `OrderPartiallyAllocated` are acted on; every other\nCloudEvents `type` -- `OrderRepromised` included -- is ignored, and a\nmessage that is not a valid CloudEvent is skipped (WARN), never blocking\nthe partition.\n",
+      "publish": {
+        "operationId": "consumeOrderAllocationEvents",
+        "summary": "Consume order-management's order allocation events.",
+        "description": "Consumed by this service into a LOCAL expected-demand read model\n(`order_demand`, one row per order id; `GET /demand`,\n`get_expected_demand`, and the default of `POST /capacity-plans`\n`assigned_demand`). An order is demand in a window [start, end) when its\n`promise_date` (the promise cutoff) is at or after start and strictly\nbefore end. Last writer wins per order id on the CloudEvents `time`\n(a later or equal time replaces, an older one is a no-op). The\nidempotency claim on the CloudEvents `id` and the upsert commit in ONE\ndatabase transaction; the offset is committed only afterwards. order-\nmanagement's events carry no site, no quantities and no cancellations\n(OrderCancelled is analytics-topic only), so demand is counted in\nORDERS, attributed to the one configured site, and not netted; see\ndocs/adr/0004-demand-ingestion-from-order-management.md.\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "OrderAllocated",
+              "title": "Order allocated (consumed)",
+              "summary": "order-management allocated every line of an order and released the eligible ones.",
+              "description": "CONSUMED from `warehouse.order-management.events` (producer: order-management,\nits own `apis/asyncapi.yaml`). Upserts the order into the expected-demand read\nmodel: promise cutoff = `data.promise_date`, released lines = `len(data.lines)`,\nsite = the configured `DEMAND_SITE_ID` (the event carries none). `subject` must\nequal `data.order_id`. Deduped on the CloudEvents `id`; last writer wins per\norder on `time`. `type` =\n`com.warehouse.wes.order-management.order.OrderAllocated`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                },
+                {
+                  "name": "warehouse-planning"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of order-management's OrderAllocated (consumed).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.order-management.order.OrderAllocated",
+                        "x-parser-schema-id": "<anonymous-schema-101>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:order-management:events:OrderAllocated:v1",
+                        "x-parser-schema-id": "<anonymous-schema-102>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Fields this service reads from order-management's OrderAllocated / OrderPartiallyAllocated `data` (its own AllocationData; hand-mirrored, never imported). Everything else in the payload is ignored.",
+                        "required": [
+                          "order_id",
+                          "promise_date"
+                        ],
+                        "properties": {
+                          "order_id": {
+                            "type": "string",
+                            "description": "Must equal the CloudEvents `subject`.",
+                            "example": "ord-7c9e6679-7d5a-4b37-b2f1-93b0c4a1d8f2",
+                            "x-parser-schema-id": "<anonymous-schema-103>"
+                          },
+                          "promise_date": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "The order's promise cutoff instant. The window predicate is applied to it.",
+                            "example": "2026-10-05T10:00:00Z",
+                            "x-parser-schema-id": "<anonymous-schema-104>"
+                          },
+                          "lines": {
+                            "type": "array",
+                            "description": "Exactly the lines released in this allocation pass (may be empty); only its length is read.",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "line_no": {
+                                  "type": "integer",
+                                  "x-parser-schema-id": "<anonymous-schema-107>"
+                                }
+                              },
+                              "x-parser-schema-id": "<anonymous-schema-106>"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-105>"
+                          }
+                        },
+                        "x-parser-schema-id": "OrderAllocationData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-100>"
+                  }
+                ],
+                "x-parser-schema-id": "OrderAllocatedEvent"
+              },
+              "examples": [
+                {
+                  "name": "twoLineOrder",
+                  "summary": "A two-line order promised for 2026-10-05T10:00Z.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "4f1c2a7e-9d31-4a6b-8f0e-6b2c1d5e7a90",
+                    "source": "/warehouse/order-management",
+                    "type": "com.warehouse.wes.order-management.order.OrderAllocated",
+                    "subject": "ord-7c9e6679-7d5a-4b37-b2f1-93b0c4a1d8f2",
+                    "time": "2026-10-04T09:15:30Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:order-management:events:OrderAllocated:v1",
+                    "data": {
+                      "order_id": "ord-7c9e6679-7d5a-4b37-b2f1-93b0c4a1d8f2",
+                      "promise_date": "2026-10-05T10:00:00Z",
+                      "lines": [
+                        {
+                          "line_no": 1,
+                          "sku": "SKU-BOOK-0001",
+                          "path_id": "pick",
+                          "gift_wrap": false,
+                          "fulfillment_class": "SAME_SKU_MULTI"
+                        },
+                        {
+                          "line_no": 2,
+                          "sku": "SKU-BOOK-0002",
+                          "path_id": "pick",
+                          "gift_wrap": true,
+                          "fulfillment_class": "SAME_SKU_MULTI"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "OrderPartiallyAllocated",
+              "title": "Order partially allocated (consumed)",
+              "summary": "Some lines of a partial-shipment order were allocated and released, some backordered.",
+              "description": "CONSUMED from `warehouse.order-management.events`. Same payload shape and the\nsame effect as OrderAllocated (`data.lines` carries exactly the lines released\nin that pass); a later OrderAllocated for the same order replaces it. `type` =\n`com.warehouse.wes.order-management.order.OrderPartiallyAllocated`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                },
+                {
+                  "name": "warehouse-planning"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of order-management's OrderPartiallyAllocated (consumed).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.order-management.order.OrderPartiallyAllocated",
+                        "x-parser-schema-id": "<anonymous-schema-109>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:order-management:events:OrderPartiallyAllocated:v1",
+                        "x-parser-schema-id": "<anonymous-schema-110>"
+                      },
+                      "data": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-108>"
+                  }
+                ],
+                "x-parser-schema-id": "OrderPartiallyAllocatedEvent"
+              }
+            }
+          ]
+        }
+      }
     }
   },
   "components": {
@@ -1046,7 +1504,13 @@
       "CapacityPlanPublished": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[1]",
       "CapacityShortageDetected": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[2]",
       "BottleneckDetected": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[3]",
+      "CapacityPlanCreatedAnalytics": "$ref:$.channels.warehouse.warehouse-planning.analytics.subscribe.message.oneOf[0]",
+      "CapacityPlanPublishedAnalytics": "$ref:$.channels.warehouse.warehouse-planning.analytics.subscribe.message.oneOf[1]",
+      "CapacityShortageDetectedAnalytics": "$ref:$.channels.warehouse.warehouse-planning.analytics.subscribe.message.oneOf[2]",
+      "BottleneckDetectedAnalytics": "$ref:$.channels.warehouse.warehouse-planning.analytics.subscribe.message.oneOf[3]",
       "ShiftPlanCommitted": "$ref:$.channels.warehouse.workforce.events.publish.message",
+      "OrderAllocated": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[0]",
+      "OrderPartiallyAllocated": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[1]",
       "LocationSlotRegistered": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[0]",
       "LocationSlotDecommissioned": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1]"
     },
@@ -1058,6 +1522,11 @@
       "BottleneckDetectedData": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[3].payload.allOf[1].properties.data",
       "CapacityPlanCreatedEvent": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload",
       "CapacityPlanPublishedEvent": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[1].payload",
+      "CapacityPlanCreatedAnalyticsEvent": "$ref:$.channels.warehouse.warehouse-planning.analytics.subscribe.message.oneOf[0].payload",
+      "CapacityPlanPublishedAnalyticsData": "$ref:$.channels.warehouse.warehouse-planning.analytics.subscribe.message.oneOf[1].payload.allOf[1].properties.data",
+      "CapacityPlanPublishedAnalyticsEvent": "$ref:$.channels.warehouse.warehouse-planning.analytics.subscribe.message.oneOf[1].payload",
+      "CapacityShortageDetectedAnalyticsEvent": "$ref:$.channels.warehouse.warehouse-planning.analytics.subscribe.message.oneOf[2].payload",
+      "BottleneckDetectedAnalyticsEvent": "$ref:$.channels.warehouse.warehouse-planning.analytics.subscribe.message.oneOf[3].payload",
       "CapacityShortageDetectedEvent": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[2].payload",
       "BottleneckDetectedEvent": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[3].payload",
       "ShiftPlanCommittedData": "$ref:$.channels.warehouse.workforce.events.publish.message.payload.allOf[1].properties.data",
@@ -1065,7 +1534,10 @@
       "LocationSlotDecommissionedData": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1].payload.allOf[1].properties.data",
       "ShiftPlanCommittedEvent": "$ref:$.channels.warehouse.workforce.events.publish.message.payload",
       "LocationSlotRegisteredEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[0].payload",
-      "LocationSlotDecommissionedEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1].payload"
+      "LocationSlotDecommissionedEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1].payload",
+      "OrderAllocationData": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data",
+      "OrderAllocatedEvent": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[0].payload",
+      "OrderPartiallyAllocatedEvent": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[1].payload"
     }
   },
   "x-parser-spec-parsed": true,

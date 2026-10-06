@@ -1,201 +1,256 @@
 ---
 id: aggregate-design-canvas
-title: Aggregate Design Canvas
-sidebar_label: Aggregate Design Canvas
-description: The full ddd-crew Aggregate Design Canvas for ShiftPlan and LaborAssignment — the two aggregate roots whose invariants and commands define this context's write model.
+title: Aggregate design canvas
+sidebar_label: Aggregate design canvas
+description: ddd-crew Aggregate Design Canvas v1.1 for ShiftPlan, AssociateShift and LaborAssignment — state transitions, invariants with the Err values that enforce them, commands, events, throughput and size.
 ---
 
-# Aggregate Design Canvas
+# Aggregate design canvas
 
-Following the [ddd-crew Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas)
-template. `workforce-management` has **three** aggregate roots
-(`AssociateShift`, `ShiftPlan`, `LaborAssignment`), each in its own package
-under `internal/domain/`. The two canvases below cover `ShiftPlan` and
-`LaborAssignment` — the two aggregates that carry this context's
-headline invariants and that `wes-work-planning` and `fulfillment-execution`
-each care about, directly or by design-contrast. `AssociateShift` is
-documented alongside them where its state gates the other two (the break and
-shift-ended checks `AssignLabor` depends on).
+:::info[Synced from workforce-management]
+This page is a copy of [`docs/docs/ddd/aggregate-design-canvas.md`](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/ddd/aggregate-design-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-## Aggregate: ShiftPlan
 
-### Name
+Follows the ddd-crew
+[Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas),
+one section per aggregate root in `internal/domain/`. None of the three roots
+has a status enum: state is held in booleans (`onBreak`, `ended`) or in the
+presence of an optional field (`active *Interval`), so each state diagram
+names the states those fields encode. Every transition label is a real method.
 
-**ShiftPlan** — package `internal/domain/shiftplan`, identity
+Throughput and size figures are **estimates** for one building running
+roughly a hundred associates per shift; they are not measured.
+
+## ShiftPlan
+
+### 1. Name
+
+`ShiftPlan` — `internal/domain/shiftplan/shift_plan.go`. Identity: the pair
 `(buildingId, shiftId)`.
 
-### Description
+### 2. Description
 
-The committed split of headcount across process paths for one building's
-shift, made of `PathPlan` lines (`pathId`, `plannedHeads`, `plannedRate`,
-`plannedHours`). Exactly one `ShiftPlan` exists per building per shift.
-`PathPlan` is a value object with no identity or lifecycle of its own — you
-do not update a line, you commit a new plan. `ProposedHeads` is a free
-function, not a method on this aggregate, because a proposal
-(`ceil(charge ÷ plannedRate)`) has no aggregate identity — it commits
-nothing.
+The headcount split a human committed across paths for one building's shift:
+a list of `PathPlan` lines (`PathId`, `PlannedHeads`, `PlannedRate`,
+`PlannedHours`). It is the context's specification model — the number
+downstream planners consume.
 
-### State Transitions
+### 3. State Transitions
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Committed: CommitShiftPlan (all lines valid)
-    [*] --> Rejected: CommitShiftPlan (any line invalid) — nothing constructed
+    [*] --> Committed: CommitShiftPlan / ShiftPlanCommitted
+    Committed --> Committed: CommitShiftPlan again for the same building and shift
     Committed --> [*]
 ```
 
-There is no "draft" or "revise" state. `CommitShiftPlan` either succeeds and
-produces a complete, immutable `ShiftPlan` for that `(buildingId, shiftId)`,
-or fails and produces nothing — there is no partially committed plan.
-`ProposePathPlan` (the pre-commit arithmetic) is not a state on this
-aggregate at all; it is advisory and stateless.
+Source: `internal/domain/shiftplan/shift_plan.go` (`CommitShiftPlan`,
+`Rehydrate`), `internal/adapters/outbound/postgres/shift_plan_repo.go`
+(`Save` deletes and re-inserts the `path_plan` lines). Omits: `Rehydrate`,
+which reconstructs without raising events. There is no draft state — a
+proposal (`ProposedHeads`) has no aggregate identity at all.
 
-### Enforced Invariants
+### 4. Enforced Invariants
 
-| Invariant | Enforcement | Error → HTTP |
-| --- | --- | --- |
-| `plannedHeads(path) ≤ installedStations(path)` for every line | Checked before construction, in the domain | `ErrPlannedHeadsExceedInstalled` → `409` |
-| `plannedHours ≤ plannedHeads × maxHoursPerShift` for every line | Checked before construction, in the domain | `ErrPlannedHoursExceedCapacity` → `409` |
-| At least one `PathPlan` line must be present | Checked before construction | `ErrNoPathPlans` → `400` |
-| Every line needs an installed-station count | Checked before construction | `ErrMissingInstalledStations` → `400` |
-| `plannedHeads(path) ≤ liveInstalledCapacity(path)` for every line — fetched fresh from `fulfillment-execution` on every commit ([ADR 0014](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0014-installed-capacity-ceiling.md)) | Checked in the domain against a value the use case fetches through `InstalledCapacityClient` | `ErrExceedsInstalledCapacity` → `409`; fetch failure `ErrInstalledCapacityUnavailable` → `503` (whole commit rejected, no fallback) |
-| Validation is all-or-nothing | `CommitShiftPlan` validates every line before constructing anything | (no partial commit possible) |
-
-The `plannedHeads ≤ installedStations` rule is enforced **independently** of
-the identical rule `wes-work-planning` enforces on its own `PathPlan` — this
-is the aggregate that actually commits headcount, so it validates its own
-commitment rather than trusting an upstream check it does not control.
-
-### Corrective Policies
-
-There is no automated corrective policy on this aggregate. A rejected
-`CommitShiftPlan` call simply fails with a typed domain error mapped to an
-HTTP status; the caller (a human, via the HTTP adapter — the MCP adapter
-has no commit tool) corrects the input and resubmits, or, on a `503`
-installed-capacity failure, retries later. No retry, no compensation, no saga — a shift plan is a
-single atomic human decision, not a long-running process.
-
-### Handled Commands
-
-| Command | Preconditions | Result |
-| --- | --- | --- |
-| `ProposePathPlan(buildingId, charge, plannedRate)` | None — pure computation | Returns proposed heads; persists nothing; raises `ShiftPlanProposed` |
-| `CommitShiftPlan(buildingId, shiftId, lines[], installedStations[])` | Every line passes the invariants above, including the live installed-capacity ceiling; at least one line present | Constructs and persists a new `ShiftPlan`; raises `ShiftPlanCommitted` |
-
-### Created Events
-
-| Event | Raised when |
+| Invariant | Enforced by |
 | --- | --- |
-| `ShiftPlanProposed` | `ProposePathPlan` computes heads for a path, ahead of any commit (constructed in the application layer — a proposal has no aggregate instance) |
-| `ShiftPlanCommitted` | A human successfully commits a headcount split |
-| `PathUnderstaffed` | Derived, not raised by this aggregate directly — `GetStaffingGap` compares this aggregate's committed plan against live `LaborAssignment` counts and raises the flag when active heads fall short. Attributed to `ShiftPlan` in the AsyncAPI catalog because that is the aggregate whose commitment it is measured against. |
+| At least one `PathPlan` line | `shiftplan.ErrNoPathPlans` in `CommitShiftPlan` |
+| Every line has a caller-supplied installed-station count | `shiftplan.ErrMissingInstalledStations` |
+| `plannedHeads ≤ installedStations` (caller-supplied) | `shiftplan.ErrPlannedHeadsExceedInstalled` |
+| `plannedHeads ≤ live installed capacity` (missing entry = 0) | `shiftplan.ErrExceedsInstalledCapacity` ([ADR 0014](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0014-installed-capacity-ceiling.md)) |
+| `plannedHours ≤ plannedHeads × maxHoursPerShift` | `shiftplan.ErrPlannedHoursExceedCapacity` |
+| Every line's path is a declared catalogue path (application layer) | `pathcatalog.ErrUnknownPath` in `CommitShiftPlan.installedCapacityForPath` |
 
-### Throughput
+### 5. Corrective Policies
 
-Low-frequency, human-cadence writes: one `CommitShiftPlan` per building per
-shift (typically once or a handful of times per shift if a plan is
-re-committed). `ProposePathPlan` is called more often — it is advisory and
-free of side effects — but persists nothing and has no throughput cost on
-the write model.
+- None automatic. A rejected commit is corrected by the human resubmitting.
+- When the live capacity read fails, the commit is rejected
+  (`ports.ErrInstalledCapacityUnavailable` → 503); nothing is retried on the
+  commit path ([ADR 0022](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0022-resilience-circuit-breakers-retry-dlq-shutdown.md)).
+- A later understaffing is surfaced by `GetStaffingGap` as `PathUnderstaffed`
+  — a flag for a human, never a plan change.
 
-### Size
+### 6. Handled Commands
 
-Small and bounded: one `ShiftPlan` holds a handful of `PathPlan` lines
-(one per active process path in a building, typically single digits). It
-does not grow over time — a new shift produces a new `ShiftPlan` instance,
-not an append to an existing one.
+`CommitShiftPlan` (`POST /shift-plans`). Read by `GetStaffingGap` and by the
+integration publisher's fan-out.
 
----
+### 7. Created Events
 
-## Aggregate: LaborAssignment
+- `com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted`
 
-### Name
+`ShiftPlanProposed` and `PathUnderstaffed` carry the `shiftplan` entity
+segment in their `type` but are constructed by use cases, not by this
+aggregate (see [Domain events](/contexts/workforce-management/domain-events)).
 
-**LaborAssignment** — package `internal/domain/assignment`, identity
+### 8. Throughput
+
+Estimate: a handful of commits per building per shift (one at shift start,
+occasional re-commits). Concurrency conflicts are not guarded: there is no
+`version` column, because each commit builds a fresh plan rather than
+mutating a loaded one ([ADR 0021](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0021-optimistic-concurrency-version-column.md)).
+
+### 9. Size
+
+Estimate: one to a dozen `PathPlan` lines; one domain event per commit
+(fanned out to one integration message per line). Lifetime: one shift.
+
+## AssociateShift
+
+### 1. Name
+
+`AssociateShift` — `internal/domain/associate/associate_shift.go`. Identity:
 `AssociateId`.
 
-### Description
+### 2. Description
 
-One associate's current path assignment plus their assignment history for
-the shift. The identity choice **is** the invariant: keying the root by
-`AssociateId` and holding a single optional `active *Interval` field (plus a
-`history []Interval` slice) makes "exactly one ACTIVE assignment per
-associate" structural rather than checked — there is no second field to put
-a second active assignment in, so no code path, race, or repair script can
-produce a double-booking. There is deliberately no way to address an
-assignment by its own identity; assignments are addressed via the
-associate.
+One associate's roster entry for a shift: their certifications, break state,
+logged hours and whether the shift ended. It answers "can this associate be
+assigned right now?" (`CanBeAssigned`, `HasCertification`).
 
-### State Transitions
+### 3. State Transitions
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Active: Assign (no prior active interval) — raises LaborAssigned
-    Active --> Active: Assign (prior interval active) — closes prior, opens new, raises LaborReassigned
-    Active --> Closed: EndActive / AssociateShiftEnded — interval closed, hours logged
-    Closed --> Active: Assign — a new interval opens
-    Closed --> [*]
+    [*] --> OnShift: NewAssociateShift / AssociateShiftStarted
+    OnShift --> OnBreak: StartBreak / AssociateBreakStarted
+    OnBreak --> OnShift: EndBreak / AssociateBreakEnded
+    OnShift --> OnShift: Certify / AssociateCertified
+    OnShift --> OnShift: LogHours
+    OnBreak --> OnBreak: Certify / AssociateCertified
+    OnShift --> Ended: EndShift / AssociateShiftEnded
+    OnBreak --> Ended: EndShift / AssociateShiftEnded
+    Ended --> Ended: EndShift is a no-op
+    Ended --> OnShift: StartAssociateShift replaces the roster entry
 ```
 
-Calling `Assign` while an interval is already active does not error — it
-**supersedes**: the old interval closes (its hours logged against
-`AssociateShift`) and a new one opens, raising `LaborReassigned` instead of
-`LaborAssigned`. This matches the floor, where a supervisor moves someone
-without first "unassigning" them.
+Source: `internal/domain/associate/associate_shift.go`,
+`internal/application/usecases/start_associate_shift.go`. States encode the
+fields `onBreak` and `ended`. Omits: the rejected transitions (listed as
+invariants below) and the infrastructure-only `SetVersion`.
 
-### Enforced Invariants
+### 4. Enforced Invariants
 
-| Invariant | Enforcement | Error → HTTP |
-| --- | --- | --- |
-| Exactly one ACTIVE assignment per associate | **Structural** — a single `active *Interval` field; unrepresentable if violated, not merely checked | (no error path — expressed as supersede behaviour instead) |
-| Assignment requires the path's certification | Checked in the domain before any state change (`hasCertification bool` passed in — the aggregate depends on the answer, not on how it was obtained) | `ErrCertificationRequired` → `409` |
-| Associate must not be on a logged break or shift-ended | Delegated to `AssociateShift.CanBeAssigned()`, checked by the application layer before calling `Assign` | `ErrOnBreak` / `ErrShiftEnded` → `409` |
-
-A path's required certification is, by convention, the `Certification` with
-the same name as the `PathId` — `pack` requires `pack`. This is a documented
-naming convention, not a modelled relationship or a cross-aggregate lookup.
-
-### Corrective Policies
-
-None automated. A rejected `Assign` (missing certification, on break, shift
-ended) fails with a typed domain error; a human corrects the situation (adds
-the certification, ends the break) and retries. Supersede is itself the
-"correction" for the double-booking case — there is no reject-then-retry
-cycle for it, because the second call succeeds by design and closes the
-first interval automatically.
-
-### Handled Commands
-
-| Command | Preconditions | Result |
-| --- | --- | --- |
-| `AssignLabor(associateId, pathId)` | Associate holds `pathId`'s required certification; associate is not on a logged break and their shift has not ended | If no active interval: opens one, raises `LaborAssigned`. If an active interval exists: closes it (logs hours), opens the new one, raises `LaborReassigned` |
-| `EndActive(at)` (via `EndAssociateShift`) | An active interval exists | Closes the interval, logs its hours against `AssociateShift` |
-
-### Created Events
-
-| Event | Raised when |
+| Invariant | Enforced by |
 | --- | --- |
-| `LaborAssigned` | An associate is placed on a path for the first time (no prior active interval) |
-| `LaborReassigned` | An active assignment is closed in favour of a new path (`fromPathId`, `toPathId` both carried — a move is one event, not a close/open pair a consumer has to correlate) |
+| No break while already on break | `associate.ErrAlreadyOnBreak` in `StartBreak` |
+| No break end while not on break | `associate.ErrNotOnBreak` in `EndBreak` |
+| No assignment while on break | `associate.ErrOnBreak` in `CanBeAssigned` |
+| No mutation after the shift ended (certify, breaks, hours, assignment) | `associate.ErrShiftEnded` |
+| Logged hours never exceed `MAX_HOURS_PER_SHIFT` | `associate.ErrMaxHoursExceeded` in `LogHours` |
+| Non-empty identity and certification values | `shared.ErrEmptyAssociateId`, `shared.ErrEmptyCertification` |
+| No lost update between two writers | `ports.ErrConcurrentModification` from the version-guarded `AssociateRepo.Save` (infrastructure, [ADR 0021](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0021-optimistic-concurrency-version-column.md)) |
 
-Neither event is published to the integration topic — no sibling receives
-them. (Like every domain event, they do reach this service's own internal
-analytics topic for the labor report, ADR 0010.) Publishing individual
-assignment moves to another context would let a downstream context
-reconstruct a per-associate location picture, exactly what the path
-boundary exists to withhold. See [Domain Events](./domain-events).
+### 5. Corrective Policies
 
-### Throughput
+- `EndAssociateShift` closes the associate's active `LaborAssignment` and
+  logs its hours before ending the shift — the one cross-aggregate policy,
+  run inside one unit of work.
+- Restarting (`StartAssociateShift` on an existing id) replaces the entry and
+  carries over the stored `version`.
 
-Higher-frequency than `ShiftPlan`: every intra-shift rebalance (a supervisor
-moving an associate) is one `AssignLabor` call. Volume scales with headcount
-and shift volatility — potentially several calls per associate per shift on
-a disrupted day, versus one `CommitShiftPlan` per shift.
+### 6. Handled Commands
 
-### Size
+`StartAssociateShift`, `CertifyAssociate`, `StartBreak`, `EndBreak`,
+`EndAssociateShift`; `LogHours` is invoked by `AssignLabor` and
+`EndAssociateShift` when an interval closes.
 
-Bounded per associate per shift: one active interval plus a `history` slice
-that grows for the life of the shift record. Explicitly acceptable at
-shift scope; the aggregate's own package documentation flags that this
-would need revisiting if `LaborAssignment` ever spanned weeks rather than a
-single shift.
+### 7. Created Events
+
+- `com.warehouse.wes.workforce-management.associate.AssociateShiftStarted`
+- `com.warehouse.wes.workforce-management.associate.AssociateCertified`
+- `com.warehouse.wes.workforce-management.associate.AssociateBreakStarted`
+- `com.warehouse.wes.workforce-management.associate.AssociateBreakEnded`
+- `com.warehouse.wes.workforce-management.associate.AssociateShiftEnded`
+
+### 8. Throughput
+
+Estimate: a few writes per associate per shift (start, one or two breaks,
+the occasional certification, end) plus one hours update per reassignment.
+
+### 9. Size
+
+Estimate: 4–8 events per instance per shift; a certification set of a few
+values. Lifetime: one shift, though the row is reused across restarts.
+
+## LaborAssignment
+
+### 1. Name
+
+`LaborAssignment` — `internal/domain/assignment/labor_assignment.go`.
+Identity: `AssociateId` (one record per associate).
+
+### 2. Description
+
+Which path an associate is on now (`active *Interval`) and every closed
+`Interval` before it (`history`). Keying the root by associate makes "exactly
+one ACTIVE assignment per associate" structural: there is only one field to
+hold it.
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Unassigned: NewLaborAssignment
+    Unassigned --> Active: Assign / LaborAssigned
+    Active --> Active: Assign to another path / LaborReassigned
+    Active --> Unassigned: EndActive, no event
+```
+
+Source: `internal/domain/assignment/labor_assignment.go`. States encode
+whether `active` is nil. Omits: `Rehydrate`; the closed interval moved into
+`history` on every `Assign`-from-Active and `EndActive`.
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+| --- | --- |
+| At most one ACTIVE assignment per associate (double-booking impossible) | structural — `Assign` closes the active interval before opening a new one |
+| The associate holds the path's required certification | `assignment.ErrCertificationRequired` in `Assign` (certification resolved by `usecases.requiredCertification`) |
+| Assignee is on shift and not on break (checked on the other aggregate first) | `associate.ErrOnBreak`, `associate.ErrShiftEnded` via `AssociateShift.CanBeAssigned` in `AssignLabor` |
+| Path is a declared catalogue path (adapter layer) | `pathcatalog.ErrUnknownPath` in the HTTP and MCP adapters' `validatePathId` |
+| No lost update between two writers | `ports.ErrConcurrentModification` from the version-guarded `AssignmentRepo.Save` |
+
+### 5. Corrective Policies
+
+- A second assignment never fails as "double-booked"; it is corrected by
+  construction into a reassignment.
+- The closed interval's hours are logged on `AssociateShift`; if that would
+  exceed `MAX_HOURS_PER_SHIFT`, the whole assignment is rejected
+  (`ErrMaxHoursExceeded`).
+
+### 6. Handled Commands
+
+`AssignLabor` (`POST /associates/{id}/assignments`, MCP `assign_labor`);
+`EndActive` from `EndAssociateShift`. `CountActiveByPath` on its repository
+backs `GetStaffingGap`.
+
+### 7. Created Events
+
+- `com.warehouse.wes.workforce-management.assignment.LaborAssigned`
+- `com.warehouse.wes.workforce-management.assignment.LaborReassigned`
+
+### 8. Throughput
+
+Estimate: the hottest aggregate — every intra-shift move is one write, a
+few per associate per shift, peaking when a shift lead rebalances.
+
+### 9. Size
+
+Estimate: history grows by one interval per move, so a handful to a few
+dozen intervals per associate. The Postgres repo rewrites the whole history
+on every `Save` (`DELETE` + re-`INSERT` into `labor_assignment_history`), so
+history length is the size driver.
+
+## Not aggregates
+
+These hold state or raise events but have no aggregate identity:
+
+| Thing | What it is | Where |
+| --- | --- | --- |
+| `ProposedHeads` / `ProposePathPlan` | pure computation that raises `ShiftPlanProposed` | `internal/domain/shiftplan`, `internal/application/usecases/propose_path_plan.go` |
+| `StaffingGap` / `GetStaffingGap` | read model derived from a `ShiftPlan` and `CountActiveByPath`; raises `PathUnderstaffed` | `internal/application/usecases/get_staffing_gap.go` |
+| `pathcatalog.Catalogue` | in-memory lookup of the process-path catalogue (file or Kafka-fed) | `internal/domain/pathcatalog` |
+| `labor_rollup` and the `analytics_*` tables | analytics projection, written by `cmd/workforce-projector` | `migrations/analytics/0001_report.up.sql`, `internal/adapters/outbound/analyticsstore` |
+| `laborperformancecache.Consumer` | per-TaskType running mean and idle share cache | `internal/adapters/outbound/laborperformancecache` |

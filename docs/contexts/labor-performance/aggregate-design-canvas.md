@@ -2,169 +2,266 @@
 id: aggregate-design-canvas
 title: Aggregate Design Canvas
 sidebar_label: Aggregate Design Canvas
-description: The full ddd-crew Aggregate Design Canvas for TaskPerformance, labor-performance's primary aggregate — state transitions, invariants, corrective policies, commands, events, throughput, size.
+description: The ddd-crew Aggregate Design Canvas v1.1 for each of Labor Performance's three aggregate roots — LaborStandard, TaskPerformance and IdlePeriod — plus the read models that are not aggregates.
 ---
 
 # Aggregate Design Canvas
 
-Following the [ddd-crew Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas)
-template. This context owns three aggregates — `LaborStandard`,
-`TaskPerformance` and, since ADR 0014, `IdlePeriod` — but
-`TaskPerformance` is the primary aggregate: it is
-the one the context's whole job (scoring a completed task) exists to
-produce, and it is the one exercised on every consumed Kafka message.
-`LaborStandard`'s design is folded into the notes below where its
-append-only-history behavior directly shapes `TaskPerformance`'s own
-invariants, and `IdlePeriod` — derived in the same unit of work — is
-summarised at the end of this page.
+:::info[Synced from labor-performance]
+This page is a copy of [`docs/docs/ddd/aggregate-design-canvas.md`](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/ddd/aggregate-design-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-## Name
 
-**TaskPerformance**
+Following the [ddd-crew Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas),
+one section per aggregate root found in `internal/domain/**`. None of the
+three roots has a status enum: their lifecycle is either derived from a
+nullable field (`LaborStandard.effectiveTo`) or they are immutable facts
+once constructed. The state diagrams below are drawn from the constructor
+and mutator methods that actually exist.
 
-## Description
+## LaborStandard
 
-One scored, already-completed task — an event-sourced fact derived from a
-`fulfillment-execution` `TaskCompleted` Kafka message, not something a
-human creates or edits directly. It freezes the standard that was active
-at the moment the task finished, computes an efficiency ratio against
-that frozen value, and is immutable from the instant it is recorded.
+### 1. Name
 
-## State Transitions
+`standard.LaborStandard` (`internal/domain/standard/standard.go`), keyed
+by `shared.StandardId`. Persisted in `labor_standards`.
 
-`TaskPerformance` has **no internal lifecycle** — it is created once, in
-one shape, and never transitions afterward. The only "transition" is its
-existence:
+### 2. Description
 
+How long one `TaskType` *should* take: `expectedSeconds`, an optional
+`travelComponentSeconds` breakdown (ADR 0015) and an effective range
+`[effectiveFrom, effectiveTo)`. History is append-only: a revision closes
+the prior record and a new record (new `StandardId`) starts at the same
+instant, so already-scored rows stay historically accurate (ADR 0004).
+`version` is the optimistic-concurrency token (ADR 0022).
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Active : standard.New - DefineStandard, no prior or as the revision
+    Active --> Closed : Close at - DefineStandard revises this TaskType
+    Closed --> [*]
+    note right of Active
+        effectiveTo is nil
+        FindCurrentlyActive returns it
+    end note
+    note right of Closed
+        effectiveTo set, never reopened
+        still found by FindActiveAsOf for past instants
+    end note
 ```
-(none recorded) --RecordTaskPerformance(kafkaEvent)--> Recorded (terminal, immutable)
+
+Source: `internal/domain/standard/standard.go` (`New`, `Close`,
+`IsActiveAt`), `internal/application/usecases/define_standard.go`.
+Omitted: `Rehydrate` (a persistence round-trip, not a transition) and the
+`version` bump, which is a repository concern.
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+|---|---|
+| `expectedSeconds > 0` | `standard.ErrNonPositiveExpectedSeconds` in `standard.New` (HTTP 422) |
+| `travelComponentSeconds`, when present, is `>= 0` | `standard.ErrNegativeTravelComponentSeconds` in `validateTravelComponentSeconds` (HTTP 422); also the `CHECK` on `labor_standards.travel_component_seconds` |
+| `travelComponentSeconds`, when present, is `<= expectedSeconds` | `standard.ErrTravelComponentExceedsExpectedSeconds` (HTTP 422); same `CHECK` |
+| At most one open standard per `TaskType` | partial unique index `idx_labor_standards_one_open_per_task_type` → `ports.ErrOpenStandardConflict` (HTTP 409) in `postgres.StandardRepo.Save` |
+| No lost update when two revisions race | `version` guard in `postgres.StandardRepo.Save` → `ports.ErrConcurrentModification` (HTTP 409) |
+| `TaskType` is `PICK`, `PACK` or `SLAM` | `shared.ErrUnknownTaskType` from `shared.NewTaskType` at the REST boundary (HTTP 400) |
+
+### 5. Corrective Policies
+
+- A conflicting revision (409) is not retried by the server; the caller
+  re-reads with `GET /standards/{taskType}` and resubmits.
+- A repeated `POST /standards` with the same `Idempotency-Key` and body
+  replays the stored response instead of revising twice; the same key with
+  a different body is rejected with 422 (ADR 0016).
+
+### 6. Handled Commands
+
+- `DefineStandard(taskType, expectedSeconds, travelComponentSeconds)` —
+  `usecases.DefineStandard.Execute`, exposed as `POST /standards`. Creates
+  the new standard and, when one is open, closes the prior one in the same
+  unit of work.
+
+### 7. Created Events
+
+- `com.warehouse.wes.labor-performance.standard.LaborStandardDefined`
+  (no prior standard was open).
+- `com.warehouse.wes.labor-performance.standard.LaborStandardRevised`
+  (a prior standard was closed).
+
+Both go to `warehouse.labor-performance.analytics` only.
+
+### 8. Throughput (estimate)
+
+*Estimate:* very low — a handful of definitions per `TaskType` per week,
+driven by industrial-engineering studies. Concurrency on one `TaskType`
+is rare, which is why optimistic concurrency is enough.
+
+### 9. Size (estimate)
+
+*Estimate:* one instance lives from definition until its revision (weeks
+to months), produces exactly one event (`Defined` or `Revised`) and is
+closed once. The history per `TaskType` grows by one row per revision.
+
+## TaskPerformance
+
+### 1. Name
+
+`performance.TaskPerformance` (`internal/domain/performance/performance.go`),
+keyed by the CloudEvents `id` of the consumed `TaskCompleted` (`eventId`).
+Persisted in `task_performances`.
+
+### 2. Description
+
+One completed task, scored against the standard active at its completion
+instant: `taskId`, `associateId` (may be empty), `taskType` (may be empty
+= unclassified), `actualSeconds`, the frozen
+`standardSecondsAtCompletion`, the derived `efficiencyPct` and
+`completedAt`. Immutable once recorded — there is no update or delete use
+case.
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Scored : performance.New - actualSeconds and standard both positive
+    [*] --> Unscored : performance.New - no active standard or no measurable duration
+    Scored --> [*]
+    Unscored --> [*]
+    note right of Unscored
+        efficiencyPct is nil, never 0
+    end note
 ```
 
-There is no update, no delete, and no revision use case anywhere in the
-application layer. A genuine data correction from
-`fulfillment-execution` — a `TaskCompleted` re-published under a NEW
-`event_id` for the same `TaskId` — is recorded as a **second**, distinct
-`TaskPerformance` row, not an edit of the first: `TaskId` is treated
-purely as an opaque foreign reference, never a repository key, consistent
-with `TaskPerformance` being "immutable once recorded."
+Source: `internal/domain/performance/performance.go` (`New`,
+`computeEfficiencyPct`), `internal/application/usecases/record_task_performance.go`.
+Omitted: `Rehydrate`. "Scored" and "Unscored" are not stored states;
+they are the two shapes `New` can produce, distinguished by whether
+`efficiencyPct` is nil. Neither ever changes afterwards.
 
-## Enforced Invariants
+### 4. Enforced Invariants
 
-- **`EfficiencyPct` never divides by zero.** `ActualSeconds<=0` (an
-  unmeasurable completion — e.g. a `TaskCompleted` whose
-  `duration_seconds` is 0 because no claim-timestamp existed to compute
-  it from) or `StandardSecondsAtCompletion<=0` (no active standard
-  existed for that `TaskType` at completion time) both yield
-  `EfficiencyPct = nil` — a real business fact, never an error and never
-  a fabricated number.
-- **`StandardSecondsAtCompletion` is frozen at ingestion time, never
-  recomputed.** Resolved exactly once — the `LaborStandard` active *as of*
-  the event's `CompletedAt` timestamp, via `StandardRepo.FindActiveAsOf`,
-  never "active right now" — and stored redundantly on the aggregate. No
-  update path exists that could even attempt a recompute. See
-  [ADR 0004](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0004-standard-frozen-at-completion-time-not-recomputed.md).
-- **Idempotent on the Kafka message's `event_id`, not `TaskId`.**
-  Recording the same `event_id` twice is a no-op, never a double-count —
-  `TaskId` is not used as the dedup key because it could in principle be
-  reused after a very long time.
-- **An empty `AssociateId` is legitimate, not an error.** A
-  `TaskCompleted` from a station with no checked-in occupant (e.g. a
-  robot station) is still recorded and counted in
-  `GetTaskTypePerformance`, just excluded from any per-associate
-  `Scorecard`.
-- **The event must be marked processed before the standard lookup and
-  save happen** — an explicit ordering (not compiler-enforced, upheld by
-  tests) so a crash mid-flight never double-processes on Kafka
-  redelivery.
-- *(On the sibling `LaborStandard` aggregate, which this invariant
-  depends on):* `ExpectedSeconds` must be `> 0`, and revising a
-  `TaskType`'s standard is append-only — `DefineStandard` closes the
-  prior record's effective range rather than overwriting it in place, so
-  already-recorded `TaskPerformance` rows' frozen values stay historically
-  accurate after a later revision. Exactly ONE active standard per
-  `TaskType` at any instant. An optional, caller-supplied
-  `TravelComponentSeconds` must satisfy `0 <= t <= ExpectedSeconds` and is
-  never computed or validated against a live lookup
-  ([ADR 0015](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0015-optional-travel-component-on-labor-standard.md)).
+| Invariant | Enforced by |
+|---|---|
+| Event id is present (dedupe key) | `performance.ErrEmptyEventId` in `performance.New` |
+| Task id is present | `performance.ErrEmptyTaskId` in `performance.New` |
+| Never divide by zero, never fabricate | `computeEfficiencyPct` returns nil when `actualSeconds <= 0` or `standardSecondsAtCompletion <= 0` |
+| Recorded at most once per CloudEvents `id` | `ports.ProcessedEvents.MarkProcessed` (`processed_events` PK) inside the same unit of work; `task_performances.event_id` is also the PK |
+| Standard frozen at completion time | `RecordTaskPerformance.standardSecondsAtCompletion` uses `StandardRepo.FindActiveAsOf(taskType, completedAt)`; `Rehydrate` never recomputes |
 
-## Corrective Policies
+### 5. Corrective Policies
 
-- **Duplicate delivery → no-op, not an error.** The `ProcessedEvents`
-  idempotency gate silently accepts a redelivered `event_id` as already
-  handled rather than surfacing a conflict — at-least-once Kafka delivery
-  is the expected steady state, not an exception.
-- **Missing or stale wire fields → degrade gracefully, never block.** An
-  older `TaskCompleted` payload that predates the `associate_id`/
-  `duration_seconds`/`task_type` enrichments (or carries a `task_type`
-  this context does not model, e.g. `REBIN`) unmarshals those fields to their Go zero values (`""`/`0`) rather than
-  failing — the resulting `TaskPerformance` is still recorded, with the
-  corresponding invariant (nil `EfficiencyPct`, unclassified `TaskType`,
-  or empty `AssociateId`) doing the honest work of representing the gap.
-- **Out-of-order or replayed events resolve against event time, not
-  consumption time.** `FindActiveAsOf(taskType, completedAt)` is always
-  used for scoring (never `FindCurrentlyActive`), so a late-arriving
-  August completion consumed in September still freezes August's
-  standard correctly.
+- A redelivered `TaskCompleted` is a no-op (`MarkProcessed` returns
+  false) — never a double count.
+- If any write in the unit of work fails, the marker rolls back with it,
+  so the redelivery is scored instead of dropped.
+- The consumer retries a failing handle 3 times with exponential backoff,
+  then dead-letters to `warehouse.fulfillment.events.dlq` (ADR 0017).
+- An unknown `task_type` or empty `associate_id` is recorded, not
+  rejected (`shared.ParseTaskTypeLenient`).
 
-## Handled Commands
+### 6. Handled Commands
 
-| Command | Effect |
-| --- | --- |
-| `RecordTaskPerformance(taskId, associateId, taskType, actualSeconds, completedAt, kafkaEventId)` | The Kafka-consumer-driven use case — called from the inbound Kafka adapter, never from HTTP. Idempotent on `kafkaEventId`. Resolves the `LaborStandard` active as of `completedAt` to freeze `StandardSecondsAtCompletion` and compute `EfficiencyPct`. Produces one `TaskPerformance` row, and (ADR 0014) derives and saves the associate's `IdlePeriod` in the same unit of work. |
-| `GetAssociateScorecard(associateId)` | Read-only. Projects the associate's `TaskPerformance` rows into a `Scorecard` (task count, mean efficiency, per-`TaskType` breakdown, `Trend`, `CoachingFlag`). 404 if zero rows exist for the associate. |
-| `GetTaskTypePerformance(taskType)` | Read-only. Projects ALL associates' `TaskPerformance` rows for one `TaskType` into a fleet-wide view (task count, mean efficiency, `MeanActualSeconds`). |
-| `GetUtilization.ForTaskType` / `.ForAssociate(subject, window)` | Read-only (ADR 0014). Task time plus idle time over a trailing window (default 1h); `ForAssociate` adds the read-time open gap. |
+- `RecordTaskPerformance(KafkaEventId, TaskId, AssociateId, TaskType,
+  ActualSeconds, CompletedAt)` — `usecases.RecordTaskPerformance.Execute`,
+  invoked only by the Kafka consumer for
+  `com.warehouse.wes.fulfillment-execution.task.TaskCompleted`.
 
-*(Handled by the sibling `LaborStandard` aggregate, included for
-completeness since `RecordTaskPerformance` depends on it):*
-`DefineStandard(taskType, expectedSeconds, travelComponentSeconds?)` and
-`GetStandard(taskType)`.
+### 7. Created Events
 
-## Created Events
+- `com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded`
+  — to `warehouse.labor-performance.analytics` (key `task_type`) **and**
+  `warehouse.labor-performance.events` (key `associate_id`).
 
-| Event | When |
-| --- | --- |
-| `TaskPerformanceRecorded` | Every successful `RecordTaskPerformance` call — including unscorable (`EfficiencyPct = nil`) and unmeasurable (`ActualSeconds = 0`) rows. |
-| `LaborStandardDefined` | The first `DefineStandard` call for a `TaskType` that has never had one. |
-| `LaborStandardRevised` | A `DefineStandard` call for a `TaskType` that already has an active standard — closes the prior record and opens a new one. |
+### 8. Throughput (estimate)
 
-See [Domain Events](./domain-events) for the full publication picture,
-including which topic each reaches today.
+*Estimate:* the highest-volume write in the context — one per completed
+pick/pack/SLAM task, i.e. tracks floor throughput (thousands per hour on
+a busy site). Each write is an insert, so there is no contention on a
+single instance.
 
-## Throughput
+### 9. Size (estimate)
 
-- **Write side:** one `TaskPerformance` row per consumed `TaskCompleted`
-  Kafka message — bounded by `fulfillment-execution`'s own task
-  completion rate, not by anything this context controls. No batching;
-  each message is processed and acknowledged individually.
-- **Read side:** `GetAssociateScorecard` runs two bounded queries per call
-  (the aggregate `ScorecardFor` query, plus `RecentByAssociateID` capped
-  at `LIMIT 10`) — never a full-table scan returned to the caller.
-  `GetTaskTypePerformance` is a single-pass aggregate query.
-- **Analytics side (ADR-0007):** target p95 event-to-report lag under 30
-  seconds from the dedicated `warehouse.labor-performance.analytics`
-  topic to the read-only report, matching the fleet's sibling contexts.
+*Estimate:* one event per instance, written once and kept forever (no
+retention sweep on `task_performances`). Rows per associate grow with
+tenure; reads only ever pull the 10 most recent
+(`RecentByAssociateID`).
 
-## Size
+## IdlePeriod
 
-Small and flat by design. A `TaskPerformance` row carries `TaskId`,
-`AssociateId` (optional), `TaskType`, `ActualSeconds`,
-`StandardSecondsAtCompletion`, `EfficiencyPct` (nullable),
-`CompletedAt` — no nested collections, no child entities. Storage is
-deliberately denormalized: `StandardSecondsAtCompletion` duplicates data
-that, at insert time, also exists in `labor_standards` — an accepted
-tradeoff for correctness under time-travel/replay, not an oversight.
+### 1. Name
 
-## Third aggregate — IdlePeriod (ADR 0014)
+`idleness.IdlePeriod` (`internal/domain/idleness/idleness.go`). Persisted
+in `idle_periods` (surrogate `BIGSERIAL` id).
 
-One associate's between-task wait, derived when a `TaskCompleted`
-arrives: from the associate's previous completion to this task's claim
-instant (`CompletedAt − ActualSeconds`). It rejects an empty `AssociateId`
-and a non-positive gap — both routine on an unordered stream, so the use
-case skips them rather than failing the enclosing
-`RecordTaskPerformance` — and caps a gap at `IDLE_GAP_CAP_SECONDS`
-(default 3600, stored with `Capped: true`). A still-running **open gap**
-is computed at read time only and never persisted. The recorded gap is
-published additively as `idle_seconds_before` on
-`TaskPerformanceRecorded`. See
-[ADR 0014](https://github.com/claudioed/labor-performance/blob/develop/docs/docs/adr/0014-labor-utilization-idleness.md).
+### 2. Description
+
+One associate's wait between finishing a task (`startedAt` = previous
+`completedAt`) and claiming the next one (`endedAt` = this task's
+`completedAt − actualSeconds`). `taskType` is the type of the task that
+**ended** the gap. `seconds` is capped at construction and `capped` says
+whether the cap applied (ADR 0014). An open gap (idle right now) is
+computed at read time and never persisted.
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+    [*] --> Recorded : idleness.New - gap at or under the cap
+    [*] --> RecordedCapped : idleness.New - gap over the cap, seconds set to cap
+    [*] --> Skipped : ErrNegativeGap or ErrEmptyAssociateId - nothing stored
+    Recorded --> [*]
+    RecordedCapped --> [*]
+    Skipped --> [*]
+```
+
+Source: `internal/domain/idleness/idleness.go` (`New`),
+`internal/application/usecases/record_task_performance.go`
+(`recordIdleGap`). Omitted: `Rehydrate`; the no-prior-completion case
+(the use case never calls `New` at all).
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+|---|---|
+| Associate id is present (robots are out of scope) | `idleness.ErrEmptyAssociateId` in `idleness.New` |
+| Gap is strictly positive | `idleness.ErrNegativeGap` in `idleness.New` (`endedAt` must be after `startedAt`) |
+| A shift-spanning gap cannot poison a mean | cap applied in `idleness.New` (`capSeconds`, default 3600 from `IDLE_GAP_CAP_SECONDS`) |
+| Recorded at most once per consumed event | same unit of work and `processed_events` gate as `TaskPerformance` |
+
+### 5. Corrective Policies
+
+- `ErrNegativeGap` (out-of-order delivery) is logged and skipped; the
+  enclosing `RecordTaskPerformance` still succeeds and publishes
+  `idle_seconds_before: null`.
+- First observation of an associate, an empty associate, or idleness not
+  wired → no gap and `idle_seconds_before: null`.
+
+### 6. Handled Commands
+
+- None of its own: it is created inside `RecordTaskPerformance`, on the
+  same unit of work as the `TaskPerformance` row.
+
+### 7. Created Events
+
+- None of its own. Its `seconds` travels as `idle_seconds_before` on
+  `TaskPerformanceRecorded`.
+
+### 8. Throughput (estimate)
+
+*Estimate:* at most one per `TaskPerformance` with a non-empty associate
+and a prior completion — the same order of magnitude as task completions.
+
+### 9. Size (estimate)
+
+*Estimate:* one row, no events, never modified; kept forever (no sweep).
+
+## Read models (not aggregates)
+
+| Read model | Where | Built from |
+|---|---|---|
+| `ports.Scorecard` (+ `TaskTypeBreakdown`, `Trend`, `CoachingFlag`) | `internal/application/ports/ports.go`, `usecases/get_associate_scorecard.go` | `task_performances` via `PerformanceRepo.ScorecardFor` and `RecentByAssociateID(…, 10)`; `performance.ClassifyTrend`, `performance.DetectCoachingFlag` |
+| `ports.TaskTypePerformance` | `ports.go`, `usecases/get_task_type_performance.go` | `PerformanceRepo.TaskTypePerformanceFor` (`meanEfficiencyPct`, `meanActualSeconds`) |
+| `usecases.UtilizationResult` | `usecases/get_utilization.go` | `PerformanceRepo.SumActualSeconds*` + `IdlePeriodRepo.Sum*` + open gap at read time; `idleness.UtilizationPct` |
+| `report.LaborPerformanceReport` (`Row`, `TaskTypeBar`, `Totals`) | `internal/analytics/report/labor_performance.go` | analytical table `labor_performance_rollup`, written only by `cmd/labor-projector` |

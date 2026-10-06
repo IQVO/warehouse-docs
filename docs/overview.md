@@ -8,73 +8,139 @@ slug: /overview
 
 # warehouse-systems documentation
 
-This site is the single, fleet-wide reference for the **warehouse-systems**
-ecosystem — eleven independently deployable, hexagonal-architecture Go services
-implementing a warehouse fulfillment platform, each owning its own bounded
-context, its own database, and its own REST/async API surface.
+This site is the fleet-wide reference for the **warehouse-systems**
+ecosystem. The ecosystem is eleven independently deployable Go services with
+hexagonal architecture that together implement a warehouse fulfillment
+platform. Each service is one bounded context with its own REST and MCP
+surface. Ten of them own a Postgres database and publish Kafka events.
+`warehouse-ops-agent` is the exception: a thin read-side agent with no
+database and no Kafka.
 
-It exists because no single repository's own docs site can honestly show the
-**strategic** picture: the context map, the core-domain classification, the
-shared ubiquitous language, and the message flows that cross bounded-context
-boundaries. Every context's own repository still owns and publishes its own
-docs site (its ADRs, its detailed tactical design, its running-locally guide)
-— this site aggregates, cross-links, and adds the strategic layer on top.
+No single repository's docs site can show the **strategic** picture: the
+context map, the core-domain classification, the shared ubiquitous language,
+and the message flows that cross context boundaries. Each context's own
+repository still owns and publishes its own docs site, with its ADRs,
+detailed tactical design and run-locally guide. This site gathers those
+artifacts, links them together, and adds the fleet-level strategic layer.
 
-## How this site is generated, and what is honest vs synthesized
+All source repositories live in the [IQVO](https://github.com/IQVO) GitHub
+organization.
 
-- **REST API reference** — generated directly from each context's own
-  `apis/openapi.yaml`, the same Spectral-linted spec each service ships and
-  gates CI on. Nothing here is hand-transcribed; regenerate with
-  `npm run gen-api-docs:all`.
-- **Async API reference** — generated directly from each context's own
-  `apis/asyncapi.yaml` via the official AsyncAPI Generator
-  (`@asyncapi/html-template`) and embedded as static HTML. Regenerate with
-  `npm run gen-async-docs:all`.
-- **Tactical DDD artifacts per context** (business context, ubiquitous
-  language, Bounded Context Canvas, Aggregate Design Canvas, domain events)
-  — authored here by hand, but sourced directly from each context's own
-  `docs/docs/ddd/`, `docs/docs/business-context/`, and `CLAUDE.md` content
-  on `origin/develop`, cross-checked against the domain source. Where a
-  context's own docs disclose a gap (e.g. "this integration is planned, not
-  yet wired"), that same honesty is preserved here.
-- **Strategic Design section** — the fleet-wide artifacts (Domain Vision,
-  Core Domain Chart, Subdomain Classification table, Context Map, Domain
-  Message Flow Modelling, fleet Ubiquitous Language) synthesize what each
-  context's own docs already state, following the
-  [ddd-crew](https://github.com/ddd-crew) collection of open strategic-design
-  templates. See [Strategic Design](/strategic-design) for the method.
-- **Architecture section** — the C4 diagrams, class diagrams and
-  entity-relationship diagrams are authored here, but every element is read
-  from the real source on `origin/develop`: the ER diagrams from each
-  context's `migrations/*.up.sql`, the class diagrams from
-  `internal/domain/**`, and the container topology from each repo's `cmd/`
-  binaries and Helm chart. Every Mermaid diagram on this site is validated by
-  `npm run validate:mermaid`, which parses and renders each one in a real
-  browser — client-side-rendered diagram types are not checked by
-  `docusaurus build`, so a syntax error would otherwise reach the published
-  site as an error box.
-- **ADRs** — linked out to each context's own repository, never copied, so
-  they never drift from the decision record of record.
+## The eleven bounded contexts
+
+| Context | Classification | CloudEvents subdomain |
+| --- | --- | --- |
+| [`order-management`](/contexts/order-management) | Generic/Supporting | `wes` |
+| [`inventory-storage`](/contexts/inventory-storage) | Core | `wms` |
+| [`wes-work-planning`](/contexts/wes-work-planning) | Core | `wes` |
+| [`fulfillment-execution`](/contexts/fulfillment-execution) | Core | `wes` |
+| [`warehouse-planning`](/contexts/warehouse-planning) | Core | `wes` |
+| [`workforce-management`](/contexts/workforce-management) | Supporting | `wes` |
+| [`labor-performance`](/contexts/labor-performance) | Supporting | `wes` |
+| [`warehouse-ops-agent`](/contexts/warehouse-ops-agent) | Supporting | `wes` |
+| [`network-fulfillment`](/contexts/network-fulfillment) | Supporting | `wes` |
+| [`facility-layout`](/contexts/facility-layout) | Generic | `wms` |
+| [`process-path-management`](/contexts/process-path-management) | Generic | `wes` |
+
+The newest context, `warehouse-planning`, answers whether the warehouse can
+process the demand assigned to it. `network-fulfillment` is the
+anti-corruption layer to an external retail fulfillment network. The
+[Subdomain Classification](/strategic-design/subdomain-classification) and
+[Core Domain Chart](/strategic-design/core-domain-chart) pages give the
+reasoning behind each classification.
+
+## Fleet-wide rules
+
+- **CloudEvents 1.0, structured content mode, on every Kafka message.** This
+  applies to the integration topics (`warehouse.<ctx>.events`) and the analytics
+  topics (`warehouse.<ctx>.analytics`) alike. Every message carries the Kafka
+  header `content-type: application/cloudevents+json; charset=UTF-8`, and
+  `type` is `com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`.
+  Consumers dispatch on the full `type`, ignore unknown types, dedupe on
+  `id`, and dead-letter or skip anything that fails CloudEvents validation.
+  All contexts share one Kafka broker. The
+  [Event Standard](/strategic-design/event-standard-cloudevents) page has the
+  full rule.
+- **REST and MCP are unauthenticated.** Static bearer keys were adopted and
+  then removed fleet-wide by deliberate decision (see [ADRs](/adr)).
+- **Each context owns its data.** Cross-context facts travel as REST/MCP
+  calls or as CloudEvents.
+  `process-path-management` and `labor-performance` make no REST or MCP
+  calls to other contexts. They integrate through events only.
+
+## How this site is generated, and what is copied vs written here
+
+- **Per-context DDD artifacts are synced copies.** Each context repository
+  keeps an artifact pack on `develop`, derived from its own code. These
+  pages are copied here without edits, and each one starts with a
+  "Synced from" note that links to its source:
+  - Core Domain Chart
+  - Bounded Context Canvas
+  - Context Map
+  - Aggregate Design Canvas
+  - Domain Message Flow
+  - EventStorming
+  - Ubiquitous Language
+  - Class Diagram
+  - Entity-Relationship
+  - Sequence Diagrams
+  - Domain Events
+
+  To fix one, edit it in the owning repository and re-sync. Each context also
+  has a business-context page and a landing page written here. Most contexts
+  also have an Async API page here that describes their Kafka topics.
+- **Strategic Design** is written here, from the synced per-context pages.
+  It follows the [ddd-crew](https://github.com/ddd-crew) templates:
+  - Domain Vision
+  - Core Domain Chart
+  - Subdomain Classification
+  - Big Picture EventStorming
+  - Context Map
+  - Domain Message Flows
+  - Event Standard
+  - Ubiquitous Language
+
+  The [DDD Starter Modelling Process](/strategic-design/ddd-starter-modelling-process)
+  walks through the fleet one step at a time and links to the artifact each
+  step produces.
+- **REST API reference** is generated from each context's
+  `apis/openapi.yaml`, the same spec each service lints in its own CI.
+  Regenerate it with `npm run gen-api-docs:all`.
+- **Async API reference** is generated from each context's
+  `apis/asyncapi.yaml` by the official AsyncAPI Generator
+  (`@asyncapi/html-template`) and embedded as static HTML. Regenerate it
+  with `npm run gen-async-docs:all`.
+- **Architecture section.** The C4 views and the fleet summaries of the
+  domain model, data model and runtime flows are written here. They are
+  checked against each context's synced class, entity-relationship and
+  sequence pages and its code on `develop`.
+- **ADRs** are linked to their own repositories, never copied, so they
+  never drift.
+
+`npm run validate:mermaid` parses and renders every Mermaid diagram on this
+site in a real browser. `docusaurus build` does not check diagrams that
+render client-side, so without this step a syntax error would reach the
+published site as an error box.
 
 ## Scope
 
-This site documents the **eleven backend bounded contexts** (the newest, `warehouse-planning`, answers whether the warehouse can process the demand assigned to it; before it, `network-fulfillment` is the anti-corruption layer to an external retail fulfillment network). The two frontend
-repositories (`warehouse-console`, `warehouse-ui-kit`) and the deployment
-repository (`warehouse-infra`) are referenced from context pages where
-relevant (e.g. Module Federation remotes, Kafka topology) but are not
-bounded contexts in the Evans/Vernon sense and are out of scope for DDD
+This site documents the **eleven backend bounded contexts** listed above.
+The two frontend repositories (`warehouse-console`, `warehouse-ui-kit`) and
+the deployment repository (`warehouse-infra`) appear on context pages where
+relevant, for example as Module Federation remotes or in the Kafka topology.
+They are not bounded contexts in the Evans/Vernon sense, so they have no DDD
 artifacts here.
 
 ## Navigating this site
 
 | Section | What it covers |
 | --- | --- |
-| [Strategic Design](/strategic-design) | Fleet-wide: domain vision, core domain chart, subdomain classification, context map, domain message flows, ubiquitous language |
-| [Architecture](/architecture) | Structural views: C4 levels 1–3, the domain model (class diagrams), the persistence model (ER diagrams), and runtime sequence flows |
-| [Bounded Contexts](/contexts) | Per-context: business context, ubiquitous language, Bounded Context Canvas, Aggregate Design Canvas, domain events, async API narrative |
-| [API Reference](/api-reference) | Per-context generated REST (OpenAPI) and async (AsyncAPI) documentation |
+| [Strategic Design](/strategic-design) | Fleet-wide: the DDD Starter Modelling Process, domain vision, core domain chart, subdomain classification, [Big Picture EventStorming](/strategic-design/eventstorming-big-picture), context map, domain message flows, the CloudEvents event standard, ubiquitous language |
+| [Architecture](/architecture) | Structural views: C4 levels 1–3, the domain model, the persistence model, and runtime sequence flows |
+| [Bounded Contexts](/contexts) | Per context: business context, then the synced ddd-crew artifact pack (ubiquitous language, core domain chart, Bounded Context Canvas, context map, Aggregate Design Canvas, domain events, domain message flow, EventStorming, class diagram, entity-relationship, sequence diagrams), then the Async API narrative where the context has one |
+| [API Reference](/api-reference) | Per context: generated REST (OpenAPI) and async (AsyncAPI) documentation |
 | [ADRs](/adr) | Index of Architecture Decision Records, linking to each context's own repository |
-| [Glossary](/glossary) | The fleet's shared ubiquitous language, one alphabetical index |
+| [Glossary](/glossary) | Key terms from every context's ubiquitous language, in one alphabetical index |
 
 ## Study-project disclosure
 
@@ -84,6 +150,6 @@ RFC 7807, hexagonal architecture). It is not a production system and is not
 affiliated with, endorsed by, or representative of Amazon, Manhattan
 Associates, Blue Yonder, or any other company. Where this documentation
 grounds a design decision in public industry research (e.g. how Amazon's
-fulfillment centers work), that research is cited; everything derived from
-it is clearly labeled as a *reference model*, not a factual claim about any
-real company's internal systems.
+fulfillment centers work), that research is cited. Anything derived from it
+is labeled as a *reference model*, not as a factual claim about any real
+company's internal systems.

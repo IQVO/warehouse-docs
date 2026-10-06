@@ -46,9 +46,10 @@ A single bounded context appears in all of them, at different zoom levels. For
 - In [Domain Model](/architecture/domain-model) it is four aggregate roots —
   `Task`, `Station`, `Package`, `OrderConsolidation` — and the capability and
   lease rules they enforce.
-- In [Data Models](/architecture/data-models) it is five tables with **no
-  foreign keys between the aggregates**, which is the previous point expressed
-  in SQL.
+- In [Data Models](/architecture/data-models) it is eight OLTP tables (four
+  aggregate tables plus infrastructure) with **no foreign keys at all**,
+  which is the previous point expressed in SQL. A further four tables sit in
+  its analytical database.
 - In [Runtime Flows](/architecture/runtime-flows) it is a participant in the
   claim, completion and release sequences.
 
@@ -56,9 +57,10 @@ Reading them in that order is the fastest way to understand any one context.
 
 ## Three things worth knowing up front
 
-**The fleet is bigger than "nine services".** Each bounded context ships four
-binaries and two databases, because the analytical read side is a separate
-process family from the operational one. That is
+**The fleet is bigger than "eleven services".** Ten of the eleven bounded
+contexts ship four binaries and two databases each, because the analytical
+read side is a separate process family from the operational one.
+`warehouse-ops-agent` is one binary with no database. That is
 [Containers](/architecture/containers).
 
 **The domain layer depends on nothing, and CI proves it.** Every context has an

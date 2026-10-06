@@ -1,141 +1,196 @@
 ---
 id: aggregate-design-canvas
-title: Aggregate Design Canvas — CapacityPlan
-sidebar_label: Aggregate Design Canvas
-description: The full ddd-crew Aggregate Design Canvas for the CapacityPlan aggregate (plus the ProcessCapacity aggregate) — state transitions, invariants, commands, events.
+title: Aggregate design canvas
+sidebar_label: Aggregate design canvas
 ---
 
-# Aggregate Design Canvas — CapacityPlan
+# Aggregate design canvas
 
-Following the [ddd-crew Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas).
-`CapacityPlan` (`internal/domain/capacityplan`) is the aggregate that raises
-this context's published events. A second aggregate, `ProcessCapacity`
-(`internal/domain/processcapacity`), holds the registered constraints and is
-summarised at the end of this page.
+:::info[Synced from warehouse-planning]
+This page is a copy of [`docs/docs/ddd/aggregate-design-canvas.md`](https://github.com/IQVO/warehouse-planning/blob/develop/docs/docs/ddd/aggregate-design-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-## Name
 
-**CapacityPlan**
+Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas),
+one section per aggregate root in `internal/domain`. There are two:
+`ProcessCapacity` and `CapacityPlan`. Read models are listed at the end.
 
-## Description
+## ProcessCapacity
 
-Ties the demand assigned to a warehouse location and planning window to the
-ProcessPath capacity available to serve it, and the resulting shortage.
-Identified by a UUID string (natural key `(WarehouseID, PlanningWindow)`, but
-several plans may exist for it). Fields: `WarehouseID`, `Location` (the
-ProcessCapacity location evaluated — a site code), `PlanningWindow`,
-`ProcessPathID`, `AssignedDemand` (orders), and computed at creation:
-`PathCapacity` (ORDER per hour), `BottleneckStep`, `CapacityOverWindow`
-(`PathCapacity x window hours`) and `Shortage`
-(`max(0, demand - capacityOverWindow)`), plus `Status` (`DRAFT` /
-`PUBLISHED`), `CreatedAt`, `PublishedAt`, and the informational
-`BottleneckConstraint` and `Warnings` (read-model fields — no published event
-carries them).
+### 1. Name
 
-The aggregate performs **no I/O**: `Create` takes the already-computed path
-rate and bottleneck plus an explicit id and time, and accumulates events as
-plain structs that `PullEvents()` hands over exactly once.
+`ProcessCapacity` (`internal/domain/processcapacity/process_capacity.go`).
 
-## State Transitions
+### 2. Description
+
+The usable throughput of one warehouse process at one site for one time
+window: the minimum across its registered constraints (LABOR, LOCATION,
+EQUIPMENT, STATION, CONVEYOR, BUFFER, REPLENISHMENT). Identity is
+`(ProcessType, Location, CapacityWindow)`, an exact key; whether it applies to a
+planning window is decided by window coverage outside the aggregate
+(`CapacityWindow.Covers`, ADR 0003).
+
+### 3. State Transitions
+
+The aggregate has no status enum. Its only state change is the first
+`AddConstraint`, which fixes the native unit (`nativeUnitSet`).
 
 ```mermaid
 stateDiagram-v2
-    [*] --> DRAFT: Create (records CapacityPlanCreated)
-    DRAFT --> PUBLISHED: Publish
-    PUBLISHED --> PUBLISHED: Publish again - rejected with ErrAlreadyPublished
-    PUBLISHED --> [*]
-    note right of PUBLISHED
-        Publish records CapacityPlanPublished and,
-        only when shortage is above zero,
-        CapacityShortageDetected and BottleneckDetected.
-    end note
+  [*] --> Empty: NewProcessCapacity(processType, location, window)
+  Empty --> Constrained: AddConstraint(type, rate) sets nativeUnit
+  Constrained --> Constrained: AddConstraint with the same unit, upserts the type
+  Constrained --> Constrained: AddConstraint with another unit is rejected ErrUnitMismatch
+  Constrained --> [*]
 ```
 
-## Enforced Invariants
+Source: `internal/domain/processcapacity/process_capacity.go`,
+`internal/application/usecases/register_process_capacity_constraint.go`.
+Omits: deletion (no code deletes a `ProcessCapacity` except migration `0005`'s
+one-off cleanup of legacy rows). `Empty` is transient: the use case always
+adds a constraint before saving.
 
-1. **Required identity fields.** `id`, `warehouse id`, `location` and
-   `process path id` must be non-blank (`ErrRequiredField`).
-2. **Non-negative demand.** `AssignedDemand >= 0` (`ErrNegativeDemand`); zero
-   is valid — nothing to serve, never a shortage.
-3. **The path capacity is an ORDER rate.** `Create` rejects anything else
-   (`ErrPathRateNotOrder`): path capacity is always normalized to ORDER by the
-   composition before a plan is built.
-4. **Shortage is never negative**, and demand exactly equal to the capacity
-   over the window is not a shortage.
-5. **Publish at most once.** A second `Publish` returns `ErrAlreadyPublished`
-   and records nothing — it would re-announce the same shortage to every
-   downstream consumer.
-6. **The plan keeps the requested window.** The window is not inherited from a
-   constraint; `capacity_over_window` is computed from its length (ADR 0003).
+### 4. Enforced Invariants
 
-## Corrective Policies
-
-- **Demand is an input, not a lookup.** `assigned_demand` and the
-  WorkloadProfile factors arrive in the request body; a missing
-  `assigned_demand` is `422 missing-assigned-demand`, never silently zero.
-- **Capacity gaps are explicit.** A path step with no covering ProcessCapacity
-  and no derived STATION constraint is `422 missing-step-capacity`, naming the
-  step, location and window — never a guessed rate.
-- **Warnings instead of invented numbers.** Stations tallied with no declared
-  standard add a warning to the plan; the step uses its registered
-  constraints only.
-
-## Handled Commands
-
-| Command | Precondition | Result |
-| --- | --- | --- |
-| **Create** (`POST /capacity-plans`, MCP `create_capacity_plan`) | ProcessPath registered; every step's capacity resolvable; valid demand and factors | New `DRAFT` plan; `CapacityPlanCreated` queued in the outbox in the same transaction |
-| **Publish** (`POST /capacity-plans/{id}/publish`, MCP `publish_capacity_plan`) | Plan exists and is `DRAFT` | `PUBLISHED`; `CapacityPlanPublished` queued, plus `CapacityShortageDetected` and `BottleneckDetected` only when `shortage > 0`, all in one transaction |
-
-Reads (`GET /capacity-plans/{id}`, MCP `get_capacity_plan`) go straight to the
-repository.
-
-## Created Events
-
-| Event | Published when |
+| Invariant | Enforced by |
 | --- | --- |
-| `CapacityPlanCreated` | `Create` — a plan is created |
-| `CapacityPlanPublished` | `Publish` — always |
-| `CapacityShortageDetected` | `Publish`, only when `shortage > 0` |
-| `BottleneckDetected` | `Publish`, only when `shortage > 0` |
+| All constraints share one native unit, set by the first constraint | `AddConstraint` returns `ErrUnitMismatch` |
+| One rate per constraint type; re-registering replaces it in place, keeping its position | `AddConstraint` (`order` + `constraints` map) |
+| A rate's quantity is not negative and its period is positive | `NewCapacityRate`: `ErrNegativeQuantity`, `ErrNonPositivePeriod` |
+| The window's end is strictly after its start | `NewCapacityWindow`: `ErrInvalidWindow` |
+| No effective rate without a constraint | `EffectiveRate` returns `ErrNoConstraints` |
+| Ties in the effective rate go to the earliest-registered constraint | `EffectiveRate` iterates `order` (persisted as `ordinal`) |
 
-Order on a shortage plan: Created (at creation), then Published,
-ShortageDetected, BottleneckDetected (at publish). See
-[Domain Events](./domain-events).
+### 5. Corrective Policies
 
-## Throughput
+- A Kafka `ShiftPlanCommitted` that fails one of these rules is a deterministic
+  rejection (`usecases.IsDomainValidationError`): it is logged, its
+  processed-event claim is committed and it is never retried.
+- A REST caller gets `400 invalid-capacity-window`, `422 negative-quantity` /
+  `non-positive-period`, or `409 unit-mismatch` (statuses from `statusFor` in
+  `internal/adapters/inbound/http/errors.go`); an MCP caller gets the same
+  slugs as tool errors. Either must correct the request.
 
-**Low-frequency, planner-driven** — a plan is created per location, window and
-path when someone (or a tool) evaluates demand, and published at most once.
-Concurrent publishes of one plan serialize: the Postgres `FindByID` locks the
-row inside the unit of work. The consumed Kafka streams (one message per
-`PathPlan` line; one per location slot) are the higher-volume inputs, handled
-in an atomic unit of work each.
+### 6. Handled Commands
 
-## Size
+| Command | Use case | Inbound |
+| --- | --- | --- |
+| `RegisterProcessCapacityConstraintCommand` | `RegisterProcessCapacityConstraint.Handle` (find or create, `AddConstraint`, save) | `POST /process-capacities`, MCP `register_process_capacity_constraint`, and `LaborCapacityConsumer` |
 
-**Small.** Scalars, one window value object, a short warnings list and two
-timestamps; no child entities. A plan is a snapshot of a computation, not a
-growing collection.
+### 7. Created Events
 
-## Second aggregate — ProcessCapacity
+None. `ProcessCapacityRegistered` and `ProcessCapacityChanged` are domain
+vocabulary only; nothing raises or publishes them.
 
-- **Identity**: `(ProcessType, Location, CapacityWindow)`. The window is part
-  of the identity and stays an **exact** key — `POST` / `GET
-  /process-capacities` address one aggregate; registering twice at one key
-  upserts.
-- **Invariants**: at least one constraint (`ErrNoConstraints` otherwise); all
-  constraints on one instance share the same native unit (`ErrUnitMismatch` —
-  never silently compare UNIT against PACKAGE); re-registering a constraint
-  type replaces its rate; a non-negative quantity and a positive period
-  (`ErrNegativeQuantity`, `ErrNonPositivePeriod`); window end strictly after
-  start (`ErrInvalidWindow`).
-- **Behaviour**: `EffectiveRate()` is the minimum across constraints plus the
-  binding constraint type; ties go to the earliest-registered constraint.
-- **Composition is outside the aggregate.** Coverage resolution and the
-  derived STATION constraint run in domain services (`ComposeStepCapacity`,
-  `ComposeProcessPathCapacity`) on transient values at read time; the stored
-  aggregate and its single-native-unit invariant are untouched (ADR 0002).
-- The labor consumer is the only writer of constraints from events
-  (`ShiftPlanCommitted` → `LABOR`, `UNIT/HOUR`); the facility consumer only
-  maintains a tally.
+### 8. Throughput (estimate)
+
+*Estimate, not measured.* Writes: one per `ShiftPlanCommitted` fan-out line
+(a few per shift plan, a handful of shift plans per site per day) plus rare
+operator registrations. Reads: once per path step on every path-capacity query
+and plan creation (`FindCovering`). Concurrency on one instance is low: two
+writes to the same `(process, site, window)` are rare.
+
+### 9. Size (estimate)
+
+*Estimate.* Up to 7 constraints per instance (one per `ConstraintType`).
+Lifetime is the length of its window (hours to a few days); instances are never
+deleted, so the table grows with every committed shift.
+
+## CapacityPlan
+
+### 1. Name
+
+`CapacityPlan` (`internal/domain/capacityplan/capacity_plan.go`).
+
+### 2. Description
+
+The demand assigned to a warehouse site and planning window, evaluated against
+the composed capacity of one `ProcessPath`: path capacity (ORDER per hour),
+capacity over the window, shortage and bottleneck step, plus the informational
+binding constraint and composition warnings. Identity is a UUID string; the
+natural key `(WarehouseID, PlanningWindow)` is not unique. The aggregate does
+no I/O: `Create` receives the already-computed path rate.
+
+### 3. State Transitions
+
+```mermaid
+stateDiagram-v2
+  [*] --> DRAFT: Create(params, now) records CapacityPlanCreated
+  DRAFT --> PUBLISHED: Publish(now) records CapacityPlanPublished
+  PUBLISHED --> PUBLISHED: Publish again is rejected ErrAlreadyPublished, records nothing
+  PUBLISHED --> [*]
+  note right of PUBLISHED
+    When shortage is above 0, Publish also records
+    CapacityShortageDetected and BottleneckDetected
+  end note
+```
+
+Source: `internal/domain/capacityplan/capacity_plan.go` (`StatusDraft`,
+`StatusPublished`, `Create`, `Publish`), `internal/domain/capacityplan/events.go`.
+Omits: `Rehydrate`, which rebuilds a stored plan in either state without
+recording events, and the absence of any delete or un-publish.
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+| --- | --- |
+| id, warehouse id, location and process path id are not blank | `Create` returns `ErrRequiredField` |
+| Assigned demand is not negative (zero is valid) | `Create` returns `ErrNegativeDemand`; also `CHECK (assigned_demand >= 0)` |
+| The path rate is an ORDER rate | `Create` returns `ErrPathRateNotOrder` |
+| `shortage = max(0, demand - capacityOverWindow)`, never negative; equal is not a shortage | `Create` (`math.Max`); `CHECK (shortage >= 0)` |
+| A plan is published at most once | `Publish` returns `ErrAlreadyPublished` |
+| Each recorded event is handed over exactly once | `PullEvents` clears the slice |
+| The window is valid | `processcapacity.NewCapacityWindow` in the use case (`ErrInvalidWindow`); `CHECK (window_end > window_start)` |
+
+### 5. Corrective Policies
+
+- An omitted `assigned_demand` with no expected orders is rejected
+  (`ErrMissingAssignedDemand`, `422 missing-assigned-demand`) rather than
+  creating a zero-demand plan (ADR 0004).
+- A second publish returns `409 capacity-plan-already-published` and queues no
+  event, so downstream consumers never see the shortage twice.
+- Concurrent publishes of one plan serialize on the Postgres row lock taken by
+  `FindByID` inside the unit of work.
+
+### 6. Handled Commands
+
+| Command | Use case | Inbound |
+| --- | --- | --- |
+| `CreateCapacityPlanCommand` | `CreateCapacityPlan.Handle` | `POST /capacity-plans`, MCP `create_capacity_plan` |
+| publish by id | `PublishCapacityPlan.Handle` | `POST /capacity-plans/{id}/publish`, MCP `publish_capacity_plan` |
+
+### 7. Created Events
+
+| Event | When | Full CloudEvents type |
+| --- | --- | --- |
+| `CapacityPlanCreated` | `Create` | `com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanCreated` |
+| `CapacityPlanPublished` | `Publish`, always | `com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanPublished` |
+| `CapacityShortageDetected` | `Publish`, only when `shortage > 0` | `com.warehouse.wes.warehouse-planning.capacityplan.CapacityShortageDetected` |
+| `BottleneckDetected` | `Publish`, only when `shortage > 0` | `com.warehouse.wes.warehouse-planning.capacityplan.BottleneckDetected` |
+
+Each is written twice by the outbox: on `warehouse.warehouse-planning.events`
+and on `warehouse.warehouse-planning.analytics`, under one CloudEvents id.
+
+### 8. Throughput (estimate)
+
+*Estimate, not measured.* Created by planners or the ops agent's tooling a few
+times per site per shift; published once. No hot instance: each plan is
+written twice in its life (create, publish) and then only read.
+
+### 9. Size (estimate)
+
+*Estimate.* 2 to 4 domain events per instance over its lifetime (Created;
+Published; plus ShortageDetected and BottleneckDetected when short), i.e. 4 to
+8 outbox rows. The row is small (scalar fields, a short warnings array) and
+lives forever; there is no archival.
+
+## Not aggregates: read models and value objects
+
+| Model | Kind | Where | Why it is not an aggregate |
+| --- | --- | --- | --- |
+| `processpath.ProcessPath` | Operator-declared read model | `internal/domain/processpath`, table `process_paths` | Construction only, no mutation method; re-registering replaces it wholesale |
+| `processcapacity.StationStandard` | Value object, stored | table `station_standards` | Immutable, keyed `(location, process type)`, upserted whole |
+| `demand.Order` / `demand.Summary` | Read model of order-management orders | `internal/domain/demand`, table `order_demand` | Last-writer-wins projection of upstream events, no invariant beyond validation |
+| Facility tally | Read model of facility-layout slots | `internal/application/tally`, tables `location_slot_tally`, `location_slot_registration` | A count, not a throughput; maintained by the consumer only |
+| `ProcessPathCapacity` (`PathCapacityResult`) | Domain service result | `ComposeProcessPathCapacity` | Computed at read time, never stored (ADR 0002) |
+| `plan_facts` | Analytics projection | `analytics/migrations`, `internal/adapters/outbound/analyticsstore` | Derived from the analytics stream (ADR 0005) |

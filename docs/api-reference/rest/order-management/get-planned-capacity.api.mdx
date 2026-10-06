@@ -1,0 +1,71 @@
+---
+id: get-planned-capacity
+title: "List a site's planned capacity windows"
+description: "Reads order-management's LOCAL read model of warehouse-planning's CapacityPlans for one site (ADR 0031): a PLANNED statement about a future window — the demand the planned capacity cannot process in it (`shortage`, in orders) — mirrored from the CloudEvents warehouse-planning publishes on `warehouse.warehouse-planning.events`. It is not live execution state and is never refreshed by calling warehouse-planning. Windows of every `status` are listed (a `DRAFT` is visible here but never influences an order; only a `PUBLISHED` plan with `shortage > 0` annotates orders — see `capacityConstraint` on the Order schema). Windows that ended before `from` are omitted. This route exists only when the integration is enabled; otherwise it is a 404."
+sidebar_label: "List a site's planned capacity windows"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "get api-method"
+info_path: api-reference/rest/order-management/order-management-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"List a site's planned capacity windows"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/planned-capacity"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Reads order-management's LOCAL read model of warehouse-planning's CapacityPlans for one site (ADR 0031): a PLANNED statement about a future window — the demand the planned capacity cannot process in it (`shortage`, in orders) — mirrored from the CloudEvents warehouse-planning publishes on `warehouse.warehouse-planning.events`. It is not live execution state and is never refreshed by calling warehouse-planning. Windows of every `status` are listed (a `DRAFT` is visible here but never influences an order; only a `PUBLISHED` plan with `shortage > 0` annotates orders — see `capacityConstraint` on the Order schema). Windows that ended before `from` are omitted. This route exists only when the integration is enabled; otherwise it is a 404.
+
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  parameters={[{"name":"site","in":"query","required":true,"description":"The planning `location` — a site/building code such as `SIM1` (exact, case-sensitive match).\n","schema":{"type":"string","minLength":1},"example":"SIM1"},{"name":"from","in":"query","required":false,"description":"RFC 3339 instant; only windows whose end is after it are listed. Defaults to now.\n","schema":{"type":"string","format":"date-time"},"example":"2026-10-05T00:00:00Z"}]}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  title={"Body"}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  responses={{"200":{"description":"The site's planned windows ordered by start (possibly none).","content":{"application/json":{"schema":{"type":"object","required":["site","windows"],"properties":{"site":{"type":"string","example":"SIM1"},"windows":{"type":"array","items":{"type":"object","required":["planId","warehouseId","location","windowStart","windowEnd","assignedDemand","capacityOverWindow","shortage","status","asOf"],"properties":{"planId":{"type":"string","example":"0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10"},"warehouseId":{"type":"string","description":"warehouse-planning's own warehouse label (informational).","example":"WH-1"},"location":{"type":"string","description":"Site/building code.","example":"SIM1"},"pathId":{"type":"string","description":"warehouse-planning's own path label (informational; not an order-management process path id).","example":"pick-rebin-pack"},"windowStart":{"type":"string","format":"date-time","example":"2026-10-05T08:00:00Z"},"windowEnd":{"type":"string","format":"date-time","description":"Exclusive.","example":"2026-10-05T16:00:00Z"},"assignedDemand":{"type":"number","format":"double","example":12000},"capacityOverWindow":{"type":"number","format":"double","example":8000},"shortage":{"type":"number","format":"double","example":4000},"bottleneckStep":{"type":"string","example":"REBIN"},"status":{"type":"string","enum":["DRAFT","PUBLISHED"],"description":"Only PUBLISHED plans with a shortage annotate orders.","example":"PUBLISHED"},"asOf":{"type":"string","format":"date-time","description":"The CloudEvents `time` of the event that last wrote this row (last writer wins per plan id).","example":"2026-10-04T21:45:10Z"}},"title":"PlannedCapacityWindow"}}},"title":"PlannedCapacity"},"example":{"site":"SIM1","windows":[{"planId":"0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10","warehouseId":"WH-1","location":"SIM1","pathId":"pick-rebin-pack","windowStart":"2026-10-05T08:00:00Z","windowEnd":"2026-10-05T16:00:00Z","assignedDemand":12000,"capacityOverWindow":8000,"shortage":4000,"bottleneckStep":"REBIN","status":"PUBLISHED","asOf":"2026-10-04T21:45:10Z"}]}}}},"400":{"description":"The `site` query parameter is missing, or `from` is not an RFC 3339 timestamp.","content":{"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 (Problem Details for HTTP APIs) error shape, used for every non-2xx response across this service — the same shape the other five services in this platform emit.\n","required":["type","title","status","detail"],"properties":{"type":{"type":"string","format":"uri","description":"A URI identifying the error category (does not need to resolve). Unique per distinct error category in this service.\n","example":"https://errors.order-management.warehouse-systems.dev/order-not-found"},"title":{"type":"string","description":"Fixed, human-readable summary of the error category.","example":"Order not found"},"status":{"type":"integer","format":"int32","description":"Duplicates the HTTP status code as an integer (RFC 7807 requirement).","example":404},"detail":{"type":"string","description":"The specific error message for this occurrence.","example":"order not found"},"instance":{"type":"string","description":"The request path that produced this error.","example":"/orders/ord-does-not-exist"}},"title":"Problem"},"example":{"type":"https://errors.order-management.warehouse-systems.dev/invalid-query-parameter","title":"A required query parameter is missing or invalid","status":400,"detail":"query parameter \"site\" is required","instance":"/planned-capacity"}}}},"404":{"description":"The planned-capacity integration is not enabled on this deployment (`PLANNED_CAPACITY_CONSUMER_GROUP` unset): the route is not registered, so the router's default 404 answers.\n"},"500":{"description":"An unexpected internal error occurred.","content":{"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 (Problem Details for HTTP APIs) error shape, used for every non-2xx response across this service — the same shape the other five services in this platform emit.\n","required":["type","title","status","detail"],"properties":{"type":{"type":"string","format":"uri","description":"A URI identifying the error category (does not need to resolve). Unique per distinct error category in this service.\n","example":"https://errors.order-management.warehouse-systems.dev/order-not-found"},"title":{"type":"string","description":"Fixed, human-readable summary of the error category.","example":"Order not found"},"status":{"type":"integer","format":"int32","description":"Duplicates the HTTP status code as an integer (RFC 7807 requirement).","example":404},"detail":{"type":"string","description":"The specific error message for this occurrence.","example":"order not found"},"instance":{"type":"string","description":"The request path that produced this error.","example":"/orders/ord-does-not-exist"}},"title":"Problem"},"example":{"type":"https://errors.order-management.warehouse-systems.dev/internal-error","title":"An unexpected internal error occurred","status":500,"detail":"unexpected adapter failure","instance":"/orders"}}}}}}
+>
+  
+</StatusCodes>
+
+
+      

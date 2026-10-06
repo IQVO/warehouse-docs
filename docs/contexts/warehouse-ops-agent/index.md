@@ -8,15 +8,19 @@ slug: /contexts/warehouse-ops-agent
 
 # Warehouse Ops Agent
 
-<span class="badge-supporting">Supporting</span> · Operator tooling, no aggregate
+<span className="badge-supporting">Supporting Subdomain</span> · Operator tooling, no aggregate
 
 `warehouse-ops-agent` is the fleet's *agentic* layer: an "AI teammate that
 sees, analyzes, and recommends" over the warehouse-systems bounded
-contexts — an outbound MCP client for eight of them: the five original
+contexts — an outbound MCP client for nine of them: the five original
 ones (`inventory-storage`, `wes-work-planning`, `fulfillment-execution`,
-`workforce-management`, `facility-layout`) plus three second-wave clients
+`workforce-management`, `facility-layout`), three second-wave clients
 (`labor-performance`, `order-management`, `process-path-management`,
-[ADR 0007](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0007-second-wave-outbound-mcp-clients.md))
+[ADR 0007](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0007-second-wave-outbound-mcp-clients.md);
+the `order-management` and `process-path-management` MCP clients are wired
+but unused), and `warehouse-planning`
+([ADR 0013](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0013-warehouse-planning-mcp-client-and-capacity-outlook.md),
+read tools only, active when `WAREHOUSE_PLANNING_MCP_ENDPOINT` is set)
 — and, separately, the Backend-for-Frontend behind the operator console's
 genuinely cross-cutting screens.
 
@@ -25,7 +29,7 @@ and plain REST APIs — never a Go-level dependency on any of them, and
 never a write (zero write capability is CI-enforced by
 `internal/architecture/zerowrite/zerowrite_test.go`). Its own REST and MCP
 surfaces are unauthenticated by deliberate decision — see
-[ADR 0006](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0006-fleet-wide-auth-removal.md).
+[ADR 0006](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0006-fleet-wide-auth-removal.md).
 
 :::info[Defining trait: no domain aggregate, no `apis/openapi.yaml`]
 Unlike every other bounded context documented in this fleet,
@@ -33,7 +37,7 @@ Unlike every other bounded context documented in this fleet,
 persisted domain state** — and correspondingly ships **no
 `apis/openapi.yaml`**. Its REST and MCP surface is small enough, and
 changes fast enough, that it is documented in prose on the
-[API surface](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/api-surface.md)
+[API surface](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/api-surface.md)
 page of its own docs site rather than generated from a spec. This is not
 an oversight this documentation pass is filling in — it is a deliberate,
 disclosed consequence of what this repository actually is: a read-side
@@ -67,28 +71,67 @@ It is **not a bounded context** in the domain sense (its own ADR 0001
 frames this as "not a sixth bounded context"). There is no
 aggregate or invariant for this repo to own, so calling it a "context"
 in the tactical-pattern sense would be a domain in name only. See
-[ADR 0001](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0001-warehouse-ops-agent-placement.md)
+[ADR 0001](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0001-warehouse-ops-agent-placement.md)
 in the repo's own docs for the full placement rationale.
 
-## On this page set
+## This context's pages
 
-- [Business Context](/contexts/warehouse-ops-agent/business-context) — what a "daily brief" and a
-  "flow-balance exception" mean operationally, and why the console needs
-  a BFF instead of each micro-frontend calling four services directly.
-- [Ubiquitous Language](/contexts/warehouse-ops-agent/ubiquitous-language) — the exact vocabulary
-  this agent coins for its own correlation policies, plus the terms it
-  borrows unredefined from its upstream contexts.
-- [Bounded Context Canvas](/contexts/warehouse-ops-agent/bounded-context-canvas) — the full
-  ddd-crew canvas, including why this context's Domain Role reads
-  *analysis context* rather than Core/Supporting/Generic, and why there
-  is no Aggregate Design Canvas, Domain Events, or AsyncAPI page for it.
+- [Business Context](/contexts/warehouse-ops-agent/business-context): what
+  a "daily brief" and a "flow-balance exception" mean operationally, and
+  why the console needs a BFF instead of each micro-frontend calling
+  several services directly.
+- [Ubiquitous Language](/contexts/warehouse-ops-agent/ubiquitous-language):
+  the vocabulary this agent coins for its own correlation policies, plus
+  the terms it borrows unchanged from its upstream contexts.
+- [Core Domain Chart](/contexts/warehouse-ops-agent/core-domain-chart)
+  ([ddd-crew core-domain-charts](https://github.com/ddd-crew/core-domain-charts)):
+  why this context is Supporting, with a caveat.
+- [Bounded Context Canvas](/contexts/warehouse-ops-agent/bounded-context-canvas)
+  ([ddd-crew bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas)):
+  the full canvas, including why this context's domain role reads
+  *analysis context*.
+- [Context Map](/contexts/warehouse-ops-agent/context-map)
+  ([ddd-crew context-mapping](https://github.com/ddd-crew/context-mapping)):
+  every upstream it reads, each with its tools and whether it is live or
+  wired but unused, plus the console downstream.
+- [Aggregate Design Canvas](/contexts/warehouse-ops-agent/aggregate-design-canvas)
+  ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
+  states that there is **no aggregate root**, and lists the boundary
+  validation, decision objects and read models instead.
+- [Domain Events](/contexts/warehouse-ops-agent/domain-events): this
+  context publishes and consumes **no** events, with the evidence.
+- [Domain Message Flow](/contexts/warehouse-ops-agent/domain-message-flow)
+  ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):
+  the morning brief, flow-balance exception, stranded-reservation triage
+  and console order-lifecycle scenarios.
+- [EventStorming](/contexts/warehouse-ops-agent/eventstorming)
+  ([ddd-crew eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet)):
+  boards for the daily brief, flow-balance exception and stranded
+  reservation.
+- [Class Diagram](/contexts/warehouse-ops-agent/class-diagram): the policy
+  layer, ports and adapters as they exist in the code.
+- [Entity Relationship](/contexts/warehouse-ops-agent/entity-relationship):
+  there is no database, so this page describes the in-memory state the
+  agent does hold.
+- [Sequence Diagrams](/contexts/warehouse-ops-agent/sequence-diagrams): the
+  main runtime interactions.
+
+Every page above except the Business Context is synced from the
+`warehouse-ops-agent` repository. There is no Async API page, because
+this context has no Kafka integration.
 
 ## Elsewhere
 
-- Repository: [github.com/claudioed/warehouse-ops-agent](https://github.com/claudioed/warehouse-ops-agent)
-- Full docs site: [claudioed.github.io/warehouse-ops-agent](https://claudioed.github.io/warehouse-ops-agent)
-- Architecture Decision Records: ten on `develop` (0001–0010), newest
-  [0008](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0008-labor-utilization-advisory-correlation.md),
-  [0009](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0009-explain-travel-factor.md) and
-  [0010](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0010-standard-metrics-convention.md)
-- Fleet-wide [Strategic Design](/strategic-design) — how all eleven backend contexts relate
+- Repository: [github.com/IQVO/warehouse-ops-agent](https://github.com/IQVO/warehouse-ops-agent)
+- Full docs site: [iqvo.github.io/warehouse-ops-agent](https://iqvo.github.io/warehouse-ops-agent)
+- Architecture Decision Records: fifteen on `develop` (0001 to 0015), the
+  newest being
+  [0013](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0013-warehouse-planning-mcp-client-and-capacity-outlook.md),
+  [0014](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0014-runtime-signals-and-stranded-reservation-adoption.md)
+  and
+  [0015](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0015-core-flow-balance-and-daily-brief-adoption.md).
+  See also the [ADR index](/adr).
+- The [API surface page](/api-reference/warehouse-ops-agent) on this site
+  describes its REST and MCP surface in prose.
+- Fleet-wide [Strategic Design](/strategic-design): how all eleven backend
+  contexts relate.

@@ -7,483 +7,320 @@ description: UML class diagrams of the aggregates, entities and value objects in
 
 # Domain Model
 
-Class diagrams of what actually lives under `internal/domain/**` in each
-context — the aggregates, the entities they own, the value objects they are
-built from, and the invariants they exist to protect.
+The fleet-level view of what lives under `internal/domain/**` in each of the
+eleven bounded contexts: which aggregate roots each one owns, the invariant
+that makes each one a consistency boundary, and how aggregates in different
+contexts refer to each other.
 
-Type names, method names, enum values and error messages on this page are the
-real ones from the Go source on `origin/develop`.
+This page summarises. The full class diagrams, state machines and invariant
+tables are on each context's own pages, synced from that repository's
+`develop` branch:
+
+- **Class Diagram**: every aggregate, entity, value object, enumeration and
+  port, with the real Go names.
+- **Aggregate Design Canvas**: one ddd-crew canvas per aggregate (state
+  transitions, enforced invariants, corrective policies, handled commands,
+  created events, throughput, size).
 
 :::note[A table is not an aggregate]
 
 This page is the **domain model**. The [Data Models](/architecture/data-models)
-page is the *persistence shape* it happens to be stored in, and the two are
-deliberately not one-to-one. The domain layer has no knowledge of SQL — no
-`pgx` types, no JSON struct tags — so the mapping between them lives entirely
+page is the *persistence shape* it is stored in, and the two are
+deliberately not one-to-one. The domain layer has no knowledge of SQL (no
+`pgx` types, no JSON struct tags), so the mapping between them lives entirely
 in the outbound Postgres adapter.
 
 :::
 
-## How to read these diagrams
+## The fleet at a glance
 
-| Stereotype | Meaning |
-| --- | --- |
-| `<<aggregate root>>` | The consistency boundary. The only type a repository loads and saves, and the only place an invariant is enforced. |
-| `<<entity>>` | Has identity and a lifecycle, but lives inside an aggregate and is never loaded on its own. |
-| `<<value object>>` | Immutable, compared by value, no identity. |
-| `<<enumeration>>` | A closed set of states, with the real Go constant values. |
+33 aggregate roots across ten contexts. The eleventh, `warehouse-ops-agent`,
+owns none, and that is a design decision. Counts are the per-aggregate
+sections of each context's Aggregate Design Canvas, cross-checked against the
+`<<AggregateRoot>>` classes in its class diagram.
 
-**Composition (`*--`)** means the root owns the child's lifecycle.
-**Association (`-->`)** across an aggregate boundary is always a reference *by
-identity* — no aggregate ever holds a pointer to another aggregate root.
+| Context | Aggregate roots | # | Detailed pages |
+| --- | --- | --- | --- |
+| `order-management` | `Order` (entity `OrderLine`, value object `PromiseGroup`) | 1 | [class diagram](/contexts/order-management/class-diagram), [canvas](/contexts/order-management/aggregate-design-canvas) |
+| `inventory-storage` | `StockUnit`, `Bin`, `Reservation` (entity `Allocation`), `ProductClassification` | 4 | [class diagram](/contexts/inventory-storage/class-diagram), [canvas](/contexts/inventory-storage/aggregate-design-canvas) |
+| `wes-work-planning` | `ChargeForecast`, `ShiftPlan` (entity `PathPlan`), `WorkPool` (pool entries), `WorkUnit` | 4 | [class diagram](/contexts/wes-work-planning/class-diagram), [canvas](/contexts/wes-work-planning/aggregate-design-canvas) |
+| `fulfillment-execution` | `Task`, `Station`, `Package`, `OrderConsolidation` | 4 | [class diagram](/contexts/fulfillment-execution/class-diagram), [canvas](/contexts/fulfillment-execution/aggregate-design-canvas) |
+| `workforce-management` | `ShiftPlan`, `AssociateShift`, `LaborAssignment` | 3 | [class diagram](/contexts/workforce-management/class-diagram), [canvas](/contexts/workforce-management/aggregate-design-canvas) |
+| `facility-layout` | `Site`, `Zone`, `Aisle`, `CrossAisle`, `LocationSlot`, `LocationType`, `PlacementRule`, `FixedStructure` | 8 | [class diagram](/contexts/facility-layout/class-diagram), [canvas](/contexts/facility-layout/aggregate-design-canvas) |
+| `process-path-management` | `ProcessPath`, `CPTSchedule` (entity `Cutoff`) | 2 | [class diagram](/contexts/process-path-management/class-diagram), [canvas](/contexts/process-path-management/aggregate-design-canvas) |
+| `labor-performance` | `LaborStandard`, `TaskPerformance`, `IdlePeriod` | 3 | [class diagram](/contexts/labor-performance/class-diagram), [canvas](/contexts/labor-performance/aggregate-design-canvas) |
+| `network-fulfillment` | `NetworkOrder` (entity `Line`), `CapabilityOffer` | 2 | [class diagram](/contexts/network-fulfillment/class-diagram), [canvas](/contexts/network-fulfillment/aggregate-design-canvas) |
+| `warehouse-planning` | `ProcessCapacity`, `CapacityPlan` | 2 | [class diagram](/contexts/warehouse-planning/class-diagram), [canvas](/contexts/warehouse-planning/aggregate-design-canvas) |
+| `warehouse-ops-agent` | none: per-request decision objects in `internal/domain/policy` | 0 | [class diagram](/contexts/warehouse-ops-agent/class-diagram), [canvas](/contexts/warehouse-ops-agent/aggregate-design-canvas) |
 
-## order-management
+## Aggregates across context boundaries
 
-```mermaid
-classDiagram
-    class Order {
-        <<aggregate root>>
-        -OrderId id
-        -bool allowPartialShipment
-        -time promiseDate
-        +Allocate(lineNo, reservationID) error
-        +RetryAllocate(lineNo, reservationID) error
-        +MarkBackordered(lineNo) error
-        +Release(lineNo) error
-        +EnsureReleasable() error
-        +EnsureCancellable() error
-        +Cancel() error
-        +Status() Status
-    }
-    class OrderLine {
-        <<entity>>
-        -int lineNo
-        -SKU sku
-        -int quantity
-        -PathId pathId
-        -bool giftWrap
-        -LineStatus status
-        -string reservationId
-    }
-    class OrderId {
-        <<value object>>
-    }
-    class SKU {
-        <<value object>>
-    }
-    class PathId {
-        <<value object>>
-    }
-    class LineStatus {
-        <<enumeration>>
-        Pending
-        Allocated
-        Backordered
-        Released
-        Cancelled
-    }
-
-    Order *-- OrderLine : owns
-    Order --> OrderId
-    OrderLine --> SKU
-    OrderLine --> PathId
-    OrderLine --> LineStatus
-```
-
-**Invariants `Order` protects**
-
-- An order must have at least one line — `ErrNoLines`.
-- A line can only be allocated from `Pending`; allocating twice is
-  `ErrLineAlreadyAllocated`, and allocating from the wrong state is
-  `ErrLineNotPending`.
-- `RetryAllocate` is the **only** route out of `Backordered` —
-  `ErrLineNotBackordered` otherwise.
-- A **ship-complete** order (`allowPartialShipment == false`) cannot be
-  released while any line is unallocated — `ErrShipCompleteBlocked`. This is
-  the invariant that makes partial shipment a real business decision rather
-  than an accident of timing.
-- An order with released lines can no longer be cancelled —
-  `ErrOrderAlreadyReleased`.
-
-`reservationId` is a plain `string`, not a typed reference: it belongs to
-`inventory-storage`, and this context deliberately models no local
-`Reservation` aggregate.
-
-The order-level `Status()` is **always derived from the line statuses and never
-stored**. There is no `status` column on the `orders` table (see
-[Data Models](/architecture/data-models)) precisely so that an order-level
-status can never drift out of sync with the lines it summarises — a
-denormalisation bug this model makes structurally impossible rather than
-merely discouraged.
-
-## inventory-storage
+No aggregate in the fleet holds a pointer to, or a foreign key into, another
+context's aggregate. Where one context needs another's identity, it stores it
+as an opaque string and never parses it. The dashed edges below are those
+identity references. Each comes from the referencing context's own
+entity-relationship or sequence-diagram page.
 
 ```mermaid
-classDiagram
-    class Reservation {
-        <<aggregate root>>
-        -string id
-        -SKU sku
-        -Quantity quantity
-        -string demandRef
-        -Status status
-        -time createdAt
-        -time expiresAt
-        +Revoke() error
-        +Confirm(now) error
-        +Expire() error
-        +IsExpired(now) bool
-    }
-    class Allocation {
-        <<value object>>
-        +string StockUnitID
-        +Quantity Quantity
-    }
-    class StockUnit {
-        <<aggregate root>>
-        -string id
-        -SKU sku
-        -BinId binId
-        -Quantity quantity
-        -Quantity reserved
-        -State state
-    }
-    class Bin {
-        <<aggregate root>>
-        -BinId id
-        -int capacity
-        -int occupied
-    }
-    class ProductClassification {
-        <<aggregate root>>
-        -SKU sku
-        -handlingTags
-        -string temperatureClass
-        -string dotHazardClass
-    }
-    class Status {
-        <<enumeration>>
-        ACTIVE
-        CONFIRMED
-        REVOKED
-        EXPIRED
-    }
-    class Quantity {
-        <<value object>>
-    }
-    class SKU {
-        <<value object>>
-    }
-    class BinId {
-        <<value object>>
-    }
+flowchart LR
+    subgraph OM["order-management"]
+        Order
+    end
+    subgraph INV["inventory-storage"]
+        Reservation
+        StockUnit
+        Bin
+        ProductClassification
+    end
+    subgraph PPM["process-path-management"]
+        ProcessPath
+        CPTSchedule
+    end
+    subgraph WWP["wes-work-planning"]
+        WorkUnit
+        WorkPool
+        ChargeForecast
+        WesShiftPlan["ShiftPlan"]
+    end
+    subgraph FE["fulfillment-execution"]
+        Task
+        Station
+        Package
+        OrderConsolidation
+    end
+    subgraph LP["labor-performance"]
+        TaskPerformance
+        LaborStandard
+        IdlePeriod
+    end
+    subgraph NF["network-fulfillment"]
+        NetworkOrder
+        CapabilityOffer
+    end
+    subgraph WPL["warehouse-planning"]
+        CapacityPlan
+        ProcessCapacity
+    end
+    subgraph WFM["workforce-management"]
+        WfmShiftPlan["ShiftPlan"]
+        AssociateShift
+        LaborAssignment
+    end
 
-    Reservation *-- Allocation : draws from
-    Reservation --> Status
-    Reservation --> Quantity
-    Allocation --> Quantity
-    StockUnit --> BinId : by identity
-    StockUnit --> SKU
-    Bin --> BinId
-    ProductClassification --> SKU
+    Order -.->|"order line reservationId"| Reservation
+    Reservation -.->|"demandRef"| Order
+    Order -.->|"line pathId"| ProcessPath
+    WorkUnit -.->|"id is orderId-line-n"| Order
+    Task -.->|"orderRef is the work unit id"| WorkUnit
+    Package -.->|"taskId, no FK"| Task
+    TaskPerformance -.->|"taskId"| Task
+    NetworkOrder -.->|"localOrderId"| Order
 ```
 
-**Invariants**
+Read the edges as "stores the identity of". Four chains are worth following:
 
-- A reservation requires at least one allocation — `ErrNoAllocations`. A
-  reservation that reserved nothing is meaningless.
-- A resolved reservation cannot be resolved again —
-  `ErrAlreadyResolved` ("already resolved (confirmed, revoked, or expired)").
-  This is what makes revocation safely idempotent.
-- An expired reservation cannot be confirmed — `ErrExpired`.
+- **Order to reservation and back.** `Order` keeps the `reservationId` that
+  inventory-storage minted for each allocated line, and the `Reservation`
+  keeps the order-management demand reference as `demandRef`. Neither side
+  models the other's aggregate locally.
+- **Order line to work unit to task.** wes-work-planning mints work unit ids
+  of the form `orderId-line-n` when it applies `OrderAllocated`.
+  fulfillment-execution stores that work unit id as the `Task`'s `orderRef`,
+  and order-management parses it back out of `TaskCPTMissed` and
+  `PackageManifested` to re-promise.
+- **Task to performance.** labor-performance keys each `TaskPerformance` on
+  the CloudEvents `id` of the `TaskCompleted` it scored and keeps the `taskId`
+  as a plain reference.
+- **Network order to local order.** network-fulfillment raises a held order
+  in order-management and stores the returned id as `localOrderId`.
 
-The `Allocation` value objects are what make a reservation **revocable with
-precision**: each records exactly which stock unit contributed how much, so
-revoking returns exactly that quantity to exactly those units rather than
-guessing.
+Same-named aggregates in different contexts are different models. The two
+`ShiftPlan`s are the clearest example: workforce-management's is the headcount
+a human committed, and wes-work-planning's is its own committed split.
+Workforce's plan reaches wes-work-planning only as the `LaborPlanObserved`
+read model (wes-work-planning ADR-0006). warehouse-planning also declares its
+own `ProcessPath` locally. It shares only the `path_id` string with
+process-path-management, by convention (warehouse-planning ADR 0001 Addendum).
 
-`StockUnit` and `Bin` are separate aggregate roots even though a unit sits in
-a bin — `binId` is a reference by identity, so moving stock never requires
-locking two aggregates.
+## Per context: what each aggregate protects
 
-## fulfillment-execution
+Each aggregate is listed with one headline invariant and the error that
+enforces it. The full invariant tables are on the linked canvas pages.
 
-The clearest example of aggregate independence in the fleet: four roots, none
-of which reference another by pointer.
+### order-management
 
-```mermaid
-classDiagram
-    class Task {
-        <<aggregate root>>
-        -TaskId id
-        -Type taskType
-        -Status status
-        -CPT cpt
-        -OrderRef orderRef
-        -CapabilitySet requiredCapabilities
-        -Lease lease
-        -bool fragile
-        -bool giftWrap
-        +Claim(stationId, stationCapabilities, now, leaseDuration) error
-        +RenewLease(stationId, now, leaseDuration) error
-        +Complete(stationId, now) error
-        +ExpireLeaseIfDue(now) bool
-        +IsAvailable(now) bool
-    }
-    class Lease {
-        <<value object>>
-        +StationId StationId
-        +time Expiry
-    }
-    class Station {
-        <<aggregate root>>
-        -StationId id
-        -CapabilitySet capabilities
-        -OccupantId occupant
-        -string locationCode
-        +CheckIn(occupant) error
-        +CheckOut() error
-        +CanAccept(required) bool
-        +ValidateAccept(required) error
-    }
-    class Package {
-        <<aggregate root>>
-        -PackageId id
-        -OrderRef orderRef
-        -Status status
-        -scannedContents
-        -bool fragileHandling
-        -bool giftWrapRequested
-    }
-    class OrderConsolidation {
-        <<aggregate root>>
-        -OrderRef orderRef
-        -requiredLines
-        -arrivedLines
-    }
-    class Type {
-        <<enumeration>>
-        PICK
-        PACK
-        SLAM
-        REBIN
-    }
-    class Status {
-        <<enumeration>>
-        PENDING
-        CLAIMED
-        COMPLETED
-    }
-    class CapabilitySet {
-        <<value object>>
-    }
-    class CPT {
-        <<value object>>
-    }
+`Order` is the only aggregate. It is the consistency boundary for intake,
+allocation, release, hold and cancellation of one customer order.
 
-    Task *-- Lease : holds while claimed
-    Task --> Type
-    Task --> Status
-    Task --> CapabilitySet
-    Task --> CPT
-    Station --> CapabilitySet
-    Lease --> Station : by identity
-```
+- At least one line (`order.ErrNoLines`). A line is allocated only from
+  `Pending` (`ErrLineNotPending`), and only `RetryAllocate` brings a line back
+  from `Backordered` (`ErrLineNotBackordered`).
+- **BR3**: a ship-complete order releases nothing while any line is
+  unallocated (`ErrShipCompleteBlocked`). **BR6**: no cancellation once any
+  line is `Released` (`ErrOrderAlreadyReleased`).
+- A held order must be ship-complete (`ErrHeldOrderMustBeShipComplete`,
+  ADR 0020). That rule is what lets network-fulfillment raise held orders.
+- The order-level `Status` is derived from the line statuses on every call
+  and never stored.
 
-**Invariants `Task` protects**
+`PathSelectionPolicy`, `PromisePolicy` and the `PlannedCapacityWindow` read
+model live beside the aggregate but are not aggregates.
+[Canvas](/contexts/order-management/aggregate-design-canvas).
 
-- A station may only claim a task whose required capabilities it satisfies —
-  `ErrCapabilityMismatch`. This is the rule that makes pull-based dispatch
-  safe: a station cannot take work it is not certified for.
-- A claimed task cannot be claimed again — `ErrAlreadyClaimed`.
-- Only the lease holder may renew or complete — `ErrNotOwner`.
-- A completed task is terminal — `ErrAlreadyCompleted`.
+### inventory-storage
 
-`CPT` (Critical Pull Time) is the priority value object: the whole pull model
-is "earliest CPT first, among tasks this station can do".
+- `StockUnit`: a quantity of one SKU at one bin. Quantity never goes negative
+  (`shared.ErrNegativeQuantity`). There is deliberately no "SKU balance"
+  aggregate to contend on.
+- `Bin`: a full bin rejects a stow (`location.ErrBinFull`). It has no SKU
+  field, which is what makes storage chaotic.
+- `Reservation`: revocable and expiring. Its `Allocation`s record which stock
+  unit and bin each unit came from, so a revoke returns exactly that quantity.
+  The reserved quantity cannot exceed the usable quantity
+  (`usecases.ErrInsufficientUsable`).
+- `ProductClassification`: SKU master data, with at least one handling tag
+  (`product.ErrNoHandlingTags`). This context is its source of truth (ADR 0009).
 
-The `Lease` is the heart of the design. `ExpireLeaseIfDue(now)` is what
-returns an abandoned task to the pool — a task can be *claimed* but never
-*lost*, which is only possible because the claim carries an expiry rather than
-being a permanent assignment.
+[Canvas](/contexts/inventory-storage/aggregate-design-canvas).
 
-## wes-work-planning
+### wes-work-planning
 
-```mermaid
-classDiagram
-    class WorkUnit {
-        <<aggregate root>>
-        -string id
-        -PathId pathId
-        -CPT cpt
-        -string reference
-        -State state
-        -string sku
-        -bool giftWrap
-        +Release(at) error
-        +Complete(at) error
-    }
-    class WorkPool {
-        <<aggregate root>>
-        -PathId pathId
-        -mode
-        -int wipLimit
-        -int alarmThreshold
-    }
-    class WorkPoolEntry {
-        <<entity>>
-        -string workUnitId
-        -CPT cpt
-        -state
-    }
-    class ReleasePolicy {
-        <<domain service>>
-        +Apply(pool) workUnitId, error
-    }
-    class ShiftPlan {
-        <<aggregate root>>
-        -PathId pathId
-        -int plannedHeads
-        -StationCount installedStations
-        -Rate rateUnitsPerHr
-    }
-    class ChargeForecast {
-        <<aggregate root>>
-        -PathId pathId
-        -time receivedAt
-        -buckets
-    }
-    class State {
-        <<enumeration>>
-        Pending
-        Released
-        Completed
-    }
-    class PathId {
-        <<value object>>
-    }
-    class CPT {
-        <<value object>>
-    }
-    class Rate {
-        <<value object>>
-    }
+- `ChargeForecast`: an input fact with at least one CPT bucket
+  (`charge.ErrNoBuckets`).
+- `ShiftPlan`: the planned heads on a path cannot exceed its installed
+  stations (`plan.ErrHeadsExceedStations`).
+- `WorkPool`: hands each entry out at most once, and on a release-fed pool
+  the WIP limit is a hard invariant (`release.ErrWIPLimitReached`). Backlog
+  depth and WIP are computed from the entries, never stored.
+- `WorkUnit`: released only from `Pending` (`workunit.ErrAlreadyReleased`) and
+  never completed twice (`ErrAlreadyCompleted`).
 
-    WorkPool *-- WorkPoolEntry : owns
-    WorkPool --> PathId
-    WorkUnit --> State
-    WorkUnit --> PathId
-    WorkUnit --> CPT
-    ReleasePolicy --> WorkPool : reads
-    ShiftPlan --> Rate
-    WorkPoolEntry --> WorkUnit : by identity
-```
+`WorkPool` and `WorkUnit` are separate aggregates that one use case saves in
+one transaction. `ReleasePolicy` is a domain service, not a method on either
+of them. [Canvas](/contexts/wes-work-planning/aggregate-design-canvas).
 
-**The key modelling decision.** `WorkPool` and `WorkUnit` are **two separate
-aggregates**. The pool holds only what the release policy needs to choose —
-an id, a CPT, a state — while the work unit owns its own full lifecycle.
-`WorkPoolEntry` references the work unit by identity, never by pointer.
+### fulfillment-execution
 
-This is why `ReleaseNextWork` saves *both* aggregates inside one
-`UnitOfWork`: they are separate consistency boundaries that this particular
-operation must move together, and the transaction — not the object graph — is
-what makes that atomic.
+- `Task`: at most one active claim (`task.ErrAlreadyClaimed`, persisted by
+  the `SaveClaim` compare-and-set, ADR-0034). The claiming station must hold
+  every required capability (`task.ErrCapabilityMismatch`). A claim is a
+  lease that expires.
+- `Station`: one occupant at a time (`station.ErrOccupied`).
+- `Package`: cannot seal without scanned contents (`pack.ErrNoScannedContents`),
+  and SLAM runs once, on a sealed package (`ErrNotSealed`, `ErrAlreadyProcessed`).
+- `OrderConsolidation`: the PACK task is created exactly once, on the
+  arrival that completes the required set (ADR-0016).
 
-`ReleasePolicy` is a **domain service**, not a method on either aggregate,
-because the decision "which unit next" is about the relationship between them
-rather than the internal state of either.
+[Canvas](/contexts/fulfillment-execution/aggregate-design-canvas).
 
-## labor-performance
+### workforce-management
 
-```mermaid
-classDiagram
-    class TaskPerformance {
-        <<aggregate root>>
-        -string eventId
-        -string taskId
-        -AssociateId associateId
-        -TaskType taskType
-        -int64 actualSeconds
-        -int64 standardSecondsAtCompletion
-        -float64 efficiencyPct "NULLABLE"
-        -time completedAt
-    }
-    class LaborStandard {
-        <<aggregate root>>
-        -StandardId id
-        -TaskType taskType
-        -int64 expectedSeconds
-        -int64 travelComponentSeconds "nullable"
-        -time effectiveFrom
-        -time effectiveTo "nil = in force"
-        +Close(at)
-        +IsActiveAt(t) bool
-    }
-    class IdlePeriod {
-        <<aggregate root>>
-        -AssociateId associateId
-        -TaskType taskType
-        -time startedAt
-        -time endedAt
-        -int64 seconds
-        -bool capped
-    }
-    class TaskType {
-        <<value object>>
-    }
-    class AssociateId {
-        <<value object>>
-    }
-    class StandardId {
-        <<value object>>
-    }
+- `ShiftPlan`: planned heads per path cannot exceed installed stations,
+  whether supplied by the caller or read live from fulfillment-execution
+  (`ErrPlannedHeadsExceedInstalled`, `ErrExceedsInstalledCapacity`).
+- `AssociateShift`: no assignment while on break (`associate.ErrOnBreak`) and
+  no mutation after the shift ends (`ErrShiftEnded`).
+- `LaborAssignment`: at most one active assignment per associate. This is
+  structural, because the root is keyed by associate and has a single active
+  slot. The associate must also hold the path's certification
+  (`assignment.ErrCertificationRequired`).
 
-    TaskPerformance --> TaskType
-    TaskPerformance --> AssociateId
-    LaborStandard --> TaskType
-    LaborStandard --> StandardId
-    IdlePeriod --> AssociateId
-    IdlePeriod --> TaskType
-```
+[Canvas](/contexts/workforce-management/aggregate-design-canvas).
 
-**Invariants**
+### facility-layout
 
-- `ErrEmptyEventId` — the Kafka event id is the identity of a performance
-  record, so it can never be empty.
-- `ErrEmptyTaskId` — a performance record must refer to a real task.
+Eight small aggregates, because physical geography is hierarchical but each
+level changes independently. `LocationSlot` is the heart of the model:
 
-Two design points deserve attention.
+- A code has seven `[A-Z0-9]` segments (`shared.ErrMalformedLocationCode`).
+  It is globally unique even after decommission
+  (`usecases.ErrDuplicateLocationCode`), and its site, zone and aisle must
+  exist and be active.
+- `Site` decommission is one-way (`site.ErrAlreadyDecommissioned`).
+- `CrossAisle` joins two distinct aisles (`ErrCrossAisleSameAisle`, also a DB
+  `CHECK`).
+- `PlacementRule` constrains at least one zone dimension (`ErrEmptyPredicate`).
+  `RuleSet.Check` evaluates the rules at slot registration, and Deny wins.
 
-**`efficiencyPct` is `*float64`, not `float64`.** The rule in this context is
-*never fabricate a number*: when nothing was scorable the value is `nil`, and
-it stays `nil` all the way out through the REST API and the analytics report.
-A `0` would read as catastrophically bad performance; `nil` reads as "not
-measured", which is the truth.
+The site layout, zone grid and travel graph are read models assembled per
+request, not aggregates. [Canvas](/contexts/facility-layout/aggregate-design-canvas).
 
-**`standardSecondsAtCompletion` is copied onto the record.** `LaborStandard`
-is a temporal aggregate — `effectiveFrom`/`effectiveTo`, with `Close(at)`
-ending one version — so a performance row freezes the standard that applied at
-the moment of completion. Revising a standard therefore never rewrites
-history.
+### process-path-management
 
-The identity being the Kafka `event_id` is what makes `RecordTaskPerformance`
-idempotent: at-least-once delivery cannot double-count, because a redelivery
-maps to the same aggregate identity.
+- `ProcessPath`: `matchPrefix` is lower-case and never coerced
+  (`ErrMatchPrefixNotLowercase`). A path needs at least one required
+  capability (`ErrNoRequiredCapabilities`).
+- `CPTSchedule`: one per site, because a CPT belongs to a departure, not to a
+  path (ADR 0010). It needs a valid IANA timezone (`ErrInvalidTimezone`) and
+  unique cutoff ids (`ErrDuplicateCptId`), and is always replaced wholesale.
+
+[Canvas](/contexts/process-path-management/aggregate-design-canvas).
+
+### labor-performance
+
+- `LaborStandard`: `expectedSeconds > 0` (`ErrNonPositiveExpectedSeconds`).
+  History is append-only. A revision closes the prior record and opens a new
+  one, so scored rows stay historically accurate.
+- `TaskPerformance`: immutable once recorded. It carries
+  `standardSecondsAtCompletion` frozen at scoring time. `efficiencyPct` is
+  `nil` rather than `0` when nothing was scorable ("never fabricate a
+  number"), and a record is written at most once per CloudEvents `id`.
+- `IdlePeriod`: the gap must be strictly positive (`ErrNegativeGap`), and
+  it is capped so that a shift-spanning gap cannot poison a mean (ADR 0014).
+
+[Canvas](/contexts/labor-performance/aggregate-design-canvas).
+
+### network-fulfillment
+
+- `NetworkOrder`: owns the network protocol (one answer, a 24h deadline, the
+  mapping to a local order) and none of the fulfillment. It needs a non-empty
+  `NetworkRef` (`ErrEmptyNetworkRef`), and a translated order has at least
+  one line (`ErrNoLines`).
+- `CapabilityOffer`: a replaceable snapshot that never advertises more than
+  physically exists (`ErrAdvertisedExceedsPhysical`). It is persisted but
+  neither published to Kafka nor submitted to the network yet.
+
+[Canvas](/contexts/network-fulfillment/aggregate-design-canvas).
+
+### warehouse-planning
+
+- `ProcessCapacity`: the minimum across its registered constraints, all of
+  which share one native unit (`ErrUnitMismatch`).
+- `CapacityPlan`: assigned demand is never negative (`ErrNegativeDemand`),
+  the path rate is an ORDER rate (`ErrPathRateNotOrder`), and
+  `shortage = max(0, demand - capacity)`. A plan is published once
+  (`ErrAlreadyPublished`).
+
+[Canvas](/contexts/warehouse-planning/aggregate-design-canvas).
+
+### warehouse-ops-agent
+
+No aggregate root and no persisted state. `internal/domain/policy` is
+deliberately not a domain in the DDD sense: it holds pure functions (`Decide`,
+`Arbitrate`, `CorrelateUtilization`) that build per-request decision objects
+from upstream reads. Its only rules are boundary validation of untrusted
+input, such as `policy.ParseRebalanceAction`. The canvas page lists them in
+place of invariants. [Canvas](/contexts/warehouse-ops-agent/aggregate-design-canvas).
 
 ## Patterns that hold across every context
 
-Reading all eight domain models together, five conventions are universal:
-
-1. **Private fields, behaviour-bearing methods.** Every field is unexported.
-   State changes go through methods that can refuse — there are no public
-   setters that would let a caller bypass an invariant.
-2. **Errors are named domain vocabulary**, not strings built at the call site.
-   `ErrShipCompleteBlocked` *is* the business rule, expressed as a value.
-3. **Value objects for every identifier.** `OrderId`, `PathId`, `SKU`,
-   `TaskId`, `AssociateId` — never a bare `string` for a domain identity,
-   so the compiler prevents passing a SKU where a path id belongs.
-4. **Cross-aggregate references are identities.** No aggregate root holds a
-   pointer to another root, anywhere in the fleet.
-5. **The domain layer imports nothing framework-shaped.** No `chi`, no `pgx`,
-   no `kafka-go`, no JSON tags — enforced by the `arch-test` CI job described
-   in [Components](/architecture/components), not by convention.
+1. **Private fields, behaviour-bearing methods.** State changes go through
+   methods that can refuse. No public setter lets a caller bypass an
+   invariant.
+2. **Errors are named domain vocabulary.** `ErrShipCompleteBlocked`,
+   `ErrWIPLimitReached` and `ErrAdvertisedExceedsPhysical` each *are* the
+   business rule, expressed as a value.
+3. **Cross-aggregate references are identities.** That holds inside a
+   context (`WorkPool` and `WorkUnit`, `Package` and `Task`) and across
+   contexts (the diagram above).
+4. **Rules that need siblings live in the use case.** An aggregate cannot see
+   its siblings, so uniqueness ("code unique", "id unique") is checked in the
+   use case and reported as a `usecases.Err…` value.
+5. **Lost updates are refused, not merged.** The aggregates that are
+   read-modified-saved concurrently use a version guard or a compare-and-set
+   in the repository (for example `ports.ErrConcurrentModification` in
+   order-management, `SaveClaim` in fulfillment-execution, and the
+   `WorkPool` version check in wes-work-planning).
+6. **The domain layer imports nothing framework-shaped.** Every one of the
+   eleven repositories has `internal/architecture/*_test.go` fitness tests
+   that fail the build if it does. See [Components](/architecture/components).

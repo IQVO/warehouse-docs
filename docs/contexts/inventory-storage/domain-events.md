@@ -1,54 +1,48 @@
 ---
+id: domain-events
 title: Domain Events
 sidebar_label: Domain Events
-description: The eleven past-tense domain events inventory-storage raises, which aggregate raises each, when each is published, and who consumes it (two cross the boundary on Kafka).
+description: The eleven past-tense domain events this context raises, which aggregate raises each, and which reach the broker.
 ---
 
 # Domain Events
 
+:::info[Synced from inventory-storage]
+This page is a copy of [`docs/docs/ddd/domain-events.md`](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/ddd/domain-events.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
+
+
 Eleven past-tense events, raised by four aggregates. Every event carries an
 `occurredAt` taken from the injected `Clock` port — never wall-clock time at
-publish — so ordering is a domain fact rather than an infrastructure
-artefact. The domain never depends on the publishing mechanism: use cases
-hand events to `ports.EventPublisher`, and which adapter is behind it (log,
-buffered, Postgres table, Kafka) is a composition-root decision.
+publish — so ordering is a domain fact rather than an infrastructure artefact.
 
-**Only two of the eleven actually cross the service boundary today** —
-`StockReserved` and `ReservationRevoked`, published to Kafka topic
-`warehouse.inventory.events`. The rest are raised in-process and delivered to
-whichever `ports.EventPublisher` is configured (the log publisher by
-default, or the Postgres `events` table when `DATABASE_URL` is set — a
-table with no relay to a broker); the Kafka adapter's `switch` has a
-`default: return nil` branch that silently drops everything else. That is
-deliberate, not an oversight — the other nine are local concerns.
-`apis/asyncapi.yaml` documents ten of the eleven as messages (every event
-except `ProductClassified`, which is not in the AsyncAPI catalog at all)
-and marks each catalog-only message as such, so a downstream team cannot
-mistake a documented event for a wired one.
+```go
+// internal/domain/shared/events.go
+type DomainEvent interface {
+	EventName() string
+	OccurredAt() time.Time
+}
+```
+
+The domain never depends on the publishing mechanism. Use cases hand events to
+`ports.EventPublisher`; which adapter is behind it (log, buffered, Postgres
+table, Kafka) is a composition-root decision.
 
 ## The catalog
 
-| Event | Raised by | When published | Consumed by |
+| Event | Raised by | Raised when | Payload |
 | --- | --- | --- | --- |
-| `StockReceived` | `StockUnit` *(pre-location)* | `ReceiveStock` acknowledges inbound goods, before anything is located | In-process only — no external consumer |
-| `ItemStowed` | `StockUnit` | `StowStock` succeeds — item-scan + location-scan both present | In-process only — no external consumer |
-| `LocationRecorded` | `StockUnit` | Immediately after `ItemStowed`; the bin now authoritatively holds this unit | In-process only — no external consumer |
-| `StockReserved` | `Reservation` | `ReserveStock` succeeds, against usable inventory | **`wes-work-planning`** — decrements `UsableInventoryObserved[sku]`. Published to `warehouse.inventory.events`. |
-| `ReservationExpired` | `Reservation` | Modelled for when a reservation's timeout elapses before confirmation — **defined, not yet raised**; no use case calls `Expire()` | None — not raised in practice; see the honest gap below |
-| `ReservationRevoked` | `Reservation` | `RevokeReservation` succeeds | **`wes-work-planning`** — increments `UsableInventoryObserved[sku]` back. Published to `warehouse.inventory.events`. |
-| `StockPicked` | `Reservation` | `ConfirmPick` consumes a reservation | In-process only — no external consumer |
-| `ItemUnlocated` | `StockUnit` | A cycle-count shortfall cannot account for stock | In-process only — no external consumer |
-| `CycleCountCompleted` | `Bin` | Any cycle count finishes, clean or not | In-process only — no external consumer |
-| `DiscrepancyDetected` | `Bin` | A cycle count finds counted ≠ system | In-process only — no external consumer |
-| `ProductClassified` | `ProductClassification` | `ClassifyProduct` registers or replaces a SKU's classification | In-process only — no external consumer; not an AsyncAPI message. Siblings read classification over REST (`GET /products/{sku}/classification`) instead. |
-
-*Nine of the eleven — every event except `LocationRecorded` and
-`ProductClassified` — are also fanned out (when `EVENT_PUBLISHER=kafka`) on
-the separate `warehouse.inventory.analytics` topic (see
-[ADR-0011](https://github.com/claudioed/inventory-storage/blob/develop/docs/docs/adr/0011-analytical-data-product.md)),
-consumed exclusively by this service's own `cmd/inventory-projector` — an
-internal data-mesh detail, not a cross-context integration, and distinct from
-the "consumed by" column above.*
+| `StockReceived` | StockUnit *(pre-location)* | `ReceiveStock` acknowledges inbound goods | `sku`, `quantity` |
+| `ItemStowed` | StockUnit | `StowStock` succeeds — item-scan + location-scan both present | `sku`, `binId`, `quantity` |
+| `LocationRecorded` | StockUnit | Immediately after `ItemStowed`; the bin now authoritatively holds this unit | `stockUnitId`, `binId` |
+| `StockReserved` | Reservation | `ReserveStock` succeeds | `reservationId`, `sku`, `quantity`, `demandRef` |
+| `ReservationExpired` | Reservation | A reservation's timeout elapses and is discovered at the next read (`GetReservationsByDemandRef`, `RevokeReservation`, `ConfirmPick`, or `ReserveStock`'s own idempotency lookup) — **lazy, not swept**, see below | `reservationId` |
+| `ReservationRevoked` | Reservation | `RevokeReservation` succeeds | `reservationId` |
+| `StockPicked` | Reservation | `ConfirmPick` consumes a reservation | `reservationId`, `sku`, `quantity` |
+| `ItemUnlocated` | StockUnit | A cycle-count shortfall cannot account for stock | `stockUnitId`, `sku`, `binId`, `quantity` |
+| `CycleCountCompleted` | Bin | Any cycle count finishes, clean or not | `binId`, `countedQty`, `systemQty`, `discrepancy` |
+| `DiscrepancyDetected` | Bin | A cycle count finds counted ≠ system | `binId`, `countedQty`, `systemQty` |
+| `ProductClassified` | ProductClassification | `ClassifyProduct` registers or replaces a SKU's classification | `sku`, `handlingTags`, `temperatureClass`, `dotHazardClass` |
 
 ## Which events flow where
 
@@ -63,90 +57,198 @@ flowchart LR
   CC["RunCycleCount"] --> E7["CycleCountCompleted"]
   CC --> E8["DiscrepancyDetected"]
   CC --> E9["ItemUnlocated"]
-  EXP["timeout (unimplemented)"] --> E10["ReservationExpired"]
+  EXP["lazy read"] --> E10["ReservationExpired"]
   CLS["ClassifyProduct"] --> E11["ProductClassified"]
 
-  E1 & E2 & E3 & E6 & E7 & E8 & E9 & E10 & E11 --> LOG["ports.EventPublisher<br/>in-process only"]
-  E4 & E5 --> KAF["Kafka<br/>warehouse.inventory.events"]
-  KAF --> WP["wes-work-planning"]
+  E4 & E5 --> KAF["warehouse.inventory.events<br/>integration topic"]
+  E1 & E2 & E4 & E5 & E6 & E7 & E8 & E9 & E10 --> ANA["warehouse.inventory.analytics<br/>internal analytics topic"]
+  E3 & E11 --> LOG["in-process only<br/>never leaves the service"]
 
   classDef wired fill:#0f766e,stroke:#134e4a,color:#fff;
   classDef local fill:#94a3b8,stroke:#475569,color:#0f172a;
-  class E4,E5,KAF,WP wired;
+  class E4,E5,KAF wired;
   class LOG local;
 ```
 
-## StockReserved — in full
+**Only `StockReserved` and `ReservationRevoked` cross the service boundary
+on the integration topic.** The integration publisher's `Encode` returns
+nothing for every other event — deliberate, not an oversight: those two are
+the published integration contract. Nine of the eleven events also go to the
+internal analytics topic for this service's own projector;
+`LocationRecorded` and `ProductClassified` go nowhere (no outbox row, no
+Kafka message). `apis/asyncapi.yaml` documents both channels, so a
+downstream team cannot mistake a documented analytics event for a wired
+integration one.
 
-Raised by `ReserveStock` when a reservation is successfully created against
-*usable* inventory. The binding is revocable and carries a timeout, so a
-physical failure downstream never strands the demand.
+## Wire catalogue
 
-**Payload:** `sku` (string), `quantity` (int), `demand_ref` (string). The
-reservation id is carried as the CloudEvents `subject`, not inside `data`.
+Every published event, from the publishers' `Encode` methods
+(`internal/adapters/outbound/kafka/publisher.go`,
+`analytics_publisher.go`). All messages are CloudEvents 1.0 structured mode,
+`source=/warehouse/inventory-storage`, routed with the `Hash` balancer on the
+Kafka key (ADR 0021), and — with Postgres and `EVENT_PUBLISHER=kafka` —
+enqueued in `outbox_events` by the producing use case's transaction and
+relayed by `cmd/inventory`.
 
-**Downstream effect:** `wes-work-planning` *decrements* its observed usable
-count for that SKU, in its own `UsableInventoryObserved` read model.
+| Event | Full CloudEvents `type` | Topic | Kafka key / `subject` | `data` fields | Producer use case | Known consumers |
+| --- | --- | --- | --- | --- | --- | --- |
+| StockReserved | `com.warehouse.wms.inventory-storage.reservation.StockReserved` | `warehouse.inventory.events` | reservation id / reservation id | `sku`, `quantity`, `demand_ref` | `ReserveStock` | `wes-work-planning` (decrements its observed usable) |
+| StockReserved | same `type` | `warehouse.inventory.analytics` | reservation id / reservation id | `sku`, `reservation_id`, `quantity` | `ReserveStock` | `cmd/inventory-projector` |
+| ReservationRevoked | `com.warehouse.wms.inventory-storage.reservation.ReservationRevoked` | `warehouse.inventory.events` | reservation id / reservation id | `sku`, `quantity`, `demand_ref` (enriched by repo lookup) | `RevokeReservation` (REST and MCP) | `wes-work-planning` (increments its observed usable) |
+| ReservationRevoked | same `type` | `warehouse.inventory.analytics` | reservation id / reservation id | `reservation_id`, `sku` (enriched) | `RevokeReservation` | `cmd/inventory-projector` |
+| ReservationExpired | `com.warehouse.wms.inventory-storage.reservation.ReservationExpired` | `warehouse.inventory.analytics` | reservation id / reservation id | `reservation_id`, `sku` (enriched) | lazy expiry in `GetReservationsByDemandRef`, `ReserveStock`, `RevokeReservation`, `ConfirmPick` | `cmd/inventory-projector` |
+| StockPicked | `com.warehouse.wms.inventory-storage.reservation.StockPicked` | `warehouse.inventory.analytics` | reservation id / reservation id | `sku`, `reservation_id`, `quantity` | `ConfirmPick` | `cmd/inventory-projector` |
+| StockReceived | `com.warehouse.wms.inventory-storage.stock.StockReceived` | `warehouse.inventory.analytics` | SKU / SKU | `sku`, `quantity` | `ReceiveStock` | `cmd/inventory-projector` |
+| ItemStowed | `com.warehouse.wms.inventory-storage.stock.ItemStowed` | `warehouse.inventory.analytics` | SKU / SKU | `sku`, `bin_id`, `quantity` | `StowStock` | `cmd/inventory-projector` |
+| ItemUnlocated | `com.warehouse.wms.inventory-storage.stock.ItemUnlocated` | `warehouse.inventory.analytics` | SKU / stock unit id | `sku`, `bin_id`, `stock_unit_id`, `quantity` | `RunCycleCount` | `cmd/inventory-projector` |
+| CycleCountCompleted | `com.warehouse.wms.inventory-storage.bin.CycleCountCompleted` | `warehouse.inventory.analytics` | bin id / bin id | `bin_id`, `counted`, `system`, `discrepancy` | `RunCycleCount` | `cmd/inventory-projector` |
+| DiscrepancyDetected | `com.warehouse.wms.inventory-storage.bin.DiscrepancyDetected` | `warehouse.inventory.analytics` | bin id / bin id | `bin_id`, `counted`, `system` | `RunCycleCount` | `cmd/inventory-projector` |
+| LocationRecorded | — (not published) | — | — | — | `StowStock` | none |
+| ProductClassified | — (not published; would be `com.warehouse.wms.inventory-storage.product.ProductClassified`) | — | — | — | `ClassifyProduct` | none — siblings read `GET /products/{sku}/classification` instead |
 
-## ReservationRevoked — in full
+`dataschema` is `urn:warehouse:inventory-storage:events:<EventName>:v1` on
+the integration topic and `urn:warehouse:inventory-storage:analytics:<EventName>:v1`
+on the analytics topic.
 
-Raised by `RevokeReservation`. Revocation is the mechanism that keeps a
-physical failure — a blocked pod, a lost tote, a chute jam, a short pick —
-from stranding an order.
+### Consumed events
 
-**Payload:** the domain event itself carries only a reservation id; the
-Kafka adapter **enriches** it by looking the reservation up through
-`ports.ReservationRepo` and emitting the same `sku` / `quantity` /
-`demand_ref` shape as `StockReserved`. If the lookup finds nothing, the
-publish fails rather than emitting a partial payload.
+| Event | Full CloudEvents `type` | Topic | Consumer (group) | Effect |
+| --- | --- | --- | --- | --- |
+| ZoneRegistered | `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | `warehouse.facility.events` | `facilitycache.Consumer` (per-process group `inventory-storage-facility-location-cache-<host>-<pid>-<ns>`, FirstOffset replay) | caches zone `hazmat` + `temperatureClass` by `zoneId` |
+| LocationSlotRegistered | `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | `warehouse.facility.events` | same | maps `locationCode` → `zoneId` (derived from the code when absent) |
+| LocationSlotDecommissioned | `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | `warehouse.facility.events` | same | drops the slot, so it answers `Known=false` |
+| all nine analytics types above | `com.warehouse.wms.inventory-storage.*` | `warehouse.inventory.analytics` | `cmd/inventory-projector` (group `inventory-analytics`, FirstOffset) | upserts `flow_accuracy_rollup`, dedupes on the CloudEvents `id` |
 
-**Downstream effect:** `wes-work-planning` *increments* its observed usable
-count for that SKU back. The symmetry is the whole point — the downstream
-read model is built on the assumption that reservations come back.
+Any other `type` on `warehouse.facility.events` is ignored; a message that
+is not a valid CloudEvent is dead-lettered to `warehouse.facility.events.dlq`.
+The projector WARN-logs and skips invalid messages instead.
 
-## One honest gap: nothing sweeps expirations yet
+## Lazy expiry: no sweeper, resolved at the next read
 
 `ReservationExpired` and `Reservation.Expire()` exist in the domain and are
-unit-tested, but **no use case calls `Expire()` and nothing publishes
-`ReservationExpired` today** — there is no background sweeper. The timeout is
-still enforced, just lazily and at a different point:
+unit-tested, and **are now genuinely raised** — but not by a background
+sweeper. The decision (2026-09-26, see [ADR 0003](https://iqvo.github.io/inventory-storage/docs/adr/0003-revocable-reservations))
+is **lazy expiry**: a timed-out reservation is discovered and resolved the
+next time it is read, not on a schedule. Every read path that can return a
+`Reservation` runs the same check first — `GetReservationsByDemandRef`,
+`RevokeReservation`, `ConfirmPick`, and `ReserveStock`'s own idempotency
+lookup — so there is no window where a stale `ACTIVE` reservation can be
+returned to a caller:
 
-- `Reservation.Confirm(now)` returns `ErrExpired` past `expiresAt`, so a
-  timed-out reservation can never be confirmed into a pick;
-- a timed-out reservation's status remains `ACTIVE` in storage, so
-  `RevokeReservation` still accepts it and returns its quantity to usable.
+- if the reservation is `ACTIVE` and past `expiresAt`, the read transitions
+  it to `EXPIRED`, returns its allocated quantity to the owning `StockUnit`'s
+  usable pool, persists both changes, and publishes `ReservationExpired`
+  through the same `ports.EventPublisher` every other domain event uses —
+  all before the read returns;
+- if it is already `EXPIRED`, `CONFIRMED`, or `REVOKED`, the read is a no-op:
+  the event is never raised twice for the same reservation;
+- `Reservation.Confirm(now)` still independently returns `ErrExpired` past
+  `expiresAt` as a second line of defence — but by the time `ConfirmPick`
+  reaches that call, the lazy-expiry check on its own read has usually
+  already resolved the reservation to `EXPIRED`, so the caller sees
+  `ErrAlreadyResolved` instead.
 
-The practical consequence is that a reservation nobody revokes keeps holding
-quantity out of usable until someone calls `DELETE /reservations/{id}`. A
-sweeper that periodically expires and releases them is a real gap, recorded
-here rather than papered over.
+The practical consequence: a reservation nobody revokes still holds quantity
+out of usable until it is *read* — there remains no proactive reclaim of
+quantity for a reservation that both times out **and** is never looked up
+again. That is judged an acceptable trade-off for this service's read
+volume; if it stops being one, the fix is a scheduled read (e.g. a periodic
+call to `GetReservationsByDemandRef` or a dedicated sweep use case), not a
+change to the lazy check itself. `apis/asyncapi.yaml` documents
+`ReservationExpired`'s payload; it reaches the analytics topic
+(`warehouse.inventory.analytics`) the same way `ReservationRevoked` does, via
+`kafka/analytics_publisher.go`.
 
 ## Naming conventions
 
-**In-process:** bare past-tense names — `"StockReserved"`, `"ItemStowed"` —
-the domain's own vocabulary, carrying no transport or platform naming.
+Two conventions coexist, and the difference is worth understanding.
 
-**On the wire:** reverse-DNS CloudEvents `type` (CloudEvents 1.0 is
-mandatory fleet-wide, see the [Event Standard](/strategic-design/event-standard-cloudevents)), the platform-wide convention:
+### In-process: bare past-tense names
+
+`shared.DomainEvent.EventName()` returns the bare name — `"StockReserved"`,
+`"ItemStowed"`. That is the domain's own vocabulary and it deliberately carries
+no transport or platform naming.
+
+### On the wire: reverse-DNS CloudEvents `type`
+
+The platform-wide convention, shared across the fleet's services:
 
 ```text
 com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>
 ```
 
-For this context, `<subdomain>` = `wms`, `<bounded-context>` =
-`inventory-storage`, and `<entity>` groups by the aggregate that raises the
-event: `stock`, `reservation`, or `bin`. For example:
-`com.warehouse.wms.inventory-storage.reservation.StockReserved`.
+All lowercase except the final PascalCase event name. For this context the
+subdomain segment is `wms` and the bounded context is `inventory-storage`:
 
-## Read models are projections, not events
+```text
+com.warehouse.wms.inventory-storage.stock.ItemStowed
+com.warehouse.wms.inventory-storage.reservation.ReservationRevoked
+com.warehouse.wms.inventory-storage.bin.CycleCountCompleted
+```
 
-`GetUsable` projects from `StockUnit`s at read time inside this service.
-Across the boundary, `wes-work-planning` projects `StockReserved` /
-`ReservationRevoked` into its own `UsableInventoryObserved` read model keyed
-by SKU. Same discipline, two scopes — read models (usable-by-SKU, bin
-occupancy) are always projections, never separately-maintained aggregates.
+Entity segments group by the aggregate that raises the event: `stock`,
+`reservation`, `bin`.
 
-See [Async API — Narrative](/contexts/inventory-storage/async-api) for the wire-level envelope detail,
-and the generated reference at
-[`/api-reference/async/inventory-storage`](/api-reference/async/inventory-storage)
-for the complete, linted AsyncAPI document.
+`StockPicked` is grouped under `reservation` rather than `stock`, because it is
+emitted by `ConfirmPick` when a reservation is consumed and the reservation id
+is the only identity it carries.
+
+## What the Kafka adapters emit
+
+Every message is a **CloudEvents 1.0** event in structured mode — the only
+envelope ([ADR-0024](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0024-cloudevents-mandatory-envelope.md)). The
+integration publisher (`warehouse.inventory.events`) and the analytics
+publisher (`warehouse.inventory.analytics`) both build it through
+`internal/adapters/kafka/cloudevents`:
+
+```json
+{
+  "specversion": "1.0",
+  "id": "9f1c2d3e-4b5a-4c6d-8e7f-0a1b2c3d4e5f",
+  "source": "/warehouse/inventory-storage",
+  "type": "com.warehouse.wms.inventory-storage.reservation.StockReserved",
+  "subject": "res-1",
+  "time": "2026-08-21T22:00:00Z",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:inventory-storage:events:StockReserved:v1",
+  "data": { "sku": "SKU-1", "quantity": 6, "demand_ref": "order-42" }
+}
+```
+
+The `id` is minted once when the event is encoded and stored inside the
+outbox row, so a relay redelivery carries the same `id`. See the
+[Events page](https://iqvo.github.io/inventory-storage/docs/api-reference/events) for every type and payload.
+
+## A detail worth knowing: `ReservationRevoked` enrichment
+
+The domain event `ReservationRevoked` carries only a `reservationId` — the
+aggregate has no reason to repeat data the reservation already holds. But the
+integration contract promises `{sku, quantity, demand_ref}`, because the
+downstream projection is keyed by SKU and cannot do a lookup.
+
+The Kafka adapter bridges that gap by re-reading the reservation through
+`ReservationRepo` at publish time:
+
+```go
+case shared.ReservationRevoked:
+	res, err := p.reservations.FindByID(ctx, e.ReservationID)
+	if err != nil { return err }
+	if res == nil { return ErrReservationNotFound }
+	data = reservationData{SKU: res.SKU().String(), Quantity: res.Quantity().Int(), DemandRef: res.DemandRef()}
+```
+
+This is the right place for it: enrichment for a downstream consumer's
+convenience is an **adapter** concern, and putting the extra fields on the
+domain event to save a lookup would let an integration requirement leak into
+the domain model. The use case saves the reservation before publishing, so the
+lookup always succeeds; `ErrReservationNotFound` exists as a guard, not as an
+expected path.
+
+## Read models are projections
+
+`CLAUDE.md` states it as a rule: read models (usable-by-SKU, bin occupancy) are
+**projections from events**, not separately-maintained aggregates. Inside this
+service, `GetUsable` projects from `StockUnit`s at read time. Across the
+boundary, `wes-work-planning` projects `StockReserved` / `ReservationRevoked`
+into its own `UsableInventoryObserved` read model keyed by SKU. Same discipline,
+two scopes.

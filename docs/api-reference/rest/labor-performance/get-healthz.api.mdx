@@ -45,13 +45,13 @@ Reports whether the service process is up and able to serve requests.
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./get-healthz.RequestSchema.json")}
+  title={"Body"}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./get-healthz.StatusCodes.json")}
+  responses={{"200":{"description":"Service is up","content":{"application/json":{"schema":{"type":"object","properties":{"status":{"type":"string","example":"ok"}}}}}}}}
 >
   
 </StatusCodes>

@@ -2,10 +2,14 @@
 
 Fleet-wide documentation for the **warehouse-systems** ecosystem: strategic
 and tactical Domain-Driven Design artifacts, generated REST and AsyncAPI
-references, and business context for all ten backend bounded contexts.
+references, and business context for all eleven backend bounded contexts.
 Built with [Docusaurus](https://docusaurus.io/), published to GitHub Pages.
 
-Live site: https://claudioed.github.io/warehouse-docs/
+Live site: https://iqvo.github.io/warehouse-docs/
+Repository: https://github.com/IQVO/warehouse-docs (every fleet repo lives
+in the `IQVO` org; Go module paths inside the service repos are still
+`github.com/claudioed/<repo>` — that is expected, don't "fix" statements
+about module paths).
 
 This repo reads FROM every context repo's own `apis/openapi.yaml` /
 `apis/asyncapi.yaml` and docs; it lives in none of them, and it never
@@ -22,16 +26,30 @@ never copies).
 - Single Docusaurus site, no develop/main split — this repo builds and
   deploys straight off `main` on every push (unlike the fleet's GitFlow
   service repos).
-- **Scope**: the platform's ten backend bounded contexts —
+- **Scope**: the platform's eleven backend bounded contexts —
   `order-management`, `inventory-storage`, `wes-work-planning`,
   `fulfillment-execution`, `workforce-management`, `facility-layout`,
   `process-path-management`, `labor-performance`, `warehouse-ops-agent`,
   `network-fulfillment` (the anti-corruption layer to an external retail
-  fulfillment network; REST only, no asyncapi.yaml, and its own ADRs live
-  under `docs/adr/`, not `docs/docs/adr/`).
+  fulfillment network; ships both `apis/openapi.yaml` and
+  `apis/asyncapi.yaml`, topics `warehouse.network-fulfillment.events` +
+  `.analytics`; its ADRs live under `docs/adr/`, not `docs/docs/adr/`),
+  `warehouse-planning` (whether the warehouse can process the demand
+  assigned to it; ADRs also under `docs/adr/`).
   The frontend repos (`warehouse-console`, `warehouse-ui-kit`) and
   `warehouse-infra` are referenced where relevant but are not bounded
   contexts in the Evans/Vernon sense — out of scope for DDD artifacts here.
+- **Classification** (must match everywhere on the site):
+  Core = `inventory-storage`, `wes-work-planning`, `fulfillment-execution`,
+  `warehouse-planning`; Supporting = `workforce-management`,
+  `labor-performance`, `warehouse-ops-agent`, `network-fulfillment`;
+  Generic = `facility-layout`, `process-path-management`;
+  `order-management` = Generic/Supporting.
+- **Fleet facts**: REST and MCP are UNAUTHENTICATED fleet-wide (by
+  deliberate decision — never document auth as current); one Kafka broker;
+  `process-path-management` and `labor-performance` make NO REST/MCP calls
+  to siblings (events/declarative only); `warehouse-ops-agent` has no
+  database and no Kafka.
 - **Two separate OpenAPI-doc-generation toolchains in one repo**, isolated
   from each other on purpose (see `tools/asyncapi-gen/` below) — a real
   npm dependency conflict between `docusaurus-plugin-openapi-docs` (needs
@@ -42,20 +60,30 @@ never copies).
 
 ```
 docs/
+  overview.md, glossary.md      hand-written fleet overview + term index
   strategic-design/            domain vision, Core Domain Chart, subdomain
                                 classification, context map, message-flow
                                 modelling, fleet ubiquitous language, the
-                                fleet Event Standard (CloudEvents 1.0)
-                                (modelled on ddd-crew's strategic templates)
-  contexts/<context>/          one dir per bounded context: business
-                                context, ubiquitous language, Bounded
-                                Context Canvas, Aggregate Design Canvas,
-                                domain events, async-API narrative
+                                fleet Event Standard (CloudEvents 1.0),
+                                Big Picture EventStorming
+                                (eventstorming-big-picture.md), and the
+                                DDD Starter Modelling Process walkthrough
+                                (ddd-starter-modelling-process.md)
+                                (modelled on ddd-crew's strategic templates;
+                                hand-written FROM the synced per-context pages)
+  architecture/                 C4 levels 1-3 + fleet summaries of domain
+                                model, data models, runtime flows (link to
+                                each context's synced class/ER/sequence pages)
+  contexts/<context>/          one dir per bounded context (see below)
   api-reference/                GENERATED — REST (docusaurus-plugin-openapi-docs)
                                 + AsyncAPI (asyncapi-gen). The REST .mdx files
                                 and per-context sidebar.ts ARE committed, and
                                 `npm run build` regenerates them first; commit
-                                the regenerated output after syncing specs
+                                the regenerated output after syncing specs.
+                                Hand-written exceptions: index.md,
+                                warehouse-ops-agent.md (prose, no spec) and
+                                the short intro on each async/<ctx>.md embed
+                                page (keep the iframe exactly as is)
   adr/                          index linking to each context's OWN ADR
                                 trail (never copied — never drifts)
 apis/<context>/
@@ -69,8 +97,29 @@ tools/asyncapi-gen/              ISOLATED sub-project (own package.json,
 scripts/gen-async-docs.mjs      invokes tools/asyncapi-gen's installed
                                 binary via execFileSync, never npx (npx
                                 re-resolves the whole tree fresh every call,
-                                10+ min cold vs <1 min cached)
+                                10+ min cold vs <1 min cached). Its CONTEXTS
+                                array lists every context with an
+                                asyncapi.yaml — all ten except
+                                warehouse-ops-agent (incl. network-fulfillment)
+scripts/validate-mermaid.cjs    renders every Mermaid diagram in a real
+                                browser (`npm run validate:mermaid`)
 ```
+
+### Per-context page set (`docs/contexts/<context>/`)
+
+Every context directory has the same page set, in this sidebar order:
+
+| Page | Origin |
+| --- | --- |
+| `index.md` | hand-written here (most carry a custom `slug: /contexts/<ctx>` — use absolute links only) |
+| `business-context.md` | hand-written here |
+| `ubiquitous-language.md`, `core-domain-chart.md`, `bounded-context-canvas.md`, `context-map.md`, `aggregate-design-canvas.md`, `domain-events.md`, `domain-message-flow.md`, `eventstorming.md`, `class-diagram.md`, `entity-relationship.md`, `sequence-diagrams.md` | **SYNCED COPIES** of the context repo's own ddd-crew artifact pack on `develop` (code-grounded). Each starts with a `:::info[Synced from <repo>]` note linking its source. NEVER rewrite them here: fix the content upstream in the context repo, then re-sync. If one breaks the build, make the minimal link/MDX fix and report it as an upstream fix needed |
+| `async-api.md` | hand-written Kafka narrative (topics, envelope example from the spec, publishing, consumer/dedupe/DLQ behaviour), only for contexts that have one: inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, process-path-management, labor-performance, network-fulfillment, warehouse-planning |
+
+The Bounded Contexts sidebar is GENERATED in `sidebars.ts` from the
+`CONTEXTS` array (the eleven contexts) × `CONTEXT_PAGES` (the page order
+above), plus `async-api` for the contexts in `ASYNC_NARRATIVE`. Adding a
+context or a page = edit those arrays, not hand-written sidebar entries.
 
 ## Syncing API specs from the fleet (do this before every content refresh)
 
@@ -82,7 +131,8 @@ the source of truth. Refresh them from each context repo's own `develop`
 cd ..   # warehouse-systems/ (siblings checked out)
 for repo in order-management inventory-storage wes-work-planning \
             fulfillment-execution workforce-management facility-layout \
-            process-path-management labor-performance network-fulfillment; do
+            process-path-management labor-performance network-fulfillment \
+            warehouse-planning; do
   git -C "$repo" show origin/develop:apis/openapi.yaml \
     > "warehouse-docs/apis/$repo/openapi.yaml" 2>/dev/null
   git -C "$repo" show origin/develop:apis/asyncapi.yaml \
@@ -92,11 +142,18 @@ git -C labor-performance show origin/develop:apis/openapi-reports.yaml \
   > "warehouse-docs/apis/labor-performance/openapi-reports.yaml" 2>/dev/null
 ```
 
-`warehouse-ops-agent` and `order-management`'s asyncapi.yaml (order-mgmt
-does have events) get handled per their actual repo shape — check
-`docusaurus.config.ts`'s `CONTEXTS` array before assuming a context needs
-both files; `warehouse-ops-agent` has neither (it's a Customer, not an
-Open Host Service, no `apis/` dir of its own — see its own CLAUDE.md).
+All ten contexts in the loop ship BOTH files (network-fulfillment and
+order-management included). `warehouse-ops-agent` has neither — it's a
+Customer, not an Open Host Service, with no `apis/` dir of its own (see its
+own CLAUDE.md); its surface is documented in prose at
+`docs/api-reference/warehouse-ops-agent.md`, sourced from its
+`docs/docs/api-surface.md`. The REST spec list lives in
+`docusaurus.config.ts` (the `docusaurus-plugin-openapi-docs` config); the
+async list is the `CONTEXTS` array in `scripts/gen-async-docs.mjs`.
+
+The per-context ddd-crew pages (`docs/contexts/<ctx>/<page>.md`, see the
+table above) are synced the same way, from each repo's own docs on
+`develop`; never hand-edit those copies either.
 
 ## Events: CloudEvents 1.0 is MANDATORY
 
@@ -118,9 +175,9 @@ rule, and every page on this site must document it that way:
   `dataschema=urn:warehouse:<repo>:<events|analytics>:<EventName>:v<N>`;
   payload under `data`, unchanged.
 - `type` = `com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`
-  (`wms` for facility-layout / inventory-storage, `wes` for the rest;
-  wes-work-planning's segment is `work-planning`). Breaking payload change =>
-  new `.v2` type + new dataschema version.
+  (`wms` for facility-layout / inventory-storage, `wes` for the other
+  nine; wes-work-planning's segment is `work-planning`). Breaking payload
+  change => new `.v2` type + new dataschema version.
 - Consumers dispatch on the FULL `type`, ignore unknown types, dedupe on
   `id`, and DLQ/skip (never parse a legacy shape) anything that fails
   CloudEvents validation.
@@ -128,9 +185,10 @@ rule, and every page on this site must document it that way:
   owning service repo, then re-sync — never hand-edit the copy.
 
 Full standard, subdomain table and the fleet's cross-service type
-catalogue: `docs/strategic-design/event-standard-cloudevents.md` (each
-service repo also carries it as its own "CloudEvents 1.0 as the mandatory
-event envelope" ADR under `docs/docs/adr/`).
+catalogue: `docs/strategic-design/event-standard-cloudevents.md`. Each of
+the ten Kafka-using service repos also records it as its own ADR (under
+`docs/docs/adr/`, or `docs/adr/` for network-fulfillment and
+warehouse-planning); `warehouse-ops-agent` uses no Kafka.
 
 ## Key Commands
 
@@ -138,6 +196,7 @@ event envelope" ADR under `docs/docs/adr/`).
 npm ci
 npm run gen-api-docs:all     # regenerate REST reference from apis/*/openapi.yaml
 npm run gen-async-docs:all   # regenerate AsyncAPI static HTML from apis/*/asyncapi.yaml
+npm run validate:mermaid     # parse + render every Mermaid diagram in a real browser
 npm run build                 # runs both generation steps, then docusaurus build
 npm start                     # dev server at http://localhost:3000
 ```
@@ -184,13 +243,20 @@ with a custom `slug` must use absolute site-rooted links
 (`/strategic-design/domain-vision`), never relative ones. Pages WITHOUT a
 custom `slug` can keep relative links safely.
 
+Other MDX traps: `{` and `<` in prose break MDX (wrap in backticks);
+admonition titles are `:::note[Title]`, never `:::note Title`; Mermaid
+diagrams that render client-side are NOT checked by `docusaurus build` —
+run `npm run validate:mermaid`.
+
 ## Verification checklist after a content refresh
 
 Don't report "the site is built" from a green `npm run build` alone.
 
-1. `npm run build` locally, fix every broken link before pushing.
+1. `npm run build` locally, fix every broken link before pushing;
+   `npm run validate:mermaid` must end with `0 failed`.
 2. Commit + push, then confirm the `docs.yml` run actually completed green
    (not just "workflow started").
-3. `curl -s -o /dev/null -w "%{http_code}"` the live GitHub Pages URL —
-   homepage, one deep content page per major section, one generated REST
-   reference page, one generated AsyncAPI static page. All must be 200.
+3. `curl -s -o /dev/null -w "%{http_code}"` the live GitHub Pages URL
+   (https://iqvo.github.io/warehouse-docs/) — homepage, one deep content
+   page per major section, one generated REST reference page, one generated
+   AsyncAPI static page. All must be 200.

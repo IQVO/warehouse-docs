@@ -2,213 +2,159 @@
 id: bounded-context-canvas
 title: Bounded Context Canvas
 sidebar_label: Bounded Context Canvas
-slug: /contexts/order-management/bounded-context-canvas
-description: The full ddd-crew Bounded Context Canvas for order-management — purpose, strategic classification, domain roles, communication, business decisions, assumptions, verification metrics, open questions.
+description: "ddd-crew Bounded Context Canvas v5 for order-management: purpose, classification, roles, every inbound and outbound message mapped to a real route, MCP tool or Kafka CloudEvents type."
 ---
 
 # Bounded Context Canvas
 
-The full [ddd-crew Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas)
-for `order-management`, filled in from this repo's own `CLAUDE.md`,
-ADRs, and docs.
+:::info[Synced from order-management]
+This page is a copy of [`docs/docs/ddd/bounded-context-canvas.md`](https://github.com/IQVO/order-management/blob/develop/docs/docs/ddd/bounded-context-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
+
+
+Follows the
+[ddd-crew Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas).
+Every message row maps to a real REST route
+(`internal/adapters/inbound/http/server.go`), MCP tool
+(`internal/adapters/inbound/mcp`) or Kafka topic and CloudEvents type
+(the publishers in `internal/adapters/outbound/kafka`, the consumers listed
+under Inbound Communication).
 
 ## Name
 
-**Order Management**
+**Order Management** (`order-management`). CloudEvents source
+`/warehouse/order-management`, type prefix
+`com.warehouse.wes.order-management.order.`.
 
-## Purpose (business language, no tech)
+## Purpose
 
-Give the platform an owner for "an order." Accept what a customer asked
-for, decide — line by line — whether the warehouse currently has the
-stock to promise it, tell the customer when to expect it, hand the work
-to the warehouse floor once it is safe to do so, and let the customer
-change their mind up until the point that is no longer possible without
-undoing physical work already underway. Before this context existed,
-nothing in the platform could answer "what is the state of order X"
-without joining three unrelated services by an unvalidated string.
+Accept customer and network demand as orders, reserve stock for every line
+in inventory-storage, promise each shipment group a carrier cutoff the
+building can actually meet, and release allocated lines to
+wes-work-planning — while keeping the order cancellable until release and
+holding network-originated orders until their caller commits.
 
 ## Strategic Classification
 
-**Domain:** Generic, leaning Supporting. `CLAUDE.md`'s own title states it
-directly: *"Order Management (Generic/Supporting Bounded Context — order
-intake, allocation, release)."* The reference model
-(`amazon-fulfillment-ddd.md`) places the matching capability, **Order
-Management / ERP interface**, in the **Generic** bucket — "upstream order
-intake; commodity integration surface." Order intake itself — accepting a
-well-formed request and validating it — genuinely is a commodity concern.
-But this context carries more than intake: BR2 (fail-closed allocation),
-BR3 (ship-complete default), and BR6 (the cancellation boundary) are real
-business rules with real invariants, enforced in the domain and
-unit-tested per failing path, earning it the "Supporting" half of the
-label rather than being treated as a thin CRUD proxy.
-
-**Business Model:** Compliance enforcer, in the specific sense that its
-job is to make sure the *rules of engagement* between the customer's
-intent and the warehouse's physical commitments are never violated — a
-line is never allocated twice, a ship-complete order never leaks partial
-work, a cancellation either fully reverts or changes nothing. It does not
-generate revenue directly and it is not a customer engagement surface; it
-is the trust boundary that makes every downstream promise (a promise
-date, a released work unit) honest.
-
-**Evolution:** Custom-built. Order intake as a raw capability is a
-commodity (any WMS/ERP interface does it), but this context's specific
-orchestration of allocation-then-release-then-cancellation against two
-Suppliers, with fail-closed semantics and a derived, unbypassable status,
-is bespoke to this platform's shape — not a bought or off-the-shelf
-product, and not yet a stable, boring "utility" the way `facility-layout`
-(Generic, fully extracted) has become. It is closer to genesis-to-custom
-than product: the rules were only recently discovered and written down
-(ADR-0003, ADR-0004), and ADR-0005 shows the design still actively
-evolving in response to review feedback.
+| Dimension | Value |
+| --- | --- |
+| Domain | **Generic/Supporting** — see [Core Domain Chart](/contexts/order-management/core-domain-chart) and [Subdomain Classification](https://github.com/IQVO/order-management/blob/develop/docs/docs/ddd/subdomain-classification.md) |
+| Business Model | **Compliance / engagement enabler** — no revenue of its own; makes the fulfillment promise to the customer that the Core contexts then keep |
+| Evolution | Intake: commodity. Allocation and hold/release: product. Capability-derived promise, multi-path routing, re-promise: custom |
 
 ## Domain Roles
 
-**Execution context.** This is the only bounded context with visibility
-into an order's full line composition before release (per ADR-0008), and
-it is the one that actually drives the allocate → release → (cancel)
-lifecycle forward by calling out to `inventory-storage` and
-`wes-work-planning`. It is not a pure analysis/read context — every use
-case it exposes (`ReceiveOrder`, `RetryAllocation`, `ReleaseHeldOrder`,
-`CancelOrder`, and the Kafka-driven `RepromiseOrder`) executes a real state
-transition, not just a query. (`GetOrder` is the one read-only exception.)
+- **Gateway** — the platform's front door for demand (`POST /orders`),
+  for both direct callers and network-fulfillment.
+- **Execution** — runs allocation, release and cancellation against
+  inventory-storage and announces released work.
+- **Analysis (light)** — computes the delivery promise from upstream
+  capability, schedule and capacity read models, and publishes an
+  analytics event stream for its own funnel projector.
 
 ## Inbound Communication
 
-| Collaborator | Message(s) | Relationship pattern |
-| --- | --- | --- |
-| caller (external — any client of the public API) | `ReceiveOrder` command (`POST /orders`) | Open Host Service — this context publishes a stable REST contract (`apis/openapi.yaml`) any caller can consume |
-| caller (external) | `RetryAllocation` command (`POST /orders/{id}/retry-allocation`) | Open Host Service |
-| caller (external) | `CancelOrder` command (`DELETE /orders/{id}`) | Open Host Service |
-| caller (external) | `GetOrder` query (`GET /orders/{id}`) | Open Host Service |
-| caller (external) | `ReleaseHeldOrder` command (`POST /orders/{id}/release`) — releases an order received with `releaseOnAllocation=false`; `409 order-not-held` otherwise | Open Host Service ([ADR-0020](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md)) |
-| `network-fulfillment` | `POST /orders` (held: `releaseOnAllocation=false`, `requiredShipBy` = the network's deadline), then `POST /orders/{id}/release` to commit or `DELETE /orders/{id}` to reject | Customer of this context's Open Host Service. `network-fulfillment` is the Anti-Corruption Layer to an external retail fulfillment network; its vocabulary (PO, ASIN, acknowledgement) and customer PII stay on its side ([ADR-0020](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md)) |
-| `process-path-management` | `ProcessPathCreated`/`ProcessPathUpdated`/`ProcessPathDeactivated` and `CPTScheduleChanged` on `warehouse.process-path-management.events` | Conformist — local-cache consumers (`kafkacatalog`, `kafkacptschedule`) feeding path validation and the capability-derived promise ([ADR-0013](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0013-process-path-selection-as-a-domain-policy.md), [ADR-0014](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0014-promise-derived-from-fulfillment-capability.md)). Enabled only by `PATH_CATALOGUE_SOURCE=kafka` (default `none`, in which case the promise falls back to `LeadTimePolicy`) |
-| `wes-work-planning` | `PathCapacityChanged` on `warehouse.work-planning.events` | Conformist — local-cache consumer (`kafkapathcapacity`) for remaining path capacity per cutoff ([ADR-0015](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0015-wes-work-planning-path-capacity-changed-wired.md)); same `PATH_CATALOGUE_SOURCE=kafka` gate |
-| `fulfillment-execution` | `TaskCPTMissed`, `PackageManifested` on `warehouse.fulfillment.events` | Conformist — `RepromiseConsumer` (stable group `order-management-repromise`, runs whenever `KAFKA_BROKERS` is set) drives `RepromiseOrder`, which may raise `OrderRepromised` ([ADR-0018](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0018-repromise-order-consumer-and-order-repromised.md)) |
-| AI agents (MCP clients) | `get_order`, `get_promise_health` tools on `cmd/mcp` | Open Host Service — read-only MCP inbound adapter ([ADR-0010](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0010-mcp-inbound-adapter.md); `get_promise_health` since [ADR-0019](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0019-promise-kpis-on-order-funnel.md)); no write tool |
-| `warehouse-ops-agent` console-bff | `GET /orders/{id}` — first hop of the cross-cutting Order Lifecycle fan-out | Conformist (read-only fan-out) — per ADR-0007, no new endpoint was needed; the BFF is simply another Customer of the existing contract |
-| `order-mgmt-mfe` (this repo's own `web/` Module Federation remote) | This service's full REST API | Conformist — a plain browser client of this service's own contract, per ADR-0007. **Live**: the remote is real (`web/`, Vite + React, port 5181), scaffolded in PR #48 — a place-order form, a lookup-by-id panel, and a cancel button, using 3 of this service's REST endpoints (there is no list/search endpoint to build a list screen against; retry-allocation and hold/release are not wired into the UI). Not a speculative intent; `npm run build` produces a real, non-empty `remoteEntry.js` the `warehouse-console` shell's federation config resolves. |
+| Collaborator | Message | Type | Channel | Relationship |
+| --- | --- | --- | --- | --- |
+| Customer channel, order-mgmt-mfe | ReceiveOrder | Command | REST `POST /orders` (Idempotency-Key with Postgres) | Open Host Service |
+| network-fulfillment | ReceiveOrder held, with `requiredShipBy` | Command | REST `POST /orders` | Customer/Supplier (OM supplier) |
+| network-fulfillment | ReleaseHeldOrder | Command | REST `POST /orders/{id}/release` | Customer/Supplier |
+| network-fulfillment, order-mgmt-mfe | CancelOrder | Command | REST `DELETE /orders/{id}` | Open Host Service |
+| Operator | RetryAllocation | Command | REST `POST /orders/{id}/retry-allocation` | Open Host Service |
+| warehouse-ops-agent console-bff, order-mgmt-mfe | GetOrder | Query | REST `GET /orders/{id}` | Open Host Service, Conformist downstream |
+| AI agents (MCP hosts) | get_order | Query | MCP tool `get_order` (`cmd/mcp`) | Open Host Service |
+| AI agents (MCP hosts) | get_promise_health | Query | MCP tool `get_promise_health` (`cmd/mcp`, reads the analytics DB) | Open Host Service |
+| Planners | GetPlannedCapacity | Query | REST `GET /planned-capacity?site=&from=` | Open Host Service |
+| fulfillment-execution | TaskCPTMissed | Event | Kafka `warehouse.fulfillment.events`, `com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed` | Published Language, ACL |
+| fulfillment-execution | PackageManifested | Event | Kafka `warehouse.fulfillment.events`, `com.warehouse.wes.fulfillment-execution.package.PackageManifested` | Published Language, ACL |
+| process-path-management | ProcessPathCreated, ProcessPathUpdated, ProcessPathDeactivated | Event | Kafka `warehouse.process-path-management.events`, `com.warehouse.wes.process-path-management.processpath.*` | Published Language, ACL |
+| process-path-management | CPTScheduleChanged | Event | Kafka `warehouse.process-path-management.events`, `com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged` | Published Language, ACL |
+| wes-work-planning | PathCapacityChanged | Event | Kafka `warehouse.work-planning.events`, `com.warehouse.wes.work-planning.workpool.PathCapacityChanged` | Published Language, ACL |
+| warehouse-planning | CapacityPlanCreated, CapacityPlanPublished, CapacityShortageDetected | Event | Kafka `warehouse.warehouse-planning.events`, `com.warehouse.wes.warehouse-planning.capacityplan.*` (opt-in) | Published Language, ACL |
 
 ## Outbound Communication
 
-| Collaborator | Message(s) | Relationship pattern |
-| --- | --- | --- |
-| `inventory-storage` | `POST /reservations`, `DELETE /reservations/{id}` | Customer/Supplier — this context is the Customer, `inventory-storage` is the Supplier/Open Host Service. Synchronous HTTP, unchanged since ADR-0002 (`INVENTORY_STORAGE_MODE`, default `permissive`, which deliberately fails allocation with `ErrDownstreamNotConfigured` rather than faking success). |
-| `inventory-storage` | `GET /products/{sku}/classification` | Customer/Supplier — separate fail-open adapter feeding eligibility-driven path selection ([ADR-0016](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0016-eligibility-driven-process-path-selection.md)); opt-in via `PRODUCT_CLASSIFICATION_MODE=http` (default `permissive`); a miss drops a routing hint, never rejects intake |
-| `wes-work-planning` | (was) `POST /paths/{pathId}/work-units`; superseded by publishing `OrderAllocated`/`OrderPartiallyAllocated` on `warehouse.order-management.events` | Was Customer/Supplier (synchronous HTTP, ADR-0002); now Open Host Service + Published Language via Kafka choreography (ADR-0005) — `wes-work-planning`'s own consumer reacts to the fact "these lines were released" instead of being called directly |
-| any subscriber | `OrderRepromised` on `warehouse.order-management.events` (`EVENT_PUBLISHER=kafka`) | Open Host Service + Published Language ([ADR-0018](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0018-repromise-order-consumer-and-order-repromised.md)) — the fleet's "your delivery is delayed" signal. No sibling context consumes it yet. |
-| this context's own `cmd/order-projector` | all ten domain events on `warehouse.order-management.analytics` | Internal analytics fan-out for the Order Funnel data product ([ADR-0006](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0006-analytical-data-product.md), promise KPIs per [ADR-0019](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0019-promise-kpis-on-order-funnel.md)) — not a cross-context contract |
+| Collaborator | Message | Type | Channel | Relationship |
+| --- | --- | --- | --- | --- |
+| inventory-storage | Reserve stock for a line | Command | REST `POST /reservations` (Idempotency-Key, ADR 0028) | Customer/Supplier, ACL |
+| inventory-storage | Revoke a reservation | Command | REST `DELETE /reservations/{id}` | Customer/Supplier, ACL |
+| inventory-storage | Product classification | Query | REST `GET /products/{sku}/classification` (fail-open) | Customer/Supplier, ACL |
+| wes-work-planning | OrderAllocated | Event | Kafka `warehouse.order-management.events`, `com.warehouse.wes.order-management.order.OrderAllocated` | Published Language |
+| wes-work-planning | OrderPartiallyAllocated | Event | Kafka `warehouse.order-management.events`, `com.warehouse.wes.order-management.order.OrderPartiallyAllocated` | Published Language |
+| any subscriber (none known) | OrderRepromised | Event | Kafka `warehouse.order-management.events`, `com.warehouse.wes.order-management.order.OrderRepromised` | Published Language |
+| order-projector (this repo) | every raised domain event | Event | Kafka `warehouse.order-management.analytics`, `com.warehouse.wes.order-management.order.*` | internal |
+| Dead-letter topics | unprocessable inbound message | Event | Kafka `warehouse.fulfillment.events.dlq`, `warehouse.warehouse-planning.events.dlq` | internal |
 
 ## Ubiquitous Language
 
-Order, OrderLine, Status, Allocation, Release, Promise, Hold, Backordered,
-FulfillmentClass — see the dedicated
-[Ubiquitous Language](/contexts/order-management/ubiquitous-language) page for full definitions
-and code references.
+Full glossary: [Ubiquitous Language](/contexts/order-management/ubiquitous-language).
+Top terms:
+
+| Term | Meaning |
+| --- | --- |
+| Order / Order line | The aggregate and its entity (`order.Order`, `order.OrderLine`) |
+| Allocation | Reserving stock for a line in inventory-storage |
+| Backordered | A line inventory-storage answered `409` for |
+| Release | Marking allocated lines `Released` and announcing them on Kafka |
+| Ship-complete | Release nothing until every line is allocated (BR3) |
+| Held order | Allocated but waiting for `POST /orders/{id}/release` (ADR 0020) |
+| Promise / promise group | The CPT window a shipment group is promised to leave by |
+| Promise basis | `Capability`, `LeadTime` or `Network` |
+| Process path | The building workflow a line is routed to (`PathSelectionPolicy`) |
 
 ## Business Decisions
 
-- **BR2 — fail-closed allocation.** Only a `409` from `inventory-storage`'s
-  `POST /reservations` is a backorder (a business fact). Any other error —
-  timeout, 5xx, transport failure — is not a fact about stock; it fails the
-  whole allocation call rather than silently marking a line backordered.
-- **BR3 — ship-complete is the default.** `allowPartialShipment` defaults
-  to `false`. With it false, any `Backordered` line puts the WHOLE order
-  in `Backordered` and no line proceeds to release until `RetryAllocation`
-  clears it. With it `true`, allocated lines are independently eligible for
-  release and the order reads `PartiallyAllocated`.
-- **The order-level status is derived, never stored.** `Order.Status()` is
-  computed from line statuses on every read; there is no `status` column
-  and no field on the aggregate that could drift out of sync.
-- **BR6 — the cancellation boundary is release.** `CancelOrder` is legal
-  ONLY while no line has reached `Released`. The check happens before any
-  reservation is revoked, so a rejected cancellation leaves
-  `inventory-storage` completely untouched. A legal cancellation revokes
-  every allocated line's reservation, then cancels every line.
-- **A failed revoke fails the whole cancellation.** The order is not
-  marked cancelled and the reservation ids are still recorded, so retrying
-  is safe and converges.
-- **A `404` from `DELETE /reservations/{id}` counts as success**, since
-  the desired end state (that reservation no longer holding stock) is true
-  either way.
+- **BR2 — fail closed on ambiguity.** Only inventory-storage's `409`
+  backorders a line; any other failure aborts the allocation pass (ADR 0003).
+- **BR3 — ship-complete by default.** `allowPartialShipment` defaults to
+  `false`; a ship-complete order releases nothing while a line is
+  unallocated (ADR 0003).
+- **BR6 — cancellation boundary at release.** No cancel once any line is
+  `Released`; released work is not clawed back (ADR 0004).
+- **Release is a published fact, not a call** (ADR 0005).
+- **Promise from capability** — CPT schedule, path cycle time and capacity,
+  per shipment group; lead time only as fallback (ADR 0014, 0017).
+- **Path is chosen, never supplied** — shortest known cycle time among
+  eligible active paths, `pick` as fallback (ADR 0013, 0016, 0021).
+- **Held orders must be ship-complete** (ADR 0020).
+- **Reservations are reconfirmed before release**; a lapsed one becomes a
+  backorder.
+- **Planned capacity annotates, never moves, a promise** (ADR 0031).
 
 ## Assumptions
 
-- **No live carrier integration for the promise.** Since ADR-0014 the
-  promise is a CPT window derived from fulfillment capability
-  (process-path cycle time, eligibility, site CPT schedule,
-  wes-work-planning path capacity) — i.e. the instant the order leaves the
-  building, not a delivery date from a carrier-rate or transit-time lookup.
-  When the capability caches are cold or `PATH_CATALOGUE_SOURCE=none`, it
-  falls back to the configurable per-path lead time (`PromiseBasis=LeadTime`).
-  A deadline-constrained order (`requiredShipBy`, ADR-0020) never falls back:
-  an infeasible deadline returns no `promiseDate` at all.
-- **An order's path, for analytics enrichment, is its first line's path**
-  — exact only because intake places every line of an order on the same
-  default path today (ADR-0006).
-- **`PathId` is always the internal default (`pick`)** — never
-  caller-supplied since ADR-0005; a caller has no visibility into or
-  control over process-path routing. Since ADR-0013/0016 that default is
-  validated against the live catalogue and its declared eligibility, but
-  it is still the only path the policy can select (the catalogue port has
-  no "list active paths" method).
-- **No cross-service transaction exists.** `allocateAndRelease` can
-  succeed on line 1 and hard-fail on line 2; the use case explicitly
-  persists whatever genuinely succeeded before returning the error, so
-  nothing is stranded upstream and a retry resumes.
-- **Fire-and-forget release, deliberately.** v1 has no release-confirmation
-  reply event from `wes-work-planning`; this context never learns whether
-  the consumer actually processed the Kafka event.
+- inventory-storage is the single source of truth for stock; this context
+  never caches stock levels.
+- One site per deployment: the promise uses `DEFAULT_SITE_ID`, and the
+  planned-capacity annotation uses `PLANNED_CAPACITY_SITE_ID` (defaulting to
+  the same value).
+- wes-work-planning accepts every released line; there is no confirmation
+  event back.
+- Upstream catalogue, CPT-schedule and capacity topics are replayable from
+  the first offset (local caches rebuild on every start).
+- REST and MCP are unauthenticated (ADR 0012); network-level controls are
+  outside this repo.
 
 ## Verification Metrics
 
-*(Suggested — not sourced from the docs, proposed given what this context
-measures and does.)*
-
-- **Allocation success rate**: share of `AllocateOrder`/`RetryAllocation`
-  passes that complete without a hard (non-409) failure. A drop signals a
-  Supplier integration problem, not a stock problem — distinguishable
-  because of BR2.
-- **Backorder rate**: share of lines landing in `Backordered` out of all
-  lines allocated in a window — a genuine stock-availability signal once
-  BR2 guarantees it isn't polluted by transport noise. The existing [Order
-  Funnel & Allocation Health report](https://github.com/claudioed/order-management/blob/develop/docs/docs/analytics/order-funnel-report.md)
-  already tracks the raw counts this metric would be computed from.
-- **Ship-complete stall time**: for orders with `allowPartialShipment=false`,
-  the time an order spends `Backordered` before a `RetryAllocation` clears
-  it (or it is cancelled) — a proxy for how much unfulfilled customer
-  promise sits blocked behind BR3.
+| Metric | Where |
+| --- | --- |
+| Orders accepted vs rejected at intake | `ports.OrderMetrics` (`internal/adapters/outbound/telemetry`) |
+| Funnel: received, allocated, partially allocated, failed, cancelled, backordered lines | `funnel_rollup` via `cmd/order-projector`, [Order Funnel report](https://iqvo.github.io/order-management/docs/analytics/order-funnel-report) |
+| Promise basis mix, split shipments, promise-to-cutoff gap | `funnel_rollup` (ADR 0019), MCP `get_promise_health` |
+| Re-promises per hour | `repromise_rollup` |
+| Outbox lag | `order.outbox.lag_seconds` gauge (ADR 0032) |
 
 ## Open Questions
 
-- **No Kafka consumer confirms release landed.** v1 ships
-  fire-and-forget: `OrderAllocated`/`OrderPartiallyAllocated` are
-  published and this context moves on with no reply event from
-  `wes-work-planning`. A confirmation-loop pattern is a real, documented
-  v1 gap, not an oversight (ADR-0005).
-- **Released work is not clawed back on cancellation.** Once any line is
-  `Released`, this context has no compensating command to call on
-  `wes-work-planning`'s published contract, and inventing one would mean
-  changing that service — ruled out by ADR-0002. Closing this would need a
-  cancellation/withdrawal operation on `wes-work-planning`, a compensating
-  stow flow on `inventory-storage` for already-picked goods, and a new
-  `Cancelling` order state to model the asynchronous, partially-failable
-  nature of that flow (ADR-0004).
-- **A partially released order cannot be cancelled at all** — not even its
-  still-allocated lines. That is the strict reading of BR6; the first
-  thing to revisit if the business asks for finer-grained cancellation
-  (ADR-0004).
-- **Nothing sweeps an orphaned hold.** An order held with
-  `releaseOnAllocation=false` that its caller never releases or cancels
-  keeps real inventory reservations until someone does (ADR-0020).
-- **`FulfillmentClass` is currently unconsumed.** No downstream context
-  reads the `fulfillment_class` field yet — its value is propagated
-  correctly on the wire, but its usefulness depends on a future
-  `wes-work-planning` decision this repo deliberately does not make
-  (ADR-0008).
-- **Two independently-maintained copies of the `WorkUnitID` formula.**
-  `{orderID}-line-{lineNo}` must match byte-for-byte between this
-  context and `wes-work-planning`'s consumer, with zero wire-level
-  enforcement — only manual review and cross-repo test discipline catch a
-  drift (ADR-0005).
+- `OrderLineReleased`/`OrderReleased` are declared and projected but never
+  raised — keep them, raise them, or delete them? Until decided, the
+  funnel's released columns stay at zero.
+- `ship-complete-blocked` (409) is mapped but unreachable over HTTP; should
+  a BR3-blocked release report that to the caller?
+- No consumer of `OrderRepromised` on the integration topic is known — does
+  wes-work-planning or network-fulfillment need it?
+- **Held orders are never swept.** Nothing expires an orphaned hold; ADR
+  0020 names network-fulfillment as the natural owner of a sweeper.
+- No release confirmation from wes-work-planning (fire-and-forget,
+  README Deferred list).

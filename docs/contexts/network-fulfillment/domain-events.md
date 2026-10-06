@@ -1,60 +1,105 @@
 ---
 id: domain-events
-title: Domain Events
-sidebar_label: Domain Events
-description: network-fulfillment has no typed domain events and no Kafka topic yet — the log-only EventPublisher port, the events ADR 0001 plans, and the rules that apply when Kafka arrives.
+title: Domain events
+sidebar_label: Domain events
 ---
 
-# Domain Events
+# Domain events
 
-:::info[No domain events, no Kafka — yet]
-`network-fulfillment` **defines no typed domain events and neither
-publishes to nor consumes from Kafka.** There is no Kafka client, topic
-or consumer group in the code, and therefore no AsyncAPI reference for
-this context. Everything it does with the fleet today is synchronous REST
-to `order-management`.
+:::info[Synced from network-fulfillment]
+This page is a copy of [`docs/ddd/domain-events.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/ddd/domain-events.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
-## What exists: a log-only publisher port
 
-`ports.EventPublisher` (`Publish(ctx, event)`) is declared in
-`internal/application/ports/ports.go`, and both use cases
-(`ReceiveNetworkDemand`, `SweepAcknowledgementDeadlines`) carry it as a
-dependency. `cmd/netfulfil` wires it to a `logPublisher` that only writes a
-structured log line — and **no use case calls `Publish`**. It is a seam
-for later, not a live integration.
+Every event this context publishes and consumes, read from code
+(`internal/domain/shared/events.go`, `internal/adapters/outbound/kafka/`,
+`internal/adapters/kafka/cloudevents/`, the three consumers) and checked
+against `apis/asyncapi.yaml`.
 
-## What ADR 0001 plans (not built)
+## Envelope
 
-| Planned event / flow | Direction | Source in [ADR 0001](https://github.com/claudioed/network-fulfillment/blob/develop/docs/adr/0001-network-fulfillment-bounded-context.md) |
-| --- | --- | --- |
-| **AcknowledgementDeadlineAtRisk** | Raised by a sweep for orders *approaching* `acknowledgeBy` without an answer — a reported fact, not a state transition, deliberately re-fired each pass while still true | §6 (the implemented sweep instead rejects orders *past* the deadline) |
-| Consume inventory availability, `CPTScheduleChanged` (`process-path-management`), `PathCapacityChanged` (`wes-work-planning`) | Inbound, into three local caches feeding `CapabilityOffer` | §8 |
-| Consume `PackageManifested` (`fulfillment-execution`) | Inbound, to drive shipment confirmation back to the network (the `idx_network_orders_local_order` index already exists for this reverse lookup) | Rollout step 6 |
-| Publish outward | "Publishing comes later" (`.claude/rules/integration-events.md`) | — |
+Every Kafka message is a **CloudEvents 1.0 event in structured content
+mode** (ADR 0008), built only by `internal/adapters/kafka/cloudevents.New`:
 
-`CapabilityOffer` itself is published **to the network** (as an inventory
-update), not onto the fleet's Kafka bus.
+| Attribute | Value |
+| --- | --- |
+| `specversion` | `1.0` |
+| `id` | a UUID minted once per encoded event. In outbox mode the encoded bytes are persisted, so a redelivery carries the same `id` |
+| `source` | `/warehouse/network-fulfillment` |
+| `type` | `com.warehouse.wes.network-fulfillment.networkorder.<EventName>` (entity `networkorder` for every event) |
+| `subject` | the `networkRef` |
+| `time` | the event's own `At`, in UTC |
+| `datacontenttype` | `application/json` |
+| `dataschema` | `urn:warehouse:network-fulfillment:<events\|analytics>:<EventName>:v1` |
+| Kafka header | `content-type: application/cloudevents+json; charset=UTF-8` |
+| Kafka key | `networkRef`, with the `kafkago.Hash` balancer, so one order's events share a partition (ADR 0005) |
 
-## Rules for when Kafka arrives
+## Published
 
-From the repository's `.claude/rules/integration-events.md`:
+Publishing is active only with `EVENT_PUBLISHER=kafka`; otherwise a
+log-only publisher is used. `fanOutPublisher` (`cmd/netfulfil/main.go`)
+sends **every** event to **both** topics:
 
-- One broker for the whole fleet; topic naming
-  `warehouse.<context>.events`; CloudEvents 1.0 envelopes (mandatory,
-  see the [Event Standard](/strategic-design/event-standard-cloudevents)) with
-  `com.warehouse.wes.network-fulfillment.networkorder.<EventName>` types
-  and `source=/warehouse/network-fulfillment`.
-- **Nothing network-shaped crosses into a published event** — no
-  purchase-order numbers as fleet identities, no ASINs, no network status
-  codes, and no customer PII.
-- Consumer group ids must be env-configurable, never inline literals
-  (`TestKafkaConsumerGroupNeverHardcodedInline`); a consumer that replays
-  from the first offset to build an in-memory cache must use a group id
-  **unique per process instance** (hostname+PID+timestamp).
-- Kafka integration tests must start their own broker via testcontainers
-  (`TestKafkaIntegrationTestsUseTestcontainers`) — CI provides no broker.
-- Add `apis/asyncapi.yaml` in the same PR.
+- `warehouse.network-fulfillment.events`, the integration topic
+  (dataschema stream `events`);
+- `warehouse.network-fulfillment.analytics`, the analytics topic (stream
+  `analytics`). The same `type` is used on both, but the `id` differs per
+  topic.
 
-See the [Bounded Context Canvas](/contexts/network-fulfillment/bounded-context-canvas)
-for the live synchronous edges.
+With `DATABASE_URL` set, both are written through `outbox_events` in the
+same transaction as the aggregate (ADR 0003), and the relay drains them.
+
+| Event | Full `type` | Payload fields (`data`) | Producer use case | Known consumers |
+| --- | --- | --- | --- | --- |
+| `NetworkOrderReceived` | `com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderReceived` | `networkRef`, `siteId`, `requiredShipBy`, `acknowledgeBy`, `lineCount` (0 for untranslatable demand), `at` | `ReceiveNetworkDemand` (both paths) | own analytics projector (`orders_received`) |
+| `NetworkOrderAcknowledged` | `com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderAcknowledged` | `networkRef`, `siteId`, `localOrderId`, `receivedAt`, `at` | `ReceiveNetworkDemand.acknowledge`, at **submission** (state `SUBMITTED`) | own analytics projector (`orders_acknowledged`, latency `at - receivedAt`) |
+| `NetworkOrderRejected` | `com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderRejected` | `networkRef`, `siteId`, `reason` (`UNTRANSLATABLE_SKU` \| `INFEASIBLE_DEADLINE` \| `ACKNOWLEDGEMENT_DEADLINE_MISSED` \| `SUBMISSION_FAILED`), `at` | `ReceiveNetworkDemand.reject` (first two reasons), `RejectOverdueOrders`, `ReconcileSubmittedOrders.fail` | own analytics projector (counters by reason; `SUBMISSION_FAILED` is claimed but counted nowhere) |
+| `NetworkOrderShipmentConfirmed` | `com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderShipmentConfirmed` | `networkRef`, `siteId`, `localOrderId`, `at` | `ConfirmNetworkOrderShipment` | none (the projector ignores it) |
+| `AcknowledgementDeadlineAtRisk` | `com.warehouse.wes.network-fulfillment.networkorder.AcknowledgementDeadlineAtRisk` | `networkRef`, `siteId`, `acknowledgeBy`, `at` | `SweepAcknowledgementDeadlines`, re-fired every pass while the order is overdue | none (the projector ignores it) |
+
+**Fleet consumers:** none found. A search of the local fleet checkouts
+found no other context referencing `warehouse.network-fulfillment.events`.
+The integration topic is a published language that nobody subscribes to
+yet.
+
+Partition key and `subject` are always `networkRef`
+(`kafka.aggregateKey`). The default branch, which keys by event name, is
+never reached by these five types.
+
+`CapabilityOffer` raises no events.
+
+## Consumed
+
+| Topic | Full `type` | Fields used | Consumer | Group id |
+| --- | --- | --- | --- | --- |
+| `warehouse.network-fulfillment.analytics` (own) | `...networkorder.NetworkOrderReceived`, `...NetworkOrderAcknowledged`, `...NetworkOrderRejected`; other types ignored | `reason`, `receivedAt`; `time`, `id` from the envelope | `internal/adapters/inbound/kafka/analytics_consumer.go` (`cmd/netfulfil-projector`) | `network-fulfillment-analytics-<host>-<pid>-<ts>` |
+| `warehouse.process-path-management.events` | `com.warehouse.wes.process-path-management.processpath.ProcessPathCreated`, `...processpath.ProcessPathUpdated`, `...processpath.ProcessPathDeactivated`, `com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged` | `path_id`, `cycle_time_p95`; schedule `site_id`, `timezone`, `cutoffs[].cpt_id/local_time/days_of_week/ship_method/eligible_path_ids` | `internal/adapters/outbound/processpathcache/consumer.go` (opt-in) | `network-fulfillment-process-path-capability-cache-<host>-<pid>-<ts>` |
+| `warehouse.work-planning.events` | `com.warehouse.wes.work-planning.workpool.PathCapacityChanged` | `path_id`, `cutoff_at`, `remaining_units`, `known` | `internal/adapters/outbound/pathcapacitycache/consumer.go` (opt-in) | `network-fulfillment-path-capacity-cache-<host>-<pid>-<ts>` |
+
+Consumer behaviour:
+
+- **Analytics consumer**: dedupes on the CloudEvents `id`
+  (`analytics_consumed_events`, then `analytics_processed_events`). A
+  non-CloudEvent is dead-lettered immediately to
+  `warehouse.network-fulfillment.analytics.dlq`. Infrastructure failures
+  are retried up to 3 times per phase, then dead-lettered (ADR 0004).
+- **The two capability caches** replay from the first offset under a
+  per-process group and gate boot on `WaitReady` (60s each). A
+  non-CloudEvent or a handling error is **logged and skipped**: no DLQ.
+
+## Discrepancies found (spec vs code, reported not fixed)
+
+1. `apis/asyncapi.yaml`'s analytics channel lists only four messages and
+   omits `AcknowledgementDeadlineAtRisk`. `fanOutPublisher` publishes it to
+   the analytics topic as well.
+2. `apis/asyncapi.yaml` `info.description` says the aggregate raises four
+   events. The integration channel lists five, which matches the code.
+3. `apis/asyncapi.yaml` `info.contact.url` still points at
+   `github.com/claudioed/network-fulfillment`. The org is `IQVO`, and the
+   Go module path is unchanged.
+4. The `NetworkOrderShipmentConfirmed` doc comment in
+   `internal/domain/shared/events.go` says "no use case in this codebase
+   calls [ConfirmShipment] yet". `ConfirmNetworkOrderShipment` (ADR 0014)
+   now does.
+5. `PostgresProjection.ApplyNetworkOrderRejected` has no counter for
+   `SUBMISSION_FAILED`, so those rejections disappear from the report.

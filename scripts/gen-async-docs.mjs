@@ -26,6 +26,7 @@ const CONTEXTS = [
   'facility-layout',
   'process-path-management',
   'labor-performance',
+  'network-fulfillment',
   'warehouse-planning',
 ];
 

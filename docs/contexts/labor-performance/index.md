@@ -8,7 +8,7 @@ slug: /contexts/labor-performance
 
 # Labor Performance
 
-<span class="badge-supporting">Supporting Subdomain</span>
+<span className="badge-supporting">Supporting Subdomain</span>
 
 **Labor Performance** owns engineered labor standards (`LaborStandard` —
 "a PICK should take 45s") and actual-vs-standard performance scoring
@@ -17,10 +17,7 @@ standard"). Since ADR 0014, it also derives idle-gap / utilization
 read models — the between-task waits `TaskPerformance` scoring alone
 never measured — additively on the same event stream, and since ADR 0015 a
 standard may carry an optional, caller-supplied travel-time component. It
-was the fleet's eighth bounded-context Go service, added after
-`order-management`, `inventory-storage`, `wes-work-planning`,
-`workforce-management`, `fulfillment-execution`, `facility-layout`, and
-`warehouse-ops-agent` (the fleet has since grown to eleven backend contexts).
+is one of the fleet's eleven backend bounded contexts.
 
 :::info[One input, zero outbound calls]
 This context has exactly **one input**: it is a Kafka **Customer** of
@@ -35,30 +32,57 @@ by the console's `labor_mfe` remote and by `warehouse-ops-agent`. It makes
 [Context Map](/strategic-design/context-map) for the full picture.
 :::
 
-## On this page set
+## This context's pages
 
-- **[Business Context](/contexts/labor-performance/business-context)** — why a standard frozen at
-  completion time matters, what an engineered standard is, and why this
-  context is a pure observer, never a decision-maker.
-- **[Ubiquitous Language](/contexts/labor-performance/ubiquitous-language)** — Standard, Scorecard,
-  Coaching Flag, and every other term this context defines.
-- **[Bounded Context Canvas](/contexts/labor-performance/bounded-context-canvas)** — the full
-  ddd-crew canvas: purpose, strategic classification, domain roles,
-  inbound/outbound communication, business decisions, open questions.
-- **[Aggregate Design Canvas](/contexts/labor-performance/aggregate-design-canvas)** — the
-  `TaskPerformance` aggregate (with notes on `LaborStandard` and
-  `IdlePeriod`): state transitions, invariants, commands, events,
-  throughput, size.
-- **[Domain Events](/contexts/labor-performance/domain-events)** — `LaborStandardDefined`,
-  `LaborStandardRevised`, `TaskPerformanceRecorded` (and its additive
-  `IdleSecondsBefore` field since ADR 0014).
-- **[Async API](/contexts/labor-performance/async-api)** — the Kafka integrations (one inbound, one outbound), narrative form.
+- [Business Context](/contexts/labor-performance/business-context): why a
+  standard frozen at completion time matters, what an engineered standard
+  is, and why this context is a pure observer, never a decision-maker.
+- [Ubiquitous Language](/contexts/labor-performance/ubiquitous-language):
+  Standard, Scorecard, Coaching Flag and every other term this context
+  defines.
+- [Core Domain Chart](/contexts/labor-performance/core-domain-chart)
+  ([ddd-crew core-domain-charts](https://github.com/ddd-crew/core-domain-charts)):
+  why this context is Supporting.
+- [Bounded Context Canvas](/contexts/labor-performance/bounded-context-canvas)
+  ([ddd-crew bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas)):
+  purpose, strategic classification, domain roles, inbound and outbound
+  communication, business decisions and open questions.
+- [Context Map](/contexts/labor-performance/context-map)
+  ([ddd-crew context-mapping](https://github.com/ddd-crew/context-mapping)):
+  every upstream and downstream relationship with its pattern, technology
+  and status.
+- [Aggregate Design Canvas](/contexts/labor-performance/aggregate-design-canvas)
+  ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
+  the `TaskPerformance` aggregate, with notes on `LaborStandard` and
+  `IdlePeriod`.
+- [Domain Events](/contexts/labor-performance/domain-events):
+  `LaborStandardDefined` and `LaborStandardRevised` (analytics topic only),
+  `TaskPerformanceRecorded` (analytics topic and the integration topic
+  `warehouse.labor-performance.events`), and the consumed
+  `fulfillment-execution` `TaskCompleted`.
+- [Domain Message Flow](/contexts/labor-performance/domain-message-flow)
+  ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):
+  key scenarios as commands, events and queries.
+- [EventStorming](/contexts/labor-performance/eventstorming)
+  ([ddd-crew eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet)):
+  process-level boards.
+- [Class Diagram](/contexts/labor-performance/class-diagram): the domain
+  model as it exists in the code.
+- [Entity Relationship](/contexts/labor-performance/entity-relationship):
+  the persisted tables.
+- [Sequence Diagrams](/contexts/labor-performance/sequence-diagrams): the
+  main runtime interactions.
+- [Async API](/contexts/labor-performance/async-api): the Kafka
+  integrations (one inbound, one outbound) in narrative form.
+
+Every page above except the Business Context and the Async API narrative
+is synced from the `labor-performance` repository.
 
 ## Elsewhere
 
-- **Repository** — [github.com/claudioed/labor-performance](https://github.com/claudioed/labor-performance)
-- **Docs site** — the service's own Docusaurus site, published from
-  `docs/docs/**/*.md` in that repository (the source this page set is
-  built from)
-- **[Generated API Reference](/api-reference/async/labor-performance)** —
-  AsyncAPI reference generated from the real `apis/asyncapi.yaml`
+- **Repository**: [github.com/IQVO/labor-performance](https://github.com/IQVO/labor-performance)
+- [ADR index](/adr): links to this context's own decision records.
+- Generated references on this site:
+  [REST](/api-reference/rest/labor-performance/labor-performance-api),
+  [Reports REST](/api-reference/rest/labor-performance-reports/labor-performance-reports-api)
+  and [AsyncAPI](/api-reference/async/labor-performance).

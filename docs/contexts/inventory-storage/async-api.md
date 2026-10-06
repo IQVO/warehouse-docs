@@ -21,29 +21,31 @@ reference (every message schema, in full), see
 | **Topic** | `warehouse.inventory.events` |
 | **Protocol** | Kafka |
 | **Client library** | `github.com/segmentio/kafka-go` |
-| **Balancer** | `LeastBytes`, `AllowAutoTopicCreation: true` — **no partition key**, so ordering is not guaranteed, even per SKU |
+| **Balancer** | `Hash` on the Kafka key (the reservation id), `AllowAutoTopicCreation: true` — one reservation's events land on one partition, so they stay ordered per reservation (inventory-storage ADR-0021); there is no per-SKU ordering |
 | **Broker** | `KAFKA_BROKERS`, default `localhost:9092` (shared broker at `~/warehouse-systems/docker-compose.kafka.yml`) |
-| **Selected by** | `EVENT_PUBLISHER=kafka` (default is `log`, so tests and local runs never need a broker) |
-| **Direction** | Publish on this topic. (Separately, this service consumes `warehouse.facility.events` into its location-classification cache — see [the canvas](/contexts/inventory-storage/bounded-context-canvas), inventory-storage ADR-0013.) |
-| **Primary consumer** | `wes-work-planning`, projecting into its own `UsableInventoryObserved` read model, keyed by SKU |
+| **Selected by** | `EVENT_PUBLISHER=kafka` (default is `log`, so tests and local runs never need a broker). With Postgres, events go through a transactional outbox (`outbox_events`, ADR-0017) drained by a relay in `cmd/inventory` |
+| **Direction** | Publish on this topic. (Separately, this service consumes `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned` from `warehouse.facility.events` into its location-classification cache when `LOCATION_LOOKUP_MODE=kafka`, which the reference deployment sets; invalid messages go to `warehouse.facility.events.dlq` — see [Domain Events](/contexts/inventory-storage/domain-events), inventory-storage ADR-0013.) |
+| **Primary consumer** | `wes-work-planning`, projecting into its own `UsableInventoryObserved` read model, keyed by SKU (per `wes-work-planning`, the projection feeds no decision yet) |
 | **Default content type** | `application/cloudevents+json` |
 
 There is a second, separate topic, `warehouse.inventory.analytics`, carrying
-the wider event set for this service's own analytical read model
+nine of the eleven domain events for this service's own analytical read model
 (the Inventory Flow & Accuracy report). That topic has exactly one
 consumer — this service's own `cmd/inventory-projector` — and is not part of
 the cross-context integration contract described on this page.
 
 ## What events are on the topic
 
-Only **two** of this context's eleven domain events are actually published:
-`StockReserved` and `ReservationRevoked`. Everything else hits the Kafka
-adapter's `default: return nil` branch and stays in-process. This is a
+Only **two** of this context's eleven domain events are published on the
+integration topic: `StockReserved` and `ReservationRevoked`. The integration
+publisher's `Encode` returns nothing for every other event; seven of those
+reach only the internal analytics topic, and `LocationRecorded` and
+`ProductClassified` stay in-process. This is a
 deliberate, small public surface — the internal model can evolve freely
 because the wire contract only exposes two events, not all ten messages the
 AsyncAPI catalog documents (`ProductClassified` is not in the catalog at
 all). See [Domain Events](/contexts/inventory-storage/domain-events) for the
-complete catalog and which of the other nine are in-process only.
+complete catalog and which topic each of the other nine reaches, if any.
 
 ## The envelope: CloudEvents 1.0 (mandatory)
 
@@ -159,28 +161,32 @@ sequenceDiagram
 
 - **At-least-once delivery is every consumer's problem.** `wes-work-planning`
   deduplicates with a `processed_events` table keyed by the CloudEvents
-  `id` (`(source, id)`), so a redelivery does not
+  `id`, so a redelivery does not
   double-decrement or double-increment its usable count.
-- **No ordering guarantee.** The `LeastBytes` balancer with no partition key
-  means no per-SKU ordering. Acceptable for an increment/decrement
-  projection, which tolerates reordering of independent events — but it is
-  why the REST read remains authoritative.
+- **Ordering is per reservation, not per SKU.** The `Hash` balancer keys on
+  the reservation id, so different reservations for the same SKU can land on
+  different partitions. Acceptable for an increment/decrement projection,
+  which tolerates reordering of independent events — but it is why the REST
+  read remains authoritative.
 - **Tolerate unknown `type` values.** The catalog grows as more
   of it is wired to the outbound adapter; a consumer that fails closed on an
   unrecognised type will break the first time that happens.
 - **The authoritative answer is always the REST read.** The event stream is
   a convenience projection for keeping a cheap local view warm, not a
   substitute for `GET /inventory/{sku}/usable` when correctness matters.
-- **Publish failures propagate.** `Publish` errors surface out of the use
-  case, so a broker outage surfaces as a `500` on the triggering request —
-  the honest behaviour today, though it couples request success to broker
-  availability; a transactional outbox would decouple them and is not built.
+- **A broker outage does not fail the request.** With Postgres and
+  `EVENT_PUBLISHER=kafka`, the use case inserts the encoded events into
+  `outbox_events` in the same transaction as the aggregate write (ADR-0017),
+  and the relay delivers them at-least-once later. The CloudEvents `id` is
+  persisted with the outbox row, so a redelivery carries the same `id`.
+  Only the in-memory, no-database mode publishes straight to Kafka.
 
 ## Building another consumer
 
 1. Read `apis/asyncapi.yaml`, not this page — it is the linted contract.
-2. Only two events are on the wire; the document's other eight messages are
-   catalog-only, each says so in its own description.
+2. Only two events are on the integration topic; the document's other
+   messages reach only the internal analytics topic, and each says which
+   topics it reaches in its own description.
 3. Deduplicate on the event id; do not assume ordering.
 4. Treat the event stream as a projection — call `GET
    /inventory/{sku}/usable` for the authoritative answer.

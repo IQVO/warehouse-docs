@@ -46,13 +46,13 @@ Liveness probe for the service. Always returns 200 with a static status body if 
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./health-check.RequestSchema.json")}
+  title={"Body"}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./health-check.StatusCodes.json")}
+  responses={{"200":{"description":"Service is up.","content":{"application/json":{"schema":{"type":"object","properties":{"status":{"type":"string","example":"ok"}},"required":["status"]},"example":{"status":"ok"}}}}}}
 >
   
 </StatusCodes>

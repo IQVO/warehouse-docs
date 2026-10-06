@@ -100,6 +100,12 @@ const sidebar: SidebarsConfig = {
           label: "Register a connection between two aisles",
           className: "api-method post",
         },
+        {
+          type: "doc",
+          id: "api-reference/rest/facility-layout/list-cross-aisles",
+          label: "List a zone's cross-aisles",
+          className: "api-method get",
+        },
       ],
     },
     {
@@ -268,6 +274,12 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/rest/facility-layout/get-healthz",
           label: "Liveness probe",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/facility-layout/get-readyz",
+          label: "Readiness probe",
           className: "api-method get",
         },
       ],

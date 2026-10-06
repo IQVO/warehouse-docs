@@ -2,187 +2,157 @@
 id: bounded-context-canvas
 title: Bounded Context Canvas
 sidebar_label: Bounded Context Canvas
-description: The full ddd-crew Bounded Context Canvas for process-path-management — purpose, strategic classification, roles, inbound/outbound communication, business decisions, open questions.
+description: ddd-crew Bounded Context Canvas v5 for process-path-management — purpose, classification, roles, every inbound and outbound message mapped to a real route, MCP tool or Kafka topic.
 ---
 
 # Bounded Context Canvas
 
-Following the [ddd-crew Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas).
+:::info[Synced from process-path-management]
+This page is a copy of [`docs/docs/ddd/bounded-context-canvas.md`](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/ddd/bounded-context-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
+
+
+Following the [ddd-crew Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas).
+Part of the [DDD artifact pack](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/ddd/ddd-artifacts.md). Every message row maps
+to a real route (`internal/adapters/inbound/http/server.go`,
+`reports_handler.go`), MCP tool (`internal/adapters/inbound/mcp/tools.go`,
+`report_tool.go`) or Kafka topic/type
+(`internal/adapters/kafka/cloudevents/types.go`).
 
 ## Name
 
-**Process Path Management**
+**Process Path Management** (`process-path-management`, CloudEvents
+subdomain `wes`, short name `pathmgmt`).
 
 ## Purpose
 
-To be the single, auditable source of truth for the process-path
-catalogue — a path's canonical identity (`PathId`), the match rule
-(`MatchPrefix`) used to resolve a caller-supplied id to a path family,
-whether it is `Direct`, and the capabilities a station/associate must hold
-to work it (`RequiredCapabilities`) — replacing a static YAML file that
-three separate services each independently boot-loaded a copy of. Since
-[ADR 0010](https://github.com/claudioed/process-path-management/blob/develop/docs/docs/adr/0010-fulfillment-capability-contract.md)
-it also publishes each path's fulfillment capability (p95 cycle time,
-eligibility) and owns the site-scoped CPT schedule, so
-`order-management` can derive a delivery promise from path feasibility.
+Be the single, auditable source of truth for the **process-path
+catalogue** — a path's canonical identity (`PathId`), the `matchPrefix`
+rule consumers use to resolve a caller-supplied id to a path family,
+whether it is `Direct`, the capabilities a station/associate must hold to
+work it, its optional destination location role, and its fulfillment
+capability contract (`cycleTimeP95`, `eligibility`) — plus each site's
+recurring **CPT schedule**. It replaced a static YAML file that three
+services boot-loaded independently, and it publishes every change as a
+Kafka event so consumers keep local copies without ever calling it.
 
 ## Strategic Classification
 
 | Axis | Verdict |
 | --- | --- |
-| Domain | **Generic Subdomain** |
-| Business model | Not applicable — this is infrastructure/configuration, not a revenue lever |
-| Evolution | Commodity — a process-path catalogue is a well-understood, industry-common concern |
-
-**Justification.** This context sits in the same bucket as `facility-layout`:
-well-understood and not a competitive differentiator the way
-`fulfillment-execution`'s Pick/Pack/SLAM task lifecycle or
-`inventory-storage`'s chaotic-storage inventory truth are, but genuinely
-needed, identically, by three different services (`fulfillment-execution`,
-`wes-work-planning`, `workforce-management`) — none of which is a more
-natural single owner than the others. `facility-layout`'s own ADR made the
-argument first for physical location structure; this is the same shape of
-decision applied to the process-path catalogue: extract once rather than
-duplicate three times or leave it an unowned static file.
+| Domain | **Generic** subdomain ([ADR 0001](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0001-process-path-management-bounded-context.md); see the [Core Domain Chart](/contexts/process-path-management/core-domain-chart)) |
+| Business Model | **Compliance / enabler** — no revenue lever of its own; it makes the Core contexts' routing, planning and promise consistent |
+| Evolution | **Custom-built**, heading towards product/commodity |
 
 ## Domain Roles
 
-| Role | Applies here? | Notes |
+| Role | Applies? | Note |
 | --- | --- | --- |
-| Published Language | **Yes** | The `ProcessPath` schema, carried field-for-field from the retired YAML file, is the published contract three consumers are expected to conform to. |
-| Open Host Service | **Yes** | The service publishes `warehouse.process-path-management.events` as a stable, documented integration point rather than a bespoke per-consumer contract. |
-| Analytics / Reporting | **Yes, additive** | A separate analytical read side (`cmd/pathmgmt-projector` + `cmd/pathmgmt-reports`) built from this context's own events, on its own topic (`warehouse.process-path-management.analytics`) and database — the "Process Path Catalogue Growth & Change" report. Landed in ADR 0007, closing the last remaining gap among the fleet's then-existing contexts in the analytics data-mesh rollout. |
-| Execution/Workflow | No | This context takes no position on dispatch, routing, or task assignment. |
+| Specification / Published Language owner | **Yes** | Defines the process-path and CPT-schedule language other contexts conform to. |
+| Open Host Service | **Yes** | One stable topic `warehouse.process-path-management.events` for every consumer. |
+| Gateway / configuration | **Yes** | Operator-facing configuration surface (REST + `process_path_mfe`). |
+| Analysis | Additive | Own "Process Path Catalogue Growth & Change" report (ADR 0007). |
+| Execution / Workflow | No | Never claims, assigns or completes work. |
 
 ## Inbound Communication
 
-There is no Kafka consumer of another context's topic in this context —
-it is the SOURCE of the process-path published language, never a consumer
-of anyone else's (its only Kafka consumer, `cmd/pathmgmt-projector`, reads
-its own analytics topic). Inbound traffic is limited to callers issuing
-REST commands/queries against the two aggregates (8 operations in
-`apis/openapi.yaml`, all unauthenticated by deliberate decision —
-[ADR 0005](https://github.com/claudioed/process-path-management/blob/develop/docs/docs/adr/0005-remove-rest-auth.md)
-removed the REST auth layer ADR 0004 had added) and read-only MCP calls:
+| Collaborator | Message | Type | Channel | Relationship |
+| --- | --- | --- | --- | --- |
+| Operator / `process_path_mfe` (warehouse-console) | Define path | Command | REST `POST /process-paths` (Idempotency-Key when Postgres is wired) | OHS, Customer |
+| Operator / `process_path_mfe` | Revise path | Command | REST `PUT /process-paths/{pathId}` | OHS, Customer |
+| Operator / `process_path_mfe` | Deactivate path | Command | REST `DELETE /process-paths/{pathId}` | OHS, Customer |
+| Operator / `process_path_mfe` | List paths (`?all=true` for audit view) | Query | REST `GET /process-paths` | OHS |
+| Operator / audit tooling | Get path | Query | REST `GET /process-paths/{pathId}` | OHS |
+| Operator | Define or revise CPT schedule | Command | REST `PUT /sites/{siteId}/cpt-schedule` | OHS |
+| Operator | Get CPT schedule | Query | REST `GET /sites/{siteId}/cpt-schedule` | OHS |
+| Kubernetes probes | Liveness / readiness | Query | REST `GET /healthz`, `GET /readyz` | Infrastructure |
+| warehouse-console (context reports) | Catalogue growth report | Query | REST `GET /reports/catalogue-growth` on `pathmgmt-reports` | OHS |
+| warehouse-console (context reports) | Report freshness | Query | REST `GET /reports/catalogue-growth/freshness` on `pathmgmt-reports` | OHS |
+| warehouse-ops-agent (wired, unused) | Get process path | Query | MCP `get_process_path` | OHS, Customer |
+| warehouse-ops-agent (wired, unused) | List process paths | Query | MCP `list_process_paths` | OHS, Customer |
+| Any MCP host (no known caller) | Get CPT schedule | Query | MCP `get_cpt_schedule` | OHS |
+| Any MCP host (no known caller) | Catalogue growth report | Query | MCP `get_catalogue_growth_report` (only when `REPORTS_BASE_URL` is set) | OHS |
+| Own `pathmgmt-projector` | ProcessPathCreated / Updated / Deactivated | Event | Kafka `warehouse.process-path-management.analytics`, types `com.warehouse.wes.process-path-management.processpath.*` | Internal (own topic) |
 
-| Command | Sent by | Delivery |
-| --- | --- | --- |
-| `Define path` (`POST /process-paths`) | Operator (or the `process_path_mfe` remote mounted by `warehouse-console`) | Synchronous REST |
-| `Revise path` (`PUT /process-paths/{pathId}`) | Operator (or operator-facing SPA) | Synchronous REST |
-| `Deactivate path` (`DELETE /process-paths/{pathId}`) | Operator (or operator-facing SPA) | Synchronous REST |
-| `List` / `Get` (`GET /process-paths`, `GET /process-paths/{pathId}`) | Operator SPA, audit tooling | Synchronous REST (read-only) |
-| `Define CPT schedule` (`PUT /sites/{siteId}/cpt-schedule`) / `Get CPT schedule` | Operator | Synchronous REST (ADR 0010) |
-| `get_process_path`, `list_process_paths` | `warehouse-ops-agent` | MCP (read-only, ADR 0006) |
+No sibling context sends this context a command or event.
 
 ## Outbound Communication
 
-Two relationships in the fleet: the integration Published Language
-(four live consumers) and, since ADR 0007, a separate, additive analytics
-surface. This context makes **no outbound call** to any sibling —
-`TestNoSiblingContextOutboundCalls` fails the build if
-`internal/adapters/outbound/**` ever imports `net/http`.
+| Collaborator | Message | Type | Channel | Relationship |
+| --- | --- | --- | --- | --- |
+| fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment | ProcessPathCreated | Event | Kafka `warehouse.process-path-management.events`, `com.warehouse.wes.process-path-management.processpath.ProcessPathCreated` | OHS + PL → CF |
+| same five | ProcessPathUpdated | Event | same topic, `com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated` | OHS + PL → CF |
+| same five | ProcessPathDeactivated | Event | same topic, `com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated` | OHS + PL → CF |
+| order-management, network-fulfillment | CPTScheduleChanged | Event | same topic, `com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged` | OHS + PL → CF |
+| Own `pathmgmt-projector` | all four types (analytics copy) | Event | Kafka `warehouse.process-path-management.analytics` | Internal |
+| Own `pathmgmt-reports` | Catalogue growth report | Query | REST `GET /reports/catalogue-growth` from the MCP report tool | Internal |
+| Operators (manual replay) | Poison analytics message | Event | Kafka `warehouse.process-path-management.analytics.dlq` | Internal |
 
-| Collaborator(s) | Relationship pattern | Integration | Status |
-| --- | --- | --- | --- |
-| `fulfillment-execution`, `wes-work-planning`, `workforce-management` | Open Host Service + Published Language (this context is upstream Supplier; all three are downstream Conformists) | Kafka topic `warehouse.process-path-management.events` — `ProcessPathCreated`, `ProcessPathUpdated`, `ProcessPathDeactivated` | **Live.** All three consumers now replay this topic into a local catalogue cache (verified live, no-restart propagation); the predecessor static YAML file is frozen and superseded. These three decode `ProcessPath*` only (no `cycle_time_p95`/`eligibility`/`destination_location_role`/`CPTScheduleChanged`). Their catalogue source is opt-in (`PATH_CATALOGUE_SOURCE`, binary default `file`); the cluster sets `kafka`. |
-| `order-management` | Open Host Service + Published Language (downstream Conformist) | Same topic — `ProcessPath*` (decoding `cycle_time_p95`, `eligibility`) plus `CPTScheduleChanged` | **Live** (ADR 0010). Two consumers (`kafkacatalog`, `kafkacptschedule`), each with a per-process-unique group; this is the fulfillment capability contract from which it derives its delivery promise. Opt-in via `PATH_CATALOGUE_SOURCE=kafka` (binary default `none`); the cluster sets `kafka`. |
-| Analytics consumers (WES Dashboard, console-BFF) | Open Host Service, separate analytics surface | REST — `GET /reports/catalogue-growth`, `GET /reports/catalogue-growth/freshness` via `cmd/pathmgmt-reports`, fed by a dedicated `warehouse.process-path-management.analytics` Kafka topic | **Live** (ADR 0007). Fleet-parity analytical data product — a separate writer (`cmd/pathmgmt-projector`)/reader (`cmd/pathmgmt-reports`)/database triad, never touching the OLTP path. The "Process Path Catalogue Growth & Change" report is bucketed by **day** (no spatial dimension — a process path is a single flat identity, unlike facility-layout's site/zone hierarchy) with fields `dayBucket`, `pathsDefined`, `pathsRevised`, `pathsDeactivated`. Verified live: real `/healthz` 200 and `/reports/catalogue-growth/freshness` returning `{"lagSeconds":0}` against the running pod. |
-
-This context has **zero REST dependency** on any of the four catalogue
-consumers, in either direction, and no synchronous dependency exists
-today from any of them back onto this service. The analytics topic is
-strictly additive and does not touch the integration topic's contract —
-one domain event now enqueues two outbox rows (one per topic) in the
-same transaction as the aggregate change (ADR 0003, extended by ADR
-0007).
-
-## MCP tools
-
-Since PR #26/#27, this context also publishes a read-only MCP tool
-surface (port 8090, Streamable HTTP, unauthenticated — ADR 0005), a
-Customer of which is `warehouse-ops-agent` (its client calls
-`get_process_path`/`list_process_paths`, but the client is wired and not
-yet used by any agent use case — see the
-[Context Map](/strategic-design/context-map)'s MCP surface section):
-
-| Tool | Reads |
-| --- | --- |
-| `get_process_path` | One `ProcessPath` by id, over the OLTP read path |
-| `list_process_paths` | The full catalogue, over the OLTP read path |
-| `get_cpt_schedule` | One site's CPT schedule, over the OLTP read path (ADR 0010) |
-| `get_catalogue_growth_report` | The analytics data product's "Process Path Catalogue Growth & Change" report, over the reports read path — registered only when `REPORTS_BASE_URL` is set; verified with a real `tools/call` against the live pod |
+No outbound call to any sibling — banned and enforced by
+`TestNoSiblingContextOutboundCalls`. See the [Context Map](/contexts/process-path-management/context-map).
 
 ## Ubiquitous Language
 
-See [Ubiquitous Language](./ubiquitous-language) for the full glossary:
-`ProcessPath`, `PathId`, `Capability`, `MatchPrefix`, `Direct`,
-`DestinationLocationRole`, `CycleTimeP95`, `Eligibility`, `CPTSchedule`,
-`Status`.
+Full glossary with code identifiers: [Ubiquitous Language](/contexts/process-path-management/ubiquitous-language).
+Top terms: **ProcessPath**, **PathId**, **MatchPrefix**, **Direct**,
+**Capability** (required capabilities), **DestinationLocationRole**,
+**CycleTimeP95**, **Eligibility**, **Status** (ACTIVE / DEACTIVATED),
+**CPTSchedule**, **Cutoff**, **SiteId**.
 
 ## Business Decisions
 
-Five decisions, enforced by the domain model (or, for the CPT
-cross-aggregate rule, the use case), not by convention:
-
-1. **`MatchPrefix` must be non-empty and lower-case.** Enforced identically
-   at `Define` and at `Revise` time by a single shared validation function.
-   Rejected with a typed sentinel error rather than silently coerced —
-   persisted data is exactly what was validated.
-2. **`RequiredCapabilities` must contain at least one capability.** A
-   process path with zero required capabilities is not a meaningful
-   business fact. Enforced by the same shared validation function, at both
-   `Define` and `Revise` time.
-3. **Deactivation is terminal and idempotent.** Once `Deactivated`, a path
-   is a closed historical record: `Revise` on it is rejected (no path back
-   to `Active`), and re-using a deactivated id is refused, never silently
-   reopened. Calling `Deactivate` again is a no-op success, not an error —
-   and does not republish `ProcessPathDeactivated` a second time.
-4. **`CycleTimeP95` must be strictly positive** (ADR 0010). It is a
-   declared standard, not a measurement; `DestinationLocationRole`, when
-   set, must be one of `Drop`/`WorkCenter`/`Shipping` (ADR 0009) and is
-   never validated live against facility-layout.
-5. **A CPT schedule may only name Active paths.** Every cutoff's
-   `eligiblePathIds` must reference an Active `ProcessPath` (422
-   otherwise), checked at write time in `DefineCPTSchedule` — a CPT is a
-   property of a departure, so it is modelled once per site, not per path
-   (ADR 0010).
+1. `matchPrefix` must be non-empty and lower-case — validated, never
+   coerced (`ErrEmptyMatchPrefix`, `ErrMatchPrefixNotLowercase`).
+2. `requiredCapabilities` must be non-empty (`ErrNoRequiredCapabilities`).
+3. `cycleTimeP95` must be strictly positive (`ErrInvalidCycleTime`).
+4. `destinationLocationRole` is optional, one of `Drop`/`WorkCenter`/
+   `Shipping`, immutable, never validated live against facility-layout.
+5. A path id is permanent: re-defining any existing id (active or
+   deactivated) is a 409 (`ErrPathAlreadyExists`).
+6. Deactivation is terminal and idempotent; a deactivated path cannot be
+   revised (`ErrPathDeactivated`).
+7. No-op revisions and repeated deactivations publish nothing.
+8. A CPT schedule is per site, revised wholesale, needs a valid IANA
+   timezone, at least one cutoff and unique `cptId`s; every
+   `eligiblePathIds` entry must be an Active path (`ErrIneligiblePathId`,
+   checked in the use case).
+9. Concurrent writers are detected by a version column and answered with
+   409 `concurrent-modification` (ADR 0017).
 
 ## Assumptions
 
-- The capability vocabulary (`pick`, `pack`, `hazmat`, …) is owned
-  elsewhere (this context is the authoritative *source of which
-  capabilities a path requires*, not the definer of the vocabulary itself).
-- Consumers that eventually wire a Kafka consumer will maintain their own
-  local read model/cache, not query this service synchronously on every
-  dispatch decision.
-- A process path is live the instant it is defined; there is no "draft" or
-  approval workflow to model.
-- Deactivation carries no position on work already in flight against a
-  path in a downstream context — that remains each consumer's own
-  operational concern.
+- Consumers keep their own local read model and never call this service
+  on their hot path.
+- The capability, product-attribute, site and location-role vocabularies
+  are owned elsewhere and stay in sync by convention.
+- A path is live the moment it is defined — no draft or approval step.
+- Deactivation says nothing about work already in flight downstream.
+- The catalogue is small and slow-changing (operator-configured), so
+  daily report buckets and full-replay consumers are enough.
 
 ## Verification Metrics
 
-- **Invariant enforcement**: 100% of `Define`/`Revise` calls pass through
-  the single shared `validate` function — no divergent validation path.
-- **No-op correctness**: repeated `Deactivate` calls against an
-  already-deactivated path never republish `ProcessPathDeactivated`; a
-  byte-for-byte-identical `Revise` never republishes `ProcessPathUpdated`.
-- **Consumer wiring**: the count of downstream services with a live Kafka
-  consumer on `warehouse.process-path-management.events`. Now 4 — the
-  three original catalogue consumers (verified live: a newly-defined path
-  reached all three running consumers with no restart, and a deactivation
-  propagated the same way) plus `order-management` (ADR 0010).
-- **Analytics freshness**: `GET /reports/catalogue-growth/freshness`
-  target p95 event-to-report lag under 30 seconds, matching the fleet's
-  sibling contexts (ADR 0007). Verified live against the running pod
-  returning `{"lagSeconds":0}`.
+- `process_path_management.paths.defined` counter, by `outcome`
+  (`accepted`/`rejected`) — operator input quality (ADR 0019).
+- `process_path_management.outbox.lag_seconds` gauge — age of the oldest
+  unpublished outbox row; 0 when drained (ADR 0018).
+- `GET /reports/catalogue-growth/freshness` → `lagSeconds` — analytics
+  read-model lag (ADR 0007).
+- Number of live consumers of `warehouse.process-path-management.events`:
+  5 today (see the [Context Map](/contexts/process-path-management/context-map)).
+- BDD: 30 Gherkin scenarios; mutation testing on `internal/domain` gated at
+  99%.
 
 ## Open Questions
 
-- Should this service ever need a synchronous read path (e.g. for
-  first-boot backfill in a new consumer), or is "replay the event stream
-  from offset zero" always sufficient?
-- Does `Direct`'s reserved multi-hop-topology meaning need to be modeled
-  further before any consumer actually needs it, or should it stay an
-  opaque, immutable flag until a concrete need appears?
+- Should the `destination_location_role` field, decoded by three
+  consumers, drive any routing decision, or stay declarative?
+- Should `PUT` endpoints accept an expected version (`If-Match`) so
+  optimistic concurrency protects user edits end-to-end, not only the
+  load-to-save window inside one request?
+- Will `warehouse-ops-agent` use its wired MCP client, or should the
+  surface stay unused?
+- Should W3C trace context be propagated on Kafka messages, as
+  `apis/asyncapi.yaml` already claims?
+- Does `Direct`'s reserved multi-hop meaning need modelling before a
+  consumer needs it?

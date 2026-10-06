@@ -142,6 +142,34 @@ const sidebar: SidebarsConfig = {
           label: "Liveness probe",
           className: "api-method get",
         },
+        {
+          type: "doc",
+          id: "api-reference/rest/inventory-storage/get-readyz",
+          label: "Readiness probe",
+          className: "api-method get",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Reports",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/inventory-storage/reports",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/inventory-storage/get-flow-accuracy-report",
+          label: "Inventory Flow & Accuracy report (hourly)",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/inventory-storage/get-flow-accuracy-freshness",
+          label: "Freshness lag of the flow-accuracy read model",
+          className: "api-method get",
+        },
       ],
     },
   ],

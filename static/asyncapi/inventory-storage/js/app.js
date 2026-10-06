@@ -60,7 +60,7 @@
               "name": "StockReserved",
               "title": "Stock Reserved",
               "summary": "A quantity was revocably bound to demand.",
-              "description": "Raised by the ReserveStock use case when a reservation is successfully created against *usable* inventory (on-hand minus active reservations minus held/unlocated stock). The binding is revocable and carries a timeout, so a physical failure downstream never strands the demand.\n\n**Published to both topics.** On `warehouse.inventory.events` (dataschema `urn:warehouse:inventory-storage:events:StockReserved:v1`) the `data` payload is the adapter's `reservationData` shape — `sku`, `quantity`, `demand_ref` — and the reservation id is the CloudEvents `subject` and the Kafka key. wes-work-planning consumes this exact `type` to update its `UsableInventoryObserved` read model by SKU. On `warehouse.inventory.analytics` (dataschema `...:analytics:StockReserved:v1`, Kafka key = SKU) `data` is `{sku, reservation_id, quantity}`.\n",
+              "description": "Raised by the ReserveStock use case when a reservation is successfully created against *usable* inventory (on-hand minus active reservations minus held/unlocated stock). The binding is revocable and carries a timeout, so a physical failure downstream never strands the demand.\n\n**Published to both topics.** On `warehouse.inventory.events` (dataschema `urn:warehouse:inventory-storage:events:StockReserved:v1`) the `data` payload is the adapter's `reservationData` shape — `sku`, `quantity`, `demand_ref` — and the reservation id is the CloudEvents `subject` and the Kafka key. wes-work-planning consumes this exact `type` to update its `UsableInventoryObserved` read model by SKU. On `warehouse.inventory.analytics` (dataschema `...:analytics:StockReserved:v1`, Kafka key = reservation id — ADR 0021) `data` is `{sku, reservation_id, quantity}`.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -668,7 +668,7 @@
               "name": "StockPicked",
               "title": "Stock Picked",
               "summary": "Reserved quantity was physically removed from its bin.",
-              "description": "Raised by the ConfirmPick use case. It consumes the reservation — a reservation cannot be double-consumed — and permanently removes the quantity from on-hand. Grouped under the `reservation` entity segment because the reservation id is the only identity the event carries.\n\nPublished to `warehouse.inventory.analytics` only (subject = reservation id, Kafka key = SKU). Analytics `data`: `{sku, reservation_id, quantity}`.\n",
+              "description": "Raised by the ConfirmPick use case. It consumes the reservation — a reservation cannot be double-consumed — and permanently removes the quantity from on-hand. Grouped under the `reservation` entity segment because the reservation id is the only identity the event carries.\n\nPublished to `warehouse.inventory.analytics` only (subject = reservation id, Kafka key = reservation id — ADR 0021). Analytics `data`: `{sku, reservation_id, quantity}`.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {

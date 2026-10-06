@@ -1,0 +1,71 @@
+---
+id: get-package
+title: "Read one Package, including its SLAM outcome"
+description: "Read-only view of a single Package, in exactly the shape `POST /tasks/{id}/seal-package` returns on 201. This is how the SLAM operator and the outbound dock loader learn the SLAM outcome: `POST /packages/{id}/slam` answers `204` both when a label was applied and when the package was diverted, so read `status` here — `LABELED` means the carton goes to the truck by its `sortLane`, `DIVERTED` means it goes to problem-solve. Side-effect-free (see [ADR-0033](https://iqvo.github.io/fulfillment-execution/docs/adr/0033-package-read-model))."
+sidebar_label: "Read one Package, including its SLAM outcome"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "get api-method"
+info_path: api-reference/rest/fulfillment-execution/fulfillment-execution-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Read one Package, including its SLAM outcome"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/packages/{id}"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+Read-only view of a single Package, in exactly the shape `POST /tasks/{id}/seal-package` returns on 201. This is how the SLAM operator and the outbound dock loader learn the SLAM outcome: `POST /packages/{id}/slam` answers `204` both when a label was applied and when the package was diverted, so read `status` here — `LABELED` means the carton goes to the truck by its `sortLane`, `DIVERTED` means it goes to problem-solve. Side-effect-free (see [ADR-0033](https://iqvo.github.io/fulfillment-execution/docs/adr/0033-package-read-model)).
+
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  parameters={[{"name":"id","in":"path","required":true,"description":"The package id, as returned by `POST /tasks/{id}/seal-package`.","schema":{"type":"string","example":"20260101T120200.000000000"}}]}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  title={"Body"}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  responses={{"200":{"description":"The package.","content":{"application/json":{"schema":{"type":"object","properties":{"id":{"type":"string","description":"Server-generated package id.","example":"20260101T120200.000000000"},"orderRef":{"type":"string","example":"order-42"},"status":{"type":"string","description":"Lifecycle state of a Package.","enum":["OPEN","SEALED","LABELED","DIVERTED"],"example":"SEALED","title":"PackageStatus"},"scannedContents":{"type":"array","items":{"type":"string"},"example":["sku-1","sku-2"]},"fragileHandling":{"type":"boolean","description":"Derived at seal time from the owning Pack task's `fragile` flag (not an independent input to seal-package) — true if any of the package's scanned/sealed contents came from an order line classified Fragile upstream.\n","example":false},"giftWrapRequested":{"type":"boolean","description":"Derived at seal time from the owning Pack task's `giftWrap` flag (not an independent input to seal-package, and not restated by the station) — true if the order this package fulfils was flagged for gift wrap at work-enqueue time. Unlike hazmat, this is a packing concern only: it does not gate which station may fulfil the order (see ADR-0011).\n","example":false},"sortLane":{"type":"string","description":"Package's derived WES-tier sortation routing decision (see [ADR-0010](https://iqvo.github.io/fulfillment-execution/docs/adr/0010-package-segregation-and-sort-lane)): `HAZMAT_LANE` if any scanned item carried a DOT hazard class from the live per-scanned-item classification lookup, else `FRAGILE_NO_TILT` if `fragileHandling` is true, else `STANDARD`. A decision only — no WCS device/conveyor integration exists in this service; a real WCS system would consume this value as its own inbound fact.\n","enum":["HAZMAT_LANE","FRAGILE_NO_TILT","STANDARD"],"example":"STANDARD","title":"SortLane"}},"title":"PackageResponse"},"example":{"id":"20260101T120200.000000000","orderRef":"order-42","status":"DIVERTED","scannedContents":["sku-1","sku-2"],"fragileHandling":false,"giftWrapRequested":false,"sortLane":"STANDARD"}}}},"404":{"description":"No package exists with this id.","content":{"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 (Problem Details for HTTP APIs) error response, used for every error this API returns. See https://www.rfc-editor.org/rfc/rfc7807.\n","required":["type","title","status","detail"],"properties":{"type":{"type":"string","format":"uri","description":"A URI identifying the error category. Does not need to resolve to a real page — it is an identifier, unique per distinct error category in this service.\n","example":"https://errors.fulfillment-execution.warehouse-systems.dev/task-not-found"},"title":{"type":"string","description":"Fixed, category-level human-readable summary.","example":"Task not found"},"status":{"type":"integer","format":"int32","description":"Duplicates the HTTP status code, per RFC 7807.","example":404},"detail":{"type":"string","description":"The specific error message for this occurrence.","example":"usecases: task not found"},"instance":{"type":"string","description":"The request path that produced the error. Omitted for a validation error on a bare collection-create endpoint (`POST /tasks`, `POST /stations`, `POST /rebin/arrivals`) whose path has no segment identifying a specific resource.\n","example":"/tasks/20260101T120000.000000000/renew-lease"}},"title":"Problem"},"example":{"type":"https://errors.fulfillment-execution.warehouse-systems.dev/package-not-found","title":"Package not found","status":404,"detail":"usecases: package not found","instance":"/packages/20260101T120200.000000000"}}}},"500":{"description":"An unexpected server-side failure (e.g. a repository or event-publisher error).","content":{"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 (Problem Details for HTTP APIs) error response, used for every error this API returns. See https://www.rfc-editor.org/rfc/rfc7807.\n","required":["type","title","status","detail"],"properties":{"type":{"type":"string","format":"uri","description":"A URI identifying the error category. Does not need to resolve to a real page — it is an identifier, unique per distinct error category in this service.\n","example":"https://errors.fulfillment-execution.warehouse-systems.dev/task-not-found"},"title":{"type":"string","description":"Fixed, category-level human-readable summary.","example":"Task not found"},"status":{"type":"integer","format":"int32","description":"Duplicates the HTTP status code, per RFC 7807.","example":404},"detail":{"type":"string","description":"The specific error message for this occurrence.","example":"usecases: task not found"},"instance":{"type":"string","description":"The request path that produced the error. Omitted for a validation error on a bare collection-create endpoint (`POST /tasks`, `POST /stations`, `POST /rebin/arrivals`) whose path has no segment identifying a specific resource.\n","example":"/tasks/20260101T120000.000000000/renew-lease"}},"title":"Problem"},"example":{"type":"https://errors.fulfillment-execution.warehouse-systems.dev/internal-error","title":"Internal server error","status":500,"detail":"pgx: connection refused"}}}}}}
+>
+  
+</StatusCodes>
+
+
+      

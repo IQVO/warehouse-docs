@@ -2,44 +2,73 @@
 id: ubiquitous-language
 title: Ubiquitous Language
 sidebar_label: Ubiquitous Language
-description: NetworkOrder, NetworkRef, NetworkLineRef, NetworkProductId vs. SKU, LocalOrderId, requiredShipBy, acknowledgeBy, held order — pulled from the domain code and .claude/rules/domain-model.md, plus the planned CapabilityOffer.
 ---
 
 # Ubiquitous Language
 
-The definitions below come from the source repository's own domain code
-(`internal/domain/networkorder/network_order.go`,
-`internal/domain/shared/shared.go`) and its
-`.claude/rules/domain-model.md`, which is kept in sync with the code and
-forbids describing planned concepts as if they exist. Planned terms are
-labelled as such.
+:::info[Synced from network-fulfillment]
+This page is a copy of [`docs/ddd/ubiquitous-language.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/ddd/ubiquitous-language.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-| Term | Definition |
-| --- | --- |
-| **NetworkOrder** | Demand that arrived from the external network carrying a deadline we did not choose; answered exactly once, in full or not at all. The aggregate owns the network *protocol* — the answer, its deadline and the mapping to local work — and none of the fulfillment (no allocation, promise computation or release). |
-| **NetworkRef** | The network's own identity for a unit of demand (for Vendor Direct Fulfillment, its purchase-order number). An **opaque** string: this context is Conformist upstream, so it never parses or derives meaning from it. Also the Postgres primary key, because the network addresses every answer by it. |
-| **NetworkLineRef** | The network's identity for one line *within* a NetworkRef — unique only inside its order, hence a distinct type. |
-| **NetworkProductId** | The network's product identifier (an ASIN, in Amazon's vocabulary). It is **not** a SKU; keeping the two as separate types makes a missing translation a compile error rather than a silently wrong lookup. Retained on each line alongside the SKU, because answers go back to the network in its terms. |
-| **SKU** | *Our* product identity, the vocabulary every other context speaks. Appears here only as the **output** of the Anti-Corruption Layer's translation. |
-| **Product translation** | The ACL's dictionary, `networkProductId -> SKU`, loaded from `PRODUCT_TRANSLATION_FILE`. Without it every order is rejected as untranslatable (and the service logs a warning at startup saying so). |
-| **LocalOrderId** | `order-management`'s `OrderId` for the held order raised from a NetworkOrder. A **persisted one-to-one mapping**, never a string convention — the fleet was burned once by an identifier that looked like an order reference and was not (order-management ADR 0018). Linkable only once acknowledged, and only once. |
-| **SiteId** | The fulfillment site a NetworkOrder is destined for — the same identity `order-management`'s `PromisePolicy` and `process-path-management`'s CPT schedule key on. |
-| **requiredShipBy** | The network's deadline, sent to `order-management` as-is. `order-management` decides feasibility; this context never does. |
-| **acknowledgeBy** | `receivedAt + AcknowledgementWindow`. The window is **24h, a domain constant** (a fact about the counterparty's protocol, not a knob), fixed at receipt and persisted, never recomputed — so a batch polled after an outage keeps its real deadlines. |
-| **Held order** | An `order-management` order raised with `releaseOnAllocation: false` (its ADR 0020): allocated but not released. Released on acknowledgement, cancelled on rejection. |
-| **State (NEW / ACKNOWLEDGED / REJECTED / CONFIRMED)** | The NetworkOrder lifecycle: `NEW -> ACKNOWLEDGED -> CONFIRMED`, `NEW -> REJECTED`. `CONFIRMED` (shipment confirmed to the network) exists in the domain but **no use case reaches it yet**. |
-| **Acknowledgement overdue** | Still `NEW` and past `acknowledgeBy` — the predicate the deadline sweep acts on. A reported fact about a missed SLA, not an error. |
-| **NETWORK_MODE (stub / sandbox / live)** | The switch every call to the network goes through, default `stub` (unrecognised values are also `stub`). Only `stub` is implemented; `sandbox`/`live` refuse to boot. |
-| **CapabilityOffer** *(planned)* | Advertised quantity per `(sku, siteId)` with a `basis` of `Physical` or `ThroughputConstrained`, invariant `advertisedQuantity <= physicalAvailable`. Designed in [ADR 0001](https://github.com/claudioed/network-fulfillment/blob/develop/docs/adr/0001-network-fulfillment-bounded-context.md); **not in the code**. |
 
-## Network vocabulary that must never cross inward
+The terms this context speaks, each mapped to the code identifier that
+implements it. Where the business word and the code name differ, the
+difference is flagged in the last section. Code wins over this page.
 
-`purchaseOrderNumber`, `itemSequenceNumber`, `buyerProductIdentifier`,
-`acknowledgementStatus` codes, `sellingParty`/`shipFromParty` and
-`ShippingSpeedCategory` belong to the network. They may appear only
-inside `internal/adapters/outbound/network/` and never in
-`internal/domain` or anything published to the fleet. `arch-go` cannot
-catch a *vocabulary* leak — that check is human.
+## Network side (the counterpart's concepts, translated at the ACL)
 
-See [Ubiquitous Language](/strategic-design/ubiquitous-language) at the
-platform level for terms reused across contexts with different meanings.
+| Term | Meaning | Code identifier |
+| --- | --- | --- |
+| **Network** | The external retail fulfillment network this context is Conformist to. Since ADR 0009 the fleet's own `retail-network` plays this role. | `ports.NetworkGateway`; `internal/adapters/outbound/network` |
+| **NetworkRef** | The network's own opaque identity for one unit of demand (its purchase-order number). It is never parsed, and it is the primary key. | `shared.NetworkRef`; column `network_orders.network_ref` |
+| **NetworkLineRef** | The network's identity for one line, unique only within its order. | `shared.NetworkLineRef`; `network_order_lines.network_line_ref` |
+| **NetworkProductId** | The network's product identifier. It is **not** a SKU. | `shared.NetworkProductId`; `network_order_lines.network_product_id` |
+| **Inbound demand** | One unit of demand as polled, before translation. | `contract.InboundDemand`, `contract.InboundLine` |
+| **Network mode** | Which gateway is wired: `stub` (default) or `live` (refuses to boot). | `network.Mode`, `ModeStub`, `ModeLive`; env `NETWORK_MODE` |
+| **Submission status** | The network's transaction-status answer for a submission: `PENDING`, `SUCCESS` or `FAILURE`. | `contract.SubmissionStatusValue`, `SubmissionPending/Success/Failure` |
+| **Label** | What a label request may return: `{labelRef, trackingNumber, carrier}` and never ship-to PII. | `contract.LabelResult` (port only; no caller) |
+
+## Our side
+
+| Term | Meaning | Code identifier |
+| --- | --- | --- |
+| **NetworkOrder** | Demand from the network with a deadline we did not choose, answered exactly once, in full or not at all. | `networkorder.NetworkOrder` |
+| **Line** | One line already translated into our vocabulary. It keeps the network's product id, because answers go back in the network's terms. | `networkorder.Line`, `NewLine` |
+| **SKU** | Our product identity. It is only ever the output of translation. | `shared.SKU` |
+| **Product translation** | The ACL dictionary from `NetworkProductId` to `SKU`. | `ports.ProductTranslation` (`ToSKU`, `KnownSKUs`); file `PRODUCT_TRANSLATION_FILE` |
+| **Untranslatable demand** | Demand naming a product with no mapping. It is recorded lineless and rejected. | `networkorder.ReceiveUntranslatable`; `shared.ErrUnknownProduct` |
+| **SiteId** | The fulfillment site the demand is destined for. | `shared.SiteId` |
+| **requiredShipBy** | The network's deadline, passed to `order-management` unchanged. | `NetworkOrder.RequiredShipBy()`; `HeldOrderRequest.RequiredShipBy` |
+| **Acknowledgement window** | 24h. A fact about the counterparty, not configuration. | `networkorder.AcknowledgementWindow` |
+| **acknowledgeBy** | `receivedAt + 24h`, fixed at receipt and persisted. | `NetworkOrder.AcknowledgeBy()`; `network_orders.acknowledge_by` |
+| **Overdue** | Still `NEW` and past `acknowledgeBy`. | `NetworkOrder.AcknowledgementOverdue(now)` |
+| **Held order** | An `order-management` order raised allocated but not released (`releaseOnAllocation: false`, ship-complete). | `FulfillmentPlanner.RaiseHeldOrder`; `contract.HeldOrderRequest/Result` |
+| **Feasible** | `order-management`'s verdict that the deadline can be met, read from the presence of a `promiseDate`. | `contract.HeldOrderResult.Feasible` |
+| **LocalOrderId** | `order-management`'s `OrderId` for the held order. A persisted one-to-one mapping. | `shared.LocalOrderId`; `network_orders.local_order_id` |
+| **Submit** | Decide to accept in full and tell the network. A commitment in flight. | `NetworkOrder.Submit()`; state `SUBMITTED` |
+| **Reconcile** | Ask the network whether a submission settled. | `ReconcileSubmittedOrders`; `NetworkGateway.SubmissionStatus` |
+| **Acknowledged** | The network has confirmed our acceptance. A settled commitment. | `NetworkOrder.ConfirmAcknowledgement()`; state `ACKNOWLEDGED` |
+| **Rejected** | We told the network no. Terminal. | `NetworkOrder.Reject()`; state `REJECTED` |
+| **Rejection reason** | Why we refused: untranslatable SKU, infeasible deadline, acknowledgement deadline missed, or submission failed. | `shared.RejectionReason` (`UNTRANSLATABLE_SKU`, `INFEASIBLE_DEADLINE`, `ACKNOWLEDGEMENT_DEADLINE_MISSED`, `SUBMISSION_FAILED`) |
+| **Release** | Commit the held order to the floor, after `SUCCESS`. | `FulfillmentPlanner.ReleaseHeldOrder` |
+| **Cancel hold** | Abandon the held order and free its reservations. | `FulfillmentPlanner.CancelHeldOrder` |
+| **Shipment confirmation** | Tell the network the order shipped, which closes it. | `NetworkOrder.ConfirmShipment()`; `ConfirmNetworkOrderShipment`; state `CONFIRMED` |
+| **Deadline at risk** | The reported fact that an order is overdue. Re-fired on every sweep pass. | `shared.AcknowledgementDeadlineAtRisk`; `SweepAcknowledgementDeadlines` |
+| **CapabilityOffer** | What we would tell the network we can ship for one `(sku, siteId)`. | `capabilityoffer.CapabilityOffer` |
+| **Advertised quantity** | `min(physicalAvailable, throughputFeasible)`, never above physical stock. | `CapabilityOffer.AdvertisedQuantity()`; `capabilityoffer.Compute` |
+| **Basis** | Which rule produced the quantity: `PHYSICAL` or `THROUGHPUT_CONSTRAINED`. | `capabilityoffer.Basis`, `BasisPhysical`, `BasisThroughputConstrained` |
+| **Physical available / usable inventory** | On-hand minus reservations minus held stock, from `inventory-storage`. | `ports.InventoryAvailability.UsableQuantity` |
+| **Next cutoff (CPT)** | The site's next Critical Pull Time and the paths eligible for it. | `ports.ProcessPathCapability.NextCutoff`; `contract.NextCutoff`, `EligiblePath` |
+| **Remaining capacity** | What a path can still admit before a cutoff, from `wes-work-planning`. | `ports.PathCapacity.RemainingCapacity` |
+| **Throughput feasible** | Remaining capacity summed over the eligible paths with a known figure. | `RecomputeCapabilityOffers.throughputFeasible` |
+
+## Terms whose code name differs
+
+| Business term | Code name | Note |
+| --- | --- | --- |
+| "Acknowledge" (business) | `Submit` then `ConfirmAcknowledgement`; `Acknowledge()` does both | `Acknowledge()` exists for tests and fixtures. The real flow splits it across `ReceiveNetworkDemand` and `ReconcileSubmittedOrders`. |
+| "Acknowledged" event | `NetworkOrderAcknowledged` | Raised at **submission** time (state `SUBMITTED`), not when the order reaches `ACKNOWLEDGED`. |
+| "Not acknowledged" error | `ErrNotAcknowledged` | Returned by `LinkLocalOrder` when the state is not `SUBMITTED`/`ACKNOWLEDGED`. The name predates the `SUBMITTED` state. |
+| "Deadline at risk" | `AcknowledgementDeadlineAtRisk` | ADR 0001 §6 says "approaching" the deadline. The code fires only once it is already **past** (`AcknowledgementOverdue`). |
+| Purchase order / ASIN / `poNumber` | `NetworkRef` / `NetworkProductId` | By design (Hard rule 1). The counterpart's names never appear outside `adapters/outbound/network/`. |
+| "Planner" | `FulfillmentPlanner` | This is `order-management` seen through a port. It does not plan anything itself. |

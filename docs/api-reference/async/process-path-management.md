@@ -8,7 +8,7 @@ description: Generated AsyncAPI (Kafka) documentation for process-path-managemen
 # process-path-management — Async API
 
 Generated directly from
-[`apis/process-path-management/asyncapi.yaml`](https://github.com/claudioed/process-path-management/blob/develop/apis/asyncapi.yaml)
+[`apis/process-path-management/asyncapi.yaml`](https://github.com/IQVO/process-path-management/blob/develop/apis/asyncapi.yaml)
 via the official [AsyncAPI Generator](https://github.com/asyncapi/generator)
 (`@asyncapi/html-template`). Regenerate with `npm run gen-async-docs:all`.
 
