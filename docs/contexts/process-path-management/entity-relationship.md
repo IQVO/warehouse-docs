@@ -14,7 +14,7 @@ This page is a copy of [`docs/docs/ddd/entity-relationship.md`](https://github.c
 
 The final schema after applying every migration in order. Part of the
 [DDD artifact pack](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/ddd/ddd-artifacts.md). There are **two databases**:
-the OLTP database (`DATABASE_URL`, `migrations/0001`–`0007`) and the
+the OLTP database (`DATABASE_URL`, `migrations/0001`–`0008`) and the
 separate analytics database (`ANALYTICS_DATABASE_URL`,
 `migrations/analytics/0001`), written only by `pathmgmt-projector` and
 read only by `pathmgmt-reports` (ADR 0007). Both are migrated with
@@ -67,6 +67,8 @@ erDiagram
         integer attempts
         text last_error "nullable"
         text topic UK "unique with event_id"
+        text traceparent "nullable, W3C trace context (ADR 0027)"
+        text tracestate "nullable, W3C trace context (ADR 0027)"
     }
 
     idempotency_keys {
@@ -90,7 +92,7 @@ erDiagram
 ```
 
 Source: `migrations/0001_init.up.sql` through
-`migrations/0007_version.up.sql`; `schema_migrations` is golang-migrate's
+`migrations/0008_outbox_trace_context.up.sql`; `schema_migrations` is golang-migrate's
 own table (`internal/adapters/outbound/postgres/migrate.go`). `text_array`
 stands for Postgres `TEXT[]`. Omits: indexes
 (`idx_process_paths_active` partial on `status = 'ACTIVE'`,

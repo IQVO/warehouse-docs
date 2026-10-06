@@ -23,7 +23,11 @@ anyone else's events.</p>
 event in structured content mode (Kafka protocol binding). The Kafka
 message value is the JSON event format and every message carries the
 Kafka header <code>content-type: application/cloudevents+json; charset=UTF-8</code>.
-W3C trace context stays in the <code>traceparent</code>/<code>tracestate</code> headers.
+W3C trace context travels in the <code>traceparent</code> (and, when present,
+<code>tracestate</code>) Kafka headers of every message raised inside a traced
+operation (ADR 0027); a message raised outside any trace carries no
+trace headers. Baggage is never propagated. The CloudEvent body does
+not carry the trace context.
 There is no other envelope, no dual-write and no envelope toggle.</p>
 <pre><code class="hljs language-json">{
   <span class="hljs-attr">"specversion"</span>: <span class="hljs-string">"1.0"</span>,

@@ -145,10 +145,11 @@ Top terms: **ShiftPlan**, **PathPlan**, **AssociateShift**,
 - Should `PathUnderstaffed` ever leave the process on the integration topic,
   or stay a read-model flag? Today it is analytics-only
   ([Domain events](/contexts/workforce-management/domain-events)).
-- The measured-rate fallback feeds `meanActualSeconds` (seconds per task)
-  into the same `ceil(charge / plannedRate)` arithmetic as a caller's
-  per-head rate; the unit relationship is not documented in
-  [ADR 0012](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0012-measured-rate-feed-for-propose-path-plan.md).
+- The measured-rate fallback feeds `meanActualSeconds` (seconds per task),
+  converted to a per-head hourly rate (`3600 / seconds`, assuming one task is
+  one unit of charge), into the same `ceil(charge / plannedRate)` arithmetic
+  as a caller's rate ([ADR 0033](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0033-docs-audit-corrections-2026-10.md)).
+  Open: is one labor-performance task always one unit of `charge`?
 - `PathDefinition.DestinationLocationRole` is carried from
   `process-path-management` but nothing here branches on it yet.
 - `cmd/mcp` keeps per-process MCP session state, so it is not horizontally

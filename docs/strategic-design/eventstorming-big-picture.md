@@ -240,12 +240,10 @@ flowchart LR
     H1["H1 default LOCATION_LOOKUP_MODE permissive enforces no placement rule"]:::hotspot
     H2["H2 bin id never checked against the facility-layout slot catalogue"]:::hotspot
     H3["H3 no use case decommissions a Site, Zone or Aisle"]:::hotspot
-    H4["H4 deactivating a path does not revisit CPT schedules that name it"]:::hotspot
     H5["H5 siteId of a CPT schedule is never validated"]:::hotspot
     R1 -.- H1
     C7 -.- H2
     C3 -.- H3
-    E5 -.- H4
     E6 -.- H5
 
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
@@ -325,13 +323,11 @@ flowchart LR
     H7["H7 no event for SUBMITTED to ACKNOWLEDGED"]:::hotspot
     H8["H8 crash after raising the hold leaves a NEW order with no localOrderId"]:::hotspot
     H9["H9 orphaned held order is never swept"]:::hotspot
-    H10["H10 Order Line Released and Order Released never raised"]:::hotspot
     H11["H11 no background sweeper for timed-out reservations"]:::hotspot
     E3 -.- H6
     P3 -.- H7
     C2 -.- H8
     C3 -.- H9
-    E6 -.- H10
     E9 -.- H11
 
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
@@ -418,13 +414,11 @@ flowchart LR
     H13["H13 no code path creates a flow-fed pool or changes the WIP limit"]:::hotspot
     H14["H14 Path Plan Drift Detected has no consumer"]:::hotspot
     H15["H15 Bottleneck Detected has no consumer"]:::hotspot
-    H16["H16 proposal divides by measured seconds where a per-head rate is expected"]:::hotspot
     H31["H31 default INSTALLED_CAPACITY_MODE permissive rejects every commit"]:::hotspot
     R4 -.- H12
     C4 -.- H13
     E8 -.- H14
     E6 -.- H15
-    R1 -.- H16
     C2 -.- H31
 
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
@@ -584,23 +578,19 @@ flowchart LR
     C5 --> E6
     C6 --> E7
 
-    H23["H23 nothing in fulfillment-execution schedules the sweeps"]:::hotspot
+    H23["H23 sweeps have no in-process scheduler; chart CronJobs are opt-in and off by default"]:::hotspot
     H24["H24 Task CPT Missed re-fires on every pass"]:::hotspot
     H25["H25 no known consumer of Order Repromised"]:::hotspot
     H26["H26 no WorkUnitId to NetworkRef mapping, shipment confirmed by hand"]:::hotspot
-    H27["H27 confirm before acknowledge surfaces as HTTP 500"]:::hotspot
     H28["H28 at-risk fires only after the deadline"]:::hotspot
     H29["H29 network-fulfillment events have no consumer"]:::hotspot
     H30["H30 capability offer never submitted to the network"]:::hotspot
-    H32["H32 CPT spelled Committed Processing Time in the fulfillment-execution OpenAPI"]:::hotspot
     R1 -.- H30
     SCH -.- H23
     E2 -.- H24
-    E2 -.- H32
     E4 -.- H25
     E1 -.- H26
     H26 -.- C4
-    C4 -.- H27
     E6 -.- H28
     E5 -.- H29
 
@@ -636,35 +626,35 @@ this site, and the corroborating context page is linked instead.
 | H1 | inventory-storage | The binary default `LOCATION_LOOKUP_MODE=permissive` enforces no placement rule | [inventory-storage EventStorming](/contexts/inventory-storage/eventstorming) H3. Discrepancy log. |
 | H2 | inventory-storage | A bin id is never validated against facility-layout's slot catalogue | [inventory-storage EventStorming](/contexts/inventory-storage/eventstorming) H1 |
 | H3 | facility-layout | No use case decommissions a Site, Zone or Aisle, or sets `UnderMaintenance` | [facility-layout EventStorming](/contexts/facility-layout/eventstorming) H1 |
-| H4 | process-path-management | Deactivating a path does not revisit CPT schedules that name it | [process-path-management EventStorming](/contexts/process-path-management/eventstorming), Hotspots |
+| ~~H4~~ | process-path-management | ~~Deactivating a path does not revisit CPT schedules that name it~~ **Resolved 2026-10-06.** Now rejected with 409 `path-referenced-by-cpt-schedule` (ADR 0026). | [process-path-management ADR 0026](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0026-reject-deactivating-a-path-named-by-a-cpt-schedule.md) |
 | H5 | process-path-management | A CPT schedule's `siteId` is never validated (ADR 0010) | [process-path-management EventStorming](/contexts/process-path-management/eventstorming), Hotspots |
 | H6 | network-fulfillment | `NetworkOrderAcknowledged` fires at `SUBMITTED`, before reconciliation | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), sticky inventory |
 | H7 | network-fulfillment | No event when an order settles from `SUBMITTED` to `ACKNOWLEDGED` | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), sticky inventory |
 | H8 | network-fulfillment | A crash after raising the hold leaves a `NEW` order with no `localOrderId` | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), sticky inventory |
 | H9 | order-management | An orphaned held order is never swept | [order-management EventStorming](/contexts/order-management/eventstorming) H3 |
-| H10 | order-management | `OrderLineReleased` and `OrderReleased` are never raised | [order-management EventStorming](/contexts/order-management/eventstorming) H1. Discrepancy log. |
+| ~~H10~~ | order-management | ~~`OrderLineReleased` and `OrderReleased` are never raised~~ **Resolved 2026-10-06.** Raised on the analytics topic only (ADR 0034). | [order-management EventStorming](/contexts/order-management/eventstorming) |
 | H11 | inventory-storage | No background sweeper. An unread, expired reservation keeps its stock until the next read. | [inventory-storage EventStorming](/contexts/inventory-storage/eventstorming) H5 |
 | H12 | wes-work-planning | `UsableInventoryObserved` is projected but feeds no decision | [wes-work-planning EventStorming](/contexts/wes-work-planning/eventstorming), Hotspots. Discrepancy log. |
 | H13 | wes-work-planning | No code path creates a flow-fed pool or changes the WIP limit | [wes-work-planning EventStorming](/contexts/wes-work-planning/eventstorming), Hotspots. Discrepancy log. |
 | H14 | wes-work-planning | `PathPlanDriftDetected` has no consumer | [wes-work-planning EventStorming](/contexts/wes-work-planning/eventstorming), Hotspots. [wes-work-planning context map](/contexts/wes-work-planning/context-map) ("published but unconsumed"). |
 | H15 | warehouse-planning | `BottleneckDetected` has no consumer | [warehouse-planning EventStorming](/contexts/warehouse-planning/eventstorming). [order-management flow 4](/contexts/order-management/domain-message-flow). |
-| H16 | workforce-management | The headcount proposal divides by `MeanActualSeconds`, a duration, where a per-head rate is expected | Discrepancy log. [workforce-management Ubiquitous Language](/contexts/workforce-management/ubiquitous-language), "Where the code name differs". |
+| ~~H16~~ | workforce-management | ~~The headcount proposal divides by `MeanActualSeconds`, a duration, where a per-head rate is expected~~ **Resolved 2026-10-06.** Now converts to a per-hour rate, 3600 / seconds (ADR 0033). | [workforce-management Ubiquitous Language](/contexts/workforce-management/ubiquitous-language) |
 | H17 | fulfillment-execution | A claim does not require a station check-in | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H18 | fulfillment-execution | `ItemPicked` is defined but never raised | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H19 | inventory-storage | No sibling context calls `POST /reservations/{id}/confirm-pick` | [inventory-storage EventStorming](/contexts/inventory-storage/eventstorming) H7. [inventory-storage context map](/contexts/inventory-storage/context-map) row 7. Discrepancy log. |
 | H20 | fulfillment-execution | Rebin events never leave the process | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H21 | fulfillment-execution | The sort lane is decided, but no WCS acts on it | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H22 | labor-performance | `REBIN` and other unknown task types are never scored | [labor-performance EventStorming](/contexts/labor-performance/eventstorming) |
-| H23 | fulfillment-execution | Nothing in the repository schedules `expire-leases` or `sweep-cpt-misses` | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming). Discrepancy log. |
+| H23 | fulfillment-execution | No in-process scheduler for `expire-leases` or `sweep-cpt-misses`. Opt-in chart CronJobs exist (`sweeps.enabled`, default off; ADR 0003 and 0025). | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H24 | fulfillment-execution | `TaskCPTMissed` re-fires on every sweep pass | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H25 | order-management | No known consumer of `OrderRepromised` | [order-management EventStorming](/contexts/order-management/eventstorming) H5. [order-management context map](/contexts/order-management/context-map). |
 | H26 | network-fulfillment | No persisted WorkUnitId-to-NetworkRef mapping, so shipment confirmation is an explicit call (ADR 0014) | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), section 3 |
-| H27 | network-fulfillment | Confirming a shipment before acknowledgement surfaces as HTTP 500 | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), section 3 |
+| ~~H27~~ | network-fulfillment | ~~Confirming a shipment before acknowledgement surfaces as HTTP 500~~ **Resolved 2026-10-06.** Now 409 `confirm-before-acknowledge` (ADR 0015). | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming) |
 | H28 | network-fulfillment | `AcknowledgementDeadlineAtRisk` fires only after the deadline, while ADR 0001 says "approaching" | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), sticky inventory |
 | H29 | network-fulfillment | `warehouse.network-fulfillment.events` is wired but unused: no consumer in the fleet | [network-fulfillment context map](/contexts/network-fulfillment/context-map) |
 | H30 | network-fulfillment | The capability offer is never submitted outward. `SubmitAvailability` is unused. | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), section 4 |
 | H31 | workforce-management | The default `INSTALLED_CAPACITY_MODE=permissive` rejects every shift-plan commit | [workforce-management EventStorming](/contexts/workforce-management/eventstorming). [workforce-management context map](/contexts/workforce-management/context-map). |
-| H32 | fulfillment-execution | `apis/openapi.yaml` expands CPT as "Committed Processing Time", while the domain says "Critical Pull Time" | Discrepancy log. [fulfillment-execution Ubiquitous Language](/contexts/fulfillment-execution/ubiquitous-language), CPT row. |
+| ~~H32~~ | fulfillment-execution | ~~`apis/openapi.yaml` expands CPT as "Committed Processing Time"~~ **Resolved 2026-10-06.** Now reads "Critical Pull Time". | [fulfillment-execution Ubiquitous Language](/contexts/fulfillment-execution/ubiquitous-language) |
 
 Other wired-but-unused edges are not drawn, because they sit outside
 the order-to-ship timeline. They are `warehouse-ops-agent`'s MCP clients
