@@ -51,7 +51,7 @@ advertisedQuantity = min(
 
 400 units in the building but a path that can only carry 120 more before
 the 18:00 cutoff means advertising 400 sells a promise the floor cannot
-keep; advertising 120 sells capability honestly. [ADR 0001](https://github.com/claudioed/network-fulfillment/blob/develop/docs/adr/0001-network-fulfillment-bounded-context.md)
+keep; advertising 120 sells capability honestly. [ADR 0001](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0001-network-fulfillment-bounded-context.md)
 names this **CapabilityOffer** and calls it "the feature" — and it is
 **not built yet**. What exists today is the commitment half: receiving
 demand and answering it honestly.
@@ -107,7 +107,7 @@ wrong home, each individually sufficient:
 ## Where the network's model collides with what the fleet shipped
 
 Two collisions are resolved up front, jointly with the companion
-[order-management ADR 0020](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md):
+[order-management ADR 0020](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md):
 
 - **Fill-or-kill vs. per-shipment-group promising.** The network confirms
   or rejects a purchase order in its entirety; `order-management` ADR 0017

@@ -196,7 +196,7 @@ alarm threshold) held simultaneously, which does not belong on a single
 period, while a decision evaluated on read has none. As a synchronous, pure
 decision over a pool snapshot, every branch is a two-line unit test — a
 scheduled job would instead test the scheduler. See
-[ADR-0003](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0003-flow-balancing-as-domain-service.md).
+[ADR-0003](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0003-flow-balancing-as-domain-service.md).
 
 The genuine gap accepted knowingly: **nothing is detected unless someone
 asks.** A path can sit over its alarm threshold indefinitely with no
@@ -222,9 +222,9 @@ decision, not an omission.
 - **It does not own geography or the list of paths.** Physical location
   and travel distance belong to `facility-layout` (read once, optionally,
   at shift-plan commit —
-  [ADR-0017](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0017-travel-distance-lookup-on-commit-shift-plan.md));
+  [ADR-0017](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0017-travel-distance-lookup-on-commit-shift-plan.md));
   which process paths exist belongs to `process-path-management`
-  ([ADR-0012](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0012-process-path-catalogue-validation.md)).
+  ([ADR-0012](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0012-process-path-catalogue-validation.md)).
   This context conforms to both rather than modelling either.
 
 ## Closing the promise loop
@@ -234,7 +234,7 @@ given truck. This context already knows that for release-fed paths — it is
 the WIP limit minus current WIP — so it **publishes** it as
 `PathCapacityChanged`, correlated by CPT cutoff timestamp, for
 `order-management` to cache
-([ADR-0018](https://github.com/claudioed/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md)).
+([ADR-0018](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md)).
 It reports `known=false` for flow-fed paths rather than dress an alarm
 threshold up as a ceiling, and — like flow balancing — it publishes only
 when a caller asks (`GET /paths/{pathId}/telemetry?cutoffAt=…`).

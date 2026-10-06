@@ -30,10 +30,10 @@ Order Management owns **Order** and **OrderLine** as first-class,
 validated aggregates: intake, per-line stock allocation (via
 `inventory-storage`), a delivery promise derived from what the warehouse
 can actually ship by which truck departure (per
-[ADR-0014](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0014-promise-derived-from-fulfillment-capability.md)),
+[ADR-0014](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0014-promise-derived-from-fulfillment-capability.md)),
 release of allocated work
 (via `wes-work-planning`, choreographed over Kafka since
-[ADR-0005](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0005-choreographed-release-via-kafka.md)),
+[ADR-0005](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0005-choreographed-release-via-kafka.md)),
 and cancellation up to the release boundary.
 
 It is the **missing upstream Open Host Service** for the fleet — every
@@ -111,7 +111,7 @@ The promise for a held order is the latest truck departure that still
 meets the deadline; if no departure can, the order carries **no promise
 at all**, because "could not determine" and "can meet it" must never be
 the same answer (see
-[ADR-0020](https://github.com/claudioed/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md)).
+[ADR-0020](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md)).
 
 ### The order's status can never lie
 

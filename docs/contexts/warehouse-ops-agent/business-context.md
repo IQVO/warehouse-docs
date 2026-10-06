@@ -69,12 +69,12 @@ signal is unavailable.
 Optionally — only when `LLM_MODE` is set to `shadow` or `on`; the
 default is `off` — a real LLM reasoner is consulted *behind* the
 deterministic policy
-([ADR 0004](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0004-llm-reasoner-behind-the-policy-layer.md)):
+([ADR 0004](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0004-llm-reasoner-behind-the-policy-layer.md)):
 the deterministic decision always runs first, the model may only call
 allow-listed MCP read tools, and its plan must pass `policy.ValidatePlan`
 or the deterministic decision is returned instead.
 
-Since [ADR 0008](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0008-labor-utilization-advisory-correlation.md),
+Since [ADR 0008](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0008-labor-utilization-advisory-correlation.md),
 `FlowBalanceAdvisory` also calls `labor-performance`'s
 `get_task_type_utilization` MCP tool — the moment that client graduates
 from wired-but-unconsumed to actually consumed (see
@@ -104,7 +104,7 @@ discipline for every other signal.
 
 ## What "explain travel factor" means, operationally
 
-[ADR 0009](https://github.com/claudioed/warehouse-ops-agent/blob/develop/docs/docs/adr/0009-explain-travel-factor.md) adds a narrower,
+[ADR 0009](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0009-explain-travel-factor.md) adds a narrower,
 caller-driven question: "how far apart are these two specific locations,
 and is that distance a plausible contributor to a slow path?"
 `explain_travel_factor` (MCP) and `GET /explain-travel-factor` (REST)

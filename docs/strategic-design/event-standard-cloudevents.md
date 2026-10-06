@@ -225,4 +225,4 @@ All service PRs merge and deploy as ONE set. Before deploying: drain each
 service's outbox (rows were pre-encoded in the flat shape), then delete and
 recreate the `warehouse.*.events` and `warehouse.*.analytics` topics and
 re-seed the process-path catalogue, so no flat message remains for a
-FirstOffset replay. See warehouse-infra [`docs/cloudevents-cutover.md`](https://github.com/claudioed/warehouse-infra/blob/develop/docs/cloudevents-cutover.md).
+FirstOffset replay. See warehouse-infra [`docs/cloudevents-cutover.md`](https://github.com/IQVO/warehouse-infra/blob/develop/docs/cloudevents-cutover.md).

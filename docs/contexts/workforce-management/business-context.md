@@ -10,7 +10,7 @@ description: Two planning horizons, one bounded context — and why stopping at 
 A fulfillment centre's throughput on any given day is a product of two
 things it can actually control: **how much work is released**, and **how
 many trained people are standing at each process path**. The first belongs
-to [wes-work-planning](https://github.com/claudioed/wes-work-planning). The
+to [wes-work-planning](https://github.com/IQVO/wes-work-planning). The
 second is Workforce Management.
 
 ## Domain vision
@@ -98,7 +98,7 @@ from `wes-work-planning`. Work Planning owns installed-station counts, but
 this context has no dependency on Work Planning and does not want one — a
 Supporting context should never become a runtime risk to a Core one.
 Independently of that, since
-[ADR 0014](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0014-installed-capacity-ceiling.md)
+[ADR 0014](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0014-installed-capacity-ceiling.md)
 every line is also checked against the live installed capacity
 `fulfillment-execution` reports for the path's capability
 (`GET /capacity/{capability}`). That is a physical ceiling, and it fails
@@ -127,7 +127,7 @@ understaffed         ← activeHeads < plannedHeads
 It is a **projection**, not stored state. No aggregate carries a "current
 headcount" field that could drift out of sync with the assignments it
 summarises — read models are derived, never redundantly persisted on the
-write model, as a platform-wide rule. Since [ADR 0020](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0020-idle-share-staffing-signal.md),
+write model, as a platform-wide rule. Since [ADR 0020](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0020-idle-share-staffing-signal.md),
 the same projection also surfaces `observedIdlePct` — `labor-performance`'s
 measured idle share for the path's task type, fed back through the same
 event-fed cache `ProposePathPlan`'s measured-rate enrichment already uses —
@@ -138,7 +138,7 @@ join.
 ## Why it stops at the path boundary
 
 This is the most consequential decision in the service. Recorded formally as
-[ADR 0002](https://github.com/claudioed/workforce-management/blob/develop/docs/docs/adr/0002-stop-at-the-path-boundary.md)
+[ADR 0002](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0002-stop-at-the-path-boundary.md)
 in the source repository.
 
 **The rule: Workforce Management never links an associate to a specific
