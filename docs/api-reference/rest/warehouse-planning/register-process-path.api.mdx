@@ -54,13 +54,14 @@ Seeds a ProcessPath read model (id, name, an ordered non-empty list of step proc
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./register-process-path.RequestSchema.json")}
+  title={"Body"}
+  body={{"required":true,"content":{"application/json":{"schema":{"type":"object","required":["id","name","steps"],"properties":{"id":{"type":"string","example":"pick-rebin-pack"},"name":{"type":"string","example":"Pick-Rebin-Pack"},"steps":{"type":"array","minItems":1,"items":{"type":"string"},"example":["PICK","REBIN","PACK"]}},"title":"RegisterProcessPathRequest"}}}}}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./register-process-path.StatusCodes.json")}
+  responses={{"201":{"description":"ProcessPath registered.","content":{"application/json":{"schema":{"type":"object","properties":{"id":{"type":"string"},"name":{"type":"string"},"steps":{"type":"array","items":{"type":"string"}}},"title":"ProcessPathResponse"}}}},"400":{"description":"Malformed request body.","content":{"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 problem detail.","properties":{"type":{"type":"string","format":"uri"},"title":{"type":"string"},"status":{"type":"integer"},"detail":{"type":"string"},"instance":{"type":"string"}},"title":"ProblemDetail"}}}},"422":{"description":"Empty step list.","content":{"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 problem detail.","properties":{"type":{"type":"string","format":"uri"},"title":{"type":"string"},"status":{"type":"integer"},"detail":{"type":"string"},"instance":{"type":"string"}},"title":"ProblemDetail"}}}}}}
 >
   
 </StatusCodes>

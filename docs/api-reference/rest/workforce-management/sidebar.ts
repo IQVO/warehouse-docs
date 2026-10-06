@@ -120,12 +120,6 @@ const sidebar: SidebarsConfig = {
           label: "Liveness check",
           className: "api-method get",
         },
-        {
-          type: "doc",
-          id: "api-reference/rest/workforce-management/readyz",
-          label: "Readiness check",
-          className: "api-method get",
-        },
       ],
     },
   ],

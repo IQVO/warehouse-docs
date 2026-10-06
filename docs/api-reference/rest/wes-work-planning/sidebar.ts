@@ -166,12 +166,6 @@ const sidebar: SidebarsConfig = {
           label: "Health check",
           className: "api-method get",
         },
-        {
-          type: "doc",
-          id: "api-reference/rest/wes-work-planning/readiness-check",
-          label: "Readiness check",
-          className: "api-method get",
-        },
       ],
     },
   ],
