@@ -13,6 +13,63 @@ import networkFulfillmentSidebar from './docs/api-reference/rest/network-fulfill
 import warehousePlanningSidebar from './docs/api-reference/rest/warehouse-planning/sidebar';
 
 /**
+ * Every bounded context's category lists the same page set, in the same
+ * order: business context first, then the ddd-crew artifact pack synced from
+ * the context repo (each page names the ddd-crew tool it applies), then the
+ * Kafka narrative where the context has one.
+ */
+const CONTEXTS = [
+  'order-management',
+  'inventory-storage',
+  'wes-work-planning',
+  'fulfillment-execution',
+  'workforce-management',
+  'facility-layout',
+  'process-path-management',
+  'labor-performance',
+  'warehouse-ops-agent',
+  'network-fulfillment',
+  'warehouse-planning',
+];
+
+const CONTEXT_PAGES = [
+  'business-context',
+  'ubiquitous-language',
+  'core-domain-chart',
+  'bounded-context-canvas',
+  'context-map',
+  'aggregate-design-canvas',
+  'domain-events',
+  'domain-message-flow',
+  'eventstorming',
+  'class-diagram',
+  'entity-relationship',
+  'sequence-diagrams',
+];
+
+// Contexts with a hand-written contexts/<ctx>/async-api narrative page.
+const ASYNC_NARRATIVE = new Set([
+  'inventory-storage',
+  'wes-work-planning',
+  'fulfillment-execution',
+  'workforce-management',
+  'process-path-management',
+  'labor-performance',
+  'network-fulfillment',
+  'warehouse-planning',
+]);
+
+function contextCategory(ctx: string, hasAsyncNarrative: boolean) {
+  const pages = hasAsyncNarrative ? [...CONTEXT_PAGES, 'async-api'] : CONTEXT_PAGES;
+  return {
+    type: 'category' as const,
+    label: ctx,
+    link: {type: 'doc' as const, id: `contexts/${ctx}/index`},
+    items: pages.map((page) => `contexts/${ctx}/${page}`),
+  };
+}
+
+/**
  * Five independent sidebars, one per navbar item:
  *  - strategicSidebar:   ddd-crew strategic-design artifacts for the WHOLE fleet
  *  - architectureSidebar: C4 levels 1-3, domain/data models, runtime flows
@@ -28,9 +85,11 @@ const sidebars: SidebarsConfig = {
       label: 'Strategic Design',
       link: {type: 'doc', id: 'strategic-design/index'},
       items: [
+        'strategic-design/ddd-starter-modelling-process',
         'strategic-design/domain-vision',
         'strategic-design/core-domain-chart',
         'strategic-design/subdomain-classification',
+        'strategic-design/eventstorming-big-picture',
         'strategic-design/context-map',
         'strategic-design/domain-message-flows',
         'strategic-design/event-standard-cloudevents',
@@ -65,143 +124,7 @@ const sidebars: SidebarsConfig = {
 
   contextsSidebar: [
     'contexts/index',
-    {
-      type: 'category',
-      label: 'order-management',
-      link: {type: 'doc', id: 'contexts/order-management/index'},
-      items: [
-        'contexts/order-management/business-context',
-        'contexts/order-management/ubiquitous-language',
-        'contexts/order-management/bounded-context-canvas',
-        'contexts/order-management/aggregate-design-canvas',
-        'contexts/order-management/domain-events',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'inventory-storage',
-      link: {type: 'doc', id: 'contexts/inventory-storage/index'},
-      items: [
-        'contexts/inventory-storage/business-context',
-        'contexts/inventory-storage/ubiquitous-language',
-        'contexts/inventory-storage/bounded-context-canvas',
-        'contexts/inventory-storage/aggregate-design-canvas',
-        'contexts/inventory-storage/domain-events',
-        'contexts/inventory-storage/async-api',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'wes-work-planning',
-      link: {type: 'doc', id: 'contexts/wes-work-planning/index'},
-      items: [
-        'contexts/wes-work-planning/business-context',
-        'contexts/wes-work-planning/ubiquitous-language',
-        'contexts/wes-work-planning/bounded-context-canvas',
-        'contexts/wes-work-planning/aggregate-design-canvas',
-        'contexts/wes-work-planning/domain-events',
-        'contexts/wes-work-planning/async-api',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'fulfillment-execution',
-      link: {type: 'doc', id: 'contexts/fulfillment-execution/index'},
-      items: [
-        'contexts/fulfillment-execution/business-context',
-        'contexts/fulfillment-execution/ubiquitous-language',
-        'contexts/fulfillment-execution/bounded-context-canvas',
-        'contexts/fulfillment-execution/aggregate-design-canvas',
-        'contexts/fulfillment-execution/domain-events',
-        'contexts/fulfillment-execution/async-api',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'workforce-management',
-      link: {type: 'doc', id: 'contexts/workforce-management/index'},
-      items: [
-        'contexts/workforce-management/business-context',
-        'contexts/workforce-management/ubiquitous-language',
-        'contexts/workforce-management/bounded-context-canvas',
-        'contexts/workforce-management/aggregate-design-canvas',
-        'contexts/workforce-management/domain-events',
-        'contexts/workforce-management/async-api',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'facility-layout',
-      link: {type: 'doc', id: 'contexts/facility-layout/index'},
-      items: [
-        'contexts/facility-layout/business-context',
-        'contexts/facility-layout/ubiquitous-language',
-        'contexts/facility-layout/bounded-context-canvas',
-        'contexts/facility-layout/aggregate-design-canvas',
-        'contexts/facility-layout/domain-events',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'process-path-management',
-      link: {type: 'doc', id: 'contexts/process-path-management/index'},
-      items: [
-        'contexts/process-path-management/business-context',
-        'contexts/process-path-management/ubiquitous-language',
-        'contexts/process-path-management/bounded-context-canvas',
-        'contexts/process-path-management/aggregate-design-canvas',
-        'contexts/process-path-management/domain-events',
-        'contexts/process-path-management/async-api',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'labor-performance',
-      link: {type: 'doc', id: 'contexts/labor-performance/index'},
-      items: [
-        'contexts/labor-performance/business-context',
-        'contexts/labor-performance/ubiquitous-language',
-        'contexts/labor-performance/bounded-context-canvas',
-        'contexts/labor-performance/aggregate-design-canvas',
-        'contexts/labor-performance/domain-events',
-        'contexts/labor-performance/async-api',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'warehouse-ops-agent',
-      link: {type: 'doc', id: 'contexts/warehouse-ops-agent/index'},
-      items: [
-        'contexts/warehouse-ops-agent/business-context',
-        'contexts/warehouse-ops-agent/ubiquitous-language',
-        'contexts/warehouse-ops-agent/bounded-context-canvas',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'network-fulfillment',
-      link: {type: 'doc', id: 'contexts/network-fulfillment/index'},
-      items: [
-        'contexts/network-fulfillment/business-context',
-        'contexts/network-fulfillment/ubiquitous-language',
-        'contexts/network-fulfillment/bounded-context-canvas',
-        'contexts/network-fulfillment/aggregate-design-canvas',
-        'contexts/network-fulfillment/domain-events',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'warehouse-planning',
-      link: {type: 'doc', id: 'contexts/warehouse-planning/index'},
-      items: [
-        'contexts/warehouse-planning/business-context',
-        'contexts/warehouse-planning/ubiquitous-language',
-        'contexts/warehouse-planning/bounded-context-canvas',
-        'contexts/warehouse-planning/aggregate-design-canvas',
-        'contexts/warehouse-planning/domain-events',
-        'contexts/warehouse-planning/async-api',
-      ],
-    },
+    ...CONTEXTS.map((ctx) => contextCategory(ctx, ASYNC_NARRATIVE.has(ctx))),
   ],
 
   apiSidebar: [
@@ -209,7 +132,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'order-management',
-      items: [...orderManagementSidebar],
+      items: [...orderManagementSidebar, 'api-reference/async/order-management'],
     },
     {
       type: 'category',
@@ -258,7 +181,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'network-fulfillment',
-      items: [...networkFulfillmentSidebar],
+      items: [...networkFulfillmentSidebar, 'api-reference/async/network-fulfillment'],
     },
     {
       type: 'category',
