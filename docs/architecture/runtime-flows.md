@@ -7,293 +7,443 @@ description: UML sequence diagrams for the platform's key end-to-end scenarios, 
 
 # Runtime Flows
 
-Sequence diagrams for the scenarios that cross bounded-context boundaries.
-Each one is drawn from the actual use-case source on `origin/develop`, and
-each includes the branches that really exist in the code — a diagram that only
-shows the happy path hides exactly the decisions worth documenting.
+Fleet-level sequence diagrams for the scenarios that cross bounded-context
+boundaries. Each participant here is a whole context. The detailed version of
+every step, with the real adapter, use case, aggregate, repository and outbox
+participants and every error branch, is on that context's own **Sequence
+Diagrams** page, traced from the use-case code on `develop`:
+
+| Context | Detailed sequence diagrams |
+| --- | --- |
+| `order-management` | [Sequence Diagrams](/contexts/order-management/sequence-diagrams) |
+| `inventory-storage` | [Sequence Diagrams](/contexts/inventory-storage/sequence-diagrams) |
+| `wes-work-planning` | [Sequence Diagrams](/contexts/wes-work-planning/sequence-diagrams) |
+| `fulfillment-execution` | [Sequence Diagrams](/contexts/fulfillment-execution/sequence-diagrams) |
+| `workforce-management` | [Sequence Diagrams](/contexts/workforce-management/sequence-diagrams) |
+| `facility-layout` | [Sequence Diagrams](/contexts/facility-layout/sequence-diagrams) |
+| `process-path-management` | [Sequence Diagrams](/contexts/process-path-management/sequence-diagrams) |
+| `labor-performance` | [Sequence Diagrams](/contexts/labor-performance/sequence-diagrams) |
+| `network-fulfillment` | [Sequence Diagrams](/contexts/network-fulfillment/sequence-diagrams) |
+| `warehouse-planning` | [Sequence Diagrams](/contexts/warehouse-planning/sequence-diagrams) |
+| `warehouse-ops-agent` | [Sequence Diagrams](/contexts/warehouse-ops-agent/sequence-diagrams) |
 
 See [Diagram Notation](/architecture/diagram-notation) for the arrow
-conventions. In short: solid arrows are synchronous calls, dashed are their
-responses, and open arrows (`-)`) are asynchronous publishes where the sender
-neither waits nor learns who consumed the message.
+conventions. Solid arrows are synchronous calls and dashed arrows their
+responses. Open arrows (`-)`) are asynchronous Kafka publishes, where the
+sender neither waits nor learns who consumed the message.
+
+Four mechanics recur in every flow below and are drawn only once here:
+
+- **Transactional outbox.** A use case saves its aggregate and inserts the
+  events it raised into `outbox_events` in one transaction. A relay in the
+  OLTP binary drains the rows to Kafka. "Publishes" below always means
+  "commits an outbox row that the relay publishes".
+- **CloudEvents 1.0, structured mode.** Every message is a CloudEvents
+  envelope with `content-type: application/cloudevents+json; charset=UTF-8`.
+  Consumers dispatch on the full `type` and ignore unknown types.
+- **Consumer idempotency.** A consumer that writes state marks the
+  CloudEvents `id` as processed in the same transaction, so an at-least-once
+  redelivery is a no-op.
+- **Dead-lettering.** A message that is not a valid CloudEvent, or whose
+  handler keeps failing after bounded retries, goes to
+  `<topic>.dlq` and the offset is committed. Delivery never blocks on a
+  poison message.
 
 ## 1. Order intake, allocation and release
 
-The single most important flow in the platform. One `POST /orders` call
-expresses the whole intent; allocation and release are internal saga steps
-triggered by that intent, not public commands a caller drives by hand.
+One `POST /orders` expresses the whole intent. Allocation and release are
+internal steps of that request. Release to the WES tier is a Kafka
+choreography: order-management does not call wes-work-planning. Its old
+synchronous `POST /paths/{pathId}/work-units` call is deliberately absent
+since order-management ADR 0005.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Client as Upstream order source
+    actor Client as Order source
     participant OM as order-management
     participant INV as inventory-storage
     participant K as Kafka
     participant WP as wes-work-planning
 
-    Client->>+OM: POST /orders
-    OM->>OM: validate lines, mint OrderId, Order = Received
-    OM-)K: OrderReceived (published unconditionally)
-    Note over OM: the caller always learns the order exists,<br/>regardless of what allocation does next
+    Client->>+OM: POST /orders with Idempotency-Key
+    OM->>OM: resolve a process path per line, Order created
+    OM-)K: OrderReceived on warehouse.order-management.analytics only
 
-    loop for each order line
-        OM->>+INV: POST /reservations {sku, qty, demandRef}
-        alt reserved
-            INV-->>-OM: 201 + reservationId
-            OM->>OM: Order.Allocate(lineNo, reservationId)
-            OM-)K: OrderLineAllocated
-        else 409 insufficient stock — a BUSINESS FACT
+    loop every line
+        OM->>+INV: POST /reservations with Idempotency-Key
+        alt 201 reserved
+            INV-->>-OM: reservation id
+            OM->>OM: Order.Allocate, OrderLineAllocated
+        else 409 insufficient stock, a business fact
             INV-->>OM: 409
-            OM->>OM: Order.MarkBackordered(lineNo)
-            OM-)K: OrderLineBackordered
-            Note over OM: continues with the next line
-        else transport error or 5xx — AMBIGUOUS
+            OM->>OM: Order.MarkBackordered, OrderLineBackordered
+        else transport error, 5xx or open circuit breaker
             INV-->>OM: error
-            OM-->>Client: fail closed, no line silently backordered
-            Note over OM,INV: the reservation may or may not exist upstream,<br/>so nothing is assumed either way
+            OM->>OM: save what was allocated, OrderAllocationPartiallyFailed
+            Note over OM: the pass aborts, nothing is backordered on a guess
         end
     end
 
-    OM-)K: OrderAllocated / OrderPartiallyAllocated
-    OM->>WP: POST /paths/{id}/work-units (release)
-    OM-->>-Client: 201 Created
+    OM->>OM: PromisePolicy sets promise groups
+    opt not held and EnsureReleasable passes
+        OM->>OM: Release every Allocated line
+    end
+    OM-)K: OrderAllocated or OrderPartiallyAllocated on warehouse.order-management.events
+    OM-->>-Client: 201 with the order as saved
 
-    K-->>WP: StockReserved consumed into the inventory view
+    K-)WP: OrderAllocated
+    WP->>WP: dedupe on CloudEvents id
+    WP->>WP: enqueue one WorkUnit per line, id orderId-line-n, CPT from promise_date
 ```
 
-**The branch that matters** is the three-way split on the reservation call. An
-HTTP 409 is not an error — it is inventory's real answer, "there is not enough
-stock", and the line becomes `Backordered` while allocation continues. Anything
-else (a timeout, a 5xx) is *ambiguous*: the reservation may or may not have
-been created upstream, so the whole call fails rather than marking a line
-backordered on a guess. Conflating those two would either strand real
-reservations or fabricate business facts out of infrastructure noise.
+**The branch that matters** is the three-way split on the reservation call.
+A `409` is inventory's real answer ("not enough stock"), so the line becomes
+`Backordered` and allocation continues. Anything else (a timeout, a 5xx, an
+open breaker) is *ambiguous*: the reservation may or may not exist upstream.
+The pass therefore stops, saves what it already allocated, and publishes
+`OrderAllocationPartiallyFailed` rather than inventing a backorder. The
+request still returns `201`, because the order was received. The response
+shows whatever was saved. `POST /orders/{id}/retry-allocation` and
+`POST /orders/{id}/release` (for held orders) re-enter the same allocation
+pass.
 
-A fully backordered order emits no order-level event — its per-line
-`OrderLineBackordered` facts already carry the whole story.
+No outcome event is published when the order ends fully `Backordered`. Its
+per-line facts already tell the story. Details:
+[order-management diagrams 1 and 2](/contexts/order-management/sequence-diagrams),
+[wes-work-planning diagram 7](/contexts/wes-work-planning/sequence-diagrams).
 
-## 2. Waveless release into execution
+## 2. Release into execution
 
-How released work becomes a claimable task. This is the spine of the WES tier
-and the point where the platform's pull-based philosophy takes over.
+How queued work becomes a claimable task. Release is pull-driven: a caller
+asks wes-work-planning to release the next unit for a path, over REST or the
+MCP tool `release_next_work`.
 
 ```mermaid
 sequenceDiagram
     autonumber
+    actor Caller as Client or MCP host
     participant WP as wes-work-planning
-    participant Pool as WorkPool aggregate
-    participant DB as Postgres + outbox
     participant K as Kafka
     participant FE as fulfillment-execution
 
-    Note over WP: ReleaseNextWork(pathId)
-    WP->>Pool: policy.Apply(pool) selects next work unit
-    Note over Pool: earliest-CPT-first, admitted only if<br/>the release policy allows another unit in flight
-
-    rect rgb(240, 244, 255)
-        Note over WP,DB: one UnitOfWork — all three or none
-        WP->>DB: pools.Save(pool)
-        WP->>DB: workUnits.Save(unit.Release(now))
-        WP->>DB: publisher.Publish(WorkReleased) to outbox_events
+    Caller->>+WP: POST /paths/{pathId}/release
+    WP->>WP: ReleasePolicy picks the earliest-CPT pending entry
+    alt pool empty, or release-fed pool at its WIP limit
+        WP-->>Caller: ErrEmptyPool or ErrWIPLimitReached
+    else a unit is released
+        WP->>WP: save WorkPool with version check, save WorkUnit, one transaction
+        WP-)K: WorkReleased on warehouse.work-planning.events
+        WP-->>-Caller: 200 with the released unit
     end
-    Note over WP,DB: the Save precedes Publish on purpose — the integration<br/>publisher reads the work unit back to enrich the event,<br/>and must see this transaction's own row
 
-    DB-)K: outbox relay drains warehouse.work-planning.events
-
-    K->>+FE: WorkReleased
-    FE->>FE: dedupe on CloudEvents id (at-least-once delivery)
-    FE->>FE: resolve pathId via the local process-path catalogue cache
-    FE->>FE: CreateTask(taskType, cpt, orderRef, requiredCapabilities)
-    FE-->>-K: Task is now Pending and claimable
+    K-)FE: WorkReleased
+    FE->>FE: dedupe on CloudEvents id
+    FE->>FE: task type from the path catalogue, longest matchPrefix
+    FE->>FE: CreateTask, orderRef is the work unit id
+    FE-)K: TaskCreated on warehouse.fulfillment.analytics
 ```
 
-Note step 3's grouping: the pool update, the work-unit state change and the
-event all commit together or not at all. Before the outbox, a crash between
-the save and the publish left the store and the topic permanently diverged —
-a failure that was actually observed in this fleet, in both directions at
-once, while the REST listing looked perfectly healthy.
+The pool update, the work-unit change and the outbox rows commit together or
+not at all. A concurrent release that loses the pool's version check is
+retried. Details:
+[wes-work-planning diagram 2](/contexts/wes-work-planning/sequence-diagrams),
+[fulfillment-execution diagram 2](/contexts/fulfillment-execution/sequence-diagrams).
 
-## 3. Pull-based claim: a station asks for work
+## 3. Pull-based claim
 
-No dispatcher assigns work to a station. The station asks, and the system
-answers with the best-fit task it is certified and equipped for. This is the
-difference between a pull system and a push system, expressed in one call.
+No dispatcher assigns work. A station asks, and fulfillment-execution answers
+with the earliest-CPT task the station is equipped for.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Assoc as Floor Associate
+    actor S as Station client
     participant FE as fulfillment-execution
-    participant SR as StationRepo
-    participant TR as TaskRepo
-    participant K as Kafka
 
-    Assoc->>+FE: POST /stations/{id}/claim-next {taskType}
-    FE->>SR: FindById(stationId)
+    S->>+FE: POST /stations/{id}/claim-next with taskType
     alt station unknown
-        SR-->>FE: nil
-        FE-->>Assoc: ErrStationNotFound
+        FE-->>S: 404 ErrStationNotFound
     end
-    SR-->>FE: station + its CapabilitySet
-
-    FE->>TR: FindClaimableByType(taskType, now)
-    TR-->>FE: candidates, ordered earliest-CPT-first
-
-    loop over candidates in priority order
-        FE->>FE: task.Claim(stationId, station.Capabilities(), now, leaseDuration)
-        alt capabilities satisfy the task
-            rect rgb(240, 244, 255)
-                FE->>TR: Save(task) — now Claimed, lease expires at now+5m
-                FE-)K: TaskClaimed
+    FE->>FE: claimable tasks of that type, earliest CPT first
+    loop each candidate
+        FE->>FE: Task.Claim with the station's capabilities, 5 minute lease
+        alt capability mismatch or already claimed
+            Note over FE: try the next candidate
+        else claimed in memory
+            FE->>FE: SaveClaim compare-and-set
+            alt lost the race to another station
+                Note over FE: try the next candidate, nothing published
+            else won
+                FE->>FE: TaskClaimed to the outbox, same transaction
+                FE-->>S: 200 the task with its lease
             end
-            FE-->>Assoc: 200 the task
-        else capability mismatch
-            Note over FE: skip, try the next candidate
         end
     end
-    FE-->>-Assoc: ErrNoClaimableTask if none matched
+    FE-->>-S: 409 no-claimable-task if nothing matched
 ```
 
-Two properties fall out of this design:
+A claim is a **lease**, not an assignment. If it expires, the sweep returns
+the task to the pool. A task can be claimed, but never lost. Details:
+[fulfillment-execution diagrams 3 and 9](/contexts/fulfillment-execution/sequence-diagrams).
 
-- **The station is never named in advance.** A task does not know which station
-  will do it, so a slow station simply claims fewer tasks. Throughput
-  self-balances without a scheduler.
-- **A claim is a lease, not an assignment.** It expires (default five minutes).
-  If an associate walks away mid-task, `ExpireLeases` returns the task to the
-  pool rather than stranding it — which is why the task can be claimed, but
-  never *lost*.
+## 4. Completion and the consumers it feeds
 
-## 4. Completion, and the two consumers it feeds
-
-`TaskCompleted` is published once onto a fan-out topic and consumed by two
-contexts with entirely different relationships to it.
+`TaskCompleted` is published once on `warehouse.fulfillment.events` and
+consumed by two contexts with different relationships to it. A third context
+consumes what one of them derives from it.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Assoc as Floor Associate
+    actor S as Station or MCP caller
     participant FE as fulfillment-execution
-    participant K as warehouse.fulfillment.events
+    participant K as Kafka
     participant WP as wes-work-planning
     participant LP as labor-performance
+    participant WFM as workforce-management
 
-    Assoc->>FE: POST /tasks/{id}/complete
-    FE->>FE: Task.Complete(now) — lease released
-    FE-)K: TaskCompleted {taskId, taskType, durationSeconds, idleSecondsBefore?}
+    S->>FE: POST /tasks/{id}/complete
+    FE->>FE: Task.Complete, lease released
+    FE-)K: TaskCompleted with work_unit_id, task_type, associate_id
 
-    par Partnership — closes the control loop
-        K->>WP: TaskCompleted
-        WP->>WP: RecordCompletion — the pool can admit more work
-    and Conformist — pure downstream observer
-        K->>LP: TaskCompleted
-        LP->>LP: RecordTaskPerformance, idempotent on event_id
-        LP->>LP: score actual vs engineered standard
-        LP-)K: TaskPerformanceRecorded
+    par feedback edge, Customer-Supplier
+        K-)WP: TaskCompleted
+        WP->>WP: RecordCompletion, WorkUnit completed, pool entry reconciled
+        WP-)K: WorkUnitCompleted
+    and Conformist observer
+        K-)LP: TaskCompleted
+        LP->>LP: score against the standard active at completion
+        LP->>LP: record IdlePeriod since the associate's previous task
+        LP-)K: TaskPerformanceRecorded on warehouse.labor-performance.events
+    end
+
+    opt LABOR_PERFORMANCE_MODE is kafka-cache
+        K-)WFM: TaskPerformanceRecorded
+        WFM->>WFM: update the in-memory labor-performance cache
     end
 ```
 
-The same message, two different strategic relationships. `wes-work-planning`
-is in a **Partnership** with `fulfillment-execution` — the two evolve together
-as one control loop, because completion is what lets the conductor release
-more work. `labor-performance` is a **Conformist**: it accepts the event shape
-exactly as published, has zero write access back, and could be switched off
-without execution noticing.
+The same message, two strategic relationships. wes-work-planning is the
+**Customer/Supplier** feedback edge: completion is what reconciles the pool,
+so the conductor can admit more work. Its context map rules out Partnership
+and Shared Kernel. labor-performance is a **Conformist**. It takes the event
+exactly as published and has no write path back to execution. It also makes
+no REST or MCP call to any sibling.
 
-`RecordTaskPerformance` is idempotent on the Kafka message's `event_id`
-because delivery is at-least-once. This is not optional anywhere in the fleet:
-a duplicated delivery must never double-count a performance row.
+`efficiencyPct` stays `null` when nothing was scorable, and a redelivered
+`TaskCompleted` is a no-op because the CloudEvents `id` is the performance
+record's key. Details:
+[wes-work-planning diagram 3](/contexts/wes-work-planning/sequence-diagrams),
+[labor-performance diagram 2](/contexts/labor-performance/sequence-diagrams).
 
-## 5. The agentic read path
+## 5. Re-promise loop
 
-`warehouse-ops-agent` holds no database and no state. Every fact in a daily
-brief is re-derived at request time from upstream MCP tools.
+When execution misses a CPT or manifests a package, order-management
+recomputes the delivery promise of the affected line's shipment group.
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor Ops as Operations Manager
-    participant A as warehouse-ops-agent
-    participant WP as wes-work-planning (MCP)
-    participant FE as fulfillment-execution (MCP)
-    participant LP as labor-performance (MCP)
-    participant LLM as LLM reasoner
+    participant FE as fulfillment-execution
+    participant K as Kafka
+    participant OM as order-management
 
-    Ops->>+A: GET /flow-balance/{pathId}
-    par read-only MCP fan-out
-        A->>WP: get_backlog_telemetry
-    and
-        A->>FE: get_queue_status
-    and
-        A->>LP: get_task_type_utilization
+    FE-)K: TaskCPTMissed or PackageManifested on warehouse.fulfillment.events
+    K-)OM: event
+    OM->>OM: parse orderId and line from order_ref orderId-line-n
+    alt order_ref is not of that form
+        Note over OM: log, commit, skip
     end
-
-    A->>A: CorrelateUtilization — a pure policy function
-
-    alt queue HIGH + idle HIGH
-        Note over A: claim_flow_problem — work exists but associates are idle
-    else queue LOW + idle HIGH
-        Note over A: starvation — advisory prose only, never auto-acts
-    else queue HIGH + idle LOW
-        Note over A: staffing_gap_confirmed
+    OM->>OM: dedupe on CloudEvents id
+    OM->>OM: PromisePolicy recomputes the line's group
+    alt promise unchanged
+        Note over OM: nothing published
+    else promise moved
+        OM->>OM: save Order with version guard
+        OM-)K: OrderRepromised on warehouse.order-management.events
     end
-
-    opt reasoner enabled and reachable
-        A->>LLM: summarise the correlated facts
-        LLM-->>A: prose brief
-    end
-    Note over A,LLM: any failure — nil client, unreachable call, null<br/>utilization — degrades to the deterministic recommendation
-
-    A-->>-Ops: advisory — read-only, the agent never writes to any context
 ```
 
-Every degradation path in this flow lands on the same place: the pre-existing
-deterministic recommendation, unchanged. A missing binding, an unreachable
-MCP server, a `null` utilization percentage, or a disabled LLM all produce a
-*less enriched* answer, never a wrong one and never an error. This is what
-makes an LLM safe to put in an operations path — it is consulted **behind** a
-policy layer, and it has no actuators.
+Details: [order-management diagram 7](/contexts/order-management/sequence-diagrams).
 
-## 6. Event-fed cache replacing a synchronous call
+## 6. Capacity planning and planned capacity
 
-A pattern that recurs three times across the fleet, and is worth reading once
-in the abstract. The first version of each of these integrations was a
-synchronous HTTP call on the request path; each was replaced by a local cache
-fed from the upstream's published topic.
+warehouse-planning builds its capacity model from other contexts' events,
+and order-management can consume the plans it publishes.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant WFM as workforce-management
+    participant FL as facility-layout
+    participant OM as order-management
+    participant K as Kafka
+    participant WPL as warehouse-planning
+    actor Planner
+
+    WFM-)K: ShiftPlanCommitted on warehouse.workforce.events
+    K-)WPL: ShiftPlanCommitted
+    WPL->>WPL: register a LABOR capacity constraint, heads x rate
+    FL-)K: LocationSlotRegistered or LocationSlotDecommissioned
+    K-)WPL: slot event
+    WPL->>WPL: update the location slot tally
+    opt DEMAND_CONSUMER_GROUP set
+        OM-)K: OrderAllocated or OrderPartiallyAllocated
+        K-)WPL: order event
+        WPL->>WPL: record order demand for the site
+    end
+
+    Planner->>+WPL: POST /capacity-plans or create_capacity_plan
+    WPL->>WPL: compose path capacity, shortage and bottleneck
+    WPL-)K: CapacityPlanCreated on warehouse.warehouse-planning.events
+    WPL-->>-Planner: 201 plan, status DRAFT
+    Planner->>+WPL: POST /capacity-plans/{id}/publish
+    WPL-)K: CapacityPlanPublished, plus ShortageDetected and BottleneckDetected when short
+    WPL-->>-Planner: 200 plan, status PUBLISHED
+
+    opt PLANNED_CAPACITY_CONSUMER_GROUP set in order-management
+        K-)OM: Created, Published or ShortageDetected
+        OM->>OM: upsert the PlannedCapacityWindow read model
+    end
+```
+
+Both of the order-management edges are opt-in. Each is off unless its
+consumer group is configured. order-management ignores `BottleneckDetected`.
+Details: [warehouse-planning diagrams 2 to 7](/contexts/warehouse-planning/sequence-diagrams),
+[order-management diagram 8](/contexts/order-management/sequence-diagrams).
+
+## 7. Network demand
+
+network-fulfillment is the anti-corruption layer to an external retail
+fulfillment network. The network gateway is a stub today, and
+`NETWORK_MODE=live` refuses to boot.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant NET as Network gateway stub
+    participant NF as network-fulfillment
+    participant OM as order-management
+    participant K as Kafka
+
+    NF->>NET: PollDemand since watermark
+    NET-->>NF: inbound demand
+    NF->>NF: translate network product ids to SKUs
+    alt untranslatable SKU
+        NF-)K: NetworkOrderReceived then NetworkOrderRejected
+        NF->>NET: SubmitAcknowledgement false
+    else translated
+        NF-)K: NetworkOrderReceived
+        NF->>+OM: POST /orders as a held, ship-complete order
+        OM-->>-NF: local order id and feasibility
+        alt not feasible by the required ship-by
+            NF->>OM: DELETE /orders/{id}
+            NF-)K: NetworkOrderRejected
+            NF->>NET: SubmitAcknowledgement false
+        else feasible
+            NF-)K: NetworkOrderAcknowledged
+            NF->>NET: SubmitAcknowledgement true
+        end
+    end
+
+    Note over NF,OM: later, on the reconcile ticker
+    NF->>NET: SubmissionStatus
+    alt SUCCESS
+        NF->>OM: POST /orders/{id}/release
+    else FAILURE
+        NF->>OM: DELETE /orders/{id}
+        NF-)K: NetworkOrderRejected
+    end
+```
+
+Every network-fulfillment event goes to `warehouse.network-fulfillment.events`.
+No fleet context consumes that topic yet. Details:
+[network-fulfillment diagrams 1 to 4](/contexts/network-fulfillment/sequence-diagrams).
+
+## 8. Event-fed cache instead of a synchronous call
+
+A pattern that recurs across the fleet. A downstream context keeps an
+in-memory cache of an upstream's published facts, so the request path never
+makes a network call to that upstream.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant U as Upstream context
     participant K as Kafka topic
-    participant Cache as Local in-memory cache
+    participant C as In-memory cache
     participant D as Downstream use case
 
-    Note over Cache: at startup
-    K->>Cache: replay from FirstOffset
-    Cache->>Cache: Ready() gate closed until replay completes
-    Note over D: requests block on WaitReady() — never serve a cold cache
+    Note over C: at startup, a fresh consumer group
+    K->>C: replay from FirstOffset
+    C->>C: Ready gate closed until the replay catches up
+    Note over D: the composition root blocks on WaitReady
 
-    U-)K: catalogue / performance event
-    K->>Cache: consume, update running state
+    U-)K: new fact
+    K->>C: consume and update
 
-    D->>Cache: read (in-process, no network)
-    Cache-->>D: answer
+    D->>C: in-process read
+    C-->>D: answer
 ```
 
-The properties this buys, all verified live in the cluster rather than assumed:
+| Upstream topic and types | Downstream cache | Selected by |
+| --- | --- | --- |
+| process-path-management `ProcessPath*` (and `CPTScheduleChanged` where needed) | path catalogues in fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment `PATH_CATALOGUE_SOURCE=kafka` in the first four. The default is a YAML file in fulfillment-execution, wes-work-planning and workforce-management, and `none` in order-management. network-fulfillment's cache is behind `CAPABILITY_OFFER_ENABLED` |
+| facility-layout `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | inventory-storage's location classification cache | `LOCATION_LOOKUP_MODE=kafka`. `http` is the wired rollback to `GET /locations/{code}/classification` |
+| labor-performance `TaskPerformanceRecorded` | workforce-management's labor-performance cache | `LABOR_PERFORMANCE_MODE=kafka-cache`. `http` calls `GET /task-types/{taskType}/performance`, and the service default is `permissive` |
+| wes-work-planning `PathCapacityChanged` | path-capacity caches in order-management and network-fulfillment | order-management's path catalogue source, and network-fulfillment's `CAPABILITY_OFFER_ENABLED` |
 
-- **The upstream can be down.** `facility-layout` was scaled to **zero
-  replicas** and `inventory-storage` still classified stows correctly from its
-  cache.
-- **Changes propagate with no restart.** A newly defined process path reached
-  all three consuming contexts, and a deactivation propagated the same way.
-- **The old synchronous client is retained, not deleted.** Each integration
-  keeps a configured rollback (`LOCATION_LOOKUP_MODE=http`,
-  `LABOR_PERFORMANCE_MODE=http`) so the change is reversible without a code
-  change.
+Each one trades read-your-writes freshness for availability: the downstream
+keeps answering while the upstream is down, and new facts arrive without a
+restart. The per-edge status (live, opt-in, wired-but-unused) is on each
+context's [Context Map](/strategic-design/context-map) page.
 
-The three instances: `process-path-management` → three catalogue consumers,
-`facility-layout` → `inventory-storage`, and `labor-performance` →
-`workforce-management`.
+## 9. The agentic read path
+
+`warehouse-ops-agent` holds no database and no state. Every fact in an
+advisory is re-derived at request time from upstream MCP tools, and the agent
+never writes to any context.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Ops as Operations manager or MCP host
+    participant A as warehouse-ops-agent
+    participant WP as wes-work-planning MCP
+    participant WFM as workforce-management MCP
+    participant FE as fulfillment-execution MCP
+    participant LP as labor-performance MCP
+    participant LLM as Anthropic Messages API
+
+    Ops->>+A: GET /flow-balance/{pathId} or get_flow_balance_exception
+    A->>WP: get_rebalance_recommendation
+    alt unknown rebalance action
+        A-->>Ops: 400, boundary validation failed
+    end
+    A->>WFM: get_staffing_gap
+    A->>FE: diagnose_stuck_tasks
+    Note over A: an unreachable upstream becomes a nil signal, not an error
+    A->>A: policy.Decide, a Partial hold if a needed signal is missing
+    opt path bound to a task type
+        A->>LP: get_task_type_utilization
+        A->>A: policy.CorrelateUtilization
+    end
+    alt LLM_MODE off, the default
+        A->>A: deterministic decision
+    else shadow or on
+        A->>LLM: reason over the facts with allow-listed read tools
+        LLM-->>A: plan or error
+        A->>A: policy.Arbitrate, deterministic in shadow, llm or fallback in on
+    end
+    A-->>-Ops: 200 advisory, read-only
+```
+
+Every degradation path lands in the same place: the deterministic decision.
+A missing binding, an unreachable MCP server, a `null` utilization or a
+failing LLM call all produce a *less enriched* answer, never a wrong one.
+The LLM is consulted **behind** a policy layer and has no actuators. The
+daily brief, the stranded-reservation check, the travel-factor explanation
+and the console BFF fan-outs (`/console/orders/{id}/lifecycle`,
+`/console/reports/wms`, `/console/reports/wes`) are on
+[the agent's sequence diagrams page](/contexts/warehouse-ops-agent/sequence-diagrams).
