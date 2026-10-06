@@ -2,73 +2,137 @@
 id: core-domain-chart
 title: Core Domain Chart
 sidebar_label: Core Domain Chart
-description: Plotting the eleven bounded contexts by business differentiation vs. complexity, per ddd-crew's Core Domain Charts method.
+description: All eleven bounded contexts on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart.
 ---
 
 # Core Domain Chart
 
-The [ddd-crew Core Domain Chart](https://github.com/ddd-crew/core-domain-charts)
-plots each subdomain on two axes — **how differentiating** it is (how much a
-competitive edge depends on getting it right) and **how complex** it is to
-build — to focus investment on what actually matters: high differentiation,
-regardless of complexity, is where the strongest engineers and the most
-design care belong.
+A [ddd-crew Core Domain Chart](https://github.com/ddd-crew/core-domain-charts)
+places each subdomain on two axes: **model complexity** (x) and **business
+differentiation** (y). Mermaid numbers the quadrants this way, and every
+context's own chart in this fleet uses the same layout:
+
+| Quadrant | Position | Meaning |
+| --- | --- | --- |
+| 1 · **Core** | top-right | Differentiating and complex. Build it in-house and invest the most here. |
+| 2 · **Decisive - Short-term Core** | top-left | Differentiating but simple. Often a quick win whose edge erodes. |
+| 3 · **Supporting** | bottom-left | Not differentiating and fairly simple. Build it cheaply. |
+| 4 · **Generic** | bottom-right | Not differentiating but complex, because the problem is solved elsewhere. Buy or reuse it. |
 
 ```mermaid
 quadrantChart
-    title Core Domain Chart — warehouse-systems
-    x-axis Low Complexity --> High Complexity
-    y-axis Low Differentiation --> High Differentiation
-    quadrant-1 Core — invest here first
-    quadrant-2 Complicated but generic — buy or reuse
-    quadrant-3 Low priority
-    quadrant-4 Supporting — necessary, not a differentiator
-    "wes-work-planning": [0.72, 0.88]
-    "fulfillment-execution": [0.68, 0.82]
-    "inventory-storage": [0.6, 0.78]
-    "warehouse-planning": [0.55, 0.74]
-    "workforce-management": [0.5, 0.45]
-    "labor-performance": [0.4, 0.35]
-    "order-management": [0.35, 0.3]
-    "warehouse-ops-agent": [0.3, 0.28]
-    "network-fulfillment": [0.45, 0.4]
-    "facility-layout": [0.3, 0.15]
-    "process-path-management": [0.2, 0.1]
+    title warehouse-systems - eleven bounded contexts
+    x-axis Low model complexity --> High model complexity
+    y-axis Low business differentiation --> High business differentiation
+    quadrant-1 Core
+    quadrant-2 Decisive - Short-term Core
+    quadrant-3 Supporting
+    quadrant-4 Generic
+    wes-work-planning: [0.78, 0.88]
+    inventory-storage: [0.78, 0.84]
+    warehouse-planning: [0.74, 0.84]
+    fulfillment-execution: [0.74, 0.80]
+    workforce-management: [0.40, 0.30]
+    labor-performance: [0.32, 0.36]
+    network-fulfillment: [0.36, 0.34]
+    warehouse-ops-agent: [0.38, 0.40]
+    order-management: [0.46, 0.36]
+    facility-layout: [0.62, 0.18]
+    process-path-management: [0.58, 0.22]
 ```
+
+Every coordinate is copied from the context's **own** chart. The contexts
+mark these positions as judgements grounded in code evidence, not
+measurements. The four Core contexts sit close together, so some of their
+labels overlap.
+
+## Where each point comes from
+
+| Context | x, y | Quadrant | Fleet classification | Source on the context's own chart |
+| --- | --- | --- | --- | --- |
+| `wes-work-planning` | 0.78, 0.88 | Core | Core | point `wes-work-planning`, [chart](/contexts/wes-work-planning/core-domain-chart) |
+| `inventory-storage` | 0.78, 0.84 | Core | Core | point `inventory-storage`, the whole context. Its chart also plots six capability points. [chart](/contexts/inventory-storage/core-domain-chart) |
+| `warehouse-planning` | 0.74, 0.84 | Core | Core | point `warehouse-planning`, [chart](/contexts/warehouse-planning/core-domain-chart) |
+| `fulfillment-execution` | 0.74, 0.80 | Core | Core | point `Fulfillment Execution`, the whole context. Its chart also plots six internal slices. [chart](/contexts/fulfillment-execution/core-domain-chart) |
+| `workforce-management` | 0.40, 0.30 | Supporting | Supporting | point `workforce management`, [chart](/contexts/workforce-management/core-domain-chart) |
+| `labor-performance` | 0.32, 0.36 | Supporting | Supporting | point `labor-performance`, [chart](/contexts/labor-performance/core-domain-chart) |
+| `network-fulfillment` | 0.36, 0.34 | Supporting | Supporting | point `network-fulfillment context`, [chart](/contexts/network-fulfillment/core-domain-chart) |
+| `warehouse-ops-agent` | 0.38, 0.40 | Supporting | Supporting | point `decision-support policy`. The chart has no whole-context point, so this page uses the higher of its two points. The other, `console-bff read models`, is at 0.18, 0.20, also Supporting. [chart](/contexts/warehouse-ops-agent/core-domain-chart) |
+| `order-management` | 0.46, 0.36 | Supporting, near the Generic border | Generic/Supporting | point `order-management today`. Its chart adds `order intake alone` at 0.15, 0.12 and `promise and routing policies` at 0.62, 0.45 "to show why the overall point sits on the Supporting/Generic boundary". [chart](/contexts/order-management/core-domain-chart) |
+| `facility-layout` | 0.62, 0.18 | Generic | Generic | point `facility-layout`, [chart](/contexts/facility-layout/core-domain-chart) |
+| `process-path-management` | 0.58, 0.22 | Generic | Generic | point `process-path-management`, [chart](/contexts/process-path-management/core-domain-chart) |
+
+Every context's own chart puts its own point in the quadrant that matches the
+fleet classification in [Subdomain Classification](/strategic-design/subdomain-classification).
+`order-management` is the one borderline case. Its x of 0.46 sits just left
+of the midline, which the fleet's Generic/Supporting label reflects.
+
+:::note[Neighbour placements on other contexts' charts]
+Two contexts also plot their neighbours on their own charts for contrast.
+Those neighbour points are not the source for this page, and a few of them
+disagree with the neighbour's own chart:
+
+- `wes-work-planning`'s chart places `process-path-management` at
+  0.30, 0.12. That is the **Supporting** quadrant, but PPM's own chart and
+  the fleet classification both say Generic (0.58, 0.22).
+- The same chart places `order-management` at 0.58, 0.30, in the Generic
+  quadrant. OM's own point is 0.46, 0.36, on the Supporting side of the
+  border. The fleet label Generic/Supporting covers both.
+- `wes-work-planning`'s and `workforce-management`'s charts each place
+  `inventory-storage`, `fulfillment-execution` and `wes-work-planning` at
+  slightly different Core coordinates. All of those points are in the Core
+  quadrant.
+
+This page keeps each context's own placement and the fleet classification.
+:::
 
 ## Reading the chart
 
-- **Quadrant 1 (Core)** — `wes-work-planning`, `fulfillment-execution`,
-  `inventory-storage` and `warehouse-planning` cluster here. This matches
-  the reference model's
-  identification of **Fulfillment Orchestration & Optimization**,
-  **Picking** (the execution side), and **Inventory & Slotting** as the
-  genuine differentiators: continuous re-planning to the fastest/cheapest
-  path, and bin-accurate chaotic storage, are where a real fulfillment
-  operation wins or loses. `warehouse-planning` is the newest Core context
-  (its ADR 0001 classifies it Core: a normalized, cross-process capacity
-  answer no other context provides); its exact position on the chart is
-  this page's own judgement, drawn just below `inventory-storage`, not a
-  measurement.
-- **Quadrant 4 (Supporting)** — `workforce-management`, `labor-performance`,
-  `order-management`, `warehouse-ops-agent` and `network-fulfillment` sit here: necessary,
-  non-trivial, but not what a competitor would copy first. Order intake and
-  labor allocation are industry-common concerns done well, not novel ones.
-- **Lower-left (Generic)** — `facility-layout` and `process-path-management`
-  are deliberately low on both axes: they are well-understood, extracted
-  *once* precisely because they are **not** worth re-solving per consumer.
-  Both this platform's own ADRs (`facility-layout` ADR-0001,
-  `process-path-management` ADR-0001) make this extraction argument
-  explicitly, citing the same "generic subdomain, extract don't duplicate"
-  reasoning ddd-crew's charts are meant to surface.
+- **Core: `wes-work-planning`, `inventory-storage`, `warehouse-planning`,
+  `fulfillment-execution`.**
+  - `wes-work-planning` owns the release decision: CPT priority, waveless
+    admission, WIP backpressure and Drum-Buffer-Rope flow balancing.
+  - `inventory-storage` owns revocable reservations and the chaotic-stow
+    ledger. Every customer promise rests on its *usable* answer.
+  - `fulfillment-execution` owns pull-based `claimNext` dispatch with
+    at-most-once leases.
+  - `warehouse-planning` computes the normalized, cross-process effective
+    capacity and the forward-looking shortage. No other context computes
+    either (its ADR 0001).
+- **Supporting: `workforce-management`, `labor-performance`,
+  `network-fulfillment`, `warehouse-ops-agent`, and `order-management` on the
+  border.** Each one is necessary, but the differentiating knowledge it uses
+  belongs to another context:
+  - `workforce-management` records human rebalancing decisions.
+  - `labor-performance` measures finished work against standards.
+  - `network-fulfillment` asks `order-management` whether an order is
+    feasible and never recomputes the answer.
+  - `warehouse-ops-agent` only recommends and owns no aggregate.
+  - `order-management`'s promise rules lift it above a commodity order
+    front end, but they are not the platform's differentiator.
+- **Generic: `facility-layout`, `process-path-management`.** Both are well
+  understood and both are extracted once, because several contexts need the
+  same model. They sit *right* of the midline: `facility-layout` has eight
+  aggregate roots and a travel graph, and `process-path-management` carries
+  the CPT schedule and the fulfillment-capability contract. Their complexity
+  serves correctness, not differentiation, so they stay in the bottom half.
 
-## Why this shapes investment
+## Complexity is not classification
 
-The fleet's own build history reflects this chart: `wes-work-planning` and
-`fulfillment-execution` carry the deepest ADR trails (13 and 19 ADRs
-respectively, as of this writing) and the most elaborate domain services
-(flow balancing, lease-based claiming) — proportional to their Core
-classification. `process-path-management` and `facility-layout`, by
-contrast, are deliberately small, focused services with a single aggregate
-each — proportional to their Generic classification. Investment tracked
-differentiation, not arbitrary team preference.
+The chart separates two things that are easy to confuse:
+
+- **`facility-layout` is complex but Generic.** It has eight aggregate roots
+  and 59 typed domain errors, yet nothing in it is where a retailer or 3PL
+  wins.
+- **`order-management` carries promise and routing policy but stays
+  Supporting.** Its own chart expects the point to drift toward the bottom of
+  the chart as the promise inputs settle.
+
+Each context's chart also states what would move it:
+
+- `wes-work-planning` would drop to Supporting if a vendor WES replaced its
+  release policy behind an ACL.
+- `warehouse-ops-agent` would move up only by adding write capability, and
+  its ADR 0001 says anything needing an aggregate belongs in a different repo.
+- `process-path-management` would move up and need re-classification if CPT
+  feasibility logic moved into it from `order-management`.
