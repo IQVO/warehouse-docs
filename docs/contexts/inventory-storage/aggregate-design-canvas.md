@@ -117,7 +117,7 @@ cycle count that finds stock missing must always be able to say so.
 | Stow | `NewStockUnit` | `StowStock` — `POST /stock/stow` |
 | Reserve | `Reserve` | `ReserveStock` — `POST /reservations` |
 | Release reservation | `ReleaseReservation` | `RevokeReservation` (`DELETE /reservations/{id}`, MCP `revoke_reservation`), lazy expiry |
-| Pick | `Pick` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick` |
+| Pick | `Pick` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick`, and per ACTIVE reservation from `ConfirmPicksForOrder` on the order's last `TaskCompleted` ([ADR 0035](https://iqvo.github.io/inventory-storage/docs/adr/0035)) |
 | Mark unlocated | `MarkUnlocated` | `RunCycleCount` — `POST /bins/{binId}/cycle-count` |
 
 ### 7. Created Events
@@ -217,7 +217,7 @@ a bin is never deleted.
 | --- | --- | --- |
 | Register / resize | `NewBin`, `Resize` | `RegisterBin` — `PUT /bins/{binId}` |
 | Occupy | `Occupy` | `StowStock` — `POST /stock/stow` |
-| Release | `Release` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick` |
+| Release | `Release` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick`, and per ACTIVE reservation from `ConfirmPicksForOrder` on the order's last `TaskCompleted` ([ADR 0035](https://iqvo.github.io/inventory-storage/docs/adr/0035)) |
 
 ### 7. Created Events
 
@@ -316,7 +316,7 @@ returns `ErrAlreadyResolved`.
 | --- | --- | --- |
 | Reserve | `New` | `ReserveStock` — `POST /reservations` (Idempotency-Key) |
 | Revoke | `Revoke` | `RevokeReservation` — `DELETE /reservations/{id}`, MCP `revoke_reservation` |
-| Confirm pick | `Confirm` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick` |
+| Confirm pick | `Confirm` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick`, and per ACTIVE reservation from `ConfirmPicksForOrder` on the order's last `TaskCompleted` ([ADR 0035](https://iqvo.github.io/inventory-storage/docs/adr/0035)) |
 | Expire | `Expire` | lazy, inside the four read paths above |
 
 ### 7. Created Events
@@ -373,12 +373,14 @@ re-classifying replaces it wholesale.
 ```mermaid
 stateDiagram-v2
     [*] --> Unclassified
-    Unclassified --> Classified: ClassifyProduct, product.New
-    Classified --> Classified: ClassifyProduct replaces
+    Unclassified --> Classified: ApplyProductClassification, product.New (version >= 1)
+    Classified --> Classified: ApplyProductClassification, newer version replaces
 ```
 
 Source: `internal/domain/product/classification.go`,
-`internal/application/usecases/classify_product.go`.
+`internal/application/usecases/apply_product_classification.go`. Since
+[ADR 0034](https://iqvo.github.io/inventory-storage/docs/adr/0034) the rows are a version-guarded local copy of
+product-master's classification; this service no longer authors them.
 Omitted: there is no delete or unclassify operation.
 
 ### 4. Enforced Invariants
@@ -408,8 +410,8 @@ Unclassified SKUs, unknown bins and unclassified occupants are **fail-open**.
 
 ### 5. Corrective Policies
 
-- **Re-classification replaces.** `ClassifyProduct` is idempotent by SKU;
-  correcting a wrong classification is just another `PUT`.
+- **Re-classification replaces.** Corrections are made in product-master
+  (ADR 0034); a newer `version` replaces the local copy wholesale.
 - None for already-stowed stock: re-classifying a SKU does not re-check
   bins it already occupies.
 
@@ -417,7 +419,7 @@ Unclassified SKUs, unknown bins and unclassified occupants are **fail-open**.
 
 | Command | Method | Use case / entry point |
 | --- | --- | --- |
-| Classify / re-classify | `product.New` | `ClassifyProduct` — `PUT /products/{sku}/classification` |
+| Apply product-master's classification | `product.New` | `ApplyProductClassification` — Kafka `warehouse.product-master.events` (`PUT /products/{sku}/classification` is 410) |
 
 ### 7. Created Events
 

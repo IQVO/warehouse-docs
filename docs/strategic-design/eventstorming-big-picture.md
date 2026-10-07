@@ -497,13 +497,11 @@ flowchart LR
 
     H17["H17 claim does not require check-in"]:::hotspot
     H18["H18 Item Picked defined but never raised"]:::hotspot
-    H19["H19 no sibling context calls confirm-pick"]:::hotspot
     H20["H20 rebin events never leave the process"]:::hotspot
     H21["H21 sort lane decided but no WCS acts on it"]:::hotspot
     H22["H22 REBIN and unknown task types are never scored"]:::hotspot
     C1 -.- H17
     E4 -.- H18
-    C6 -.- H19
     C3 -.- H20
     E5 -.- H21
     P4 -.- H22
@@ -518,8 +516,10 @@ flowchart LR
     classDef hotspot fill:#e74c3c,stroke:#78281f,color:#ffffff
 ```
 
-`Item Picked` and `Stock Picked` are drawn unconnected on purpose. One is
-never raised and the other is never triggered in the live flow (H18, H19).
+`Item Picked` and `Stock Picked` are drawn unconnected on purpose. `Item Picked`
+is never raised (H18). `Stock Picked` is raised by inventory-storage's confirm-pick
+consumer on an order's last completed PICK (ADR 0035), but that consumer is off by
+default, so the live flow does not yet trigger it.
 
 Sources: [fulfillment-execution scenarios 1 and 2](/contexts/fulfillment-execution/domain-message-flow),
 [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming),
@@ -633,7 +633,7 @@ this site, and the corroborating context page is linked instead.
 | ~~H16~~ | workforce-management | ~~The headcount proposal divides by `MeanActualSeconds`, a duration, where a per-head rate is expected~~ **Resolved 2026-10-06.** Now converts to a per-hour rate, 3600 / seconds (ADR 0033). | [workforce-management Ubiquitous Language](/contexts/workforce-management/ubiquitous-language) |
 | H17 | fulfillment-execution | A claim does not require a station check-in | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H18 | fulfillment-execution | `ItemPicked` is defined but never raised | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
-| H19 | inventory-storage | No sibling context calls `POST /reservations/{id}/confirm-pick` | [inventory-storage EventStorming](/contexts/inventory-storage/eventstorming) H7. [inventory-storage context map](/contexts/inventory-storage/context-map) row 7. Discrepancy log. **Direction decided 2026-10-06:** event-driven, blocked on contract additions (inventory-storage ADR 0032, Proposed). |
+| ~~H19~~ | inventory-storage | ~~No sibling context calls `POST /reservations/{id}/confirm-pick`~~ **Resolved 2026-10-07.** A consumer confirms an order's reservations on its last completed PICK, driven by `TaskCompleted.order_ref` (inventory-storage ADR 0035, fulfillment-execution ADR 0040). It is off by default. | [inventory-storage EventStorming](/contexts/inventory-storage/eventstorming) |
 | H20 | fulfillment-execution | Rebin events never leave the process | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H21 | fulfillment-execution | The sort lane is decided, but no WCS acts on it | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H22 | labor-performance | `REBIN` and other unknown task types are never scored | [labor-performance EventStorming](/contexts/labor-performance/eventstorming) |

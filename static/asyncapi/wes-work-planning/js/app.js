@@ -4,7 +4,7 @@
   "info": {
     "title": "WES Work Planning & Release — Domain Events",
     "version": "1.0.0",
-    "description": "Asynchronous event contract for the **Work Planning & Release** bounded\ncontext, the core domain of the WES (Warehouse Execution System)\nsubdomain. This service is the \"conductor\" of the distribution centre: it\nturns a shift's charge (volume due by each CPT) into a committed plan\n(rate x heads per process path), releases work continuously and\nwaveless-ly into per-path work pools, and performs flow balancing\n(Drum-Buffer-Rope, with CPT as the drum) from live buffer telemetry. It\nsits downstream of WMS planning/inventory and upstream of WCS equipment\ncontrol.\n\n## Message format\n\nEvery message this service produces or consumes on Kafka is a\n**CloudEvents 1.0 structured-mode** JSON document (mandatory fleet\nstandard, ADR-0027 — there is no flat envelope, no dual-write/dual-read\nand no envelope toggle): the CloudEvents context attributes and the\nevent-specific `data` payload travel together in a single JSON body, and\nevery produced Kafka message carries the header\n`content-type: application/cloudevents+json; charset=UTF-8` next to the\nW3C `traceparent`/`tracestate` headers. All of `specversion` (`1.0`),\n`id`, `source` (always `/warehouse/wes-work-planning`), `type`,\n`subject` (the aggregate instance id), `time` (domain occurred-at, UTC),\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:wes-work-planning:<events|analytics>:<EventName>:v1`) are\nrequired. `data` is described per message below.\n\n## `type` naming convention\n\nThe CloudEvents `type` attribute follows a reverse-DNS dotted convention\nshared by every bounded context in this program:\n\n```\ncom.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>\n```\n\nAll segments are lowercase except the final PascalCase event name, which\nmatches the past-tense domain event name used in the code. For this\nservice the subdomain is `wes` and the bounded context is\n`work-planning`, so for example:\n\n```\ncom.warehouse.wes.work-planning.workunit.WorkReleased\ncom.warehouse.wes.work-planning.charge.ChargeForecastReceived\n```\n\nThe `entity` segment names the aggregate (or aggregate cluster) that\nraises the event: `charge` for the ChargeForecast aggregate, `plan` for\nShiftPlan/PathPlan, `workpool` for the WorkPool aggregate and the flow\nbalancing decisions taken against it, and `workunit` for the WorkUnit\naggregate.\n\n## Catalog completeness vs. what is actually published\n\nThis document is the **complete catalog** of the past-tense domain events\ndeclared by this bounded context (see `internal/domain/shared/events.go`),\nso that it is a usable reference for the whole domain model. Not every\ncatalogued event is emitted onto Kafka today: the outbound adapter\n(`internal/adapters/outbound/kafka/publisher.go`) only sees the events\nthat application use cases actually hand to `EventPublisher.Publish`. Any\nmessage that is not wired to the outbound adapter says so explicitly in\nits own `description`. Note also that Kafka publication is opt-in at\nruntime via the `EVENT_PUBLISHER=kafka` environment variable; with the\ndefault `EVENT_PUBLISHER=log` the same events are only written to the log\npublisher.\n\n## What this service consumes from other bounded contexts\n\nWork Planning is unusual in this program in that it is both a producer\nand a consumer of integration events. Those inbound streams are **not**\npart of this channel and are owned by their own bounded contexts; they\nare listed here only for orientation. Consumers dispatch on these exact\nCloudEvents `type` strings (never a short name or suffix match):\n\n```\ncom.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted\ncom.warehouse.wms.inventory-storage.reservation.StockReserved\ncom.warehouse.wms.inventory-storage.reservation.ReservationRevoked\ncom.warehouse.wes.fulfillment-execution.task.TaskCompleted\ncom.warehouse.wes.order-management.order.OrderAllocated\ncom.warehouse.wes.order-management.order.OrderPartiallyAllocated\ncom.warehouse.wes.network-inventory-planning.workdemand.WorkDemandReleased\ncom.warehouse.wes.process-path-management.processpath.ProcessPathCreated\ncom.warehouse.wes.process-path-management.processpath.ProcessPathUpdated\ncom.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated\n```\n\nA message that is not a valid CloudEvents 1.0 event (including the\nretired flat envelope) is dead-lettered to `<topic>.dlq` by the main\nconsumer, or skipped with a WARN log by the catalogue and analytics\nconsumers — never parsed as a legacy shape. This service also consumes\n`ShiftPlanCommitted` from workforce-management on\n`warehouse.workforce.events` (projected into the read-only\n`LaborPlanObserved` view — deliberately *not* fed into this context's own\nShiftPlan aggregate, which is a different model that happens to share the\nname), `StockReserved` and `ReservationRevoked` from inventory-storage on\n`warehouse.inventory.events` (projected into the SKU-keyed\n`UsableInventoryObserved` view), `TaskCompleted` from\nfulfillment-execution on `warehouse.fulfillment.events` (fed into the\n`RecordCompletion` use case to close the execution feedback loop),\n`OrderAllocated`/`OrderPartiallyAllocated` from order-management on\n`warehouse.order-management.events` (fed into the existing\n`EnqueueWorkUnit` use case, once per order line — the event-choreography\nreplacement for order-management's former synchronous call to\n`POST /paths/{pathId}/work-units`; deliberately fire-and-forget, with no\nreply event published back), and `WorkDemandReleased` from\nnetwork-inventory-planning on\n`warehouse.network-inventory-planning.events` (fed into the existing\n`EnqueueWorkUnit` use case, one work unit per released transfer demand\nleg under the deterministic id `demand_id` — see ADR-0033; also\nfire-and-forget). All consumer paths are idempotent under\nat-least-once redelivery: the CloudEvents `id` is recorded as processed\nin the SAME transaction as the event's effect (ADR-0028), so a failed\nattempt is retried and, once retries are exhausted, dead-lettered to\n`<topic>.dlq` — never acknowledged as already processed. A `TaskCompleted`\nwhose `work_unit_id` names a work unit this context never planned (e.g.\na PACK task fulfillment-execution created during rebin consolidation,\nwhich carries the order id) is a deliberate, INFO-logged skip: it is\nmarked processed and neither retried nor dead-lettered.\n",
+    "description": "Asynchronous event contract for the **Work Planning & Release** bounded\ncontext, the core domain of the WES (Warehouse Execution System)\nsubdomain. This service is the \"conductor\" of the distribution centre: it\nturns a shift's charge (volume due by each CPT) into a committed plan\n(rate x heads per process path), releases work continuously and\nwaveless-ly into per-path work pools, and performs flow balancing\n(Drum-Buffer-Rope, with CPT as the drum) from live buffer telemetry. It\nsits downstream of WMS planning/inventory and upstream of WCS equipment\ncontrol.\n\n## Message format\n\nEvery message this service produces or consumes on Kafka is a\n**CloudEvents 1.0 structured-mode** JSON document (mandatory fleet\nstandard, ADR-0027 — there is no flat envelope, no dual-write/dual-read\nand no envelope toggle): the CloudEvents context attributes and the\nevent-specific `data` payload travel together in a single JSON body, and\nevery produced Kafka message carries the header\n`content-type: application/cloudevents+json; charset=UTF-8` next to the\nW3C `traceparent`/`tracestate` headers. All of `specversion` (`1.0`),\n`id`, `source` (always `/warehouse/wes-work-planning`), `type`,\n`subject` (the aggregate instance id), `time` (domain occurred-at, UTC),\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:wes-work-planning:<events|analytics>:<EventName>:v1`) are\nrequired. `data` is described per message below.\n\n## `type` naming convention\n\nThe CloudEvents `type` attribute follows a reverse-DNS dotted convention\nshared by every bounded context in this program:\n\n```\ncom.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>\n```\n\nAll segments are lowercase except the final PascalCase event name, which\nmatches the past-tense domain event name used in the code. For this\nservice the subdomain is `wes` and the bounded context is\n`work-planning`, so for example:\n\n```\ncom.warehouse.wes.work-planning.workunit.WorkReleased\ncom.warehouse.wes.work-planning.charge.ChargeForecastReceived\n```\n\nThe `entity` segment names the aggregate (or aggregate cluster) that\nraises the event: `charge` for the ChargeForecast aggregate, `plan` for\nShiftPlan/PathPlan, `workpool` for the WorkPool aggregate and the flow\nbalancing decisions taken against it, and `workunit` for the WorkUnit\naggregate.\n\n## Catalog completeness vs. what is actually published\n\nThis document is the **complete catalog** of the past-tense domain events\ndeclared by this bounded context (see `internal/domain/shared/events.go`),\nso that it is a usable reference for the whole domain model. Not every\ncatalogued event is emitted onto Kafka today: the outbound adapter\n(`internal/adapters/outbound/kafka/publisher.go`) only sees the events\nthat application use cases actually hand to `EventPublisher.Publish`. Any\nmessage that is not wired to the outbound adapter says so explicitly in\nits own `description`. Note also that Kafka publication is opt-in at\nruntime via the `EVENT_PUBLISHER=kafka` environment variable; with the\ndefault `EVENT_PUBLISHER=log` the same events are only written to the log\npublisher.\n\n## What this service consumes from other bounded contexts\n\nWork Planning is unusual in this program in that it is both a producer\nand a consumer of integration events. Those inbound streams are **not**\npart of this channel and are owned by their own bounded contexts; they\nare listed here only for orientation. Consumers dispatch on these exact\nCloudEvents `type` strings (never a short name or suffix match):\n\n```\ncom.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted\ncom.warehouse.wms.inventory-storage.reservation.StockReserved\ncom.warehouse.wms.inventory-storage.reservation.ReservationRevoked\ncom.warehouse.wes.fulfillment-execution.task.TaskCompleted\ncom.warehouse.wes.order-management.order.OrderAllocated\ncom.warehouse.wes.order-management.order.OrderPartiallyAllocated\ncom.warehouse.wes.network-inventory-planning.workdemand.WorkDemandReleased\ncom.warehouse.wes.process-path-management.processpath.ProcessPathCreated\ncom.warehouse.wes.process-path-management.processpath.ProcessPathUpdated\ncom.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated\n```\n\nA message that is not a valid CloudEvents 1.0 event (including the\nretired flat envelope) is dead-lettered to `<topic>.dlq` by the main\nconsumer, or skipped with a WARN log by the catalogue and analytics\nconsumers — never parsed as a legacy shape. This service also consumes\n`ShiftPlanCommitted` from workforce-management on\n`warehouse.workforce.events` (projected into the read-only\n`LaborPlanObserved` view — deliberately *not* fed into this context's own\nShiftPlan aggregate, which is a different model that happens to share the\nname), `StockReserved` and `ReservationRevoked` from inventory-storage on\n`warehouse.inventory.events` (projected into the SKU-keyed\n`UsableInventoryObserved` view), `TaskCompleted` from\nfulfillment-execution on `warehouse.fulfillment.events` (fed into the\n`RecordCompletion` use case to close the execution feedback loop),\n`OrderAllocated`/`OrderPartiallyAllocated` from order-management on\n`warehouse.order-management.events` (fed into the existing\n`EnqueueWorkUnit` use case, once per order line — the event-choreography\nreplacement for order-management's former synchronous call to\n`POST /paths/{pathId}/work-units`; deliberately fire-and-forget, with no\nreply event published back), and `WorkDemandReleased` from\nnetwork-inventory-planning on\n`warehouse.network-inventory-planning.events` (fed into the existing\n`EnqueueWorkUnit` use case, one work unit per released transfer demand\nleg under the deterministic id `demand_id` — see ADR-0033; also\nfire-and-forget), and `ProductClassified` from product-master on\n`warehouse.product-master.events` (applied to this context's local\nclassification copy, version-guarded, by a dedicated consumer under\n`PRODUCT_CLASSIFICATION_CONSUMER_GROUP`; the copy is what the\n`WorkReleased` encoder reads for its hazmat/fragile hints — see\nADR-0035). All consumer paths are idempotent under\nat-least-once redelivery: the CloudEvents `id` is recorded as processed\nin the SAME transaction as the event's effect (ADR-0028), so a failed\nattempt is retried and, once retries are exhausted, dead-lettered to\n`<topic>.dlq` — never acknowledged as already processed. A `TaskCompleted`\nwhose `work_unit_id` names a work unit this context never planned (e.g.\na PACK task fulfillment-execution created during rebin consolidation,\nwhich carries the order id) is a deliberate, INFO-logged skip: it is\nmarked processed and neither retried nor dead-lettered.\n",
     "contact": {
       "name": "WES Work Planning Team",
       "url": "https://warehouse-systems.internal/teams/wes-work-planning",
@@ -371,7 +371,7 @@
               "name": "WorkReleased",
               "title": "Work Released",
               "summary": "The release policy admitted a work unit into active work.",
-              "description": "Raised by the WorkPool aggregate when `ReleaseNextWork` applies the release policy and admits the highest-priority (earliest-CPT) queued work unit into active work. This is the primary integration event of this bounded context: fulfillment-execution consumes it and turns it into a Task. Actively published to `warehouse.work-planning.events`. The outbound adapter enriches the `data` payload with the unit's `cpt` and `ref` by reading the WorkUnit repository, since the domain event itself only carries the identifiers. When the released unit carries a known SKU, the adapter also performs a synchronous read of that SKU's classification from inventory-storage (`GET /products/{sku}/classification`, see ADR-0009 in this service's ADR index) and stamps two OPTIONAL derived fields, `required_capabilities` and `fragile`, present only when there is a hint to give.",
+              "description": "Raised by the WorkPool aggregate when `ReleaseNextWork` applies the release policy and admits the highest-priority (earliest-CPT) queued work unit into active work. This is the primary integration event of this bounded context: fulfillment-execution consumes it and turns it into a Task. Actively published to `warehouse.work-planning.events`. The outbound adapter enriches the `data` payload with the unit's `cpt` and `ref` by reading the WorkUnit repository, since the domain event itself only carries the identifiers. When the released unit carries a known SKU, the adapter also reads that SKU's classification from this context's local copy of product-master's `ProductClassified` events (ADR-0035; previously a synchronous read from inventory-storage, ADR-0009) and stamps two OPTIONAL derived fields, `required_capabilities` and `fragile`, present only when there is a hint to give.",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -405,7 +405,7 @@
                       },
                       "data": {
                         "type": "object",
-                        "description": "Payload published by the outbound Kafka adapter, enriched from the WorkUnit repository with the unit's CPT and reference, the caller-stated gift-wrap request when one was made (see ADR-0010), and — when the released unit carries a known SKU — with derived hazmat-capability/fragile hints read once, synchronously, from inventory-storage's product classification at publish time (see ADR-0009).",
+                        "description": "Payload published by the outbound Kafka adapter, enriched from the WorkUnit repository with the unit's CPT and reference, the caller-stated gift-wrap request when one was made (see ADR-0010), and — when the released unit carries a known SKU — with derived hazmat-capability/fragile hints read once, at publish time, from the local copy of product-master's classification (see ADR-0009, ADR-0035).",
                         "required": [
                           "path_id",
                           "work_unit_id",
@@ -439,7 +439,7 @@
                               "type": "string",
                               "x-parser-schema-id": "<anonymous-schema-34>"
                             },
-                            "description": "OPTIONAL. Present only when the released unit's SKU is classified Hazmat in inventory-storage, in which case it contains exactly `[\"hazmat\"]`. Absent — not an empty array — when the SKU is unclassified, unknown, or the inventory-storage lookup is unavailable (PRODUCT_CLASSIFICATION_MODE=permissive, the default, or a lookup error). Consumers must treat an absent field identically to an empty array. See ADR-0009.",
+                            "description": "OPTIONAL. Present only when the released unit's SKU is classified Hazmat by product-master, in which case it contains exactly `[\"hazmat\"]`. Absent — not an empty array — when the SKU is unclassified, not yet in the local copy, or the copy is unreadable (PRODUCT_CLASSIFICATION_MODE=permissive, the default, or a lookup error). Consumers must treat an absent field identically to an empty array. See ADR-0009, ADR-0035.",
                             "example": [
                               "hazmat"
                             ],
@@ -447,7 +447,7 @@
                           },
                           "fragile": {
                             "type": "boolean",
-                            "description": "OPTIONAL. Present and `true` only when the released unit's SKU is classified Fragile in inventory-storage. Absent — not `false` — when the SKU is unclassified, unknown, or the lookup is unavailable. Consumers must treat an absent field identically to `false`. See ADR-0009.",
+                            "description": "OPTIONAL. Present and `true` only when the released unit's SKU is classified Fragile by product-master. Absent — not `false` — when the SKU is unclassified, unknown, or the lookup is unavailable. Consumers must treat an absent field identically to `false`. See ADR-0009, ADR-0035.",
                             "example": true,
                             "x-parser-schema-id": "<anonymous-schema-35>"
                           },
@@ -1949,6 +1949,151 @@
           ]
         }
       }
+    },
+    "warehouse.product-master.events": {
+      "description": "product-master's integration topic, CONSUMED by this service (owned by that bounded context; listed here read-only for orientation, mirroring its own apis/asyncapi.yaml). Key = the SKU. This service consumes only ProductClassified and ignores every other type on the topic (ProductRegistered, ProductDescriptionChanged, ProductDimensionsDeclared, ProductMeasured). See ADR-0035.",
+      "publish": {
+        "operationId": "consumeProductClassified",
+        "summary": "Consume product-master's ProductClassified into the local classification copy.",
+        "description": "A dedicated consumer reads this topic under the stable consumer group `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (only with `PRODUCT_CLASSIFICATION_MODE=kafka`) and keeps one row per SKU in `product_classification_copy`. It claims the CloudEvents `id` and applies the classification in ONE transaction, overwriting a stored row only when the incoming `version` is greater (an equal or older version is a no-op). Invalid CloudEvents and invalid payloads are WARN-logged and skipped; transient failures retry the same message and the offset is committed only after success.",
+        "message": {
+          "name": "ProductClassified",
+          "title": "Product Classified (consumed)",
+          "summary": "product-master set or replaced a SKU's handling classification.",
+          "description": "CONSUMED from `warehouse.product-master.events` — this entry mirrors the producer's own contract read-only and is NOT published by this service. A full-state replacement of one SKU's classification at the producer's aggregate `version`; `temperature_class` and `dot_hazard_class` are omitted when unset. Applied to the local `product_classification_copy` only when `version` is greater than the stored one (ADR-0035); `classification_source` is ignored. The `WorkReleased` encoder maps `Hazmat` to `required_capabilities: [\"hazmat\"]` and `Fragile` to `fragile: true`.",
+          "contentType": "application/cloudevents+json",
+          "tags": [
+            {
+              "name": "work-planning"
+            }
+          ],
+          "payload": {
+            "title": "ProductClassified CloudEvent (consumed)",
+            "description": "CloudEvent envelope of product-master's ProductClassified, mirrored read-only from the producer's own contract. This service consumes it; it never publishes it.",
+            "allOf": [
+              "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+              {
+                "type": "object",
+                "required": [
+                  "type",
+                  "dataschema",
+                  "data"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "description": "Fixed event type (the producer's own).",
+                    "const": "com.warehouse.wms.product-master.product.ProductClassified",
+                    "x-parser-schema-id": "<anonymous-schema-162>"
+                  },
+                  "dataschema": {
+                    "type": "string",
+                    "description": "The producer's payload schema id. Overrides CloudEventBase's pattern (which only admits THIS repo's own urns): a consumed event carries the PRODUCER's urn.",
+                    "const": "urn:warehouse:product-master:events:ProductClassified:v1",
+                    "x-parser-schema-id": "<anonymous-schema-163>"
+                  },
+                  "data": {
+                    "type": "object",
+                    "description": "Full-state replacement of the SKU's classification. This service requires `sku` and a `version` of at least 1 and skips (WARN) anything else.",
+                    "required": [
+                      "sku",
+                      "handling_tags",
+                      "classification_source",
+                      "version"
+                    ],
+                    "properties": {
+                      "sku": {
+                        "type": "string",
+                        "description": "The classified SKU (also the Kafka key and the CloudEvents subject).",
+                        "x-parser-schema-id": "<anonymous-schema-165>"
+                      },
+                      "handling_tags": {
+                        "type": "array",
+                        "minItems": 1,
+                        "description": "Handling tags in stable order.",
+                        "items": {
+                          "type": "string",
+                          "enum": [
+                            "Hazmat",
+                            "Fragile",
+                            "TemperatureSensitive",
+                            "Oversized",
+                            "HighValue"
+                          ],
+                          "x-parser-schema-id": "<anonymous-schema-167>"
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-166>"
+                      },
+                      "temperature_class": {
+                        "type": "string",
+                        "description": "OPTIONAL. Present only with TemperatureSensitive.",
+                        "enum": [
+                          "Ambient",
+                          "Chilled",
+                          "Frozen"
+                        ],
+                        "x-parser-schema-id": "<anonymous-schema-168>"
+                      },
+                      "dot_hazard_class": {
+                        "type": "integer",
+                        "description": "OPTIONAL. Present only with Hazmat. Stored, not surfaced.",
+                        "minimum": 1,
+                        "maximum": 9,
+                        "x-parser-schema-id": "<anonymous-schema-169>"
+                      },
+                      "classification_source": {
+                        "type": "string",
+                        "description": "Migration artefact of the producer; ignored here.",
+                        "enum": [
+                          "native",
+                          "legacy-import"
+                        ],
+                        "x-parser-schema-id": "<anonymous-schema-170>"
+                      },
+                      "version": {
+                        "type": "integer",
+                        "description": "The producer's aggregate version after the change. The local copy applies a message only when this is greater than the stored version.",
+                        "minimum": 1,
+                        "x-parser-schema-id": "<anonymous-schema-171>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-164>"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-161>"
+              }
+            ],
+            "x-parser-schema-id": "ProductClassifiedEvent"
+          },
+          "examples": [
+            {
+              "name": "hazmatFrozen",
+              "summary": "SKU-1 classified Hazmat + TemperatureSensitive (Frozen), DOT class 3.",
+              "payload": {
+                "specversion": "1.0",
+                "id": "0f6d8a2b-3c4e-4d5f-8a9b-7c6d5e4f3a2b",
+                "source": "/warehouse/product-master",
+                "type": "com.warehouse.wms.product-master.product.ProductClassified",
+                "subject": "SKU-1",
+                "time": "2026-10-06T21:02:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:product-master:events:ProductClassified:v1",
+                "data": {
+                  "sku": "SKU-1",
+                  "handling_tags": [
+                    "Hazmat",
+                    "TemperatureSensitive"
+                  ],
+                  "temperature_class": "Frozen",
+                  "dot_hazard_class": 3,
+                  "classification_source": "native",
+                  "version": 3
+                }
+              }
+            }
+          ]
+        }
+      }
     }
   },
   "components": {
@@ -1957,6 +2102,7 @@
       "ShiftPlanCommitted": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[1]",
       "WorkUnitCreated": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[2]",
       "WorkDemandReleased": "$ref:$.channels.warehouse.network-inventory-planning.events.publish.message",
+      "ProductClassified": "$ref:$.channels.warehouse.product-master.events.publish.message",
       "WorkReleased": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[3]",
       "WorkUnitCompleted": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[4]",
       "BacklogThresholdBreached": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[5]",
@@ -1983,6 +2129,7 @@
       "ShiftPlanCommittedEvent": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[1].payload",
       "WorkUnitCreatedEvent": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[2].payload",
       "WorkDemandReleasedEvent": "$ref:$.channels.warehouse.network-inventory-planning.events.publish.message.payload",
+      "ProductClassifiedEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.payload",
       "WorkReleasedEvent": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[3].payload",
       "WorkUnitCompletedEvent": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[4].payload",
       "BacklogThresholdBreachedEvent": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[5].payload",
