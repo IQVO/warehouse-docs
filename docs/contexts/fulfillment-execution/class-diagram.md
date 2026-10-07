@@ -364,7 +364,7 @@ classDiagram
     }
     class ClassificationClient {
         <<OutboundAdapter>>
-        outbound/productclassification
+        outbound/productclassificationcopy
     }
     class FacilityLayoutClient {
         <<OutboundAdapter>>

@@ -45,6 +45,8 @@ the fleet-level index.
 | facility-layout | Every MCP tool error is `<slug>: detail`, using the REST problem slug; unmapped errors become `internal-error`. This is the convention warehouse-planning already used. | [ADR 0033](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0033-slug-prefixed-mcp-tool-errors.md) |
 | warehouse-ops-agent | A facility-layout validation rejection (a slug such as `missing-location-code` or `invalid-*`) is a 400 instead of a 502. Old slug-less messages stay 502. | [ADR 0018](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0018-mcp-tool-error-slug-classification.md) |
 | warehouse-ops-agent | `DAILY_BRIEF_PATH_TARGETS` set to `[]` or `null` fails startup with a config error naming the variable. | [ADR 0017](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0017-empty-path-targets-is-a-config-error.md) |
+| fulfillment-execution | `TaskCompleted` v1 carries an optional `order_ref` (the order id), additive on both topics. | [ADR 0040](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0040-task-completed-carries-order-ref.md) |
+| inventory-storage | A new consumer confirms an order's reservations on its last completed PICK (default off). | [ADR 0035](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0035-confirm-pick-from-task-completed.md) |
 | inventory-storage | The flaky transfer-allocation integration test was fixed at its root cause (a cold Kafka broker's fixed 5 s join backoff), and the Docs site is now built on pull requests. | [inventory-storage #146](https://github.com/IQVO/inventory-storage/pull/146) |
 
 ## Decided and kept
@@ -60,18 +62,39 @@ the fleet-level index.
 | wes-work-planning | `RateDeviationDetected` stays declared but unraised, marked "reserved" in the AsyncAPI. `UsableInventoryObserved` stays read-only context. | Detection and gating are business rules nobody has specified; reservations already guard availability. |
 | facility-layout | `FacilityLayoutImported` stays keyed by its CloudEvents id ([ADR 0034](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0034-facility-layout-imported-stays-keyed-by-cloudevents-id.md)). | No consumer needs import ordering; keying by site would be a contract change for no benefit. |
 
-## Decided, not yet buildable
+## Confirm-pick: built, switched off by default
 
-**Confirming picks in inventory-storage.** Nothing calls
-`POST /reservations/{id}/confirm-pick`, so reserved stock is never confirmed as
-picked. The decided direction is event-driven: inventory-storage consumes a
-pick-completion integration event from fulfillment-execution, with no
-synchronous cross-context call. No existing event carries what is needed (a
-reservation correlation, or demand reference plus SKU, and the picked
-quantity), so [ADR 0032](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0032-confirm-pick-event-driven.md)
-is recorded as **Proposed**. It names the missing fields and the owners:
-fulfillment-execution to publish the event, and wes-work-planning to carry the
-correlation in `WorkReleased`. It also needs a product rule for short picks.
+Nothing called `POST /reservations/{id}/confirm-pick`, so reserved stock was
+never confirmed as picked. The decision was event-driven, with no synchronous
+cross-context call, and building it corrected the first design:
+
+- A **PICK task is per order line**, not per order, and a Reservation stores only
+  its SKU, quantity and the order id (`demand_ref`). A task therefore cannot be
+  mapped to one reservation.
+- fulfillment-execution now publishes the order id as an optional `order_ref` on
+  `TaskCompleted` v1 (additive; [ADR 0040](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0040-task-completed-carries-order-ref.md)).
+  The task keeps the order id from `WorkReleased.ref` in a new nullable column;
+  transfer work is excluded.
+- inventory-storage counts an order's completed picks and confirms its active
+  reservations only when the **last** pick completes
+  ([ADR 0035](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0035-confirm-pick-from-task-completed.md),
+  which supersedes the earlier Proposed ADR 0032). Confirming on the first pick
+  would mark unpicked lines as picked with no undo; confirming late is safe
+  because a reservation keeps the stock unavailable meanwhile. The count, the
+  event-id claim and the confirmations commit in one transaction, and the
+  counter rows are swept after 30 days.
+
+The consumer is **off by default** (`TASK_COMPLETED_CONSUMER_MODE`). Turning it
+on needs the producer released first and `eventPublisher=kafka`; watch the
+`expired` outcome of `inventory.pick_confirmations`.
+
+Known limits, recorded in the ADR: **short picks are not modelled** (a task has
+no per-line quantity); tasks created before the migration, or through REST or
+MCP, carry no order id and are never confirmed this way; and the count matches
+by number, not identity, so a line already revoked or expired while its task
+still completes can make an order confirm one pick early. The per-line answer
+is for order-management to send a line number, the Reservation to store it and
+the event to carry it.
 
 ## Open modelling note
 
@@ -85,6 +108,5 @@ deprecate `buildingId` in a later, breaking ADR.
 ## Effect on the Big Picture EventStorming
 
 The [Big Picture hotspot table](/strategic-design/eventstorming-big-picture#hotspots-and-their-sources)
-now shows H6, H7, H13 and H23 as resolved by the decisions above, records H1,
-H11 and H12 as decided and kept, and notes that H19 has a decided direction
-that is blocked on ADR 0032.
+now shows H6, H7, H13, H19 and H23 as resolved by the decisions above, and
+records H1, H11 and H12 as decided and kept.

@@ -229,7 +229,7 @@ without raising `LeaseExpired`. The re-promise policy lives in
 | A lapsed lease is claimable again | Policy | `Task.IsAvailable`, `TaskRepo.FindClaimableByType` |
 | Re-promise on CPT miss | Policy (downstream) | `order-management`, [ADR-0025](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0025-cpt-missed-sweep-and-package-manifested.md) |
 | Queue depth, Package read model, Throughput rollup | Read model | `get_queue_depth.go`; `get_package.go` ([ADR-0033](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0033-package-read-model.md)); `throughput_rollup` ([ADR-0012](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0012-analytical-data-product.md)) |
-| `wes-work-planning`, `labor-performance`, `order-management`, `inventory-storage` | External system | `apis/asyncapi.yaml`; `productclassification/client.go` |
+| `wes-work-planning`, `labor-performance`, `order-management`, `product-master` | External system | `apis/asyncapi.yaml`; `inbound/kafka/product_classified_consumer.go` |
 | Claim does not require check-in | Hotspot | [Aggregates & invariants](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/ddd/aggregates-and-invariants.md) "Honest status"; `claim_next.go` never reads occupancy |
 | `ItemPicked` never raised | Hotspot | [Domain events](/contexts/fulfillment-execution/domain-events); no caller of `shared.NewItemPicked` outside tests |
 | Rebin events never leave the process | Hotspot | not in `inIntegrationContract` / `inAnalyticsContract`, not in `apis/asyncapi.yaml` ([ADR-0016](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0016-rebin-and-order-consolidation.md)) |
