@@ -203,6 +203,12 @@ analytics topic <code>warehouse.workforce.analytics</code> (dataschema
 on the current <code>ShiftPlan</code>. This is a <strong>flag, not a decision</strong>: this
 bounded context surfaces the gap and never moves anyone in response.
 Rebalancing is a human call, recorded back here as a new assignment.</p>
+<p><strong>Site scope (ADR 0034, additive).</strong> When the gap was requested for
+one canonical site, <code>data.site_code</code> carries it and <code>active_heads</code>
+counts only associates with an active shift at that site. When
+<code>site_code</code> is absent the gap is <strong>unscoped</strong> (every site together,
+the pre-ADR-0034 behaviour): consumers MUST treat absence as
+"unscoped", never as a particular site.</p>
 <p><strong>Not on the integration topic.</strong> Published only to the internal
 analytics topic <code>warehouse.workforce.analytics</code> (dataschema
 <code>urn:warehouse:workforce-management:analytics:&lt;EventName&gt;:v1</code>).</p>
@@ -220,6 +226,23 @@ analytics topic <code>warehouse.workforce.analytics</code> (dataschema
     <span class="hljs-attr">"path_id"</span>: <span class="hljs-string">"pack"</span>,
     <span class="hljs-attr">"planned_heads"</span>: <span class="hljs-number">5</span>,
     <span class="hljs-attr">"active_heads"</span>: <span class="hljs-number">3</span>
+  }
+}
+</code></pre>
+</div></div></li><li class="mt-4"><h5 class="text-xs font-bold text-gray-500">#2 Example - packUnderstaffedAtSite</h5><p class="text-xs font-bold text-gray-500">The same gap computed for site WH1 only (additive site_code).</p><div class="mt-1"><div class="prose max-w-none text-sm"><pre><code class="hljs language-json">{
+  <span class="hljs-attr">"specversion"</span>: <span class="hljs-string">"1.0"</span>,
+  <span class="hljs-attr">"id"</span>: <span class="hljs-string">"c92f6a3d-8ba5-4e1f-8d44-2f8a5c7b9e16"</span>,
+  <span class="hljs-attr">"source"</span>: <span class="hljs-string">"/warehouse/workforce-management"</span>,
+  <span class="hljs-attr">"type"</span>: <span class="hljs-string">"com.warehouse.wes.workforce-management.shiftplan.PathUnderstaffed"</span>,
+  <span class="hljs-attr">"subject"</span>: <span class="hljs-string">"pack"</span>,
+  <span class="hljs-attr">"time"</span>: <span class="hljs-string">"2026-08-22T02:15:00Z"</span>,
+  <span class="hljs-attr">"datacontenttype"</span>: <span class="hljs-string">"application/json"</span>,
+  <span class="hljs-attr">"dataschema"</span>: <span class="hljs-string">"urn:warehouse:workforce-management:analytics:PathUnderstaffed:v1"</span>,
+  <span class="hljs-attr">"data"</span>: {
+    <span class="hljs-attr">"path_id"</span>: <span class="hljs-string">"pack"</span>,
+    <span class="hljs-attr">"planned_heads"</span>: <span class="hljs-number">5</span>,
+    <span class="hljs-attr">"active_heads"</span>: <span class="hljs-number">2</span>,
+    <span class="hljs-attr">"site_code"</span>: <span class="hljs-string">"WH1"</span>
   }
 }
 </code></pre>
@@ -425,6 +448,12 @@ analytics topic <code>warehouse.workforce.analytics</code> (dataschema
 on the current <code>ShiftPlan</code>. This is a <strong>flag, not a decision</strong>: this
 bounded context surfaces the gap and never moves anyone in response.
 Rebalancing is a human call, recorded back here as a new assignment.</p>
+<p><strong>Site scope (ADR 0034, additive).</strong> When the gap was requested for
+one canonical site, <code>data.site_code</code> carries it and <code>active_heads</code>
+counts only associates with an active shift at that site. When
+<code>site_code</code> is absent the gap is <strong>unscoped</strong> (every site together,
+the pre-ADR-0034 behaviour): consumers MUST treat absence as
+"unscoped", never as a particular site.</p>
 <p><strong>Not on the integration topic.</strong> Published only to the internal
 analytics topic <code>warehouse.workforce.analytics</code> (dataschema
 <code>urn:warehouse:workforce-management:analytics:&lt;EventName&gt;:v1</code>).</p>

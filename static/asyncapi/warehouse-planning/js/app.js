@@ -320,7 +320,7 @@
                       },
                       "data": {
                         "type": "object",
-                        "description": "Payload of CapacityPlanPublished.",
+                        "description": "Payload of CapacityPlanPublished. site_id is ADDITIVE on the v1 payload — present for plans created after migration 0008, omitted for older plans — and a consumer must treat its absence as unknown (never derive it from warehouse_id or location).",
                         "required": [
                           "plan_id",
                           "warehouse_id",
@@ -348,72 +348,78 @@
                             "example": "WH-1",
                             "x-parser-schema-id": "<anonymous-schema-29>"
                           },
+                          "site_id": {
+                            "type": "string",
+                            "description": "Additive, optional. Canonical site the plan is scoped to (a facility-layout Site site_code, the same identifier its SiteCapabilityChanged event publishes). Omitted for plans stored before migration 0008.",
+                            "example": "SIM1",
+                            "x-parser-schema-id": "<anonymous-schema-30>"
+                          },
                           "location": {
                             "type": "string",
                             "description": "ProcessCapacity location the plan evaluates.",
                             "example": "PATH-ZONE-A",
-                            "x-parser-schema-id": "<anonymous-schema-30>"
+                            "x-parser-schema-id": "<anonymous-schema-31>"
                           },
                           "path_id": {
                             "type": "string",
                             "description": "ProcessPath evaluated.",
                             "example": "pick-rebin-pack",
-                            "x-parser-schema-id": "<anonymous-schema-31>"
+                            "x-parser-schema-id": "<anonymous-schema-32>"
                           },
                           "window_start": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Planning window start (RFC 3339, UTC).",
                             "example": "2026-10-05T08:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-32>"
+                            "x-parser-schema-id": "<anonymous-schema-33>"
                           },
                           "window_end": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Planning window end, exclusive (RFC 3339, UTC).",
                             "example": "2026-10-05T16:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-33>"
+                            "x-parser-schema-id": "<anonymous-schema-34>"
                           },
                           "assigned_demand": {
                             "type": "number",
                             "format": "double",
                             "description": "Orders assigned to the window.",
                             "example": 12000,
-                            "x-parser-schema-id": "<anonymous-schema-34>"
+                            "x-parser-schema-id": "<anonymous-schema-35>"
                           },
                           "path_capacity": {
                             "type": "number",
                             "format": "double",
                             "description": "Normalized path capacity, ORDER per HOUR.",
                             "example": 1000,
-                            "x-parser-schema-id": "<anonymous-schema-35>"
+                            "x-parser-schema-id": "<anonymous-schema-36>"
                           },
                           "capacity_over_window": {
                             "type": "number",
                             "format": "double",
                             "description": "path_capacity x window hours, in orders.",
                             "example": 8000,
-                            "x-parser-schema-id": "<anonymous-schema-36>"
+                            "x-parser-schema-id": "<anonymous-schema-37>"
                           },
                           "shortage": {
                             "type": "number",
                             "format": "double",
                             "description": "max(0, assigned_demand - capacity_over_window), in orders. Never negative.",
                             "example": 4000,
-                            "x-parser-schema-id": "<anonymous-schema-37>"
+                            "x-parser-schema-id": "<anonymous-schema-38>"
                           },
                           "bottleneck_step": {
                             "type": "string",
                             "description": "The ProcessPath step limiting end-to-end flow.",
                             "example": "REBIN",
-                            "x-parser-schema-id": "<anonymous-schema-38>"
+                            "x-parser-schema-id": "<anonymous-schema-39>"
                           },
                           "published_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the plan was published (RFC 3339, UTC).",
                             "example": "2026-10-04T21:45:10Z",
-                            "x-parser-schema-id": "<anonymous-schema-39>"
+                            "x-parser-schema-id": "<anonymous-schema-40>"
                           }
                         },
                         "x-parser-schema-id": "CapacityPlanPublishedData"
@@ -440,6 +446,7 @@
                     "data": {
                       "plan_id": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
                       "warehouse_id": "WH-1",
+                      "site_id": "SIM1",
                       "location": "PATH-ZONE-A",
                       "path_id": "pick-rebin-pack",
                       "window_start": "2026-10-05T08:00:00Z",
@@ -478,11 +485,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityShortageDetected",
-                        "x-parser-schema-id": "<anonymous-schema-41>"
+                        "x-parser-schema-id": "<anonymous-schema-42>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:warehouse-planning:events:CapacityShortageDetected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-42>"
+                        "x-parser-schema-id": "<anonymous-schema-43>"
                       },
                       "data": {
                         "type": "object",
@@ -504,72 +511,72 @@
                             "type": "string",
                             "description": "The CapacityPlan id (UUID); equals the CloudEvents subject.",
                             "example": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
-                            "x-parser-schema-id": "<anonymous-schema-43>"
+                            "x-parser-schema-id": "<anonymous-schema-44>"
                           },
                           "warehouse_id": {
                             "type": "string",
                             "description": "Warehouse the plan is for.",
                             "example": "WH-1",
-                            "x-parser-schema-id": "<anonymous-schema-44>"
+                            "x-parser-schema-id": "<anonymous-schema-45>"
                           },
                           "location": {
                             "type": "string",
                             "description": "ProcessCapacity location the plan evaluates.",
                             "example": "PATH-ZONE-A",
-                            "x-parser-schema-id": "<anonymous-schema-45>"
+                            "x-parser-schema-id": "<anonymous-schema-46>"
                           },
                           "path_id": {
                             "type": "string",
                             "description": "ProcessPath evaluated.",
                             "example": "pick-rebin-pack",
-                            "x-parser-schema-id": "<anonymous-schema-46>"
+                            "x-parser-schema-id": "<anonymous-schema-47>"
                           },
                           "window_start": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Planning window start (RFC 3339, UTC).",
                             "example": "2026-10-05T08:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-47>"
+                            "x-parser-schema-id": "<anonymous-schema-48>"
                           },
                           "window_end": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Planning window end, exclusive (RFC 3339, UTC).",
                             "example": "2026-10-05T16:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-48>"
+                            "x-parser-schema-id": "<anonymous-schema-49>"
                           },
                           "assigned_demand": {
                             "type": "number",
                             "format": "double",
                             "description": "Orders assigned to the window.",
                             "example": 12000,
-                            "x-parser-schema-id": "<anonymous-schema-49>"
+                            "x-parser-schema-id": "<anonymous-schema-50>"
                           },
                           "capacity_over_window": {
                             "type": "number",
                             "format": "double",
                             "description": "path_capacity x window hours, in orders.",
                             "example": 8000,
-                            "x-parser-schema-id": "<anonymous-schema-50>"
+                            "x-parser-schema-id": "<anonymous-schema-51>"
                           },
                           "shortage": {
                             "type": "number",
                             "format": "double",
                             "description": "max(0, assigned_demand - capacity_over_window), in orders. Never negative.",
                             "example": 4000,
-                            "x-parser-schema-id": "<anonymous-schema-51>"
+                            "x-parser-schema-id": "<anonymous-schema-52>"
                           },
                           "bottleneck_step": {
                             "type": "string",
                             "description": "The ProcessPath step limiting end-to-end flow.",
                             "example": "REBIN",
-                            "x-parser-schema-id": "<anonymous-schema-52>"
+                            "x-parser-schema-id": "<anonymous-schema-53>"
                           }
                         },
                         "x-parser-schema-id": "CapacityShortageDetectedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-40>"
+                    "x-parser-schema-id": "<anonymous-schema-41>"
                   }
                 ],
                 "x-parser-schema-id": "CapacityShortageDetectedEvent"
@@ -626,11 +633,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.warehouse-planning.capacityplan.BottleneckDetected",
-                        "x-parser-schema-id": "<anonymous-schema-54>"
+                        "x-parser-schema-id": "<anonymous-schema-55>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:warehouse-planning:events:BottleneckDetected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-55>"
+                        "x-parser-schema-id": "<anonymous-schema-56>"
                       },
                       "data": {
                         "type": "object",
@@ -650,58 +657,58 @@
                             "type": "string",
                             "description": "The CapacityPlan id (UUID); equals the CloudEvents subject.",
                             "example": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
-                            "x-parser-schema-id": "<anonymous-schema-56>"
+                            "x-parser-schema-id": "<anonymous-schema-57>"
                           },
                           "warehouse_id": {
                             "type": "string",
                             "description": "Warehouse the plan is for.",
                             "example": "WH-1",
-                            "x-parser-schema-id": "<anonymous-schema-57>"
+                            "x-parser-schema-id": "<anonymous-schema-58>"
                           },
                           "location": {
                             "type": "string",
                             "description": "ProcessCapacity location the plan evaluates.",
                             "example": "PATH-ZONE-A",
-                            "x-parser-schema-id": "<anonymous-schema-58>"
+                            "x-parser-schema-id": "<anonymous-schema-59>"
                           },
                           "path_id": {
                             "type": "string",
                             "description": "ProcessPath evaluated.",
                             "example": "pick-rebin-pack",
-                            "x-parser-schema-id": "<anonymous-schema-59>"
+                            "x-parser-schema-id": "<anonymous-schema-60>"
                           },
                           "window_start": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Planning window start (RFC 3339, UTC).",
                             "example": "2026-10-05T08:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-60>"
+                            "x-parser-schema-id": "<anonymous-schema-61>"
                           },
                           "window_end": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Planning window end, exclusive (RFC 3339, UTC).",
                             "example": "2026-10-05T16:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-61>"
+                            "x-parser-schema-id": "<anonymous-schema-62>"
                           },
                           "bottleneck_step": {
                             "type": "string",
                             "description": "The ProcessPath step limiting end-to-end flow.",
                             "example": "REBIN",
-                            "x-parser-schema-id": "<anonymous-schema-62>"
+                            "x-parser-schema-id": "<anonymous-schema-63>"
                           },
                           "path_capacity": {
                             "type": "number",
                             "format": "double",
                             "description": "Normalized path capacity, ORDER per HOUR.",
                             "example": 1000,
-                            "x-parser-schema-id": "<anonymous-schema-63>"
+                            "x-parser-schema-id": "<anonymous-schema-64>"
                           }
                         },
                         "x-parser-schema-id": "BottleneckDetectedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-53>"
+                    "x-parser-schema-id": "<anonymous-schema-54>"
                   }
                 ],
                 "x-parser-schema-id": "BottleneckDetectedEvent"
@@ -770,15 +777,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanCreated",
-                        "x-parser-schema-id": "<anonymous-schema-65>"
+                        "x-parser-schema-id": "<anonymous-schema-66>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:warehouse-planning:analytics:CapacityPlanCreated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-66>"
+                        "x-parser-schema-id": "<anonymous-schema-67>"
                       },
                       "data": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-64>"
+                    "x-parser-schema-id": "<anonymous-schema-65>"
                   }
                 ],
                 "x-parser-schema-id": "CapacityPlanCreatedAnalyticsEvent"
@@ -834,11 +841,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanPublished",
-                        "x-parser-schema-id": "<anonymous-schema-68>"
+                        "x-parser-schema-id": "<anonymous-schema-69>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:warehouse-planning:analytics:CapacityPlanPublished:v1",
-                        "x-parser-schema-id": "<anonymous-schema-69>"
+                        "x-parser-schema-id": "<anonymous-schema-70>"
                       },
                       "data": {
                         "description": "Payload of CapacityPlanPublished on the analytics topic -- the integration payload plus binding_constraint.",
@@ -854,16 +861,16 @@
                                 "type": "string",
                                 "description": "Additive, analytics-only. The constraint type binding the bottleneck step (LABOR, STATION, ...); empty for a plan created before it was recorded.\n",
                                 "example": "STATION",
-                                "x-parser-schema-id": "<anonymous-schema-71>"
+                                "x-parser-schema-id": "<anonymous-schema-72>"
                               }
                             },
-                            "x-parser-schema-id": "<anonymous-schema-70>"
+                            "x-parser-schema-id": "<anonymous-schema-71>"
                           }
                         ],
                         "x-parser-schema-id": "CapacityPlanPublishedAnalyticsData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-67>"
+                    "x-parser-schema-id": "<anonymous-schema-68>"
                   }
                 ],
                 "x-parser-schema-id": "CapacityPlanPublishedAnalyticsEvent"
@@ -884,6 +891,7 @@
                     "data": {
                       "plan_id": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
                       "warehouse_id": "WH-1",
+                      "site_id": "SIM1",
                       "location": "PATH-ZONE-A",
                       "path_id": "pick-rebin-pack",
                       "window_start": "2026-10-05T08:00:00Z",
@@ -920,15 +928,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityShortageDetected",
-                        "x-parser-schema-id": "<anonymous-schema-73>"
+                        "x-parser-schema-id": "<anonymous-schema-74>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:warehouse-planning:analytics:CapacityShortageDetected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-74>"
+                        "x-parser-schema-id": "<anonymous-schema-75>"
                       },
                       "data": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[2].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-72>"
+                    "x-parser-schema-id": "<anonymous-schema-73>"
                   }
                 ],
                 "x-parser-schema-id": "CapacityShortageDetectedAnalyticsEvent"
@@ -982,15 +990,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.warehouse-planning.capacityplan.BottleneckDetected",
-                        "x-parser-schema-id": "<anonymous-schema-76>"
+                        "x-parser-schema-id": "<anonymous-schema-77>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:warehouse-planning:analytics:BottleneckDetected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-77>"
+                        "x-parser-schema-id": "<anonymous-schema-78>"
                       },
                       "data": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[3].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-75>"
+                    "x-parser-schema-id": "<anonymous-schema-76>"
                   }
                 ],
                 "x-parser-schema-id": "BottleneckDetectedAnalyticsEvent"
@@ -1060,11 +1068,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted",
-                    "x-parser-schema-id": "<anonymous-schema-79>"
+                    "x-parser-schema-id": "<anonymous-schema-80>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:workforce-management:events:ShiftPlanCommitted:v1",
-                    "x-parser-schema-id": "<anonymous-schema-80>"
+                    "x-parser-schema-id": "<anonymous-schema-81>"
                   },
                   "data": {
                     "type": "object",
@@ -1079,41 +1087,41 @@
                       "building_id": {
                         "type": "string",
                         "example": "BLD1",
-                        "x-parser-schema-id": "<anonymous-schema-81>"
+                        "x-parser-schema-id": "<anonymous-schema-82>"
                       },
                       "shift_id": {
                         "type": "string",
                         "example": "SHIFT1",
-                        "x-parser-schema-id": "<anonymous-schema-82>"
+                        "x-parser-schema-id": "<anonymous-schema-83>"
                       },
                       "path_id": {
                         "type": "string",
                         "description": "Becomes the ProcessType (upper-cased) of the LABOR constraint.",
                         "example": "pack",
-                        "x-parser-schema-id": "<anonymous-schema-83>"
+                        "x-parser-schema-id": "<anonymous-schema-84>"
                       },
                       "planned_heads": {
                         "type": "integer",
                         "example": 3,
-                        "x-parser-schema-id": "<anonymous-schema-84>"
+                        "x-parser-schema-id": "<anonymous-schema-85>"
                       },
                       "planned_rate": {
                         "type": "number",
                         "format": "double",
                         "example": 50,
-                        "x-parser-schema-id": "<anonymous-schema-85>"
+                        "x-parser-schema-id": "<anonymous-schema-86>"
                       },
                       "planned_hours": {
                         "type": "number",
                         "format": "double",
                         "example": 8,
-                        "x-parser-schema-id": "<anonymous-schema-86>"
+                        "x-parser-schema-id": "<anonymous-schema-87>"
                       }
                     },
                     "x-parser-schema-id": "ShiftPlanCommittedData"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-78>"
+                "x-parser-schema-id": "<anonymous-schema-79>"
               }
             ],
             "x-parser-schema-id": "ShiftPlanCommittedEvent"
@@ -1181,11 +1189,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered",
-                        "x-parser-schema-id": "<anonymous-schema-88>"
+                        "x-parser-schema-id": "<anonymous-schema-89>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:LocationSlotRegistered:v1",
-                        "x-parser-schema-id": "<anonymous-schema-89>"
+                        "x-parser-schema-id": "<anonymous-schema-90>"
                       },
                       "data": {
                         "type": "object",
@@ -1199,38 +1207,38 @@
                           "locationCode": {
                             "type": "string",
                             "example": "A-01-01",
-                            "x-parser-schema-id": "<anonymous-schema-90>"
+                            "x-parser-schema-id": "<anonymous-schema-91>"
                           },
                           "zoneId": {
                             "type": "string",
                             "example": "ZONE-A",
-                            "x-parser-schema-id": "<anonymous-schema-91>"
+                            "x-parser-schema-id": "<anonymous-schema-92>"
                           },
                           "locationType": {
                             "type": "string",
                             "example": "BULK",
-                            "x-parser-schema-id": "<anonymous-schema-92>"
+                            "x-parser-schema-id": "<anonymous-schema-93>"
                           },
                           "role": {
                             "type": "string",
                             "description": "Storage (default) tallies storage positions per locationType; WorkCenter tallies stations per activity.",
                             "example": "Storage",
-                            "x-parser-schema-id": "<anonymous-schema-93>"
+                            "x-parser-schema-id": "<anonymous-schema-94>"
                           },
                           "activities": {
                             "type": "array",
                             "description": "Present only when role is WorkCenter.",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-95>"
+                              "x-parser-schema-id": "<anonymous-schema-96>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-94>"
+                            "x-parser-schema-id": "<anonymous-schema-95>"
                           }
                         },
                         "x-parser-schema-id": "LocationSlotRegisteredData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-87>"
+                    "x-parser-schema-id": "<anonymous-schema-88>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotRegisteredEvent"
@@ -1281,11 +1289,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned",
-                        "x-parser-schema-id": "<anonymous-schema-97>"
+                        "x-parser-schema-id": "<anonymous-schema-98>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:LocationSlotDecommissioned:v1",
-                        "x-parser-schema-id": "<anonymous-schema-98>"
+                        "x-parser-schema-id": "<anonymous-schema-99>"
                       },
                       "data": {
                         "type": "object",
@@ -1297,13 +1305,13 @@
                           "locationCode": {
                             "type": "string",
                             "example": "A-01-01",
-                            "x-parser-schema-id": "<anonymous-schema-99>"
+                            "x-parser-schema-id": "<anonymous-schema-100>"
                           }
                         },
                         "x-parser-schema-id": "LocationSlotDecommissionedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-96>"
+                    "x-parser-schema-id": "<anonymous-schema-97>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotDecommissionedEvent"
@@ -1368,11 +1376,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderAllocated",
-                        "x-parser-schema-id": "<anonymous-schema-101>"
+                        "x-parser-schema-id": "<anonymous-schema-102>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:events:OrderAllocated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-102>"
+                        "x-parser-schema-id": "<anonymous-schema-103>"
                       },
                       "data": {
                         "type": "object",
@@ -1386,14 +1394,14 @@
                             "type": "string",
                             "description": "Must equal the CloudEvents `subject`.",
                             "example": "ord-7c9e6679-7d5a-4b37-b2f1-93b0c4a1d8f2",
-                            "x-parser-schema-id": "<anonymous-schema-103>"
+                            "x-parser-schema-id": "<anonymous-schema-104>"
                           },
                           "promise_date": {
                             "type": "string",
                             "format": "date-time",
                             "description": "The order's promise cutoff instant. The window predicate is applied to it.",
                             "example": "2026-10-05T10:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-104>"
+                            "x-parser-schema-id": "<anonymous-schema-105>"
                           },
                           "lines": {
                             "type": "array",
@@ -1403,18 +1411,18 @@
                               "properties": {
                                 "line_no": {
                                   "type": "integer",
-                                  "x-parser-schema-id": "<anonymous-schema-107>"
+                                  "x-parser-schema-id": "<anonymous-schema-108>"
                                 }
                               },
-                              "x-parser-schema-id": "<anonymous-schema-106>"
+                              "x-parser-schema-id": "<anonymous-schema-107>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-105>"
+                            "x-parser-schema-id": "<anonymous-schema-106>"
                           }
                         },
                         "x-parser-schema-id": "OrderAllocationData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-100>"
+                    "x-parser-schema-id": "<anonymous-schema-101>"
                   }
                 ],
                 "x-parser-schema-id": "OrderAllocatedEvent"
@@ -1479,15 +1487,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderPartiallyAllocated",
-                        "x-parser-schema-id": "<anonymous-schema-109>"
+                        "x-parser-schema-id": "<anonymous-schema-110>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:events:OrderPartiallyAllocated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-110>"
+                        "x-parser-schema-id": "<anonymous-schema-111>"
                       },
                       "data": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-108>"
+                    "x-parser-schema-id": "<anonymous-schema-109>"
                   }
                 ],
                 "x-parser-schema-id": "OrderPartiallyAllocatedEvent"
