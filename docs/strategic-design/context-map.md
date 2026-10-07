@@ -9,9 +9,9 @@ description: Fleet-wide ddd-crew context map of the twelve bounded contexts — 
 
 This is the fleet-wide [ddd-crew Context Map](https://github.com/ddd-crew/context-mapping)
 of the twelve backend bounded contexts. The twelfth, `product-master`, was
-decided on 2026-10-06 and is being built: its edges below are all planned or
-in progress. Each context's repository has its own
-context map, synced to this site and grounded in that repo's code. This page
+decided on 2026-10-06; it and its four `ProductClassified` consumers are now
+merged (K20), although the reference deployment does not run it yet. Each
+context's repository has its own context map, synced to this site and grounded in that repo's code. This page
 puts those maps together. Where two contexts' maps describe the same edge
 differently, this page checked the code and the reference deployment
 (`warehouse-infra` on `develop`) and records the difference under
@@ -29,8 +29,7 @@ Per-context maps (the source for every row below):
 [warehouse-ops-agent](/contexts/warehouse-ops-agent/context-map) ·
 [network-fulfillment](/contexts/network-fulfillment/context-map) ·
 [warehouse-planning](/contexts/warehouse-planning/context-map) ·
-[product-master](/contexts/product-master/bounded-context-canvas) (canvas;
-no synced context map yet)
+[product-master](/contexts/product-master/context-map)
 
 **Pattern legend:** **U/D** upstream/downstream · **OHS** Open Host Service ·
 **PL** Published Language · **CF** Conformist · **ACL** Anti-Corruption Layer ·
@@ -49,6 +48,8 @@ no context imports a sibling's types, and every per-context map says so.
 - **absent-planned**: a relationship the domain needs or an ADR names, with
   no wire yet.
 - **deliberately absent**: no relationship, by decision (Separate Ways).
+- **retired**: the code for the edge was removed and the consumer rejects
+  the old mode at boot; the row stays for traceability.
 
 Many consumers ship with a `permissive` / `file` / `log` binary default and
 are switched on per deployment. When a per-context page calls an edge
@@ -56,6 +57,13 @@ are switched on per deployment. When a per-context page calls an edge
 on (`warehouse-infra` `terraform/locals.tf` `sync_edge_env`,
 `terraform/services.tf`, `helm-values/*.yaml`) and **wired-but-unused** if it
 does not.
+
+One exception: **K20** (`product-master` → its four local-copy consumers) is
+marked **live** because the producer and every consumer are merged on
+`develop` (inventory-storage ADR 0034, order-management ADR 0036,
+wes-work-planning ADR 0035, fulfillment-execution ADR 0039), while
+`warehouse-infra` has not yet caught up; its row says exactly what the
+reference deployment is missing.
 
 ## The whole map
 
@@ -74,7 +82,7 @@ flowchart LR
     subgraph WMS["wms subdomain"]
         FL["facility-layout<br/>Generic"]
         INV["inventory-storage<br/>Core"]
-        PM["product-master<br/>Supporting<br/>new, being built"]
+        PM["product-master<br/>Supporting"]
     end
 
     subgraph WES["wes subdomain"]
@@ -112,8 +120,6 @@ flowchart LR
     WPL ==>|"Kafka CapacityPlan events"| OM
 
     INV -->|"REST reservations"| OM
-    INV -->|"REST product classification"| WP
-    INV -->|"REST product classification"| FE
     FL -->|"REST distance"| WP
     FE -->|"REST installed capacity"| WFM
     OM -->|"REST held orders, release, cancel"| NF
@@ -141,15 +147,14 @@ flowchart LR
     FE -.-x|"deliberately absent"| WCS
 
     %% product-master (ADR 0001, 0003). The four Published Language edges are
-    %% dashed while each consumer is being built. When a consumer ships its
-    %% warehouse.product-master.events consumer and the reference deployment
-    %% enables it, flip that edge from -.-> to ==> and drop "planned / in progress"
-    %% from its label (and set its row in the edge table to live). Delete the
-    %% INV -.-> PM migration edge at stage E, when the legacy importer is removed.
-    PM -.->|"Kafka ProductClassified,<br/>planned / in progress"| INV
-    PM -.->|"Kafka ProductClassified,<br/>planned / in progress"| OM
-    PM -.->|"Kafka ProductClassified,<br/>planned / in progress"| WP
-    PM -.->|"Kafka ProductClassified,<br/>planned / in progress"| FE
+    %% live: every consumer keeps a version-guarded local copy (INV ADR 0034,
+    %% OM ADR 0036, WP ADR 0035, FE ADR 0039). They replaced the REST
+    %% classification lookups R2, R3 and R4. Delete the INV -.-> PM migration
+    %% edge at stage E, when the legacy importer is removed.
+    PM ==>|"Kafka ProductClassified,<br/>local copy"| INV
+    PM ==>|"Kafka ProductClassified,<br/>local copy"| OM
+    PM ==>|"Kafka ProductClassified,<br/>local copy"| WP
+    PM ==>|"Kafka ProductClassified,<br/>local copy"| FE
     INV -.->|"Kafka legacy ProductClassified,<br/>Conformist, migration only"| PM
 
     classDef core fill:#1e3a8a,stroke:#1e293b,color:#fff;
@@ -166,7 +171,9 @@ flowchart LR
 structured mode on one shared broker). Thin solid arrows are live synchronous
 REST or MCP reads. Every REST and MCP surface in the fleet is unauthenticated.
 Dotted arrows are wired-but-unused or absent-planned, as the table states.
-The five dotted `product-master` edges are planned / in progress (K20, K21).
+The four thick `product-master` edges are K20; the dotted
+`inventory-storage` → `product-master` edge is the migration-only legacy
+import (K21).
 The crossed edge is deliberately absent. `order-management` is coloured with
 the Supporting contexts because it is classified Generic/Supporting (see
 [Subdomain Classification](/strategic-design/subdomain-classification)).
@@ -208,8 +215,8 @@ Omitted from the diagram:
 | K17 | `labor-performance` → `workforce-management` | OHS + PL / CF + ACL | `warehouse.labor-performance.events`: `TaskPerformanceRecorded` (measured rate and idle share) | **live** with `LABOR_PERFORMANCE_MODE=kafka-cache`, which the reference deployment sets | [LP](/contexts/labor-performance/context-map), [WFM](/contexts/workforce-management/context-map) |
 | K18 | `warehouse-planning` → `order-management` | OHS + PL / ACL (local read model) | `warehouse.warehouse-planning.events`: `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected`. `BottleneckDetected` is ignored | **live**. It is opt-in (`PLANNED_CAPACITY_CONSUMER_GROUP`, OM ADR 0031), and the reference deployment sets it (`helm-values/order-management.yaml`, `plannedCapacity.consumerGroup`). The read model only annotates orders and serves `GET /planned-capacity`. No promise moves | [WPL](/contexts/warehouse-planning/context-map), [OM](/contexts/order-management/context-map) |
 | K19 | `network-fulfillment` → any subscriber | OHS + PL / — | `warehouse.network-fulfillment.events`: `networkorder.*` | **wired-but-unused**. Published only with `EVENT_PUBLISHER=kafka` (chart default `log`), and no consumer exists in the fleet | [NF](/contexts/network-fulfillment/context-map) |
-| K20 | `product-master` → `inventory-storage`, `order-management`, `wes-work-planning`, `fulfillment-execution` | PL / local copy per consumer (one row per SKU, applied only when the event `version` is newer) | `warehouse.product-master.events`: `ProductClassified` | **planned / in progress** (product-master ADR 0001 and ADR 0003, stages C and D). When the consumers ship, this edge replaces the live classification lookups R2, R3 and R4 | [PM](/contexts/product-master/bounded-context-canvas) |
-| K21 | `inventory-storage` → `product-master` | CF, migration only | `warehouse.inventory.events`: `com.warehouse.wms.inventory-storage.product.ProductClassified`, read by product-master's legacy importer (`LEGACY_IMPORT_CONSUMER_GROUP`) | **planned / in progress**. Removed at stage E together with the importer (product-master ADR 0003) | [PM](/contexts/product-master/bounded-context-canvas) |
+| K20 | `product-master` → `inventory-storage`, `order-management`, `wes-work-planning`, `fulfillment-execution` | PL / local copy per consumer (one row per SKU, applied only when the event `version` is newer) | `warehouse.product-master.events`: `ProductClassified` | **live** in code: every consumer is merged on `develop` (INV ADR 0034, consumer group `PRODUCT_MASTER_CONSUMER_GROUP`; OM ADR 0036, WP ADR 0035 and FE ADR 0039, `PRODUCT_CLASSIFICATION_MODE=kafka` with `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`). It replaced the classification lookups R2, R3 and R4 (product-master ADR 0003, stages C and D). Not yet in the reference deployment: `warehouse-infra` `develop` does not deploy `product-master` and still sets `PRODUCT_CLASSIFICATION_MODE=http` for WP and FE | [PM](/contexts/product-master/context-map), [INV](/contexts/inventory-storage/context-map), [OM](/contexts/order-management/context-map), [WP](/contexts/wes-work-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
+| K21 | `inventory-storage` → `product-master` | CF, migration only | `warehouse.inventory.events`: `com.warehouse.wms.inventory-storage.product.ProductClassified`, read by product-master's legacy importer (`LEGACY_IMPORT_CONSUMER_GROUP`) | **wired, migration only**. The importer is merged and opt-in; on `inventory-storage`'s `develop` the legacy type is emitted only by its one-shot backfill command. Removed at stage E together with the importer (product-master ADR 0003) | [PM](/contexts/product-master/context-map) |
 
 Published types with no consumer, as stated by their owners:
 
@@ -232,9 +239,9 @@ draw those edges.
 | # | Upstream → Downstream (caller) | Pattern (U / D) | Technology | Status | Source |
 | --- | --- | --- | --- | --- | --- |
 | R1 | `inventory-storage` → `order-management` | OHS + PL / C/S + ACL | `POST /reservations` (with `Idempotency-Key`), `DELETE /reservations/{id}` | **live** (`INVENTORY_STORAGE_MODE=http`) | [INV](/contexts/inventory-storage/context-map), [OM](/contexts/order-management/context-map) |
-| R2 | `inventory-storage` → `order-management` | OHS + PL / C/S + ACL | `GET /products/{sku}/classification` (fail-open routing hint) | **wired-but-unused**. `PRODUCT_CLASSIFICATION_MODE` defaults to `permissive`, and the reference deployment sets it for WP and FE but not for OM | [OM](/contexts/order-management/context-map), [INV](/contexts/inventory-storage/context-map) |
-| R3 | `inventory-storage` → `wes-work-planning` | OHS / CF | `GET /products/{sku}/classification` at release | **live** (`PRODUCT_CLASSIFICATION_MODE=http` in `sync_edge_env`) | [INV](/contexts/inventory-storage/context-map), [WP](/contexts/wes-work-planning/context-map) |
-| R4 | `inventory-storage` → `fulfillment-execution` | OHS / ACL | `GET /products/{sku}/classification` at seal time | **live** (`PRODUCT_CLASSIFICATION_MODE=http` in `sync_edge_env`) | [INV](/contexts/inventory-storage/context-map), [FE](/contexts/fulfillment-execution/context-map) |
+| R2 | `inventory-storage` → `order-management` | OHS + PL / C/S + ACL | `GET /products/{sku}/classification` (fail-open routing hint) | **retired** by OM ADR 0036: the `http` mode is removed and rejected at boot, replaced by K20 | [OM](/contexts/order-management/context-map), [INV](/contexts/inventory-storage/context-map) |
+| R3 | `inventory-storage` → `wes-work-planning` | OHS / CF | `GET /products/{sku}/classification` at release | **retired** by WP ADR 0035: the `http` mode is removed and rejected at boot, replaced by K20. `sync_edge_env` still sets `PRODUCT_CLASSIFICATION_MODE=http` for WP, which the current binary refuses | [INV](/contexts/inventory-storage/context-map), [WP](/contexts/wes-work-planning/context-map) |
+| R4 | `inventory-storage` → `fulfillment-execution` | OHS / ACL | `GET /products/{sku}/classification` at seal time | **retired** by FE ADR 0039: the `http` mode is removed and rejected at boot, replaced by K20. `sync_edge_env` still sets `PRODUCT_CLASSIFICATION_MODE=http` for FE, which the current binary refuses | [INV](/contexts/inventory-storage/context-map), [FE](/contexts/fulfillment-execution/context-map) |
 | R5 | `inventory-storage` → `network-fulfillment` | OHS / CF | `GET /inventory/{sku}/usable` | **wired-but-unused**. The client is built only inside the `CAPABILITY_OFFER_ENABLED` wiring | [NF](/contexts/network-fulfillment/context-map), [INV](/contexts/inventory-storage/context-map) |
 | R6 | `facility-layout` → `inventory-storage` | OHS / ACL | `GET /locations/{locationCode}/classification` | **wired-but-unused**. This is the rollback for K4 (`LOCATION_LOOKUP_MODE=http`) | [FL](/contexts/facility-layout/context-map), [INV](/contexts/inventory-storage/context-map) |
 | R7 | `facility-layout` → `wes-work-planning` | OHS + PL / CF | `GET /distance?from=&to=` at shift-plan commit | **live** (`TRAVEL_DISTANCE_MODE=http` in `sync_edge_env`) | [FL](/contexts/facility-layout/context-map), [WP](/contexts/wes-work-planning/context-map) |
@@ -308,7 +315,7 @@ The context maps declare these pairs as having no relationship, by decision:
   `inventory-storage`**: "stock is not capacity".
 - **`fulfillment-execution` does not consume the inventory, facility or order
   topics.** Those facts reach it only through what `wes-work-planning`
-  releases, plus R4 and R8.
+  releases, plus R8; classifications reach it from `product-master` (K20).
 - **`network-fulfillment` ↔ `facility-layout`, `workforce-management`,
   `labor-performance`, `warehouse-planning`, `warehouse-ops-agent`.**
 
@@ -324,9 +331,9 @@ places where two synced pages describe the same edge differently.
 | K10 `process-path-management` → `network-fulfillment` | PPM: **Live** | NF: **Wired, opt-in** | NF is correct. `network-fulfillment`'s `cmd/netfulfil/main.go` starts the cache only inside `wireCapabilityOffer`, which returns early unless `CAPABILITY_OFFER_ENABLED=true` (default false). The reference deployment does not set it |
 | K13 `wes-work-planning` → `network-fulfillment` | WP: **Live** (behind NF's `CAPABILITY_OFFER_ENABLED`) | NF: **Wired, opt-in** | Same gate as K10, so **wired-but-unused** |
 | R5 `inventory-storage` → `network-fulfillment` | INV: **Live**, "no mode switch" | NF: **Wired, opt-in** | NF is correct. `wireInventoryClient()` is called only from `wireCapabilityOffer` |
-| R2 OM product-classification lookup | INV: **Live** in the cluster. OM: live when `PRODUCT_CLASSIFICATION_MODE=http` | — | `warehouse-infra` sets `PRODUCT_CLASSIFICATION_MODE=http` only for `wes-work-planning` and `fulfillment-execution`, and OM's chart does not render the variable. OM's binary default is `permissive`, so this edge is **wired-but-unused** in the reference deployment. The reservation calls (R1) are live |
-| R3, R7 (WP's classification and distance lookups) | WP: **Wired**, the default `permissive` never calls out | INV: live when the caller sets `http`. FL: **Live** | Both are **live** in the reference deployment (`sync_edge_env["wes-work-planning"]`). WP's page describes the binary default |
-| R4 (FE's classification lookup), K8 for FE | FE: **Opt-in** | INV, PPM: live | Both are **live** in the reference deployment. FE's page describes the binary default |
+| R2, R3, R4 product-classification lookups | older synced INV, WP and FE pages: live or opt-in over REST | product-master, OM, WP, FE ADRs: replaced by a Kafka local copy | The consumers' `develop` code wins: each rejects `PRODUCT_CLASSIFICATION_MODE=http` at boot, so all three are **retired** and K20 carries the classification. `warehouse-infra`'s `sync_edge_env` still sets `http` for WP and FE and must move to `kafka` before those images roll out. The reservation calls (R1) are live |
+| R7 (WP's distance lookup) | WP: **Wired**, the default `permissive` never calls out | FL: **Live** | **live** in the reference deployment (`sync_edge_env["wes-work-planning"]`). WP's page describes the binary default |
+| K8 for FE | FE: **Opt-in** | PPM: live | **live** in the reference deployment. FE's page describes the binary default |
 | A3–A6 per-tool status | FE, WFM, FL, LP each list all their tools as consumed by the agent | OA: some tools are wired only | OA is correct. On `develop`, its use cases call only the tools listed as live in A1–A9 |
 | K2 `order-management` → `warehouse-planning` | WPL: wired, opt-in | OM's map does not list WPL as a consumer of its topic | WPL's consumer exists and the reference deployment enables it, so **live** |
 
@@ -344,6 +351,10 @@ different pattern for the downstream side. The edge table shows both:
 
 **Corrections to this page's previous version:**
 
+- The `product-master` edges were "planned / in progress". All four
+  `ProductClassified` consumers are merged (K20), the REST classification
+  lookups R2, R3 and R4 are retired, and the legacy import (K21) is wired
+  for the migration.
 - FE → WP was labelled **Partnership**. Both FE's and WP's maps call it
   Customer/Supplier with a feedback edge. FE's page explains why the WES
   tier is deliberately not a Partnership.

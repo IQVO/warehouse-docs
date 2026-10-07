@@ -14,7 +14,7 @@ via the official [AsyncAPI Generator](https://github.com/asyncapi/generator)
 
 For the narrative version (which events this context publishes, who
 consumes them, and the migration-only legacy consumer) see
-[product-master's Bounded Context Canvas](/contexts/product-master/bounded-context-canvas)
+[product-master's Async API narrative](/contexts/product-master/async-api)
 and the fleet [Event Standard](/strategic-design/event-standard-cloudevents).
 
 <iframe

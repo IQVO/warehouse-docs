@@ -174,12 +174,11 @@ it to a different subject:
   keeps applying placement and segregation at stow time.
 - The two meet at stow time, when a placement check validates that a
   hazmat or temperature-sensitive SKU is stowed in a matching zone.
-- **`wes-work-planning`**'s `ProductClassificationView` is today a
-  synchronous, unpersisted read of inventory-storage's classification. It is
-  made once at release, to stamp `fragile` on `WorkReleased`. It moves to a
-  local copy of product-master's `ProductClassified` (in progress,
-  product-master ADR 0003 stage D), as do the order-management and
-  fulfillment-execution lookups.
+- **`wes-work-planning`**'s `ProductClassificationView` is read once at
+  release, to stamp `fragile` on `WorkReleased`. Since wes-work-planning ADR
+  0035 it reads a local copy of product-master's `ProductClassified`
+  (product-master ADR 0003 stage D) instead of calling inventory-storage, as
+  do order-management (ADR 0036) and fulfillment-execution (ADR 0039).
 
 ### "Location", "Site" and "Zone"
 

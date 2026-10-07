@@ -165,7 +165,7 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wms.inventory-storage.product.ProductClassified` | retiring: backfill-only after inventory-storage ADR 0034, consumed by product-master's legacy importer until stage E |
 | `com.warehouse.wms.product-master.product.ProductRegistered` | (published contract; no consumer yet) |
 | `com.warehouse.wms.product-master.product.ProductDescriptionChanged` | (published contract; no consumer yet) |
-| `com.warehouse.wms.product-master.product.ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution: in progress (product-master ADR 0003) |
+| `com.warehouse.wms.product-master.product.ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies; inventory-storage ADR 0034, order-management ADR 0036, wes-work-planning ADR 0035, fulfillment-execution ADR 0039) |
 | `com.warehouse.wms.product-master.product.ProductDimensionsDeclared` | (published contract; no consumer yet) |
 | `com.warehouse.wms.product-master.product.ProductMeasured` | (published contract; no consumer yet) |
 | `com.warehouse.wes.order-management.order.OrderAllocated` | wes-work-planning |

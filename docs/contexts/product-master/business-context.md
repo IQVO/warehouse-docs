@@ -26,7 +26,7 @@ of the product, not of any physical holding", but there was nowhere else to
 put it. That had three costs (ADR 0001, Context):
 
 - **Three live lookups.** `order-management`, `wes-work-planning` and
-  `fulfillment-execution` each call `GET /products/{sku}/classification` on
+  `fulfillment-execution` each called `GET /products/{sku}/classification` on
   `inventory-storage` at request time, each with its own REST client,
   `PRODUCT_CLASSIFICATION_MODE` switch and circuit breaker. The 2026-10-05
   audit flagged this as a hotspot.
@@ -102,9 +102,16 @@ no shared database, no cross-context REST call (ADR 0003).
 
 ## Honest scope today
 
-- The four ADRs and both contracts are written and pinned; the service and
-  the four consumers are being built now. Nothing here is live in the
-  reference deployment yet.
+- The service and the four consumers are merged on their `develop`
+  branches: stages A to D are in the code (inventory-storage ADR 0034,
+  order-management ADR 0036, wes-work-planning ADR 0035,
+  fulfillment-execution ADR 0039). Stage E (removing the legacy importer,
+  the backfill command and the deprecated endpoint) is not done.
+- The reference deployment does not run product-master yet:
+  `warehouse-infra`'s `develop` has no `product-master` entry, and its
+  `sync_edge_env` still sets `PRODUCT_CLASSIFICATION_MODE=http` for
+  `wes-work-planning` and `fulfillment-execution`, a value both binaries
+  now reject at boot.
 - Four of the five published types have no consumer yet. The physical
   profile's intended downstream uses (expected package weight at the weigh
   check, cube-based slot fit, cube-based storage capacity) are later phases.
