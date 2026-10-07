@@ -90,6 +90,22 @@ const sidebar: SidebarsConfig = {
     },
     {
       type: "category",
+      label: "Pool Configuration",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/wes-work-planning/pool-configuration",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/wes-work-planning/configure-pool",
+          label: "Configure a process path's work pool (feed mode and WIP limit)",
+          className: "api-method put",
+        },
+      ],
+    },
+    {
+      type: "category",
       label: "Telemetry",
       link: {
         type: "doc",
@@ -164,6 +180,12 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/rest/wes-work-planning/health-check",
           label: "Health check",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/wes-work-planning/readiness-check",
+          label: "Readiness check",
           className: "api-method get",
         },
       ],

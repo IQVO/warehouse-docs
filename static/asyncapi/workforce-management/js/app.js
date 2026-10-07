@@ -458,7 +458,7 @@
               "name": "PathUnderstaffed",
               "title": "Path understaffed",
               "summary": "A path's active assignments fall short of its committed planned heads.",
-              "description": "Raised when the staffing-gap read model finds that a path's active\n`LaborAssignment` count is below the `plannedHeads` committed for it\non the current `ShiftPlan`. This is a **flag, not a decision**: this\nbounded context surfaces the gap and never moves anyone in response.\nRebalancing is a human call, recorded back here as a new assignment.\n\n**Not on the integration topic.** Published only to the internal\nanalytics topic `warehouse.workforce.analytics` (dataschema\n`urn:warehouse:workforce-management:analytics:<EventName>:v1`).\n",
+              "description": "Raised when the staffing-gap read model finds that a path's active\n`LaborAssignment` count is below the `plannedHeads` committed for it\non the current `ShiftPlan`. This is a **flag, not a decision**: this\nbounded context surfaces the gap and never moves anyone in response.\nRebalancing is a human call, recorded back here as a new assignment.\n\n**Site scope (ADR 0034, additive).** When the gap was requested for\none canonical site, `data.site_code` carries it and `active_heads`\ncounts only associates with an active shift at that site. When\n`site_code` is absent the gap is **unscoped** (every site together,\nthe pre-ADR-0034 behaviour): consumers MUST treat absence as\n\"unscoped\", never as a particular site.\n\n**Not on the integration topic.** Published only to the internal\nanalytics topic `warehouse.workforce.analytics` (dataschema\n`urn:warehouse:workforce-management:analytics:<EventName>:v1`).\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -518,6 +518,12 @@
                             "minimum": 0,
                             "description": "Count of currently ACTIVE LaborAssignments on this path.",
                             "x-parser-schema-id": "<anonymous-schema-40>"
+                          },
+                          "site_code": {
+                            "type": "string",
+                            "description": "ADDITIVE and optional (ADR 0034; the payload stays v1). The canonical Site code (the facility-layout Site code, the same identifier warehouse-planning carries as `site_id`) the gap was computed for: `active_heads` then counts only associates with an active shift at that site. Omitted when the gap was computed fleet-wide, so consumers MUST treat absence as \"unscoped\" (every site together), never as a particular site.",
+                            "example": "WH1",
+                            "x-parser-schema-id": "<anonymous-schema-41>"
                           }
                         },
                         "x-parser-schema-id": "<anonymous-schema-37>"
@@ -545,6 +551,26 @@
                       "path_id": "pack",
                       "planned_heads": 5,
                       "active_heads": 3
+                    }
+                  }
+                },
+                {
+                  "name": "packUnderstaffedAtSite",
+                  "summary": "The same gap computed for site WH1 only (additive site_code).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "c92f6a3d-8ba5-4e1f-8d44-2f8a5c7b9e16",
+                    "source": "/warehouse/workforce-management",
+                    "type": "com.warehouse.wes.workforce-management.shiftplan.PathUnderstaffed",
+                    "subject": "pack",
+                    "time": "2026-08-22T02:15:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:workforce-management:analytics:PathUnderstaffed:v1",
+                    "data": {
+                      "path_id": "pack",
+                      "planned_heads": 5,
+                      "active_heads": 2,
+                      "site_code": "WH1"
                     }
                   }
                 }
@@ -581,13 +607,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.associate.AssociateShiftStarted",
-                        "x-parser-schema-id": "<anonymous-schema-42>"
+                        "x-parser-schema-id": "<anonymous-schema-43>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:AssociateShiftStarted:v1",
-                        "x-parser-schema-id": "<anonymous-schema-43>"
+                        "x-parser-schema-id": "<anonymous-schema-44>"
                       },
                       "data": {
                         "type": "object",
@@ -599,13 +625,13 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the associate starting the shift.",
-                            "x-parser-schema-id": "<anonymous-schema-45>"
+                            "x-parser-schema-id": "<anonymous-schema-46>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-44>"
+                        "x-parser-schema-id": "<anonymous-schema-45>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-41>"
+                    "x-parser-schema-id": "<anonymous-schema-42>"
                   }
                 ],
                 "x-parser-schema-id": "AssociateShiftStartedEvent"
@@ -661,13 +687,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.associate.AssociateCertified",
-                        "x-parser-schema-id": "<anonymous-schema-47>"
+                        "x-parser-schema-id": "<anonymous-schema-48>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:AssociateCertified:v1",
-                        "x-parser-schema-id": "<anonymous-schema-48>"
+                        "x-parser-schema-id": "<anonymous-schema-49>"
                       },
                       "data": {
                         "type": "object",
@@ -680,18 +706,18 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the associate being certified.",
-                            "x-parser-schema-id": "<anonymous-schema-50>"
+                            "x-parser-schema-id": "<anonymous-schema-51>"
                           },
                           "certification": {
                             "type": "string",
                             "description": "The named qualification granted, e.g. \"hazmat\".",
-                            "x-parser-schema-id": "<anonymous-schema-51>"
+                            "x-parser-schema-id": "<anonymous-schema-52>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-49>"
+                        "x-parser-schema-id": "<anonymous-schema-50>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-46>"
+                    "x-parser-schema-id": "<anonymous-schema-47>"
                   }
                 ],
                 "x-parser-schema-id": "AssociateCertifiedEvent"
@@ -748,13 +774,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.associate.AssociateBreakStarted",
-                        "x-parser-schema-id": "<anonymous-schema-53>"
+                        "x-parser-schema-id": "<anonymous-schema-54>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:AssociateBreakStarted:v1",
-                        "x-parser-schema-id": "<anonymous-schema-54>"
+                        "x-parser-schema-id": "<anonymous-schema-55>"
                       },
                       "data": {
                         "type": "object",
@@ -766,13 +792,13 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the associate starting a break.",
-                            "x-parser-schema-id": "<anonymous-schema-56>"
+                            "x-parser-schema-id": "<anonymous-schema-57>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-55>"
+                        "x-parser-schema-id": "<anonymous-schema-56>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-52>"
+                    "x-parser-schema-id": "<anonymous-schema-53>"
                   }
                 ],
                 "x-parser-schema-id": "AssociateBreakStartedEvent"
@@ -828,13 +854,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.associate.AssociateBreakEnded",
-                        "x-parser-schema-id": "<anonymous-schema-58>"
+                        "x-parser-schema-id": "<anonymous-schema-59>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:AssociateBreakEnded:v1",
-                        "x-parser-schema-id": "<anonymous-schema-59>"
+                        "x-parser-schema-id": "<anonymous-schema-60>"
                       },
                       "data": {
                         "type": "object",
@@ -846,13 +872,13 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the associate ending a break.",
-                            "x-parser-schema-id": "<anonymous-schema-61>"
+                            "x-parser-schema-id": "<anonymous-schema-62>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-60>"
+                        "x-parser-schema-id": "<anonymous-schema-61>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-57>"
+                    "x-parser-schema-id": "<anonymous-schema-58>"
                   }
                 ],
                 "x-parser-schema-id": "AssociateBreakEndedEvent"
@@ -908,13 +934,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.associate.AssociateShiftEnded",
-                        "x-parser-schema-id": "<anonymous-schema-63>"
+                        "x-parser-schema-id": "<anonymous-schema-64>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:AssociateShiftEnded:v1",
-                        "x-parser-schema-id": "<anonymous-schema-64>"
+                        "x-parser-schema-id": "<anonymous-schema-65>"
                       },
                       "data": {
                         "type": "object",
@@ -926,13 +952,13 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the associate whose shift ended.",
-                            "x-parser-schema-id": "<anonymous-schema-66>"
+                            "x-parser-schema-id": "<anonymous-schema-67>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-65>"
+                        "x-parser-schema-id": "<anonymous-schema-66>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-62>"
+                    "x-parser-schema-id": "<anonymous-schema-63>"
                   }
                 ],
                 "x-parser-schema-id": "AssociateShiftEndedEvent"
@@ -988,13 +1014,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.assignment.LaborAssigned",
-                        "x-parser-schema-id": "<anonymous-schema-68>"
+                        "x-parser-schema-id": "<anonymous-schema-69>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:LaborAssigned:v1",
-                        "x-parser-schema-id": "<anonymous-schema-69>"
+                        "x-parser-schema-id": "<anonymous-schema-70>"
                       },
                       "data": {
                         "type": "object",
@@ -1007,18 +1033,18 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the assigned associate.",
-                            "x-parser-schema-id": "<anonymous-schema-71>"
+                            "x-parser-schema-id": "<anonymous-schema-72>"
                           },
                           "path_id": {
                             "type": "string",
                             "description": "Process path the associate now works, e.g. \"pack\". Never a task id.",
-                            "x-parser-schema-id": "<anonymous-schema-72>"
+                            "x-parser-schema-id": "<anonymous-schema-73>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-70>"
+                        "x-parser-schema-id": "<anonymous-schema-71>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-67>"
+                    "x-parser-schema-id": "<anonymous-schema-68>"
                   }
                 ],
                 "x-parser-schema-id": "LaborAssignedEvent"
@@ -1075,13 +1101,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.assignment.LaborReassigned",
-                        "x-parser-schema-id": "<anonymous-schema-74>"
+                        "x-parser-schema-id": "<anonymous-schema-75>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:LaborReassigned:v1",
-                        "x-parser-schema-id": "<anonymous-schema-75>"
+                        "x-parser-schema-id": "<anonymous-schema-76>"
                       },
                       "data": {
                         "type": "object",
@@ -1095,23 +1121,23 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the reassigned associate.",
-                            "x-parser-schema-id": "<anonymous-schema-77>"
+                            "x-parser-schema-id": "<anonymous-schema-78>"
                           },
                           "from_path_id": {
                             "type": "string",
                             "description": "Process path whose active assignment was ended.",
-                            "x-parser-schema-id": "<anonymous-schema-78>"
+                            "x-parser-schema-id": "<anonymous-schema-79>"
                           },
                           "to_path_id": {
                             "type": "string",
                             "description": "Process path the associate was moved onto.",
-                            "x-parser-schema-id": "<anonymous-schema-79>"
+                            "x-parser-schema-id": "<anonymous-schema-80>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-76>"
+                        "x-parser-schema-id": "<anonymous-schema-77>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-73>"
+                    "x-parser-schema-id": "<anonymous-schema-74>"
                   }
                 ],
                 "x-parser-schema-id": "LaborReassignedEvent"
