@@ -596,7 +596,7 @@
           "name": "LegacyProductClassified",
           "title": "inventory-storage ProductClassified (legacy, consumed)",
           "summary": "inventory-storage's classification event, imported during the migration.",
-          "description": "`type` = `com.warehouse.wms.inventory-storage.product.ProductClassified`,\nsource `/warehouse/inventory-storage`, dataschema\n`urn:warehouse:inventory-storage:events:ProductClassified:v1`. Produced\nby inventory-storage (its ADR 0031); retired by its ADR 0033.\n",
+          "description": "`type` = `com.warehouse.wms.inventory-storage.product.ProductClassified`,\nsource `/warehouse/inventory-storage`, dataschema\n`urn:warehouse:inventory-storage:events:ProductClassified:v1`. Produced\nby inventory-storage (its ADR 0031); retired by its ADR 0034.\n",
           "contentType": "application/cloudevents+json",
           "tags": [
             {
