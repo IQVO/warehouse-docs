@@ -11,6 +11,7 @@ import laborPerformanceSidebar from './docs/api-reference/rest/labor-performance
 import laborPerformanceReportsSidebar from './docs/api-reference/rest/labor-performance-reports/sidebar';
 import networkFulfillmentSidebar from './docs/api-reference/rest/network-fulfillment/sidebar';
 import warehousePlanningSidebar from './docs/api-reference/rest/warehouse-planning/sidebar';
+import productMasterSidebar from './docs/api-reference/rest/product-master/sidebar';
 
 /**
  * Every bounded context's category lists the same page set, in the same
@@ -30,6 +31,7 @@ const CONTEXTS = [
   'warehouse-ops-agent',
   'network-fulfillment',
   'warehouse-planning',
+  'product-master',
 ];
 
 const CONTEXT_PAGES = [
@@ -59,8 +61,16 @@ const ASYNC_NARRATIVE = new Set([
   'warehouse-planning',
 ]);
 
+// Contexts that do not have the full synced page set yet. product-master was
+// decided on 2026-10-06 and has no docs site of its own to sync from, so only
+// the pages written for this site (from its ADRs) exist.
+const CONTEXT_PAGES_OVERRIDE: Record<string, string[]> = {
+  'product-master': ['business-context', 'bounded-context-canvas'],
+};
+
 function contextCategory(ctx: string, hasAsyncNarrative: boolean) {
-  const pages = hasAsyncNarrative ? [...CONTEXT_PAGES, 'async-api'] : CONTEXT_PAGES;
+  const base = CONTEXT_PAGES_OVERRIDE[ctx] ?? CONTEXT_PAGES;
+  const pages = hasAsyncNarrative ? [...base, 'async-api'] : base;
   return {
     type: 'category' as const,
     label: ctx,
@@ -188,6 +198,11 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'warehouse-planning',
       items: [...warehousePlanningSidebar, 'api-reference/async/warehouse-planning'],
+    },
+    {
+      type: 'category',
+      label: 'product-master',
+      items: [...productMasterSidebar, 'api-reference/async/product-master'],
     },
   ],
 };

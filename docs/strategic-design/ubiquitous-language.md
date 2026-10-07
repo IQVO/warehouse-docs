@@ -2,7 +2,7 @@
 id: ubiquitous-language
 title: Ubiquitous Language (Fleet Overview)
 sidebar_label: Ubiquitous Language
-description: How the vocabulary is organised across the eleven bounded contexts, which terms are genuinely shared, and which words mean different things in different contexts.
+description: How the vocabulary is organised across the twelve bounded contexts, which terms are genuinely shared, and which words mean different things in different contexts.
 ---
 
 # Ubiquitous Language: Fleet Overview
@@ -40,6 +40,7 @@ wins. For one alphabetical index across every context, see
 | `warehouse-ops-agent` | FlowBalanceException, StrandedReservation, DailyBrief, OpenException, Blast radius, PathTarget, Capacity outlook | [Ubiquitous Language](/contexts/warehouse-ops-agent/ubiquitous-language) |
 | `network-fulfillment` | NetworkOrder, NetworkRef, NetworkProductId, Product translation, Acknowledgement window, Held order, Shipment confirmation, CapabilityOffer | [Ubiquitous Language](/contexts/network-fulfillment/ubiquitous-language) |
 | `warehouse-planning` | ProcessCapacity, CapacityConstraint, CapacityWindow, WorkloadProfile, ProcessPath, StationStandard, CapacityPlan, Shortage, Bottleneck | [Ubiquitous Language](/contexts/warehouse-planning/ubiquitous-language) |
+| `product-master` | Product (master record), Classification, Handling tag, TemperatureClass, DOT hazard class, Physical profile, Declared, Measured, Effective, Discrepancy, Version | [Bounded Context Canvas](/contexts/product-master/bounded-context-canvas#ubiquitous-language) (no synced glossary yet) |
 
 ## Shared terms
 
@@ -56,8 +57,12 @@ no Shared Kernel".
 | **Capability / Certification** | A named qualification such as `pick`, `pack` or `hazmat`. `process-path-management` declares which capabilities a path requires. `fulfillment-execution` gates a station's claim with `Station.Capability`, and `workforce-management` gates an associate's assignment with `Certification`. Each enforces its own half independently, and neither reads the other's data. | `process-path-management` (required set) | fulfillment-execution, workforce-management |
 | **Work unit id** | `orderId-line-lineNo`, derived the same way by `order-management` and `wes-work-planning` and never transmitted by order-management. `fulfillment-execution` receives it as `work_unit_id` and stores it as `OrderRef`. | `wes-work-planning` | order-management, fulfillment-execution, warehouse-ops-agent |
 | **Usable inventory** | On-hand minus active reservations minus held, damaged or unlocated stock. Only usable stock constrains release. | `inventory-storage` | wes-work-planning (`UsableInventoryObserved`, a projection by SKU), network-fulfillment ("physical available") |
-| **TemperatureClass** | `Ambient`, `Chilled` or `Frozen`. The concept is deliberately duplicated rather than shared (inventory-storage ADR 0009). It applies to what a zone can hold in facility-layout, and to what a SKU needs in inventory-storage. | facility-layout and inventory-storage | — |
-| **DOT hazard class** | The top-level US DOT hazard class, 1 to 9. Compatibility follows a class-level matrix derived from 49 CFR §177.848. It is checked per **bin** in inventory-storage and per **package** in fulfillment-execution. | `inventory-storage` (product master data) | fulfillment-execution (looked up at seal time) |
+| **TemperatureClass** | `Ambient`, `Chilled` or `Frozen`. The concept is deliberately duplicated rather than shared (inventory-storage ADR 0009). It applies to what a zone can hold in facility-layout, and to what a SKU needs on the product side. | facility-layout (zone side) and `product-master` (SKU side, moved from inventory-storage by product-master ADR 0001) | inventory-storage keeps applying it at stow time from its local copy |
+| **DOT hazard class** | The top-level US DOT hazard class, 1 to 9, recorded only with the `Hazmat` tag. Compatibility follows a class-level matrix derived from 49 CFR §177.848. product-master records the class but owns no segregation rule: it is checked per **bin** in inventory-storage and per **package** in fulfillment-execution. | `product-master` (product master data, moved from inventory-storage) | inventory-storage (segregation per bin), fulfillment-execution (segregation per package, looked up at seal time) |
+| **Handling tags** | The closed set `Hazmat`, `Fragile`, `TemperatureSensitive`, `Oversized`, `HighValue`, in that stable order on the wire. `TemperatureSensitive` requires a TemperatureClass; a DOT hazard class needs `Hazmat`. | `product-master` (moved from inventory-storage) | inventory-storage (stow placement and segregation), order-management, wes-work-planning (`fragile` on `WorkReleased`), fulfillment-execution |
+| **Product (master record)** | The SKU-level master record: description, Classification, Physical profile and a `version` that starts at 1 and grows by one per accepted change. A SKU must be registered before it can be classified or dimensioned. It answers no "where" or "how many" question. | `product-master` (ADR 0001) | every consumer of `warehouse.product-master.events` keeps a local copy per SKU, applied only when the event `version` is newer |
+| **Classification** | A SKU's handling classification: handling tags, TemperatureClass and DOT hazard class, published as one full-state `ProductClassified`. `classification_source` is `native` (authored in product-master) or `legacy-import` (imported from inventory-storage during the migration). | `product-master`, since product-master ADR 0001 and ADR 0003 (it was inventory-storage's `ProductClassification`) | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies, in progress) |
+| **Physical profile** | One unit's size and weight, in whole millimetres and grams. **Declared**: what the vendor or steward says. **Measured**: the latest reading from a dimensioning device or a manual measurement, with `measuredAt`; an older reading is rejected. **Effective**: measured if present, else declared, else none; consumers act only on effective. **Discrepancy**: true when measured volume or weight differs from declared by more than 10 % of the declared value; information for stewards, never a rejection. | `product-master` (ADR 0002) | none yet (published contract; no consumer yet) |
 | **CloudEvents `id`** | The dedupe key for every consumed event. It stays stable across outbox redelivery. labor-performance calls it `KafkaEventId`. | every producer | every consumer |
 
 ## Same word, different model
@@ -161,14 +166,20 @@ it to a different subject:
 - **`facility-layout`** classifies **space**. It returns the `hazmat` and
   `temperatureClass` pair of a slot's zone at
   `GET /locations/{locationCode}/classification`.
-- **`inventory-storage`** classifies **product**. Its
-  `ProductClassification` is SKU master data with a closed tag set:
+- **`product-master`** classifies **product** (product-master ADR 0001).
+  Its `Classification` is SKU master data with a closed tag set:
   `Hazmat`, `Fragile`, `TemperatureSensitive`, `Oversized`, `HighValue`.
+  It took this over from **`inventory-storage`**'s `ProductClassification`
+  (product-master ADR 0003). inventory-storage keeps a local copy of it and
+  keeps applying placement and segregation at stow time.
 - The two meet at stow time, when a placement check validates that a
   hazmat or temperature-sensitive SKU is stowed in a matching zone.
-- **`wes-work-planning`**'s `ProductClassificationView` is a synchronous,
-  unpersisted read of inventory-storage's classification. It is made once
-  at release, to stamp `fragile` on `WorkReleased`.
+- **`wes-work-planning`**'s `ProductClassificationView` is today a
+  synchronous, unpersisted read of inventory-storage's classification. It is
+  made once at release, to stamp `fragile` on `WorkReleased`. It moves to a
+  local copy of product-master's `ProductClassified` (in progress,
+  product-master ADR 0003 stage D), as do the order-management and
+  fulfillment-execution lookups.
 
 ### "Location", "Site" and "Zone"
 
