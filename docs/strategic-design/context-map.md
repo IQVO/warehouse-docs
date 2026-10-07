@@ -2,13 +2,15 @@
 id: context-map
 title: Context Map
 sidebar_label: Context Map
-description: Fleet-wide ddd-crew context map of the eleven bounded contexts — every edge with upstream/downstream, context-mapping pattern, technology and wiring status (live, wired-but-unused, absent-planned), reconciled against each context's own context map and code.
+description: Fleet-wide ddd-crew context map of the twelve bounded contexts — every edge with upstream/downstream, context-mapping pattern, technology and wiring status (live, wired-but-unused, absent-planned), reconciled against each context's own context map and code.
 ---
 
 # Context Map
 
 This is the fleet-wide [ddd-crew Context Map](https://github.com/ddd-crew/context-mapping)
-of the eleven backend bounded contexts. Each context's repository has its own
+of the twelve backend bounded contexts. The twelfth, `product-master`, was
+decided on 2026-10-06 and is being built: its edges below are all planned or
+in progress. Each context's repository has its own
 context map, synced to this site and grounded in that repo's code. This page
 puts those maps together. Where two contexts' maps describe the same edge
 differently, this page checked the code and the reference deployment
@@ -26,7 +28,9 @@ Per-context maps (the source for every row below):
 [labor-performance](/contexts/labor-performance/context-map) ·
 [warehouse-ops-agent](/contexts/warehouse-ops-agent/context-map) ·
 [network-fulfillment](/contexts/network-fulfillment/context-map) ·
-[warehouse-planning](/contexts/warehouse-planning/context-map)
+[warehouse-planning](/contexts/warehouse-planning/context-map) ·
+[product-master](/contexts/product-master/bounded-context-canvas) (canvas;
+no synced context map yet)
 
 **Pattern legend:** **U/D** upstream/downstream · **OHS** Open Host Service ·
 **PL** Published Language · **CF** Conformist · **ACL** Anti-Corruption Layer ·
@@ -70,6 +74,7 @@ flowchart LR
     subgraph WMS["wms subdomain"]
         FL["facility-layout<br/>Generic"]
         INV["inventory-storage<br/>Core"]
+        PM["product-master<br/>Supporting<br/>new, being built"]
     end
 
     subgraph WES["wes subdomain"]
@@ -135,12 +140,24 @@ flowchart LR
     RN -.->|"Vendor API, planned"| NF
     FE -.-x|"deliberately absent"| WCS
 
+    %% product-master (ADR 0001, 0003). The four Published Language edges are
+    %% dashed while each consumer is being built. When a consumer ships its
+    %% warehouse.product-master.events consumer and the reference deployment
+    %% enables it, flip that edge from -.-> to ==> and drop "planned / in progress"
+    %% from its label (and set its row in the edge table to live). Delete the
+    %% INV -.-> PM migration edge at stage E, when the legacy importer is removed.
+    PM -.->|"Kafka ProductClassified,<br/>planned / in progress"| INV
+    PM -.->|"Kafka ProductClassified,<br/>planned / in progress"| OM
+    PM -.->|"Kafka ProductClassified,<br/>planned / in progress"| WP
+    PM -.->|"Kafka ProductClassified,<br/>planned / in progress"| FE
+    INV -.->|"Kafka legacy ProductClassified,<br/>Conformist, migration only"| PM
+
     classDef core fill:#1e3a8a,stroke:#1e293b,color:#fff;
     classDef supp fill:#6d28d9,stroke:#4c1d95,color:#fff;
     classDef gen fill:#475569,stroke:#94a3b8,color:#fff;
     classDef ext fill:#f1f5f9,stroke:#64748b,color:#334155,stroke-dasharray: 5 5;
     class INV,WP,FE,WPL core;
-    class OM,WFM,LP,NF,OA supp;
+    class OM,WFM,LP,NF,OA,PM supp;
     class FL,PPM gen;
     class RN,WCS,CON,NOSUB ext;
 ```
@@ -149,6 +166,7 @@ flowchart LR
 structured mode on one shared broker). Thin solid arrows are live synchronous
 REST or MCP reads. Every REST and MCP surface in the fleet is unauthenticated.
 Dotted arrows are wired-but-unused or absent-planned, as the table states.
+The five dotted `product-master` edges are planned / in progress (K20, K21).
 The crossed edge is deliberately absent. `order-management` is coloured with
 the Supporting contexts because it is classified Generic/Supporting (see
 [Subdomain Classification](/strategic-design/subdomain-classification)).
@@ -190,6 +208,8 @@ Omitted from the diagram:
 | K17 | `labor-performance` → `workforce-management` | OHS + PL / CF + ACL | `warehouse.labor-performance.events`: `TaskPerformanceRecorded` (measured rate and idle share) | **live** with `LABOR_PERFORMANCE_MODE=kafka-cache`, which the reference deployment sets | [LP](/contexts/labor-performance/context-map), [WFM](/contexts/workforce-management/context-map) |
 | K18 | `warehouse-planning` → `order-management` | OHS + PL / ACL (local read model) | `warehouse.warehouse-planning.events`: `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected`. `BottleneckDetected` is ignored | **live**. It is opt-in (`PLANNED_CAPACITY_CONSUMER_GROUP`, OM ADR 0031), and the reference deployment sets it (`helm-values/order-management.yaml`, `plannedCapacity.consumerGroup`). The read model only annotates orders and serves `GET /planned-capacity`. No promise moves | [WPL](/contexts/warehouse-planning/context-map), [OM](/contexts/order-management/context-map) |
 | K19 | `network-fulfillment` → any subscriber | OHS + PL / — | `warehouse.network-fulfillment.events`: `networkorder.*` | **wired-but-unused**. Published only with `EVENT_PUBLISHER=kafka` (chart default `log`), and no consumer exists in the fleet | [NF](/contexts/network-fulfillment/context-map) |
+| K20 | `product-master` → `inventory-storage`, `order-management`, `wes-work-planning`, `fulfillment-execution` | PL / local copy per consumer (one row per SKU, applied only when the event `version` is newer) | `warehouse.product-master.events`: `ProductClassified` | **planned / in progress** (product-master ADR 0001 and ADR 0003, stages C and D). When the consumers ship, this edge replaces the live classification lookups R2, R3 and R4 | [PM](/contexts/product-master/bounded-context-canvas) |
+| K21 | `inventory-storage` → `product-master` | CF, migration only | `warehouse.inventory.events`: `com.warehouse.wms.inventory-storage.product.ProductClassified`, read by product-master's legacy importer (`LEGACY_IMPORT_CONSUMER_GROUP`) | **planned / in progress**. Removed at stage E together with the importer (product-master ADR 0003) | [PM](/contexts/product-master/bounded-context-canvas) |
 
 Published types with no consumer, as stated by their owners:
 
@@ -197,7 +217,15 @@ Published types with no consumer, as stated by their owners:
   `WorkReleased` and `PathCapacityChanged`);
 - nine of the twelve types on `warehouse.facility.events`;
 - `OrderRepromised` on `warehouse.order-management.events`;
-- `BottleneckDetected` on `warehouse.warehouse-planning.events`.
+- `BottleneckDetected` on `warehouse.warehouse-planning.events`;
+- `ProductRegistered`, `ProductDescriptionChanged`,
+  `ProductDimensionsDeclared` and `ProductMeasured` on
+  `warehouse.product-master.events` (published contract; no consumer yet).
+
+`product-master` also serves REST (and, per its ADR 0001, MCP read tools) as
+an Open Host Service for operators, `warehouse-console` and
+`warehouse-ops-agent`. No client for it exists yet, so the diagram does not
+draw those edges.
 
 ### REST (context to context)
 
@@ -335,7 +363,7 @@ different pattern for the downstream side. The edge table shows both:
 
 ## Upstream: retail-network (planned)
 
-`retail-network` is not one of the eleven bounded contexts. It plays the role
+`retail-network` is not one of the twelve bounded contexts. It plays the role
 of an external retail fulfillment network. `network-fulfillment` is
 **Conformist** to it and acts as an **Anti-Corruption Layer** for the fleet:
 the network's vocabulary stops at `internal/adapters/outbound/network/`, and
