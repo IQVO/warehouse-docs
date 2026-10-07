@@ -127,6 +127,7 @@ Subdomain and bounded-context segments (authoritative):
 |--------------------------|-----------|--------------------------|--------|
 | facility-layout          | wms       | facility-layout          | /warehouse/facility-layout |
 | inventory-storage        | wms       | inventory-storage        | /warehouse/inventory-storage |
+| product-master | wms | product-master | /warehouse/product-master |
 | order-management         | wes       | order-management         | /warehouse/order-management |
 | process-path-management  | wes       | process-path-management  | /warehouse/process-path-management |
 | warehouse-planning       | wes       | warehouse-planning       | /warehouse/warehouse-planning |
@@ -143,6 +144,7 @@ Entity segments for repos that had no catalogue yet:
 - network-fulfillment: `NetworkOrder*` → `networkorder`
 - warehouse-planning: `CapacityPlan*` / `CapacityShortageDetected` / `BottleneckDetected` → `capacityplan`
 - labor-performance: `LaborStandardDefined`/`LaborStandardRevised` → `standard`; `TaskPerformanceRecorded` → `performance`
+- product-master: every `Product*` event → `product` (product-master ADR 0004)
 
 Repos that already have an AsyncAPI catalogue keep the entity segments
 already documented there. Events not yet in a catalogue get the entity of
@@ -160,6 +162,12 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | inventory-storage |
 | `com.warehouse.wms.inventory-storage.reservation.StockReserved` | wes-work-planning |
 | `com.warehouse.wms.inventory-storage.reservation.ReservationRevoked` | wes-work-planning |
+| `com.warehouse.wms.inventory-storage.product.ProductClassified` | retiring: backfill-only after inventory-storage ADR 0033, consumed by product-master's legacy importer until stage E |
+| `com.warehouse.wms.product-master.product.ProductRegistered` | (published contract; no consumer yet) |
+| `com.warehouse.wms.product-master.product.ProductDescriptionChanged` | (published contract; no consumer yet) |
+| `com.warehouse.wms.product-master.product.ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution: in progress (product-master ADR 0003) |
+| `com.warehouse.wms.product-master.product.ProductDimensionsDeclared` | (published contract; no consumer yet) |
+| `com.warehouse.wms.product-master.product.ProductMeasured` | (published contract; no consumer yet) |
 | `com.warehouse.wes.order-management.order.OrderAllocated` | wes-work-planning |
 | `com.warehouse.wes.order-management.order.OrderPartiallyAllocated` | wes-work-planning |
 | `com.warehouse.wes.order-management.order.OrderRepromised` | (published contract) |
