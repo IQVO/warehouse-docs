@@ -2,13 +2,15 @@
 id: index
 title: Bounded Contexts
 sidebar_label: Bounded Contexts
-description: The eleven bounded contexts, each with its full ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
+description: The twelve bounded contexts, each with its ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
 slug: /contexts
 ---
 
 # Bounded Contexts
 
-Every bounded context below has the same page set, in this order. The
+Every bounded context below has the same page set, in this order, except
+`product-master`, which is new and so far has only the Business Context and
+the Bounded Context Canvas. The
 ddd-crew tool behind each page, or the page's source if no ddd-crew tool
 applies, is given in brackets:
 
@@ -73,8 +75,9 @@ site.
 | [warehouse-ops-agent](/contexts/warehouse-ops-agent) | Supporting | `wes` | Operator tooling, no aggregate |
 | [network-fulfillment](/contexts/network-fulfillment) | Supporting | `wes` | External network edge (anti-corruption layer) |
 | [warehouse-planning](/contexts/warehouse-planning) | Core | `wes` | WES — capacity planning |
+| [product-master](/contexts/product-master) | Supporting | `wms` | WMS — product master data (decided 2026-10-06, being built; Business Context and Bounded Context Canvas only so far) |
 
-See [Strategic Design](/strategic-design) for how these eleven relate to
+See [Strategic Design](/strategic-design) for how these twelve relate to
 each other at the fleet level, and the
 [DDD Starter Modelling Process](/strategic-design/ddd-starter-modelling-process)
 for which modelling step each page belongs to.

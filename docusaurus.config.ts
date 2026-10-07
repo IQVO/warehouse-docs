@@ -128,6 +128,12 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          productMaster: {
+            specPath: 'apis/product-master/openapi.yaml',
+            outputDir: 'docs/api-reference/rest/product-master',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],
@@ -207,6 +213,7 @@ const config: Config = {
             {label: 'warehouse-ops-agent', href: 'https://github.com/IQVO/warehouse-ops-agent'},
             {label: 'network-fulfillment', href: 'https://github.com/IQVO/network-fulfillment'},
             {label: 'warehouse-planning', href: 'https://github.com/IQVO/warehouse-planning'},
+            {label: 'product-master', href: 'https://github.com/IQVO/product-master'},
           ],
         },
         {
