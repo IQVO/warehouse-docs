@@ -75,7 +75,7 @@ site.
 | [warehouse-ops-agent](/contexts/warehouse-ops-agent) | Supporting | `wes` | Operator tooling, no aggregate |
 | [network-fulfillment](/contexts/network-fulfillment) | Supporting | `wes` | External network edge (anti-corruption layer) |
 | [warehouse-planning](/contexts/warehouse-planning) | Core | `wes` | WES — capacity planning |
-| [product-master](/contexts/product-master) | Supporting | `wms` | WMS — product master data (decided 2026-10-06, being built; Business Context and Bounded Context Canvas only so far) |
+| [product-master](/contexts/product-master) | Supporting | `wms` | WMS — product master data (classification and physical profile; four live `ProductClassified` local-copy consumers) |
 
 See [Strategic Design](/strategic-design) for how these twelve relate to
 each other at the fleet level, and the
