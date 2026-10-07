@@ -59,17 +59,17 @@ const ASYNC_NARRATIVE = new Set([
   'labor-performance',
   'network-fulfillment',
   'warehouse-planning',
+  'product-master',
 ]);
 
-// Contexts that do not have the full synced page set yet. product-master was
-// decided on 2026-10-06 and has no docs site of its own to sync from, so only
-// the pages written for this site (from its ADRs) exist.
-const CONTEXT_PAGES_OVERRIDE: Record<string, string[]> = {
-  'product-master': ['business-context', 'bounded-context-canvas'],
+// Pages a context has beyond the shared page set, appended after it.
+// product-master's own docs site keeps a use-case catalogue next to the pack.
+const CONTEXT_EXTRA_PAGES: Record<string, string[]> = {
+  'product-master': ['use-cases'],
 };
 
 function contextCategory(ctx: string, hasAsyncNarrative: boolean) {
-  const base = CONTEXT_PAGES_OVERRIDE[ctx] ?? CONTEXT_PAGES;
+  const base = [...CONTEXT_PAGES, ...(CONTEXT_EXTRA_PAGES[ctx] ?? [])];
   const pages = hasAsyncNarrative ? [...base, 'async-api'] : base;
   return {
     type: 'category' as const,
