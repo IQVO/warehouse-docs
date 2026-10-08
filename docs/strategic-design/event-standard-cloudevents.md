@@ -128,6 +128,8 @@ Subdomain and bounded-context segments (authoritative):
 | facility-layout          | wms       | facility-layout          | /warehouse/facility-layout |
 | inventory-storage        | wms       | inventory-storage        | /warehouse/inventory-storage |
 | product-master | wms | product-master | /warehouse/product-master |
+| inbound-receiving        | wms       | inbound-receiving        | /warehouse/inbound-receiving |
+| slotting-optimization    | wms       | slotting-optimization    | /warehouse/slotting-optimization |
 | order-management         | wes       | order-management         | /warehouse/order-management |
 | process-path-management  | wes       | process-path-management  | /warehouse/process-path-management |
 | warehouse-planning       | wes       | warehouse-planning       | /warehouse/warehouse-planning |
@@ -145,6 +147,8 @@ Entity segments for repos that had no catalogue yet:
 - warehouse-planning: `CapacityPlan*` / `CapacityShortageDetected` / `BottleneckDetected` → `capacityplan`
 - labor-performance: `LaborStandardDefined`/`LaborStandardRevised` → `standard`; `TaskPerformanceRecorded` → `performance`
 - product-master: every `Product*` event → `product` (product-master ADR 0004)
+- inbound-receiving: `ASN*` → `asn`; `DockAppointment*` → `dockappointment`; `Receipt*` → `receipt` (inbound-receiving ADR 0004)
+- slotting-optimization: every `SlotPlan*` event → `slotplan` (slotting-optimization ADR 0004)
 
 Repos that already have an AsyncAPI catalogue keep the entity segments
 already documented there. Events not yet in a catalogue get the entity of
@@ -157,17 +161,30 @@ a suffix match) and these must be byte-identical on both sides:
 
 | `type` | consumed by |
 | --- | --- |
-| `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | inventory-storage, warehouse-planning |
-| `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | inventory-storage, warehouse-planning |
-| `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | inventory-storage |
+| `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | inventory-storage, warehouse-planning, inbound-receiving (in progress), slotting-optimization (in progress) |
+| `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | inventory-storage, warehouse-planning, inbound-receiving (in progress), slotting-optimization (in progress) |
+| `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | inventory-storage, slotting-optimization (in progress) |
 | `com.warehouse.wms.inventory-storage.reservation.StockReserved` | wes-work-planning |
 | `com.warehouse.wms.inventory-storage.reservation.ReservationRevoked` | wes-work-planning |
 | `com.warehouse.wms.inventory-storage.product.ProductClassified` | retiring: backfill-only after inventory-storage ADR 0034, consumed by product-master's legacy importer until stage E |
-| `com.warehouse.wms.product-master.product.ProductRegistered` | (published contract; no consumer yet) |
+| `com.warehouse.wms.product-master.product.ProductRegistered` | inbound-receiving (in progress) |
 | `com.warehouse.wms.product-master.product.ProductDescriptionChanged` | (published contract; no consumer yet) |
-| `com.warehouse.wms.product-master.product.ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies; inventory-storage ADR 0034, order-management ADR 0036, wes-work-planning ADR 0035, fulfillment-execution ADR 0039) |
-| `com.warehouse.wms.product-master.product.ProductDimensionsDeclared` | (published contract; no consumer yet) |
-| `com.warehouse.wms.product-master.product.ProductMeasured` | (published contract; no consumer yet) |
+| `com.warehouse.wms.product-master.product.ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies; inventory-storage ADR 0034, order-management ADR 0036, wes-work-planning ADR 0035, fulfillment-execution ADR 0039), slotting-optimization (in progress) |
+| `com.warehouse.wms.product-master.product.ProductDimensionsDeclared` | slotting-optimization (in progress) |
+| `com.warehouse.wms.product-master.product.ProductMeasured` | slotting-optimization (in progress) |
+| `com.warehouse.wms.inbound-receiving.asn.ASNRegistered` | (published contract; no consumer yet) |
+| `com.warehouse.wms.inbound-receiving.asn.ASNCancelled` | (published contract; no consumer yet) |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked` | planned: warehouse-planning inbound-labor demand (not built) |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCheckedIn` | (published contract; no consumer yet) |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled` | (published contract; no consumer yet) |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCompleted` | (published contract; no consumer yet) |
+| `com.warehouse.wms.inbound-receiving.receipt.ReceiptOpened` | (published contract; no consumer yet) |
+| `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` | inventory-storage (in progress; inventory-storage handover ADR) |
+| `com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed` | (published contract; no consumer yet) |
+| `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanGenerated` | (published contract; no consumer yet) |
+| `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved` | planned: MOVE work execution (not built); read by warehouse-ops-agent and the console |
+| `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanRejected` | (published contract; no consumer yet) |
+| `com.warehouse.wes.order-management.siteskudemand.SiteSkuDemandChanged` | slotting-optimization (in progress) |
 | `com.warehouse.wes.order-management.order.OrderAllocated` | wes-work-planning |
 | `com.warehouse.wes.order-management.order.OrderPartiallyAllocated` | wes-work-planning |
 | `com.warehouse.wes.order-management.order.OrderRepromised` | (published contract) |
