@@ -113,6 +113,7 @@ classDiagram
         -string reference
         -string sku
         -bool giftWrap
+        -int lineNo
         -State state
         -Time releasedAt
         -Time completedAt
@@ -121,6 +122,7 @@ classDiagram
         +Complete(at) error
         +SetSKU(sku)
         +SetGiftWrap(giftWrap)
+        +SetLineNo(lineNo)
     }
     class State {
         <<Enumeration>>

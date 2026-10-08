@@ -117,7 +117,7 @@ cycle count that finds stock missing must always be able to say so.
 | Stow | `NewStockUnit` | `StowStock` — `POST /stock/stow` |
 | Reserve | `Reserve` | `ReserveStock` — `POST /reservations` |
 | Release reservation | `ReleaseReservation` | `RevokeReservation` (`DELETE /reservations/{id}`, MCP `revoke_reservation`), lazy expiry |
-| Pick | `Pick` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick`, and per ACTIVE reservation from `ConfirmPicksForOrder` on the order's last `TaskCompleted` ([ADR 0035](https://iqvo.github.io/inventory-storage/docs/adr/0035)) |
+| Pick | `Pick` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick`, and per ACTIVE reservation from `ConfirmPicksForOrder` on `TaskCompleted`: the picked line's reservation when the event carries `line_no` ([ADR 0036](https://iqvo.github.io/inventory-storage/docs/adr/0036)), the order's on its last pick otherwise ([ADR 0035](https://iqvo.github.io/inventory-storage/docs/adr/0035)) |
 | Mark unlocated | `MarkUnlocated` | `RunCycleCount` — `POST /bins/{binId}/cycle-count` |
 
 ### 7. Created Events
@@ -217,7 +217,7 @@ a bin is never deleted.
 | --- | --- | --- |
 | Register / resize | `NewBin`, `Resize` | `RegisterBin` — `PUT /bins/{binId}` |
 | Occupy | `Occupy` | `StowStock` — `POST /stock/stow` |
-| Release | `Release` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick`, and per ACTIVE reservation from `ConfirmPicksForOrder` on the order's last `TaskCompleted` ([ADR 0035](https://iqvo.github.io/inventory-storage/docs/adr/0035)) |
+| Release | `Release` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick`, and per ACTIVE reservation from `ConfirmPicksForOrder` on `TaskCompleted`: the picked line's reservation when the event carries `line_no` ([ADR 0036](https://iqvo.github.io/inventory-storage/docs/adr/0036)), the order's on its last pick otherwise ([ADR 0035](https://iqvo.github.io/inventory-storage/docs/adr/0035)) |
 
 ### 7. Created Events
 
@@ -264,6 +264,7 @@ recoverable (ADR 0003).
 | `id` | Identity, minted by `ReservationRepo.NextID` |
 | `sku`, `quantity` | What is claimed |
 | `demandRef` | Opaque upstream reference (order + line); replay-guard and lookup key |
+| `lineNo` | Optional order line the reservation is for (`line_no`, nullable; ADR 0036). Set at creation from `POST /reservations`'s `lineNo`, immutable, `nil` when unknown (a reservation made before migration 0035, or by a client that does not send it); with `demandRef` it is what the `TaskCompleted` consumer confirms by |
 | `allocations` | `[]Allocation{StockUnitID, BinID, Quantity}` |
 | `status` | `ACTIVE` / `CONFIRMED` / `REVOKED` / `EXPIRED` |
 | `createdAt`, `expiresAt` | `expiresAt = createdAt + timeout` (default 30 min) |
@@ -296,8 +297,9 @@ returns `ErrAlreadyResolved`.
 | R3 | No double-consume: only `ACTIVE` may transition | `Revoke` / `Confirm` / `Expire` → `reservation.ErrAlreadyResolved` | `TestReservation_Revoke_Twice_Rejected`, `TestReservation_Confirm_Twice_Rejected`, `TestReservation_Expire_Twice_Rejected`, `TestConfirmPick_AfterRevoke_Rejected` |
 | R4 | Expires after a timeout; never confirmed late | `IsExpired(now)`; `Confirm` → `reservation.ErrExpired` | `TestReservation_IsExpired`, `TestReservation_Confirm_AfterExpiry_Rejected` |
 | R5 | Must allocate against something | `New` → `reservation.ErrNoAllocations` | `TestNew_RequiresAtLeastOneAllocation` |
-| R6 | One active reservation per (demandRef, SKU, quantity) — best effort | `ReserveStock.activeReservationFor` / `isReplayOf` (use case, not DB-enforced) | `reserve_stock_multi_line_test.go` |
+| R6 | One active reservation per (demandRef, SKU, quantity, and line when the request names one) — best effort; an ACTIVE reservation with no line still answers a line-aware retry | `ReserveStock.activeReservationFor` / `isReplayOf` (use case, not DB-enforced) | `reserve_stock_multi_line_test.go`, `reserve_stock_line_test.go` |
 | R7 | Empty `demandRef` is rejected | HTTP handler → `400 missing-demand-ref` | `server_test.go` |
+| R8 | `lineNo`, when present, is between 1 and 2147483647 (the 32-bit `line_no` column) | `reservation.ValidLineNo` in `NewForLine` → `reservation.ErrInvalidLineNo`; HTTP handler → `400 invalid-line-no`; TaskCompleted `line_no` outside the range → `ErrMalformedPickCompletion` (dead-lettered); column `INTEGER CHECK (line_no IS NULL OR line_no >= 1)` | `TestNewForLine_RejectsANonPositiveLineNo`, `TestNewForLine_LineNoBoundaryTable`, `TestReserveStock_Endpoint_NonPositiveLineNo_Rejected`, `TestReserveStock_Endpoint_LineNoBoundaryTable` |
 
 ### 5. Corrective Policies
 
@@ -314,9 +316,9 @@ returns `ErrAlreadyResolved`.
 
 | Command | Method | Use case / entry point |
 | --- | --- | --- |
-| Reserve | `New` | `ReserveStock` — `POST /reservations` (Idempotency-Key) |
+| Reserve | `New`, `NewForLine` | `ReserveStock` — `POST /reservations` (Idempotency-Key, optional `lineNo`, ADR 0036) |
 | Revoke | `Revoke` | `RevokeReservation` — `DELETE /reservations/{id}`, MCP `revoke_reservation` |
-| Confirm pick | `Confirm` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick`, and per ACTIVE reservation from `ConfirmPicksForOrder` on the order's last `TaskCompleted` ([ADR 0035](https://iqvo.github.io/inventory-storage/docs/adr/0035)) |
+| Confirm pick | `Confirm` | `ConfirmPick` — `POST /reservations/{id}/confirm-pick`, and per ACTIVE reservation from `ConfirmPicksForOrder` on `TaskCompleted`: the picked line's reservation when the event carries `line_no` ([ADR 0036](https://iqvo.github.io/inventory-storage/docs/adr/0036)), the order's on its last pick otherwise ([ADR 0035](https://iqvo.github.io/inventory-storage/docs/adr/0035)) |
 | Expire | `Expire` | lazy, inside the four read paths above |
 
 ### 7. Created Events
@@ -352,11 +354,14 @@ expired) within the 30-minute default timeout. Rows are never deleted.
 ### 2. Description
 
 SKU-level master data, independent of any `StockUnit` or bin, describing how
-an item must be handled. This context is the **source of truth** (ADR 0009):
-a closed set of `HandlingTag`s, a `TemperatureClass` required only for
+an item must be handled. product-master is the **source of truth**
+([ADR 0034](https://iqvo.github.io/inventory-storage/docs/adr/0034), superseding the ownership part of ADR 0009); this
+aggregate is a version-guarded local copy of it: a closed set of
+`HandlingTag`s, a `TemperatureClass` required only for
 `TemperatureSensitive` SKUs, and an optional US DOT hazard class meaningful
 only for `Hazmat` SKUs (ADR 0010). `StowStock` enforces placement and
-same-bin segregation from it; three sibling contexts read it over REST.
+same-bin segregation from it; no sibling context reads it any more (the REST
+`GET` is deprecated).
 
 | Field | Meaning |
 | --- | --- |
@@ -425,14 +430,14 @@ Unclassified SKUs, unknown bins and unclassified occupants are **fail-open**.
 
 | Event | Full CloudEvents `type` | Topics |
 | --- | --- | --- |
-| ProductClassified | `com.warehouse.wms.inventory-storage.product.ProductClassified` (subject and Kafka key = SKU; `data` = `{sku, handling_tags, temperature_class?, dot_hazard_class?}`, a full-state replacement) | `warehouse.inventory.events` and `warehouse.inventory.analytics`, through the outbox in the same transaction as the save — **published since 2026-10-06**, [ADR 0031](https://iqvo.github.io/inventory-storage/docs/adr/0031) |
+| ProductClassified (legacy) | `com.warehouse.wms.inventory-storage.product.ProductClassified` (subject and Kafka key = SKU; `data` = `{sku, handling_tags, temperature_class?, dot_hazard_class?}`, a full-state replacement) | `warehouse.inventory.events` only, through the outbox — since [ADR 0034](https://iqvo.github.io/inventory-storage/docs/adr/0034) raised by **no** write path; only the one-shot `RepublishProductClassifications` backfill emits it, for product-master's legacy importer (published on every write from 2026-10-06 under [ADR 0031](https://iqvo.github.io/inventory-storage/docs/adr/0031) until ADR 0034) |
 
 ### 8. Throughput (estimate)
 
-Low writes (catalogue changes), high reads: every classified-SKU stow and
-every sibling's `GET /products/{sku}/classification` — siblings can now keep a
-local copy from the published `ProductClassified` event instead
-([ADR 0031](https://iqvo.github.io/inventory-storage/docs/adr/0031)); the REST read stays.
+Low writes (product-master's `ProductClassified` messages), high reads: every
+classified-SKU stow. Siblings keep their own copies from product-master's
+events; the deprecated REST read `GET /products/{sku}/classification` stays
+until product-master ADR 0003 stage E.
 
 ### 9. Size (estimate)
 

@@ -4,7 +4,7 @@
   "info": {
     "title": "Workforce Management Events",
     "version": "1.0.0",
-    "description": "Domain-event catalog for **Workforce Management**, a Supporting bounded\ncontext in the WES (Warehouse Execution Systems) subdomain. It owns \"who\nis on shift, on which process path, at what rate; direct vs indirect\nhours\" — the shift-start planning horizon (a human commits a split of\nheadcount across paths) plus intra-shift assignment tracking (moving\nassociates between paths as backlogs deviate). It stops at the path\nboundary: it never links an associate to a specific task, and it never\ndecides a rebalance — it makes the labor picture legible and enforces its\ninvariants.\n\nThree aggregates raise the events documented here:\n\n- `AssociateShift` (package `internal/domain/associate`) — roster entry:\n  who is on, their certifications, their break state, their logged hours.\n  Raises `AssociateShiftStarted`, `AssociateCertified`,\n  `AssociateBreakStarted`, `AssociateBreakEnded`, `AssociateShiftEnded`.\n- `ShiftPlan` (package `internal/domain/shiftplan`) — the committed split\n  of headcount across paths for one building's shift, made of `PathPlan`\n  lines. Raises `ShiftPlanProposed`, `ShiftPlanCommitted` and the\n  staffing-gap flag `PathUnderstaffed`.\n- `LaborAssignment` (package `internal/domain/assignment`) — one\n  associate on one path for an interval, with exactly one ACTIVE\n  assignment per associate at a time. Raises `LaborAssigned` and\n  `LaborReassigned`.\n\n**Envelope (mandatory).** Every Kafka message this service produces or\nconsumes is a CloudEvents 1.0 event in *structured content mode*\n(ADR-0026, superseding the envelope half of ADR-0004): the Kafka message\nvalue is the JSON event format, content type\n`application/cloudevents+json`, and every message carries the Kafka header\n`content-type: application/cloudevents+json; charset=UTF-8` alongside the\nW3C `traceparent`/`tracestate` headers. All of `specversion` (`1.0`),\n`id`, `source` (`/warehouse/workforce-management`), `type`, `subject`,\n`time`, `datacontenttype` (`application/json`) and `dataschema` are\nREQUIRED; the bounded context's own payload sits under `data`. There is\nno flat envelope and no envelope toggle.\n\n**Type naming convention.** The CloudEvents `type` attribute is\nreverse-DNS dotted and follows the exact shape\n`com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`, all\nlowercase except the final PascalCase event name. For this context the\nsubdomain is `wes` and the bounded context is `workforce-management`, so\nfor example a committed shift plan is published as\n`com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted`.\nThe `entity` segment is the aggregate that raises the event —\n`associate`, `shiftplan` or `assignment`. `PathUnderstaffed` uses\n`shiftplan`, since the gap is measured against a committed `ShiftPlan`'s\nplanned heads. A breaking payload change gets a new `.v2` type and a new\n`dataschema` version, never a mutation of the old one.\n\n**dataschema.** `urn:warehouse:workforce-management:<stream>:<EventName>:v1`\nwhere `<stream>` is `events` for `warehouse.workforce.events` and\n`analytics` for `warehouse.workforce.analytics`. The same occurrence keeps\nthe same `type` on both topics; `dataschema` names the payload shape.\n\n**Subject.** The aggregate instance id: the associate id for\n`associate`/`assignment` events, the path id for `PathUnderstaffed` and\n`ShiftPlanProposed`, and the ShiftPlan aggregate id\n`<buildingId>/<shiftId>` for `ShiftPlanCommitted` (the same value as the\nintegration message's Kafka key).\n\n**Which events leave the process on which topic.** The integration topic\n`warehouse.workforce.events` carries **only** `ShiftPlanCommitted`, fanned\nout into one message per `PathPlan` line. Every event in this catalog is\npublished to the internal analytics topic\n`warehouse.workforce.analytics` (consumed by this service's own analytics\nprojector, ADR-0010). Each message below pins its exact `type` and\n`dataschema` and documents the payload actually on the wire.\n",
+    "description": "Domain-event catalog for **Workforce Management**, a Supporting bounded\ncontext in the WES (Warehouse Execution Systems) subdomain. It owns \"who\nis on shift, on which process path, at what rate; direct vs indirect\nhours\" — the shift-start planning horizon (a human commits a split of\nheadcount across paths) plus intra-shift assignment tracking (moving\nassociates between paths as backlogs deviate). It stops at the path\nboundary: it never links an associate to a specific task, and it never\ndecides a rebalance — it makes the labor picture legible and enforces its\ninvariants.\n\nThree aggregates raise the events documented here:\n\n- `AssociateShift` (package `internal/domain/associate`) — roster entry:\n  who is on, their certifications, their break state, their logged hours.\n  Raises `AssociateShiftStarted`, `AssociateCertified`,\n  `AssociateBreakStarted`, `AssociateBreakEnded`, `AssociateShiftEnded`.\n- `ShiftPlan` (package `internal/domain/shiftplan`) — the committed split\n  of headcount across paths for one site's shift (`siteCode`; `buildingId`\n  is its deprecated alias, ADR 0035), made of `PathPlan`\n  lines. Raises `ShiftPlanProposed`, `ShiftPlanCommitted` and the\n  staffing-gap flag `PathUnderstaffed`.\n- `LaborAssignment` (package `internal/domain/assignment`) — one\n  associate on one path for an interval, with exactly one ACTIVE\n  assignment per associate at a time. Raises `LaborAssigned` and\n  `LaborReassigned`.\n\n**Envelope (mandatory).** Every Kafka message this service produces or\nconsumes is a CloudEvents 1.0 event in *structured content mode*\n(ADR-0026, superseding the envelope half of ADR-0004): the Kafka message\nvalue is the JSON event format, content type\n`application/cloudevents+json`, and every message carries the Kafka header\n`content-type: application/cloudevents+json; charset=UTF-8` alongside the\nW3C `traceparent`/`tracestate` headers. All of `specversion` (`1.0`),\n`id`, `source` (`/warehouse/workforce-management`), `type`, `subject`,\n`time`, `datacontenttype` (`application/json`) and `dataschema` are\nREQUIRED; the bounded context's own payload sits under `data`. There is\nno flat envelope and no envelope toggle.\n\n**Type naming convention.** The CloudEvents `type` attribute is\nreverse-DNS dotted and follows the exact shape\n`com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`, all\nlowercase except the final PascalCase event name. For this context the\nsubdomain is `wes` and the bounded context is `workforce-management`, so\nfor example a committed shift plan is published as\n`com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted`.\nThe `entity` segment is the aggregate that raises the event —\n`associate`, `shiftplan` or `assignment`. `PathUnderstaffed` uses\n`shiftplan`, since the gap is measured against a committed `ShiftPlan`'s\nplanned heads. A breaking payload change gets a new `.v2` type and a new\n`dataschema` version, never a mutation of the old one.\n\n**dataschema.** `urn:warehouse:workforce-management:<stream>:<EventName>:v1`\nwhere `<stream>` is `events` for `warehouse.workforce.events` and\n`analytics` for `warehouse.workforce.analytics`. The same occurrence keeps\nthe same `type` on both topics; `dataschema` names the payload shape.\n\n**Subject.** The aggregate instance id: the associate id for\n`associate`/`assignment` events, the path id for `PathUnderstaffed` and\n`ShiftPlanProposed`, and the ShiftPlan aggregate id\n`<buildingId>/<shiftId>` for `ShiftPlanCommitted` (the same value as the\nintegration message's Kafka key). The first segment of that id IS the site\ncode (ADR 0035): the subject and the Kafka key are unchanged by the\nsiteCode convergence, so no consumer's partitioning or ordering moves.\n\n**siteCode / buildingId (ADR 0035).** The ShiftPlan key has one canonical\nname, `siteCode` (the facility-layout Site code), and one deprecated alias,\n`buildingId`, with the SAME value. `ShiftPlanProposed` and\n`ShiftPlanCommitted` (v1, both topics where published) therefore carry\n`site_code` next to the unchanged, now deprecated, `building_id`. The\nchange is additive: no `.v2`, nothing removed, `site_code` is not\n`required` in the schema because messages produced before the addition lack\nit. Removing `building_id` is a future breaking change with its own ADR.\n\n**Which events leave the process on which topic.** The integration topic\n`warehouse.workforce.events` carries **only** `ShiftPlanCommitted`, fanned\nout into one message per `PathPlan` line. Every event in this catalog is\npublished to the internal analytics topic\n`warehouse.workforce.analytics` (consumed by this service's own analytics\nprojector, ADR-0010). Each message below pins its exact `type` and\n`dataschema` and documents the payload actually on the wire.\n",
     "contact": {
       "name": "Workforce Management — claudioed",
       "url": "https://github.com/claudioed/workforce-management",
@@ -58,8 +58,8 @@
             {
               "name": "ShiftPlanCommitted",
               "title": "Shift plan committed",
-              "summary": "A human committed a headcount split across process paths for a building's shift.",
-              "description": "Raised by the `ShiftPlan` aggregate when a human commits the split of\nheadcount across process paths for one building's shift. The commit\nis validated in the domain: `plannedHeads(path)` must not exceed\n`installedStations(path)`, and planned hours must fit the shift's max\nhours.\n\n**Published to `warehouse.workforce.events`.** This is the only\ndomain event on the integration topic; wes-work-planning dispatches on\nits exact `type`. The adapter loads the committed\nplan through the `ShiftPlanRepo` and **fans the single domain event\nout into one Kafka message per `PathPlan` line** — a plan committed\nwith three path lines produces three messages on\n`warehouse.workforce.events`, each carrying that one line's\n`path_id`, `planned_heads`, `planned_rate` and `planned_hours`\nalongside the plan's `building_id` and `shift_id`. Consumers must\ntherefore expect N messages per commit, not one, and must not assume\na message carries the whole plan. Every line message has its own\nunique CloudEvents `id` (minted once and persisted with the outbox\nrow, so a redelivery repeats it); `subject` is the ShiftPlan aggregate\nid `<buildingId>/<shiftId>`, identical to the Kafka key.\n",
+              "summary": "A human committed a headcount split across process paths for a site's shift.",
+              "description": "Raised by the `ShiftPlan` aggregate when a human commits the split of\nheadcount across process paths for one site's shift. The commit\nis validated in the domain: `plannedHeads(path)` must not exceed\n`installedStations(path)`, and planned hours must fit the shift's max\nhours.\n\n**Published to `warehouse.workforce.events`.** This is the only\ndomain event on the integration topic; wes-work-planning dispatches on\nits exact `type`. The adapter loads the committed\nplan through the `ShiftPlanRepo` and **fans the single domain event\nout into one Kafka message per `PathPlan` line** — a plan committed\nwith three path lines produces three messages on\n`warehouse.workforce.events`, each carrying that one line's\n`path_id`, `planned_heads`, `planned_rate` and `planned_hours`\nalongside the plan's `site_code` (canonical) and `building_id`\n(deprecated, same value) and `shift_id`. Consumers must\ntherefore expect N messages per commit, not one, and must not assume\na message carries the whole plan. Every line message has its own\nunique CloudEvents `id` (minted once and persisted with the outbox\nrow, so a redelivery repeats it); `subject` is the ShiftPlan aggregate\nid `<buildingId>/<shiftId>`, identical to the Kafka key.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -183,36 +183,42 @@
                           "planned_hours"
                         ],
                         "properties": {
+                          "site_code": {
+                            "type": "string",
+                            "description": "Canonical name of the shift-plan key (ADR 0035): the Site\ncode the shift plan was committed for. Carries the SAME\nvalue as `building_id`. Added after v1 shipped, so it is\ndeliberately not `required` -- messages produced before\nthe addition lack it; consumers must fall back to\n`building_id` when it is absent. The first segment of\n`subject` and of the Kafka key is this value.\n",
+                            "x-parser-schema-id": "<anonymous-schema-14>"
+                          },
                           "building_id": {
                             "type": "string",
-                            "description": "Building the shift plan was committed for.",
-                            "x-parser-schema-id": "<anonymous-schema-14>"
+                            "deprecated": true,
+                            "description": "DEPRECATED -- use `site_code`; same value. Kept, not\nremoved (additive change, no `.v2`); removal needs a later\nbreaking ADR. Site the shift plan was committed for.\n",
+                            "x-parser-schema-id": "<anonymous-schema-15>"
                           },
                           "shift_id": {
                             "type": "string",
-                            "description": "Shift the plan covers. One ShiftPlan exists per building per shift.",
-                            "x-parser-schema-id": "<anonymous-schema-15>"
+                            "description": "Shift the plan covers. One ShiftPlan exists per site per shift.",
+                            "x-parser-schema-id": "<anonymous-schema-16>"
                           },
                           "path_id": {
                             "type": "string",
                             "description": "Process path this line plans headcount for, e.g. \"pack\".",
-                            "x-parser-schema-id": "<anonymous-schema-16>"
+                            "x-parser-schema-id": "<anonymous-schema-17>"
                           },
                           "planned_heads": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Heads committed to this path. Never exceeds the path's installed stations.",
-                            "x-parser-schema-id": "<anonymous-schema-17>"
+                            "x-parser-schema-id": "<anonymous-schema-18>"
                           },
                           "planned_rate": {
                             "type": "number",
                             "description": "Planned units per hour per head used to size this line.",
-                            "x-parser-schema-id": "<anonymous-schema-18>"
+                            "x-parser-schema-id": "<anonymous-schema-19>"
                           },
                           "planned_hours": {
                             "type": "number",
                             "description": "Total labor hours committed to this path for the shift.",
-                            "x-parser-schema-id": "<anonymous-schema-19>"
+                            "x-parser-schema-id": "<anonymous-schema-20>"
                           }
                         },
                         "x-parser-schema-id": "<anonymous-schema-13>"
@@ -237,6 +243,7 @@
                     "datacontenttype": "application/json",
                     "dataschema": "urn:warehouse:workforce-management:events:ShiftPlanCommitted:v1",
                     "data": {
+                      "site_code": "BLD1",
                       "building_id": "BLD1",
                       "shift_id": "SHIFT1",
                       "path_id": "pack",
@@ -296,13 +303,13 @@
                         "type": "string",
                         "description": "Fixed type for this event (same occurrence type as the integration message).",
                         "const": "com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted",
-                        "x-parser-schema-id": "<anonymous-schema-21>"
+                        "x-parser-schema-id": "<anonymous-schema-22>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:ShiftPlanCommitted:v1",
-                        "x-parser-schema-id": "<anonymous-schema-22>"
+                        "x-parser-schema-id": "<anonymous-schema-23>"
                       },
                       "data": {
                         "type": "object",
@@ -312,21 +319,27 @@
                           "shift_id"
                         ],
                         "properties": {
+                          "site_code": {
+                            "type": "string",
+                            "description": "Canonical name of the shift-plan key (ADR 0035): the Site\ncode the shift plan was committed for. Carries the SAME\nvalue as `building_id`. Added after v1 shipped, so it is\ndeliberately not `required` -- messages produced before\nthe addition lack it; consumers must fall back to\n`building_id` when it is absent.\n",
+                            "x-parser-schema-id": "<anonymous-schema-25>"
+                          },
                           "building_id": {
                             "type": "string",
-                            "description": "Building the shift plan was committed for.",
-                            "x-parser-schema-id": "<anonymous-schema-24>"
+                            "deprecated": true,
+                            "description": "DEPRECATED -- use `site_code`; same value. Kept, not\nremoved (additive change, no `.v2`); removal needs a later\nbreaking ADR. Site the shift plan was committed for.\n",
+                            "x-parser-schema-id": "<anonymous-schema-26>"
                           },
                           "shift_id": {
                             "type": "string",
                             "description": "Shift the plan covers.",
-                            "x-parser-schema-id": "<anonymous-schema-25>"
+                            "x-parser-schema-id": "<anonymous-schema-27>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-23>"
+                        "x-parser-schema-id": "<anonymous-schema-24>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-20>"
+                    "x-parser-schema-id": "<anonymous-schema-21>"
                   }
                 ],
                 "x-parser-schema-id": "ShiftPlanCommittedAnalyticsEvent"
@@ -345,6 +358,7 @@
                     "datacontenttype": "application/json",
                     "dataschema": "urn:warehouse:workforce-management:analytics:ShiftPlanCommitted:v1",
                     "data": {
+                      "site_code": "BLD1",
                       "building_id": "BLD1",
                       "shift_id": "SHIFT1"
                     }
@@ -383,13 +397,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.shiftplan.ShiftPlanProposed",
-                        "x-parser-schema-id": "<anonymous-schema-27>"
+                        "x-parser-schema-id": "<anonymous-schema-29>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:ShiftPlanProposed:v1",
-                        "x-parser-schema-id": "<anonymous-schema-28>"
+                        "x-parser-schema-id": "<anonymous-schema-30>"
                       },
                       "data": {
                         "type": "object",
@@ -401,32 +415,38 @@
                           "planned_rate"
                         ],
                         "properties": {
+                          "site_code": {
+                            "type": "string",
+                            "description": "Canonical name of the shift-plan key (ADR 0035): the Site\ncode the proposal was computed for. Carries the SAME\nvalue as `building_id`. Added after v1 shipped, so it is\ndeliberately not `required`; consumers must fall back to\n`building_id` when it is absent.\n",
+                            "x-parser-schema-id": "<anonymous-schema-32>"
+                          },
                           "building_id": {
                             "type": "string",
-                            "description": "Building the proposal was computed for.",
-                            "x-parser-schema-id": "<anonymous-schema-30>"
+                            "deprecated": true,
+                            "description": "DEPRECATED -- use `site_code`; same value. Kept, not\nremoved (additive change, no `.v2`); removal needs a later\nbreaking ADR. Site the proposal was computed for.\n",
+                            "x-parser-schema-id": "<anonymous-schema-33>"
                           },
                           "path_id": {
                             "type": "string",
                             "description": "Process path the heads were proposed for.",
-                            "x-parser-schema-id": "<anonymous-schema-31>"
+                            "x-parser-schema-id": "<anonymous-schema-34>"
                           },
                           "planned_heads": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Proposed heads, computed as ceil(charge / plannedRate).",
-                            "x-parser-schema-id": "<anonymous-schema-32>"
+                            "x-parser-schema-id": "<anonymous-schema-35>"
                           },
                           "planned_rate": {
                             "type": "number",
                             "description": "Planned units per hour per head used in the computation.",
-                            "x-parser-schema-id": "<anonymous-schema-33>"
+                            "x-parser-schema-id": "<anonymous-schema-36>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-29>"
+                        "x-parser-schema-id": "<anonymous-schema-31>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-26>"
+                    "x-parser-schema-id": "<anonymous-schema-28>"
                   }
                 ],
                 "x-parser-schema-id": "ShiftPlanProposedEvent"
@@ -445,6 +465,7 @@
                     "datacontenttype": "application/json",
                     "dataschema": "urn:warehouse:workforce-management:analytics:ShiftPlanProposed:v1",
                     "data": {
+                      "site_code": "BLD1",
                       "building_id": "BLD1",
                       "path_id": "pack",
                       "planned_heads": 6,
@@ -485,13 +506,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.shiftplan.PathUnderstaffed",
-                        "x-parser-schema-id": "<anonymous-schema-35>"
+                        "x-parser-schema-id": "<anonymous-schema-38>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:PathUnderstaffed:v1",
-                        "x-parser-schema-id": "<anonymous-schema-36>"
+                        "x-parser-schema-id": "<anonymous-schema-39>"
                       },
                       "data": {
                         "type": "object",
@@ -505,31 +526,31 @@
                           "path_id": {
                             "type": "string",
                             "description": "Process path whose active assignments fall short of plan.",
-                            "x-parser-schema-id": "<anonymous-schema-38>"
+                            "x-parser-schema-id": "<anonymous-schema-41>"
                           },
                           "planned_heads": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Heads committed to this path on the current ShiftPlan.",
-                            "x-parser-schema-id": "<anonymous-schema-39>"
+                            "x-parser-schema-id": "<anonymous-schema-42>"
                           },
                           "active_heads": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Count of currently ACTIVE LaborAssignments on this path.",
-                            "x-parser-schema-id": "<anonymous-schema-40>"
+                            "x-parser-schema-id": "<anonymous-schema-43>"
                           },
                           "site_code": {
                             "type": "string",
                             "description": "ADDITIVE and optional (ADR 0034; the payload stays v1). The canonical Site code (the facility-layout Site code, the same identifier warehouse-planning carries as `site_id`) the gap was computed for: `active_heads` then counts only associates with an active shift at that site. Omitted when the gap was computed fleet-wide, so consumers MUST treat absence as \"unscoped\" (every site together), never as a particular site.",
                             "example": "WH1",
-                            "x-parser-schema-id": "<anonymous-schema-41>"
+                            "x-parser-schema-id": "<anonymous-schema-44>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-37>"
+                        "x-parser-schema-id": "<anonymous-schema-40>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-34>"
+                    "x-parser-schema-id": "<anonymous-schema-37>"
                   }
                 ],
                 "x-parser-schema-id": "PathUnderstaffedEvent"
@@ -607,13 +628,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.associate.AssociateShiftStarted",
-                        "x-parser-schema-id": "<anonymous-schema-43>"
+                        "x-parser-schema-id": "<anonymous-schema-46>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:AssociateShiftStarted:v1",
-                        "x-parser-schema-id": "<anonymous-schema-44>"
+                        "x-parser-schema-id": "<anonymous-schema-47>"
                       },
                       "data": {
                         "type": "object",
@@ -625,13 +646,13 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the associate starting the shift.",
-                            "x-parser-schema-id": "<anonymous-schema-46>"
+                            "x-parser-schema-id": "<anonymous-schema-49>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-45>"
+                        "x-parser-schema-id": "<anonymous-schema-48>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-42>"
+                    "x-parser-schema-id": "<anonymous-schema-45>"
                   }
                 ],
                 "x-parser-schema-id": "AssociateShiftStartedEvent"
@@ -687,13 +708,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.associate.AssociateCertified",
-                        "x-parser-schema-id": "<anonymous-schema-48>"
+                        "x-parser-schema-id": "<anonymous-schema-51>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:AssociateCertified:v1",
-                        "x-parser-schema-id": "<anonymous-schema-49>"
+                        "x-parser-schema-id": "<anonymous-schema-52>"
                       },
                       "data": {
                         "type": "object",
@@ -706,18 +727,18 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the associate being certified.",
-                            "x-parser-schema-id": "<anonymous-schema-51>"
+                            "x-parser-schema-id": "<anonymous-schema-54>"
                           },
                           "certification": {
                             "type": "string",
                             "description": "The named qualification granted, e.g. \"hazmat\".",
-                            "x-parser-schema-id": "<anonymous-schema-52>"
+                            "x-parser-schema-id": "<anonymous-schema-55>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-50>"
+                        "x-parser-schema-id": "<anonymous-schema-53>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-47>"
+                    "x-parser-schema-id": "<anonymous-schema-50>"
                   }
                 ],
                 "x-parser-schema-id": "AssociateCertifiedEvent"
@@ -774,13 +795,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.associate.AssociateBreakStarted",
-                        "x-parser-schema-id": "<anonymous-schema-54>"
+                        "x-parser-schema-id": "<anonymous-schema-57>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:AssociateBreakStarted:v1",
-                        "x-parser-schema-id": "<anonymous-schema-55>"
+                        "x-parser-schema-id": "<anonymous-schema-58>"
                       },
                       "data": {
                         "type": "object",
@@ -792,13 +813,13 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the associate starting a break.",
-                            "x-parser-schema-id": "<anonymous-schema-57>"
+                            "x-parser-schema-id": "<anonymous-schema-60>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-56>"
+                        "x-parser-schema-id": "<anonymous-schema-59>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-53>"
+                    "x-parser-schema-id": "<anonymous-schema-56>"
                   }
                 ],
                 "x-parser-schema-id": "AssociateBreakStartedEvent"
@@ -854,13 +875,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.associate.AssociateBreakEnded",
-                        "x-parser-schema-id": "<anonymous-schema-59>"
+                        "x-parser-schema-id": "<anonymous-schema-62>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:AssociateBreakEnded:v1",
-                        "x-parser-schema-id": "<anonymous-schema-60>"
+                        "x-parser-schema-id": "<anonymous-schema-63>"
                       },
                       "data": {
                         "type": "object",
@@ -872,13 +893,13 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the associate ending a break.",
-                            "x-parser-schema-id": "<anonymous-schema-62>"
+                            "x-parser-schema-id": "<anonymous-schema-65>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-61>"
+                        "x-parser-schema-id": "<anonymous-schema-64>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-58>"
+                    "x-parser-schema-id": "<anonymous-schema-61>"
                   }
                 ],
                 "x-parser-schema-id": "AssociateBreakEndedEvent"
@@ -934,13 +955,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.associate.AssociateShiftEnded",
-                        "x-parser-schema-id": "<anonymous-schema-64>"
+                        "x-parser-schema-id": "<anonymous-schema-67>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:AssociateShiftEnded:v1",
-                        "x-parser-schema-id": "<anonymous-schema-65>"
+                        "x-parser-schema-id": "<anonymous-schema-68>"
                       },
                       "data": {
                         "type": "object",
@@ -952,13 +973,13 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the associate whose shift ended.",
-                            "x-parser-schema-id": "<anonymous-schema-67>"
+                            "x-parser-schema-id": "<anonymous-schema-70>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-66>"
+                        "x-parser-schema-id": "<anonymous-schema-69>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-63>"
+                    "x-parser-schema-id": "<anonymous-schema-66>"
                   }
                 ],
                 "x-parser-schema-id": "AssociateShiftEndedEvent"
@@ -1014,13 +1035,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.assignment.LaborAssigned",
-                        "x-parser-schema-id": "<anonymous-schema-69>"
+                        "x-parser-schema-id": "<anonymous-schema-72>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:LaborAssigned:v1",
-                        "x-parser-schema-id": "<anonymous-schema-70>"
+                        "x-parser-schema-id": "<anonymous-schema-73>"
                       },
                       "data": {
                         "type": "object",
@@ -1033,18 +1054,18 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the assigned associate.",
-                            "x-parser-schema-id": "<anonymous-schema-72>"
+                            "x-parser-schema-id": "<anonymous-schema-75>"
                           },
                           "path_id": {
                             "type": "string",
                             "description": "Process path the associate now works, e.g. \"pack\". Never a task id.",
-                            "x-parser-schema-id": "<anonymous-schema-73>"
+                            "x-parser-schema-id": "<anonymous-schema-76>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-71>"
+                        "x-parser-schema-id": "<anonymous-schema-74>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-68>"
+                    "x-parser-schema-id": "<anonymous-schema-71>"
                   }
                 ],
                 "x-parser-schema-id": "LaborAssignedEvent"
@@ -1101,13 +1122,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.assignment.LaborReassigned",
-                        "x-parser-schema-id": "<anonymous-schema-75>"
+                        "x-parser-schema-id": "<anonymous-schema-78>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:LaborReassigned:v1",
-                        "x-parser-schema-id": "<anonymous-schema-76>"
+                        "x-parser-schema-id": "<anonymous-schema-79>"
                       },
                       "data": {
                         "type": "object",
@@ -1121,23 +1142,23 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the reassigned associate.",
-                            "x-parser-schema-id": "<anonymous-schema-78>"
+                            "x-parser-schema-id": "<anonymous-schema-81>"
                           },
                           "from_path_id": {
                             "type": "string",
                             "description": "Process path whose active assignment was ended.",
-                            "x-parser-schema-id": "<anonymous-schema-79>"
+                            "x-parser-schema-id": "<anonymous-schema-82>"
                           },
                           "to_path_id": {
                             "type": "string",
                             "description": "Process path the associate was moved onto.",
-                            "x-parser-schema-id": "<anonymous-schema-80>"
+                            "x-parser-schema-id": "<anonymous-schema-83>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-77>"
+                        "x-parser-schema-id": "<anonymous-schema-80>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-74>"
+                    "x-parser-schema-id": "<anonymous-schema-77>"
                   }
                 ],
                 "x-parser-schema-id": "LaborReassignedEvent"

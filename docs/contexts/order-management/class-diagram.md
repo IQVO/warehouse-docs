@@ -431,6 +431,14 @@ classDiagram
     <<Port>>
     +GetClassification(ctx, sku string) ProductClassification
   }
+  class ProductClassificationCopy {
+    <<Repository>>
+    +Upsert(ctx, rec ProductClassificationRecord) bool
+  }
+  class ProductClassificationProcessedEvents {
+    <<Repository>>
+    +MarkProcessed(ctx, eventId string) bool
+  }
   class ProcessPathCatalogue {
     <<Port>>
     +IsActive(pathId PathId) bool
@@ -466,7 +474,10 @@ classDiagram
   InventoryReservationClient ..> ReservationRequest
 ```
 
-Source: `internal/application/ports/ports.go`. Omits: the sentinel errors
+Source: `internal/application/ports/ports.go`. `ReservationRequest.LineNo`
+is sent on `POST /reservations` as the optional `lineNo` (when at least 1) and
+also scopes the Idempotency-Key ([ADR 0037](https://iqvo.github.io/order-management/docs/adr/0037-send-line-no-on-reservations)).
+Omits: the sentinel errors
 (`ErrInsufficientStock`, `ErrDownstreamNotConfigured`,
 `ErrDownstreamUnavailable`, `ErrConcurrentModification`) and the
 `ProductClassification`/`ReservationResult` result structs.
@@ -480,10 +491,11 @@ flowchart LR
     MCP["inbound/mcp<br/>get_order, get_promise_health"]
     KREP["inbound/kafka<br/>RepromiseConsumer"]
     KPC["inbound/kafka<br/>PlannedCapacityConsumer"]
+    KCLS["inbound/kafka<br/>ProductClassificationConsumer"]
     KAN["inbound/kafka<br/>AnalyticsConsumer"]
   end
   subgraph APP["Application"]
-    UC["usecases<br/>ReceiveOrder, RetryAllocation, ReleaseHeldOrder,<br/>CancelOrder, GetOrder, RepromiseOrder,<br/>ApplyPlannedCapacity, GetPlannedCapacity,<br/>OrderCapacityConstraints"]
+    UC["usecases<br/>ReceiveOrder, RetryAllocation, ReleaseHeldOrder,<br/>CancelOrder, GetOrder, RepromiseOrder,<br/>ApplyPlannedCapacity, GetPlannedCapacity,<br/>OrderCapacityConstraints, ApplyProductClassification"]
     PORTS["ports"]
   end
   subgraph DOM["Domain"]
@@ -493,7 +505,7 @@ flowchart LR
     PG["postgres<br/>OrderRepo, UnitOfWork, OutboxPublisher,<br/>OutboxRelay, Sweeper, PlannedCapacityRepo"]
     MEM["memory<br/>in-memory repos, SystemClock"]
     INV["inventorystorage<br/>Client, BreakerClient, PermissiveClient"]
-    CLS["productclassification<br/>Client, BreakerClient, PermissiveLookup"]
+    CLS["productclassificationcopy<br/>PostgresStore, MemoryStore, PermissiveLookup,<br/>Postgres/MemoryProcessedEvents"]
     CACHE["kafkacatalog, kafkacptschedule,<br/>kafkapathcapacity, pathcapacity"]
     KPUB["kafka<br/>Publisher, AnalyticsPublisher, RelaySink"]
     LOG["events<br/>LogPublisher"]
@@ -506,6 +518,7 @@ flowchart LR
   MCP --> UC
   KREP --> UC
   KPC --> UC
+  KCLS --> UC
   KAN --> REP
   UC --> PORTS
   UC --> D
@@ -522,7 +535,8 @@ flowchart LR
 ```
 
 Source: `cmd/order/main.go`, `cmd/order/wiring.go`,
-`cmd/order/planned_capacity.go`, `cmd/mcp/main.go`,
+`cmd/order/planned_capacity.go`, `cmd/order/product_classification.go`,
+`cmd/mcp/main.go`,
 `cmd/order-projector/main.go`, `internal/adapters/**`. Omits:
 `cmd/order-reports` (reads `analytics/report` through `analyticsstore` and
 serves `inbound/http.ReportsHandlers`), and the `cloudevents` helper every

@@ -27,7 +27,8 @@ who is on, their certifications, their break state, their logged hours.
 Raises <code>AssociateShiftStarted</code>, <code>AssociateCertified</code>,
 <code>AssociateBreakStarted</code>, <code>AssociateBreakEnded</code>, <code>AssociateShiftEnded</code>.</li>
 <li><code>ShiftPlan</code> (package <code>internal/domain/shiftplan</code>) — the committed split
-of headcount across paths for one building's shift, made of <code>PathPlan</code>
+of headcount across paths for one site's shift (<code>siteCode</code>; <code>buildingId</code>
+is its deprecated alias, ADR 0035), made of <code>PathPlan</code>
 lines. Raises <code>ShiftPlanProposed</code>, <code>ShiftPlanCommitted</code> and the
 staffing-gap flag <code>PathUnderstaffed</code>.</li>
 <li><code>LaborAssignment</code> (package <code>internal/domain/assignment</code>) — one
@@ -66,7 +67,17 @@ the same <code>type</code> on both topics; <code>dataschema</code> names the pay
 <code>associate</code>/<code>assignment</code> events, the path id for <code>PathUnderstaffed</code> and
 <code>ShiftPlanProposed</code>, and the ShiftPlan aggregate id
 <code>&lt;buildingId&gt;/&lt;shiftId&gt;</code> for <code>ShiftPlanCommitted</code> (the same value as the
-integration message's Kafka key).</p>
+integration message's Kafka key). The first segment of that id IS the site
+code (ADR 0035): the subject and the Kafka key are unchanged by the
+siteCode convergence, so no consumer's partitioning or ordering moves.</p>
+<p><strong>siteCode / buildingId (ADR 0035).</strong> The ShiftPlan key has one canonical
+name, <code>siteCode</code> (the facility-layout Site code), and one deprecated alias,
+<code>buildingId</code>, with the SAME value. <code>ShiftPlanProposed</code> and
+<code>ShiftPlanCommitted</code> (v1, both topics where published) therefore carry
+<code>site_code</code> next to the unchanged, now deprecated, <code>building_id</code>. The
+change is additive: no <code>.v2</code>, nothing removed, <code>site_code</code> is not
+<code>required</code> in the schema because messages produced before the addition lack
+it. Removing <code>building_id</code> is a future breaking change with its own ADR.</p>
 <p><strong>Which events leave the process on which topic.</strong> The integration topic
 <code>warehouse.workforce.events</code> carries <strong>only</strong> <code>ShiftPlanCommitted</code>, fanned
 out into one message per <code>PathPlan</code> line. Every event in this catalog is
@@ -100,8 +111,8 @@ message is a CloudEvents 1.0 structured-mode event; route on the full
 one message per <code>PathPlan</code> line of the committed plan, each with its
 own unique <code>id</code>. The remaining messages listed here are published to
 the analytics topic only — see each message's description.</p>
-</div></div><div class="border bg-gray-100 rounded px-4 py-2 mt-2"><div class="text-sm text-gray-700">Operation ID<span class="bg-orange-600 text-white rounded text-xs ml-2 py-0 px-2">consumeWorkforceEvents</span></div></div><div class="mt-2 text-sm"><p>Available only on servers:</p><ul class="flex flex-wrap leading-normal"><li class="inline-block mt-2 mr-2"><a href="#server-production" class="border border-solid border-blue-300 hover:bg-blue-300 hover:text-blue-600 text-blue-500 font-bold no-underline text-xs rounded px-3 py-1 cursor-pointer"><span class="underline">production</span></a></li></ul></div><div class="mt-2" id="operation-send-warehouse.workforce.events-security"></div><div class="mt-2"></div><div class="mt-2"></div><div class="mt-2"><ul class="flex flex-wrap leading-normal"><li class="inline-block mt-2 mr-2"><div title="" class="border border-solid border-blue-300 hover:bg-blue-300 hover:text-blue-600 text-blue-500 font-bold no-underline text-xs rounded px-3 py-1"><span class="">#workforce-management</span></div></li></ul></div></div><div class="w-full mt-4" id="operation-send-warehouse.workforce.events-message"><div class="mt-2"><p class="px-8">Accepts the following message:</p><div class="mt-2"><div class="panel-item"><div class="panel-item--center px-8"><div class="shadow rounded bg-gray-200 p-4 border"><div><span class="text-gray-700 mr-2">Shift plan committed</span></div><p class="text-gray-600 text-sm">A human committed a headcount split across process paths for a building&#x27;s shift.</p><ul class="leading-normal mt-2 mb-4 space-x-2 space-y-2"><li class="inline-block"><a href="https://www.iana.org/assignments/media-types/application/cloudevents+json" title="Opens in new window" class="border border-solid border-orange-300 hover:bg-orange-300 hover:text-orange-600 text-orange-500 font-bold no-underline text-xs uppercase rounded px-3 py-1" target="_blank" rel="nofollow noopener noreferrer"><span>application/cloudevents+json</span></a></li></ul><div class="mt-2"><div class="prose max-w-none text-sm"><p>Raised by the <code>ShiftPlan</code> aggregate when a human commits the split of
-headcount across process paths for one building's shift. The commit
+</div></div><div class="border bg-gray-100 rounded px-4 py-2 mt-2"><div class="text-sm text-gray-700">Operation ID<span class="bg-orange-600 text-white rounded text-xs ml-2 py-0 px-2">consumeWorkforceEvents</span></div></div><div class="mt-2 text-sm"><p>Available only on servers:</p><ul class="flex flex-wrap leading-normal"><li class="inline-block mt-2 mr-2"><a href="#server-production" class="border border-solid border-blue-300 hover:bg-blue-300 hover:text-blue-600 text-blue-500 font-bold no-underline text-xs rounded px-3 py-1 cursor-pointer"><span class="underline">production</span></a></li></ul></div><div class="mt-2" id="operation-send-warehouse.workforce.events-security"></div><div class="mt-2"></div><div class="mt-2"></div><div class="mt-2"><ul class="flex flex-wrap leading-normal"><li class="inline-block mt-2 mr-2"><div title="" class="border border-solid border-blue-300 hover:bg-blue-300 hover:text-blue-600 text-blue-500 font-bold no-underline text-xs rounded px-3 py-1"><span class="">#workforce-management</span></div></li></ul></div></div><div class="w-full mt-4" id="operation-send-warehouse.workforce.events-message"><div class="mt-2"><p class="px-8">Accepts the following message:</p><div class="mt-2"><div class="panel-item"><div class="panel-item--center px-8"><div class="shadow rounded bg-gray-200 p-4 border"><div><span class="text-gray-700 mr-2">Shift plan committed</span></div><p class="text-gray-600 text-sm">A human committed a headcount split across process paths for a site&#x27;s shift.</p><ul class="leading-normal mt-2 mb-4 space-x-2 space-y-2"><li class="inline-block"><a href="https://www.iana.org/assignments/media-types/application/cloudevents+json" title="Opens in new window" class="border border-solid border-orange-300 hover:bg-orange-300 hover:text-orange-600 text-orange-500 font-bold no-underline text-xs uppercase rounded px-3 py-1" target="_blank" rel="nofollow noopener noreferrer"><span>application/cloudevents+json</span></a></li></ul><div class="mt-2"><div class="prose max-w-none text-sm"><p>Raised by the <code>ShiftPlan</code> aggregate when a human commits the split of
+headcount across process paths for one site's shift. The commit
 is validated in the domain: <code>plannedHeads(path)</code> must not exceed
 <code>installedStations(path)</code>, and planned hours must fit the shift's max
 hours.</p>
@@ -113,7 +124,8 @@ out into one Kafka message per <code>PathPlan</code> line</strong> — a plan co
 with three path lines produces three messages on
 <code>warehouse.workforce.events</code>, each carrying that one line's
 <code>path_id</code>, <code>planned_heads</code>, <code>planned_rate</code> and <code>planned_hours</code>
-alongside the plan's <code>building_id</code> and <code>shift_id</code>. Consumers must
+alongside the plan's <code>site_code</code> (canonical) and <code>building_id</code>
+(deprecated, same value) and <code>shift_id</code>. Consumers must
 therefore expect N messages per commit, not one, and must not assume
 a message carries the whole plan. Every line message has its own
 unique CloudEvents <code>id</code> (minted once and persisted with the outbox
@@ -132,6 +144,7 @@ publisher emits per line.</p>
   <span class="hljs-attr">"datacontenttype"</span>: <span class="hljs-string">"application/json"</span>,
   <span class="hljs-attr">"dataschema"</span>: <span class="hljs-string">"urn:warehouse:workforce-management:events:ShiftPlanCommitted:v1"</span>,
   <span class="hljs-attr">"data"</span>: {
+    <span class="hljs-attr">"site_code"</span>: <span class="hljs-string">"BLD1"</span>,
     <span class="hljs-attr">"building_id"</span>: <span class="hljs-string">"BLD1"</span>,
     <span class="hljs-attr">"shift_id"</span>: <span class="hljs-string">"SHIFT1"</span>,
     <span class="hljs-attr">"path_id"</span>: <span class="hljs-string">"pack"</span>,
@@ -168,6 +181,7 @@ building id; <code>subject</code> is the ShiftPlan aggregate id
   <span class="hljs-attr">"datacontenttype"</span>: <span class="hljs-string">"application/json"</span>,
   <span class="hljs-attr">"dataschema"</span>: <span class="hljs-string">"urn:warehouse:workforce-management:analytics:ShiftPlanCommitted:v1"</span>,
   <span class="hljs-attr">"data"</span>: {
+    <span class="hljs-attr">"site_code"</span>: <span class="hljs-string">"BLD1"</span>,
     <span class="hljs-attr">"building_id"</span>: <span class="hljs-string">"BLD1"</span>,
     <span class="hljs-attr">"shift_id"</span>: <span class="hljs-string">"SHIFT1"</span>
   }
@@ -191,6 +205,7 @@ analytics topic <code>warehouse.workforce.analytics</code> (dataschema
   <span class="hljs-attr">"datacontenttype"</span>: <span class="hljs-string">"application/json"</span>,
   <span class="hljs-attr">"dataschema"</span>: <span class="hljs-string">"urn:warehouse:workforce-management:analytics:ShiftPlanProposed:v1"</span>,
   <span class="hljs-attr">"data"</span>: {
+    <span class="hljs-attr">"site_code"</span>: <span class="hljs-string">"BLD1"</span>,
     <span class="hljs-attr">"building_id"</span>: <span class="hljs-string">"BLD1"</span>,
     <span class="hljs-attr">"path_id"</span>: <span class="hljs-string">"pack"</span>,
     <span class="hljs-attr">"planned_heads"</span>: <span class="hljs-number">6</span>,
@@ -407,8 +422,8 @@ analytics topic <code>warehouse.workforce.analytics</code> (dataschema
   }
 }
 </code></pre>
-</div></div></li></ul></div></div></div></div></div></li></ul></div></div></div></li></ul></section><section id="messages" class="mt-16"><h2 class="2xl:w-7/12 text-3xl font-light mb-4 px-8">Messages</h2><ul><li class="mb-4" id="message-ShiftPlanCommitted"><div class="panel-item"><div class="panel-item--center px-8"><div class="shadow rounded bg-gray-200 p-4 border"><div><strong class="text-gray-700 mr-2">#<!-- -->1</strong><span class="text-gray-700 mr-2">Shift plan committed</span></div><p class="text-gray-600 text-sm">A human committed a headcount split across process paths for a building&#x27;s shift.</p><ul class="leading-normal mt-2 mb-4 space-x-2 space-y-2"><li class="inline-block"><a href="https://www.iana.org/assignments/media-types/application/cloudevents+json" title="Opens in new window" class="border border-solid border-orange-300 hover:bg-orange-300 hover:text-orange-600 text-orange-500 font-bold no-underline text-xs uppercase rounded px-3 py-1" target="_blank" rel="nofollow noopener noreferrer"><span>application/cloudevents+json</span></a></li></ul><div class="border bg-gray-100 rounded px-4 py-2 mt-2"><div class="text-sm text-gray-700">Message ID<span class="bg-orange-600 text-white rounded text-xs ml-2 py-0 px-2">ShiftPlanCommitted</span></div></div><div class="mt-2"><div class="prose max-w-none text-sm"><p>Raised by the <code>ShiftPlan</code> aggregate when a human commits the split of
-headcount across process paths for one building's shift. The commit
+</div></div></li></ul></div></div></div></div></div></li></ul></div></div></div></li></ul></section><section id="messages" class="mt-16"><h2 class="2xl:w-7/12 text-3xl font-light mb-4 px-8">Messages</h2><ul><li class="mb-4" id="message-ShiftPlanCommitted"><div class="panel-item"><div class="panel-item--center px-8"><div class="shadow rounded bg-gray-200 p-4 border"><div><strong class="text-gray-700 mr-2">#<!-- -->1</strong><span class="text-gray-700 mr-2">Shift plan committed</span></div><p class="text-gray-600 text-sm">A human committed a headcount split across process paths for a site&#x27;s shift.</p><ul class="leading-normal mt-2 mb-4 space-x-2 space-y-2"><li class="inline-block"><a href="https://www.iana.org/assignments/media-types/application/cloudevents+json" title="Opens in new window" class="border border-solid border-orange-300 hover:bg-orange-300 hover:text-orange-600 text-orange-500 font-bold no-underline text-xs uppercase rounded px-3 py-1" target="_blank" rel="nofollow noopener noreferrer"><span>application/cloudevents+json</span></a></li></ul><div class="border bg-gray-100 rounded px-4 py-2 mt-2"><div class="text-sm text-gray-700">Message ID<span class="bg-orange-600 text-white rounded text-xs ml-2 py-0 px-2">ShiftPlanCommitted</span></div></div><div class="mt-2"><div class="prose max-w-none text-sm"><p>Raised by the <code>ShiftPlan</code> aggregate when a human commits the split of
+headcount across process paths for one site's shift. The commit
 is validated in the domain: <code>plannedHeads(path)</code> must not exceed
 <code>installedStations(path)</code>, and planned hours must fit the shift's max
 hours.</p>
@@ -420,7 +435,8 @@ out into one Kafka message per <code>PathPlan</code> line</strong> — a plan co
 with three path lines produces three messages on
 <code>warehouse.workforce.events</code>, each carrying that one line's
 <code>path_id</code>, <code>planned_heads</code>, <code>planned_rate</code> and <code>planned_hours</code>
-alongside the plan's <code>building_id</code> and <code>shift_id</code>. Consumers must
+alongside the plan's <code>site_code</code> (canonical) and <code>building_id</code>
+(deprecated, same value) and <code>shift_id</code>. Consumers must
 therefore expect N messages per commit, not one, and must not assume
 a message carries the whole plan. Every line message has its own
 unique CloudEvents <code>id</code> (minted once and persisted with the outbox

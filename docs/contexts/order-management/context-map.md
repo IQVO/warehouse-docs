@@ -106,7 +106,8 @@ Omits: the analytics topic (internal to this repo), the
 `OrderRepromised` integration event (published, no known consumer), the
 `SiteSkuDemandChanged` projection (ADR 0035, opt-in via
 `DEMAND_PROJECTION_SITE_ID`, no known consumer yet), and the
-CloudEvents type prefix `com.warehouse.wes.<context>.` on every Kafka label.
+CloudEvents type prefix on every Kafka label (`com.warehouse.wms.product-master.`
+for product-master, `com.warehouse.wes.<context>.` for the others).
 Arrows point from upstream to downstream; `id` and `sku` stand for the path
 parameters.
 
@@ -119,15 +120,9 @@ parameters.
 | wes-work-planning | order-management | Published Language | Anti-Corruption Layer (local read model) | Kafka `warehouse.work-planning.events` | live with `PATH_CATALOGUE_SOURCE=kafka` | `outbound/kafkapathcapacity` |
 | fulfillment-execution | order-management | Published Language | Anti-Corruption Layer | Kafka `warehouse.fulfillment.events` | live whenever `KAFKA_BROKERS` is set | `inbound/kafka/repromise_consumer.go` |
 | warehouse-planning | order-management | Published Language | Anti-Corruption Layer (local read model) | Kafka `warehouse.warehouse-planning.events` | opt-in, `PLANNED_CAPACITY_CONSUMER_GROUP` | `inbound/kafka/planned_capacity_consumer.go` |
-| order-management | network-inventory-planning | Published Language (CloudEvents, `apis/asyncapi.yaml`) | Anti-Corruption Layer (local read model of site/SKU demand) | Kafka `warehouse.order-management.events`, `com.warehouse.wes.order-management.siteskudemand.SiteSkuDemandChanged` | opt-in on the consumer side (`SITE_SKU_DEMAND_CONSUMER_GROUP`, set in the reference deployment) | `outbound/kafka/publisher.go`, ADR 0035 |
 | order-management | network-fulfillment | Open Host Service (`apis/openapi.yaml`) | Customer/Supplier; network-fulfillment is the ACL to the external network | REST `POST /orders`, `POST /orders/{id}/release`, `DELETE /orders/{id}` | live | ADR 0020 |
 | order-management | warehouse-ops-agent, order-mgmt-mfe | Open Host Service | Conformist | REST, MCP `get_order` | live | ADR 0007, ADR 0010 |
 | order-management | wes-work-planning (synchronous) | — | — | REST `POST /paths/{pathId}/work-units` | deliberately absent since ADR 0005 | ADR 0005 |
-
-:::note[Added in warehouse-docs]
-The row above for `network-inventory-planning` was added here when that context was onboarded on this site, from the code of both repositories on `develop`. It is not yet in this context's own map, so a re-sync from `develop` will drop it until the upstream map lists the edge.
-:::
-
 
 No Shared Kernel and no Partnership: no Go code or schema is shared with any
 sibling context (ADR 0002). Every downstream decode lands in a struct local

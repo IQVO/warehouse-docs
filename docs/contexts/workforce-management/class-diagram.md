@@ -29,6 +29,8 @@ classDiagram
         -lines PathPlan[]
         -events DomainEvent[]
         +CommitShiftPlan(buildingId, shiftId, lines, installedStations, installedCapacity, maxHoursPerShift, at) ShiftPlan
+        +SiteCode() string
+        +BuildingId() string
         +PlannedHeadsFor(pathId) int
         +Lines() PathPlan[]
         +PullEvents() DomainEvent[]
@@ -132,7 +134,7 @@ Source: `internal/domain/shiftplan/shift_plan.go`,
 `internal/domain/associate/associate_shift.go`,
 `internal/domain/assignment/labor_assignment.go`,
 `internal/domain/shared/ids.go`, `internal/domain/pathcatalog/path_definition.go`.
-Omits: getters that only expose a field (`BuildingId`, `ShiftId`,
+Omits: getters that only expose a field (`ShiftId`,
 `AssociateId`, `Version`, `IsOnBreak`, `HoursLogged`, `Ended`,
 `Certifications`, `ActiveInterval`, `History`), every `Rehydrate` / `RehydrateAtSite`
 constructor, the private `record`/`closeActive` helpers, the `New*`
@@ -141,7 +143,9 @@ validating constructors of the string value objects, and the free function
 `<<Entity>>` for want of a better stereotype: it is reference data with no
 identity of its own. There are **no enumerations**: no aggregate has a status
 enum. The three roots reference each other only by `AssociateId` / `PathId`
-values, never by object reference.
+values, never by object reference. `ShiftPlan.SiteCode()` is the canonical
+accessor of the plan key; `BuildingId()` is its deprecated alias returning the
+same value ([ADR 0035](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0035-sitecode-converges-building-id.md)).
 
 ## Domain events
 
@@ -159,11 +163,13 @@ classDiagram
         PathId PathId
         PlannedHeads int
         PlannedRate float64
+        +SiteCode() string
     }
     class ShiftPlanCommitted {
         <<DomainEvent>>
         BuildingId string
         ShiftId string
+        +SiteCode() string
     }
     class PathUnderstaffed {
         <<DomainEvent>>

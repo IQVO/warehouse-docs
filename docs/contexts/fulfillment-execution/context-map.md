@@ -109,12 +109,6 @@ diagram labels.
 | 9 | `facility-layout` → **this** | U: OHS; D: **ACL** (`ports.LocationRoleInfo`), conforming to the `LocationRole` vocabulary | REST `GET /locations/{locationCode}`, called once per `RegisterStation` with a `locationCode`, behind retry + circuit breaker | **Opt-in** (`LOCATION_ROLE_MODE=http` + `FACILITY_LAYOUT_BASE_URL`; default permissive no-op) | `internal/adapters/outbound/facilitylayout/`; [ADR-0024](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0024-station-location-code-and-workcenter-role-check.md) |
 | 10 | **this** → WCS / equipment | Strategically U: this; D: WCS; ACL seam on this side | none | **Deliberately absent** — the port declares no methods and has no adapter | `internal/application/ports/equipment.go`; [ADR-0015](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0015-wcs-equipment-anti-corruption-seam.md) |
 | 11 | `inventory-storage`, `facility-layout`, `order-management` events → **this** | Separate Ways | none | **Deliberately absent** — stock, layout and order facts reach this context only through what `wes-work-planning` releases (plus the opt-in facility-layout lookup and product-master copy above) | no consumer for those topics in `internal/adapters/inbound/kafka/` |
-| 12 | **this** → `network-inventory-planning` | U: OHS + PL; D: ACL (hand-mirrored `TransferFactData`) | Kafka `warehouse.fulfillment.events`, `com.warehouse.wes.fulfillment-execution.transfer.TransferPicked`, `...TransferDispatched`, `...TransferArrived` (selected by `work_kind`; `TransferArrived` is reserved and may never fire) | **Live** with `EVENT_PUBLISHER=kafka`; the consumer is opt-in on the other side (`TRANSFER_FACT_CONSUMER_GROUP`, set in the reference deployment) | `internal/adapters/outbound/kafka/publisher.go`; [ADR-0036](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0036-transfer-task-types-and-facts.md) |
-
-:::note[Added in warehouse-docs]
-The row above for `network-inventory-planning` was added here when that context was onboarded on this site, from the code of both repositories on `develop`. It is not yet in this context's own map, so a re-sync from `develop` will drop it until the upstream map lists the edge.
-:::
-
 
 All REST and MCP surfaces are unauthenticated
 ([ADR-0022](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0022-remove-rest-mcp-auth.md)). No Shared Kernel and no
