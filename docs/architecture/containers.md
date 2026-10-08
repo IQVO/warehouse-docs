@@ -12,11 +12,12 @@ A **container** here is C4's meaning of the word: a separately deployable or
 runnable unit, whether that is a Go process, a Postgres database or the
 broker. It is unrelated to Docker specifically.
 
-The fleet has eleven backend bounded contexts. Ten of them ship **four Go
+This site covers twelve backend contexts. Eleven of them ship **four Go
 binaries and two databases** each, plus a Module Federation frontend remote,
 because the analytical read side is a separate process family from the
-operational one. The eleventh, `warehouse-ops-agent`, is one binary with no
-database. Binaries are listed from each repository's `cmd/` on
+operational one. The twelfth, `warehouse-ops-agent`, is one binary with no
+database. (`network-inventory-planning`, the fleet's twelfth domain context,
+is deployed too but not documented on this site yet.) Binaries are listed from each repository's `cmd/` on
 `origin/develop`, and workloads from its Helm chart's `templates/`.
 
 ## The edge: two independent gateways
@@ -38,12 +39,12 @@ C4Container
 
     Container_Boundary(fe, "Frontend workloads — ClusterIP only") {
         Container(shell, "warehouse-console", "React + nginx", "The Module Federation host shell, served at /")
-        Container(remotes, "10 x MFE remote", "React + nginx", "Each owned by its context's repo (web/), served at /mfes/{context}/")
+        Container(remotes, "11 x MFE remote", "React + nginx", "Each owned by its context's repo (web/), served at /mfes/{context}/")
     }
 
     Container_Boundary(api, "API workloads — ClusterIP only") {
-        Container(oltp, "10 x OLTP REST service", "Go", "One per persisting bounded context, :8080")
-        Container(reports, "10 x reports service", "Go", "Read-only analytics API, :8092")
+        Container(oltp, "11 x OLTP REST service", "Go", "One per persisting bounded context, :8080")
+        Container(reports, "11 x reports service", "Go", "Read-only analytics API, :8092")
         Container(agent, "warehouse-ops-agent", "Go", ":8095 — console BFF, advisories and its own MCP server")
     }
 
@@ -79,12 +80,14 @@ Three consequences follow, and all three are load-bearing:
    calls stay on direct ClusterIP and Kafka and never hairpin through either
    gateway.
 
-The console's ten remotes are `order_mgmt_mfe`, `inventory_mfe`,
+The console's eleven remotes are `order_mgmt_mfe`, `inventory_mfe`,
 `planning_mfe`, `fulfillment_mfe`, `workforce_mfe`, `facility_mfe`,
 `process_path_mfe`, `labor_mfe`, `netfulfil_mfe` (keyed
-`network_fulfillment_mfe` in the console's federation config) and
-`capacity_mfe` (warehouse-planning). The console's cross-cutting screens
-(the order lifecycle and the WMS and WES dashboards) do not call ten services
+`network_fulfillment_mfe` in the console's federation config),
+`capacity_mfe` (warehouse-planning) and `productmaster_mfe`
+(product-master, served at `/mfes/product-master/`). The console's
+cross-cutting screens (the order lifecycle and the WMS and WES dashboards)
+do not call every service
 from the browser. They call `warehouse-ops-agent`'s BFF routes
 `/console/orders/{id}/lifecycle`, `/console/reports/wms` and
 `/console/reports/wes`, which fan out server-side.
@@ -93,7 +96,7 @@ from the browser. They call `warehouse-ops-agent`'s BFF routes
 
 Every persisting bounded context follows the same internal shape.
 `labor-performance` is drawn here as the representative example. Substitute
-the names and the diagram holds for all ten.
+the names and the diagram holds for all eleven.
 
 ```mermaid
 C4Container
@@ -152,6 +155,7 @@ is a freshness lag, not real time, which is why every report has a
 | `labor-performance` | `cmd/labor` | `cmd/mcp` | `cmd/labor-projector` | `cmd/labor-reports` | `labor_mfe` | 2 |
 | `network-fulfillment` | `cmd/netfulfil` | `cmd/mcp` | `cmd/netfulfil-projector` | `cmd/netfulfil-reports` | `netfulfil_mfe` | 2 |
 | `warehouse-planning` | `cmd/api` | `cmd/mcp` | `cmd/planning-projector` | `cmd/planning-reports` | `capacity_mfe` | 2 |
+| `product-master` | `cmd/api` | `cmd/mcp` | `cmd/product-projector` | `cmd/product-reports` | `productmaster_mfe` | 2 |
 | `warehouse-ops-agent` | `cmd/agent` | in-process at `/mcp` | none | none | none | **0** |
 
 Per-context table counts are in [Data Models](/architecture/data-models),
@@ -183,9 +187,10 @@ release are addressed separately.
 
 The logical separation is real, but the physical deployment has less
 isolation than the diagram might suggest. **One Postgres release**
-(`postgres`, in the data namespace) hosts twenty databases: ten OLTP
-databases and ten `<service>_analytics` databases, each with its own generated
-role. OLTP connections go through PgBouncer. Analytics connections go to
+(`postgres`, in the data namespace) hosts twenty-three databases: an OLTP
+database and a `<service>_analytics` database for each of the eleven
+persisting contexts on this site, plus `network-inventory-planning`'s OLTP
+database, each with its own generated role. OLTP connections go through PgBouncer. Analytics connections go to
 Postgres directly.
 
 In the local cluster a single generated analytics role serves both the
@@ -205,7 +210,8 @@ The main MCP consumer inside the fleet is `warehouse-ops-agent`, which calls
 upstream tools such as `get_rebalance_recommendation`,
 `get_backlog_telemetry`, `get_staffing_gap`, `diagnose_stuck_tasks`,
 `get_task_type_utilization`, `check_availability`, `estimate_travel_distance`
-and `get_process_path_capacity`. Several more are wired but unused.
+`get_process_path_capacity` and product-master's `list_products` (for
+`find_master_data_gaps`). Several more are wired but unused.
 labor-performance and process-path-management call no sibling over REST or
 MCP. The per-tool status is on each context's
 [Context Map](/strategic-design/context-map) page.
@@ -251,6 +257,7 @@ flowchart LR
     LP[labor-performance]
     NF[network-fulfillment]
     WPL[warehouse-planning]
+    PM[product-master]
 
     tOM(["warehouse.order-management.events"])
     tINV(["warehouse.inventory.events"])
@@ -262,6 +269,7 @@ flowchart LR
     tLP(["warehouse.labor-performance.events"])
     tWPL(["warehouse.warehouse-planning.events"])
     tNF(["warehouse.network-fulfillment.events"])
+    tPM(["warehouse.product-master.events"])
 
     OM --> tOM
     INV --> tINV
@@ -273,6 +281,7 @@ flowchart LR
     LP --> tLP
     WPL --> tWPL
     NF --> tNF
+    PM --> tPM
 
     tOM --> WWP
     tOM -.->|opt-in| WPL
@@ -294,12 +303,17 @@ flowchart LR
     tPPM -.->|opt-in| NF
     tLP --> WFM
     tWPL -.->|opt-in| OM
+    tPM --> INV
+    tPM --> OM
+    tPM --> WWP
+    tPM --> FE
+    tINV -.->|"legacy ProductClassified, migration only"| PM
 ```
 
 | Topic | Producer | Integration types | Consumers |
 | --- | --- | ---: | --- |
 | `warehouse.order-management.events` | order-management | 3 | wes-work-planning (`OrderAllocated`, `OrderPartiallyAllocated`); warehouse-planning, opt-in |
-| `warehouse.inventory.events` | inventory-storage | 2 | wes-work-planning |
+| `warehouse.inventory.events` | inventory-storage | 7 | wes-work-planning (`StockReserved`, `ReservationRevoked`); product-master's legacy importer (`ProductClassified`, emitted only by the one-shot backfill, migration only); the four transfer replies go to `network-inventory-planning`, not documented here |
 | `warehouse.work-planning.events` | wes-work-planning | 11 | fulfillment-execution (`WorkReleased`); order-management and network-fulfillment (`PathCapacityChanged`) |
 | `warehouse.fulfillment.events` | fulfillment-execution | 3 | wes-work-planning and labor-performance (`TaskCompleted`); order-management (`TaskCPTMissed`, `PackageManifested`) |
 | `warehouse.workforce.events` | workforce-management | 1 | wes-work-planning, warehouse-planning (`ShiftPlanCommitted`) |
@@ -308,6 +322,7 @@ flowchart LR
 | `warehouse.labor-performance.events` | labor-performance | 1 | workforce-management (`TaskPerformanceRecorded`) |
 | `warehouse.warehouse-planning.events` | warehouse-planning | 4 | order-management, opt-in |
 | `warehouse.network-fulfillment.events` | network-fulfillment | 5 | none yet |
+| `warehouse.product-master.events` | product-master | 5 | inventory-storage, order-management, wes-work-planning, fulfillment-execution (`ProductClassified`, into local copies) |
 
 The type counts are the messages each producer's `asyncapi.yaml` declares on
 its integration channel. Several consumers are themselves behind a mode
@@ -323,8 +338,9 @@ One per persisting context, consumed only by that context's own projector:
 `warehouse.workforce.analytics`, `warehouse.facility.analytics`,
 `warehouse.process-path-management.analytics`,
 `warehouse.labor-performance.analytics`,
-`warehouse.network-fulfillment.analytics` and
-`warehouse.warehouse-planning.analytics`.
+`warehouse.network-fulfillment.analytics`,
+`warehouse.warehouse-planning.analytics` and
+`warehouse.product-master.analytics`.
 
 ## What this diagram does not show
 

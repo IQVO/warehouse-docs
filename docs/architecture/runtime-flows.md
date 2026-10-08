@@ -394,6 +394,21 @@ sequenceDiagram
 | labor-performance `TaskPerformanceRecorded` | workforce-management's labor-performance cache | `LABOR_PERFORMANCE_MODE=kafka-cache`. `http` calls `GET /task-types/{taskType}/performance`, and the service default is `permissive` |
 | wes-work-planning `PathCapacityChanged` | path-capacity caches in order-management and network-fulfillment | order-management's path catalogue source, and network-fulfillment's `CAPABILITY_OFFER_ENABLED` |
 
+A durable variant of the same pattern carries product master data.
+`product-master`'s `ProductClassified` on `warehouse.product-master.events`
+feeds a Postgres local copy, not an in-memory cache, in four contexts:
+inventory-storage's `product_classifications` (consumer group
+`PRODUCT_MASTER_CONSUMER_GROUP`, ADR 0034) and the
+`product_classification_copy` tables of order-management (ADR 0036),
+wes-work-planning (ADR-0035) and fulfillment-execution (ADR-0039), selected by
+`PRODUCT_CLASSIFICATION_MODE=kafka` with a stable
+`PRODUCT_CLASSIFICATION_CONSUMER_GROUP`. Each consumer commits its offset
+after the row is written, applies a message only when its `version` is newer
+than the stored one, and so does not replay from `FirstOffset` at startup.
+This replaced the synchronous `GET /products/{sku}/classification` calls to
+inventory-storage, and `http` mode is now rejected at boot. The reference
+deployment runs all four in `kafka` mode.
+
 Each one trades read-your-writes freshness for availability: the downstream
 keeps answering while the upstream is down, and new facts arrive without a
 restart. The per-edge status (live, opt-in, wired-but-unused) is on each

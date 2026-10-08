@@ -40,7 +40,7 @@ are deliberately not one-to-one. The domain layer has no knowledge of SQL.
 
 ## Databases
 
-Ten contexts persist. Each has an **OLTP** database and a separate
+Eleven contexts on this site persist. Each has an **OLTP** database and a separate
 **analytical** database. The OLTP binary (and its MCP sibling) owns the first.
 The analytical one is written only by that context's projector binary and
 read only by its reports binary (see [Containers](/architecture/containers)).
@@ -51,18 +51,27 @@ explains why).
 
 | Context | OLTP tables | Analytics tables | Real FKs (OLTP) | Detailed page |
 | --- | ---: | ---: | --- | --- |
-| `order-management` | 8 | 4 | `order_lines` and `order_promise_groups` to `orders` | [ER](/contexts/order-management/entity-relationship) |
-| `inventory-storage` | 7 | 3 | `stock_units` to `bins`; `reservation_allocations` to `reservations` and `stock_units` | [ER](/contexts/inventory-storage/entity-relationship) |
-| `wes-work-planning` | 11 | 3 | `work_pool_entries` to `work_pools` | [ER](/contexts/wes-work-planning/entity-relationship) |
-| `fulfillment-execution` | 8 | 4 | none | [ER](/contexts/fulfillment-execution/entity-relationship) |
+| `order-management` | 10 | 4 | `order_lines` and `order_promise_groups` to `orders` | [ER](/contexts/order-management/entity-relationship) |
+| `inventory-storage` | 12 | 3 | `stock_units` to `bins`; `reservation_allocations` to `reservations` and `stock_units` | [ER](/contexts/inventory-storage/entity-relationship) |
+| `wes-work-planning` | 12 | 3 | `work_pool_entries` to `work_pools` | [ER](/contexts/wes-work-planning/entity-relationship) |
+| `fulfillment-execution` | 9 | 4 | none | [ER](/contexts/fulfillment-execution/entity-relationship) |
 | `workforce-management` | 8 | 4 | `path_plan` to `shift_plan`; `labor_assignment_history` to `labor_assignment` | [ER](/contexts/workforce-management/entity-relationship) |
 | `facility-layout` | 10 | 3 | eight, along the site, zone, aisle and slot hierarchy | [ER](/contexts/facility-layout/entity-relationship) |
 | `process-path-management` | 5 | 3 | `cpt_schedule_cutoffs` to `cpt_schedules` | [ER](/contexts/process-path-management/entity-relationship) |
 | `labor-performance` | 6 | 3 | none | [ER](/contexts/labor-performance/entity-relationship) |
 | `network-fulfillment` | 4 | 3 | `network_order_lines` to `network_orders` | [ER](/contexts/network-fulfillment/entity-relationship) |
 | `warehouse-planning` | 10 | 2 | `process_capacity_constraint` to `process_capacity` | [ER](/contexts/warehouse-planning/entity-relationship) |
+| `product-master` | 3 | 3 | none | [ER](/contexts/product-master/entity-relationship) |
 | `warehouse-ops-agent` | 0 | 0 | no database | [ER](/contexts/warehouse-ops-agent/entity-relationship) |
-| **Total** | **77** | **32** | | |
+| **Total** | **89** | **35** | | |
+
+The `inventory-storage`, `order-management`, `wes-work-planning`,
+`fulfillment-execution` and `product-master` rows were re-counted from each
+repository's migrations on `develop` (2026-10-07), after the product-master
+migration added a classification copy to each consumer. Some synced ER pages
+predate it: `fulfillment-execution`'s does not show
+`product_classification_copy`, and `inventory-storage`'s does not show the
+transfer tables.
 
 Most FKs in the fleet run from a child table to its parent **inside one
 aggregate** (an `Order` and its lines, a `WorkPool` and its entries, a
@@ -75,22 +84,23 @@ separate aggregates of their own:
 - **inventory-storage**: `stock_units.bin_id` to `bins`, and
   `reservation_allocations.stock_unit_id` to `stock_units`.
 
-fulfillment-execution and labor-performance have no FKs at all. Their
+fulfillment-execution, labor-performance and product-master have no FKs at all. Their
 aggregates reference each other only by identity.
 
 ## Tables by role
 
 | Context | Aggregate state | Read models of other contexts | Infrastructure |
 | --- | --- | --- | --- |
-| `order-management` | `orders`, `order_lines`, `order_promise_groups` | `planned_capacity_windows` (warehouse-planning's `CapacityPlan`) | `outbox_events`, `idempotency_keys`, `repromise_processed_events`, `planned_capacity_processed_events` |
-| `inventory-storage` | `bins`, `stock_units`, `reservations`, `reservation_allocations`, `product_classifications` | none (the facility location cache is in memory) | `outbox_events`, `idempotency_keys` |
-| `wes-work-planning` | `work_pools`, `work_pool_entries`, `work_units`, `shift_plans`, `charge_forecasts` | `labor_plan_view` (workforce), `usable_inventory_view` (inventory) | `outbox_events`, `idempotency_keys`, `processed_events`; `events` is legacy and unused |
-| `fulfillment-execution` | `tasks`, `stations`, `packages`, `order_consolidations` | none (the path catalogue is in memory) | `outbox_events`, `idempotency_keys`, `processed_events`; `domain_events` is legacy and unused |
+| `order-management` | `orders`, `order_lines`, `order_promise_groups` | `planned_capacity_windows` (warehouse-planning's `CapacityPlan`), `product_classification_copy` (product-master's `ProductClassified`, ADR 0036) | `outbox_events`, `idempotency_keys`, `repromise_processed_events`, `planned_capacity_processed_events`, `product_classification_processed_events` |
+| `inventory-storage` | `bins`, `stock_units`, `reservations`, `reservation_allocations`; the transfer tables `transfer_allocations`, `transfer_receipts`, `inventory_exceptions` | `product_classifications` (a version-guarded copy of product-master's classification since ADR 0034), `order_pick_progress` (fulfillment-execution's `TaskCompleted`, ADR 0035); the facility location cache is in memory | `outbox_events`, `idempotency_keys`, `processed_events` |
+| `wes-work-planning` | `work_pools`, `work_pool_entries`, `work_units`, `shift_plans`, `charge_forecasts` | `labor_plan_view` (workforce), `usable_inventory_view` (inventory), `product_classification_copy` (product-master, ADR-0035) | `outbox_events`, `idempotency_keys`, `processed_events`; `events` is legacy and unused |
+| `fulfillment-execution` | `tasks`, `stations`, `packages`, `order_consolidations` | `product_classification_copy` (product-master, ADR-0039); the path catalogue is in memory | `outbox_events`, `idempotency_keys`, `processed_events`; `domain_events` is legacy and unused |
 | `workforce-management` | `shift_plan`, `path_plan`, `associate_shift`, `labor_assignment`, `labor_assignment_history` | none (catalogue and performance caches are in memory) | `outbox_events`, `idempotency_keys`; `domain_event` is legacy and unused |
 | `facility-layout` | `sites`, `zones`, `aisles`, `cross_aisles`, `location_slots`, `location_types`, `placement_rules`, `fixed_structures` | none (it consumes nothing) | `outbox_events`, `idempotency_keys` |
 | `process-path-management` | `process_paths`, `cpt_schedules`, `cpt_schedule_cutoffs` | none (it consumes nothing) | `outbox_events`, `idempotency_keys` |
 | `labor-performance` | `labor_standards`, `task_performances`, `idle_periods` | none | `outbox_events`, `idempotency_keys`, `processed_events` |
 | `network-fulfillment` | `network_orders`, `network_order_lines`, `capability_offers` | none (path and capacity caches are in memory) | `outbox_events` |
+| `product-master` | `products` (the `Product` aggregate, classification and physical profile in one row) | none (the legacy importer writes into `products`) | `outbox_events`, `processed_events` |
 | `warehouse-planning` | `process_capacity`, `process_capacity_constraint`, `capacity_plans`; plus the locally declared `process_paths` and stored `station_standards` value objects | `location_slot_registration`, `location_slot_tally` (facility-layout), `order_demand` (order-management) | `outbox_events`, `processed_events` |
 
 Patterns that the table makes visible:
@@ -106,7 +116,8 @@ Patterns that the table makes visible:
   further and uses that `id` as the primary key of `task_performances`.
 - **HTTP idempotency.** Eight contexts store `Idempotency-Key` replays in
   `idempotency_keys`. network-fulfillment and warehouse-planning do not
-  implement that middleware.
+  implement that middleware, and product-master needs none: every write is an
+  idempotent `PUT`.
 - **Event-fed caches often live in memory, not in tables.** Process-path
   catalogues, the facility location cache, the labor-performance cache and
   path-capacity caches are rebuilt from Kafka at startup. That is why several
@@ -126,6 +137,7 @@ are never parsed except at one documented seam:
 | `tasks.order_ref`, `packages.order_ref`, `order_consolidations.order_ref` | a `work_unit_id` | wes-work-planning |
 | `task_performances.task_id`, `associate_id`, `task_type` | task, associate and task-type ids | fulfillment-execution |
 | `network_orders.local_order_id` | an order id | order-management |
+| `product_classifications.sku` (inventory-storage), `product_classification_copy.sku` (order-management, wes-work-planning, fulfillment-execution), each with the product's `version` | a product's SKU | product-master |
 
 The one seam that parses an identity is order-management's re-promise
 consumer: it reads `orderId` and the line number back out of the
