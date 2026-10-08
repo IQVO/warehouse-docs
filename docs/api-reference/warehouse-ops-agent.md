@@ -28,6 +28,8 @@ removal).
 | `GET /console/reports/wms?from=&to=` | The console-bff WMS dashboard (ADR 0003). It has three sections, one each from the reports binaries of `order-management`, `inventory-storage` and `facility-layout`. Each section degrades on its own. |
 | `GET /console/reports/wes?from=&to=` | The console-bff WES dashboard. It has four sections, one each from `wes-work-planning`, `fulfillment-execution`, `workforce-management` and `labor-performance`. Each section degrades on its own. |
 | `GET /runtime-signals` | Runtime health per backend service over a 10-minute window: Istio 5xx rate and p99 latency from Prometheus, plus error-log counts from Loki. A source that cannot be queried is listed in `unavailableSources` and does not fail the request. |
+| `GET /master-data-gaps?kind=&cursor=` | Pages through `product-master`'s `list_products` MCP tool and reports products with a master-data gap: `unclassified` or `dimension-discrepancy` (all kinds when `kind` is omitted). 503 when `PRODUCT_MASTER_MCP_ENDPOINT` is unset, 502 when product-master is unreachable (ADR 0020). |
+| `GET /transfer-watch/stuck`, `GET /transfer-watch/transfers/{id}`, `GET /transfer-watch/imbalance` | Reads over `network-inventory-planning` (ADR 0019). That context is not documented on this site yet. |
 
 ## MCP (`internal/adapters/inbound/mcp`)
 
@@ -42,8 +44,9 @@ bounded context for facts.
 | `get_flow_balance_exception` | Correlates the E1 signals for one `pathId` (+ `buildingId`/`shiftId`) into a ranked `FlowBalanceException`. |
 | `explain_travel_factor` | Same as the REST route. Both location codes are required and never guessed. |
 | `detect_stranded_reservation` | The E2 `StrandedReservationException` use case. It correlates `fulfillment-execution`'s expired or expiring leases with `inventory-storage`'s usable-stock shortfall for one SKU. It recommends `revoke_reservation` only together with the blast radius that recommendation requires, and never calls that write tool itself. |
+| `find_master_data_gaps` | Same as `GET /master-data-gaps`. Registered only when `PRODUCT_MASTER_MCP_ENDPOINT` is set (ADR 0020). |
 
-All five tools are annotated read-only. The agent has no write tools. See
+All six tools are annotated read-only. The agent has no write tools. See
 [warehouse-ops-agent's governance note](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/mcp/governance-note.md)
 for why that is a v1 design choice.
 
@@ -53,4 +56,8 @@ The outbound MCP clients for `order-management` and `process-path-management`
 are wired in the composition root, but no use case consumes them yet
 (ADR 0007). The agent uses its `warehouse-planning` client
 (ADR 0013) only through `get_process_path_capacity`, for the daily brief's
-capacity outlook. Its other planning read tools are wired but unused.
+capacity outlook. Its other planning read tools are wired but unused. Its
+`product-master` client (ADR 0020) may call exactly four read tools; only
+`list_products` has a use case today, and `get_product`,
+`get_product_classification` and `get_physical_profile` are wired but
+unused.
