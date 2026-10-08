@@ -140,6 +140,12 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          inboundReceiving: {
+            specPath: 'apis/inbound-receiving/openapi.yaml',
+            outputDir: 'docs/api-reference/rest/inbound-receiving',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],

@@ -31,8 +31,8 @@ Live site: https://iqvo.github.io/warehouse-docs/
     `develop` (`core-domain-chart`, `bounded-context-canvas`, `context-map`,
     `aggregate-design-canvas`, `domain-message-flow`, `eventstorming`,
     `ubiquitous-language`, `class-diagram`, `entity-relationship`,
-    `sequence-diagrams`, `domain-events`; `product-master` also has
-    `use-cases`). Each synced page has a "Synced from" note. Edit those pages
+    `sequence-diagrams`, `domain-events`; `product-master` and
+    `inbound-receiving` also have `use-cases`). Each synced page has a "Synced from" note. Edit those pages
     upstream, never here. The exception is `network-inventory-planning`, whose
     repository has no `docs/docs/ddd/` pack yet: its pages were written here from
     its code and ADRs and say so in a note at the top; replace them with synced
@@ -41,11 +41,11 @@ Live site: https://iqvo.github.io/warehouse-docs/
     have one.
 
   The Bounded Contexts sidebar is generated from the `CONTEXTS` and
-  `CONTEXT_PAGES` arrays in `sidebars.ts`. `inbound-receiving` and
-  `slotting-optimization` (decided 2026-10-08) list only `business-context`
-  and `bounded-context-canvas` through `CONTEXT_PAGE_OVERRIDES`, because
-  their repositories have no artifact pack, `apis/` specs or Async API
-  narrative yet.
+  `CONTEXT_PAGES` arrays in `sidebars.ts`. `slotting-optimization` (decided
+  2026-10-08, not built) lists only `business-context` and
+  `bounded-context-canvas` through `CONTEXT_PAGE_OVERRIDES`, because its
+  repository has no artifact pack, `apis/` specs or Async API narrative yet.
+  `inbound-receiving` has the full pack, plus `use-cases` and `async-api`.
 - **API Reference** (`docs/api-reference/`): generated REST docs
   ([`docusaurus-plugin-openapi-docs`](https://github.com/PaloAltoNetworks/docusaurus-openapi-docs))
   and generated AsyncAPI docs ([`@asyncapi/html-template`](https://github.com/asyncapi/html-template)),
@@ -69,7 +69,7 @@ cd ..   # warehouse-systems/ (siblings checked out)
 for repo in order-management inventory-storage wes-work-planning \
             fulfillment-execution workforce-management facility-layout \
             process-path-management labor-performance network-fulfillment \
-            warehouse-planning product-master network-inventory-planning; do
+            warehouse-planning product-master inbound-receiving network-inventory-planning; do
   git -C "$repo" show origin/develop:apis/openapi.yaml \
     > "warehouse-docs/apis/$repo/openapi.yaml" 2>/dev/null
   git -C "$repo" show origin/develop:apis/asyncapi.yaml \
@@ -79,11 +79,13 @@ git -C labor-performance show origin/develop:apis/openapi-reports.yaml \
   > "warehouse-docs/apis/labor-performance/openapi-reports.yaml" 2>/dev/null
 ```
 
-`warehouse-ops-agent` has no `apis/` directory. All twelve other contexts
-ship both an `openapi.yaml` and an `asyncapi.yaml`. `inbound-receiving` and
-`slotting-optimization` are not in the sync loop above yet: add them to the
-loop, to the `docusaurus.config.ts` plugin config, to `sidebars.ts` and to
-`scripts/gen-async-docs.mjs` when their contracts merge.
+`warehouse-ops-agent` has no `apis/` directory. Thirteen contexts ship both an
+`openapi.yaml` and an `asyncapi.yaml` (`inbound-receiving` was added to the sync
+loop above, `docusaurus.config.ts`, `sidebars.ts` and
+`scripts/gen-async-docs.mjs` when its contracts merged).
+`slotting-optimization` is not in the sync loop yet: add it to
+the loop, to the `docusaurus.config.ts` plugin config, to `sidebars.ts` and to
+`scripts/gen-async-docs.mjs` when its contracts merge.
 
 Next, regenerate the API reference pages (see below). Commit the refreshed
 specs and the regenerated docs together. If a spec is wrong, fix it in the
@@ -116,8 +118,9 @@ contexts `order-management`, `inventory-storage`, `wes-work-planning`,
 `process-path-management`, `labor-performance`, `network-fulfillment`,
 `warehouse-planning`, `product-master`, `network-inventory-planning`,
 `inbound-receiving` and `slotting-optimization`, plus `warehouse-ops-agent`.
-`inbound-receiving` and `slotting-optimization` are decided but not built, so they
-have business-context and canvas pages only.
+`inbound-receiving` ships its
+artifact pack and specs; `slotting-optimization` is decided but not built, so it
+has business-context and canvas pages only.
 The frontend repositories (`warehouse-console`, `warehouse-ui-kit`) and the
 deployment repository (`warehouse-infra`) are referenced where relevant.
 They are not bounded contexts in the Evans/Vernon sense, so they have no DDD

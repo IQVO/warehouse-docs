@@ -91,7 +91,7 @@ Every event is CloudEvents 1.0 in structured mode with
 | `dockappointment.DockAppointmentCancelled` | `appointment_id` | none |
 | `dockappointment.DockAppointmentCompleted` | `appointment_id` | none |
 | `receipt.ReceiptOpened` | `asn_number` | none |
-| `receipt.ReceiptLineReceived` | `asn_number` | `inventory-storage` (in progress) |
+| `receipt.ReceiptLineReceived` | `asn_number` | `inventory-storage` (code merged on its `develop`, ADR 0037; opt-in by `INBOUND_RECEIPT_CONSUMER_GROUP`) |
 | `receipt.ReceiptClosed` | `asn_number` | none |
 
 REST, behind Kong at `/api/inbound-receiving` (problem type base
@@ -106,13 +106,14 @@ REST, behind Kong at `/api/inbound-receiving` (problem type base
 
 ## Honest scope today
 
-- The repository is bootstrapped with `develop` protected and the template
-  instantiated. There is no domain code, no published AsyncAPI and no OpenAPI
-  yet, so this site holds no `apis/inbound-receiving/` specs and no generated
-  reference. A later change adds them once the contract PRs merge.
-- The `inventory-storage` consumer is in progress. Until it merges and the
-  reference deployment sets its consumer group, `ReceiptLineReceived` has no
-  live consumer.
+- The service is merged on `IQVO/inbound-receiving` `develop`: REST API,
+  outbox and the two local-copy consumers. This site now holds its
+  `apis/inbound-receiving/` specs, the generated references and the synced
+  artifact pack. The Kong route (`/api/inbound-receiving`) is the planned
+  cluster path: `warehouse-infra` does not run the service yet.
+- The `inventory-storage` consumer is merged on its `develop`. Until the
+  reference deployment runs `inbound-receiving` and sets its consumer group,
+  `ReceiptLineReceived` has no live consumer end to end.
 - The planned build waves also cover an MCP server, an analytics read side, a
   `warehouse-ops-agent` MCP client, a console remote with a tile and the
   `warehouse-infra` wiring. None of them exists yet.
