@@ -15,8 +15,7 @@ platform: fourteen domain bounded contexts plus `warehouse-ops-agent`. Each
 service has its own REST and MCP surface. The fourteen domain contexts own a
 Postgres database and publish Kafka events. `warehouse-ops-agent` is the
 exception: a thin read-side agent with no database and no Kafka. This site
-documents thirteen of the domain contexts and the agent;
-`network-inventory-planning` (created 2026-10-06) is not aggregated here yet.
+documents all fourteen domain contexts and the agent.
 `inbound-receiving` and `slotting-optimization` (decided 2026-10-08) are
 registered here with business-context and canvas pages only; their
 generated API references are added once their contracts merge.
@@ -31,7 +30,7 @@ artifacts, links them together, and adds the fleet-level strategic layer.
 All source repositories live in the [IQVO](https://github.com/IQVO) GitHub
 organization.
 
-## The fourteen contexts on this site
+## The fifteen contexts on this site
 
 | Context | Classification | CloudEvents subdomain |
 | --- | --- | --- |
@@ -49,11 +48,14 @@ organization.
 | [`product-master`](/contexts/product-master) | Supporting | `wms` |
 | [`inbound-receiving`](/contexts/inbound-receiving) | Supporting | `wms` |
 | [`slotting-optimization`](/contexts/slotting-optimization) | Supporting | `wms` |
+| [`network-inventory-planning`](/contexts/network-inventory-planning) | Core | `wes` |
 
 The newest contexts on this site, `inbound-receiving` and
 `slotting-optimization` (decided 2026-10-08), cover what happens before the
 first stow (ASN, dock appointment, receipt, discrepancies) and which SKUs
-deserve a forward pick slot. `product-master`, before them, is the single source of
+deserve a forward pick slot. `network-inventory-planning` recommends and
+orchestrates inter-warehouse stock transfers as an operator-approved saga
+without ever moving stock itself. `product-master`, before them, is the single source of
 truth for what a SKU is: its handling classification (taken over from
 `inventory-storage`) and its physical profile. `warehouse-planning` answers
 whether the warehouse can process the demand assigned to it. `network-fulfillment` is the
@@ -137,9 +139,9 @@ published site as an error box.
 
 ## Scope
 
-This site documents the **fourteen backend contexts** listed above (thirteen
-domain bounded contexts and `warehouse-ops-agent`). The fleet's fourteenth
-domain context, `network-inventory-planning`, is not aggregated yet.
+This site documents the **fifteen backend contexts** listed above (fourteen
+domain bounded contexts and `warehouse-ops-agent`), which is every backend
+service in the fleet.
 The two frontend repositories (`warehouse-console`, `warehouse-ui-kit`) and
 the deployment repository (`warehouse-infra`) appear on context pages where
 relevant, for example as Module Federation remotes or in the Kafka topology.

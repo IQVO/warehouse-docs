@@ -25,6 +25,7 @@ Diagrams** page, traced from the use-case code on `develop`:
 | `labor-performance` | [Sequence Diagrams](/contexts/labor-performance/sequence-diagrams) |
 | `network-fulfillment` | [Sequence Diagrams](/contexts/network-fulfillment/sequence-diagrams) |
 | `warehouse-planning` | [Sequence Diagrams](/contexts/warehouse-planning/sequence-diagrams) |
+| `network-inventory-planning` | [Sequence Diagrams](/contexts/network-inventory-planning/sequence-diagrams) |
 | `warehouse-ops-agent` | [Sequence Diagrams](/contexts/warehouse-ops-agent/sequence-diagrams) |
 
 See [Diagram Notation](/architecture/diagram-notation) for the arrow
@@ -47,7 +48,9 @@ Four mechanics recur in every flow below and are drawn only once here:
 - **Dead-lettering.** A message that is not a valid CloudEvent, or whose
   handler keeps failing after bounded retries, goes to
   `<topic>.dlq` and the offset is committed. Delivery never blocks on a
-  poison message.
+  poison message. network-inventory-planning's five OLTP consumers are the
+  exception: they log and commit past deterministic failures, retry transient ones
+  without limit, and have no dead-letter topic.
 
 ## 1. Order intake, allocation and release
 
@@ -414,7 +417,48 @@ keeps answering while the upstream is down, and new facts arrive without a
 restart. The per-edge status (live, opt-in, wired-but-unused) is on each
 context's [Context Map](/strategic-design/context-map) page.
 
-## 9. The agentic read path
+## 9. Inter-warehouse transfer
+
+An operator approves a transfer in `network-inventory-planning` (NIP). The saga
+reserves origin stock in `inventory-storage`, has the origin work done through
+`wes-work-planning` and `fulfillment-execution`, and ends when the destination stow
+is confirmed. NIP never moves stock. The three read-model feeds
+(`facility-layout`, `order-management`, `warehouse-planning`) arrive before this
+flow starts and are not drawn.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Op as Operator
+    participant NIP as network-inventory-planning
+    participant INV as inventory-storage
+    participant WP as wes-work-planning
+    participant FE as fulfillment-execution
+
+    Op->>NIP: POST /v1/transfers:approve with Idempotency-Key
+    Note over NIP: fail-closed snapshot and ValidateApproval, then one transaction: saga ALLOCATING and two outbox rows
+    NIP--)INV: TransferAllocationRequested
+    INV--)NIP: TransferStockAllocated
+    Note over NIP: ALLOCATING to ALLOCATED, pick demand outboxed in the same transaction
+    NIP--)WP: WorkDemandReleased pick
+    WP--)FE: WorkReleased
+    FE--)NIP: TransferPicked
+    Note over NIP: PICKED with the picked quantity, dispatch demand outboxed
+    NIP--)WP: WorkDemandReleased dispatch
+    FE--)NIP: TransferDispatched
+    INV--)NIP: TransferReceiptStaged
+    INV--)NIP: TransferStockStowed
+    Note over NIP: RECEIVED, terminal
+```
+
+A refusal (`TransferStockAllocationRejected`) ends the saga in `UNFULFILLABLE`.
+Everything after the approval is driven by messages, so a lost message leaves a
+transfer parked in its state; a stuck transfer is visible through
+`find_stuck_transfers`, the console and the analytics reports, and nothing
+recovers it automatically. Full detail is on
+[the context's sequence diagrams page](/contexts/network-inventory-planning/sequence-diagrams).
+
+## 10. The agentic read path
 
 `warehouse-ops-agent` holds no database and no state. Every fact in an
 advisory is re-derived at request time from upstream MCP tools, and the agent

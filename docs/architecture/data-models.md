@@ -40,7 +40,7 @@ are deliberately not one-to-one. The domain layer has no knowledge of SQL.
 
 ## Databases
 
-Eleven contexts on this site persist. Each has an **OLTP** database and a separate
+Twelve contexts on this site persist. Each has an **OLTP** database and a separate
 **analytical** database. The OLTP binary (and its MCP sibling) owns the first.
 The analytical one is written only by that context's projector binary and
 read only by its reports binary (see [Containers](/architecture/containers)).
@@ -62,8 +62,9 @@ explains why).
 | `network-fulfillment` | 4 | 3 | `network_order_lines` to `network_orders` | [ER](/contexts/network-fulfillment/entity-relationship) |
 | `warehouse-planning` | 10 | 2 | `process_capacity_constraint` to `process_capacity` | [ER](/contexts/warehouse-planning/entity-relationship) |
 | `product-master` | 3 | 3 | none | [ER](/contexts/product-master/entity-relationship) |
+| `network-inventory-planning` | 8 | 4 | `transfer_audit` to `inter_warehouse_transfer` | [ER](/contexts/network-inventory-planning/entity-relationship) |
 | `warehouse-ops-agent` | 0 | 0 | no database | [ER](/contexts/warehouse-ops-agent/entity-relationship) |
-| **Total** | **89** | **35** | | |
+| **Total** | **97** | **39** | | |
 
 The `inventory-storage`, `order-management`, `wes-work-planning`,
 `fulfillment-execution` and `product-master` rows were re-counted from each
@@ -71,7 +72,8 @@ repository's migrations on `develop` (2026-10-07), after the product-master
 migration added a classification copy to each consumer. Some synced ER pages
 predate it: `fulfillment-execution`'s does not show
 `product_classification_copy`, and `inventory-storage`'s does not show the
-transfer tables.
+transfer tables. The `network-inventory-planning` row was counted from its
+migrations on `develop` (2026-10-08).
 
 Most FKs in the fleet run from a child table to its parent **inside one
 aggregate** (an `Order` and its lines, a `WorkPool` and its entries, a
@@ -101,6 +103,7 @@ aggregates reference each other only by identity.
 | `labor-performance` | `labor_standards`, `task_performances`, `idle_periods` | none | `outbox_events`, `idempotency_keys`, `processed_events` |
 | `network-fulfillment` | `network_orders`, `network_order_lines`, `capability_offers` | none (path and capacity caches are in memory) | `outbox_events` |
 | `product-master` | `products` (the `Product` aggregate, classification and physical profile in one row) | none (the legacy importer writes into `products`) | `outbox_events`, `processed_events` |
+| `network-inventory-planning` | `inter_warehouse_transfer`, `transfer_audit` (the immutable audit trail), `rebalance_runs` | `site_capability` (facility-layout), `site_sku_demand` (order-management), `published_capacity_plan` (warehouse-planning) | `outbox_events`, `processed_events` |
 | `warehouse-planning` | `process_capacity`, `process_capacity_constraint`, `capacity_plans`; plus the locally declared `process_paths` and stored `station_standards` value objects | `location_slot_registration`, `location_slot_tally` (facility-layout), `order_demand` (order-management) | `outbox_events`, `processed_events` |
 
 Patterns that the table makes visible:
@@ -117,7 +120,9 @@ Patterns that the table makes visible:
 - **HTTP idempotency.** Eight contexts store `Idempotency-Key` replays in
   `idempotency_keys`. network-fulfillment and warehouse-planning do not
   implement that middleware, and product-master needs none: every write is an
-  idempotent `PUT`.
+  idempotent `PUT`. network-inventory-planning keeps its approval idempotency in a
+  unique `idempotency_key` column on the transfer itself, not in an
+  `idempotency_keys` table.
 - **Event-fed caches often live in memory, not in tables.** Process-path
   catalogues, the facility location cache, the labor-performance cache and
   path-capacity caches are rebuilt from Kafka at startup. That is why several
@@ -137,6 +142,7 @@ are never parsed except at one documented seam:
 | `tasks.order_ref`, `packages.order_ref`, `order_consolidations.order_ref` | a `work_unit_id` | wes-work-planning |
 | `task_performances.task_id`, `associate_id`, `task_type` | task, associate and task-type ids | fulfillment-execution |
 | `network_orders.local_order_id` | an order id | order-management |
+| `inter_warehouse_transfer.reservation_id`, `allocations` and `stow_allocations` (`stock_unit_id`, `bin_id`) | an inventory-storage reservation and its stock units and bins | inventory-storage |
 | `product_classifications.sku` (inventory-storage), `product_classification_copy.sku` (order-management, wes-work-planning, fulfillment-execution), each with the product's `version` | a product's SKU | product-master |
 
 The one seam that parses an identity is order-management's re-promise
@@ -161,6 +167,7 @@ projector bookkeeping.
 | `labor-performance` | `labor_performance_rollup` | none | same two |
 | `network-fulfillment` | `acknowledgement_rollup` | none | same two |
 | `warehouse-planning` | `plan_facts` | none | `analytics_processed_events` only |
+| `network-inventory-planning` | `transfer_state_advances`, `transfer_stuck_detections`, `rebalance_run_facts` (append-only facts, aggregated at read time) | none | `analytics_processed_events` only |
 
 | Table kind | Purpose |
 | --- | --- |

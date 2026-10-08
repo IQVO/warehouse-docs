@@ -12,6 +12,7 @@ import laborPerformanceReportsSidebar from './docs/api-reference/rest/labor-perf
 import networkFulfillmentSidebar from './docs/api-reference/rest/network-fulfillment/sidebar';
 import warehousePlanningSidebar from './docs/api-reference/rest/warehouse-planning/sidebar';
 import productMasterSidebar from './docs/api-reference/rest/product-master/sidebar';
+import networkInventoryPlanningSidebar from './docs/api-reference/rest/network-inventory-planning/sidebar';
 
 /**
  * Every bounded context's category lists the same page set, in the same
@@ -34,6 +35,7 @@ const CONTEXTS = [
   'product-master',
   'inbound-receiving',
   'slotting-optimization',
+  'network-inventory-planning',
 ];
 
 const CONTEXT_PAGES = [
@@ -62,6 +64,7 @@ const ASYNC_NARRATIVE = new Set([
   'network-fulfillment',
   'warehouse-planning',
   'product-master',
+  'network-inventory-planning',
 ]);
 
 // Pages a context has beyond the shared page set, appended after it.
@@ -213,6 +216,11 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'product-master',
       items: [...productMasterSidebar, 'api-reference/async/product-master'],
+    },
+    {
+      type: 'category',
+      label: 'network-inventory-planning',
+      items: [...networkInventoryPlanningSidebar, 'api-reference/async/network-inventory-planning'],
     },
   ],
 };

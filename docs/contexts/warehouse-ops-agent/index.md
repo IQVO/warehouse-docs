@@ -21,7 +21,7 @@ the `order-management` and `process-path-management` MCP clients are wired
 but unused), and `warehouse-planning`
 ([ADR 0013](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0013-warehouse-planning-mcp-client-and-capacity-outlook.md),
 read tools only, active when `WAREHOUSE_PLANNING_MCP_ENDPOINT` is set),
-`network-inventory-planning`
+[`network-inventory-planning`](/contexts/network-inventory-planning)
 ([ADR 0019](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0019-network-inventory-planning-transfer-watch.md),
 transfer watch) and `product-master`
 ([ADR 0020](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0020-product-master-mcp-client-and-master-data-gaps.md),

@@ -714,3 +714,12 @@ sticky inventory and the code evidence:
 | `network-fulfillment` | [/contexts/network-fulfillment/eventstorming](/contexts/network-fulfillment/eventstorming) |
 | `warehouse-planning` | [/contexts/warehouse-planning/eventstorming](/contexts/warehouse-planning/eventstorming) |
 | `product-master` | [/contexts/product-master/eventstorming](/contexts/product-master/eventstorming) |
+| `network-inventory-planning` | [/contexts/network-inventory-planning/eventstorming](/contexts/network-inventory-planning/eventstorming) |
+
+`network-inventory-planning`'s inter-warehouse transfer flow is not one of the five
+phases above, which follow a customer order from intake to shipment. It has its
+own design-level board, linked in the last row: facts from `facility-layout`,
+`order-management` and `warehouse-planning` feed a fail-closed snapshot, an operator
+approval starts a saga that reserves stock in `inventory-storage`, and the floor facts
+from `fulfillment-execution` carry it to the destination stow. Its hotspots are on
+that page and in the [Context Map](/strategic-design/context-map) (K30 to K36).

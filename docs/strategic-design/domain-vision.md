@@ -40,7 +40,7 @@ Everything else in the platform — physical location structure
 (`labor-performance`) — exists to feed that orchestration loop trustworthy,
 current facts, never to make decisions on its own.
 
-## The fourteen contexts on this site, one sentence each
+## The fifteen contexts on this site, one sentence each
 
 | Context | One-sentence purpose |
 | --- | --- |
@@ -56,6 +56,7 @@ current facts, never to make decisions on its own.
 | `network-fulfillment` | The anti-corruption layer to an external retail fulfillment network: polls network demand, places it with `order-management` as a held order, and owns the acknowledgement deadline. |
 | `warehouse-planning` | Answers whether the warehouse can process the demand assigned to it: composes labor, station and other constraints into path capacity and records capacity plans with shortage and bottleneck detection. |
 | `product-master` | The single source of truth for what a SKU is: its handling classification (taken over from `inventory-storage`) and its declared and measured physical profile, published as events that four contexts keep local copies of. |
+| `network-inventory-planning` | Recommends inter-warehouse stock transfers from fail-closed local facts and carries an operator-approved transfer through reservation, floor work and destination stow as a saga, without ever moving stock itself. |
 | `inbound-receiving` | Everything before the first stow: the advance ship notice, the dock appointment and the receipt with its discrepancies (Short, Over, Damaged); hands good units to `inventory-storage` as events. Decided 2026-10-08, in progress. |
 | `slotting-optimization` | Decides which SKUs deserve a forward pick slot: ranks SKUs by pick velocity, proposes a slot plan under the `abc-velocity-v1` policy, and publishes the approved forward-pick map after a human approves it. Decided 2026-10-08, in progress. |
 
@@ -72,7 +73,7 @@ actual inbound and outbound value streams described in Amazon's own public
 material and industry trade coverage. This table is that flow, stage by
 stage, against what this platform actually implements — so "which of these
 is real code, and which is deliberately out of scope" is answerable in one
-place instead of scattered across fourteen repos' own docs.
+place instead of scattered across fifteen repos' own docs.
 
 | Real Amazon FC stage | What physically happens | Built here? |
 | --- | --- | --- |

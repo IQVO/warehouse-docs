@@ -17,7 +17,7 @@ performs **flow balancing** from live buffer telemetry so that every parcel
 makes its truck without the floor ever being starved or flooded.
 
 It sits downstream of five upstream event suppliers (`inventory-storage`,
-`workforce-management`, `order-management`, `network-inventory-planning`'s
+`workforce-management`, `order-management`, [`network-inventory-planning`](/contexts/network-inventory-planning)'s
 transfer work demand (ADR-0033), and `product-master`, whose
 `ProductClassified` it keeps as a local copy for release-time hazmat and
 fragile hints), conforms to two Generic

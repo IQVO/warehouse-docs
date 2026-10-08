@@ -29,6 +29,7 @@ const CONTEXTS = [
   'network-fulfillment',
   'warehouse-planning',
   'product-master',
+  'network-inventory-planning',
 ];
 
 const asyncapiBin = path.join(root, 'tools', 'asyncapi-gen', 'node_modules', '.bin', 'asyncapi');

@@ -12,14 +12,13 @@ A **container** here is C4's meaning of the word: a separately deployable or
 runnable unit, whether that is a Go process, a Postgres database or the
 broker. It is unrelated to Docker specifically.
 
-This site covers fourteen backend contexts. Eleven of them ship **four Go
+This site covers fifteen backend contexts. Twelve of them ship **four Go
 binaries and two databases** each, plus a Module Federation frontend remote,
 because the analytical read side is a separate process family from the
-operational one. The twelfth, `warehouse-ops-agent`, is one binary with no
+operational one. The thirteenth, `warehouse-ops-agent`, is one binary with no
 database. The two newest, `inbound-receiving` and
 `slotting-optimization` (decided 2026-10-08), have no deployed binaries yet
-and are not drawn in the views below. (`network-inventory-planning`, the
-fleet's fourteenth domain context, is deployed too but not documented on this site yet.) Binaries are listed from each repository's `cmd/` on
+and are not drawn in the views below. Binaries are listed from each repository's `cmd/` on
 `origin/develop`, and workloads from its Helm chart's `templates/`.
 
 ## The edge: two independent gateways
@@ -82,12 +81,13 @@ Three consequences follow, and all three are load-bearing:
    calls stay on direct ClusterIP and Kafka and never hairpin through either
    gateway.
 
-The console's eleven remotes are `order_mgmt_mfe`, `inventory_mfe`,
+The console's twelve remotes are `order_mgmt_mfe`, `inventory_mfe`,
 `planning_mfe`, `fulfillment_mfe`, `workforce_mfe`, `facility_mfe`,
 `process_path_mfe`, `labor_mfe`, `netfulfil_mfe` (keyed
 `network_fulfillment_mfe` in the console's federation config),
-`capacity_mfe` (warehouse-planning) and `productmaster_mfe`
-(product-master, served at `/mfes/product-master/`). The console's
+`capacity_mfe` (warehouse-planning), `productmaster_mfe`
+(product-master, served at `/mfes/product-master/`) and `nip_mfe`
+(network-inventory-planning, served at `/mfes/network-inventory-planning/`). The console's
 cross-cutting screens (the order lifecycle and the WMS and WES dashboards)
 do not call every service
 from the browser. They call `warehouse-ops-agent`'s BFF routes
@@ -98,7 +98,7 @@ from the browser. They call `warehouse-ops-agent`'s BFF routes
 
 Every persisting bounded context follows the same internal shape.
 `labor-performance` is drawn here as the representative example. Substitute
-the names and the diagram holds for all eleven.
+the names and the diagram holds for all twelve.
 
 ```mermaid
 C4Container
@@ -158,6 +158,7 @@ is a freshness lag, not real time, which is why every report has a
 | `network-fulfillment` | `cmd/netfulfil` | `cmd/mcp` | `cmd/netfulfil-projector` | `cmd/netfulfil-reports` | `netfulfil_mfe` | 2 |
 | `warehouse-planning` | `cmd/api` | `cmd/mcp` | `cmd/planning-projector` | `cmd/planning-reports` | `capacity_mfe` | 2 |
 | `product-master` | `cmd/api` | `cmd/mcp` | `cmd/product-projector` | `cmd/product-reports` | `productmaster_mfe` | 2 |
+| `network-inventory-planning` | `cmd/network-inventory-planning` | `cmd/mcp` | `cmd/nip-projector` | `cmd/nip-reports` | `nip_mfe` | 2 |
 | `warehouse-ops-agent` | `cmd/agent` | in-process at `/mcp` | none | none | none | **0** |
 
 Per-context table counts are in [Data Models](/architecture/data-models),
@@ -189,10 +190,9 @@ release are addressed separately.
 
 The logical separation is real, but the physical deployment has less
 isolation than the diagram might suggest. **One Postgres release**
-(`postgres`, in the data namespace) hosts twenty-three databases: an OLTP
-database and a `<service>_analytics` database for each of the eleven
-persisting contexts on this site, plus `network-inventory-planning`'s OLTP
-database, each with its own generated role. OLTP connections go through PgBouncer. Analytics connections go to
+(`postgres`, in the data namespace) hosts twenty-four databases: an OLTP
+database and a `<service>_analytics` database for each of the twelve
+persisting contexts on this site, each with its own generated role. OLTP connections go through PgBouncer. Analytics connections go to
 Postgres directly.
 
 In the local cluster a single generated analytics role serves both the
@@ -212,8 +212,9 @@ The main MCP consumer inside the fleet is `warehouse-ops-agent`, which calls
 upstream tools such as `get_rebalance_recommendation`,
 `get_backlog_telemetry`, `get_staffing_gap`, `diagnose_stuck_tasks`,
 `get_task_type_utilization`, `check_availability`, `estimate_travel_distance`
-`get_process_path_capacity` and product-master's `list_products` (for
-`find_master_data_gaps`). Several more are wired but unused.
+`get_process_path_capacity`, product-master's `list_products` (for
+`find_master_data_gaps`) and network-inventory-planning's `get_transfer`,
+`find_stuck_transfers` and `simulate_transfer_options` (its transfer watch). Several more are wired but unused.
 labor-performance and process-path-management call no sibling over REST or
 MCP. The per-tool status is on each context's
 [Context Map](/strategic-design/context-map) page.
@@ -222,8 +223,10 @@ MCP. The per-tool status is on each context's
 
 There is exactly **one Kafka broker platform-wide**: a single combined
 controller and broker in KRaft mode. Business topics are auto-created with
-eight partitions. Consumers dead-letter messages they cannot process to
-`<topic>.dlq`.
+eight partitions. Most consumers dead-letter messages they cannot process to
+`<topic>.dlq`. The exception is network-inventory-planning, whose five OLTP
+consumers log and commit past deterministic failures and have no dead-letter topic;
+only its analytics projector dead-letters.
 
 Two distinct topic families run over it, and conflating them is a common
 misreading:
@@ -260,6 +263,7 @@ flowchart LR
     NF[network-fulfillment]
     WPL[warehouse-planning]
     PM[product-master]
+    NIP[network-inventory-planning]
 
     tOM(["warehouse.order-management.events"])
     tINV(["warehouse.inventory.events"])
@@ -272,6 +276,7 @@ flowchart LR
     tWPL(["warehouse.warehouse-planning.events"])
     tNF(["warehouse.network-fulfillment.events"])
     tPM(["warehouse.product-master.events"])
+    tNIP(["warehouse.network-inventory-planning.events"])
 
     OM --> tOM
     INV --> tINV
@@ -284,6 +289,7 @@ flowchart LR
     WPL --> tWPL
     NF --> tNF
     PM --> tPM
+    NIP --> tNIP
 
     tOM --> WWP
     tOM -.->|opt-in| WPL
@@ -310,20 +316,28 @@ flowchart LR
     tPM --> WWP
     tPM --> FE
     tINV -.->|"legacy ProductClassified, migration only"| PM
+    tOM -.->|opt-in| NIP
+    tFL -.->|opt-in| NIP
+    tWPL -.->|opt-in| NIP
+    tINV -.->|opt-in| NIP
+    tFE -.->|opt-in| NIP
+    tNIP -.->|opt-in| INV
+    tNIP --> WWP
 ```
 
 | Topic | Producer | Integration types | Consumers |
 | --- | --- | ---: | --- |
-| `warehouse.order-management.events` | order-management | 3 | wes-work-planning (`OrderAllocated`, `OrderPartiallyAllocated`); warehouse-planning, opt-in |
-| `warehouse.inventory.events` | inventory-storage | 7 | wes-work-planning (`StockReserved`, `ReservationRevoked`); product-master's legacy importer (`ProductClassified`, emitted only by the one-shot backfill, migration only); the four transfer replies go to `network-inventory-planning`, not documented here |
+| `warehouse.order-management.events` | order-management | 3 | wes-work-planning (`OrderAllocated`, `OrderPartiallyAllocated`); warehouse-planning, opt-in; network-inventory-planning (`SiteSkuDemandChanged`), opt-in |
+| `warehouse.inventory.events` | inventory-storage | 7 | wes-work-planning (`StockReserved`, `ReservationRevoked`); product-master's legacy importer (`ProductClassified`, emitted only by the one-shot backfill, migration only); `network-inventory-planning` (the two allocation replies and the two destination facts, opt-in) |
 | `warehouse.work-planning.events` | wes-work-planning | 11 | fulfillment-execution (`WorkReleased`); order-management and network-fulfillment (`PathCapacityChanged`) |
-| `warehouse.fulfillment.events` | fulfillment-execution | 3 | wes-work-planning and labor-performance (`TaskCompleted`); order-management (`TaskCPTMissed`, `PackageManifested`) |
+| `warehouse.fulfillment.events` | fulfillment-execution | 3 | wes-work-planning and labor-performance (`TaskCompleted`); order-management (`TaskCPTMissed`, `PackageManifested`); network-inventory-planning (the three transfer facts, opt-in) |
 | `warehouse.workforce.events` | workforce-management | 1 | wes-work-planning, warehouse-planning (`ShiftPlanCommitted`) |
-| `warehouse.facility.events` | facility-layout | 12 | inventory-storage, warehouse-planning |
+| `warehouse.facility.events` | facility-layout | 12 | inventory-storage, warehouse-planning, network-inventory-planning (`SiteCapabilityChanged`, opt-in) |
 | `warehouse.process-path-management.events` | process-path-management | 4 | fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment |
 | `warehouse.labor-performance.events` | labor-performance | 1 | workforce-management (`TaskPerformanceRecorded`) |
-| `warehouse.warehouse-planning.events` | warehouse-planning | 4 | order-management, opt-in |
+| `warehouse.warehouse-planning.events` | warehouse-planning | 4 | order-management, opt-in; network-inventory-planning (`CapacityPlanPublished`), opt-in |
 | `warehouse.network-fulfillment.events` | network-fulfillment | 5 | none yet |
+| `warehouse.network-inventory-planning.events` | network-inventory-planning | 3 | inventory-storage (`TransferAllocationRequested`, opt-in); wes-work-planning (`WorkDemandReleased`); `TransferPlanApproved` has no consumer |
 | `warehouse.product-master.events` | product-master | 5 | inventory-storage, order-management, wes-work-planning, fulfillment-execution (`ProductClassified`, into local copies) |
 
 The type counts are the messages each producer's `asyncapi.yaml` declares on
@@ -341,8 +355,9 @@ One per persisting context, consumed only by that context's own projector:
 `warehouse.process-path-management.analytics`,
 `warehouse.labor-performance.analytics`,
 `warehouse.network-fulfillment.analytics`,
-`warehouse.warehouse-planning.analytics` and
-`warehouse.product-master.analytics`.
+`warehouse.warehouse-planning.analytics`,
+`warehouse.product-master.analytics` and
+`warehouse.network-inventory-planning.analytics`.
 
 ## What this diagram does not show
 

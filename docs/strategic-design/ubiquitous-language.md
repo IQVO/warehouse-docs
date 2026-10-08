@@ -2,7 +2,7 @@
 id: ubiquitous-language
 title: Ubiquitous Language (Fleet Overview)
 sidebar_label: Ubiquitous Language
-description: How the vocabulary is organised across the fourteen bounded contexts, which terms are genuinely shared, and which words mean different things in different contexts.
+description: How the vocabulary is organised across the fifteen backend contexts, which terms are genuinely shared, and which words mean different things in different contexts.
 ---
 
 # Ubiquitous Language: Fleet Overview
@@ -41,6 +41,7 @@ wins. For one alphabetical index across every context, see
 | `network-fulfillment` | NetworkOrder, NetworkRef, NetworkProductId, Product translation, Acknowledgement window, Held order, Shipment confirmation, CapabilityOffer | [Ubiquitous Language](/contexts/network-fulfillment/ubiquitous-language) |
 | `warehouse-planning` | ProcessCapacity, CapacityConstraint, CapacityWindow, WorkloadProfile, ProcessPath, StationStandard, CapacityPlan, Shortage, Bottleneck | [Ubiquitous Language](/contexts/warehouse-planning/ubiquitous-language) |
 | `product-master` | Product (master record), Classification, Handling tag, TemperatureClass, DOT hazard class, Physical profile, Declared, Measured, Effective, Discrepancy, Version | [Ubiquitous Language](/contexts/product-master/ubiquitous-language) |
+| `network-inventory-planning` | InterWarehouseTransfer, Proposal, ScoreBreakdown, PlanningSnapshot, SiteCapability, SiteSkuDemand, WorkDemand, Picked quantity, StuckTransfer, RebalanceRun | [Ubiquitous Language](/contexts/network-inventory-planning/ubiquitous-language) |
 | `inbound-receiving` | ASN, Dock appointment, Receipt, Receipt line, Condition (Good or Damaged), Discrepancy (Short, Over, Damaged), Dock door | [Business Context](/contexts/inbound-receiving/business-context) (no separate glossary page yet) |
 | `slotting-optimization` | Slot plan, Forward-pick slot, Pick velocity, ABC class, Stickiness, Policy (`abc-velocity-v1`), Assignment, Move (Assign, Relocate, Vacate) | [Business Context](/contexts/slotting-optimization/business-context) (no separate glossary page yet) |
 
@@ -153,6 +154,10 @@ it to a different subject:
   `Reservation` model exists, only the id.
 - **`wes-work-planning`** never holds a reservation. It only observes the
   effect through `StockReserved` and `ReservationRevoked`.
+- **`network-inventory-planning`**: a transfer is *allocating* while it waits for
+  inventory-storage's reply to `TransferAllocationRequested`, and *allocated* once
+  `TransferStockAllocated` arrives. The reservation and its allocations are
+  inventory-storage's; the transfer only stores their ids and quantities.
 
 ### "Capacity"
 
@@ -166,6 +171,7 @@ it to a different subject:
 | `warehouse-planning` | **ProcessCapacity**: the usable throughput of one process at one site for one window, which is the minimum across its constraints. A **CapacityPlan** compares assigned demand with it. |
 | `order-management` | Remaining path capacity feeds the promise. Planned capacity from warehouse-planning only annotates the order (ADR 0031). |
 | `network-fulfillment` | **Throughput feasible**: remaining capacity summed over the paths eligible for the next cutoff. |
+| `network-inventory-planning` | Never computes capacity. It reads `warehouse-planning`'s published `capacity_over_window` per site and compares it with that site's in-window demand to get **headroom** (negative means short). |
 
 ### "Discrepancy"
 

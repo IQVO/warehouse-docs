@@ -2,8 +2,8 @@
 
 Fleet-wide documentation for the **warehouse-systems** ecosystem. It holds
 the strategic and tactical Domain-Driven Design artifacts, the generated REST
-and AsyncAPI references, and the business context for fourteen backend
-contexts: thirteen domain bounded contexts plus `warehouse-ops-agent`. Built with [Docusaurus](https://docusaurus.io/) and
+and AsyncAPI references, and the business context for fifteen backend
+contexts: fourteen domain bounded contexts plus `warehouse-ops-agent`. Built with [Docusaurus](https://docusaurus.io/) and
 published to **GitHub Pages** through GitHub Actions.
 
 Live site: https://iqvo.github.io/warehouse-docs/
@@ -33,7 +33,10 @@ Live site: https://iqvo.github.io/warehouse-docs/
     `ubiquitous-language`, `class-diagram`, `entity-relationship`,
     `sequence-diagrams`, `domain-events`; `product-master` also has
     `use-cases`). Each synced page has a "Synced from" note. Edit those pages
-    upstream, never here.
+    upstream, never here. The exception is `network-inventory-planning`, whose
+    repository has no `docs/docs/ddd/` pack yet: its pages were written here from
+    its code and ADRs and say so in a note at the top; replace them with synced
+    copies once the pack exists.
   - `async-api.md`, a Kafka narrative written here, for the contexts that
     have one.
 
@@ -66,7 +69,7 @@ cd ..   # warehouse-systems/ (siblings checked out)
 for repo in order-management inventory-storage wes-work-planning \
             fulfillment-execution workforce-management facility-layout \
             process-path-management labor-performance network-fulfillment \
-            warehouse-planning product-master; do
+            warehouse-planning product-master network-inventory-planning; do
   git -C "$repo" show origin/develop:apis/openapi.yaml \
     > "warehouse-docs/apis/$repo/openapi.yaml" 2>/dev/null
   git -C "$repo" show origin/develop:apis/asyncapi.yaml \
@@ -76,7 +79,7 @@ git -C labor-performance show origin/develop:apis/openapi-reports.yaml \
   > "warehouse-docs/apis/labor-performance/openapi-reports.yaml" 2>/dev/null
 ```
 
-`warehouse-ops-agent` has no `apis/` directory. All eleven other contexts
+`warehouse-ops-agent` has no `apis/` directory. All twelve other contexts
 ship both an `openapi.yaml` and an `asyncapi.yaml`. `inbound-receiving` and
 `slotting-optimization` are not in the sync loop above yet: add them to the
 loop, to the `docusaurus.config.ts` plugin config, to `sidebars.ts` and to
@@ -107,14 +110,14 @@ Pages must be set to **Source: GitHub Actions** for this repository
 
 ## Scope
 
-This site documents fourteen backend contexts: the thirteen domain bounded
+This site documents fifteen backend contexts: the fourteen domain bounded
 contexts `order-management`, `inventory-storage`, `wes-work-planning`,
 `fulfillment-execution`, `workforce-management`, `facility-layout`,
 `process-path-management`, `labor-performance`, `network-fulfillment`,
-`warehouse-planning`, `product-master`, `inbound-receiving` and
-`slotting-optimization`, plus `warehouse-ops-agent`.
-The fleet's fourteenth domain context, `network-inventory-planning`, is not
-aggregated here yet.
+`warehouse-planning`, `product-master`, `network-inventory-planning`,
+`inbound-receiving` and `slotting-optimization`, plus `warehouse-ops-agent`.
+`inbound-receiving` and `slotting-optimization` are decided but not built, so they
+have business-context and canvas pages only.
 The frontend repositories (`warehouse-console`, `warehouse-ui-kit`) and the
 deployment repository (`warehouse-infra`) are referenced where relevant.
 They are not bounded contexts in the Evans/Vernon sense, so they have no DDD

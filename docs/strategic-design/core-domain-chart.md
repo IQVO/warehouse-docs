@@ -2,7 +2,7 @@
 id: core-domain-chart
 title: Core Domain Chart
 sidebar_label: Core Domain Chart
-description: The twelve contexts documented on this site on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart.
+description: The thirteen contexts documented on this site on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart.
 ---
 
 # Core Domain Chart
@@ -21,7 +21,7 @@ context's own chart in this fleet uses the same layout:
 
 ```mermaid
 quadrantChart
-    title warehouse-systems - twelve contexts
+    title warehouse-systems - thirteen contexts
     x-axis Low model complexity --> High model complexity
     y-axis Low business differentiation --> High business differentiation
     quadrant-1 Core
@@ -40,17 +40,18 @@ quadrantChart
     facility-layout: [0.62, 0.18]
     process-path-management: [0.58, 0.22]
     product-master: [0.36, 0.30]
+    network-inventory-planning: [0.68, 0.80]
 ```
 
 Every coordinate is copied from the context's **own** chart. The contexts
 mark these positions as judgements grounded in code evidence, not
-measurements. The four Core contexts sit close together, so some of their
+measurements. The five Core contexts sit close together, so some of their
 labels overlap; so do `product-master` and `network-fulfillment` in the
-Supporting quadrant. `network-inventory-planning` is not on this site yet,
-so it is not plotted. `inbound-receiving` and `slotting-optimization` are
-classified Supporting (see
+Supporting quadrant. `network-inventory-planning` has no pack of its own yet,
+so its point is the one on its page here, authored from its code and ADR 0001.
+`inbound-receiving` and `slotting-optimization` are classified Supporting (see
 [Subdomain Classification](/strategic-design/subdomain-classification)) but
-have no Core Domain Chart of their own yet, so they are not plotted either:
+have no Core Domain Chart of their own yet, so they are not plotted:
 this page copies coordinates from context charts and invents none.
 
 ## Where each point comes from
@@ -69,6 +70,7 @@ this page copies coordinates from context charts and invents none.
 | `facility-layout` | 0.62, 0.18 | Generic | Generic | point `facility-layout`, [chart](/contexts/facility-layout/core-domain-chart) |
 | `process-path-management` | 0.58, 0.22 | Generic | Generic | point `process-path-management`, [chart](/contexts/process-path-management/core-domain-chart) |
 | `product-master` | 0.36, 0.30 | Supporting | Supporting | point `product-master`, [chart](/contexts/product-master/core-domain-chart) |
+| `network-inventory-planning` | 0.68, 0.80 | Core | Core | point `network-inventory-planning`, authored in this repository because the context repo has no pack yet. [chart](/contexts/network-inventory-planning/core-domain-chart) |
 
 Every context's own chart puts its own point in the quadrant that matches the
 fleet classification in [Subdomain Classification](/strategic-design/subdomain-classification).
@@ -97,7 +99,7 @@ This page keeps each context's own placement and the fleet classification.
 ## Reading the chart
 
 - **Core: `wes-work-planning`, `inventory-storage`, `warehouse-planning`,
-  `fulfillment-execution`.**
+  `fulfillment-execution`, `network-inventory-planning`.**
   - `wes-work-planning` owns the release decision: CPT priority, waveless
     admission, WIP backpressure and Drum-Buffer-Rope flow balancing.
   - `inventory-storage` owns revocable reservations and the chaotic-stow
@@ -107,6 +109,11 @@ This page keeps each context's own placement and the fleet classification.
   - `warehouse-planning` computes the normalized, cross-process effective
     capacity and the forward-looking shortage. No other context computes
     either (its ADR 0001).
+  - `network-inventory-planning` decides whether stock should move between
+    warehouses and carries an approved transfer to the destination as a saga.
+    No other context relates stock, demand and capacity across sites (its ADR
+    0001). It sits just below the other Core points because forecasting and
+    optimisation are not built yet.
 - **Supporting: `workforce-management`, `labor-performance`,
   `network-fulfillment`, `warehouse-ops-agent`, `product-master`, and
   `order-management` on the border.** Each one is necessary, but the differentiating knowledge it uses

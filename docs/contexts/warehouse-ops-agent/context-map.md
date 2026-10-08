@@ -113,6 +113,7 @@ context.
 | `inventory-storage` (Core) | OHS / Conformist | MCP `check_availability`, `get_bin_occupancy` (E2, exposed as the MCP tool `detect_stranded_reservation`); REST `GET /reservations?demandRef=`; reports `/reports/flow-accuracy` | live | `mcpclient/inventory_storage.go`, `usecases/stranded_reservation.go` |
 | `warehouse-planning` (Core) | OHS / Conformist, **read tools only** (its MCP server is read+write) | MCP `get_process_path_capacity` (live, daily-brief capacity outlook); `get_capacity_plan`, `get_storage_capacity`, `list_station_standards` (wired) | live, only when `WAREHOUSE_PLANNING_MCP_ENDPOINT` is set | `mcpclient/warehouse_planning.go`, `usecases/capacity_outlook.go`, `zerowrite/mcpclient_tools_test.go` |
 | `product-master` (Supporting) | OHS / Conformist (read-only server; contract pinned to its published registry golden) | MCP `list_products` (live, master-data gaps); `get_product`, `get_product_classification`, `get_physical_profile` (wired) | live, only when `PRODUCT_MASTER_MCP_ENDPOINT` is set | `mcpclient/product_master.go`, `mcpclient/testdata/product_master_tools.golden.json`, `usecases/master_data_gaps.go` |
+| `network-inventory-planning` (Core) | OHS / Conformist (read-only MCP server; the client port has no write method) | MCP `get_transfer`, `find_stuck_transfers`, `simulate_transfer_options` (live, the transfer watch: REST `GET /transfer-watch/stuck`, `/transfer-watch/transfers/{id}`, `/transfer-watch/imbalance`); `list_transfers` (wired) | live, only when `NETWORK_INVENTORY_PLANNING_MCP_ENDPOINT` is set | `mcpclient/network_inventory_planning.go` (ADR 0019) |
 | `workforce-management` (Supporting) | OHS / Conformist | MCP `get_staffing_gap` (live), `propose_path_heads` (wired); reports `/reports/labor` | live | `mcpclient/workforce_management.go` |
 | `labor-performance` (Supporting) | OHS / Conformist | MCP `get_task_type_utilization` (live, ADR 0008) + 3 wired tools; reports `/reports/performance` | live | `mcpclient/labor_performance.go`, `usecases/flow_balance_advisory.go` |
 | `facility-layout` (Generic) | OHS / Conformist | MCP `list_sites`, `estimate_travel_distance` (live), `get_site_layout`, `get_zone_grid` (wired); reports `/reports/catalog-growth` | live | `mcpclient/facility_layout.go`, `usecases/explain_travel_factor.go` |
@@ -121,6 +122,11 @@ context.
 | `network-fulfillment` (Supporting) | Separate Ways | none | deliberately absent | no client in `internal/adapters/outbound` |
 | Prometheus / Loki | Conformist (not a bounded context) | HTTP `/api/v1/query`, `/loki/api/v1/query_range` | live | `telemetry/prometheus_reader.go`, `logs/loki_reader.go` |
 | Anthropic Messages API (external) | Conformist, with `policy.ValidatePlan` / `Arbitrate` as the anti-corruption gate | HTTP `POST /v1/messages` | off by default (`LLM_MODE=off`) | `llm/anthropic/reasoner.go`, `cmd/agent/reasoner.go` |
+
+:::note[Added in warehouse-docs]
+The row above for `network-inventory-planning` was added here when that context was onboarded on this site, from the code of both repositories on `develop`. It is not yet in this context's own map, so a re-sync from `develop` will drop it until the upstream map lists the edge.
+:::
+
 
 | Downstream | Pattern | Technology | Status | Evidence |
 |---|---|---|---|---|
