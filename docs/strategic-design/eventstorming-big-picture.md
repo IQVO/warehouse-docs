@@ -2,7 +2,7 @@
 id: eventstorming-big-picture
 title: Big Picture EventStorming
 sidebar_label: Big Picture EventStorming
-description: Fleet-level Big Picture EventStorming of the order-to-ship timeline across the eleven bounded contexts, in ddd-crew cheat-sheet notation, with pivotal events and hotspots drawn only from documented gaps.
+description: Fleet-level Big Picture EventStorming of the order-to-ship timeline across the twelve contexts documented on this site, in ddd-crew cheat-sheet notation, with pivotal events and hotspots drawn only from documented gaps.
 ---
 
 # Big Picture EventStorming
@@ -57,7 +57,7 @@ flowchart LR
 | Command | blue `#4aa3df` | A request to change state: a REST write, an MCP write tool or a network port call |
 | Policy | lilac `#c39bd3` | "Whenever X happens, do Y". These are reactions wired in code. |
 | Read Model | green `#7dcea0` | Data a person or policy reads to decide, often a local cache fed by events |
-| External System | salmon `#f1948a` | Something outside the eleven contexts: the retail network, an external scheduler |
+| External System | salmon `#f1948a` | Something outside the fleet's contexts: the retail network, an external scheduler |
 | Actor | yellow `#fff176` | A person or role who issues a command |
 | Hotspot | red `#e74c3c` | A documented gap, numbered `H1` and up and sourced in the table below |
 
@@ -117,6 +117,10 @@ flowchart LR
         OM2["Order Allocated"]:::pivotal
         OM3["Order Repromised"]:::event
     end
+    subgraph S_PM["product-master"]
+        direction LR
+        PM1["Product Classified"]:::event
+    end
     subgraph S_INV["inventory-storage"]
         direction LR
         IN1["Item Stowed"]:::event
@@ -143,6 +147,10 @@ flowchart LR
     end
 
     FL1 --> FL2 --> IN1
+    PM1 --> IN1
+    PM1 -.-> OM1
+    PM1 -.-> WP2
+    PM1 -.-> FE3
     PP1 --> PP2
     FL2 --> WL1
     WF1 --> WL1 --> WL2
@@ -168,7 +176,9 @@ Solid arrows are the causal order of the happy path. Dotted arrows are
 feedback and read-model feeds. `PathCapacityChanged`, `CPTScheduleChanged`
 and published shortages are cached locally by `order-management`, and its
 promise and order view read from those caches. `TaskPerformanceRecorded`
-reaches the next staffing proposal. The `FE4` to `NF3` arrow is dotted on
+reaches the next staffing proposal. `Product Classified` feeds the local
+classification copies that stow, order intake, release and package sealing
+read (product-master ADR 0003). The `FE4` to `NF3` arrow is dotted on
 purpose. No event or call links a manifested package to the network order,
 and an operator closes the loop by hand (hotspot H26).
 
@@ -179,14 +189,24 @@ pages, joined on [Domain Message Flows](/strategic-design/domain-message-flows).
 ## Phase 0: the building, the catalogue and the standards
 
 Reference data has to exist before the first order arrives. Facility
-structure, process paths and CPT schedules, labor standards and stock on
-the shelves are all set up in this phase.
+structure, product master data, process paths and CPT schedules, labor
+standards and stock on the shelves are all set up in this phase.
 
 ```mermaid
 flowchart LR
     OP["Operator"]:::actor
     IE["Industrial engineer"]:::actor
     IC["Inventory control"]:::actor
+    MDS["Master-data steward"]:::actor
+    subgraph S_PM["product-master"]
+        direction LR
+        C8["Register Product, Classify Product"]:::command
+        E10["Product Registered"]:::event
+        E11["Product Classified"]:::event
+        C9["Declare Dimensions, Record Measurement"]:::command
+        E12["Product Dimensions Declared, Product Measured"]:::event
+    end
+    R5["Classification local copies in inventory-storage, order-management, wes-work-planning, fulfillment-execution"]:::readmodel
     subgraph S_FL["facility-layout"]
         direction LR
         C1["Register Zone"]:::command
@@ -212,7 +232,7 @@ flowchart LR
     subgraph S_INV["inventory-storage"]
         direction LR
         R1["Facility location cache"]:::readmodel
-        C7["Classify Product, Receive Stock, Stow Stock"]:::command
+        C7["Receive Stock, Stow Stock"]:::command
         E8["Stock Received"]:::event
         E9["Item Stowed"]:::event
     end
@@ -236,6 +256,10 @@ flowchart LR
     IE --> C6 --> E7
     IC --> C7 --> E8 --> E9
     R1 --> C7
+    MDS --> C8 --> E10
+    C8 --> E11 --> R5
+    MDS --> C9 --> E12
+    R5 --> C7
 
     H1["H1 default LOCATION_LOOKUP_MODE permissive enforces no placement rule"]:::hotspot
     H2["H2 bin id never checked against the facility-layout slot catalogue"]:::hotspot
@@ -245,6 +269,10 @@ flowchart LR
     C7 -.- H2
     C3 -.- H3
     E6 -.- H5
+    H33["H33 a SKU classified just before its first stow may reach a copy late"]:::hotspot
+    H34["H34 no event consumer of the physical profile yet"]:::hotspot
+    E11 -.- H33
+    E12 -.- H34
 
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
     classDef command fill:#4aa3df,stroke:#1f6f9f,color:#0b1e2d
@@ -259,7 +287,8 @@ flowchart LR
 Sources: [facility-layout flows 1 and 3](/contexts/facility-layout/domain-message-flow),
 [process-path-management flows 1 to 3](/contexts/process-path-management/domain-message-flow),
 [labor-performance flow 2](/contexts/labor-performance/domain-message-flow),
-[inventory-storage flow 3](/contexts/inventory-storage/domain-message-flow).
+[inventory-storage flow 3](/contexts/inventory-storage/domain-message-flow),
+[product-master domain message flow](/contexts/product-master/domain-message-flow).
 
 ## Phase 1: demand intake and allocation
 
@@ -647,6 +676,9 @@ this site, and the corroborating context page is linked instead.
 | H30 | network-fulfillment | The capability offer is never submitted outward. `SubmitAvailability` is unused. | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), section 4 |
 | H31 | workforce-management | The default `INSTALLED_CAPACITY_MODE=permissive` rejects every shift-plan commit | [workforce-management EventStorming](/contexts/workforce-management/eventstorming). [workforce-management context map](/contexts/workforce-management/context-map). |
 | ~~H32~~ | fulfillment-execution | ~~`apis/openapi.yaml` expands CPT as "Committed Processing Time"~~ **Resolved 2026-10-06.** Now reads "Critical Pull Time". | [fulfillment-execution Ubiquitous Language](/contexts/fulfillment-execution/ubiquitous-language) |
+| H33 | product-master | A SKU classified moments before its first stow may reach a consumer's local copy late | [product-master EventStorming](/contexts/product-master/eventstorming) (product-master ADR 0001, Consequences) |
+| H34 | product-master | No event consumer of the physical profile (`ProductDimensionsDeclared`, `ProductMeasured`) yet | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0002, "later phases") |
+| H35 | product-master | Stage E (remove the legacy importer, the inventory-storage backfill and the deprecated classification endpoint) has no date | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0003, stage E) |
 
 Other wired-but-unused edges are not drawn, because they sit outside
 the order-to-ship timeline. They are `warehouse-ops-agent`'s MCP clients
@@ -677,3 +709,4 @@ sticky inventory and the code evidence:
 | `warehouse-ops-agent` | [/contexts/warehouse-ops-agent/eventstorming](/contexts/warehouse-ops-agent/eventstorming) |
 | `network-fulfillment` | [/contexts/network-fulfillment/eventstorming](/contexts/network-fulfillment/eventstorming) |
 | `warehouse-planning` | [/contexts/warehouse-planning/eventstorming](/contexts/warehouse-planning/eventstorming) |
+| `product-master` | [/contexts/product-master/eventstorming](/contexts/product-master/eventstorming) |

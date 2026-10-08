@@ -40,12 +40,12 @@ Everything else in the platform — physical location structure
 (`labor-performance`) — exists to feed that orchestration loop trustworthy,
 current facts, never to make decisions on its own.
 
-## The eleven bounded contexts, one sentence each
+## The twelve contexts on this site, one sentence each
 
 | Context | One-sentence purpose |
 | --- | --- |
 | `order-management` | Accepts orders, allocates stock, and releases work — the missing upstream front door. |
-| `inventory-storage` | The authoritative source of stock truth under chaotic storage; owns reservations. |
+| `inventory-storage` | The authoritative source of stock truth under chaotic storage; owns reservations and applies hazmat placement and DOT segregation from a local copy of product-master's classification. |
 | `wes-work-planning` | The conductor: waveless release and continuous flow balancing across process paths. |
 | `fulfillment-execution` | The Pick/Pack/SLAM task lifecycle; claims, executes, and completes floor work. |
 | `workforce-management` | Certifies, assigns, and tracks labor against process-path capability requirements. |
@@ -55,6 +55,7 @@ current facts, never to make decisions on its own.
 | `warehouse-ops-agent` | An agentic read-side aggregator (daily brief, exception correlation) and the console's BFF; owns no domain aggregate. |
 | `network-fulfillment` | The anti-corruption layer to an external retail fulfillment network: polls network demand, places it with `order-management` as a held order, and owns the acknowledgement deadline. |
 | `warehouse-planning` | Answers whether the warehouse can process the demand assigned to it: composes labor, station and other constraints into path capacity and records capacity plans with shortage and bottleneck detection. |
+| `product-master` | The single source of truth for what a SKU is: its handling classification (taken over from `inventory-storage`) and its declared and measured physical profile, published as events that four contexts keep local copies of. |
 
 See [Subdomain Classification](./subdomain-classification) for the
 Core/Supporting/Generic verdict on each, and [Context Map](./context-map)
@@ -69,7 +70,7 @@ actual inbound and outbound value streams described in Amazon's own public
 material and industry trade coverage. This table is that flow, stage by
 stage, against what this platform actually implements — so "which of these
 is real code, and which is deliberately out of scope" is answerable in one
-place instead of scattered across eleven repos' own docs.
+place instead of scattered across twelve repos' own docs.
 
 | Real Amazon FC stage | What physically happens | Built here? |
 | --- | --- | --- |

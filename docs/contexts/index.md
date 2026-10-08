@@ -8,9 +8,9 @@ slug: /contexts
 
 # Bounded Contexts
 
-Every bounded context below has the same page set, in this order, except
-`product-master`, which is new and so far has only the Business Context and
-the Bounded Context Canvas. The
+Every bounded context below has the same page set, in this order.
+`product-master` adds one extra synced page, **Use Cases**, after the
+Sequence Diagrams. The
 ddd-crew tool behind each page, or the page's source if no ddd-crew tool
 applies, is given in brackets:
 
@@ -50,7 +50,8 @@ applies, is given in brackets:
     the generated AsyncAPI reference. This page exists only for
     `inventory-storage`, `wes-work-planning`, `fulfillment-execution`,
     `workforce-management`, `process-path-management`,
-    `labor-performance`, `network-fulfillment` and `warehouse-planning`.
+    `labor-performance`, `network-fulfillment`, `warehouse-planning` and
+    `product-master`.
     (Hand-written for this site.)
 
 :::info[Synced pages]
@@ -76,6 +77,9 @@ site.
 | [network-fulfillment](/contexts/network-fulfillment) | Supporting | `wes` | External network edge (anti-corruption layer) |
 | [warehouse-planning](/contexts/warehouse-planning) | Core | `wes` | WES — capacity planning |
 | [product-master](/contexts/product-master) | Supporting | `wms` | WMS — product master data (classification and physical profile; four live `ProductClassified` local-copy consumers) |
+
+`network-inventory-planning`, the fleet's twelfth domain context, has no
+pages here yet.
 
 See [Strategic Design](/strategic-design) for how these twelve relate to
 each other at the fleet level, and the

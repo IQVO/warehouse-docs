@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **product-master** bounded context (WMS subdomain):\nSKU-level product master data, i.e. handling classification and the\nphysical profile (ADR 0001, ADR 0002).\n\n**Published.** The `Product` aggregate raises five events, published to\n`warehouse.product-master.events` through a **transactional outbox**: the\nproduct row and its already-encoded events are written in ONE database\ntransaction and a relay drains them to Kafka (at-least-once; the CloudEvents\n`id` is stored with the outbox row, so a retry republishes the same `id`).\nA change that alters nothing raises no event.\n\n**Local copies, not lookups.** Sibling contexts (inventory-storage,\norder-management, wes-work-planning, fulfillment-execution) keep a local\ncopy keyed by SKU. Every payload carries the aggregate `version` after the\nchange; apply a message only when its `version` is greater than the stored\none. Payloads are full-state per concern (classification, physical profile),\nso a consumer overwrites, it never merges.\n\n**Consumed (migration only, ADR 0003).** inventory-storage's legacy\n`ProductClassified` on `warehouse.inventory.events`, read by the legacy\nimporter when `LEGACY_IMPORT_CONSUMER_GROUP` is set.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\n`specversion`, `id`, `source` (`/warehouse/product-master`), `type`,\n`subject` (the SKU), `time`, `datacontenttype` (`application/json`) and\n`dataschema` (`urn:warehouse:product-master:events:<EventName>:v1`) are all\nrequired. Kafka key = the SKU. Type =\n`com.warehouse.wms.product-master.product.<EventName>`. A breaking payload\nchange is a new `.v2` type, never a mutation.\n"
+    "description": "Event catalog for the **product-master** bounded context (WMS subdomain):\nSKU-level product master data, i.e. handling classification and the\nphysical profile (ADR 0001, ADR 0002).\n\n**Published.** The `Product` aggregate raises five events, published to\n`warehouse.product-master.events` through a **transactional outbox**: the\nproduct row and its already-encoded events are written in ONE database\ntransaction and a relay drains them to Kafka (at-least-once; the CloudEvents\n`id` is stored with the outbox row, so a retry republishes the same `id`).\nA change that alters nothing raises no event.\n\n**Local copies, not lookups.** Sibling contexts (inventory-storage,\norder-management, wes-work-planning, fulfillment-execution) keep a local\ncopy keyed by SKU. Every payload carries the aggregate `version` after the\nchange; apply a message only when its `version` is greater than the stored\none. Payloads are full-state per concern (classification, physical profile),\nso a consumer overwrites, it never merges.\n\n**Analytics (ADR 0006).** The same five events are ALSO written, in the\nsame transaction, to `warehouse.product-master.analytics` with the same\n`type` and the same `id` per occurrence, `dataschema`\n`urn:warehouse:product-master:analytics:<EventName>:v1` and payloads equal\nto the integration payloads. Only this service's `product-projector`\nconsumes it; it is not an integration contract.\n\n**Consumed (migration only, ADR 0003).** inventory-storage's legacy\n`ProductClassified` on `warehouse.inventory.events`, read by the legacy\nimporter when `LEGACY_IMPORT_CONSUMER_GROUP` is set.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\n`specversion`, `id`, `source` (`/warehouse/product-master`), `type`,\n`subject` (the SKU), `time`, `datacontenttype` (`application/json`) and\n`dataschema` (`urn:warehouse:product-master:events:<EventName>:v1`) are all\nrequired. Kafka key = the SKU. Type =\n`com.warehouse.wms.product-master.product.<EventName>`. A breaking payload\nchange is a new `.v2` type, never a mutation.\n"
   },
   "servers": {
     "production": {
@@ -39,6 +39,10 @@
     {
       "name": "consumed",
       "description": "Events produced by sibling contexts that this service consumes (migration only)."
+    },
+    {
+      "name": "analytics",
+      "description": "This service's own analytics stream, consumed only by its projector (ADR 0006)."
     }
   ],
   "channels": {
@@ -581,6 +585,238 @@
         }
       }
     },
+    "warehouse.product-master.analytics": {
+      "description": "This service's analytics topic (`AnalyticsTopic` in\n`internal/adapters/outbound/kafka/analytics_encoder.go`; ADR 0006).\nWritten by the SAME outbox relay, from rows inserted in the same\ntransaction as the integration rows (one CloudEvents `id` per occurrence\non both topics); key = SKU. Consumed ONLY by this service's\n`product-projector` under a fixed consumer group read from env\n`ANALYTICS_CONSUMER_GROUP` (at-least-once; the offset is committed after\nthe projection and the dedupe mark committed together in the analytical\ndatabase). The projector dedupes on `id`, ignores unknown types, skips\n(with a rate-limited WARN) anything that is not CloudEvents 1.0, and\ndead-letters a known type with an unusable payload to\n`warehouse.product-master.analytics.dlq` (raw bytes plus `x-dlq-*`\nheaders). Not an integration contract: other contexts consume\n`warehouse.product-master.events`.\n",
+      "subscribe": {
+        "operationId": "receiveProductAnalyticsEvents",
+        "summary": "Receive the Product analytics events.",
+        "description": "Route on the full `type`; the payloads equal the integration payloads\n(no analytics-only fields in v1). `dataschema` is\n`urn:warehouse:product-master:analytics:<EventName>:v1`.\n",
+        "tags": [
+          {
+            "name": "analytics"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "ProductRegistered",
+              "title": "Product registered (analytics)",
+              "summary": "Product registered, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductRegistered` (the same as on the integration topic); dataschema `urn:warehouse:product-master:analytics:ProductRegistered:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[0].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "1b0c9a4e-2f7d-4a63-9d1e-5a7c3e2b9f10",
+                    "source": "/warehouse/product-master",
+                    "type": "com.warehouse.wms.product-master.product.ProductRegistered",
+                    "subject": "SKU-1",
+                    "time": "2026-10-06T21:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:product-master:analytics:ProductRegistered:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "description": "Lithium battery pack 12V",
+                      "version": 1
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProductDescriptionChanged",
+              "title": "Product description changed (analytics)",
+              "summary": "Product description changed, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductDescriptionChanged` (the same as on the integration topic); dataschema `urn:warehouse:product-master:analytics:ProductDescriptionChanged:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[1].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "8d3f2c1a-6b5e-4f7a-9c0d-1e2f3a4b5c6d",
+                    "source": "/warehouse/product-master",
+                    "type": "com.warehouse.wms.product-master.product.ProductDescriptionChanged",
+                    "subject": "SKU-1",
+                    "time": "2026-10-06T21:01:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:product-master:analytics:ProductDescriptionChanged:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "description": "Lithium battery pack 12V, 7Ah",
+                      "version": 2
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProductClassified",
+              "title": "Product classified (analytics)",
+              "summary": "Product classified, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductClassified` (the same as on the integration topic); dataschema `urn:warehouse:product-master:analytics:ProductClassified:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[2].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "0f6d8a2b-3c4e-4d5f-8a9b-7c6d5e4f3a2b",
+                    "source": "/warehouse/product-master",
+                    "type": "com.warehouse.wms.product-master.product.ProductClassified",
+                    "subject": "SKU-1",
+                    "time": "2026-10-06T21:02:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:product-master:analytics:ProductClassified:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "handling_tags": [
+                        "Hazmat",
+                        "TemperatureSensitive"
+                      ],
+                      "temperature_class": "Frozen",
+                      "dot_hazard_class": 3,
+                      "classification_source": "native",
+                      "version": 3
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProductDimensionsDeclared",
+              "title": "Product dimensions declared (analytics)",
+              "summary": "Product dimensions declared, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductDimensionsDeclared` (the same as on the integration topic); dataschema `urn:warehouse:product-master:analytics:ProductDimensionsDeclared:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[3].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d",
+                    "source": "/warehouse/product-master",
+                    "type": "com.warehouse.wms.product-master.product.ProductDimensionsDeclared",
+                    "subject": "SKU-1",
+                    "time": "2026-10-06T21:03:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:product-master:analytics:ProductDimensionsDeclared:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "declared": {
+                        "length_mm": 200,
+                        "width_mm": 120,
+                        "height_mm": 80,
+                        "weight_g": 1500,
+                        "volume_mm3": 1920000
+                      },
+                      "effective": {
+                        "length_mm": 200,
+                        "width_mm": 120,
+                        "height_mm": 80,
+                        "weight_g": 1500,
+                        "volume_mm3": 1920000
+                      },
+                      "effective_source": "declared",
+                      "discrepancy": false,
+                      "version": 4
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProductMeasured",
+              "title": "Product measured (analytics)",
+              "summary": "Product measured, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductMeasured` (the same as on the integration topic); dataschema `urn:warehouse:product-master:analytics:ProductMeasured:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[3].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+                    "source": "/warehouse/product-master",
+                    "type": "com.warehouse.wms.product-master.product.ProductMeasured",
+                    "subject": "SKU-1",
+                    "time": "2026-10-06T21:04:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:product-master:analytics:ProductMeasured:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "declared": {
+                        "length_mm": 200,
+                        "width_mm": 120,
+                        "height_mm": 80,
+                        "weight_g": 1500,
+                        "volume_mm3": 1920000
+                      },
+                      "measured": {
+                        "length_mm": 205,
+                        "width_mm": 121,
+                        "height_mm": 82,
+                        "weight_g": 1720,
+                        "volume_mm3": 2034010,
+                        "measured_at": "2026-10-06T14:05:00Z",
+                        "device_id": "CUBISCAN-03"
+                      },
+                      "effective": {
+                        "length_mm": 205,
+                        "width_mm": 121,
+                        "height_mm": 82,
+                        "weight_g": 1720,
+                        "volume_mm3": 2034010
+                      },
+                      "effective_source": "measured",
+                      "discrepancy": true,
+                      "version": 5
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
     "warehouse.inventory.events": {
       "description": "inventory-storage's integration topic. Consumed ONLY by the legacy\nimporter during the migration (ADR 0003), with a stable consumer group\nread from env `LEGACY_IMPORT_CONSUMER_GROUP` (unset = not started). Every\ntype other than inventory-storage's `ProductClassified` is ignored.\n",
       "publish": {
@@ -683,7 +919,12 @@
       "ProductClassified": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[2]",
       "ProductDimensionsDeclared": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[3]",
       "ProductMeasured": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[4]",
-      "LegacyProductClassified": "$ref:$.channels.warehouse.inventory.events.publish.message"
+      "LegacyProductClassified": "$ref:$.channels.warehouse.inventory.events.publish.message",
+      "ProductRegisteredAnalytics": "$ref:$.channels.warehouse.product-master.analytics.subscribe.message.oneOf[0]",
+      "ProductDescriptionChangedAnalytics": "$ref:$.channels.warehouse.product-master.analytics.subscribe.message.oneOf[1]",
+      "ProductClassifiedAnalytics": "$ref:$.channels.warehouse.product-master.analytics.subscribe.message.oneOf[2]",
+      "ProductDimensionsDeclaredAnalytics": "$ref:$.channels.warehouse.product-master.analytics.subscribe.message.oneOf[3]",
+      "ProductMeasuredAnalytics": "$ref:$.channels.warehouse.product-master.analytics.subscribe.message.oneOf[4]"
     },
     "schemas": {
       "CloudEventEnvelope": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[0].payload.allOf[0]",

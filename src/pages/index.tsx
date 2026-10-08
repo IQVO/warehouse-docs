@@ -25,6 +25,7 @@ const CONTEXTS: ContextCard[] = [
   {slug: 'warehouse-ops-agent', name: 'warehouse-ops-agent', tier: 'Supporting'},
   {slug: 'network-fulfillment', name: 'network-fulfillment', tier: 'Supporting'},
   {slug: 'warehouse-planning', name: 'warehouse-planning', tier: 'Core'},
+  {slug: 'product-master', name: 'product-master', tier: 'Supporting'},
 ];
 
 const TIER_CLASS: Record<ContextCard['tier'], string> = {
@@ -44,7 +45,7 @@ function HomepageHeader() {
         </Heading>
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
         <p className={styles.heroLead}>
-          Eleven independently deployable bounded contexts, one shared
+          Twelve independently deployable backend contexts, one shared
           ubiquitous language, and a single documented context map. This
           site is generated directly from each context's own OpenAPI and
           AsyncAPI specifications, ADRs, and domain source — never
@@ -71,7 +72,7 @@ function HomepageHeader() {
 function ContextGrid() {
   return (
     <section className="container">
-      <Heading as="h2">The eleven bounded contexts</Heading>
+      <Heading as="h2">The twelve contexts on this site</Heading>
       <div className={styles.contextGrid}>
         {CONTEXTS.map((ctx) => (
           <Link key={ctx.slug} className={styles.contextCard} to={`/contexts/${ctx.slug}`}>

@@ -8,8 +8,8 @@ slug: /glossary
 
 # Glossary
 
-This is an alphabetical index of the key terms from the eleven bounded
-contexts' ubiquitous languages. Each term belongs to one context, which holds
+This is an alphabetical index of the key terms from the ubiquitous languages
+of the twelve contexts documented on this site. Each term belongs to one context, which holds
 its authoritative definition. The short definitions below are condensed from
 each context's **Ubiquitous Language** page. That page is synced from the
 context's own repository, maps every term to its code identifier, and wins if
@@ -34,14 +34,17 @@ page covers terms that several contexts reuse with different meanings.
 | Certification | [`workforce-management`](/contexts/workforce-management/ubiquitous-language) | A named qualification an associate holds (`pack`, `hazmat`, `pick`). It gates LaborAssignment. |
 | Charge | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | The volume that must clear a process path, bucketed by CPT: a set of `(CPT, quantity)` pairs. |
 | claimNext | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | Pull-based dispatch: returns the earliest-CPT pending task a station is certified and equipped for. There is no `assign(task, station)`. |
+| Classification source | [`product-master`](/contexts/product-master/ubiquitous-language) | `native` when a classification was authored in product-master, `legacy-import` when its legacy importer took it from inventory-storage during the migration (ADR 0003). A legacy import never overwrites a native one. |
 | CPT (Critical Pull Time) | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | The last moment a parcel can be manifested and still make its truck. Priority derives from it. |
 | DailyBrief | [`warehouse-ops-agent`](/contexts/warehouse-ops-agent/ubiquitous-language) | The synthesized cross-path, cross-site operational summary: each monitored path's facts plus the open exceptions derived from them. |
 | Direct | [`process-path-management`](/contexts/process-path-management/ubiquitous-language) | A structural, immutable fact about a path's routing shape. It is set at definition and cannot be revised. |
+| Discrepancy | [`product-master`](/contexts/product-master/ubiquitous-language) | True when a product's measured unit volume or weight differs from the declared value by more than 10 %. Information for stewards; it never rejects a measurement. |
 | Flow balancing | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | A bounded, two-lever correction on one path when backlog deviates from plan: throttle upstream release, or flag labour reassignment. |
 | FlowBalanceException | [`warehouse-ops-agent`](/contexts/warehouse-ops-agent/ubiquitous-language) | The E1 correlation of a wes rebalance recommendation, a staffing gap and a stuck-task diagnostic for one path into one ranked recommendation. |
-| Fragile | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | A Task-level packing hint stamped at release time from inventory-storage's product classification. It does not gate claiming. |
+| Fragile | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | A Task-level packing hint stamped at release time from wes-work-planning's local copy of product-master's classification. It does not gate claiming. |
 | Fulfillment class | [`order-management`](/contexts/order-management/ubiquitous-language) | A demand-shape classifier (`SINGLE`, `SAME_SKU_MULTI`, `MULTI_LINE_MULTI`), derived from line count and quantity and never stored. |
 | Gift wrap | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | A Task-level packing hint from a caller-stated request, independent of product classification. |
+| Handling tag | [`product-master`](/contexts/product-master/ubiquitous-language) | One of the closed set `Hazmat`, `Fragile`, `TemperatureSensitive`, `Oversized`, `HighValue` on a SKU's classification, always in that order on the wire. Moved from inventory-storage. |
 | Held order | [`order-management`](/contexts/order-management/ubiquitous-language) | An order received with `releaseOnAllocation=false`. It allocates, then waits for an explicit release or a cancel. Must be ship-complete. `network-fulfillment` raises these. |
 | LaborAssignment | [`workforce-management`](/contexts/workforce-management/ubiquitous-language) | One associate on one path for an interval. Exactly one ACTIVE assignment per associate, gated by certification. |
 | LaborStandard | [`labor-performance`](/contexts/labor-performance/ubiquitous-language) | The engineered expected duration for one task type, with an effective range. It is frozen onto each scored task at completion time. |
@@ -60,9 +63,11 @@ page covers terms that several contexts reuse with different meanings.
 | PathId | [`process-path-management`](/contexts/process-path-management/ubiquitous-language) | The canonical identity of a process path (`PICK`, `PACK`, ...). fulfillment-execution, wes-work-planning and workforce-management reference the same identity. |
 | PathPlan | [`workforce-management`](/contexts/workforce-management/ubiquitous-language) | One line of a ShiftPlan: `pathId`, `plannedHeads`, `plannedRate`, `plannedHours`. |
 | PathUnderstaffed | [`workforce-management`](/contexts/workforce-management/ubiquitous-language) | A flag, not a decision: the planned heads for a path are not currently met by active assignments. |
+| Physical profile | [`product-master`](/contexts/product-master/ubiquitous-language) | One unit's declared and latest measured dimensions (mm) and weight (g), the effective values (measured if present, else declared) and the discrepancy flag (ADR 0002). |
 | PlacementRule | [`facility-layout`](/contexts/facility-layout/ubiquitous-language) | Declares which LocationTypes are legal in which Zones. It is enforced once, at registration time. |
 | ProcessCapacity | [`warehouse-planning`](/contexts/warehouse-planning/ubiquitous-language) | The usable throughput of one process at one site for one window: the minimum across its registered constraints. |
 | ProcessPath | [`process-path-management`](/contexts/process-path-management/ubiquitous-language) | The aggregate root: the operator-configurable definition of one process path. (`warehouse-planning` keeps its own, differently modelled ProcessPath: an ordered sequence of process steps.) |
+| Product (master record) | [`product-master`](/contexts/product-master/ubiquitous-language) | The SKU-level master record: description, classification, physical profile and a `version` that grows by one per accepted change. Downstream copies apply an event only when its `version` is newer. |
 | Promise | [`order-management`](/contexts/order-management/ubiquitous-language) | The CPT window (or lead-time date) an order or shipment group is promised to leave by. It is recomputed (re-promised) on `TaskCPTMissed`/`PackageManifested`. |
 | Release | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | Continuous, priority-ordered (waveless) admission of work into a work pool. |
 | Remaining capacity | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | `max(0, wipLimit − WIP)` for a release-fed pool, reported per CPT cutoff on `PathCapacityChanged`. Unknown for a flow-fed pool. |

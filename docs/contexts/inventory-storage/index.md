@@ -10,8 +10,8 @@ description: The WMS-tier authoritative record of what stock is held where, and 
 <span className="badge-core">Core Subdomain</span> · WMS tier
 
 **Inventory & Storage** is the WMS-tier authoritative record of *what is held
-where, and what portion of it is usable*. It is one of the platform's eleven
-backend bounded contexts, and it owns the "storing them under chaotic storage" clause
+where, and what portion of it is usable*. It is one of the platform's twelve
+domain bounded contexts, and it owns the "storing them under chaotic storage" clause
 of the platform's domain vision — the truth that everything downstream
 depends on.
 
@@ -33,13 +33,14 @@ the `Unlocated` state are all consequences of taking that sentence literally.
 | **Revocable reservations** | Allocation is a `Reservation` with a timeout that can always be revoked and re-satisfied from a different physical holding. |
 | **Usable inventory** | The read model that actually constrains release: on-hand minus active reservations minus held/unlocated stock. |
 | **Cycle counting** | Verifying a bin's physical contents against system records, reconciling shortfalls by flagging stock `Unlocated`. |
-| **Product classification** | SKU-level master data (hazmat, fragile, temperature-sensitive, oversized, high-value, optional DOT hazard class) enforced at stow time. |
+| **Placement and segregation at stow** | Hazmat zone placement and same-bin DOT segregation, enforced at stow time against a version-guarded local copy of `product-master`'s classification ([ADR-0034](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0034-product-master-owns-classification.md)). The classification itself (handling tags, temperature class, DOT hazard class) is owned by `product-master` since 2026-10-07. |
 
 ## What it deliberately does not own
 
 - does not pick, pack, ship, or route associates — that is `fulfillment-execution` and `wes-work-planning`;
 - does not plan labour or headcount — that is `workforce-management`;
 - does not model the physical building (site, area, zone, aisle, bay, level, position) — that is `facility-layout`, a separate Generic subdomain;
+- does not own product master data — `product-master` is the source of truth for a SKU's classification; `PUT /products/{sku}/classification` here answers `410` (`classification-moved`), and the deprecated `GET` serves the local copy;
 - does not own bin existence as a place-in-the-building fact — `facility-layout` owns that; a `Bin` here is a flat, declaratively-registered capacity record, created/resized by inventory control via `PUT /bins/{binId}` (ADR-0025), not a node in the warehouse map.
 
 ## Where this fits in the platform
@@ -48,15 +49,22 @@ the `Unlocated` state are all consequences of taking that sentence literally.
 usable inventory. `wes-work-planning` is a Customer/Supplier downstream,
 conforming to its Published Language (REST + the two published Kafka
 events) with no write access to any of its aggregates. `order-management`
-reserves and revokes stock over REST, and `order-management`,
-`wes-work-planning` and `fulfillment-execution` read
-`GET /products/{sku}/classification` (each opt-in via its own
-`PRODUCT_CLASSIFICATION_MODE`). `network-fulfillment` reads
+reserves and revokes stock over REST. `order-management`,
+`wes-work-planning` and `fulfillment-execution` no longer call its
+`GET /products/{sku}/classification`: each keeps its own local copy of
+`product-master`'s `ProductClassified`. `network-fulfillment` reads
 `GET /inventory/{sku}/usable` (opt-in) to compute its capability offers.
-The one sibling topic it consumes is
-`facility-layout`'s `warehouse.facility.events`, into a local
+It consumes `facility-layout`'s `warehouse.facility.events` into a local
 location-classification cache
-([ADR-0013](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0013-location-classification-via-facility-events.md)).
+([ADR-0013](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0013-location-classification-via-facility-events.md)),
+`product-master`'s `warehouse.product-master.events` into its
+`product_classifications` copy (`PRODUCT_MASTER_CONSUMER_GROUP`, ADR-0034,
+set in the reference deployment), `network-inventory-planning`'s transfer
+allocation commands (ADR-0030) and, off by default,
+`fulfillment-execution`'s `TaskCompleted` to confirm picks (ADR-0035). Its
+legacy `ProductClassified` is emitted only by the one-shot
+`republish-product-classifications` backfill, for `product-master`'s
+migration importer.
 Every REST and MCP endpoint is unauthenticated by deliberate decision
 ([ADR-0015](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0015-remove-rest-identity-layer.md)). See the
 [Bounded Context Canvas](/contexts/inventory-storage/bounded-context-canvas) for the full picture of

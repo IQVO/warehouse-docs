@@ -12,7 +12,7 @@ slug: /contexts/warehouse-ops-agent
 
 `warehouse-ops-agent` is the fleet's *agentic* layer: an "AI teammate that
 sees, analyzes, and recommends" over the warehouse-systems bounded
-contexts — an outbound MCP client for nine of them: the five original
+contexts — an outbound MCP client for eleven of them: the five original
 ones (`inventory-storage`, `wes-work-planning`, `fulfillment-execution`,
 `workforce-management`, `facility-layout`), three second-wave clients
 (`labor-performance`, `order-management`, `process-path-management`,
@@ -20,7 +20,14 @@ ones (`inventory-storage`, `wes-work-planning`, `fulfillment-execution`,
 the `order-management` and `process-path-management` MCP clients are wired
 but unused), and `warehouse-planning`
 ([ADR 0013](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0013-warehouse-planning-mcp-client-and-capacity-outlook.md),
-read tools only, active when `WAREHOUSE_PLANNING_MCP_ENDPOINT` is set)
+read tools only, active when `WAREHOUSE_PLANNING_MCP_ENDPOINT` is set),
+`network-inventory-planning`
+([ADR 0019](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0019-network-inventory-planning-transfer-watch.md),
+transfer watch) and `product-master`
+([ADR 0020](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0020-product-master-mcp-client-and-master-data-gaps.md),
+four read tools, of which `list_products` feeds `find_master_data_gaps` and
+`GET /master-data-gaps`; active when `PRODUCT_MASTER_MCP_ENDPOINT` is set,
+which the reference deployment does)
 — and, separately, the Backend-for-Frontend behind the operator console's
 genuinely cross-cutting screens.
 
@@ -133,5 +140,5 @@ this context has no Kafka integration.
   See also the [ADR index](/adr).
 - The [API surface page](/api-reference/warehouse-ops-agent) on this site
   describes its REST and MCP surface in prose.
-- Fleet-wide [Strategic Design](/strategic-design): how all eleven backend
-  contexts relate.
+- Fleet-wide [Strategic Design](/strategic-design): how the twelve contexts
+  documented on this site relate.

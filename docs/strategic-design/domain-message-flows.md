@@ -2,7 +2,7 @@
 id: domain-message-flows
 title: Domain Message Flow Modelling
 sidebar_label: Domain Message Flows
-description: Commands, events and queries flowing between the eleven bounded contexts for the platform's key business scenarios, in ddd-crew Domain Message Flow notation, with the Kafka topic of every event.
+description: Commands, events and queries flowing between the twelve contexts documented on this site for the platform's key business scenarios, in ddd-crew Domain Message Flow notation, with the Kafka topic of every event.
 ---
 
 # Domain Message Flow Modelling
@@ -45,6 +45,7 @@ context's own projector and are never read by a sibling.
 | --- | --- | --- | --- |
 | `warehouse.order-management.events` | order-management | `OrderAllocated`, `OrderPartiallyAllocated` | wes-work-planning, warehouse-planning |
 | `warehouse.inventory.events` | inventory-storage | `StockReserved`, `ReservationRevoked` | wes-work-planning |
+| | | legacy `ProductClassified` (emitted only by the one-shot backfill) | product-master's legacy importer (migration only, removed at stage E) |
 | `warehouse.work-planning.events` | wes-work-planning | `WorkReleased` | fulfillment-execution |
 | | | `PathCapacityChanged` | order-management, network-fulfillment |
 | `warehouse.fulfillment.events` | fulfillment-execution | `TaskCompleted` | wes-work-planning, labor-performance |
@@ -56,11 +57,14 @@ context's own projector and are never read by a sibling.
 | `warehouse.facility.events` | facility-layout | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | inventory-storage (all three), warehouse-planning (the two slot events) |
 | `warehouse.warehouse-planning.events` | warehouse-planning | `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected` | order-management (`BottleneckDetected` is ignored) |
 | `warehouse.network-fulfillment.events` | network-fulfillment | none | no consumer (wired but unused) |
+| `warehouse.product-master.events` | product-master | `ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies) |
 
 Several published types have no sibling consumer today. These are
 `OrderRepromised`, nine of the eleven `warehouse.work-planning.events`
 types (for example `PathPlanDriftDetected` and `WorkUnitCompleted`),
-`BottleneckDetected` and every `warehouse.network-fulfillment.events` type.
+`BottleneckDetected`, every `warehouse.network-fulfillment.events` type and
+the four `warehouse.product-master.events` types other than
+`ProductClassified`.
 They are listed as hotspots on
 [Big Picture EventStorming](/strategic-design/eventstorming-big-picture).
 `warehouse-ops-agent` has no Kafka I/O at all. It only issues `qry:`
@@ -128,7 +132,7 @@ sequenceDiagram
     actor Sup as Supervisor or ops agent
     participant FE as fulfillment-execution
     Customer->>OM: cmd: POST /orders
-    OM->>INV: qry: GET /products/{sku}/classification
+    Note over OM: product attributes read from its local classification copy
     loop every line
         OM->>INV: cmd: POST /reservations
         Note over OM,INV: 201 reserved or 409 insufficient usable stock
@@ -139,7 +143,7 @@ sequenceDiagram
     Note over WP: ApplyOrderAllocated enqueues one WorkUnit per released line
     WP-)WP: evt: WorkUnitCreated on warehouse.work-planning.events
     Sup->>WP: cmd: POST /paths/{pathId}/release or MCP release_next_work
-    WP->>INV: qry: GET /products/{sku}/classification for the Fragile hint
+    Note over WP: hazmat and fragile hints read from its local classification copy
     WP-)FE: evt: WorkReleased on warehouse.work-planning.events
     Note over FE: CreateTask builds its own Task, orderRef is the work unit id
 ```
@@ -147,9 +151,12 @@ sequenceDiagram
 `OrderPartiallyAllocated` takes the place of `OrderAllocated` when a
 partial-shipment order releases only some lines. A ship-complete order with
 a backordered line releases nothing. `POST /paths/{pathId}/work-units` is a
-REST alternative to the Kafka enqueue. The release-time classification
-lookup in `wes-work-planning` is opt-in. With its default
-`PRODUCT_CLASSIFICATION_MODE=permissive`, it does not call out.
+REST alternative to the Kafka enqueue. Neither `order-management` nor
+`wes-work-planning` asks another context for a SKU's classification at
+request time: each reads a local copy fed by product-master's
+`ProductClassified` (scenario 10), with `PRODUCT_CLASSIFICATION_MODE=kafka`
+in the reference deployment. The binary default, `permissive`, reads no
+copy and adds no hint.
 
 Sources: [order-management flow 1](/contexts/order-management/domain-message-flow),
 [wes-work-planning scenario 1](/contexts/wes-work-planning/domain-message-flow),
@@ -186,7 +193,7 @@ sequenceDiagram
     Note over FE: last line creates the PACK task once
     Packer->>FE: cmd: POST /stations/{stationId}/claim-next taskType PACK
     Packer->>FE: cmd: POST /tasks/{id}/seal-package
-    FE->>INV: qry: GET /products/{sku}/classification, opt-in, for DOT segregation
+    Note over FE: DOT segregation checked against its local classification copy
     Slam->>FE: cmd: POST /packages/{id}/slam actualWeight and expectedWeight
     FE-)OM: evt: PackageManifested on warehouse.fulfillment.events
     Note over OM: re-promise the line, see scenario 5
@@ -459,3 +466,46 @@ different, locally declared model (see
 Sources: [process-path-management flows 1 and 2](/contexts/process-path-management/domain-message-flow),
 [workforce-management flow 4](/contexts/workforce-management/domain-message-flow),
 [wes-work-planning context map](/contexts/wes-work-planning/context-map).
+
+## 10. Product master data propagation
+
+`product-master` is the single source of truth for what a SKU is. A steward
+registers and classifies a product there. Four contexts keep a local,
+version-guarded copy of the classification. Nobody calls `product-master`
+at request time, and `product-master` calls nobody.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Steward as Master-data steward
+    participant PM as product-master
+    participant INV as inventory-storage
+    participant OM as order-management
+    participant WP as wes-work-planning
+    participant FE as fulfillment-execution
+    participant OA as warehouse-ops-agent
+    Steward->>PM: cmd: PUT /products/{sku}
+    PM-)PM: evt: ProductRegistered on warehouse.product-master.events
+    Steward->>PM: cmd: PUT /products/{sku}/classification
+    PM-)INV: evt: ProductClassified on warehouse.product-master.events
+    PM-)OM: evt: ProductClassified
+    PM-)WP: evt: ProductClassified
+    PM-)FE: evt: ProductClassified
+    Note over INV,FE: each applies the event only when its version is newer than the stored row
+    Steward->>PM: cmd: PUT /products/{sku}/dimensions/measured
+    PM-)PM: evt: ProductMeasured, no sibling consumer
+    OA->>PM: qry: MCP list_products for find_master_data_gaps
+```
+
+`inventory-storage` answers its old `PUT /products/{sku}/classification`
+with `410` (`classification-moved`) and keeps applying hazmat placement and
+DOT segregation at stow time from its copy. During the migration,
+`product-master`'s legacy importer also reads `inventory-storage`'s legacy
+`ProductClassified` from `warehouse.inventory.events`, which only the
+one-shot `republish-product-classifications` backfill still emits; both are
+removed at stage E (product-master ADR 0003).
+
+Sources: [product-master domain message flow](/contexts/product-master/domain-message-flow),
+[product-master Async API](/contexts/product-master/async-api),
+[product-master context map](/contexts/product-master/context-map),
+[warehouse-ops-agent context map](/contexts/warehouse-ops-agent/context-map).

@@ -9,12 +9,14 @@ slug: /overview
 # warehouse-systems documentation
 
 This site is the fleet-wide reference for the **warehouse-systems**
-ecosystem. The ecosystem is eleven independently deployable Go services with
-hexagonal architecture that together implement a warehouse fulfillment
-platform. Each service is one bounded context with its own REST and MCP
-surface. Ten of them own a Postgres database and publish Kafka events.
-`warehouse-ops-agent` is the exception: a thin read-side agent with no
-database and no Kafka.
+ecosystem. The ecosystem is thirteen independently deployable Go services
+with hexagonal architecture that together implement a warehouse fulfillment
+platform: twelve domain bounded contexts plus `warehouse-ops-agent`. Each
+service has its own REST and MCP surface. The twelve domain contexts own a
+Postgres database and publish Kafka events. `warehouse-ops-agent` is the
+exception: a thin read-side agent with no database and no Kafka. This site
+documents eleven of the domain contexts and the agent;
+`network-inventory-planning` (created 2026-10-06) is not aggregated here yet.
 
 No single repository's docs site can show the **strategic** picture: the
 context map, the core-domain classification, the shared ubiquitous language,
@@ -26,7 +28,7 @@ artifacts, links them together, and adds the fleet-level strategic layer.
 All source repositories live in the [IQVO](https://github.com/IQVO) GitHub
 organization.
 
-## The eleven bounded contexts
+## The twelve contexts on this site
 
 | Context | Classification | CloudEvents subdomain |
 | --- | --- | --- |
@@ -41,9 +43,12 @@ organization.
 | [`network-fulfillment`](/contexts/network-fulfillment) | Supporting | `wes` |
 | [`facility-layout`](/contexts/facility-layout) | Generic | `wms` |
 | [`process-path-management`](/contexts/process-path-management) | Generic | `wes` |
+| [`product-master`](/contexts/product-master) | Supporting | `wms` |
 
-The newest context, `warehouse-planning`, answers whether the warehouse can
-process the demand assigned to it. `network-fulfillment` is the
+The newest context on this site, `product-master`, is the single source of
+truth for what a SKU is: its handling classification (taken over from
+`inventory-storage`) and its physical profile. `warehouse-planning` answers
+whether the warehouse can process the demand assigned to it. `network-fulfillment` is the
 anti-corruption layer to an external retail fulfillment network. The
 [Subdomain Classification](/strategic-design/subdomain-classification) and
 [Core Domain Chart](/strategic-design/core-domain-chart) pages give the
@@ -124,7 +129,9 @@ published site as an error box.
 
 ## Scope
 
-This site documents the **eleven backend bounded contexts** listed above.
+This site documents the **twelve backend contexts** listed above (eleven
+domain bounded contexts and `warehouse-ops-agent`). The fleet's twelfth
+domain context, `network-inventory-planning`, is not aggregated yet.
 The two frontend repositories (`warehouse-console`, `warehouse-ui-kit`) and
 the deployment repository (`warehouse-infra`) appear on context pages where
 relevant, for example as Module Federation remotes or in the Kafka topology.
