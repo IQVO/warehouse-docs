@@ -2,7 +2,7 @@
 id: core-domain-chart
 title: Core Domain Chart
 sidebar_label: Core Domain Chart
-description: All eleven bounded contexts on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart.
+description: The twelve contexts documented on this site on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart.
 ---
 
 # Core Domain Chart
@@ -21,7 +21,7 @@ context's own chart in this fleet uses the same layout:
 
 ```mermaid
 quadrantChart
-    title warehouse-systems - eleven bounded contexts
+    title warehouse-systems - twelve contexts
     x-axis Low model complexity --> High model complexity
     y-axis Low business differentiation --> High business differentiation
     quadrant-1 Core
@@ -39,12 +39,15 @@ quadrantChart
     order-management: [0.46, 0.36]
     facility-layout: [0.62, 0.18]
     process-path-management: [0.58, 0.22]
+    product-master: [0.36, 0.30]
 ```
 
 Every coordinate is copied from the context's **own** chart. The contexts
 mark these positions as judgements grounded in code evidence, not
 measurements. The four Core contexts sit close together, so some of their
-labels overlap.
+labels overlap; so do `product-master` and `network-fulfillment` in the
+Supporting quadrant. `network-inventory-planning` is not on this site yet,
+so it is not plotted.
 
 ## Where each point comes from
 
@@ -61,6 +64,7 @@ labels overlap.
 | `order-management` | 0.46, 0.36 | Supporting, near the Generic border | Generic/Supporting | point `order-management today`. Its chart adds `order intake alone` at 0.15, 0.12 and `promise and routing policies` at 0.62, 0.45 "to show why the overall point sits on the Supporting/Generic boundary". [chart](/contexts/order-management/core-domain-chart) |
 | `facility-layout` | 0.62, 0.18 | Generic | Generic | point `facility-layout`, [chart](/contexts/facility-layout/core-domain-chart) |
 | `process-path-management` | 0.58, 0.22 | Generic | Generic | point `process-path-management`, [chart](/contexts/process-path-management/core-domain-chart) |
+| `product-master` | 0.36, 0.30 | Supporting | Supporting | point `product-master`, [chart](/contexts/product-master/core-domain-chart) |
 
 Every context's own chart puts its own point in the quadrant that matches the
 fleet classification in [Subdomain Classification](/strategic-design/subdomain-classification).
@@ -100,14 +104,17 @@ This page keeps each context's own placement and the fleet classification.
     capacity and the forward-looking shortage. No other context computes
     either (its ADR 0001).
 - **Supporting: `workforce-management`, `labor-performance`,
-  `network-fulfillment`, `warehouse-ops-agent`, and `order-management` on the
-  border.** Each one is necessary, but the differentiating knowledge it uses
+  `network-fulfillment`, `warehouse-ops-agent`, `product-master`, and
+  `order-management` on the border.** Each one is necessary, but the differentiating knowledge it uses
   belongs to another context:
   - `workforce-management` records human rebalancing decisions.
   - `labor-performance` measures finished work against standards.
   - `network-fulfillment` asks `order-management` whether an order is
     feasible and never recomputes the answer.
   - `warehouse-ops-agent` only recommends and owns no aggregate.
+  - `product-master` must be right and be the single source of SKU master
+    data, but nobody chooses the warehouse for how it records handling tags
+    and dimensions (its ADR 0001).
   - `order-management`'s promise rules lift it above a commodity order
     front end, but they are not the platform's differentiator.
 - **Generic: `facility-layout`, `process-path-management`.** Both are well
