@@ -15,8 +15,8 @@ jump between them, repeat them, and revisit earlier steps as they learn.
 
 This page uses the eight steps to index the site. For each step it gives
 a short description and names the artifact on this site that is the
-step's output for the twelve `warehouse-systems` contexts documented
-here (`network-inventory-planning` is not aggregated yet).
+step's output for the thirteen `warehouse-systems` contexts documented
+here.
 
 ```mermaid
 flowchart LR
@@ -51,7 +51,7 @@ Story Mapping.
 - [Domain Vision](/strategic-design/domain-vision): what the platform
   does, the end-to-end fulfillment flow it serves, and where it wins.
 - One **Business Context** page per bounded context, which describes the
-  problem the context solves in business language. All twelve are listed
+  problem the context solves in business language. All thirteen are listed
   in the [per-context table](#per-context-artifacts-by-step) below.
 
 ## 2. Discover
@@ -80,7 +80,7 @@ coupled parts that can be reasoned about and changed independently.
 - [Subdomain Classification](/strategic-design/subdomain-classification):
   each bounded context, the part of the domain it owns, and why the line
   is drawn there.
-- [Bounded Contexts](/contexts): the twelve resulting contexts, with their
+- [Bounded Contexts](/contexts): the thirteen resulting contexts, with their
   tier and CloudEvents subdomain (`wms` or `wes`).
 
 ## 4. Strategize
@@ -92,7 +92,7 @@ matters. ddd-crew's tool here is the
 
 **Output on this site:**
 
-- [Core Domain Chart](/strategic-design/core-domain-chart): all twelve
+- [Core Domain Chart](/strategic-design/core-domain-chart): all thirteen
   contexts on one chart.
 - One **Core Domain Chart** per context, synced from its repository,
   which gives that context's own position and evidence.

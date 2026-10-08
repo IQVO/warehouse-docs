@@ -29,7 +29,7 @@ removal).
 | `GET /console/reports/wes?from=&to=` | The console-bff WES dashboard. It has four sections, one each from `wes-work-planning`, `fulfillment-execution`, `workforce-management` and `labor-performance`. Each section degrades on its own. |
 | `GET /runtime-signals` | Runtime health per backend service over a 10-minute window: Istio 5xx rate and p99 latency from Prometheus, plus error-log counts from Loki. A source that cannot be queried is listed in `unavailableSources` and does not fail the request. |
 | `GET /master-data-gaps?kind=&cursor=` | Pages through `product-master`'s `list_products` MCP tool and reports products with a master-data gap: `unclassified` or `dimension-discrepancy` (all kinds when `kind` is omitted). 503 when `PRODUCT_MASTER_MCP_ENDPOINT` is unset, 502 when product-master is unreachable (ADR 0020). |
-| `GET /transfer-watch/stuck`, `GET /transfer-watch/transfers/{id}`, `GET /transfer-watch/imbalance` | Reads over `network-inventory-planning` (ADR 0019). That context is not documented on this site yet. |
+| `GET /transfer-watch/stuck`, `GET /transfer-watch/transfers/{id}`, `GET /transfer-watch/imbalance` | Reads over [`network-inventory-planning`](/contexts/network-inventory-planning) (ADR 0019): its `get_transfer`, `find_stuck_transfers` and `simulate_transfer_options` MCP tools. |
 
 ## MCP (`internal/adapters/inbound/mcp`)
 

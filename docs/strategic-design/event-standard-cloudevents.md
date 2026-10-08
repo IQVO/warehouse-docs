@@ -136,6 +136,7 @@ Subdomain and bounded-context segments (authoritative):
 | workforce-management     | wes       | workforce-management     | /warehouse/workforce-management |
 | fulfillment-execution    | wes       | fulfillment-execution    | /warehouse/fulfillment-execution |
 | wes-work-planning        | wes       | work-planning            | /warehouse/wes-work-planning |
+| network-inventory-planning | wes     | network-inventory-planning | /warehouse/network-inventory-planning |
 
 Entity segments for repos that had no catalogue yet:
 
@@ -145,6 +146,7 @@ Entity segments for repos that had no catalogue yet:
 - warehouse-planning: `CapacityPlan*` / `CapacityShortageDetected` / `BottleneckDetected` → `capacityplan`
 - labor-performance: `LaborStandardDefined`/`LaborStandardRevised` → `standard`; `TaskPerformanceRecorded` → `performance`
 - product-master: every `Product*` event → `product` (product-master ADR 0004)
+- network-inventory-planning: `TransferPlanApproved` / `TransferAllocationRequested` → `transfer`; `WorkDemandReleased` → `workdemand` (the name wes-work-planning's consumed contract uses); the analytics occurrences `TransferStateAdvanced` / `TransferStuckDetected` / `RebalanceRunCompleted` → `saga` (network-inventory-planning ADR 0004)
 
 Repos that already have an AsyncAPI catalogue keep the entity segments
 already documented there. Events not yet in a catalogue get the entity of
@@ -160,8 +162,13 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | inventory-storage, warehouse-planning |
 | `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | inventory-storage, warehouse-planning |
 | `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | inventory-storage |
+| `com.warehouse.wms.facility-layout.site.SiteCapabilityChanged` | network-inventory-planning |
 | `com.warehouse.wms.inventory-storage.reservation.StockReserved` | wes-work-planning |
 | `com.warehouse.wms.inventory-storage.reservation.ReservationRevoked` | wes-work-planning |
+| `com.warehouse.wms.inventory-storage.reservation.TransferStockAllocated` | network-inventory-planning |
+| `com.warehouse.wms.inventory-storage.reservation.TransferStockAllocationRejected` | network-inventory-planning |
+| `com.warehouse.wms.inventory-storage.stock.TransferReceiptStaged` | network-inventory-planning |
+| `com.warehouse.wms.inventory-storage.stock.TransferStockStowed` | network-inventory-planning |
 | `com.warehouse.wms.inventory-storage.product.ProductClassified` | retiring: backfill-only after inventory-storage ADR 0034, consumed by product-master's legacy importer until stage E |
 | `com.warehouse.wms.product-master.product.ProductRegistered` | (published contract; no consumer yet) |
 | `com.warehouse.wms.product-master.product.ProductDescriptionChanged` | (published contract; no consumer yet) |
@@ -171,6 +178,7 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wes.order-management.order.OrderAllocated` | wes-work-planning |
 | `com.warehouse.wes.order-management.order.OrderPartiallyAllocated` | wes-work-planning |
 | `com.warehouse.wes.order-management.order.OrderRepromised` | (published contract) |
+| `com.warehouse.wes.order-management.siteskudemand.SiteSkuDemandChanged` | network-inventory-planning |
 | `com.warehouse.wes.process-path-management.processpath.ProcessPathCreated` | fulfillment-execution, wes-work-planning, workforce-management, order-management |
 | `com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated` | same four |
 | `com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated` | same four |
@@ -180,12 +188,18 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` | wes-work-planning, labor-performance |
 | `com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed` | order-management |
 | `com.warehouse.wes.fulfillment-execution.package.PackageManifested` | order-management |
+| `com.warehouse.wes.fulfillment-execution.transfer.TransferPicked` | network-inventory-planning |
+| `com.warehouse.wes.fulfillment-execution.transfer.TransferDispatched` | network-inventory-planning |
+| `com.warehouse.wes.fulfillment-execution.transfer.TransferArrived` | network-inventory-planning (reserved kind; scan-driven receiving can bypass it) |
 | `com.warehouse.wes.work-planning.workunit.WorkReleased` | fulfillment-execution |
 | `com.warehouse.wes.work-planning.workpool.PathCapacityChanged` | order-management |
 | `com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanCreated` | (published contract; no live consumer — order-management is planned / in progress) |
-| `com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanPublished` | (published contract; no live consumer — order-management is planned / in progress) |
+| `com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanPublished` | network-inventory-planning (needs the additive `site_id`; a legacy event without it is excluded); order-management (opt-in) |
 | `com.warehouse.wes.warehouse-planning.capacityplan.CapacityShortageDetected` | (published contract; no live consumer — order-management is planned / in progress) |
 | `com.warehouse.wes.warehouse-planning.capacityplan.BottleneckDetected` | (published contract; no live consumer — order-management is planned / in progress) |
+| `com.warehouse.wes.network-inventory-planning.transfer.TransferPlanApproved` | (published contract; no consumer yet) |
+| `com.warehouse.wes.network-inventory-planning.transfer.TransferAllocationRequested` | inventory-storage |
+| `com.warehouse.wes.network-inventory-planning.workdemand.WorkDemandReleased` | wes-work-planning |
 
 ## 5. Consumer rules
 

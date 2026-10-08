@@ -8,7 +8,7 @@ description: UML class diagrams of the aggregates, entities and value objects in
 # Domain Model
 
 The fleet-level view of what lives under `internal/domain/**` in each of the
-twelve contexts documented on this site: which aggregate roots each one owns, the invariant
+thirteen contexts documented on this site: which aggregate roots each one owns, the invariant
 that makes each one a consistency boundary, and how aggregates in different
 contexts refer to each other.
 
@@ -34,7 +34,7 @@ in the outbound Postgres adapter.
 
 ## The fleet at a glance
 
-34 aggregate roots across eleven contexts. The twelfth, `warehouse-ops-agent`,
+35 aggregate roots across twelve contexts. The thirteenth, `warehouse-ops-agent`,
 owns none, and that is a design decision. Counts are the per-aggregate
 sections of each context's Aggregate Design Canvas, cross-checked against the
 `<<AggregateRoot>>` classes in its class diagram.
@@ -52,6 +52,7 @@ sections of each context's Aggregate Design Canvas, cross-checked against the
 | `network-fulfillment` | `NetworkOrder` (entity `Line`), `CapabilityOffer` | 2 | [class diagram](/contexts/network-fulfillment/class-diagram), [canvas](/contexts/network-fulfillment/aggregate-design-canvas) |
 | `warehouse-planning` | `ProcessCapacity`, `CapacityPlan` | 2 | [class diagram](/contexts/warehouse-planning/class-diagram), [canvas](/contexts/warehouse-planning/aggregate-design-canvas) |
 | `product-master` | `Product` (value objects `Classification`, `PhysicalProfile` with `UnitDimensions` and `Measurement`) | 1 | [class diagram](/contexts/product-master/class-diagram), [canvas](/contexts/product-master/aggregate-design-canvas) |
+| `network-inventory-planning` | `InterWarehouseTransfer` (the saga; entities `AuditEntry`, `Allocation`, `StowAllocation`). Planner, snapshot and read-model facts are value objects and services, not aggregates | 1 | [class diagram](/contexts/network-inventory-planning/class-diagram), [canvas](/contexts/network-inventory-planning/aggregate-design-canvas) |
 | `warehouse-ops-agent` | none: per-request decision objects in `internal/domain/policy` | 0 | [class diagram](/contexts/warehouse-ops-agent/class-diagram), [canvas](/contexts/warehouse-ops-agent/aggregate-design-canvas) |
 
 ## Aggregates across context boundaries
@@ -110,6 +111,9 @@ flowchart LR
     subgraph PM["product-master"]
         Product
     end
+    subgraph NIP["network-inventory-planning"]
+        InterWarehouseTransfer
+    end
 
     Order -.->|"order line reservationId"| Reservation
     Reservation -.->|"demandRef"| Order
@@ -120,9 +124,12 @@ flowchart LR
     TaskPerformance -.->|"taskId"| Task
     NetworkOrder -.->|"localOrderId"| Order
     ProductClassification -.->|"sku, version-guarded copy"| Product
+    InterWarehouseTransfer -.->|"reservationId, stock unit and bin ids"| Reservation
+    InterWarehouseTransfer -.->|"transfer_ref on released demand"| WorkUnit
+    Task -.->|"transfer_ref on transfer facts"| InterWarehouseTransfer
 ```
 
-Read the edges as "stores the identity of". Five chains are worth following:
+Read the edges as "stores the identity of". Six chains are worth following:
 
 - **Order to reservation and back.** `Order` keeps the `reservationId` that
   inventory-storage minted for each allocated line, and the `Reservation`
@@ -143,6 +150,13 @@ Read the edges as "stores the identity of". Five chains are worth following:
   order-management, wes-work-planning and fulfillment-execution keep the same
   copy in a `product_classification_copy` table outside their domain
   aggregates.
+- **Transfer to reservation, work and facts.** network-inventory-planning stores
+  the `reservationId` and the per-stock-unit allocations inventory-storage returns,
+  and the stow allocations it returns at the destination. It releases work under the
+  deterministic `demand_id` `<transfer_id>:pick` or `:dispatch`, which
+  wes-work-planning uses as the work unit id. fulfillment-execution's transfer facts
+  carry the `transfer_ref` back. None of the three contexts models a transfer
+  aggregate.
 
 Same-named aggregates in different contexts are different models. The two
 `ShiftPlan`s are the clearest example: workforce-management's is the headcount
@@ -319,6 +333,18 @@ request, not aggregates. [Canvas](/contexts/facility-layout/aggregate-design-can
 
 [Canvas](/contexts/product-master/aggregate-design-canvas).
 
+### network-inventory-planning
+
+- `InterWarehouseTransfer`: eleven states with a closed transition table; any
+  illegal move is an `IllegalTransitionError` and mutates nothing. A reply or fact
+  that does not match the transfer's line, site, SKU or quantity is refused
+  (`ErrFactRefused`). A short pick is recorded, not refused, and an impossible
+  picked quantity is. Cancel is legal only before `ALLOCATED`, and no use case calls
+  it yet. Approval is fail-closed (`ErrFactsIncomplete`) and expires after 24 hours
+  (`ErrProposalExpired`).
+
+[Canvas](/contexts/network-inventory-planning/aggregate-design-canvas).
+
 ### warehouse-ops-agent
 
 No aggregate root and no persisted state. `internal/domain/policy` is
@@ -348,5 +374,5 @@ place of invariants. [Canvas](/contexts/warehouse-ops-agent/aggregate-design-can
    order-management, `SaveClaim` in fulfillment-execution, and the
    `WorkPool` version check in wes-work-planning).
 6. **The domain layer imports nothing framework-shaped.** Every one of the
-   twelve repositories has `internal/architecture/*_test.go` fitness tests
+   thirteen repositories has `internal/architecture/*_test.go` fitness tests
    that fail the build if it does. See [Components](/architecture/components).

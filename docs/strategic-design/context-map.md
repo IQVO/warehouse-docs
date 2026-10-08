@@ -2,19 +2,20 @@
 id: context-map
 title: Context Map
 sidebar_label: Context Map
-description: Fleet-wide ddd-crew context map of the twelve bounded contexts documented on this site — every edge with upstream/downstream, context-mapping pattern, technology and wiring status (live, wired-but-unused, absent-planned), reconciled against each context's own context map and code.
+description: Fleet-wide ddd-crew context map of the thirteen backend contexts documented on this site — every edge with upstream/downstream, context-mapping pattern, technology and wiring status (live, wired-but-unused, absent-planned), reconciled against each context's own context map and code.
 ---
 
 # Context Map
 
 This is the fleet-wide [ddd-crew Context Map](https://github.com/ddd-crew/context-mapping)
-of the twelve contexts documented on this site: eleven domain bounded
-contexts plus `warehouse-ops-agent`. The newest, `product-master`, was
-decided on 2026-10-06; it and its four `ProductClassified` consumers are
-merged and run in the reference deployment (K20, deployed 2026-10-07).
-`network-inventory-planning`, the fleet's twelfth domain context, is not
-aggregated on this site yet, so its edges are not drawn here. Each
-context's repository has its own context map, synced to this site and grounded in that repo's code. This page
+of the thirteen contexts documented on this site: twelve domain bounded
+contexts plus `warehouse-ops-agent`, which is every backend service in the
+fleet. The newest, `network-inventory-planning` (NIP), plans and orchestrates
+inter-warehouse transfers; its edges are K22 to K28 and A13 below. `product-master`
+and its four `ProductClassified` consumers (K20) run in the reference deployment.
+Each context's repository has its own context map, synced to this site and grounded
+in that repo's code, except NIP's, which was authored here because its repository
+has no pack yet. This page
 puts those maps together. Where two contexts' maps describe the same edge
 differently, this page checked the code and the reference deployment
 (`warehouse-infra` on `develop`) and records the difference under
@@ -32,7 +33,8 @@ Per-context maps (the source for every row below):
 [warehouse-ops-agent](/contexts/warehouse-ops-agent/context-map) ·
 [network-fulfillment](/contexts/network-fulfillment/context-map) ·
 [warehouse-planning](/contexts/warehouse-planning/context-map) ·
-[product-master](/contexts/product-master/context-map)
+[product-master](/contexts/product-master/context-map) ·
+[network-inventory-planning](/contexts/network-inventory-planning/context-map)
 
 **Pattern legend:** **U/D** upstream/downstream · **OHS** Open Host Service ·
 **PL** Published Language · **CF** Conformist · **ACL** Anti-Corruption Layer ·
@@ -89,6 +91,7 @@ flowchart LR
         WFM["workforce-management<br/>Supporting"]
         LP["labor-performance<br/>Supporting"]
         WPL["warehouse-planning<br/>Core"]
+        NIP["network-inventory-planning<br/>Core"]
         NF["network-fulfillment<br/>Supporting"]
         OA["warehouse-ops-agent<br/>Supporting"]
     end
@@ -155,11 +158,24 @@ flowchart LR
     PM ==>|"Kafka ProductClassified,<br/>local copy"| FE
     INV -.->|"Kafka legacy ProductClassified,<br/>Conformist, migration only"| PM
 
+    %% network-inventory-planning (ADRs 0002, 0003, 0005, 0008, 0010). Edges are
+    %% configured in warehouse-infra develop (terraform/network-inventory-planning.tf,
+    %% helm-values/inventory-storage.yaml). The dispatch leg of NIP -> WP needs the
+    %% path transfer-dispatch to exist in the process-path catalogue.
+    FL ==>|"Kafka SiteCapabilityChanged"| NIP
+    OM ==>|"Kafka SiteSkuDemandChanged"| NIP
+    WPL ==>|"Kafka CapacityPlanPublished"| NIP
+    NIP ==>|"Kafka TransferAllocationRequested"| INV
+    INV ==>|"Kafka TransferStockAllocated, Rejected,<br/>TransferReceiptStaged, TransferStockStowed"| NIP
+    NIP ==>|"Kafka WorkDemandReleased"| WP
+    FE ==>|"Kafka TransferPicked, Dispatched,<br/>TransferArrived (reserved)"| NIP
+    NIP -->|"MCP read tools"| OA
+
     classDef core fill:#1e3a8a,stroke:#1e293b,color:#fff;
     classDef supp fill:#6d28d9,stroke:#4c1d95,color:#fff;
     classDef gen fill:#475569,stroke:#94a3b8,color:#fff;
     classDef ext fill:#f1f5f9,stroke:#64748b,color:#334155,stroke-dasharray: 5 5;
-    class INV,WP,FE,WPL core;
+    class INV,WP,FE,WPL,NIP core;
     class OM,WFM,LP,NF,OA,PM supp;
     class FL,PPM gen;
     class RN,WCS,CON,NOSUB ext;
@@ -172,7 +188,8 @@ Dotted arrows are wired-but-unused or absent-planned, as the table states.
 The four thick `product-master` edges are K20; the dotted
 `inventory-storage` → `product-master` edge is the migration-only legacy
 import (K21). The thin `product-master` → `warehouse-ops-agent` edge is A12.
-The crossed edge is deliberately absent. `order-management` is coloured with
+The seven thick `network-inventory-planning` edges are K22 to K28; the thin
+one to the agent is A13. The crossed edge is deliberately absent. `order-management` is coloured with
 the Supporting contexts because it is classified Generic/Supporting (see
 [Subdomain Classification](/strategic-design/subdomain-classification)).
 Separate Ways relationships are not drawn. They are listed in
@@ -215,6 +232,13 @@ Omitted from the diagram:
 | K19 | `network-fulfillment` → any subscriber | OHS + PL / — | `warehouse.network-fulfillment.events`: `networkorder.*` | **wired-but-unused**. Published only with `EVENT_PUBLISHER=kafka` (chart default `log`), and no consumer exists in the fleet | [NF](/contexts/network-fulfillment/context-map) |
 | K20 | `product-master` → `inventory-storage`, `order-management`, `wes-work-planning`, `fulfillment-execution` | PL / local copy per consumer (one row per SKU, applied only when the event `version` is newer) | `warehouse.product-master.events`: `ProductClassified` | **live** (deployed 2026-10-07). INV ADR 0034, consumer group `PRODUCT_MASTER_CONSUMER_GROUP` (`helm-values/inventory-storage.yaml`, `productMasterConsumerGroup`); OM ADR 0036, WP ADR 0035 and FE ADR 0039, `PRODUCT_CLASSIFICATION_MODE=kafka` with `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (OM: `helm-values/order-management.yaml`, `productClassification`; WP and FE: `sync_edge_env`). It replaced the classification lookups R2, R3 and R4 (product-master ADR 0003, stages C and D) | [PM](/contexts/product-master/context-map), [INV](/contexts/inventory-storage/context-map), [OM](/contexts/order-management/context-map), [WP](/contexts/wes-work-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
 | K21 | `inventory-storage` → `product-master` | CF, migration only | `warehouse.inventory.events`: `com.warehouse.wms.inventory-storage.product.ProductClassified`, read by product-master's legacy importer (`LEGACY_IMPORT_CONSUMER_GROUP`) | **live, migration only**. The reference deployment starts the importer (`helm-values/product-master.yaml`, `legacyImportConsumerGroup`). `inventory-storage` emits the legacy type only from its one-shot `republish-product-classifications` backfill, run once on 2026-10-07. Removed at stage E together with the importer (product-master ADR 0003) | [PM](/contexts/product-master/context-map) |
+| K22 | `facility-layout` → `network-inventory-planning` | OHS + PL / ACL (a last-writer-wins `site_capability` row) | `warehouse.facility.events`: `SiteCapabilityChanged` | **live**. Opt-in (`SITE_CAPABILITY_CONSUMER_GROUP`, NIP ADR 0002), and the reference deployment sets it (`terraform/network-inventory-planning.tf`). `facility-layout`'s own code names no consumer | [NIP](/contexts/network-inventory-planning/context-map) |
+| K23 | `order-management` → `network-inventory-planning` | OHS + PL / ACL (a `site_sku_demand` row per order line, `REMOVED` tombstones it) | `warehouse.order-management.events`: `SiteSkuDemandChanged` | **live**. Opt-in (`SITE_SKU_DEMAND_CONSUMER_GROUP`), set in the reference deployment. `order-management`'s own code names no consumer | [NIP](/contexts/network-inventory-planning/context-map) |
+| K24 | `warehouse-planning` → `network-inventory-planning` | OHS + PL / ACL (a `published_capacity_plan` row per plan, legacy events without the additive `site_id` excluded) | `warehouse.warehouse-planning.events`: `CapacityPlanPublished` | **live**. Opt-in (`CAPACITY_PLAN_CONSUMER_GROUP`), set in the reference deployment | [NIP](/contexts/network-inventory-planning/context-map), [WPL](/contexts/warehouse-planning/context-map) |
+| K25 | `network-inventory-planning` → `inventory-storage` | C/S: the command carries exactly the five fields inventory-storage's consumer defines | `warehouse.network-inventory-planning.events`: `TransferAllocationRequested`, key `transfer_line_id` | **live**. Consumer opt-in (`TRANSFER_ALLOCATION_CONSUMER_MODE=kafka`, default `off`), set in `helm-values/inventory-storage.yaml`; INV ADR 0030 | [NIP](/contexts/network-inventory-planning/context-map), [INV](/contexts/inventory-storage/context-map) |
+| K26 | `inventory-storage` → `network-inventory-planning` | OHS + PL / ACL (closed rejection vocabulary, hand-mirrored payloads) | `warehouse.inventory.events`: `TransferStockAllocated`, `TransferStockAllocationRejected`, `TransferReceiptStaged`, `TransferStockStowed` | **live**. Opt-in (`TRANSFER_REPLY_CONSUMER_GROUP`), set in the reference deployment. Drives `ALLOCATING` to `ALLOCATED` or `UNFULFILLABLE`, then `ARRIVED` and `RECEIVED` | [NIP](/contexts/network-inventory-planning/context-map), [INV](/contexts/inventory-storage/context-map) |
+| K27 | `network-inventory-planning` → `wes-work-planning` | C/S: the payload mirrors WES's consumed contract | `warehouse.network-inventory-planning.events`: `WorkDemandReleased` (pick and dispatch legs) | **live** on the consumer side: the fifth topic of `wes-work-planning`'s always-on consumer, with a `.dlq` per topic (WP ADR 0033). The pick path is `pick`; the dispatch path `transfer-dispatch` is **not seeded** and must be created in `process-path-management` first (comment in `terraform/network-inventory-planning.tf`), so until then a dispatch demand is dead-lettered | [NIP](/contexts/network-inventory-planning/context-map), [WP](/contexts/wes-work-planning/context-map) |
+| K28 | `fulfillment-execution` → `network-inventory-planning` | OHS + PL / ACL (hand-mirrored `TransferFactData`) | `warehouse.fulfillment.events`: `TransferPicked`, `TransferDispatched`, `TransferArrived` (reserved, scan-driven receiving can bypass it) | **live**. Opt-in (`TRANSFER_FACT_CONSUMER_GROUP`), set in the reference deployment | [NIP](/contexts/network-inventory-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
 
 Published types with no consumer, as stated by their owners:
 
@@ -223,6 +247,7 @@ Published types with no consumer, as stated by their owners:
 - nine of the twelve types on `warehouse.facility.events`;
 - `OrderRepromised` on `warehouse.order-management.events`;
 - `BottleneckDetected` on `warehouse.warehouse-planning.events`;
+- `TransferPlanApproved` on `warehouse.network-inventory-planning.events`;
 - `ProductRegistered`, `ProductDescriptionChanged`,
   `ProductDimensionsDeclared` and `ProductMeasured` on
   `warehouse.product-master.events` (published contract; no consumer yet).
@@ -271,6 +296,7 @@ methods its use cases call on `develop`.
 | A10 | `network-fulfillment` | — | — | — | **deliberately absent**. NF serves read-only MCP tools, but the agent has no client for them |
 | A11 | `warehouse-ops-agent` → `warehouse-console` | C/S: the agent is the BFF Supplier | — | `/console/orders/{id}/lifecycle`, `/console/reports/wms`, `/console/reports/wes`, `/daily-brief` | **live** |
 | A12 | `product-master` | `list_products` (the `find_master_data_gaps` tool and `GET /master-data-gaps`, OA ADR 0020) | `get_product`, `get_product_classification`, `get_physical_profile` | — | **live** (`PRODUCT_MASTER_MCP_ENDPOINT`, set in the reference deployment by `terraform/ops-agent.tf`) |
+| A13 | `network-inventory-planning` | `get_transfer`, `find_stuck_transfers`, `simulate_transfer_options` (the transfer-watch use case, OA ADR 0019; the client port also exposes `list_transfers`) | — | — | **live** (`NETWORK_INVENTORY_PLANNING_MCP_ENDPOINT`, set in the reference deployment by `terraform/ops-agent.tf` when MCP servers are deployed) |
 
 The Order Lifecycle screen fans out to four contexts' OLTP APIs: OM, INV, WP
 and FE. The `/console/reports/*` endpoints read seven contexts' `*-reports`
@@ -317,6 +343,12 @@ The context maps declare these pairs as having no relationship, by decision:
   releases, plus R8; classifications reach it from `product-master` (K20).
 - **`network-fulfillment` ↔ `facility-layout`, `workforce-management`,
   `labor-performance`, `warehouse-planning`, `warehouse-ops-agent`.**
+- **`network-inventory-planning` ↔ `workforce-management`, `labor-performance`,
+  `process-path-management`, `network-fulfillment`, `product-master`.** None of
+  their `internal`, `cmd` or `apis` on `develop` names it, and it names none of
+  them. The one indirect dependency is configuration: its pick and dispatch
+  `path_id` values must exist in `wes-work-planning`'s catalogue, which
+  `process-path-management` feeds (see K27).
 
 ## Where the per-context maps disagree
 
@@ -336,6 +368,7 @@ places where two synced pages describe the same edge differently.
 | K8 for FE | FE: **Opt-in** | PPM: live | **live** in the reference deployment. FE's page describes the binary default |
 | A3–A6 per-tool status | FE, WFM, FL, LP each list all their tools as consumed by the agent | OA: some tools are wired only | OA is correct. On `develop`, its use cases call only the tools listed as live in A1–A9 |
 | K2 `order-management` → `warehouse-planning` | WPL: wired, opt-in | OM's map does not list WPL as a consumer of its topic | WPL's consumer exists and the reference deployment enables it, so **live** |
+| K22 to K24 `facility-layout`, `order-management`, `warehouse-planning` → `network-inventory-planning` | `warehouse-planning`'s own synced context map lists `network-inventory-planning` as "No relationship ... Absent"; the other two producers' maps do not mention it | NIP's code and AsyncAPI consume all three topics | NIP is correct. `network-inventory-planning` reads `CapacityPlanPublished` and relies on `warehouse-planning`'s additive `site_id` (which `warehouse-planning` publishes on `develop`). The producers are unaware of the consumer, which is normal for a Published Language edge; the upstream map rows are an upstream follow-up |
 
 **Pattern disagreements** (judgement, not code). The two pages name a
 different pattern for the downstream side. The edge table shows both:
@@ -374,6 +407,12 @@ different pattern for the downstream side. The edge table shows both:
 - `network-fulfillment` was missing as a downstream of PPM, WP and INV
   (K10, K13, R5). Those edges exist, but none is enabled.
 - OM → WPL demand (K2) and LP → WFM REST (R10) were missing.
+- `network-inventory-planning` was missing altogether. Its seven Kafka edges
+  (K22 to K28) and the agent's transfer-watch client (A13) are added. Their status
+  follows the reference deployment's configuration on `develop`
+  (`terraform/network-inventory-planning.tf`, `helm-values/inventory-storage.yaml`,
+  `terraform/ops-agent.tf`); that configuration was read, not observed on a
+  running cluster.
 - The retail-network ADR is `network-fulfillment` ADR **0009**. It was
   renumbered from 0002, and 0002 is now a "Moved" stub.
 
@@ -398,7 +437,8 @@ relationship is decided in
 contexts ship their own remote in their `web/` directory: `order-mgmt-mfe`,
 `inventory-mfe`, `facility-mfe`, `workforce_mfe`, `labor_mfe`,
 `process_path_mfe`, `capacity_mfe` (warehouse-planning),
-`productmaster_mfe` (product-master, the Product Master tile), and the
+`productmaster_mfe` (product-master, the Product Master tile), `nip_mfe`
+(network-inventory-planning, route `/network-inventory/*`), and the
 network-fulfillment, fulfillment-execution and wes-work-planning remotes.
 Each remote calls only its own context's REST API. That is presentation
 composition, not a domain edge, so the diagram leaves it out. The one

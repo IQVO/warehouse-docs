@@ -57,7 +57,7 @@ Reading them in that order is the fastest way to understand any one context.
 
 ## Three things worth knowing up front
 
-**The fleet is bigger than "twelve services".** Eleven of the twelve
+**The fleet is bigger than "thirteen services".** Twelve of the thirteen
 contexts on this site ship four binaries and two databases each, because the analytical
 read side is a separate process family from the operational one.
 `warehouse-ops-agent` is one binary with no database. That is

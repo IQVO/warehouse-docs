@@ -2,7 +2,7 @@
 id: subdomain-classification
 title: Subdomain Classification
 sidebar_label: Subdomain Classification
-description: Core, Supporting, or Generic — the twelve contexts documented on this site, with the CloudEvents subdomain segment each one publishes under and the justification each context's own Bounded Context Canvas and Core Domain Chart give.
+description: Core, Supporting, or Generic — the thirteen contexts documented on this site, with the CloudEvents subdomain segment each one publishes under and the justification each context's own Bounded Context Canvas and Core Domain Chart give.
 ---
 
 # Subdomain Classification
@@ -10,8 +10,8 @@ description: Core, Supporting, or Generic — the twelve contexts documented on 
 Domain-Driven Design splits a domain into **Core**, **Supporting** and
 **Generic** subdomains by how much competitive advantage each one gives. Size,
 difficulty and how interesting the code is do not decide it. The table below
-gives the fleet verdict for the twelve contexts documented on this site
-(`network-inventory-planning` is not aggregated yet). Each verdict matches
+gives the fleet verdict for the thirteen contexts documented on this site
+(every backend service in the fleet). Each verdict matches
 the **Strategic Classification** section of that context's own
 [Bounded Context Canvas](/contexts) and its point on its own Core Domain
 Chart. The fleet-wide plot is on [Core Domain Chart](/strategic-design/core-domain-chart).
@@ -31,6 +31,7 @@ classification. For example, `facility-layout` is `wms` and Generic, while
 | `fulfillment-execution` | <span class="badge-core">Core</span> | `wes` | Cost reduction / operational efficiency | Custom-built | Pull-based dispatch with lease semantics is the throughput differentiator. The context's own chart splits it internally: Task dispatch and lease, and Rebin consolidation, are Core. Pack and SLAM are Supporting and kept thin. The analytics read side and WCS equipment control are Generic. [Canvas](/contexts/fulfillment-execution/bounded-context-canvas), [chart](/contexts/fulfillment-execution/core-domain-chart) |
 | `inventory-storage` | <span class="badge-core">Core</span> | `wms` | Revenue enabler | Custom-built, moving towards Product | "Inventory & Slotting" is Core in the reference model. Revocable reservations and the chaotic-stow ledger are the differentiators: four aggregates and 30 tested aggregate invariants. Every customer promise rests on its *usable* answer. [Canvas](/contexts/inventory-storage/bounded-context-canvas), [chart](/contexts/inventory-storage/core-domain-chart) |
 | `warehouse-planning` | <span class="badge-core">Core</span> | `wes` | Risk reduction / engagement creator | Custom-built, recently out of genesis | ADR 0001 introduces it as a Core Domain. No other context computes a normalized, cross-process effective capacity or a forward-looking capacity shortage. `workforce-management` stops at the path boundary, `facility-layout` knows structure but not throughput, and `inventory-storage` knows stock, which is not capacity. [Canvas](/contexts/warehouse-planning/bounded-context-canvas), [chart](/contexts/warehouse-planning/core-domain-chart) |
+| `network-inventory-planning` | <span class="badge-core">Core</span> | `wes` | Cost reduction / service level | Custom-built, early | ADR 0001 creates it as a "WES-core bounded context". No other context decides whether stock should move between warehouses: `inventory-storage` holds stock per site, `order-management` knows demand, `warehouse-planning` knows throughput, and none relates them. Every recommendation is reproducible (policy version, reason codes, score breakdown) and an approved transfer is carried to the destination as a saga without a distributed transaction. Held back from the top: no forecasting or optimisation is built yet. [Canvas](/contexts/network-inventory-planning/bounded-context-canvas), [chart](/contexts/network-inventory-planning/core-domain-chart) |
 | `order-management` | <span class="badge-generic">Generic</span>/<span class="badge-supporting">Supporting</span> | `wes` | Compliance / engagement enabler | Intake: commodity. Allocation and hold/release: product. Capability-derived promise, routing and re-promise: custom | Intake on its own is commodity: the reference model files "Order Management / ERP interface" as Generic. The fulfillment rules layered on top lift it toward Supporting: fail-closed allocation, ship-complete, held network orders, and a promise derived from CPT schedule and path capacity. Its own chart places the context on the Supporting/Generic border. [Canvas](/contexts/order-management/bounded-context-canvas), [chart](/contexts/order-management/core-domain-chart) |
 | `workforce-management` | <span class="badge-supporting">Supporting</span> | `wes` | Compliance / cost reduction | Product, with two custom-built parts (the idle-share trim and the installed-capacity ceiling) | Labor management is "important, industry-common". There is no optimiser or scoring function, and rebalancing is a human decision this context only records (ADR 0002). It is not Generic, because it is too tied to the fleet's process-path vocabulary for an off-the-shelf product to fit. [Canvas](/contexts/workforce-management/bounded-context-canvas), [chart](/contexts/workforce-management/core-domain-chart) |
 | `labor-performance` | <span class="badge-supporting">Supporting</span> | `wes` | Compliance / cost reduction | Product | It only measures how well finished work matched a standard someone else configures. Engineered labor standards are a standard module in commercial labor-management products (its ADR 0002: "Supporting, not Core"). [Canvas](/contexts/labor-performance/bounded-context-canvas), [chart](/contexts/labor-performance/core-domain-chart) |
@@ -40,7 +41,7 @@ classification. For example, `facility-layout` is `wms` and Generic, while
 | `facility-layout` | <span class="badge-generic">Generic</span> | `wms` | Compliance / enabler | Product, heading toward commodity | The location hierarchy is the industry's WMS convention, adopted rather than invented, and location roles mirror commercial WMS location masters. It has to be correct, not clever. Its complexity is real (eight aggregate roots and a travel graph), but that complexity serves correctness, not differentiation. [Canvas](/contexts/facility-layout/bounded-context-canvas), [chart](/contexts/facility-layout/core-domain-chart) |
 | `process-path-management` | <span class="badge-generic">Generic</span> | `wes` | Compliance / enabler | Custom-built, heading towards product/commodity | A process-path catalogue is well understood and does not differentiate. It declares what a path is and decides nothing about dispatch, routing or assignment. It is extracted because several contexts need the same definition and none of them is its natural owner (its ADR 0001). [Canvas](/contexts/process-path-management/bounded-context-canvas), [chart](/contexts/process-path-management/core-domain-chart) |
 
-Count: four Core, five Supporting, two Generic, and one Generic/Supporting.
+Count: five Core, five Supporting, two Generic, and one Generic/Supporting.
 
 ## The "extract once, don't duplicate" pattern
 

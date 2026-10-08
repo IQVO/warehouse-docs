@@ -9,7 +9,7 @@ slug: /glossary
 # Glossary
 
 This is an alphabetical index of the key terms from the ubiquitous languages
-of the twelve contexts documented on this site. Each term belongs to one context, which holds
+of the thirteen contexts documented on this site. Each term belongs to one context, which holds
 its authoritative definition. The short definitions below are condensed from
 each context's **Ubiquitous Language** page. That page is synced from the
 context's own repository, maps every term to its code identifier, and wins if
@@ -46,6 +46,7 @@ page covers terms that several contexts reuse with different meanings.
 | Gift wrap | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | A Task-level packing hint from a caller-stated request, independent of product classification. |
 | Handling tag | [`product-master`](/contexts/product-master/ubiquitous-language) | One of the closed set `Hazmat`, `Fragile`, `TemperatureSensitive`, `Oversized`, `HighValue` on a SKU's classification, always in that order on the wire. Moved from inventory-storage. |
 | Held order | [`order-management`](/contexts/order-management/ubiquitous-language) | An order received with `releaseOnAllocation=false`. It allocates, then waits for an explicit release or a cancel. Must be ship-complete. `network-fulfillment` raises these. |
+| InterWarehouseTransfer | [`network-inventory-planning`](/contexts/network-inventory-planning/ubiquitous-language) | The saga aggregate: an operator-approved plan to move a quantity of one SKU between two sites. Eleven states from `DRAFT` to `RECEIVED`; it references the reservation and the physical facts and owns neither. |
 | LaborAssignment | [`workforce-management`](/contexts/workforce-management/ubiquitous-language) | One associate on one path for an interval. Exactly one ACTIVE assignment per associate, gated by certification. |
 | LaborStandard | [`labor-performance`](/contexts/labor-performance/ubiquitous-language) | The engineered expected duration for one task type, with an effective range. It is frozen onto each scored task at completion time. |
 | Lease | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | A time-boxed claim on a Task. If it is not renewed or completed before expiry, the task returns to Pending. |
@@ -64,11 +65,14 @@ page covers terms that several contexts reuse with different meanings.
 | PathPlan | [`workforce-management`](/contexts/workforce-management/ubiquitous-language) | One line of a ShiftPlan: `pathId`, `plannedHeads`, `plannedRate`, `plannedHours`. |
 | PathUnderstaffed | [`workforce-management`](/contexts/workforce-management/ubiquitous-language) | A flag, not a decision: the planned heads for a path are not currently met by active assignments. |
 | Physical profile | [`product-master`](/contexts/product-master/ubiquitous-language) | One unit's declared and latest measured dimensions (mm) and weight (g), the effective values (measured if present, else declared) and the discrepancy flag (ADR 0002). |
+| PlanningSnapshot | [`network-inventory-planning`](/contexts/network-inventory-planning/ubiquitous-language) | The fail-closed view built from the local site-capability, site-demand and published-capacity read models. A stale, empty or direction-disabled input refuses it. |
 | PlacementRule | [`facility-layout`](/contexts/facility-layout/ubiquitous-language) | Declares which LocationTypes are legal in which Zones. It is enforced once, at registration time. |
 | ProcessCapacity | [`warehouse-planning`](/contexts/warehouse-planning/ubiquitous-language) | The usable throughput of one process at one site for one window: the minimum across its registered constraints. |
 | ProcessPath | [`process-path-management`](/contexts/process-path-management/ubiquitous-language) | The aggregate root: the operator-configurable definition of one process path. (`warehouse-planning` keeps its own, differently modelled ProcessPath: an ordered sequence of process steps.) |
+| Proposal | [`network-inventory-planning`](/contexts/network-inventory-planning/ubiquitous-language) | An advisory transfer recommendation with a policy version, reason codes and a score breakdown. It reserves and moves nothing. |
 | Product (master record) | [`product-master`](/contexts/product-master/ubiquitous-language) | The SKU-level master record: description, classification, physical profile and a `version` that grows by one per accepted change. Downstream copies apply an event only when its `version` is newer. |
 | Promise | [`order-management`](/contexts/order-management/ubiquitous-language) | The CPT window (or lead-time date) an order or shipment group is promised to leave by. It is recomputed (re-promised) on `TaskCPTMissed`/`PackageManifested`. |
+| RebalanceRun | [`network-inventory-planning`](/contexts/network-inventory-planning/ubiquitous-language) | One scheduled, observe-only planning pass with its snapshot watermark, counts and outcome. It never approves anything. |
 | Release | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | Continuous, priority-ordered (waveless) admission of work into a work pool. |
 | Remaining capacity | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | `max(0, wipLimit − WIP)` for a release-fed pool, reported per CPT cutoff on `PathCapacityChanged`. Unknown for a flow-fed pool. |
 | Reservation | [`inventory-storage`](/contexts/inventory-storage/ubiquitous-language) | A revocable binding of a quantity to demand, with a timeout. A revoke returns exactly the allocated quantity. |
@@ -81,11 +85,13 @@ page covers terms that several contexts reuse with different meanings.
 | StockUnit | [`inventory-storage`](/contexts/inventory-storage/ubiquitous-language) | A quantity of a SKU at a specific bin; the aggregate root of inventory truth. |
 | Stow | [`inventory-storage`](/contexts/inventory-storage/ubiquitous-language) | Placing inbound stock into a bin. Invalid without both an item scan and a location scan; the only operation that creates a StockUnit. |
 | StrandedReservation | [`warehouse-ops-agent`](/contexts/warehouse-ops-agent/ubiquitous-language) | The E2 correlation of expired or expiring task leases with a usable-stock shortfall, giving a `revoke_reservation` or `hold` recommendation. |
+| StuckTransfer | [`network-inventory-planning`](/contexts/network-inventory-planning/ubiquitous-language) | A non-terminal transfer whose last transition is older than its per-state threshold (defaults `ALLOCATING` 1h, `PICKED` 24h, `IN_TRANSIT` 72h). A reading, not a state. |
 | Task | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | A unit of physical work with a type, a CPT, an order reference, required capabilities and two packing hints. At most one active claim. |
 | TaskPerformance | [`labor-performance`](/contexts/labor-performance/ubiquitous-language) | One completed task, scored against the standard active at completion and frozen. |
 | Usable inventory | [`inventory-storage`](/contexts/inventory-storage/ubiquitous-language) | Stock immediately available to fulfil: on-hand minus active reservations minus held, damaged or unlocated stock. |
 | Utilization | [`labor-performance`](/contexts/labor-performance/ubiquitous-language) | Task time ÷ (task time + idle time) over a trailing window, as a percent. Null when nothing was observed. |
 | Work pool | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | The queue for exactly one process path: its entries, feed mode (release-fed or flow-fed), WIP limit and alarm threshold. It does not store arrival or service rates. |
+| WorkDemand | [`network-inventory-planning`](/contexts/network-inventory-planning/ubiquitous-language) | One leg of an approved transfer (`<transfer_id>:pick` or `:dispatch`) released to `wes-work-planning` as `WorkDemandReleased`. |
 | WorkloadProfile | [`warehouse-planning`](/contexts/warehouse-planning/ubiquitous-language) | Per-warehouse conversion factors (units or packages per order) that normalize different processes' native rates into orders per hour. |
 | WorkUnit | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | A releasable unit of work (for example one order line). It carries a CPT and is distinct from fulfillment-execution's Task. |
 | Zone | [`facility-layout`](/contexts/facility-layout/ubiquitous-language) | A behavioral classification scoped to a Site, carrying a TemperatureClass and a Hazmat flag. |

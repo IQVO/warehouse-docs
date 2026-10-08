@@ -2,7 +2,7 @@
 id: domain-message-flows
 title: Domain Message Flow Modelling
 sidebar_label: Domain Message Flows
-description: Commands, events and queries flowing between the twelve contexts documented on this site for the platform's key business scenarios, in ddd-crew Domain Message Flow notation, with the Kafka topic of every event.
+description: Commands, events and queries flowing between the thirteen contexts documented on this site for the platform's key business scenarios, in ddd-crew Domain Message Flow notation, with the Kafka topic of every event.
 ---
 
 # Domain Message Flow Modelling
@@ -44,25 +44,31 @@ context's own projector and are never read by a sibling.
 | Topic | Producer | Event types consumed by a sibling | Consumers |
 | --- | --- | --- | --- |
 | `warehouse.order-management.events` | order-management | `OrderAllocated`, `OrderPartiallyAllocated` | wes-work-planning, warehouse-planning |
+| | | `SiteSkuDemandChanged` | network-inventory-planning |
 | `warehouse.inventory.events` | inventory-storage | `StockReserved`, `ReservationRevoked` | wes-work-planning |
+| | | `TransferStockAllocated`, `TransferStockAllocationRejected`, `TransferReceiptStaged`, `TransferStockStowed` | network-inventory-planning |
 | | | legacy `ProductClassified` (emitted only by the one-shot backfill) | product-master's legacy importer (migration only, removed at stage E) |
 | `warehouse.work-planning.events` | wes-work-planning | `WorkReleased` | fulfillment-execution |
 | | | `PathCapacityChanged` | order-management, network-fulfillment |
 | `warehouse.fulfillment.events` | fulfillment-execution | `TaskCompleted` | wes-work-planning, labor-performance |
+| | | `TransferPicked`, `TransferDispatched`, `TransferArrived` | network-inventory-planning |
 | | | `TaskCPTMissed`, `PackageManifested` | order-management |
 | `warehouse.workforce.events` | workforce-management | `ShiftPlanCommitted` | wes-work-planning, warehouse-planning |
 | `warehouse.labor-performance.events` | labor-performance | `TaskPerformanceRecorded` | workforce-management |
 | `warehouse.process-path-management.events` | process-path-management | `ProcessPathCreated`, `ProcessPathUpdated`, `ProcessPathDeactivated` | fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment |
 | | | `CPTScheduleChanged` | order-management, network-fulfillment |
 | `warehouse.facility.events` | facility-layout | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | inventory-storage (all three), warehouse-planning (the two slot events) |
-| `warehouse.warehouse-planning.events` | warehouse-planning | `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected` | order-management (`BottleneckDetected` is ignored) |
+| | | `SiteCapabilityChanged` | network-inventory-planning |
+| `warehouse.warehouse-planning.events` | warehouse-planning | `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected` | order-management (`BottleneckDetected` is ignored); `CapacityPlanPublished` also network-inventory-planning |
 | `warehouse.network-fulfillment.events` | network-fulfillment | none | no consumer (wired but unused) |
+| `warehouse.network-inventory-planning.events` | network-inventory-planning | `TransferAllocationRequested` | inventory-storage |
+| | | `WorkDemandReleased` | wes-work-planning |
 | `warehouse.product-master.events` | product-master | `ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies) |
 
 Several published types have no sibling consumer today. These are
 `OrderRepromised`, nine of the eleven `warehouse.work-planning.events`
 types (for example `PathPlanDriftDetected` and `WorkUnitCompleted`),
-`BottleneckDetected`, every `warehouse.network-fulfillment.events` type and
+`BottleneckDetected`, `TransferPlanApproved`, every `warehouse.network-fulfillment.events` type and
 the four `warehouse.product-master.events` types other than
 `ProductClassified`.
 They are listed as hotspots on
@@ -509,3 +515,50 @@ Sources: [product-master domain message flow](/contexts/product-master/domain-me
 [product-master Async API](/contexts/product-master/async-api),
 [product-master context map](/contexts/product-master/context-map),
 [warehouse-ops-agent context map](/contexts/warehouse-ops-agent/context-map).
+
+## 11. Inter-warehouse transfer
+
+`network-inventory-planning` keeps local copies of three siblings' facts. An
+operator approves a transfer, and a saga carries it through reservation, floor
+work and destination stow. NIP never moves stock: `inventory-storage` reserves
+and stows, `fulfillment-execution` reports the physical steps, and
+`wes-work-planning` turns released demands into work.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Op as Operator
+    participant FL as facility-layout
+    participant OM as order-management
+    participant WPL as warehouse-planning
+    participant NIP as network-inventory-planning
+    participant INV as inventory-storage
+    participant WP as wes-work-planning
+    participant FE as fulfillment-execution
+    FL-)NIP: evt: SiteCapabilityChanged on warehouse.facility.events
+    OM-)NIP: evt: SiteSkuDemandChanged on warehouse.order-management.events
+    WPL-)NIP: evt: CapacityPlanPublished on warehouse.warehouse-planning.events
+    Op->>NIP: qry: GET /v1/transfer-simulations
+    Op->>NIP: cmd: POST /v1/transfers:approve with Idempotency-Key
+    NIP-)INV: cmd: TransferAllocationRequested on warehouse.network-inventory-planning.events
+    INV-)NIP: evt: TransferStockAllocated on warehouse.inventory.events
+    NIP-)WP: cmd: WorkDemandReleased pick leg
+    WP-)FE: evt: WorkReleased on warehouse.work-planning.events
+    FE-)NIP: evt: TransferPicked on warehouse.fulfillment.events
+    NIP-)WP: cmd: WorkDemandReleased dispatch leg, picked quantity
+    FE-)NIP: evt: TransferDispatched
+    INV-)NIP: evt: TransferReceiptStaged on warehouse.inventory.events
+    INV-)NIP: evt: TransferStockStowed
+    Note over NIP: state RECEIVED, terminal
+```
+
+An allocation refusal (`TransferStockAllocationRejected`) ends the saga in
+`UNFULFILLABLE` and releases no work. `TransferArrived` is reserved and may never
+fire, because `TransferReceiptStaged` drives the same arrival. The dispatch leg
+needs a `transfer-dispatch` path in the process-path catalogue; the reference
+deployment's own comment says it is not seeded. The read-only transfer watch of
+`warehouse-ops-agent` reads the result over MCP (`find_stuck_transfers`).
+
+Sources: [network-inventory-planning domain message flow](/contexts/network-inventory-planning/domain-message-flow),
+[network-inventory-planning Async API](/contexts/network-inventory-planning/async-api),
+[network-inventory-planning context map](/contexts/network-inventory-planning/context-map).

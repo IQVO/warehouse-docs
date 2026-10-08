@@ -78,8 +78,14 @@ below), e2e test harnesses, and the `.dlq` topics.
 | 6 | `warehouse-ops-agent` | U: OHS + PL · D: Conformist | MCP (Streamable HTTP) tools `list_sites`, `get_site_layout`, `get_zone_grid`, `estimate_travel_distance`; REST `GET /reports/catalog-growth` (+ `/freshness`) on `cmd/facility-reports` | **Live** (`FACILITY_LAYOUT_MCP_ENDPOINT`, `FACILITY_LAYOUT_REPORTS_REST_URL`) | `warehouse-ops-agent`: `internal/adapters/outbound/mcpclient/facility_layout.go`, `internal/config/config.go` |
 | 7 | own analytics read side | same bounded context, not a context relationship | Kafka `warehouse.facility.analytics`, group `facility-analytics` | **Live** with `EVENT_PUBLISHER=kafka` | this repo: `internal/adapters/inbound/kafka/analytics_consumer.go`; [ADR 0010](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0010-analytical-data-product.md) |
 | 8 | `workforce-management` | **Separate Ways** | — | **Deliberately absent** — it stops at the process-path boundary and never links an associate to a location | no client or consumer in its code |
+| 9 | `network-inventory-planning` | U: OHS + PL · D: ACL (hand-mirrored payload kept as a last-writer-wins `site_capability` row) | Kafka `warehouse.facility.events` — `com.warehouse.wms.facility-layout.site.SiteCapabilityChanged` | **Live** when `SITE_CAPABILITY_CONSUMER_GROUP` is set on the consumer side (set in the reference deployment) | `network-inventory-planning`: `internal/adapters/inbound/kafka/consumers.go` |
 | — | `order-management`, `process-path-management`, `labor-performance`, `network-fulfillment` | no relationship | — | **Absent** — no client of this context's REST/MCP surface and no consumer of its topics on `develop` | org-wide code search for `FACILITY_LAYOUT` and `warehouse.facility.events` |
 | — | anything **this** context calls | — | — | **Deliberately absent** — `facility-layout` has no outbound adapter to another service, ever | `internal/adapters/outbound/` holds only Postgres, memory, Kafka publishers, telemetry, boot-retry and analytics-store adapters |
+
+:::note[Added in warehouse-docs]
+The row above for `network-inventory-planning` was added here when that context was onboarded on this site, from the code of both repositories on `develop`. It is not yet in this context's own map, so a re-sync from `develop` will drop it until the upstream map lists the edge.
+:::
+
 
 On `warehouse.facility.events`, nine of the twelve event types have no
 external consumer today: `SiteRegistered`, `AisleRegistered`,

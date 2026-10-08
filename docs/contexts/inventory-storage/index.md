@@ -59,7 +59,7 @@ location-classification cache
 ([ADR-0013](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0013-location-classification-via-facility-events.md)),
 `product-master`'s `warehouse.product-master.events` into its
 `product_classifications` copy (`PRODUCT_MASTER_CONSUMER_GROUP`, ADR-0034,
-set in the reference deployment), `network-inventory-planning`'s transfer
+set in the reference deployment), [`network-inventory-planning`](/contexts/network-inventory-planning)'s transfer
 allocation commands (ADR-0030) and, off by default,
 `fulfillment-execution`'s `TaskCompleted` to confirm picks (ADR-0035). Its
 legacy `ProductClassified` is emitted only by the one-shot

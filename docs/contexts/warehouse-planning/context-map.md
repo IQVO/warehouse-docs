@@ -71,6 +71,12 @@ upstream and downstream edges readable; it is one context.
 | 7 | `process-path-management` | none | **Separate Ways**: its `ProcessPath` has no physical step sequence; the two contexts share the `path_id` string only as a human cross-reference | none | **Deliberately absent** (ADR 0001 Addendum) | no consumer exists; `POST /process-paths` declares paths locally |
 | 8 | `inventory-storage` | none | **Separate Ways**: stock is not capacity | none | **Deliberately absent** (ADR 0001) | no consumer, no client |
 | 9 | `fulfillment-execution`, `wes-work-planning` (observed capacity), `network-fulfillment` (demand) | `warehouse-planning` | Published Language intended | Kafka (intended) | **Planned, not implemented** (ADR 0001 context map) | none |
+| 10 | `warehouse-planning` | `network-inventory-planning` | OHS + PL / ACL (a `published_capacity_plan` row per plan; a legacy event without the additive `site_id` is excluded) | Kafka `warehouse.warehouse-planning.events`, `com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanPublished` | **Live** when `CAPACITY_PLAN_CONSUMER_GROUP` is set on the consumer side (set in the reference deployment) | this repo: `internal/adapters/outbound/kafka/encoder.go` (the additive `site_id`); there: `internal/adapters/inbound/kafka/consumers.go` |
+
+:::note[Added in warehouse-docs]
+The row above for `network-inventory-planning` was added here when that context was onboarded on this site, from the code of both repositories on `develop`. It is not yet in this context's own map, so a re-sync from `develop` will drop it until the upstream map lists the edge.
+:::
+
 
 There is no Shared Kernel, no Partnership and no Conformist relationship: no
 sibling Go package is imported (hard rule 5 in `CLAUDE.md`) and every upstream

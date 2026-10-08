@@ -2,7 +2,7 @@
 id: index
 title: Bounded Contexts
 sidebar_label: Bounded Contexts
-description: The twelve bounded contexts, each with its ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
+description: The twelve domain bounded contexts and the operator agent, each with its ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
 slug: /contexts
 ---
 
@@ -50,8 +50,8 @@ applies, is given in brackets:
     the generated AsyncAPI reference. This page exists only for
     `inventory-storage`, `wes-work-planning`, `fulfillment-execution`,
     `workforce-management`, `process-path-management`,
-    `labor-performance`, `network-fulfillment`, `warehouse-planning` and
-    `product-master`.
+    `labor-performance`, `network-fulfillment`, `warehouse-planning`,
+    `product-master` and `network-inventory-planning`.
     (Hand-written for this site.)
 
 :::info[Synced pages]
@@ -61,6 +61,14 @@ that repository's code. To correct one, edit it in the owning repository
 and re-sync. Do not edit the copy here. Only the Business Context, the
 overview (index) page and the Async API narrative are written for this
 site.
+:::
+
+:::note[One exception: network-inventory-planning]
+`network-inventory-planning` does not yet ship a `docs/docs/ddd/` pack in its
+own repository, so there is nothing to sync. Its pages 2 to 12 were written
+here, from the code on its `develop` branch (commit `8d25980`) and its ADRs,
+and each one says so in a note at the top. When the repository publishes its
+own pack, replace them with synced copies.
 :::
 
 | Context | Classification | CloudEvents subdomain | Tier |
@@ -77,11 +85,9 @@ site.
 | [network-fulfillment](/contexts/network-fulfillment) | Supporting | `wes` | External network edge (anti-corruption layer) |
 | [warehouse-planning](/contexts/warehouse-planning) | Core | `wes` | WES — capacity planning |
 | [product-master](/contexts/product-master) | Supporting | `wms` | WMS — product master data (classification and physical profile; four live `ProductClassified` local-copy consumers) |
+| [network-inventory-planning](/contexts/network-inventory-planning) | Core | `wes` | WES — inter-warehouse transfer planning (advisory proposals, operator-approved transfer saga) |
 
-`network-inventory-planning`, the fleet's twelfth domain context, has no
-pages here yet.
-
-See [Strategic Design](/strategic-design) for how these twelve relate to
+See [Strategic Design](/strategic-design) for how these contexts relate to
 each other at the fleet level, and the
 [DDD Starter Modelling Process](/strategic-design/ddd-starter-modelling-process)
 for which modelling step each page belongs to.
