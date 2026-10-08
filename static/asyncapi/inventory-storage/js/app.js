@@ -4,7 +4,7 @@
   "info": {
     "title": "Inventory & Storage Domain Events",
     "version": "1.0.0",
-    "description": "Domain-event catalog for the **inventory-storage** bounded context, the WMS-tier authoritative record of what is held where, and what portion of it is usable. This context implements Amazon-style chaotic (random) stow: there is no fixed product location — an inbound item may be stowed into any free bin, and this service records the exact bin it landed in. It supplies \"stock reality\" to the Work Planning bounded context (wes-work-planning) and makes allocation a *revocable* reservation, so a failed physical pick never strands an order.\n\n**Envelope.** Every message on this channel is a CloudEvents 1.0 *structured-mode* JSON document with content type `application/cloudevents+json`. The CloudEvents context attributes carry routing and identity (`specversion`, `id`, `source`, `type`, `subject`, `time`, `datacontenttype`); the business payload lives entirely under `data`. `source` is always `/warehouse/inventory-storage`, and `subject` is the id of the aggregate instance the event is about (a reservation id, a stock unit id, or a bin id).\n\n**The `type` attribute** follows the platform-wide reverse-DNS convention `com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>` — all lowercase except the final PascalCase event name. For this context the subdomain is `wms` (Warehouse Management System, a core subdomain) and the bounded context is `inventory-storage`, so for example a stow produces `com.warehouse.wms.inventory-storage.stock.ItemStowed` and a revoked allocation produces `com.warehouse.wms.inventory-storage.reservation.ReservationRevoked`.\n\n**Aggregates and entity groupings.** Three aggregates raise every event documented here. The **StockUnit** aggregate (entity segment `stock`) raises `StockReceived`, `ItemStowed`, `LocationRecorded` and `ItemUnlocated`. The **Reservation** aggregate (entity segment `reservation`) raises `StockReserved`, `ReservationExpired`, `ReservationRevoked` and `StockPicked` — `StockPicked` is grouped with the reservation because it is emitted by ConfirmPick when a reservation is consumed, and reservation id is the only identity it carries. The **Bin/Location** aggregate (entity segment `bin`) raises `CycleCountCompleted` and `DiscrepancyDetected`.\n\n**What reaches Kafka.** This document is the complete domain-event catalog for the bounded context. Two topics carry a subset of it: `warehouse.inventory.events` (the integration contract — `StockReserved`, `ReservationRevoked`, the transfer replies, the transfer receipt/stow events, and the legacy `ProductClassified`, from `internal/adapters/outbound/kafka/publisher.go`) and `warehouse.inventory.analytics` (the analytics data product — every message below except `LocationRecorded` and `ProductClassified`, from `internal/adapters/outbound/kafka/analytics_publisher.go`). Each message says which topics it reaches. `LocationRecorded` is in-process only (no consumer; decided 2026-10-06). Since ADR 0034 product-master owns product classification: `ProductClassified` is no longer raised by any write path and is emitted only by the one-shot `republish-product-classifications` backfill command (product-master ADR 0003 stage B), on the integration topic.\n\n**Consumed.** This service also consumes product-master's `warehouse.product-master.events` (channel below, ADR 0034) into a local copy of every SKU's classification that StowStock reads. Applying it raises no event here. It also consumes fulfillment-execution's `TaskCompleted` from `warehouse.fulfillment.events` (channel below, ADR 0035) to confirm a completed order's reservations as picked once the order's LAST PICK task completes (one PICK task per order line, counted per order); that raises this service's own `StockPicked` (analytics topic) per reservation.\n\n**CloudEvents is mandatory (ADR-0024).** Every message on both topics is exactly the CloudEvents 1.0 structured-mode event documented here — all of `specversion`, `id`, `source`, `type`, `subject`, `time`, `datacontenttype` and `dataschema` are required — and every Kafka message carries the header `content-type: application/cloudevents+json; charset=UTF-8`. The same `type` names an occurrence on both topics; `dataschema` (`urn:warehouse:inventory-storage:<events|analytics>:<EventName>:v1`) names the payload shape. Each schema's `data` is the exact wire payload; `StockReserved` and `ReservationRevoked`, which reach both topics, give one `data` shape per `dataschema`. There is no other envelope.\n",
+    "description": "Domain-event catalog for the **inventory-storage** bounded context, the WMS-tier authoritative record of what is held where, and what portion of it is usable. This context implements Amazon-style chaotic (random) stow: there is no fixed product location — an inbound item may be stowed into any free bin, and this service records the exact bin it landed in. It supplies \"stock reality\" to the Work Planning bounded context (wes-work-planning) and makes allocation a *revocable* reservation, so a failed physical pick never strands an order.\n\n**Envelope.** Every message on this channel is a CloudEvents 1.0 *structured-mode* JSON document with content type `application/cloudevents+json`. The CloudEvents context attributes carry routing and identity (`specversion`, `id`, `source`, `type`, `subject`, `time`, `datacontenttype`); the business payload lives entirely under `data`. `source` is always `/warehouse/inventory-storage`, and `subject` is the id of the aggregate instance the event is about (a reservation id, a stock unit id, or a bin id).\n\n**The `type` attribute** follows the platform-wide reverse-DNS convention `com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>` — all lowercase except the final PascalCase event name. For this context the subdomain is `wms` (Warehouse Management System, a core subdomain) and the bounded context is `inventory-storage`, so for example a stow produces `com.warehouse.wms.inventory-storage.stock.ItemStowed` and a revoked allocation produces `com.warehouse.wms.inventory-storage.reservation.ReservationRevoked`.\n\n**Aggregates and entity groupings.** Three aggregates raise every event documented here. The **StockUnit** aggregate (entity segment `stock`) raises `StockReceived`, `ItemStowed`, `LocationRecorded` and `ItemUnlocated`. The **Reservation** aggregate (entity segment `reservation`) raises `StockReserved`, `ReservationExpired`, `ReservationRevoked` and `StockPicked` — `StockPicked` is grouped with the reservation because it is emitted by ConfirmPick when a reservation is consumed, and reservation id is the only identity it carries. The **Bin/Location** aggregate (entity segment `bin`) raises `CycleCountCompleted` and `DiscrepancyDetected`.\n\n**What reaches Kafka.** This document is the complete domain-event catalog for the bounded context. Two topics carry a subset of it: `warehouse.inventory.events` (the integration contract — `StockReserved`, `ReservationRevoked`, the transfer replies, the transfer receipt/stow events, and the legacy `ProductClassified`, from `internal/adapters/outbound/kafka/publisher.go`) and `warehouse.inventory.analytics` (the analytics data product — every message below except `LocationRecorded` and `ProductClassified`, from `internal/adapters/outbound/kafka/analytics_publisher.go`). Each message says which topics it reaches. `LocationRecorded` is in-process only (no consumer; decided 2026-10-06). Since ADR 0034 product-master owns product classification: `ProductClassified` is no longer raised by any write path and is emitted only by the one-shot `republish-product-classifications` backfill command (product-master ADR 0003 stage B), on the integration topic.\n\n**Consumed.** This service also consumes product-master's `warehouse.product-master.events` (channel below, ADR 0034) into a local copy of every SKU's classification that StowStock reads. Applying it raises no event here. It also consumes fulfillment-execution's `TaskCompleted` from `warehouse.fulfillment.events` (channel below, ADR 0035) to confirm a completed order's reservations as picked once the order's LAST PICK task completes (one PICK task per order line, counted per order); that raises this service's own `StockPicked` (analytics topic) per reservation. And it consumes inbound-receiving's `ReceiptLineReceived` from `warehouse.inbound-receiving.events` (channel below, ADR 0037): a line with `condition=Good` is booked as a staged receipt through the existing ReceiveStock use case (the same `StockReceived` as `POST /stock/receive`, analytics topic; quantity staged, stow stays the RF action); `Damaged` is not booked in v1.\n\n**CloudEvents is mandatory (ADR-0024).** Every message on both topics is exactly the CloudEvents 1.0 structured-mode event documented here — all of `specversion`, `id`, `source`, `type`, `subject`, `time`, `datacontenttype` and `dataschema` are required — and every Kafka message carries the header `content-type: application/cloudevents+json; charset=UTF-8`. The same `type` names an occurrence on both topics; `dataschema` (`urn:warehouse:inventory-storage:<events|analytics>:<EventName>:v1`) names the payload shape. Each schema's `data` is the exact wire payload; `StockReserved` and `ReservationRevoked`, which reach both topics, give one `data` shape per `dataschema`. There is no other envelope.\n",
     "contact": {
       "name": "Warehouse Systems Platform Team",
       "url": "https://github.com/claudioed/inventory-storage",
@@ -43,6 +43,10 @@
     {
       "name": "fulfillment-execution",
       "description": "Events consumed from the fulfillment-execution bounded context (wes subdomain): TaskCompleted, from which picks are confirmed (ADR 0035).\n"
+    },
+    {
+      "name": "inbound-receiving",
+      "description": "Events consumed from the inbound-receiving bounded context (wms subdomain): ReceiptLineReceived, from which Good lines are booked as staged stock (ADR 0037).\n"
     }
   ],
   "servers": {
@@ -1918,8 +1922,8 @@
       "description": "fulfillment-execution's integration topic, its Published Language for task facts (the `FulfillmentTopic` constant in `internal/adapters/inbound/kafka/task_completed_consumer.go`). CONSUMED by this service (ADR 0035), not published: key = `subject` = task id, `source=/warehouse/fulfillment-execution`. Only `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` is acted on; `TaskCPTMissed`, `PackageManifested` and the `Transfer*` facts share the topic and are committed past untouched. The consumer runs only when `TASK_COMPLETED_CONSUMER_MODE=kafka` (default `off`; also requires `DATABASE_URL` and `KAFKA_BROKERS`), under the fixed group `TASK_COMPLETED_CONSUMER_GROUP` (default `inventory-storage-confirm-pick`). Poison messages and messages whose handling kept failing are written to `warehouse.fulfillment.events.dlq`.\n",
       "publish": {
         "operationId": "confirmPicksFromTaskCompleted",
-        "summary": "Confirm an order's picked reservations on the order's last TaskCompleted.",
-        "description": "At-least-once, fixed group: FetchMessage, then CommitMessages only after the message settles. A PICK task is per order LINE and every one carries the same `order_ref`, while a reservation has no line identity (only sku, quantity and `demand_ref`), so a task cannot be matched to one reservation. For `task_type = PICK` with a non-empty `order_ref` (the OrderId order-management reserved against, stored here as `demand_ref`) the pick is COUNTED for the order (table `order_pick_progress`); only when the count reaches the order's ACTIVE + CONFIRMED reservations (REVOKED and EXPIRED are not awaited), i.e. on the LAST pick, is every ACTIVE reservation with that `demand_ref` confirmed through the existing ConfirmPick logic (stock decremented, bin capacity released, `StockPicked` raised). Earlier picks only record progress and settle as successful no-ops. The CloudEvents `id` claim in `processed_events`, the counter increment and all confirmations commit in ONE transaction, so a failure rolls everything back and the redelivery is applied in full; a redelivered id never advances the counter, and a further PICK event for an already confirmed order confirms nothing new. Counter rows older than `ORDER_PICK_PROGRESS_RETENTION` (default 720h) are swept. Reservations already CONFIRMED or REVOKED are skipped; an EXPIRED one (ADR 0003) is skipped, logged and counted (`inventory.pick_confirmations{outcome=expired}`), never an error. No reservations for the order (a transfer or non-inventory order), a non-PICK task, a missing `order_ref` (a producer that predates the field) and every other event type are successful no-ops. A Task carries no SKU or quantity, so SHORT PICKS ARE NOT MODELLED. The per-line path (order-management sends `line_no`, Reservation stores it, the event carries it) is recorded in ADR 0035. A transient failure retries the same message with capped backoff (5 attempts), then dead-letters it; an undecodable payload is dead-lettered at once; a message that is not a CloudEvent is skipped with a sampled WARN.\n",
+        "summary": "Confirm the picked line's reservation (line_no), or fall back to confirming the order on its last TaskCompleted.",
+        "description": "At-least-once, fixed group: FetchMessage, then CommitMessages only after the message settles. For `task_type = PICK` with a non-empty `order_ref` (the OrderId order-management reserved against, stored here as `demand_ref`) there are two paths.\n\nPER-LINE (ADR 0036, audit decision 18): when the event carries the additive `line_no`, exactly the ACTIVE reservation(s) with `demand_ref = order_ref` and `line_no` equal to the event's are confirmed through the existing ConfirmPick logic (stock decremented, bin capacity released, `StockPicked` raised); normally exactly one, since earlier attempts of the line are REVOKED. CONFIRMED and REVOKED ones are skipped; an EXPIRED one (ADR 0003) is skipped, logged and counted (`inventory.pick_confirmations{outcome=expired}`), never an error. Other lines of the order are never touched, so a line whose pick has not arrived stays ACTIVE and reserved. Nothing is counted on this path (no `order_pick_progress` row).\n\nCOUNTING FALLBACK (ADR 0035, kept for backward compatibility): when the event has no `line_no`, or names a line that no reservation of the order carries but the order has reservations created before `line_no` existed (NULL), the pick is COUNTED for the order (table `order_pick_progress`) against those reservations only; when the count reaches their ACTIVE + CONFIRMED number (REVOKED and EXPIRED are not awaited), i.e. on the LAST pick, every ACTIVE one is confirmed. Earlier picks only record progress and settle as successful no-ops. Counter rows older than `ORDER_PICK_PROGRESS_RETENTION` (default 720h) are swept. The \"one pick early\" edge of that counting does not exist on the per-line path.\n\nThe CloudEvents `id` claim in `processed_events`, the counter increment (fallback only) and all confirmations commit in ONE transaction, so a failure rolls everything back and the redelivery is applied in full; a redelivered id is a no-op, and a further PICK event for an already confirmed line confirms nothing new. No reservations for the order (a transfer or non-inventory order), a line with no reservation and no line-less ones to fall back to, a non-PICK task, a missing `order_ref` (a producer that predates the field) and every other event type are successful no-ops. A Task carries no SKU or quantity, so SHORT PICKS ARE NOT MODELLED. A `line_no` that is not an integer between 1 and 2147483647 is a malformed payload: dead-lettered at once.\n\nA transient failure retries the same message with capped backoff (5 attempts), then dead-letters it; an undecodable payload is dead-lettered at once; a message that is not a CloudEvent is skipped with a sampled WARN.\n",
         "tags": [
           {
             "name": "fulfillment-execution",
@@ -1929,8 +1933,8 @@
         "message": {
           "name": "FulfillmentTaskCompleted",
           "title": "Task Completed (from fulfillment-execution, consumed)",
-          "summary": "A station finished a claimed task; the last PICK task of an order makes this service confirm the order's reservations as picked.",
-          "description": "CONSUMED, not produced (ADR 0035). Pinned by fulfillment-execution's `apis/asyncapi.yaml`: type `com.warehouse.wes.fulfillment-execution.task.TaskCompleted`, `source=/warehouse/fulfillment-execution`, subject and Kafka key = task id. This service reads only `task_id`, `task_type` and `order_ref`; every other field (`station_id`, `work_unit_id`, `associate_id`, `duration_seconds`) is ignored. `order_ref` is the additive optional field of ADR 0035 (v1, omitted when empty): the task's order reference, i.e. the OrderId order-management used as `demand_ref`. A message without it, or with any `task_type` other than `PICK`, is a successful no-op.\n",
+          "summary": "A station finished a claimed task; a PICK task makes this service confirm the picked line's reservation (or, without a line, the order's on its last pick).",
+          "description": "CONSUMED, not produced (ADR 0035, ADR 0036). Pinned by fulfillment-execution's `apis/asyncapi.yaml`: type `com.warehouse.wes.fulfillment-execution.task.TaskCompleted`, `source=/warehouse/fulfillment-execution`, subject and Kafka key = task id. This service reads only `task_id`, `task_type`, `order_ref` and `line_no`; every other field (`station_id`, `work_unit_id`, `associate_id`, `duration_seconds`) is ignored. `order_ref` is the additive optional field of ADR 0035 (v1, omitted when empty): the task's order reference, i.e. the OrderId order-management used as `demand_ref`. `line_no` is the additive optional field of ADR 0036 (v1, omitted when unknown): the order line the task was for. A message without `order_ref`, or with any `task_type` other than `PICK`, is a successful no-op; one without `line_no` takes the ADR 0035 counting path.\n",
           "contentType": "application/cloudevents+json",
           "tags": [
             {
@@ -2023,8 +2027,15 @@
                   },
                   "order_ref": {
                     "type": "string",
-                    "description": "The completed task's order reference = the OrderId order-management reserved against (this service's reservation `demand_ref`). Every PICK task of an order (one per order line) carries the same value; this service counts them and confirms on the last one. Additive and optional (ADR 0035): omitted when empty, in which case nothing is counted or confirmed.\n",
+                    "description": "The completed task's order reference = the OrderId order-management reserved against (this service's reservation `demand_ref`). Every PICK task of an order (one per order line) carries the same value. Additive and optional (ADR 0035): omitted when empty, in which case nothing is counted or confirmed.\n",
                     "x-parser-schema-id": "<anonymous-schema-170>"
+                  },
+                  "line_no": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 2147483647,
+                    "description": "The order line this task was for (the `line_no` the reservation of that line was made with). Additive and optional (ADR 0036): omitted when unknown. When present, exactly the ACTIVE reservation(s) of (`order_ref`, `line_no`) are confirmed and nothing is counted; when absent the ADR 0035 last-pick counting applies. A value outside 1..2147483647 (the 32-bit line_no column) or a non-integer is a malformed payload (dead-lettered).\n",
+                    "x-parser-schema-id": "<anonymous-schema-171>"
                   }
                 },
                 "x-parser-schema-id": "<anonymous-schema-167>"
@@ -2034,8 +2045,32 @@
           },
           "examples": [
             {
+              "name": "pickTaskCompletedForLine",
+              "summary": "The PICK task for line 2 of order ORD-1001 completed (per-line path, ADR 0036).",
+              "payload": {
+                "specversion": "1.0",
+                "id": "7a2d3b4c-5e6f-4071-9b8c-0d1e2f3a4b5c",
+                "source": "/warehouse/fulfillment-execution",
+                "type": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+                "subject": "task-8a20",
+                "time": "2026-10-06T15:01:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
+                "data": {
+                  "task_id": "task-8a20",
+                  "station_id": "station-03",
+                  "work_unit_id": "wu-8a20",
+                  "associate_id": "worker-42",
+                  "duration_seconds": 120,
+                  "task_type": "PICK",
+                  "order_ref": "ORD-1001",
+                  "line_no": 2
+                }
+              }
+            },
+            {
               "name": "pickTaskCompleted",
-              "summary": "One PICK task (one order line) of order ORD-1001 completed.",
+              "summary": "One PICK task (one order line) of order ORD-1001 completed, from a producer that does not send line_no (counting fallback, ADR 0035).",
               "payload": {
                 "specversion": "1.0",
                 "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
@@ -2053,6 +2088,197 @@
                   "duration_seconds": 245,
                   "task_type": "PICK",
                   "order_ref": "ORD-1001"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.inbound-receiving.events": {
+      "description": "inbound-receiving's integration topic, its Published Language for ASNs, dock appointments and receipts (inbound-receiving ADR 0003; the `InboundReceivingTopic` constant in `internal/adapters/inbound/kafka/inbound_receipt_consumer.go`). CONSUMED by this service (ADR 0037), not published: key = ASN number, `source=/warehouse/inbound-receiving`, `subject` = the receipt id. Only `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` is acted on; `ASNRegistered`, `ASNCancelled`, `DockAppointment*`, `ReceiptOpened` and `ReceiptClosed` share the topic and are committed past untouched. The consumer runs only when `INBOUND_RECEIPT_CONSUMER_GROUP` is set (stable group id; also requires `DATABASE_URL` and `KAFKA_BROKERS`).\n",
+      "publish": {
+        "operationId": "bookInboundReceiptLine",
+        "summary": "Book a received Good line as a staged receipt.",
+        "description": "At-least-once, fixed group: FetchMessage, then CommitMessages only after the handler settles. For `condition=Good` the CloudEvents `id` is claimed in `processed_events` (consumer `inbound-receipt-line`) in the SAME transaction as the existing ReceiveStock use case, which raises `StockReceived` through the outbox (analytics topic): the units are staged and not yet usable, and stow stays the RF action (item scan plus location scan). `POST /stock/receive` is unchanged and keeps working for ad-hoc receipts. `condition=Damaged` is NOT booked in v1 (quarantine is a later ADR): it is claimed, logged at INFO and counted in `inventory.inbound_receipt_units{outcome=damaged_not_booked}`. A redelivered `id` is a no-op. A transient failure retries the same message with capped backoff; a message that is not a valid CloudEvent, has an undecodable payload, an empty `sku`, a non-positive `quantity` or an unknown `condition` is logged (WARN) and committed past.\n",
+        "tags": [
+          {
+            "name": "inbound-receiving",
+            "description": "Consumed from the inbound-receiving bounded context."
+          }
+        ],
+        "message": {
+          "name": "InboundReceivingReceiptLineReceived",
+          "title": "Receipt Line Received (from inbound-receiving, consumed)",
+          "summary": "A quantity was received against an ASN line at the dock; Good units are booked as staged stock here.",
+          "description": "CONSUMED, not produced (ADR 0037). Pinned by inbound-receiving's `apis/asyncapi.yaml` (the handover event of its ADR 0003): type `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived`, `source=/warehouse/inbound-receiving`, subject = the receipt id, Kafka key = the ASN number. `data` is snake_case: `{receipt_id, asn_number, line_no, sku, quantity, condition, received_at}` with `condition` one of `Good` or `Damaged`. This service books `sku` and `quantity` of a `Good` line through ReceiveStock (its own clock stamps the resulting `StockReceived`; `received_at`, `receipt_id`, `asn_number` and `line_no` are logged, not stored) and does not book a `Damaged` line.\n",
+          "contentType": "application/cloudevents+json",
+          "tags": [
+            {
+              "name": "inbound-receiving",
+              "description": "Consumed from inbound-receiving."
+            }
+          ],
+          "payload": {
+            "type": "object",
+            "description": "CloudEvents 1.0 envelope of inbound-receiving's ReceiptLineReceived v1 as consumed here (not composed from CloudEventBase, whose `source` is this service's own).\n",
+            "required": [
+              "specversion",
+              "id",
+              "source",
+              "type",
+              "subject",
+              "time",
+              "datacontenttype",
+              "data"
+            ],
+            "properties": {
+              "specversion": {
+                "type": "string",
+                "enum": [
+                  "1.0"
+                ],
+                "x-parser-schema-id": "<anonymous-schema-172>"
+              },
+              "id": {
+                "type": "string",
+                "description": "CloudEvents id; the dedupe key (claimed in processed_events under consumer `inbound-receipt-line`).",
+                "x-parser-schema-id": "<anonymous-schema-173>"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "/warehouse/inbound-receiving"
+                ],
+                "x-parser-schema-id": "<anonymous-schema-174>"
+              },
+              "type": {
+                "type": "string",
+                "const": "com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived",
+                "x-parser-schema-id": "<anonymous-schema-175>"
+              },
+              "subject": {
+                "type": "string",
+                "description": "The receipt id (the Kafka key is the ASN number).",
+                "x-parser-schema-id": "<anonymous-schema-176>"
+              },
+              "time": {
+                "type": "string",
+                "format": "date-time",
+                "x-parser-schema-id": "<anonymous-schema-177>"
+              },
+              "datacontenttype": {
+                "type": "string",
+                "enum": [
+                  "application/json"
+                ],
+                "x-parser-schema-id": "<anonymous-schema-178>"
+              },
+              "dataschema": {
+                "type": "string",
+                "description": "urn:warehouse:inbound-receiving:events:ReceiptLineReceived:v1",
+                "x-parser-schema-id": "<anonymous-schema-179>"
+              },
+              "data": {
+                "type": "object",
+                "required": [
+                  "receipt_id",
+                  "asn_number",
+                  "line_no",
+                  "sku",
+                  "quantity",
+                  "condition",
+                  "received_at"
+                ],
+                "properties": {
+                  "receipt_id": {
+                    "type": "string",
+                    "x-parser-schema-id": "<anonymous-schema-181>"
+                  },
+                  "asn_number": {
+                    "type": "string",
+                    "x-parser-schema-id": "<anonymous-schema-182>"
+                  },
+                  "line_no": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "x-parser-schema-id": "<anonymous-schema-183>"
+                  },
+                  "sku": {
+                    "type": "string",
+                    "description": "Must be non-empty; an empty SKU is logged and committed past.",
+                    "x-parser-schema-id": "<anonymous-schema-184>"
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "Units received on this occurrence. A value <= 0 is logged and committed past.",
+                    "x-parser-schema-id": "<anonymous-schema-185>"
+                  },
+                  "condition": {
+                    "type": "string",
+                    "enum": [
+                      "Good",
+                      "Damaged"
+                    ],
+                    "description": "Only Good is booked as stock (ADR 0037); Damaged is counted and ignored; any other value is logged and committed past.",
+                    "x-parser-schema-id": "<anonymous-schema-186>"
+                  },
+                  "received_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "x-parser-schema-id": "<anonymous-schema-187>"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-180>"
+              }
+            },
+            "x-parser-schema-id": "InboundReceivingReceiptLineReceivedEvent"
+          },
+          "examples": [
+            {
+              "name": "goodLine",
+              "summary": "40 good units of SKU-1 received against line 1 of ASN-1001.",
+              "payload": {
+                "specversion": "1.0",
+                "id": "3f8f6c2e-9b1a-4d6e-8a52-0c7d1e4b9a10",
+                "source": "/warehouse/inbound-receiving",
+                "type": "com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived",
+                "subject": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                "time": "2026-10-09T08:10:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:inbound-receiving:events:ReceiptLineReceived:v1",
+                "data": {
+                  "receipt_id": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                  "asn_number": "ASN-1001",
+                  "line_no": 1,
+                  "sku": "SKU-1",
+                  "quantity": 40,
+                  "condition": "Good",
+                  "received_at": "2026-10-09T08:10:00Z"
+                }
+              }
+            },
+            {
+              "name": "damagedLine",
+              "summary": "4 damaged units of SKU-1; recorded by inbound-receiving, not booked here.",
+              "payload": {
+                "specversion": "1.0",
+                "id": "5b7d9e11-2c4a-4f68-9d03-7a1e6c8b2f40",
+                "source": "/warehouse/inbound-receiving",
+                "type": "com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived",
+                "subject": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                "time": "2026-10-09T08:12:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:inbound-receiving:events:ReceiptLineReceived:v1",
+                "data": {
+                  "receipt_id": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                  "asn_number": "ASN-1001",
+                  "line_no": 1,
+                  "sku": "SKU-1",
+                  "quantity": 4,
+                  "condition": "Damaged",
+                  "received_at": "2026-10-09T08:12:00Z"
                 }
               }
             }
@@ -2092,13 +2318,13 @@
                   "type": "string",
                   "description": "Fixed event type for LocationRecorded.",
                   "const": "com.warehouse.wms.inventory-storage.stock.LocationRecorded",
-                  "x-parser-schema-id": "<anonymous-schema-172>"
+                  "x-parser-schema-id": "<anonymous-schema-189>"
                 },
                 "dataschema": {
                   "type": "string",
                   "description": "Reserved for if LocationRecorded is ever published; it is in-process only today.",
                   "pattern": "^urn:warehouse:inventory-storage:events:LocationRecorded:v1$",
-                  "x-parser-schema-id": "<anonymous-schema-173>"
+                  "x-parser-schema-id": "<anonymous-schema-190>"
                 },
                 "data": {
                   "type": "object",
@@ -2111,18 +2337,18 @@
                     "stock_unit_id": {
                       "type": "string",
                       "description": "Identifier of the StockUnit whose location is now known.",
-                      "x-parser-schema-id": "<anonymous-schema-175>"
+                      "x-parser-schema-id": "<anonymous-schema-192>"
                     },
                     "bin_id": {
                       "type": "string",
                       "description": "The bin that authoritatively holds that StockUnit.",
-                      "x-parser-schema-id": "<anonymous-schema-176>"
+                      "x-parser-schema-id": "<anonymous-schema-193>"
                     }
                   },
-                  "x-parser-schema-id": "<anonymous-schema-174>"
+                  "x-parser-schema-id": "<anonymous-schema-191>"
                 }
               },
-              "x-parser-schema-id": "<anonymous-schema-171>"
+              "x-parser-schema-id": "<anonymous-schema-188>"
             }
           ],
           "x-parser-schema-id": "LocationRecordedEvent"
@@ -2151,6 +2377,7 @@
       "ProductClassified": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[6]",
       "ProductMasterProductClassified": "$ref:$.channels.warehouse.product-master.events.publish.message",
       "FulfillmentTaskCompleted": "$ref:$.channels.warehouse.fulfillment.events.publish.message",
+      "InboundReceivingReceiptLineReceived": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message",
       "StockReserved": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[0]",
       "TransferStockAllocated": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[2]",
       "TransferStockAllocationRejected": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[3]",
@@ -2171,6 +2398,7 @@
       "ProductClassifiedEvent": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[6].payload",
       "ProductMasterProductClassifiedEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.payload",
       "FulfillmentTaskCompletedEvent": "$ref:$.channels.warehouse.fulfillment.events.publish.message.payload",
+      "InboundReceivingReceiptLineReceivedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.payload",
       "StockReservedEvent": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[0].payload",
       "ReservationExpiredEvent": "$ref:$.channels.warehouse.inventory.analytics.subscribe.message.oneOf[5].payload",
       "ReservationRevokedEvent": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[1].payload",
