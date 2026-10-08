@@ -11,12 +11,12 @@ description: Kafka integration for product-master — one published integration 
 
 | Topic | Direction | Messages | Status |
 | --- | --- | --- | --- |
-| `warehouse.product-master.events` | **Published** (this context is the exclusive publisher) | `ProductRegistered`, `ProductDescriptionChanged`, `ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured` | **Live**. `inventory-storage` (its ADR 0034), `order-management` (ADR 0036), `wes-work-planning` (ADR 0035) and `fulfillment-execution` (ADR 0039) each keep a local copy of `ProductClassified`. The other four types have no consumer yet |
-| `warehouse.inventory.events` | **Consumed** (producer: `inventory-storage`) | `com.warehouse.wms.inventory-storage.product.ProductClassified` only (every other type is ignored) | **Migration only**. Opt-in via `LEGACY_IMPORT_CONSUMER_GROUP` (unset = importer not started); removed at stage E of [ADR 0003](https://github.com/IQVO/product-master/blob/develop/docs/adr/0003-migration-from-inventory-storage.md) |
+| `warehouse.product-master.events` | **Published** (this context is the exclusive publisher) | `ProductRegistered`, `ProductDescriptionChanged`, `ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured` | **Live** in the reference deployment. `inventory-storage` (its ADR 0034), `order-management` (ADR 0036), `wes-work-planning` (ADR 0035) and `fulfillment-execution` (ADR 0039) each keep a local copy of `ProductClassified`. The other four types have no consumer yet |
+| `warehouse.product-master.analytics` | **Published**, consumed only by this service's own `product-projector` | the same five types, same CloudEvents `id`, `dataschema` `urn:warehouse:product-master:analytics:<EventName>:v1` | **Live**. Written in the same outbox transaction as the integration topic; poison messages go to `warehouse.product-master.analytics.dlq` ([ADR 0006](https://github.com/IQVO/product-master/blob/develop/docs/adr/0006-analytics-read-side.md)) |
+| `warehouse.inventory.events` | **Consumed** (producer: `inventory-storage`) | `com.warehouse.wms.inventory-storage.product.ProductClassified` only (every other type is ignored) | **Migration only**. Opt-in via `LEGACY_IMPORT_CONSUMER_GROUP` (unset = importer not started; set to `product-master-legacy-import` in the reference deployment); removed at stage E of [ADR 0003](https://github.com/IQVO/product-master/blob/develop/docs/adr/0003-migration-from-inventory-storage.md) |
 
-There is no analytics topic in v1
-([ADR 0004](https://github.com/IQVO/product-master/blob/develop/docs/adr/0004-cloudevents-envelope-and-type-catalogue.md),
-"Not published (yet)").
+The analytics topic is an internal data product of this context, like every
+sibling's `warehouse.<ctx>.analytics`: no other context reads it.
 
 ## The envelope
 
@@ -86,14 +86,19 @@ selects the sink (default `log`, which only logs each message).
 
 All four consumers replaced their live `GET /products/{sku}/classification`
 calls to `inventory-storage` with a local copy fed by this topic. None of them
-calls `product-master` at request time.
+calls `product-master` at request time. The reference deployment switches all
+four on (deployed 2026-10-07): the consumer-group values below are set in
+`warehouse-infra`'s `helm-values/inventory-storage.yaml` and
+`helm-values/order-management.yaml`, and `PRODUCT_CLASSIFICATION_MODE=kafka`
+for `wes-work-planning` and `fulfillment-execution` in `terraform/locals.tf`
+`sync_edge_env`.
 
 | Consumer | Consumer group env | Mode switch | What the local copy is for | Its ADR |
 | --- | --- | --- | --- | --- |
-| `inventory-storage` | `PRODUCT_MASTER_CONSUMER_GROUP` (unset = not started) | none | its existing `product_classifications` table, read by `StowStock` for placement and same-bin DOT segregation | 0034 |
-| `order-management` | `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` | `PRODUCT_CLASSIFICATION_MODE=kafka` or `permissive` (default); `http` is rejected at boot | intake enrichment: derived product attributes for path eligibility routing | 0036 |
-| `wes-work-planning` | `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` | `PRODUCT_CLASSIFICATION_MODE=kafka` or `permissive` (default) | release-time capabilities and the fragile flag | 0035 |
-| `fulfillment-execution` | `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` | `PRODUCT_CLASSIFICATION_MODE=kafka` or `permissive` (default); `http` is rejected at boot | seal-time package segregation | 0039 |
+| `inventory-storage` | `PRODUCT_MASTER_CONSUMER_GROUP` (unset = not started; `inventory-storage-product-master` in the reference deployment) | none | its existing `product_classifications` table, read by `StowStock` for placement and same-bin DOT segregation | 0034 |
+| `order-management` | `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (`order-management-product-classification`) | `PRODUCT_CLASSIFICATION_MODE=kafka` or `permissive` (default); `http` is rejected at boot | intake enrichment: derived product attributes for path eligibility routing | 0036 |
+| `wes-work-planning` | `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (`wes-work-planning-product-classification`) | `PRODUCT_CLASSIFICATION_MODE=kafka` or `permissive` (default); `http` is rejected at boot | release-time capabilities and the fragile flag | 0035 |
+| `fulfillment-execution` | `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (`fulfillment-execution-product-classification`) | `PRODUCT_CLASSIFICATION_MODE=kafka` or `permissive` (default); `http` is rejected at boot | seal-time package segregation | 0039 |
 
 **Consumer rule.** Keep one row per SKU with the classification and its
 `version`; apply a message only when its `version` is greater than the stored

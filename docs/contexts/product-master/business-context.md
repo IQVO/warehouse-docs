@@ -13,7 +13,11 @@ Sourced from `product-master`'s
 [ADR 0003](https://github.com/IQVO/product-master/blob/develop/docs/adr/0003-migration-from-inventory-storage.md)
 and
 [ADR 0004](https://github.com/IQVO/product-master/blob/develop/docs/adr/0004-cloudevents-envelope-and-type-catalogue.md),
-all accepted on 2026-10-06.
+all accepted on 2026-10-06, and the later
+[ADR 0005](https://github.com/IQVO/product-master/blob/develop/docs/adr/0005-mcp-server-adoption.md)
+(MCP) and
+[ADR 0006](https://github.com/IQVO/product-master/blob/develop/docs/adr/0006-analytics-read-side.md)
+(analytics read side).
 
 ## The gap
 
@@ -107,13 +111,20 @@ no shared database, no cross-context REST call (ADR 0003).
   order-management ADR 0036, wes-work-planning ADR 0035,
   fulfillment-execution ADR 0039). Stage E (removing the legacy importer,
   the backfill command and the deprecated endpoint) is not done.
-- The reference deployment does not run product-master yet:
-  `warehouse-infra`'s `develop` has no `product-master` entry, and its
-  `sync_edge_env` still sets `PRODUCT_CLASSIFICATION_MODE=http` for
-  `wes-work-planning` and `fulfillment-execution`, a value both binaries
-  now reject at boot.
+- The reference deployment runs product-master and all four consumers in
+  `kafka` mode (deployed 2026-10-07): `warehouse-infra` has a
+  `product-master` entry in `terraform/locals.tf`, sets
+  `PRODUCT_CLASSIFICATION_MODE=kafka` for `wes-work-planning` and
+  `fulfillment-execution` in `sync_edge_env`, and sets the dedicated chart
+  values for `order-management` (`productClassification.mode: kafka`) and
+  `inventory-storage` (`productMasterConsumerGroup`). The stage B backfill
+  (`inventory republish-product-classifications`) was run once on
+  2026-10-07 and republished 6 rows.
 - Four of the five published types have no consumer yet. The physical
   profile's intended downstream uses (expected package weight at the weigh
   check, cube-based slot fit, cube-based storage capacity) are later phases.
-- No analytics topic in v1 (ADR 0004), and no measurement history: only the
-  latest measurement is kept (ADR 0002).
+- There is no measurement history: only the latest measurement is kept
+  (ADR 0002). The analytics read side
+  ([ADR 0006](https://github.com/IQVO/product-master/blob/develop/docs/adr/0006-analytics-read-side.md))
+  copies every event to `warehouse.product-master.analytics` for the master
+  data quality report; no other context reads that topic.

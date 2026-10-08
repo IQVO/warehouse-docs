@@ -10,9 +10,9 @@ slug: /contexts/product-master
 
 <span className="badge-supporting">Supporting Subdomain</span>
 
-**Product Master** is the fleet's twelfth backend bounded context. It sits in
-the `wms` tier of the CloudEvents subdomain taxonomy, the third `wms` context
-after `facility-layout` and `inventory-storage`. It is the single source of
+**Product Master** is one of the fleet's twelve domain bounded contexts. It
+sits in the `wms` tier of the CloudEvents subdomain taxonomy, the third `wms`
+context after `facility-layout` and `inventory-storage`. It is the single source of
 truth for **what a SKU is**: for handling (its classification) and physically
 (its unit dimensions and weight). It answers no "where" or "how many"
 question; stock stays in `inventory-storage`
@@ -26,9 +26,10 @@ measured and effective values, with a discrepancy flag,
 and a `version` carried on every published event.
 
 :::info[What is live, what is migration-only, and what has no consumer]
-Per this context's own [Context Map](/contexts/product-master/context-map):
+Per this context's own [Context Map](/contexts/product-master/context-map),
+checked against the reference deployment (`warehouse-infra` `develop`):
 
-**Live in code:** `inventory-storage` (its ADR 0034), `order-management`
+**Live:** `inventory-storage` (its ADR 0034), `order-management`
 (ADR 0036), `wes-work-planning` (ADR 0035) and `fulfillment-execution`
 (ADR 0039) each keep a local copy of `ProductClassified` from
 `warehouse.product-master.events`, version-guarded, one row per SKU. For
@@ -38,17 +39,28 @@ replaces their former `GET /products/{sku}/classification` calls to
 at boot, and `inventory-storage` answers its old classification write with
 `410 Gone`
 ([ADR 0003](https://github.com/IQVO/product-master/blob/develop/docs/adr/0003-migration-from-inventory-storage.md),
-stages C and D). Events leave through a transactional outbox. The context
-serves REST (operators, console, agents), never service-to-service reads.
+stages C and D). Events leave through a transactional outbox. The reference
+deployment runs `product-master` and switches every consumer on:
+`productMasterConsumerGroup` in `helm-values/inventory-storage.yaml`,
+`productClassification.mode: kafka` in `helm-values/order-management.yaml`,
+and `PRODUCT_CLASSIFICATION_MODE=kafka` in `terraform/locals.tf`
+`sync_edge_env` for `wes-work-planning` and `fulfillment-execution`.
 
-**Not yet in the reference deployment:** `warehouse-infra`'s `develop` does
-not deploy `product-master`, and it still sets
-`PRODUCT_CLASSIFICATION_MODE=http` for `wes-work-planning` and
-`fulfillment-execution`.
+**Read surfaces (no service-to-service reads):** REST behind Kong at
+`/api/product-master`, a read-only MCP server (`cmd/mcp`, four tools,
+[ADR 0005](https://github.com/IQVO/product-master/blob/develop/docs/adr/0005-mcp-server-adoption.md))
+that `warehouse-ops-agent` reads for its `find_master_data_gaps` tool, the
+`productmaster_mfe` console remote at `/mfes/product-master/` (the Product
+Master tile in `warehouse-console`), and the master data quality report of the
+analytics read side (`cmd/product-projector` and `cmd/product-reports`,
+[ADR 0006](https://github.com/IQVO/product-master/blob/develop/docs/adr/0006-analytics-read-side.md)).
 
 **Migration only:** a legacy importer reads `inventory-storage`'s own
-`ProductClassified` (opt-in by `LEGACY_IMPORT_CONSUMER_GROUP`) until the
-decommission stage (stage E) removes it.
+`ProductClassified` (`LEGACY_IMPORT_CONSUMER_GROUP`, set in the reference
+deployment) until the decommission stage (stage E) removes it.
+`inventory-storage` now emits that legacy type only from its one-shot
+`republish-product-classifications` backfill, which was run once on
+2026-10-07.
 
 **Published contract, no consumer yet:** `ProductRegistered`,
 `ProductDescriptionChanged`, `ProductDimensionsDeclared` and
@@ -103,15 +115,19 @@ is synced from the `product-master` repository.
 ## Elsewhere
 
 - **Repository**: [github.com/IQVO/product-master](https://github.com/IQVO/product-master).
-  Its ADRs live under `docs/adr/`, not `docs/docs/adr/`: four on `develop`,
+  Its ADRs live under `docs/adr/`, not `docs/docs/adr/`: six on `develop`,
   [0001](https://github.com/IQVO/product-master/blob/develop/docs/adr/0001-product-master-bounded-context.md)
   (the bounded context),
   [0002](https://github.com/IQVO/product-master/blob/develop/docs/adr/0002-physical-profile-declared-vs-measured.md)
   (physical profile),
   [0003](https://github.com/IQVO/product-master/blob/develop/docs/adr/0003-migration-from-inventory-storage.md)
-  (migration from inventory-storage) and
+  (migration from inventory-storage),
   [0004](https://github.com/IQVO/product-master/blob/develop/docs/adr/0004-cloudevents-envelope-and-type-catalogue.md)
-  (CloudEvents envelope and type catalogue).
+  (CloudEvents envelope and type catalogue),
+  [0005](https://github.com/IQVO/product-master/blob/develop/docs/adr/0005-mcp-server-adoption.md)
+  (read-only MCP server) and
+  [0006](https://github.com/IQVO/product-master/blob/develop/docs/adr/0006-analytics-read-side.md)
+  (analytics read side).
 - [ADR index](/adr): links to this context's own decision records.
 - **Generated references on this site**: [REST](/api-reference/rest/product-master/product-master-api)
   and [AsyncAPI](/api-reference/async/product-master), generated from the
