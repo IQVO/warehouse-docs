@@ -10,9 +10,10 @@ slug: /contexts/product-master
 
 <span className="badge-supporting">Supporting Subdomain</span>
 
-**Product Master** is one of the fleet's twelve domain bounded contexts. It
+**Product Master** is one of the fleet's fourteen domain bounded contexts. It
 sits in the `wms` tier of the CloudEvents subdomain taxonomy, the third `wms`
-context after `facility-layout` and `inventory-storage`. It is the single source of
+context after `facility-layout` and `inventory-storage` (`inbound-receiving`
+and `slotting-optimization` have since become the fourth and fifth). It is the single source of
 truth for **what a SKU is**: for handling (its classification) and physically
 (its unit dimensions and weight). It answers no "where" or "how many"
 question; stock stays in `inventory-storage`

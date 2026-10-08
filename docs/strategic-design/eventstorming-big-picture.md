@@ -2,7 +2,7 @@
 id: eventstorming-big-picture
 title: Big Picture EventStorming
 sidebar_label: Big Picture EventStorming
-description: Fleet-level Big Picture EventStorming of the order-to-ship timeline across the twelve contexts documented on this site, in ddd-crew cheat-sheet notation, with pivotal events and hotspots drawn only from documented gaps.
+description: Fleet-level Big Picture EventStorming of the order-to-ship timeline across the contexts documented on this site, in ddd-crew cheat-sheet notation, with pivotal events and hotspots drawn only from documented gaps.
 ---
 
 # Big Picture EventStorming
@@ -20,7 +20,11 @@ Every orange sticky is a real domain event: it appears in a synced
 `apis/<context>/asyncapi.yaml` or on that context's Domain Events page.
 Every hotspot is a gap that is already documented somewhere, and the
 [hotspot table](#hotspots-and-their-sources) cites the source for each one.
-Nothing on this page is a guess.
+Nothing on this page is a guess. The two newest contexts,
+`inbound-receiving` and `slotting-optimization`, are deliberately not drawn
+on the wall yet: `inbound-receiving` sits before the first stow and
+`slotting-optimization` outside the order-to-ship line, and their events are
+not in a synced `asyncapi.yaml` until their contracts merge.
 
 ## Legend
 

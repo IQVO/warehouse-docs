@@ -2,13 +2,16 @@
 id: index
 title: Bounded Contexts
 sidebar_label: Bounded Contexts
-description: The twelve bounded contexts, each with its ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
+description: The fourteen bounded contexts, each with its ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
 slug: /contexts
 ---
 
 # Bounded Contexts
 
-Every bounded context below has the same page set, in this order.
+Every bounded context below has the same page set, in this order, except
+`inbound-receiving` and `slotting-optimization`, which are decided
+(2026-10-08) but not built and so carry only the pages written for this
+site: **Business Context** and **Bounded Context Canvas**.
 `product-master` adds one extra synced page, **Use Cases**, after the
 Sequence Diagrams. The
 ddd-crew tool behind each page, or the page's source if no ddd-crew tool
@@ -77,11 +80,13 @@ site.
 | [network-fulfillment](/contexts/network-fulfillment) | Supporting | `wes` | External network edge (anti-corruption layer) |
 | [warehouse-planning](/contexts/warehouse-planning) | Core | `wes` | WES — capacity planning |
 | [product-master](/contexts/product-master) | Supporting | `wms` | WMS — product master data (classification and physical profile; four live `ProductClassified` local-copy consumers) |
+| [inbound-receiving](/contexts/inbound-receiving) | Supporting | `wms` | WMS — everything before the first stow: ASN, dock appointment, receipt, discrepancies. Decided 2026-10-08, not built |
+| [slotting-optimization](/contexts/slotting-optimization) | Supporting | `wms` | WMS — which SKUs deserve a forward pick slot: velocity-ranked slot plans a human approves. Decided 2026-10-08, not built |
 
-`network-inventory-planning`, the fleet's twelfth domain context, has no
+`network-inventory-planning`, the fleet's fourteenth domain context, has no
 pages here yet.
 
-See [Strategic Design](/strategic-design) for how these twelve relate to
+See [Strategic Design](/strategic-design) for how these fourteen relate to
 each other at the fleet level, and the
 [DDD Starter Modelling Process](/strategic-design/ddd-starter-modelling-process)
 for which modelling step each page belongs to.

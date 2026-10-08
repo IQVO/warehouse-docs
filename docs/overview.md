@@ -9,14 +9,17 @@ slug: /overview
 # warehouse-systems documentation
 
 This site is the fleet-wide reference for the **warehouse-systems**
-ecosystem. The ecosystem is thirteen independently deployable Go services
+ecosystem. The ecosystem is fifteen independently deployable Go services
 with hexagonal architecture that together implement a warehouse fulfillment
-platform: twelve domain bounded contexts plus `warehouse-ops-agent`. Each
-service has its own REST and MCP surface. The twelve domain contexts own a
+platform: fourteen domain bounded contexts plus `warehouse-ops-agent`. Each
+service has its own REST and MCP surface. The fourteen domain contexts own a
 Postgres database and publish Kafka events. `warehouse-ops-agent` is the
 exception: a thin read-side agent with no database and no Kafka. This site
-documents eleven of the domain contexts and the agent;
+documents thirteen of the domain contexts and the agent;
 `network-inventory-planning` (created 2026-10-06) is not aggregated here yet.
+`inbound-receiving` and `slotting-optimization` (decided 2026-10-08) are
+registered here with business-context and canvas pages only; their
+generated API references are added once their contracts merge.
 
 No single repository's docs site can show the **strategic** picture: the
 context map, the core-domain classification, the shared ubiquitous language,
@@ -28,7 +31,7 @@ artifacts, links them together, and adds the fleet-level strategic layer.
 All source repositories live in the [IQVO](https://github.com/IQVO) GitHub
 organization.
 
-## The twelve contexts on this site
+## The fourteen contexts on this site
 
 | Context | Classification | CloudEvents subdomain |
 | --- | --- | --- |
@@ -44,8 +47,13 @@ organization.
 | [`facility-layout`](/contexts/facility-layout) | Generic | `wms` |
 | [`process-path-management`](/contexts/process-path-management) | Generic | `wes` |
 | [`product-master`](/contexts/product-master) | Supporting | `wms` |
+| [`inbound-receiving`](/contexts/inbound-receiving) | Supporting | `wms` |
+| [`slotting-optimization`](/contexts/slotting-optimization) | Supporting | `wms` |
 
-The newest context on this site, `product-master`, is the single source of
+The newest contexts on this site, `inbound-receiving` and
+`slotting-optimization` (decided 2026-10-08), cover what happens before the
+first stow (ASN, dock appointment, receipt, discrepancies) and which SKUs
+deserve a forward pick slot. `product-master`, before them, is the single source of
 truth for what a SKU is: its handling classification (taken over from
 `inventory-storage`) and its physical profile. `warehouse-planning` answers
 whether the warehouse can process the demand assigned to it. `network-fulfillment` is the
@@ -129,8 +137,8 @@ published site as an error box.
 
 ## Scope
 
-This site documents the **twelve backend contexts** listed above (eleven
-domain bounded contexts and `warehouse-ops-agent`). The fleet's twelfth
+This site documents the **fourteen backend contexts** listed above (thirteen
+domain bounded contexts and `warehouse-ops-agent`). The fleet's fourteenth
 domain context, `network-inventory-planning`, is not aggregated yet.
 The two frontend repositories (`warehouse-console`, `warehouse-ui-kit`) and
 the deployment repository (`warehouse-infra`) appear on context pages where
