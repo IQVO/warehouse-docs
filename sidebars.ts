@@ -32,6 +32,8 @@ const CONTEXTS = [
   'network-fulfillment',
   'warehouse-planning',
   'product-master',
+  'inbound-receiving',
+  'slotting-optimization',
 ];
 
 const CONTEXT_PAGES = [
@@ -68,8 +70,16 @@ const CONTEXT_EXTRA_PAGES: Record<string, string[]> = {
   'product-master': ['use-cases'],
 };
 
+// Contexts decided but not built yet list only the pages written for this
+// site, instead of the synced artifact pack their repositories do not have.
+// Add the full pack (and the async-api narrative) when the repositories ship it.
+const CONTEXT_PAGE_OVERRIDES: Record<string, string[]> = {
+  'inbound-receiving': ['business-context', 'bounded-context-canvas'],
+  'slotting-optimization': ['business-context', 'bounded-context-canvas'],
+};
+
 function contextCategory(ctx: string, hasAsyncNarrative: boolean) {
-  const base = [...CONTEXT_PAGES, ...(CONTEXT_EXTRA_PAGES[ctx] ?? [])];
+  const base = CONTEXT_PAGE_OVERRIDES[ctx] ?? [...CONTEXT_PAGES, ...(CONTEXT_EXTRA_PAGES[ctx] ?? [])];
   const pages = hasAsyncNarrative ? [...base, 'async-api'] : base;
   return {
     type: 'category' as const,
