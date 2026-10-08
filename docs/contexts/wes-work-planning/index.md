@@ -16,8 +16,11 @@ continuously** — waveless, one unit at a time, earliest-CPT-first — and
 performs **flow balancing** from live buffer telemetry so that every parcel
 makes its truck without the floor ever being starved or flooded.
 
-It sits downstream of three upstream event suppliers (`inventory-storage`,
-`workforce-management`, `order-management`), conforms to two Generic
+It sits downstream of five upstream event suppliers (`inventory-storage`,
+`workforce-management`, `order-management`, `network-inventory-planning`'s
+transfer work demand (ADR-0033), and `product-master`, whose
+`ProductClassified` it keeps as a local copy for release-time hazmat and
+fragile hints), conforms to two Generic
 contexts (`process-path-management`'s catalogue and `facility-layout`'s
 travel distances), closes a control loop with `fulfillment-execution`
 (`WorkReleased` out, `TaskCompleted` back), and reports remaining path

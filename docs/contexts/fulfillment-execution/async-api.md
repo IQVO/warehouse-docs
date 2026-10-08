@@ -22,6 +22,7 @@ fleet-wide, mandatory [Event Standard](/strategic-design/event-standard-cloudeve
 | Publish | `warehouse.fulfillment.events` | `TaskCompleted`, `TaskCPTMissed`, `PackageManifested` | `internal/adapters/outbound/kafka/publisher.go` |
 | Publish (internal) | `warehouse.fulfillment.analytics` | ten event types (all but `TaskCPTMissed` and the two Rebin events), consumed only by this service's `cmd/fulfillment-projector` | `internal/adapters/outbound/kafka/analytics_publisher.go` |
 | Consume (opt-in) | `warehouse.process-path-management.events` | process-path catalogue events | `internal/adapters/outbound/kafkacatalog` — only when `PATH_CATALOGUE_SOURCE=kafka` |
+| Consume (opt-in) | `warehouse.product-master.events` | `ProductClassified` only, into the `product_classification_copy` table read per scanned SKU at seal time for DOT segregation ([ADR-0039](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0039-product-classification-local-copy.md)) | `internal/adapters/inbound/kafka/product_classified_consumer.go`, `internal/adapters/outbound/productclassificationcopy` — only when `PRODUCT_CLASSIFICATION_MODE=kafka`, group `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`; set in the reference deployment. `http` (the former REST lookup to `inventory-storage`) fails the boot |
 
 Client library on both sides: `github.com/segmentio/kafka-go` (pure Go, no
 cgo). Broker list comes from `KAFKA_BROKERS`, default `localhost:9092` — the

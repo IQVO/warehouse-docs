@@ -120,4 +120,4 @@ directory).
   and [AsyncAPI](/api-reference/async/network-fulfillment), generated from
   the real `apis/openapi.yaml` and `apis/asyncapi.yaml`.
 - The fleet-wide [Context Map](/strategic-design/context-map) shows where
-  this context sits among the eleven backend contexts.
+  this context sits among the fleet's contexts.

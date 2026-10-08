@@ -24,8 +24,8 @@ reference (every message schema, in full), see
 | **Balancer** | `Hash` on the Kafka key (the reservation id), `AllowAutoTopicCreation: true` — one reservation's events land on one partition, so they stay ordered per reservation (inventory-storage ADR-0021); there is no per-SKU ordering |
 | **Broker** | `KAFKA_BROKERS`, default `localhost:9092` (shared broker at `~/warehouse-systems/docker-compose.kafka.yml`) |
 | **Selected by** | `EVENT_PUBLISHER=kafka` (default is `log`, so tests and local runs never need a broker). With Postgres, events go through a transactional outbox (`outbox_events`, ADR-0017) drained by a relay in `cmd/inventory` |
-| **Direction** | Publish on this topic. (Separately, this service consumes `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned` from `warehouse.facility.events` into its location-classification cache when `LOCATION_LOOKUP_MODE=kafka`, which the reference deployment sets; invalid messages go to `warehouse.facility.events.dlq` — see [Domain Events](/contexts/inventory-storage/domain-events), inventory-storage ADR-0013.) |
-| **Primary consumer** | `wes-work-planning`, projecting into its own `UsableInventoryObserved` read model, keyed by SKU (per `wes-work-planning`, the projection feeds no decision yet) |
+| **Direction** | Publish on this topic. (Separately, this service consumes `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned` from `warehouse.facility.events` into its location-classification cache when `LOCATION_LOOKUP_MODE=kafka`, which the reference deployment sets — invalid messages go to `warehouse.facility.events.dlq`, ADR-0013 — and `product-master`'s `ProductClassified` from `warehouse.product-master.events` into its `product_classifications` copy under `PRODUCT_MASTER_CONSUMER_GROUP`, also set in the reference deployment, ADR-0034. See [Domain Events](/contexts/inventory-storage/domain-events).) |
+| **Consumers** | `wes-work-planning`, projecting `StockReserved` and `ReservationRevoked` into its own `UsableInventoryObserved` read model, keyed by SKU (per `wes-work-planning`, the projection feeds no decision yet); `product-master`'s legacy importer, reading the legacy `ProductClassified` during the migration only; `network-inventory-planning`, reading the transfer replies (not documented on this site yet) |
 | **Default content type** | `application/cloudevents+json` |
 
 There is a second, separate topic, `warehouse.inventory.analytics`, carrying
@@ -36,16 +36,25 @@ the cross-context integration contract described on this page.
 
 ## What events are on the topic
 
-Only **two** of this context's eleven domain events are published on the
-integration topic: `StockReserved` and `ReservationRevoked`. The integration
-publisher's `Encode` returns nothing for every other event; seven of those
-reach only the internal analytics topic, and `LocationRecorded` and
-`ProductClassified` stay in-process. This is a
-deliberate, small public surface — the internal model can evolve freely
-because the wire contract only exposes two events, not all ten messages the
-AsyncAPI catalog documents (`ProductClassified` is not in the catalog at
-all). See [Domain Events](/contexts/inventory-storage/domain-events) for the
-complete catalog and which topic each of the other nine reaches, if any.
+The synced `apis/asyncapi.yaml` declares seven types on the integration
+topic:
+
+- `StockReserved` and `ReservationRevoked`, the reservation contract that
+  `wes-work-planning` projects (described below);
+- four transfer replies and destination facts (`TransferStockAllocated`,
+  `TransferStockAllocationRejected`, `TransferReceiptStaged`,
+  `TransferStockStowed`) for `network-inventory-planning` (ADR-0030,
+  ADR-0033);
+- the legacy `com.warehouse.wms.inventory-storage.product.ProductClassified`.
+  Since [ADR-0034](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0034-product-master-owns-classification.md)
+  `product-master` owns classification, `PUT /products/{sku}/classification`
+  answers `410` and no write path raises this event any more. Only the
+  one-shot `republish-product-classifications` backfill emits it, for
+  `product-master`'s legacy importer; it was run once on 2026-10-07. It is
+  retired at `product-master`'s migration stage E.
+
+See [Domain Events](/contexts/inventory-storage/domain-events) for the
+complete catalog and which topic each event reaches, if any.
 
 ## The envelope: CloudEvents 1.0 (mandatory)
 
@@ -184,9 +193,10 @@ sequenceDiagram
 ## Building another consumer
 
 1. Read `apis/asyncapi.yaml`, not this page — it is the linted contract.
-2. Only two events are on the integration topic; the document's other
-   messages reach only the internal analytics topic, and each says which
-   topics it reaches in its own description.
+2. Each message in the document says which topics it reaches in its own
+   description. Do not build on the legacy `ProductClassified`: it is
+   backfill-only and retiring. Read product classification from
+   `product-master`'s `warehouse.product-master.events` instead.
 3. Deduplicate on the event id; do not assume ordering.
 4. Treat the event stream as a projection — call `GET
    /inventory/{sku}/usable` for the authoritative answer.

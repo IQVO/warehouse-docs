@@ -17,7 +17,7 @@ standard"). Since ADR 0014, it also derives idle-gap / utilization
 read models — the between-task waits `TaskPerformance` scoring alone
 never measured — additively on the same event stream, and since ADR 0015 a
 standard may carry an optional, caller-supplied travel-time component. It
-is one of the fleet's eleven backend bounded contexts.
+is one of the fleet's twelve domain bounded contexts.
 
 :::info[One input, zero outbound calls]
 This context has exactly **one input**: it is a Kafka **Customer** of

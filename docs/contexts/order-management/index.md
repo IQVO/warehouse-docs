@@ -73,7 +73,12 @@ identity and becomes the upstream that supplies it to the others.
   past-tense events this context declares. Three of them
   (`OrderAllocated`, `OrderPartiallyAllocated` and `OrderRepromised`) go to
   the integration topic `warehouse.order-management.events`. The page also
-  covers the ten CloudEvents types it consumes from four sibling contexts.
+  covers the CloudEvents types it consumes from sibling contexts. On
+  `develop` it also consumes `product-master`'s `ProductClassified` into a
+  local `product_classification_copy`
+  ([ADR 0036](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0036-product-classification-local-copy.md);
+  `PRODUCT_CLASSIFICATION_MODE=kafka` in the reference deployment), which
+  the synced page does not list yet.
 - [Domain Message Flow](/contexts/order-management/domain-message-flow)
   ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):
   key scenarios as commands, events and queries.

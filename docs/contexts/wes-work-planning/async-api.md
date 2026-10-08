@@ -114,7 +114,9 @@ partition to one member and the other consumes nothing while reporting
 healthy.
 
 With `PATH_CATALOGUE_SOURCE=kafka` a fifth, separate consumer replays
-process-path-management's topic — see the last section below.
+process-path-management's topic, and with `PRODUCT_CLASSIFICATION_MODE=kafka`
+another one keeps the product classification copy — see the last two
+sections below.
 
 ### `warehouse.workforce.events` — `ShiftPlanCommitted`, from `workforce-management`
 
@@ -229,6 +231,25 @@ Startup blocks until the replay has caught up, then the consumer keeps
 following the topic live. It is a state rebuild, not an effect, so it does
 not use `processed_events`.
 
+### `warehouse.product-master.events` — `ProductClassified`, from `product-master`
+
+Consumed only when `PRODUCT_CLASSIFICATION_MODE=kafka`, under the stable
+consumer group `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` shared by every
+replica ([ADR-0035](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0035-product-classification-local-copy.md);
+`internal/adapters/inbound/kafka/product_classification_consumer.go`). It
+keeps one row per SKU in `product_classification_copy`, claiming the
+CloudEvents `id` and applying the classification in one transaction, and
+overwrites a stored row only when the incoming `version` is greater. Every
+other type on the topic is ignored; an invalid CloudEvent or payload is
+WARN-logged and skipped. `ReleaseNextWork` reads the copy to stamp
+`required_capabilities` (`hazmat`) and `fragile` on `WorkReleased`; nothing
+calls `inventory-storage` or `product-master` at release time. The default
+`permissive` mode reads no copy and adds no hint, and `http` (the former
+`GET /products/{sku}/classification` call to `inventory-storage`) fails the
+boot. The reference deployment sets `kafka`
+(`warehouse-infra` `terraform/locals.tf` `sync_edge_env`), and `cmd/mcp` reads
+the same copy read-only.
+
 ## Idempotency
 
 Kafka is at-least-once, so redelivery is normal, not exceptional. Every
@@ -265,6 +286,7 @@ at) (alreadyProcessed bool, err error)`.
 | `ShiftPlanCommitted` | the labour projection is **not** re-written |
 | `TaskCompleted` | `RecordCompletion` is **not** called a second time |
 | `OrderAllocated` / `OrderPartiallyAllocated` | `EnqueueWorkUnit` is **not** called a second time per line |
+| `ProductClassified` | the copy is **not** rewritten; an older `version` is a no-op even with a new `id` |
 
 The `TaskCompleted` case matters operationally beyond the dedup table
 itself: `WorkUnit.Complete` already rejects double-completion with
@@ -282,6 +304,8 @@ nobody reads.
 | `KAFKA_CONSUMER_GROUP` | `wes-work-planning` | Consumer group of the integration-event consumer; set a unique value for any second process on the shared broker. |
 | `EVENT_PUBLISHER` | `log` | `kafka` switches the outbound publisher; requires `KAFKA_BROKERS`. With `DATABASE_URL` also set, events go through the transactional outbox. |
 | `OUTBOX_RELAY_INTERVAL` | `1s` | How long the outbox relay sleeps between empty passes (outbox mode only). |
+| `PRODUCT_CLASSIFICATION_MODE` | `permissive` | `kafka` keeps the local copy of product-master's classification; `http` is rejected at boot (ADR-0035). |
+| `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` | *(none)* | Required with `kafka`: the stable consumer group of the classification copy. |
 | `PATH_CATALOGUE_SOURCE` | `file` | `kafka` replays `warehouse.process-path-management.events` into the catalogue; requires `KAFKA_BROKERS`. |
 
 ## Generated reference

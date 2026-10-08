@@ -10,7 +10,7 @@ slug: /contexts/warehouse-planning
 
 <span className="badge-core">Core Subdomain</span>
 
-**Warehouse Planning** is the fleet's eleventh backend bounded context and
+**Warehouse Planning** is one of the fleet's twelve domain bounded contexts and
 sits in the `wes` tier of the CloudEvents subdomain taxonomy. It answers one
 question: **can this warehouse process the demand assigned to it**, given its
 current labor, location, equipment, station, conveyor and buffer
