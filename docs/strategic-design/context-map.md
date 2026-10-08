@@ -180,9 +180,9 @@ flowchart LR
     %% builds them: INB -> WPL needs an inbound process path in warehouse-planning,
     %% SLOT -> WP needs a MOVE/REPLENISH task type (process-path-management,
     %% wes-work-planning, fulfillment-execution).
-    PM -.->|"Kafka ProductRegistered,<br/>local copy, in progress"| INB
-    FL -.->|"Kafka LocationSlot events,<br/>local copy, in progress"| INB
-    INB -.->|"Kafka ReceiptLineReceived,<br/>handover, in progress"| INV
+    PM -.->|"Kafka ProductRegistered,<br/>local copy, code merged, not deployed"| INB
+    FL -.->|"Kafka LocationSlot events,<br/>local copy, code merged, not deployed"| INB
+    INB -.->|"Kafka ReceiptLineReceived,<br/>handover, code merged, not deployed"| INV
     PM -.->|"Kafka ProductClassified, ProductDimensionsDeclared,<br/>ProductMeasured, in progress"| SLOT
     FL -.->|"Kafka ZoneRegistered,<br/>LocationSlot events, in progress"| SLOT
     OM -.->|"Kafka SiteSkuDemandChanged,<br/>in progress"| SLOT
@@ -266,9 +266,9 @@ Omitted from the diagram:
 | K19 | `network-fulfillment` → any subscriber | OHS + PL / — | `warehouse.network-fulfillment.events`: `networkorder.*` | **wired-but-unused**. Published only with `EVENT_PUBLISHER=kafka` (chart default `log`), and no consumer exists in the fleet | [NF](/contexts/network-fulfillment/context-map) |
 | K20 | `product-master` → `inventory-storage`, `order-management`, `wes-work-planning`, `fulfillment-execution` | PL / local copy per consumer (one row per SKU, applied only when the event `version` is newer) | `warehouse.product-master.events`: `ProductClassified` | **live** (deployed 2026-10-07). INV ADR 0034, consumer group `PRODUCT_MASTER_CONSUMER_GROUP` (`helm-values/inventory-storage.yaml`, `productMasterConsumerGroup`); OM ADR 0036, WP ADR 0035 and FE ADR 0039, `PRODUCT_CLASSIFICATION_MODE=kafka` with `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (OM: `helm-values/order-management.yaml`, `productClassification`; WP and FE: `sync_edge_env`). It replaced the classification lookups R2, R3 and R4 (product-master ADR 0003, stages C and D) | [PM](/contexts/product-master/context-map), [INV](/contexts/inventory-storage/context-map), [OM](/contexts/order-management/context-map), [WP](/contexts/wes-work-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
 | K21 | `inventory-storage` → `product-master` | CF, migration only | `warehouse.inventory.events`: `com.warehouse.wms.inventory-storage.product.ProductClassified`, read by product-master's legacy importer (`LEGACY_IMPORT_CONSUMER_GROUP`) | **live, migration only**. The reference deployment starts the importer (`helm-values/product-master.yaml`, `legacyImportConsumerGroup`). `inventory-storage` emits the legacy type only from its one-shot `republish-product-classifications` backfill, run once on 2026-10-07. Removed at stage E together with the importer (product-master ADR 0003) | [PM](/contexts/product-master/context-map) |
-| K22 | `product-master` → `inbound-receiving` | PL / local copy (one row per SKU: existence check for ASN lines) | `warehouse.product-master.events`: `ProductRegistered` | **absent-planned** (in progress). Consumer mode defaults to `permissive`, the cluster sets `kafka` once the service PR merges. Flip to **live** when `warehouse-infra` runs `inbound-receiving` in `kafka` mode | [inbound-receiving](/contexts/inbound-receiving/bounded-context-canvas) |
-| K23 | `facility-layout` → `inbound-receiving` | OHS + PL / ACL (local copy of dock doors) | `warehouse.facility.events`: `LocationSlotRegistered`, `LocationSlotDecommissioned` | **absent-planned** (in progress). Same flip rule as K22 | [inbound-receiving](/contexts/inbound-receiving/bounded-context-canvas) |
-| K24 | `inbound-receiving` → `inventory-storage` | PL; the receiving handover. inventory-storage is the Conformist and runs its existing `ReceiveStock` use case for condition `Good` | `warehouse.inbound-receiving.events`: `receipt.ReceiptLineReceived` | **absent-planned** (in progress, inventory-storage handover ADR). No synchronous call in either direction. Damaged units are not booked as stock in v1. Flip to **live** when the inventory-storage consumer is merged and the reference deployment sets its consumer group | [inbound-receiving](/contexts/inbound-receiving/bounded-context-canvas) |
+| K22 | `product-master` → `inbound-receiving` | PL / local copy (one row per SKU: existence check for ASN lines) | `warehouse.product-master.events`: `ProductRegistered` | **absent-planned** (code merged on `inbound-receiving` `develop`, not deployed). Consumer mode defaults to `permissive`, the cluster sets `kafka` once the service runs there. Flip to **live** when `warehouse-infra` runs `inbound-receiving` in `kafka` mode | [inbound-receiving](/contexts/inbound-receiving/bounded-context-canvas) |
+| K23 | `facility-layout` → `inbound-receiving` | OHS + PL / ACL (local copy of dock doors) | `warehouse.facility.events`: `LocationSlotRegistered`, `LocationSlotDecommissioned` | **absent-planned** (code merged, not deployed). Same flip rule as K22 | [inbound-receiving](/contexts/inbound-receiving/bounded-context-canvas) |
+| K24 | `inbound-receiving` → `inventory-storage` | PL; the receiving handover. inventory-storage is the Conformist and runs its existing `ReceiveStock` use case for condition `Good` | `warehouse.inbound-receiving.events`: `receipt.ReceiptLineReceived` | **absent-planned** (code merged on both sides: inventory-storage ADR 0037 and its `INBOUND_RECEIPT_CONSUMER_GROUP` consumer; not deployed). No synchronous call in either direction. Damaged units are not booked as stock in v1. Flip to **live** when the reference deployment runs `inbound-receiving` and sets the inventory-storage consumer group | [inbound-receiving](/contexts/inbound-receiving/bounded-context-canvas) |
 | K25 | `product-master` → `slotting-optimization` | PL / local copy (classification and effective physical profile per SKU) | `warehouse.product-master.events`: `ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured` | **absent-planned** (in progress). Same flip rule as K22 | [slotting-optimization](/contexts/slotting-optimization/bounded-context-canvas) |
 | K26 | `facility-layout` → `slotting-optimization` | OHS + PL / ACL (local copy of zones and slots) | `warehouse.facility.events`: `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | **absent-planned** (in progress). Same flip rule as K22 | [slotting-optimization](/contexts/slotting-optimization/bounded-context-canvas) |
 | K27 | `order-management` → `slotting-optimization` | PL / ACL (pick velocity from the demand feed) | `warehouse.order-management.events`: `siteskudemand.SiteSkuDemandChanged` | **absent-planned** (in progress). Same flip rule as K22 | [slotting-optimization](/contexts/slotting-optimization/bounded-context-canvas) |
@@ -293,10 +293,10 @@ Published types with no consumer, as stated by their owners:
 - `ProductRegistered`, `ProductDescriptionChanged`,
   `ProductDimensionsDeclared` and `ProductMeasured` on
   `warehouse.product-master.events` (published contract; no consumer yet.
-  Consumers for `ProductRegistered` (K22) and the two physical-profile
-  types (K25) are in progress);
+  Consumers for `ProductRegistered` (K22, code merged in inbound-receiving, not
+  deployed) and the two physical-profile types (K25, in progress));
 - every `warehouse.inbound-receiving.events` type except
-  `ReceiptLineReceived` (K24, in progress) and `DockAppointmentBooked` (K28,
+  `ReceiptLineReceived` (K24, code merged, not deployed) and `DockAppointmentBooked` (K28,
   planned, not built): `ASNRegistered`, `ASNCancelled`,
   `DockAppointmentCheckedIn`, `DockAppointmentCancelled`,
   `DockAppointmentCompleted`, `ReceiptOpened` and `ReceiptClosed`;
