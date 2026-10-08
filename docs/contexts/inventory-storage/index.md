@@ -10,7 +10,7 @@ description: The WMS-tier authoritative record of what stock is held where, and 
 <span className="badge-core">Core Subdomain</span> · WMS tier
 
 **Inventory & Storage** is the WMS-tier authoritative record of *what is held
-where, and what portion of it is usable*. It is one of the platform's twelve
+where, and what portion of it is usable*. It is one of the platform's fourteen
 domain bounded contexts, and it owns the "storing them under chaotic storage" clause
 of the platform's domain vision — the truth that everything downstream
 depends on.

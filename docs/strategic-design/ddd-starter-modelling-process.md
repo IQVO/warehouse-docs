@@ -15,7 +15,7 @@ jump between them, repeat them, and revisit earlier steps as they learn.
 
 This page uses the eight steps to index the site. For each step it gives
 a short description and names the artifact on this site that is the
-step's output for the twelve `warehouse-systems` contexts documented
+step's output for the fourteen `warehouse-systems` contexts documented
 here (`network-inventory-planning` is not aggregated yet).
 
 ```mermaid
@@ -51,7 +51,7 @@ Story Mapping.
 - [Domain Vision](/strategic-design/domain-vision): what the platform
   does, the end-to-end fulfillment flow it serves, and where it wins.
 - One **Business Context** page per bounded context, which describes the
-  problem the context solves in business language. All twelve are listed
+  problem the context solves in business language. All fourteen are listed
   in the [per-context table](#per-context-artifacts-by-step) below.
 
 ## 2. Discover
@@ -80,7 +80,7 @@ coupled parts that can be reasoned about and changed independently.
 - [Subdomain Classification](/strategic-design/subdomain-classification):
   each bounded context, the part of the domain it owns, and why the line
   is drawn there.
-- [Bounded Contexts](/contexts): the twelve resulting contexts, with their
+- [Bounded Contexts](/contexts): the fourteen resulting contexts, with their
   tier and CloudEvents subdomain (`wms` or `wes`).
 
 ## 4. Strategize
@@ -92,8 +92,8 @@ matters. ddd-crew's tool here is the
 
 **Output on this site:**
 
-- [Core Domain Chart](/strategic-design/core-domain-chart): all twelve
-  contexts on one chart.
+- [Core Domain Chart](/strategic-design/core-domain-chart): the twelve
+  contexts that have a chart of their own, on one chart.
 - One **Core Domain Chart** per context, synced from its repository,
   which gives that context's own position and evidence.
 
@@ -102,7 +102,7 @@ The resulting classification:
 | Classification | Bounded contexts |
 | --- | --- |
 | Core | `inventory-storage`, `wes-work-planning`, `fulfillment-execution`, `warehouse-planning` |
-| Supporting | `workforce-management`, `labor-performance`, `warehouse-ops-agent`, `network-fulfillment`, `product-master` |
+| Supporting | `workforce-management`, `labor-performance`, `warehouse-ops-agent`, `network-fulfillment`, `product-master`, `inbound-receiving`, `slotting-optimization` |
 | Generic | `facility-layout`, `process-path-management` |
 | Generic/Supporting | `order-management` |
 
@@ -193,6 +193,8 @@ them. ddd-crew's tool for the aggregate is the
 | `network-fulfillment` | [Business Context](/contexts/network-fulfillment/business-context) | [EventStorming](/contexts/network-fulfillment/eventstorming) | [Core Domain Chart](/contexts/network-fulfillment/core-domain-chart) | [Message Flow](/contexts/network-fulfillment/domain-message-flow), [Context Map](/contexts/network-fulfillment/context-map) | [Canvas](/contexts/network-fulfillment/bounded-context-canvas) | [Aggregate Canvas](/contexts/network-fulfillment/aggregate-design-canvas) |
 | `warehouse-planning` | [Business Context](/contexts/warehouse-planning/business-context) | [EventStorming](/contexts/warehouse-planning/eventstorming) | [Core Domain Chart](/contexts/warehouse-planning/core-domain-chart) | [Message Flow](/contexts/warehouse-planning/domain-message-flow), [Context Map](/contexts/warehouse-planning/context-map) | [Canvas](/contexts/warehouse-planning/bounded-context-canvas) | [Aggregate Canvas](/contexts/warehouse-planning/aggregate-design-canvas) |
 | `product-master` | [Business Context](/contexts/product-master/business-context) | [EventStorming](/contexts/product-master/eventstorming) | [Core Domain Chart](/contexts/product-master/core-domain-chart) | [Message Flow](/contexts/product-master/domain-message-flow), [Context Map](/contexts/product-master/context-map) | [Canvas](/contexts/product-master/bounded-context-canvas) | [Aggregate Canvas](/contexts/product-master/aggregate-design-canvas) |
+| `inbound-receiving` | [Business Context](/contexts/inbound-receiving/business-context) | not yet | not yet | not yet (edges K22 to K24 and K28 on the [Context Map](/strategic-design/context-map)) | [Canvas](/contexts/inbound-receiving/bounded-context-canvas) | not yet |
+| `slotting-optimization` | [Business Context](/contexts/slotting-optimization/business-context) | not yet | not yet | not yet (edges K25 to K27 and K29 on the [Context Map](/strategic-design/context-map)) | [Canvas](/contexts/slotting-optimization/bounded-context-canvas) | not yet |
 
 The Decompose step's output is fleet-level only, in
 [Subdomain Classification](/strategic-design/subdomain-classification).

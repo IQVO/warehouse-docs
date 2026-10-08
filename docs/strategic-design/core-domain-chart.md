@@ -47,7 +47,11 @@ mark these positions as judgements grounded in code evidence, not
 measurements. The four Core contexts sit close together, so some of their
 labels overlap; so do `product-master` and `network-fulfillment` in the
 Supporting quadrant. `network-inventory-planning` is not on this site yet,
-so it is not plotted.
+so it is not plotted. `inbound-receiving` and `slotting-optimization` are
+classified Supporting (see
+[Subdomain Classification](/strategic-design/subdomain-classification)) but
+have no Core Domain Chart of their own yet, so they are not plotted either:
+this page copies coordinates from context charts and invents none.
 
 ## Where each point comes from
 

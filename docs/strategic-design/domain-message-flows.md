@@ -2,7 +2,7 @@
 id: domain-message-flows
 title: Domain Message Flow Modelling
 sidebar_label: Domain Message Flows
-description: Commands, events and queries flowing between the twelve contexts documented on this site for the platform's key business scenarios, in ddd-crew Domain Message Flow notation, with the Kafka topic of every event.
+description: Commands, events and queries flowing between the fourteen contexts documented on this site for the platform's key business scenarios, in ddd-crew Domain Message Flow notation, with the Kafka topic of every event.
 ---
 
 # Domain Message Flow Modelling
@@ -58,13 +58,22 @@ context's own projector and are never read by a sibling.
 | `warehouse.warehouse-planning.events` | warehouse-planning | `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected` | order-management (`BottleneckDetected` is ignored) |
 | `warehouse.network-fulfillment.events` | network-fulfillment | none | no consumer (wired but unused) |
 | `warehouse.product-master.events` | product-master | `ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies) |
+| `warehouse.inbound-receiving.events` | inbound-receiving | `ReceiptLineReceived` | inventory-storage (in progress, not live) |
+| | | `DockAppointmentBooked` | none; warehouse-planning inbound-labor demand is planned, not built |
+| `warehouse.slotting-optimization.events` | slotting-optimization | `SlotPlanApproved` | none; MOVE work execution is planned, not built |
 
 Several published types have no sibling consumer today. These are
 `OrderRepromised`, nine of the eleven `warehouse.work-planning.events`
 types (for example `PathPlanDriftDetected` and `WorkUnitCompleted`),
-`BottleneckDetected`, every `warehouse.network-fulfillment.events` type and
-the four `warehouse.product-master.events` types other than
-`ProductClassified`.
+`BottleneckDetected`, every `warehouse.network-fulfillment.events` type, the
+four `warehouse.product-master.events` types other than
+`ProductClassified` (consumers of three are in progress: inbound-receiving
+for `ProductRegistered`, slotting-optimization for the two physical-profile
+types), every `warehouse.inbound-receiving.events` type except the
+in-progress `ReceiptLineReceived`, and every
+`warehouse.slotting-optimization.events` type. The rows for
+`inbound-receiving` and `slotting-optimization` are the decided contract
+(2026-10-08); no scenario below traverses them yet.
 They are listed as hotspots on
 [Big Picture EventStorming](/strategic-design/eventstorming-big-picture).
 `warehouse-ops-agent` has no Kafka I/O at all. It only issues `qry:`

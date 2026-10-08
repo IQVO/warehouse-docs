@@ -214,6 +214,8 @@ const config: Config = {
             {label: 'network-fulfillment', href: 'https://github.com/IQVO/network-fulfillment'},
             {label: 'warehouse-planning', href: 'https://github.com/IQVO/warehouse-planning'},
             {label: 'product-master', href: 'https://github.com/IQVO/product-master'},
+            {label: 'inbound-receiving', href: 'https://github.com/IQVO/inbound-receiving'},
+            {label: 'slotting-optimization', href: 'https://github.com/IQVO/slotting-optimization'},
           ],
         },
         {
