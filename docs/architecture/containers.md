@@ -12,11 +12,13 @@ A **container** here is C4's meaning of the word: a separately deployable or
 runnable unit, whether that is a Go process, a Postgres database or the
 broker. It is unrelated to Docker specifically.
 
-This site covers thirteen backend contexts. Twelve of them ship **four Go
+This site covers fifteen backend contexts. Twelve of them ship **four Go
 binaries and two databases** each, plus a Module Federation frontend remote,
 because the analytical read side is a separate process family from the
 operational one. The thirteenth, `warehouse-ops-agent`, is one binary with no
-database. Binaries are listed from each repository's `cmd/` on
+database. The two newest, `inbound-receiving` and
+`slotting-optimization` (decided 2026-10-08), have no deployed binaries yet
+and are not drawn in the views below. Binaries are listed from each repository's `cmd/` on
 `origin/develop`, and workloads from its Helm chart's `templates/`.
 
 ## The edge: two independent gateways

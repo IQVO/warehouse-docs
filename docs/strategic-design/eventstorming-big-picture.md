@@ -20,7 +20,11 @@ Every orange sticky is a real domain event: it appears in a synced
 `apis/<context>/asyncapi.yaml` or on that context's Domain Events page.
 Every hotspot is a gap that is already documented somewhere, and the
 [hotspot table](#hotspots-and-their-sources) cites the source for each one.
-Nothing on this page is a guess.
+Nothing on this page is a guess. The two newest contexts,
+`inbound-receiving` and `slotting-optimization`, are deliberately not drawn
+on the wall yet: `inbound-receiving` sits before the first stow and
+`slotting-optimization` outside the order-to-ship line, and their events are
+not in a synced `asyncapi.yaml` until their contracts merge.
 
 ## Legend
 
@@ -718,4 +722,4 @@ own design-level board, linked in the last row: facts from `facility-layout`,
 `order-management` and `warehouse-planning` feed a fail-closed snapshot, an operator
 approval starts a saga that reserves stock in `inventory-storage`, and the floor facts
 from `fulfillment-execution` carry it to the destination stow. Its hotspots are on
-that page and in the [Context Map](/strategic-design/context-map) (K22 to K28).
+that page and in the [Context Map](/strategic-design/context-map) (K30 to K36).

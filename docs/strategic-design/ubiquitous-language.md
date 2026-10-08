@@ -2,7 +2,7 @@
 id: ubiquitous-language
 title: Ubiquitous Language (Fleet Overview)
 sidebar_label: Ubiquitous Language
-description: How the vocabulary is organised across the thirteen backend contexts, which terms are genuinely shared, and which words mean different things in different contexts.
+description: How the vocabulary is organised across the fifteen backend contexts, which terms are genuinely shared, and which words mean different things in different contexts.
 ---
 
 # Ubiquitous Language: Fleet Overview
@@ -42,6 +42,8 @@ wins. For one alphabetical index across every context, see
 | `warehouse-planning` | ProcessCapacity, CapacityConstraint, CapacityWindow, WorkloadProfile, ProcessPath, StationStandard, CapacityPlan, Shortage, Bottleneck | [Ubiquitous Language](/contexts/warehouse-planning/ubiquitous-language) |
 | `product-master` | Product (master record), Classification, Handling tag, TemperatureClass, DOT hazard class, Physical profile, Declared, Measured, Effective, Discrepancy, Version | [Ubiquitous Language](/contexts/product-master/ubiquitous-language) |
 | `network-inventory-planning` | InterWarehouseTransfer, Proposal, ScoreBreakdown, PlanningSnapshot, SiteCapability, SiteSkuDemand, WorkDemand, Picked quantity, StuckTransfer, RebalanceRun | [Ubiquitous Language](/contexts/network-inventory-planning/ubiquitous-language) |
+| `inbound-receiving` | ASN, Dock appointment, Receipt, Receipt line, Condition (Good or Damaged), Discrepancy (Short, Over, Damaged), Dock door | [Business Context](/contexts/inbound-receiving/business-context) (no separate glossary page yet) |
+| `slotting-optimization` | Slot plan, Forward-pick slot, Pick velocity, ABC class, Stickiness, Policy (`abc-velocity-v1`), Assignment, Move (Assign, Relocate, Vacate) | [Business Context](/contexts/slotting-optimization/business-context) (no separate glossary page yet) |
 
 ## Shared terms
 
@@ -65,6 +67,10 @@ no Shared Kernel".
 | **Classification** | A SKU's handling classification: handling tags, TemperatureClass and DOT hazard class, published as one full-state `ProductClassified`. `classification_source` is `native` (authored in product-master) or `legacy-import` (imported from inventory-storage during the migration). | `product-master`, since product-master ADR 0001 and ADR 0003 (it was inventory-storage's `ProductClassification`) | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies, live in the reference deployment) |
 | **Physical profile** | One unit's size and weight, in whole millimetres and grams. **Declared**: what the vendor or steward says. **Measured**: the latest reading from a dimensioning device or a manual measurement, with `measuredAt`; an older reading is rejected. **Effective**: measured if present, else declared, else none; consumers act only on effective. **Discrepancy**: true when measured volume or weight differs from declared by more than 10 % of the declared value; information for stewards, never a rejection. | `product-master` (ADR 0002) | no event consumer yet; read over MCP by warehouse-ops-agent's `find_master_data_gaps` and summarised by product-master's own master data quality report |
 | **CloudEvents `id`** | The dedupe key for every consumed event. It stays stable across outbox redelivery. labor-performance calls it `KafkaEventId`. | every producer | every consumer |
+| **ASN** | Advance ship notice: a supplier's declaration of what is arriving, keyed by `asn_number`, with lines of `sku` and `expected_qty`. The expectation a receipt is counted against. Decided 2026-10-08, in progress. | `inbound-receiving` | no consumer yet (`ASNRegistered` and `ASNCancelled` are a published contract) |
+| **Discrepancy** | At receipt close, a line whose count differs from the ASN: **Short** (fewer than expected), **Over** (more than expected) or **Damaged** (damaged units). Carried on `ReceiptClosed` as `kind`, `expected_qty`, `received_qty` and `damaged_qty`. In `product-master` the same word means something else (measured versus declared dimensions); see below. | `inbound-receiving` | no consumer yet |
+| **Receipt condition** | `Good` or `Damaged` on `ReceiptLineReceived`. Only `Good` units become receivable stock in `inventory-storage`; damaged units stay on the receipt and quarantine is a later ADR. | `inbound-receiving` | `inventory-storage` (in progress) |
+| **Forward-pick slot** | A storage-role, active slot in a forward zone (`FORWARD_ZONE_CODES`, default `FWD`) that holds one SKU for picking. The approved SKU-to-slot map is published on `SlotPlanApproved`. Decided 2026-10-08, in progress. | `slotting-optimization` | planned: MOVE work execution (not built), `warehouse-ops-agent` and the console read it |
 
 ## Same word, different model
 
@@ -166,6 +172,14 @@ it to a different subject:
 | `order-management` | Remaining path capacity feeds the promise. Planned capacity from warehouse-planning only annotates the order (ADR 0031). |
 | `network-fulfillment` | **Throughput feasible**: remaining capacity summed over the paths eligible for the next cutoff. |
 | `network-inventory-planning` | Never computes capacity. It reads `warehouse-planning`'s published `capacity_over_window` per site and compares it with that site's in-window demand to get **headroom** (negative means short). |
+
+### "Discrepancy"
+
+| Context | What a "discrepancy" is |
+| --- | --- |
+| `inbound-receiving` | A **count difference at receipt close**: `Short`, `Over` or `Damaged`, per ASN line, listed on `ReceiptClosed`. It is a fact about a delivery. |
+| `product-master` | A **flag on a SKU's physical profile**: true when measured volume or weight differs from declared by more than 10 %. It is a fact about master data, and it never rejects a measurement. |
+| `inventory-storage` | Cycle-count variances are recorded against stock; they are not the same record as a receipt discrepancy, and the two are never merged. |
 
 ### "Classification"
 

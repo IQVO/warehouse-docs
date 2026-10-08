@@ -2,7 +2,7 @@
 id: subdomain-classification
 title: Subdomain Classification
 sidebar_label: Subdomain Classification
-description: Core, Supporting, or Generic — the thirteen contexts documented on this site, with the CloudEvents subdomain segment each one publishes under and the justification each context's own Bounded Context Canvas and Core Domain Chart give.
+description: Core, Supporting, or Generic — the fifteen contexts documented on this site, with the CloudEvents subdomain segment each one publishes under and the justification each context's own Bounded Context Canvas and Core Domain Chart give.
 ---
 
 # Subdomain Classification
@@ -10,11 +10,14 @@ description: Core, Supporting, or Generic — the thirteen contexts documented o
 Domain-Driven Design splits a domain into **Core**, **Supporting** and
 **Generic** subdomains by how much competitive advantage each one gives. Size,
 difficulty and how interesting the code is do not decide it. The table below
-gives the fleet verdict for the thirteen contexts documented on this site
+gives the fleet verdict for the fifteen contexts documented on this site
 (every backend service in the fleet). Each verdict matches
 the **Strategic Classification** section of that context's own
 [Bounded Context Canvas](/contexts) and its point on its own Core Domain
 Chart. The fleet-wide plot is on [Core Domain Chart](/strategic-design/core-domain-chart).
+The two newest rows, `inbound-receiving` and `slotting-optimization`
+(decided 2026-10-08), have a Bounded Context Canvas written from the
+decision log but no Core Domain Chart yet.
 
 The **CloudEvents subdomain** column is the `<subdomain>` segment of every
 event `type` the context publishes:
@@ -38,10 +41,12 @@ classification. For example, `facility-layout` is `wms` and Generic, while
 | `warehouse-ops-agent` | <span class="badge-supporting">Supporting</span> | `wes` (it publishes no events) | Cost reduction / operator productivity | Custom-built correlation policy. Product BFF shape | It correlates facts other contexts own and only recommends, with zero write tools. Caveat from its own canvas: it owns no aggregate, so it is not a bounded context in the aggregate-and-invariant sense. The fleet map still files it as Supporting. [Canvas](/contexts/warehouse-ops-agent/bounded-context-canvas), [chart](/contexts/warehouse-ops-agent/core-domain-chart) |
 | `network-fulfillment` | <span class="badge-supporting">Supporting</span> | `wes` | Revenue-channel enabler | Custom-built ACL and acknowledgement protocol. `CapabilityOffer` is genesis → custom | It lets the building's capability be sold through an external network, but the knowledge it uses is owned elsewhere: feasibility is asked of `order-management`, never recomputed. It is Conformist to the network and an Anti-Corruption Layer for the fleet (its ADR 0001). [Canvas](/contexts/network-fulfillment/bounded-context-canvas), [chart](/contexts/network-fulfillment/core-domain-chart) |
 | `product-master` | <span class="badge-supporting">Supporting</span> | `wms` | Compliance and risk reduction | Custom-built (genesis) | It keeps hazmat, temperature and fragile handling correct in every downstream flow, but nobody chooses the warehouse for how it records SKU master data: "necessary for every warehouse flow and specific to this warehouse's handling rules, but it is not where the business differentiates" (its ADR 0001). One aggregate, few rules. It took classification over from `inventory-storage` (ADR 0003). [Canvas](/contexts/product-master/bounded-context-canvas), [chart](/contexts/product-master/core-domain-chart) |
+| `inbound-receiving` | <span class="badge-supporting">Supporting</span> | `wms` | Cost reduction / compliance (accurate receipt and discrepancy record) | Custom-built (genesis) | Not generic, because the ASN, dock-appointment and discrepancy rules differ per retailer. Not Core, because nobody chooses a warehouse for how it records a receipt, and the ASN, appointment and discrepancy rules are replaceable policy objects (decision 3 of the 2026-10-08 plan). [Canvas](/contexts/inbound-receiving/bounded-context-canvas) |
+| `slotting-optimization` | <span class="badge-supporting">Supporting</span> | `wms` | Cost reduction (pick travel and labor) | Custom-built (genesis) | Not generic, because slotting policy differs per retailer. Not Core, because the competitive core stays the WES conductor, and the v1 policy `abc-velocity-v1` is a deterministic, replaceable policy behind a port (decisions 3 and 7 of the 2026-10-08 plan). [Canvas](/contexts/slotting-optimization/bounded-context-canvas) |
 | `facility-layout` | <span class="badge-generic">Generic</span> | `wms` | Compliance / enabler | Product, heading toward commodity | The location hierarchy is the industry's WMS convention, adopted rather than invented, and location roles mirror commercial WMS location masters. It has to be correct, not clever. Its complexity is real (eight aggregate roots and a travel graph), but that complexity serves correctness, not differentiation. [Canvas](/contexts/facility-layout/bounded-context-canvas), [chart](/contexts/facility-layout/core-domain-chart) |
 | `process-path-management` | <span class="badge-generic">Generic</span> | `wes` | Compliance / enabler | Custom-built, heading towards product/commodity | A process-path catalogue is well understood and does not differentiate. It declares what a path is and decides nothing about dispatch, routing or assignment. It is extracted because several contexts need the same definition and none of them is its natural owner (its ADR 0001). [Canvas](/contexts/process-path-management/bounded-context-canvas), [chart](/contexts/process-path-management/core-domain-chart) |
 
-Count: five Core, five Supporting, two Generic, and one Generic/Supporting.
+Count: five Core, seven Supporting, two Generic, and one Generic/Supporting.
 
 ## The "extract once, don't duplicate" pattern
 

@@ -8,7 +8,7 @@ description: UML class diagrams of the aggregates, entities and value objects in
 # Domain Model
 
 The fleet-level view of what lives under `internal/domain/**` in each of the
-thirteen contexts documented on this site: which aggregate roots each one owns, the invariant
+fifteen contexts documented on this site: which aggregate roots each one owns, the invariant
 that makes each one a consistency boundary, and how aggregates in different
 contexts refer to each other.
 
@@ -35,7 +35,10 @@ in the outbound Postgres adapter.
 ## The fleet at a glance
 
 35 aggregate roots across twelve contexts. The thirteenth, `warehouse-ops-agent`,
-owns none, and that is a design decision. Counts are the per-aggregate
+owns none, and that is a design decision. The two newest contexts decided on
+2026-10-08 are not counted because nothing is built yet: `inbound-receiving`
+plans three aggregates (`Asn`, `DockAppointment`, `Receipt`) and
+`slotting-optimization` plans one (`SlotPlan`). Counts are the per-aggregate
 sections of each context's Aggregate Design Canvas, cross-checked against the
 `<<AggregateRoot>>` classes in its class diagram.
 

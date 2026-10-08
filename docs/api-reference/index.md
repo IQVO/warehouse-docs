@@ -53,8 +53,12 @@ the topic. **Sub** means it reads another context's topic.
 | `product-master` | `apis/product-master/openapi.yaml` (v1.0.0) | 12 (incl. the two `product-reports` paths) | Pub `warehouse.product-master.events` (5), Pub `warehouse.product-master.analytics` (5); Sub `warehouse.inventory.events` (1, migration only, product-master ADR 0003) | [REST](/api-reference/rest/product-master/product-master-api) · [Async](/api-reference/async/product-master) |
 | `network-inventory-planning` | `apis/network-inventory-planning/openapi.yaml` (v1.0.0) | 12 (incl. the five `reports` paths served by `nip-reports` on `:8092`) | Pub `warehouse.network-inventory-planning.events` (3), Pub `warehouse.network-inventory-planning.analytics` (3); Sub `warehouse.facility.events` (1), Sub `warehouse.order-management.events` (1), Sub `warehouse.warehouse-planning.events` (1), Sub `warehouse.inventory.events` (4), Sub `warehouse.fulfillment.events` (3) | [REST](/api-reference/rest/network-inventory-planning/network-inventory-planning-api) · [Async](/api-reference/async/network-inventory-planning) |
 
-Twelve contexts publish an `apis/asyncapi.yaml`; only `warehouse-ops-agent`
-has none. The counts for `order-management`, `inventory-storage`,
+Twelve contexts publish an `apis/asyncapi.yaml`; `warehouse-ops-agent` has
+none, and `inbound-receiving` and `slotting-optimization` have no spec
+synced yet (their contracts are pinned in the
+[Event Standard](/strategic-design/event-standard-cloudevents) catalogue and
+get an `apis/<ctx>/` entry and generated pages once the contract PRs merge).
+The counts for `order-management`, `inventory-storage`,
 `wes-work-planning`, `fulfillment-execution` and `product-master` were
 re-read from the specs synced on 2026-10-07; `network-inventory-planning` was
 counted from the specs synced when it was onboarded. Not every spec lists the topics

@@ -49,6 +49,10 @@ measurements. The five Core contexts sit close together, so some of their
 labels overlap; so do `product-master` and `network-fulfillment` in the
 Supporting quadrant. `network-inventory-planning` has no pack of its own yet,
 so its point is the one on its page here, authored from its code and ADR 0001.
+`inbound-receiving` and `slotting-optimization` are classified Supporting (see
+[Subdomain Classification](/strategic-design/subdomain-classification)) but
+have no Core Domain Chart of their own yet, so they are not plotted:
+this page copies coordinates from context charts and invents none.
 
 ## Where each point comes from
 

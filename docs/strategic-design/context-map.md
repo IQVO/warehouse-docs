@@ -2,20 +2,26 @@
 id: context-map
 title: Context Map
 sidebar_label: Context Map
-description: Fleet-wide ddd-crew context map of the thirteen backend contexts documented on this site — every edge with upstream/downstream, context-mapping pattern, technology and wiring status (live, wired-but-unused, absent-planned), reconciled against each context's own context map and code.
+description: Fleet-wide ddd-crew context map of the fifteen contexts documented on this site — every edge with upstream/downstream, context-mapping pattern, technology and wiring status (live, wired-but-unused, absent-planned), reconciled against each context's own context map and code.
 ---
 
 # Context Map
 
 This is the fleet-wide [ddd-crew Context Map](https://github.com/ddd-crew/context-mapping)
-of the thirteen contexts documented on this site: twelve domain bounded
+of the fifteen contexts documented on this site: fourteen domain bounded
 contexts plus `warehouse-ops-agent`, which is every backend service in the
-fleet. The newest, `network-inventory-planning` (NIP), plans and orchestrates
-inter-warehouse transfers; its edges are K22 to K28 and A13 below. `product-master`
-and its four `ProductClassified` consumers (K20) run in the reference deployment.
-Each context's repository has its own context map, synced to this site and grounded
-in that repo's code, except NIP's, which was authored here because its repository
-has no pack yet. This page
+fleet. `product-master`, decided on 2026-10-06, and its four `ProductClassified`
+consumers are merged and run in the reference deployment (K20, deployed
+2026-10-07). `inbound-receiving` and `slotting-optimization`, decided on
+2026-10-08, are the fourth and fifth `wms` contexts. Both are new: every edge
+that touches them below is **absent-planned** (in progress, or planned and not
+built), not live, and each is flipped to live or wired when its service PR
+merges and the reference deployment switches it on.
+`network-inventory-planning` (NIP), the newest context with code behind it,
+plans and orchestrates inter-warehouse transfers; its edges are K30 to K36 and
+A15 below. Each context's repository has its own context map, synced to this
+site and grounded in that repo's code, except NIP's, which was authored here
+because its repository has no pack yet. This page
 puts those maps together. Where two contexts' maps describe the same edge
 differently, this page checked the code and the reference deployment
 (`warehouse-infra` on `develop`) and records the difference under
@@ -34,7 +40,10 @@ Per-context maps (the source for every row below):
 [network-fulfillment](/contexts/network-fulfillment/context-map) ·
 [warehouse-planning](/contexts/warehouse-planning/context-map) ·
 [product-master](/contexts/product-master/context-map) ·
-[network-inventory-planning](/contexts/network-inventory-planning/context-map)
+[network-inventory-planning](/contexts/network-inventory-planning/context-map) ·
+[inbound-receiving](/contexts/inbound-receiving) and
+[slotting-optimization](/contexts/slotting-optimization) (no per-context
+map page yet; their edges are in the table below and on their canvases)
 
 **Pattern legend:** **U/D** upstream/downstream · **OHS** Open Host Service ·
 **PL** Published Language · **CF** Conformist · **ACL** Anti-Corruption Layer ·
@@ -81,6 +90,8 @@ flowchart LR
         FL["facility-layout<br/>Generic"]
         INV["inventory-storage<br/>Core"]
         PM["product-master<br/>Supporting"]
+        INB["inbound-receiving<br/>Supporting"]
+        SLOT["slotting-optimization<br/>Supporting"]
     end
 
     subgraph WES["wes subdomain"]
@@ -158,6 +169,26 @@ flowchart LR
     PM ==>|"Kafka ProductClassified,<br/>local copy"| FE
     INV -.->|"Kafka legacy ProductClassified,<br/>Conformist, migration only"| PM
 
+    %% inbound-receiving and slotting-optimization (decided 2026-10-08). None of
+    %% these edges is built. Flip an edge to a thick arrow (==>) only when the
+    %% consumer's service PR has merged AND the reference deployment
+    %% (warehouse-infra) runs it in kafka mode:
+    %%  - PM -> INB, FL -> INB: INB local copies (INB service PR)
+    %%  - INB -> INV: ReceiptLineReceived handover (inventory-storage handover ADR)
+    %%  - PM, FL, OM -> SLOT: SLOT local copies (SLOT service PR)
+    %% The two "not built" edges stay dotted until a later ADR in the consumer
+    %% builds them: INB -> WPL needs an inbound process path in warehouse-planning,
+    %% SLOT -> WP needs a MOVE/REPLENISH task type (process-path-management,
+    %% wes-work-planning, fulfillment-execution).
+    PM -.->|"Kafka ProductRegistered,<br/>local copy, in progress"| INB
+    FL -.->|"Kafka LocationSlot events,<br/>local copy, in progress"| INB
+    INB -.->|"Kafka ReceiptLineReceived,<br/>handover, in progress"| INV
+    PM -.->|"Kafka ProductClassified, ProductDimensionsDeclared,<br/>ProductMeasured, in progress"| SLOT
+    FL -.->|"Kafka ZoneRegistered,<br/>LocationSlot events, in progress"| SLOT
+    OM -.->|"Kafka SiteSkuDemandChanged,<br/>in progress"| SLOT
+    INB -.->|"Kafka DockAppointmentBooked,<br/>planned, not built"| WPL
+    SLOT -.->|"Kafka SlotPlanApproved,<br/>MOVE work, planned, not built"| WP
+
     %% network-inventory-planning (ADRs 0002, 0003, 0005, 0008, 0010). Edges are
     %% configured in warehouse-infra develop (terraform/network-inventory-planning.tf,
     %% helm-values/inventory-storage.yaml). The dispatch leg of NIP -> WP needs the
@@ -176,7 +207,7 @@ flowchart LR
     classDef gen fill:#475569,stroke:#94a3b8,color:#fff;
     classDef ext fill:#f1f5f9,stroke:#64748b,color:#334155,stroke-dasharray: 5 5;
     class INV,WP,FE,WPL,NIP core;
-    class OM,WFM,LP,NF,OA,PM supp;
+    class OM,WFM,LP,NF,OA,PM,INB,SLOT supp;
     class FL,PPM gen;
     class RN,WCS,CON,NOSUB ext;
 ```
@@ -188,8 +219,11 @@ Dotted arrows are wired-but-unused or absent-planned, as the table states.
 The four thick `product-master` edges are K20; the dotted
 `inventory-storage` → `product-master` edge is the migration-only legacy
 import (K21). The thin `product-master` → `warehouse-ops-agent` edge is A12.
-The seven thick `network-inventory-planning` edges are K22 to K28; the thin
-one to the agent is A13. The crossed edge is deliberately absent. `order-management` is coloured with
+The seven thick `network-inventory-planning` edges are K30 to K36; the thin
+one to the agent is A15. The eight dotted `inbound-receiving` and
+`slotting-optimization` edges (K22 to K29) are all absent-planned: six are in
+progress in service PRs and two are planned with no build behind them.
+The crossed edge is deliberately absent. `order-management` is coloured with
 the Supporting contexts because it is classified Generic/Supporting (see
 [Subdomain Classification](/strategic-design/subdomain-classification)).
 Separate Ways relationships are not drawn. They are listed in
@@ -232,13 +266,21 @@ Omitted from the diagram:
 | K19 | `network-fulfillment` → any subscriber | OHS + PL / — | `warehouse.network-fulfillment.events`: `networkorder.*` | **wired-but-unused**. Published only with `EVENT_PUBLISHER=kafka` (chart default `log`), and no consumer exists in the fleet | [NF](/contexts/network-fulfillment/context-map) |
 | K20 | `product-master` → `inventory-storage`, `order-management`, `wes-work-planning`, `fulfillment-execution` | PL / local copy per consumer (one row per SKU, applied only when the event `version` is newer) | `warehouse.product-master.events`: `ProductClassified` | **live** (deployed 2026-10-07). INV ADR 0034, consumer group `PRODUCT_MASTER_CONSUMER_GROUP` (`helm-values/inventory-storage.yaml`, `productMasterConsumerGroup`); OM ADR 0036, WP ADR 0035 and FE ADR 0039, `PRODUCT_CLASSIFICATION_MODE=kafka` with `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (OM: `helm-values/order-management.yaml`, `productClassification`; WP and FE: `sync_edge_env`). It replaced the classification lookups R2, R3 and R4 (product-master ADR 0003, stages C and D) | [PM](/contexts/product-master/context-map), [INV](/contexts/inventory-storage/context-map), [OM](/contexts/order-management/context-map), [WP](/contexts/wes-work-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
 | K21 | `inventory-storage` → `product-master` | CF, migration only | `warehouse.inventory.events`: `com.warehouse.wms.inventory-storage.product.ProductClassified`, read by product-master's legacy importer (`LEGACY_IMPORT_CONSUMER_GROUP`) | **live, migration only**. The reference deployment starts the importer (`helm-values/product-master.yaml`, `legacyImportConsumerGroup`). `inventory-storage` emits the legacy type only from its one-shot `republish-product-classifications` backfill, run once on 2026-10-07. Removed at stage E together with the importer (product-master ADR 0003) | [PM](/contexts/product-master/context-map) |
-| K22 | `facility-layout` → `network-inventory-planning` | OHS + PL / ACL (a last-writer-wins `site_capability` row) | `warehouse.facility.events`: `SiteCapabilityChanged` | **live**. Opt-in (`SITE_CAPABILITY_CONSUMER_GROUP`, NIP ADR 0002), and the reference deployment sets it (`terraform/network-inventory-planning.tf`). `facility-layout`'s own code names no consumer | [NIP](/contexts/network-inventory-planning/context-map) |
-| K23 | `order-management` → `network-inventory-planning` | OHS + PL / ACL (a `site_sku_demand` row per order line, `REMOVED` tombstones it) | `warehouse.order-management.events`: `SiteSkuDemandChanged` | **live**. Opt-in (`SITE_SKU_DEMAND_CONSUMER_GROUP`), set in the reference deployment. `order-management`'s own code names no consumer | [NIP](/contexts/network-inventory-planning/context-map) |
-| K24 | `warehouse-planning` → `network-inventory-planning` | OHS + PL / ACL (a `published_capacity_plan` row per plan, legacy events without the additive `site_id` excluded) | `warehouse.warehouse-planning.events`: `CapacityPlanPublished` | **live**. Opt-in (`CAPACITY_PLAN_CONSUMER_GROUP`), set in the reference deployment | [NIP](/contexts/network-inventory-planning/context-map), [WPL](/contexts/warehouse-planning/context-map) |
-| K25 | `network-inventory-planning` → `inventory-storage` | C/S: the command carries exactly the five fields inventory-storage's consumer defines | `warehouse.network-inventory-planning.events`: `TransferAllocationRequested`, key `transfer_line_id` | **live**. Consumer opt-in (`TRANSFER_ALLOCATION_CONSUMER_MODE=kafka`, default `off`), set in `helm-values/inventory-storage.yaml`; INV ADR 0030 | [NIP](/contexts/network-inventory-planning/context-map), [INV](/contexts/inventory-storage/context-map) |
-| K26 | `inventory-storage` → `network-inventory-planning` | OHS + PL / ACL (closed rejection vocabulary, hand-mirrored payloads) | `warehouse.inventory.events`: `TransferStockAllocated`, `TransferStockAllocationRejected`, `TransferReceiptStaged`, `TransferStockStowed` | **live**. Opt-in (`TRANSFER_REPLY_CONSUMER_GROUP`), set in the reference deployment. Drives `ALLOCATING` to `ALLOCATED` or `UNFULFILLABLE`, then `ARRIVED` and `RECEIVED` | [NIP](/contexts/network-inventory-planning/context-map), [INV](/contexts/inventory-storage/context-map) |
-| K27 | `network-inventory-planning` → `wes-work-planning` | C/S: the payload mirrors WES's consumed contract | `warehouse.network-inventory-planning.events`: `WorkDemandReleased` (pick and dispatch legs) | **live** on the consumer side: the fifth topic of `wes-work-planning`'s always-on consumer, with a `.dlq` per topic (WP ADR 0033). The pick path is `pick`; the dispatch path `transfer-dispatch` is **not seeded** and must be created in `process-path-management` first (comment in `terraform/network-inventory-planning.tf`), so until then a dispatch demand is dead-lettered | [NIP](/contexts/network-inventory-planning/context-map), [WP](/contexts/wes-work-planning/context-map) |
-| K28 | `fulfillment-execution` → `network-inventory-planning` | OHS + PL / ACL (hand-mirrored `TransferFactData`) | `warehouse.fulfillment.events`: `TransferPicked`, `TransferDispatched`, `TransferArrived` (reserved, scan-driven receiving can bypass it) | **live**. Opt-in (`TRANSFER_FACT_CONSUMER_GROUP`), set in the reference deployment | [NIP](/contexts/network-inventory-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
+| K22 | `product-master` → `inbound-receiving` | PL / local copy (one row per SKU: existence check for ASN lines) | `warehouse.product-master.events`: `ProductRegistered` | **absent-planned** (in progress). Consumer mode defaults to `permissive`, the cluster sets `kafka` once the service PR merges. Flip to **live** when `warehouse-infra` runs `inbound-receiving` in `kafka` mode | [inbound-receiving](/contexts/inbound-receiving/bounded-context-canvas) |
+| K23 | `facility-layout` → `inbound-receiving` | OHS + PL / ACL (local copy of dock doors) | `warehouse.facility.events`: `LocationSlotRegistered`, `LocationSlotDecommissioned` | **absent-planned** (in progress). Same flip rule as K22 | [inbound-receiving](/contexts/inbound-receiving/bounded-context-canvas) |
+| K24 | `inbound-receiving` → `inventory-storage` | PL; the receiving handover. inventory-storage is the Conformist and runs its existing `ReceiveStock` use case for condition `Good` | `warehouse.inbound-receiving.events`: `receipt.ReceiptLineReceived` | **absent-planned** (in progress, inventory-storage handover ADR). No synchronous call in either direction. Damaged units are not booked as stock in v1. Flip to **live** when the inventory-storage consumer is merged and the reference deployment sets its consumer group | [inbound-receiving](/contexts/inbound-receiving/bounded-context-canvas) |
+| K25 | `product-master` → `slotting-optimization` | PL / local copy (classification and effective physical profile per SKU) | `warehouse.product-master.events`: `ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured` | **absent-planned** (in progress). Same flip rule as K22 | [slotting-optimization](/contexts/slotting-optimization/bounded-context-canvas) |
+| K26 | `facility-layout` → `slotting-optimization` | OHS + PL / ACL (local copy of zones and slots) | `warehouse.facility.events`: `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | **absent-planned** (in progress). Same flip rule as K22 | [slotting-optimization](/contexts/slotting-optimization/bounded-context-canvas) |
+| K27 | `order-management` → `slotting-optimization` | PL / ACL (pick velocity from the demand feed) | `warehouse.order-management.events`: `siteskudemand.SiteSkuDemandChanged` | **absent-planned** (in progress). Same flip rule as K22 | [slotting-optimization](/contexts/slotting-optimization/bounded-context-canvas) |
+| K28 | `inbound-receiving` → `warehouse-planning` | PL, inbound-labor demand | `warehouse.inbound-receiving.events`: `dockappointment.DockAppointmentBooked` | **absent-planned, not built**. `warehouse-planning`'s `CapacityPlan` has no inbound process path; adding one is a separate ADR there. Nothing consumes the event today | [inbound-receiving](/contexts/inbound-receiving/bounded-context-canvas) |
+| K29 | `slotting-optimization` → `wes-work-planning` | PL, MOVE work execution | `warehouse.slotting-optimization.events`: `slotplan.SlotPlanApproved` (carries the full forward-pick map and the moves, so a consumer needs no lookup) | **absent-planned, not built**. MOVE and REPLENISH work through the `process-path-management` catalogue, `wes-work-planning` and `fulfillment-execution` is its own ADR-gated phase. Nothing consumes the event today | [slotting-optimization](/contexts/slotting-optimization/bounded-context-canvas) |
+| K30 | `facility-layout` → `network-inventory-planning` | OHS + PL / ACL (a last-writer-wins `site_capability` row) | `warehouse.facility.events`: `SiteCapabilityChanged` | **live**. Opt-in (`SITE_CAPABILITY_CONSUMER_GROUP`, NIP ADR 0002), and the reference deployment sets it (`terraform/network-inventory-planning.tf`). `facility-layout`'s own code names no consumer | [NIP](/contexts/network-inventory-planning/context-map) |
+| K31 | `order-management` → `network-inventory-planning` | OHS + PL / ACL (a `site_sku_demand` row per order line, `REMOVED` tombstones it) | `warehouse.order-management.events`: `SiteSkuDemandChanged` | **live**. Opt-in (`SITE_SKU_DEMAND_CONSUMER_GROUP`), set in the reference deployment. `order-management`'s own code names no consumer | [NIP](/contexts/network-inventory-planning/context-map) |
+| K32 | `warehouse-planning` → `network-inventory-planning` | OHS + PL / ACL (a `published_capacity_plan` row per plan, legacy events without the additive `site_id` excluded) | `warehouse.warehouse-planning.events`: `CapacityPlanPublished` | **live**. Opt-in (`CAPACITY_PLAN_CONSUMER_GROUP`), set in the reference deployment | [NIP](/contexts/network-inventory-planning/context-map), [WPL](/contexts/warehouse-planning/context-map) |
+| K33 | `network-inventory-planning` → `inventory-storage` | C/S: the command carries exactly the five fields inventory-storage's consumer defines | `warehouse.network-inventory-planning.events`: `TransferAllocationRequested`, key `transfer_line_id` | **live**. Consumer opt-in (`TRANSFER_ALLOCATION_CONSUMER_MODE=kafka`, default `off`), set in `helm-values/inventory-storage.yaml`; INV ADR 0030 | [NIP](/contexts/network-inventory-planning/context-map), [INV](/contexts/inventory-storage/context-map) |
+| K34 | `inventory-storage` → `network-inventory-planning` | OHS + PL / ACL (closed rejection vocabulary, hand-mirrored payloads) | `warehouse.inventory.events`: `TransferStockAllocated`, `TransferStockAllocationRejected`, `TransferReceiptStaged`, `TransferStockStowed` | **live**. Opt-in (`TRANSFER_REPLY_CONSUMER_GROUP`), set in the reference deployment. Drives `ALLOCATING` to `ALLOCATED` or `UNFULFILLABLE`, then `ARRIVED` and `RECEIVED` | [NIP](/contexts/network-inventory-planning/context-map), [INV](/contexts/inventory-storage/context-map) |
+| K35 | `network-inventory-planning` → `wes-work-planning` | C/S: the payload mirrors WES's consumed contract | `warehouse.network-inventory-planning.events`: `WorkDemandReleased` (pick and dispatch legs) | **live** on the consumer side: the fifth topic of `wes-work-planning`'s always-on consumer, with a `.dlq` per topic (WP ADR 0033). The pick path is `pick`; the dispatch path `transfer-dispatch` is **not seeded** and must be created in `process-path-management` first (comment in `terraform/network-inventory-planning.tf`), so until then a dispatch demand is dead-lettered | [NIP](/contexts/network-inventory-planning/context-map), [WP](/contexts/wes-work-planning/context-map) |
+| K36 | `fulfillment-execution` → `network-inventory-planning` | OHS + PL / ACL (hand-mirrored `TransferFactData`) | `warehouse.fulfillment.events`: `TransferPicked`, `TransferDispatched`, `TransferArrived` (reserved, scan-driven receiving can bypass it) | **live**. Opt-in (`TRANSFER_FACT_CONSUMER_GROUP`), set in the reference deployment | [NIP](/contexts/network-inventory-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
 
 Published types with no consumer, as stated by their owners:
 
@@ -250,7 +292,21 @@ Published types with no consumer, as stated by their owners:
 - `TransferPlanApproved` on `warehouse.network-inventory-planning.events`;
 - `ProductRegistered`, `ProductDescriptionChanged`,
   `ProductDimensionsDeclared` and `ProductMeasured` on
-  `warehouse.product-master.events` (published contract; no consumer yet).
+  `warehouse.product-master.events` (published contract; no consumer yet.
+  Consumers for `ProductRegistered` (K22) and the two physical-profile
+  types (K25) are in progress);
+- every `warehouse.inbound-receiving.events` type except
+  `ReceiptLineReceived` (K24, in progress) and `DockAppointmentBooked` (K28,
+  planned, not built): `ASNRegistered`, `ASNCancelled`,
+  `DockAppointmentCheckedIn`, `DockAppointmentCancelled`,
+  `DockAppointmentCompleted`, `ReceiptOpened` and `ReceiptClosed`;
+- all three `warehouse.slotting-optimization.events` types:
+  `SlotPlanGenerated`, `SlotPlanRejected`, and `SlotPlanApproved`, whose
+  planned consumer (K29) is not built.
+
+No other context consumes `inbound-receiving` or `slotting-optimization`
+yet (**not consumed yet**), apart from the in-progress K24. K28 and K29 are
+planned and not built.
 
 `product-master` also serves REST, a read-only MCP server (its ADR 0005)
 and a master data quality report (its ADR 0006) as an Open Host Service for
@@ -296,7 +352,9 @@ methods its use cases call on `develop`.
 | A10 | `network-fulfillment` | — | — | — | **deliberately absent**. NF serves read-only MCP tools, but the agent has no client for them |
 | A11 | `warehouse-ops-agent` → `warehouse-console` | C/S: the agent is the BFF Supplier | — | `/console/orders/{id}/lifecycle`, `/console/reports/wms`, `/console/reports/wes`, `/daily-brief` | **live** |
 | A12 | `product-master` | `list_products` (the `find_master_data_gaps` tool and `GET /master-data-gaps`, OA ADR 0020) | `get_product`, `get_product_classification`, `get_physical_profile` | — | **live** (`PRODUCT_MASTER_MCP_ENDPOINT`, set in the reference deployment by `terraform/ops-agent.tf`) |
-| A13 | `network-inventory-planning` | `get_transfer`, `find_stuck_transfers`, `simulate_transfer_options` (the transfer-watch use case, OA ADR 0019; the client port also exposes `list_transfers`) | — | — | **live** (`NETWORK_INVENTORY_PLANNING_MCP_ENDPOINT`, set in the reference deployment by `terraform/ops-agent.tf` when MCP servers are deployed) |
+| A13 | `inbound-receiving` | — | — | — | **absent-planned, not built**. A read-side MCP client in `warehouse-ops-agent` is planned; neither the context's MCP server nor the client exists yet |
+| A14 | `slotting-optimization` | — | — | — | **absent-planned, not built**. Same as A13; the agent would read `SlotPlanApproved` data and the forward-slot map |
+| A15 | `network-inventory-planning` | `get_transfer`, `find_stuck_transfers`, `simulate_transfer_options` (the transfer-watch use case, OA ADR 0019; the client port also exposes `list_transfers`) | — | — | **live** (`NETWORK_INVENTORY_PLANNING_MCP_ENDPOINT`, set in the reference deployment by `terraform/ops-agent.tf` when MCP servers are deployed) |
 
 The Order Lifecycle screen fans out to four contexts' OLTP APIs: OM, INV, WP
 and FE. The `/console/reports/*` endpoints read seven contexts' `*-reports`
@@ -348,7 +406,13 @@ The context maps declare these pairs as having no relationship, by decision:
   their `internal`, `cmd` or `apis` on `develop` names it, and it names none of
   them. The one indirect dependency is configuration: its pick and dispatch
   `path_id` values must exist in `wes-work-planning`'s catalogue, which
-  `process-path-management` feeds (see K27).
+  `process-path-management` feeds (see K35).
+
+- **`inbound-receiving` and `slotting-optimization` ↔ every other context
+  not named in K22 to K29.** Neither makes a synchronous call to any
+  sibling, and they have no relationship with each other: slotting does not
+  read receipts, and receiving does not read slot plans. Their local copies
+  are built only from the topics named above.
 
 ## Where the per-context maps disagree
 
@@ -384,6 +448,8 @@ different pattern for the downstream side. The edge table shows both:
 
 **Corrections to this page's previous version:**
 
+- `inbound-receiving` and `slotting-optimization` (decided 2026-10-08) were
+  added with edges K22 to K29 and A13 and A14. None is live.
 - K20 was marked live "in code" only, with the reference deployment
   behind. Since 2026-10-07 `warehouse-infra` deploys `product-master` and
   runs all four consumers in `kafka` mode, so K20 is live by the same rule
@@ -408,7 +474,7 @@ different pattern for the downstream side. The edge table shows both:
   (K10, K13, R5). Those edges exist, but none is enabled.
 - OM → WPL demand (K2) and LP → WFM REST (R10) were missing.
 - `network-inventory-planning` was missing altogether. Its seven Kafka edges
-  (K22 to K28) and the agent's transfer-watch client (A13) are added. Their status
+  (K30 to K36) and the agent's transfer-watch client (A15) are added. Their status
   follows the reference deployment's configuration on `develop`
   (`terraform/network-inventory-planning.tf`, `helm-values/inventory-storage.yaml`,
   `terraform/ops-agent.tf`); that configuration was read, not observed on a
@@ -440,6 +506,8 @@ contexts ship their own remote in their `web/` directory: `order-mgmt-mfe`,
 `productmaster_mfe` (product-master, the Product Master tile), `nip_mfe`
 (network-inventory-planning, route `/network-inventory/*`), and the
 network-fulfillment, fulfillment-execution and wes-work-planning remotes.
+`inbound-receiving` and `slotting-optimization` each plan their own remote
+and console tile, which are not built yet.
 Each remote calls only its own context's REST API. That is presentation
 composition, not a domain edge, so the diagram leaves it out. The one
 cross-context read path for the console is `warehouse-ops-agent`'s BFF (A11).
