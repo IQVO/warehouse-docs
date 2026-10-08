@@ -106,6 +106,28 @@ const sidebar: SidebarsConfig = {
         },
       ],
     },
+    {
+      type: "category",
+      label: "Reports",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/product-master/reports",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/product-master/get-master-data-quality",
+          label: "Master data quality per day and current coverage",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/product-master/get-reports-freshness",
+          label: "How far the analytics projection is behind",
+          className: "api-method get",
+        },
+      ],
+    },
   ],
 };
 
