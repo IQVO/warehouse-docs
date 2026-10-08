@@ -134,6 +134,12 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          networkInventoryPlanning: {
+            specPath: 'apis/network-inventory-planning/openapi.yaml',
+            outputDir: 'docs/api-reference/rest/network-inventory-planning',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],
@@ -214,6 +220,7 @@ const config: Config = {
             {label: 'network-fulfillment', href: 'https://github.com/IQVO/network-fulfillment'},
             {label: 'warehouse-planning', href: 'https://github.com/IQVO/warehouse-planning'},
             {label: 'product-master', href: 'https://github.com/IQVO/product-master'},
+            {label: 'network-inventory-planning', href: 'https://github.com/IQVO/network-inventory-planning'},
           ],
         },
         {
