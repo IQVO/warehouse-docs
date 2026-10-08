@@ -40,7 +40,7 @@ Everything else in the platform — physical location structure
 (`labor-performance`) — exists to feed that orchestration loop trustworthy,
 current facts, never to make decisions on its own.
 
-## The twelve contexts on this site, one sentence each
+## The fourteen contexts on this site, one sentence each
 
 | Context | One-sentence purpose |
 | --- | --- |
@@ -56,6 +56,8 @@ current facts, never to make decisions on its own.
 | `network-fulfillment` | The anti-corruption layer to an external retail fulfillment network: polls network demand, places it with `order-management` as a held order, and owns the acknowledgement deadline. |
 | `warehouse-planning` | Answers whether the warehouse can process the demand assigned to it: composes labor, station and other constraints into path capacity and records capacity plans with shortage and bottleneck detection. |
 | `product-master` | The single source of truth for what a SKU is: its handling classification (taken over from `inventory-storage`) and its declared and measured physical profile, published as events that four contexts keep local copies of. |
+| `inbound-receiving` | Everything before the first stow: the advance ship notice, the dock appointment and the receipt with its discrepancies (Short, Over, Damaged); hands good units to `inventory-storage` as events. Decided 2026-10-08, in progress. |
+| `slotting-optimization` | Decides which SKUs deserve a forward pick slot: ranks SKUs by pick velocity, proposes a slot plan under the `abc-velocity-v1` policy, and publishes the approved forward-pick map after a human approves it. Decided 2026-10-08, in progress. |
 
 See [Subdomain Classification](./subdomain-classification) for the
 Core/Supporting/Generic verdict on each, and [Context Map](./context-map)
@@ -70,12 +72,12 @@ actual inbound and outbound value streams described in Amazon's own public
 material and industry trade coverage. This table is that flow, stage by
 stage, against what this platform actually implements — so "which of these
 is real code, and which is deliberately out of scope" is answerable in one
-place instead of scattered across twelve repos' own docs.
+place instead of scattered across fourteen repos' own docs.
 
 | Real Amazon FC stage | What physically happens | Built here? |
 | --- | --- | --- |
-| **Inbound dock** | Supplier/inter-FC trucks arrive; a receiving team unloads pallets onto the dock floor (first-come, first-served scheduling). | Not modeled — a physical logistics event upstream of any bounded context's write boundary. |
-| **Receive** | Boxes are scanned and opened; goods are checked and staged (originally into totes/carts). | **Yes.** `inventory-storage`'s `receiveStock` use case — item-scan staging, no bin yet. |
+| **Inbound dock** | Supplier/inter-FC trucks arrive; a receiving team unloads pallets onto the dock floor (first-come, first-served scheduling). | **Decided 2026-10-08, in progress.** `inbound-receiving`'s `DockAppointment` aggregate books a door and a window, checks the carrier in and completes when the receipt closes. The truck and the unloading themselves stay physical and are not modeled. |
+| **Receive** | Boxes are scanned and opened; goods are checked and staged (originally into totes/carts). | **Yes, in two steps.** `inventory-storage`'s `receiveStock` use case (item-scan staging, no bin yet) is live. `inbound-receiving` (decided 2026-10-08, in progress) adds the step before it: an ASN, a `Receipt` with line-by-line counts and discrepancies, then a `ReceiptLineReceived` event that `inventory-storage` consumes to run `receiveStock`. |
 | **Stow** | An associate (or robot) places each item into a coded bin. Storage is **chaotic/random** — no fixed product location; the item goes wherever there's free space, and the system records the exact bin scanned. | **Yes, and genuinely Amazon-accurate.** `inventory-storage`'s `stowStock` use case implements real chaotic stow (ADR-0002) with hazmat-zone segregation — not a simplification, the actual model. |
 | **Pick** | On order placement the system identifies the bin; a robot brings the pod to the station (or the picker walks to it); the item is retrieved into a tote. | **Yes.** A `PICK` task in `fulfillment-execution`'s pull-dispatched (`claimNext`) task lifecycle, one of `process-path-management`'s four operator-configurable path types. |
 | **Consolidate / convey** | A full tote is routed to packing; for a multi-line order, independently-picked lines converge before packing can start. | **Yes.** `fulfillment-execution`'s `REBIN` task type + its `OrderConsolidation` aggregate (ADR-0016) — the fan-in tracker that waits for every line of an order before creating its `PACK` task. Single-line orders skip this, matching the reference material's own note that "single-item shipments skip Induct and Rebin." |
