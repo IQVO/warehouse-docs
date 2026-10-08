@@ -51,16 +51,19 @@ the topic. **Sub** means it reads another context's topic.
 | `network-fulfillment` | `apis/network-fulfillment/openapi.yaml` | 8 | Pub `warehouse.network-fulfillment.events` (5), Pub `warehouse.network-fulfillment.analytics` (4) | [REST](/api-reference/rest/network-fulfillment/network-fulfillment-api) · [Async](/api-reference/async/network-fulfillment) |
 | `warehouse-planning` | `apis/warehouse-planning/openapi.yaml` (v0.1.0) | 17 | Pub `warehouse.warehouse-planning.events` (4), Pub `warehouse.warehouse-planning.analytics` (4); Sub `warehouse.workforce.events` (1), Sub `warehouse.facility.events` (2), Sub `warehouse.order-management.events` (2) | [REST](/api-reference/rest/warehouse-planning/warehouse-planning) · [Async](/api-reference/async/warehouse-planning) |
 | `product-master` | `apis/product-master/openapi.yaml` (v1.0.0) | 12 (incl. the two `product-reports` paths) | Pub `warehouse.product-master.events` (5), Pub `warehouse.product-master.analytics` (5); Sub `warehouse.inventory.events` (1, migration only, product-master ADR 0003) | [REST](/api-reference/rest/product-master/product-master-api) · [Async](/api-reference/async/product-master) |
+| `inbound-receiving` | `apis/inbound-receiving/openapi.yaml` (v1.0.0) | 17 | Pub `warehouse.inbound-receiving.events` (9); Sub `warehouse.product-master.events` (1), Sub `warehouse.facility.events` (2) | [REST](/api-reference/rest/inbound-receiving/inbound-receiving-api) · [Async](/api-reference/async/inbound-receiving) |
 | `network-inventory-planning` | `apis/network-inventory-planning/openapi.yaml` (v1.0.0) | 12 (incl. the five `reports` paths served by `nip-reports` on `:8092`) | Pub `warehouse.network-inventory-planning.events` (3), Pub `warehouse.network-inventory-planning.analytics` (3); Sub `warehouse.facility.events` (1), Sub `warehouse.order-management.events` (1), Sub `warehouse.warehouse-planning.events` (1), Sub `warehouse.inventory.events` (4), Sub `warehouse.fulfillment.events` (3) | [REST](/api-reference/rest/network-inventory-planning/network-inventory-planning-api) · [Async](/api-reference/async/network-inventory-planning) |
 
-Twelve contexts publish an `apis/asyncapi.yaml`; `warehouse-ops-agent` has
-none, and `inbound-receiving` and `slotting-optimization` have no spec
-synced yet (their contracts are pinned in the
+Thirteen contexts publish an `apis/asyncapi.yaml`; `warehouse-ops-agent` has
+none, and `slotting-optimization` has no spec synced yet (its contracts are
+pinned in the
 [Event Standard](/strategic-design/event-standard-cloudevents) catalogue and
 get an `apis/<ctx>/` entry and generated pages once the contract PRs merge).
 The counts for `order-management`, `inventory-storage`,
 `wes-work-planning`, `fulfillment-execution` and `product-master` were
-re-read from the specs synced on 2026-10-07; `network-inventory-planning` was
+re-read from the specs synced on 2026-10-07; `inbound-receiving` was counted
+from the specs synced when it was onboarded (17 path × method pairs, three
+channels); `network-inventory-planning` was
 counted from the specs synced when it was onboarded. Not every spec lists the topics
 its context consumes, so the **Sub** entries are a lower bound. Each context's
 [Domain Events](/contexts) page lists every topic its code consumes and

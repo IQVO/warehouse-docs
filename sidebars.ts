@@ -12,6 +12,7 @@ import laborPerformanceReportsSidebar from './docs/api-reference/rest/labor-perf
 import networkFulfillmentSidebar from './docs/api-reference/rest/network-fulfillment/sidebar';
 import warehousePlanningSidebar from './docs/api-reference/rest/warehouse-planning/sidebar';
 import productMasterSidebar from './docs/api-reference/rest/product-master/sidebar';
+import inboundReceivingSidebar from './docs/api-reference/rest/inbound-receiving/sidebar';
 import networkInventoryPlanningSidebar from './docs/api-reference/rest/network-inventory-planning/sidebar';
 
 /**
@@ -64,20 +65,22 @@ const ASYNC_NARRATIVE = new Set([
   'network-fulfillment',
   'warehouse-planning',
   'product-master',
+  'inbound-receiving',
   'network-inventory-planning',
 ]);
 
 // Pages a context has beyond the shared page set, appended after it.
-// product-master's own docs site keeps a use-case catalogue next to the pack.
+// product-master and inbound-receiving keep their own docs site with a
+// use-case catalogue next to the pack.
 const CONTEXT_EXTRA_PAGES: Record<string, string[]> = {
   'product-master': ['use-cases'],
+  'inbound-receiving': ['use-cases'],
 };
 
 // Contexts decided but not built yet list only the pages written for this
 // site, instead of the synced artifact pack their repositories do not have.
 // Add the full pack (and the async-api narrative) when the repositories ship it.
 const CONTEXT_PAGE_OVERRIDES: Record<string, string[]> = {
-  'inbound-receiving': ['business-context', 'bounded-context-canvas'],
   'slotting-optimization': ['business-context', 'bounded-context-canvas'],
 };
 
@@ -216,6 +219,11 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'product-master',
       items: [...productMasterSidebar, 'api-reference/async/product-master'],
+    },
+    {
+      type: 'category',
+      label: 'inbound-receiving',
+      items: [...inboundReceivingSidebar, 'api-reference/async/inbound-receiving'],
     },
     {
       type: 'category',
