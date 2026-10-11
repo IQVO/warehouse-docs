@@ -146,6 +146,12 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          slottingOptimization: {
+            specPath: 'apis/slotting-optimization/openapi.yaml',
+            outputDir: 'docs/api-reference/rest/slotting-optimization',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],

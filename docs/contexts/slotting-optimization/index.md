@@ -2,7 +2,7 @@
 id: index
 title: Slotting Optimization
 sidebar_label: Slotting Optimization
-description: The Supporting, WMS-tier bounded context decided on 2026-10-08 that decides which SKUs deserve a forward pick slot, by pick velocity, with human approval. Not built yet.
+description: The Supporting, WMS-tier bounded context that decides which SKUs deserve a forward pick slot, and which slot each one gets, by pick velocity, with human approval.
 slug: /contexts/slotting-optimization
 ---
 
@@ -13,47 +13,77 @@ slug: /contexts/slotting-optimization
 **Slotting Optimization** is one of the fleet's fourteen domain bounded
 contexts. It sits in the `wms` tier of the CloudEvents subdomain taxonomy, the
 fifth `wms` context after `facility-layout`, `inventory-storage`,
-`product-master` and `inbound-receiving`. It answers one question the fleet
-could not answer before: **which SKUs deserve a forward pick slot**.
-`facility-layout` already models forward and reserve zones, but nothing
-decided what belongs in them.
+`product-master` and `inbound-receiving`. It decides **which SKUs deserve a
+forward pick slot, and which slot each one gets**. It computes a reviewable
+proposal (a *slot plan*), a human approves or rejects it, and an approved plan
+is published as a CloudEvent carrying the full forward assignment map and the
+physical moves it implies.
 
-:::warning[Decided, not built]
-The user decided this context on 2026-10-08. Its repository,
-[IQVO/slotting-optimization](https://github.com/IQVO/slotting-optimization),
-exists (bootstrapped from the harness template, `develop` protected) but has
-no domain code yet. Everything below is the decision log and the pinned
-contracts. Nothing here is live. The local-copy consumers (edges K25 to K27
-on the [Context Map](/strategic-design/context-map)) are in progress. The
-execution of approved moves (edge K29) is **planned and not built**.
+:::info[What is built, what is not deployed, and what is planned]
+Per this context's own [Context Map](/contexts/slotting-optimization/context-map)
+and [integration page](https://iqvo.github.io/slotting-optimization/docs/ecosystem/integration),
+checked against `develop`:
+
+**Built on `develop`:** one binary, `cmd/api`: the REST API (seven
+operations), the transactional outbox and relay, and three opt-in local-copy
+consumers (demand from `order-management`, product facts from
+`product-master`, zones and slots from `facility-layout`).
+
+**Not deployed:** there is no `Dockerfile`, no `charts/` directory and no
+`warehouse-infra` wiring (values file, Kong route, ArgoCD application) yet.
+The service runs from source or a locally built binary.
+
+**Planned, not built:** executing the moves of an approved plan (MOVE and
+REPLENISH work through `process-path-management`, `wes-work-planning` and
+`fulfillment-execution`), a read-only MCP server (no `cmd/mcp`), an
+analytics read side and a console remote. Nothing consumes its events today.
 :::
 
-It is planned to own one aggregate, **`SlotPlan`**: a proposed assignment of
-SKUs to forward slots for a site and a lookback window. A plan is generated
-as a draft by the `abc-velocity-v1` policy and becomes real only when a
-human approves it. The package is `slotplan`.
+It owns one aggregate, **`SlotPlan`** (package `internal/domain/slotplan`),
+generated as a `Draft` by the `abc-velocity-v1` policy (package
+`internal/domain/planning`) and moved to `Approved` or `Rejected` by a human.
+Approving a plan supersedes the site's previous Approved plan in the same
+transaction (`Superseded` is the fourth state).
 
 ## This context's pages
 
 - [Business Context](/contexts/slotting-optimization/business-context): the
-  gap, the v1 policy and the decisions taken, and what the context
+  gap, what it owns, the v1 policy, the decisions taken, and what the context
   deliberately does not do.
+- [Ubiquitous Language](/contexts/slotting-optimization/ubiquitous-language):
+  slot plan, forward slot, assignment, move, velocity, demand window,
+  stickiness, local copy.
+- [Core Domain Chart](/contexts/slotting-optimization/core-domain-chart):
+  Supporting, and why.
 - [Bounded Context Canvas](/contexts/slotting-optimization/bounded-context-canvas)
   ([ddd-crew bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas)):
   purpose, classification, roles, inbound and outbound communication,
   business decisions and open questions.
-
-The synced artifact pack and the generated REST and AsyncAPI references are
-added when the repository ships them. They are not stubbed here.
+- [Context Map](/contexts/slotting-optimization/context-map): every edge with
+  its pattern, technology and state, planned edges labelled.
+- [Aggregate Design Canvas](/contexts/slotting-optimization/aggregate-design-canvas):
+  `SlotPlan`.
+- [Domain Events](/contexts/slotting-optimization/domain-events): the three
+  published events and the seven consumed ones.
+- [Domain Message Flow](/contexts/slotting-optimization/domain-message-flow),
+  [EventStorming](/contexts/slotting-optimization/eventstorming),
+  [Class Diagram](/contexts/slotting-optimization/class-diagram),
+  [Entity Relationship](/contexts/slotting-optimization/entity-relationship),
+  [Sequence Diagrams](/contexts/slotting-optimization/sequence-diagrams) and
+  [Use Cases](/contexts/slotting-optimization/use-cases).
+- [Async API](/contexts/slotting-optimization/async-api): the Kafka narrative.
+- Generated references: [REST](/api-reference/rest/slotting-optimization/slotting-optimization-api)
+  and [AsyncAPI](/api-reference/async/slotting-optimization).
 
 ## Elsewhere
 
-- **Repository**: [github.com/IQVO/slotting-optimization](https://github.com/IQVO/slotting-optimization).
-  Its ADRs live under `docs/adr/`. The planned first set is 0001 (bounded
-  context), 0002 (aggregates, invariants and the slotting policy), 0003
-  (local copies and consumed contracts), 0004 (CloudEvents envelope and type
-  catalogue); MCP adoption and the analytics read side follow in later
-  phases.
+- **Repository**: [github.com/IQVO/slotting-optimization](https://github.com/IQVO/slotting-optimization),
+  with its own docs site at
+  [iqvo.github.io/slotting-optimization](https://iqvo.github.io/slotting-optimization/).
+  Its ADRs live under `docs/adr/`, all Accepted (2026-10-08): 0001 (bounded
+  context), 0002 (the `SlotPlan` aggregate, its invariants and the
+  `abc-velocity-v1` policy), 0003 (event-fed local copies and the consumed
+  contracts), 0004 (CloudEvents envelope and type catalogue).
 - **Fleet-level**: [Context Map](/strategic-design/context-map) (K25 to K27
   and K29), the [Event Standard](/strategic-design/event-standard-cloudevents)
   (subdomain table and type catalogue),

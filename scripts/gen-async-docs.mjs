@@ -30,6 +30,7 @@ const CONTEXTS = [
   'warehouse-planning',
   'product-master',
   'inbound-receiving',
+  'slotting-optimization',
   'network-inventory-planning',
 ];
 

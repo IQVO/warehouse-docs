@@ -2,133 +2,124 @@
 id: bounded-context-canvas
 title: Bounded context canvas
 sidebar_label: Bounded context canvas
-description: The ddd-crew Bounded Context Canvas for slotting-optimization, written from the 2026-10-08 decision log before any code exists.
 ---
 
 # Bounded context canvas
 
-:::info[Written here, from the decision log]
-This canvas is hand-written for this site from the 2026-10-08 plan and its
-pinned contracts. `slotting-optimization` has no code yet, so unlike the other
-contexts' canvases it is **not** a synced copy and cites no source file.
-When the repository ships its own canvas, replace this page with the synced
-copy.
+:::info[Synced from slotting-optimization]
+This page is a copy of [`docs/docs/ddd/bounded-context-canvas.md`](https://github.com/IQVO/slotting-optimization/blob/develop/docs/docs/ddd/bounded-context-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
-Following the ddd-crew [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas).
+
+ddd-crew [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas),
+filled from the code on `develop` and ADR 0001.
 
 ## Name
 
-**Slotting Optimization** (`slotting-optimization`, Go module
-`github.com/claudioed/slotting-optimization`, GitHub
-`IQVO/slotting-optimization`).
+**slotting-optimization**
 
 ## Purpose
 
-Decide which SKUs deserve a forward pick slot, and which slot, from how often
-each SKU is picked. Propose a slot plan under a replaceable policy
-(`abc-velocity-v1` in v1), let a human approve or reject it, and publish the
-approved forward-pick map and the moves it implies. It moves no stock.
+Decide, explainably and repeatably, which SKUs get a forward pick slot and
+which slot each one gets; let a person approve or reject that proposal; and
+publish the approved assignment map with the physical moves it implies.
 
-## Strategic Classification
+## Strategic classification
 
-| Axis | Verdict | Evidence |
-| --- | --- | --- |
-| Domain | **Supporting** | Decision 3: slotting policy differs per retailer, so it is not generic, and the competitive core stays the WES conductor, so it is not Core. See [Subdomain Classification](/strategic-design/subdomain-classification). |
-| Business model | **Cost reduction** | A better forward-pick assignment cuts pick travel and labor. |
-| Evolution | **Custom-built** (genesis) | Decided 2026-10-08; no code yet. |
+| Dimension | Value |
+| --- | --- |
+| Domain | **Supporting** ([Subdomain classification](https://iqvo.github.io/slotting-optimization/docs/ddd/subdomain-classification)) |
+| Tier | WMS, CloudEvents subdomain `wms` |
+| Business model | Cost reduction (pick travel and labor) |
+| Evolution | Custom-built, genesis |
 
-## Domain Roles
+## Domain roles
 
-| Role | Applies? | Notes |
-| --- | --- | --- |
-| Analysis context | Yes (primary) | It computes a ranking and an assignment over sets of SKUs and slots. |
-| Draft context | Yes | A plan is generated as a `Draft` and only a human approval makes it effective. |
-| Specification context | Yes | An approved plan specifies what should sit where. Others act on it. |
-| Gateway / Open Host Service | Yes | REST plus the `warehouse.slotting-optimization.events` Published Language. |
-| Execution context | No | It never moves goods or work. Execution is planned and not built. |
-| Analytics / reporting | Planned | `warehouse.slotting-optimization.analytics` is reserved in the pinned contracts. The read side is a later phase. |
+- **Policy engine**: computes a proposal from declarative inputs
+  (`planning.Planner`, policy `abc-velocity-v1`).
+- **Approval workflow**: a Draft becomes Approved or Rejected by a human
+  decision; the previous Approved plan of the site becomes Superseded.
 
-## Inbound Communication
+## Inbound communication
 
-| Collaborator | Message | Type | Channel | Relationship |
-| --- | --- | --- | --- | --- |
-| Slotting planner | Generate a plan | Command | REST `POST /slot-plans` | This context is the OHS |
-| Slotting planner | Approve or reject a plan | Command | REST `POST /slot-plans/{planId}/approve`, `POST /slot-plans/{planId}/reject` | OHS |
-| Operator, console, agent | List and get plans, the forward-slot map, SKU velocity | Query | REST `GET /slot-plans`, `GET /slot-plans/{planId}`, `GET /forward-slots`, `GET /sku-velocity` | OHS |
-| `order-management` | `SiteSkuDemandChanged` | Event | Kafka `warehouse.order-management.events`, `com.warehouse.wes.order-management.siteskudemand.SiteSkuDemandChanged` | Conformist with a local copy (pick velocity); in progress |
-| `product-master` | `ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured` | Event | Kafka `warehouse.product-master.events`, `com.warehouse.wms.product-master.product.*` | Conformist with a local copy (handling classification, effective physical profile); in progress |
-| `facility-layout` | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | Event | Kafka `warehouse.facility.events`, `com.warehouse.wms.facility-layout.zone.*` and `...locationslot.*` | Conformist with a local copy (zones and eligible slots); in progress |
+```mermaid
+flowchart LR
+    om["order-management"] -->|"SiteSkuDemandChanged (event)"| so["slotting-optimization"]
+    pm["product-master"] -->|"ProductClassified, ProductDimensionsDeclared, ProductMeasured (events)"| so
+    fl["facility-layout"] -->|"ZoneRegistered, LocationSlotRegistered, LocationSlotDecommissioned (events)"| so
+    pl["planner, console, agent"] -->|"Generate, Approve, Reject (REST commands)"| so
+    pl -->|"plans, forward slots, velocity (REST queries)"| so
+```
 
-No REST endpoint is authenticated (the fleet-wide revert). The generate
-`POST` takes an `Idempotency-Key`.
+Source: `internal/adapters/inbound/kafka/{demand,product,layout}_consumer.go`,
+`internal/adapters/inbound/http/server.go`.
 
-## Outbound Communication
+| Collaborator | Message | Kind | Channel |
+| --- | --- | --- | --- |
+| order-management | `SiteSkuDemandChanged` | event | `warehouse.order-management.events` |
+| product-master | `ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured` | events | `warehouse.product-master.events` |
+| facility-layout | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | events | `warehouse.facility.events` |
+| planner (human, console, agent) | Generate slot plan, Approve, Reject | commands | `POST /slot-plans`, `POST /slot-plans/{planId}/approve`, `POST /slot-plans/{planId}/reject` |
+| planner (human, console, agent) | Get plan, List plans, Forward slots, SKU velocity | queries | `GET /slot-plans/{planId}`, `GET /slot-plans`, `GET /forward-slots`, `GET /sku-velocity` |
 
-The context makes **no** synchronous call to any sibling. Everything outbound
-leaves through the transactional outbox.
+## Outbound communication
 
-| Collaborator | Message | Type | Channel | Relationship |
-| --- | --- | --- | --- | --- |
-| none today; planned: MOVE work execution | `SlotPlanApproved` (the full `assignments` map and the `moves`, kinds `Assign`, `Relocate`, `Vacate`) | Event | Kafka `warehouse.slotting-optimization.events`, `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved` | This context upstream, Published Language; the consumer is not built (decision 8). Also to be read by `warehouse-ops-agent` and the console |
-| none today | `SlotPlanGenerated` | Event | same topic, `...slotplan.SlotPlanGenerated` | Published contract |
-| none today | `SlotPlanRejected` | Event | same topic, `...slotplan.SlotPlanRejected` | Published contract |
+```mermaid
+flowchart LR
+    so["slotting-optimization"] -->|"SlotPlanGenerated, SlotPlanApproved, SlotPlanRejected (events)"| topic["warehouse.slotting-optimization.events"]
+    topic -.->|"planned: moves to MOVE or REPLENISH work"| exec["process-path-management, wes-work-planning, fulfillment-execution"]
+```
 
-## Ubiquitous Language
+Source: `internal/adapters/outbound/kafka/encoder.go`, ADR 0001 (context map).
 
-Fleet-level terms are in the [Ubiquitous Language](/strategic-design/ubiquitous-language)
-overview and the [Glossary](/glossary). Top terms: **Slot plan**,
-**Forward-pick slot**, **Pick velocity**, **ABC class**, **Stickiness**,
-**Policy** (`abc-velocity-v1`), **Assignment**, **Move** (`Assign`,
-`Relocate`, `Vacate`).
+| Message | Kind | Channel | Consumers |
+| --- | --- | --- | --- |
+| `SlotPlanGenerated` | event | `warehouse.slotting-optimization.events` | none yet |
+| `SlotPlanApproved` | event | same | none yet; the execution path is planned, not built |
+| `SlotPlanRejected` | event | same | none yet |
 
-## Business Decisions
+## Ubiquitous language
 
-1. Slotting is its own context, not part of `facility-layout`, `inventory-storage`
-   or `inbound-receiving` (decision 1).
-2. SKUs are ranked by order-line picks in the lookback window: units first,
-   then SKU ascending (decision 7).
-3. An eligible forward slot has role `Storage`, is active, sits in a zone whose
-   code is in `FORWARD_ZONE_CODES` (default `FWD`), is compatible with the
-   SKU's temperature class and hazmat flag, and fits one effective unit by
-   volume and weight (decision 7).
-4. Slot order is a replaceable `SlotRankingPolicy` port; v1 is the lexical
-   location code (decision 7).
-5. A SKU that keeps a top-N rank and still fits keeps its slot (stickiness,
-   the churn limit) (decision 7).
-6. One SKU per forward slot in v1 (decision 7).
-7. A human must approve a plan: generate (Draft), then Approve or Reject
-   (decision 7).
-8. Executing the moves is a planned edge, not built (decision 8).
-9. Local copies are event-fed, `permissive` by default and `kafka` in the
-   cluster (decision 6).
-10. No authentication, a transactional outbox, optimistic concurrency, and
-    CloudEvents built through the repository's own helper (decision 10).
+SlotPlan, window, lookback, policy, Draft, Approved, Rejected, Superseded,
+assignment, move (Assign, Relocate, Vacate), unassigned (NoEligibleSlot,
+NoPhysicalProfile, NoCapacityFit), ABC class, velocity (picks, units),
+forward slot, eligibility, stickiness, local copy. Full glossary:
+[Ubiquitous language](/contexts/slotting-optimization/ubiquitous-language).
+
+## Business decisions
+
+| Decision | Rule in code |
+| --- | --- |
+| Who is a candidate | SKUs with at least one ACTIVE demand line due in the window |
+| Rank of candidates | picks desc, units desc, SKU asc |
+| ABC class | cumulative pick share before the SKU: below 80 % is A, below 95 % is B, else C |
+| Which slots are forward slots | active, role `Storage`, zone of the site, zone code in `FORWARD_ZONE_CODES` |
+| Eligibility | hazmat matches, temperature class matches (empty is Ambient), one unit fits volume and weight |
+| Slot ranking | lexical by location code (v1, a port) |
+| Churn limit | keep the previous slot when still eligible and free |
+| Human approval | nothing becomes the site's map without `approve`; one Approved plan per site |
 
 ## Assumptions
 
-- Pick velocity can be derived from `SiteSkuDemandChanged` (units demanded per
-  order line, state `ACTIVE` or `REMOVED`) without a live lookup.
-- Ordering slots by location code is an acceptable v1 proxy for closeness,
-  because `facility-layout` events carry no travel distance.
-- The effective physical profile (measured, else declared) is enough to decide
-  whether a unit fits a slot.
+- Forward slots are `Storage` slots in zones listed in `FORWARD_ZONE_CODES`
+  (default `FWD`); one SKU per forward slot.
+- The demand `site_id` equals the facility `siteCode` (ADR 0003 calls for
+  verifying this against live data).
+- The local copies are current enough: a stale copy yields a partial plan
+  that lists unplaceable SKUs instead of guessing.
 
-## Verification Metrics
+## Verification metrics
 
-None exist yet, because there is no code. The fleet rules the build must meet
-are: a golden exact-JSON test per published type, consumers that dedupe on the
-CloudEvents `id` in the same transaction as the effect, and
-testcontainers-only Kafka and Postgres integration tests. A deterministic
-policy also needs a replay test that the same inputs give the same plan. This
-section is to be filled from the repository's own canvas.
+- Deterministic output: same input, same plan (planner tests).
+- Mutation gate: 99 % efficacy and mutant coverage on both domain packages.
+- Coverage gate: 90 % over domain and application.
+- Golden CloudEvents tests per published type and
+  `TestEventCatalogueMatchesContract`.
 
-## Open Questions
+## Open questions
 
-- Who executes an approved plan, and through which task type? (MOVE and
-  REPLENISH work are their own ADR-gated phase across three contexts.)
-- What replaces the lexical slot order once travel distance is available, and
-  which context publishes that distance?
-- When does a second SKU per forward slot, or an affinity-based policy,
-  justify a new policy version?
-- What top-N and lookback defaults suit the first site?
+- Who executes the moves (planned edge through process-path-management, not
+  built)?
+- Which consumer will read `SlotPlanApproved` first?
+- A travel-distance ranking needs layout geometry the consumer does not read
+  yet (`LocationGeometryUpdated` is ignored today).
