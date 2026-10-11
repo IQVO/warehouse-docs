@@ -158,6 +158,28 @@ const sidebar: SidebarsConfig = {
         },
       ],
     },
+    {
+      type: "category",
+      label: "Reports",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/inbound-receiving/reports",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/inbound-receiving/get-receiving-performance",
+          label: "Receiving performance and accuracy per day, and the state right now",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/inbound-receiving/get-reports-freshness",
+          label: "How far the analytics projection is behind",
+          className: "api-method get",
+        },
+      ],
+    },
   ],
 };
 

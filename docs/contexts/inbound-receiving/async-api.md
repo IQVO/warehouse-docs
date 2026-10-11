@@ -2,7 +2,7 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: Kafka integration for inbound-receiving — one published integration topic with nine events, the ReceiptLineReceived handover that inventory-storage books, two opt-in local-copy consumers and the CloudEvents envelope.
+description: Kafka integration for inbound-receiving — one published integration topic with nine events, the internal analytics stream, the ReceiptLineReceived handover that inventory-storage books, two opt-in local-copy consumers and the CloudEvents envelope.
 ---
 
 # Async API
@@ -20,7 +20,7 @@ bottom. For per-event payloads, producer use cases and consumers, see
 | `warehouse.inbound-receiving.events` | **Published** | Nine events from the `Asn`, `DockAppointment` and `Receipt` aggregates, written by the transactional outbox relay. |
 | `warehouse.product-master.events` | Consumed | Only `ProductRegistered`, into the `known_skus` local copy. Started only when `PRODUCT_MODE=kafka`, group from `PRODUCT_CONSUMER_GROUP`. |
 | `warehouse.facility.events` | Consumed | Only `LocationSlotRegistered` and `LocationSlotDecommissioned`, into the `dock_doors` local copy. Started only when `DOCK_DOOR_MODE=kafka`, group from `DOCK_DOOR_CONSUMER_GROUP`. |
-| `warehouse.inbound-receiving.analytics` | Reserved | Named in ADR 0004 for a later analytics read side. Nothing publishes to it. |
+| `warehouse.inbound-receiving.analytics` | **Published** (internal) | Since ADR 0006, every published event is also written here in the same unit of work, under the same CloudEvents `id`, `type`, `subject` and key, with `dataschema=urn:warehouse:inbound-receiving:analytics:<EventName>:v1`. Its only consumer is this context's own `inbound-projector`; it is not an integration contract. |
 
 ## The envelope
 
@@ -66,11 +66,25 @@ consumers dedupe on it. `EVENT_PUBLISHER=log` (the default) only logs messages.
 
 | Consumer | State | Behaviour |
 | --- | --- | --- |
-| `inventory-storage` | **Live in code** on its `develop` (its ADR 0037), started only when `INBOUND_RECEIPT_CONSUMER_GROUP` is set | Books `condition=Good` quantities through its existing ReceiveStock use case, dedupes on the CloudEvents `id`, logs and counts `Damaged` lines without booking them, commits the offset only after handling. A new group starts at the earliest offset. |
+| `inventory-storage` | **Live** (its ADR 0037), started only when `INBOUND_RECEIPT_CONSUMER_GROUP` is set; the reference deployment sets it (`inventory-storage-inbound-receipts`, `warehouse-infra` `helm-values/inventory-storage.yaml`) | Books `condition=Good` quantities through its existing ReceiveStock use case, dedupes on the CloudEvents `id`, logs and counts `Damaged` lines without booking them, commits the offset only after handling. A new group starts at the earliest offset. |
 | `warehouse-planning` | **Planned, not built** | Would consume `DockAppointmentBooked` as inbound-labor demand; its CapacityPlan has no inbound process path yet. |
 
-The reference deployment (`warehouse-infra` `develop`) does not run
-`inbound-receiving` yet, so no edge on this page is live end to end.
+The reference deployment (`warehouse-infra` `develop`) runs `inbound-receiving`
+with `EVENT_PUBLISHER=kafka`, `PRODUCT_MODE=kafka` and `DOCK_DOOR_MODE=kafka`
+(`helm-values/inbound-receiving.yaml`), so the handover to `inventory-storage`
+is live end to end.
+
+## The analytics stream
+
+`warehouse.inbound-receiving.analytics` (DLQ
+`warehouse.inbound-receiving.analytics.dlq`) carries the same nine events,
+byte-for-byte the integration payload (`FanoutEncoder`,
+`internal/adapters/outbound/kafka/analytics_encoder.go`). `cmd/inbound-projector`
+(group `ANALYTICS_CONSUMER_GROUP`, default `inbound-receiving-analytics`)
+projects it into a separate analytical database, and `cmd/inbound-reports`
+(port 8092) serves `GET /reports/receiving-performance` and
+`GET /reports/freshness` from it (ADR 0006). Sibling contexts keep reading
+`warehouse.inbound-receiving.events`.
 
 ## Consuming: local copies
 

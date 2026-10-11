@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **inbound-receiving** bounded context (WMS subdomain):\nthe inbound dock workflow of ASNs, dock appointments and receipts\n(ADR 0001, ADR 0002).\n\n**Published.** The `Asn`, `DockAppointment` and `Receipt` aggregates raise\nnine events, published to `warehouse.inbound-receiving.events` through a\n**transactional outbox**: the aggregate row and its already-encoded events\nare written in ONE database transaction and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is stored with the outbox row, so a\nretry republishes the same `id`). Consumers dedupe on `id`.\n`ReceiptLineReceived` is the **handover event**: inventory-storage consumes\nit and books `condition=Good` quantities into stock (ADR 0003); Damaged\nquantities are recorded here and not booked.\n\n**Consumed (ADR 0003).** `ProductRegistered` from\n`warehouse.product-master.events` feeds the `known_skus` local copy\n(`PRODUCT_MODE`, group from env `PRODUCT_CONSUMER_GROUP`).\n`LocationSlotRegistered` and `LocationSlotDecommissioned` from\n`warehouse.facility.events` feed the `dock_doors` local copy\n(`DOCK_DOOR_MODE`, group from env `DOCK_DOOR_CONSUMER_GROUP`). Both modes\ndefault to `permissive` (consumer not started); a `kafka` mode with an\nunset group is a boot error.\n\n**Planned, not built.** warehouse-planning consuming\n`DockAppointmentBooked` as inbound-labor demand is a documented future\nedge. Nothing consumes that event today.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\n`specversion`, `id`, `source` (`/warehouse/inbound-receiving`), `type`,\n`subject` (the aggregate instance id), `time`, `datacontenttype`\n(`application/json`) and `dataschema`\n(`urn:warehouse:inbound-receiving:events:<EventName>:v1`) are all required.\n`type` = `com.warehouse.wms.inbound-receiving.<entity>.<EventName>` with\n`<entity>` one of `asn`, `dockappointment`, `receipt`. Kafka key:\n`asn_number` for `asn.*` and `receipt.*`, `appointment_id` for\n`dockappointment.*`. `data` is snake_case, optional fields are omitted when\nunset, timestamps are RFC 3339 UTC. A breaking payload change is a new\n`.v2` type, never a mutation.\n"
+    "description": "Event catalog for the **inbound-receiving** bounded context (WMS subdomain):\nthe inbound dock workflow of ASNs, dock appointments and receipts\n(ADR 0001, ADR 0002).\n\n**Published.** The `Asn`, `DockAppointment` and `Receipt` aggregates raise\nnine events, published to `warehouse.inbound-receiving.events` through a\n**transactional outbox**: the aggregate row and its already-encoded events\nare written in ONE database transaction and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is stored with the outbox row, so a\nretry republishes the same `id`). Consumers dedupe on `id`.\n`ReceiptLineReceived` is the **handover event**: inventory-storage consumes\nit and books `condition=Good` quantities into stock (ADR 0003); Damaged\nquantities are recorded here and not booked.\n\n**Consumed (ADR 0003).** `ProductRegistered` from\n`warehouse.product-master.events` feeds the `known_skus` local copy\n(`PRODUCT_MODE`, group from env `PRODUCT_CONSUMER_GROUP`).\n`LocationSlotRegistered` and `LocationSlotDecommissioned` from\n`warehouse.facility.events` feed the `dock_doors` local copy\n(`DOCK_DOOR_MODE`, group from env `DOCK_DOOR_CONSUMER_GROUP`). Both modes\ndefault to `permissive` (consumer not started); a `kafka` mode with an\nunset group is a boot error.\n\n**Analytics (ADR 0006).** The same nine events are ALSO written, in the\nsame transaction, to `warehouse.inbound-receiving.analytics` with the same\n`type` and the same `id` per occurrence, `dataschema`\n`urn:warehouse:inbound-receiving:analytics:<EventName>:v1` and payloads\nequal to the integration payloads. Only this service's `inbound-projector`\nconsumes it; it is not an integration contract.\n\n**Planned, not built.** warehouse-planning consuming\n`DockAppointmentBooked` as inbound-labor demand is a documented future\nedge. Nothing consumes that event today.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\n`specversion`, `id`, `source` (`/warehouse/inbound-receiving`), `type`,\n`subject` (the aggregate instance id), `time`, `datacontenttype`\n(`application/json`) and `dataschema`\n(`urn:warehouse:inbound-receiving:events:<EventName>:v1`) are all required.\n`type` = `com.warehouse.wms.inbound-receiving.<entity>.<EventName>` with\n`<entity>` one of `asn`, `dockappointment`, `receipt`. Kafka key:\n`asn_number` for `asn.*` and `receipt.*`, `appointment_id` for\n`dockappointment.*`. `data` is snake_case, optional fields are omitted when\nunset, timestamps are RFC 3339 UTC. A breaking payload change is a new\n`.v2` type, never a mutation.\n"
   },
   "servers": {
     "production": {
@@ -47,6 +47,10 @@
     {
       "name": "consumed",
       "description": "Events produced by sibling contexts that this service consumes."
+    },
+    {
+      "name": "analytics",
+      "description": "This service's own analytics stream, consumed only by its projector (ADR 0006)."
     }
   ],
   "channels": {
@@ -930,6 +934,377 @@
         }
       }
     },
+    "warehouse.inbound-receiving.analytics": {
+      "description": "This service's analytics topic (`AnalyticsTopic` in\n`internal/adapters/outbound/kafka/analytics_encoder.go`; ADR 0006).\nWritten by the SAME outbox relay, from rows inserted in the same\ntransaction as the integration rows (one CloudEvents `id` per occurrence\non both topics); key as on the integration topic. Consumed ONLY by this\nservice's `inbound-projector` under a fixed consumer group read from env\n`ANALYTICS_CONSUMER_GROUP` (at-least-once; the offset is committed after\nthe projection and the dedupe mark committed together in the analytical\ndatabase). The projector dedupes on `id`, ignores unknown types, skips\n(with a rate-limited WARN) anything that is not CloudEvents 1.0, and\ndead-letters a known type with an unusable payload to\n`warehouse.inbound-receiving.analytics.dlq` (raw bytes plus `x-dlq-*`\nheaders). Not an integration contract: other contexts consume\n`warehouse.inbound-receiving.events`.\n",
+      "subscribe": {
+        "operationId": "receiveInboundReceivingAnalyticsEvents",
+        "summary": "Receive the inbound-receiving analytics events.",
+        "description": "Route on the full `type`; the payloads equal the integration payloads\n(no analytics-only fields in v1). `dataschema` is\n`urn:warehouse:inbound-receiving:analytics:<EventName>:v1`.\n",
+        "tags": [
+          {
+            "name": "analytics"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "ASNRegistered",
+              "title": "ASN registered (analytics)",
+              "summary": "A supplier's advance ship notice was registered, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.asn.ASNRegistered` (the same as on the integration topic); dataschema `urn:warehouse:inbound-receiving:analytics:ASNRegistered:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[0].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7c1f3a52-0d4e-4b8a-9e61-2a5d8f0c3b14",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.asn.ASNRegistered",
+                    "subject": "ASN-1001",
+                    "time": "2026-10-08T12:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:analytics:ASNRegistered:v1",
+                    "data": {
+                      "asn_number": "ASN-1001",
+                      "supplier_ref": "ACME",
+                      "expected_arrival": "2026-10-09T08:00:00Z",
+                      "lines": [
+                        {
+                          "line_no": 1,
+                          "sku": "SKU-1",
+                          "expected_qty": 40
+                        },
+                        {
+                          "line_no": 2,
+                          "sku": "SKU-2",
+                          "expected_qty": 5
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ASNCancelled",
+              "title": "ASN cancelled (analytics)",
+              "summary": "A Registered ASN was cancelled, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.asn.ASNCancelled` (the same as on the integration topic); dataschema `urn:warehouse:inbound-receiving:analytics:ASNCancelled:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[1].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "1e9b4d70-3c2a-4f5d-8b17-6a0c9d2e7f31",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.asn.ASNCancelled",
+                    "subject": "ASN-1001",
+                    "time": "2026-10-08T12:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:analytics:ASNCancelled:v1",
+                    "data": {
+                      "asn_number": "ASN-1001",
+                      "reason": "Supplier cancelled the shipment"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DockAppointmentBooked",
+              "title": "Dock appointment booked (analytics)",
+              "summary": "A door window was booked for a carrier, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked` (the same as on the integration topic); dataschema `urn:warehouse:inbound-receiving:analytics:DockAppointmentBooked:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[2].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "4a8c2e91-5b3d-4c7f-a012-9e6d1b8f3c25",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked",
+                    "subject": "appt-123e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-08T12:05:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:analytics:DockAppointmentBooked:v1",
+                    "data": {
+                      "appointment_id": "appt-123e4567-e89b-12d3-a456-426614174000",
+                      "door_code": "WH1-DOCK-IN-01",
+                      "carrier": "ACME Freight",
+                      "window_start": "2026-10-09T08:00:00Z",
+                      "window_end": "2026-10-09T10:00:00Z",
+                      "asn_numbers": [
+                        "ASN-1001"
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DockAppointmentCheckedIn",
+              "title": "Dock appointment checked in (analytics)",
+              "summary": "The carrier arrived at the door, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCheckedIn` (the same as on the integration topic); dataschema `urn:warehouse:inbound-receiving:analytics:DockAppointmentCheckedIn:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[3].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "9d3e5f10-2a4b-4c6d-8e7f-0b1a2c3d4e5f",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCheckedIn",
+                    "subject": "appt-123e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-09T07:50:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:analytics:DockAppointmentCheckedIn:v1",
+                    "data": {
+                      "appointment_id": "appt-123e4567-e89b-12d3-a456-426614174000",
+                      "door_code": "WH1-DOCK-IN-01",
+                      "checked_in_at": "2026-10-09T07:50:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DockAppointmentCancelled",
+              "title": "Dock appointment cancelled (analytics)",
+              "summary": "A Booked appointment was cancelled, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled` (the same as on the integration topic); dataschema `urn:warehouse:inbound-receiving:analytics:DockAppointmentCancelled:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[4].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "b2c4d6e8-1f3a-4b5c-9d7e-8f0a1b2c3d4e",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled",
+                    "subject": "appt-123e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-08T18:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:analytics:DockAppointmentCancelled:v1",
+                    "data": {
+                      "appointment_id": "appt-123e4567-e89b-12d3-a456-426614174000",
+                      "door_code": "WH1-DOCK-IN-01",
+                      "reason": "Carrier delayed"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DockAppointmentCompleted",
+              "title": "Dock appointment completed (analytics)",
+              "summary": "The receipt opened from the appointment closed, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCompleted` (the same as on the integration topic); dataschema `urn:warehouse:inbound-receiving:analytics:DockAppointmentCompleted:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[5].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "c3d5e7f9-2a4b-4c6d-8e0f-1a2b3c4d5e6f",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCompleted",
+                    "subject": "appt-123e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-09T09:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:analytics:DockAppointmentCompleted:v1",
+                    "data": {
+                      "appointment_id": "appt-123e4567-e89b-12d3-a456-426614174000",
+                      "door_code": "WH1-DOCK-IN-01",
+                      "completed_at": "2026-10-09T09:30:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ReceiptOpened",
+              "title": "Receipt opened (analytics)",
+              "summary": "Receiving of an ASN started, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.receipt.ReceiptOpened` (the same as on the integration topic); dataschema `urn:warehouse:inbound-receiving:analytics:ReceiptOpened:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[6].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "d4e6f8a0-3b5c-4d7e-9f1a-2b3c4d5e6f70",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.receipt.ReceiptOpened",
+                    "subject": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-09T08:05:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:analytics:ReceiptOpened:v1",
+                    "data": {
+                      "receipt_id": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                      "asn_number": "ASN-1001",
+                      "appointment_id": "appt-123e4567-e89b-12d3-a456-426614174000",
+                      "door_code": "WH1-DOCK-IN-01",
+                      "opened_at": "2026-10-09T08:05:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ReceiptLineReceived",
+              "title": "Receipt line received (analytics)",
+              "summary": "A quantity was received against a line (the handover event), on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` (the same as on the integration topic); dataschema `urn:warehouse:inbound-receiving:analytics:ReceiptLineReceived:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[7].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3f8f6c2e-9b1a-4d6e-8a52-0c7d1e4b9a10",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived",
+                    "subject": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-09T08:10:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:analytics:ReceiptLineReceived:v1",
+                    "data": {
+                      "receipt_id": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                      "asn_number": "ASN-1001",
+                      "line_no": 1,
+                      "sku": "SKU-1",
+                      "quantity": 40,
+                      "condition": "Good",
+                      "received_at": "2026-10-09T08:10:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ReceiptClosed",
+              "title": "Receipt closed (analytics)",
+              "summary": "Receiving ended, with the discrepancies against the ASN, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed` (the same as on the integration topic); dataschema `urn:warehouse:inbound-receiving:analytics:ReceiptClosed:v1`; payload equal to the integration payload.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[8].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "e5f7a9b1-4c6d-4e8f-a02b-3c4d5e6f7a81",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed",
+                    "subject": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-09T09:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:analytics:ReceiptClosed:v1",
+                    "data": {
+                      "receipt_id": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                      "asn_number": "ASN-1001",
+                      "closed_at": "2026-10-09T09:30:00Z",
+                      "discrepancies": [
+                        {
+                          "line_no": 1,
+                          "sku": "SKU-1",
+                          "kind": "Short",
+                          "expected_qty": 40,
+                          "received_qty": 34,
+                          "damaged_qty": 4
+                        },
+                        {
+                          "line_no": 1,
+                          "sku": "SKU-1",
+                          "kind": "Damaged",
+                          "expected_qty": 40,
+                          "received_qty": 34,
+                          "damaged_qty": 4
+                        },
+                        {
+                          "line_no": 2,
+                          "sku": "SKU-2",
+                          "kind": "Over",
+                          "expected_qty": 5,
+                          "received_qty": 7,
+                          "damaged_qty": 0
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
     "warehouse.product-master.events": {
       "description": "product-master's integration topic. Consumed ONLY for `ProductRegistered`\n(ADR 0003), into the `known_skus` local copy, with a stable consumer\ngroup read from env `PRODUCT_CONSUMER_GROUP`; the consumer is started\nonly when `PRODUCT_MODE=kafka`. Every other type on the topic is ignored.\n",
       "publish": {
@@ -1241,6 +1616,15 @@
       "ReceiptOpened": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[6]",
       "ReceiptLineReceived": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[7]",
       "ReceiptClosed": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[8]",
+      "ASNRegisteredAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[0]",
+      "ASNCancelledAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[1]",
+      "DockAppointmentBookedAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[2]",
+      "DockAppointmentCheckedInAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[3]",
+      "DockAppointmentCancelledAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[4]",
+      "DockAppointmentCompletedAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[5]",
+      "ReceiptOpenedAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[6]",
+      "ReceiptLineReceivedAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[7]",
+      "ReceiptClosedAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[8]",
       "ProductRegistered": "$ref:$.channels.warehouse.product-master.events.publish.message",
       "LocationSlotRegistered": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[0]",
       "LocationSlotDecommissioned": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1]"
