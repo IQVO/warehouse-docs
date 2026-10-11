@@ -8,11 +8,11 @@ description: Why everything before the first stow is its own bounded context —
 # Business Context
 
 Sourced from the plan and decision log of 2026-10-08 for the two new WMS-tier
-contexts, `inbound-receiving` and `slotting-optimization`. The context's own
-ADRs 0001 to 0004 are being written in the
-[IQVO/inbound-receiving](https://github.com/IQVO/inbound-receiving)
-repository (`docs/adr/`, none on `develop` when this page was written) and,
-once merged, are the authority where they differ from this page.
+contexts, `inbound-receiving` and `slotting-optimization`, and refreshed
+against the code on `develop`. The context's own ADRs 0001 to 0006 (under
+`docs/adr/` in
+[IQVO/inbound-receiving](https://github.com/IQVO/inbound-receiving)) are the
+authority where they differ from this page.
 
 ## The gap
 
@@ -27,7 +27,7 @@ capabilities and converges execution to include inbound. The fleet's own
 [Domain Vision](/strategic-design/domain-vision) listed the inbound dock as
 not modeled.
 
-## What it plans to own
+## What it owns
 
 Three aggregates, each its own consistency boundary (decision 4):
 
@@ -91,7 +91,7 @@ Every event is CloudEvents 1.0 in structured mode with
 | `dockappointment.DockAppointmentCancelled` | `appointment_id` | none |
 | `dockappointment.DockAppointmentCompleted` | `appointment_id` | none |
 | `receipt.ReceiptOpened` | `asn_number` | none |
-| `receipt.ReceiptLineReceived` | `asn_number` | `inventory-storage` (code merged on its `develop`, ADR 0037; opt-in by `INBOUND_RECEIPT_CONSUMER_GROUP`) |
+| `receipt.ReceiptLineReceived` | `asn_number` | `inventory-storage` (its ADR 0037; opt-in by `INBOUND_RECEIPT_CONSUMER_GROUP`, set in the reference deployment) |
 | `receipt.ReceiptClosed` | `asn_number` | none |
 
 REST, behind Kong at `/api/inbound-receiving` (problem type base
@@ -106,14 +106,19 @@ REST, behind Kong at `/api/inbound-receiving` (problem type base
 
 ## Honest scope today
 
-- The service is merged on `IQVO/inbound-receiving` `develop`: REST API,
-  outbox and the two local-copy consumers. This site now holds its
-  `apis/inbound-receiving/` specs, the generated references and the synced
-  artifact pack. The Kong route (`/api/inbound-receiving`) is the planned
-  cluster path: `warehouse-infra` does not run the service yet.
-- The `inventory-storage` consumer is merged on its `develop`. Until the
-  reference deployment runs `inbound-receiving` and sets its consumer group,
-  `ReceiptLineReceived` has no live consumer end to end.
-- The planned build waves also cover an MCP server, an analytics read side, a
-  `warehouse-ops-agent` MCP client, a console remote with a tile and the
-  `warehouse-infra` wiring. None of them exists yet.
+- The service is built on `IQVO/inbound-receiving` `develop`: REST API,
+  outbox, the two local-copy consumers, a read-only MCP server (`cmd/mcp`,
+  ADR 0005), the analytics read side (`cmd/inbound-projector` and
+  `cmd/inbound-reports`, ADR 0006), a Helm chart and the web remote
+  `inbound_mfe`. This site holds its `apis/inbound-receiving/` specs, the
+  generated references and the synced artifact pack.
+- The reference deployment (`warehouse-infra` `develop`) runs it behind Kong
+  at `/api/inbound-receiving`, with both local copies in `kafka` mode, and
+  sets `inventory-storage`'s consumer group, so the `ReceiptLineReceived`
+  handover is live end to end. `warehouse-ops-agent` reads it over MCP and
+  the console mounts `inbound_mfe` at `/mfes/inbound-receiving/`.
+- `warehouse-infra` documents one open issue: requests to
+  `/api/inbound-receiving/reports/*` through Kong land on the OLTP route and
+  return 404; the reports service works in-cluster.
+- `DockAppointmentBooked` as inbound-labor demand for `warehouse-planning`
+  remains planned, not built.

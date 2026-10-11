@@ -34,13 +34,14 @@ in the outbound Postgres adapter.
 
 ## The fleet at a glance
 
-35 aggregate roots across twelve contexts. The thirteenth, `warehouse-ops-agent`,
-owns none, and that is a design decision. The two newest contexts decided on
-2026-10-08 are not counted because nothing is built yet: `inbound-receiving`
-plans three aggregates (`Asn`, `DockAppointment`, `Receipt`) and
-`slotting-optimization` plans one (`SlotPlan`). Counts are the per-aggregate
-sections of each context's Aggregate Design Canvas, cross-checked against the
-`<<AggregateRoot>>` classes in its class diagram.
+39 aggregate roots across fourteen contexts. The fifteenth, `warehouse-ops-agent`,
+owns none, and that is a design decision. The two newest contexts, decided on
+2026-10-08, are built and counted: `inbound-receiving` has three aggregates
+(`Asn`, `DockAppointment`, `Receipt`) and `slotting-optimization` has one
+(`SlotPlan`). Counts are the per-aggregate sections of each context's
+Aggregate Design Canvas, cross-checked against the `<<AggregateRoot>>`
+classes in its class diagram (`slotting-optimization`'s class diagram draws
+`SlotPlan` without the stereotype; its canvas covers that one aggregate).
 
 | Context | Aggregate roots | # | Detailed pages |
 | --- | --- | --- | --- |
@@ -56,6 +57,8 @@ sections of each context's Aggregate Design Canvas, cross-checked against the
 | `warehouse-planning` | `ProcessCapacity`, `CapacityPlan` | 2 | [class diagram](/contexts/warehouse-planning/class-diagram), [canvas](/contexts/warehouse-planning/aggregate-design-canvas) |
 | `product-master` | `Product` (value objects `Classification`, `PhysicalProfile` with `UnitDimensions` and `Measurement`) | 1 | [class diagram](/contexts/product-master/class-diagram), [canvas](/contexts/product-master/aggregate-design-canvas) |
 | `network-inventory-planning` | `InterWarehouseTransfer` (the saga; entities `AuditEntry`, `Allocation`, `StowAllocation`). Planner, snapshot and read-model facts are value objects and services, not aggregates | 1 | [class diagram](/contexts/network-inventory-planning/class-diagram), [canvas](/contexts/network-inventory-planning/aggregate-design-canvas) |
+| `inbound-receiving` | `Asn`, `DockAppointment`, `Receipt` (entity `ReceiptLine`) | 3 | [class diagram](/contexts/inbound-receiving/class-diagram), [canvas](/contexts/inbound-receiving/aggregate-design-canvas) |
+| `slotting-optimization` | `SlotPlan` (assignments, moves and unassigned SKUs as value objects; the `abc-velocity-v1` planner is a domain service) | 1 | [class diagram](/contexts/slotting-optimization/class-diagram), [canvas](/contexts/slotting-optimization/aggregate-design-canvas) |
 | `warehouse-ops-agent` | none: per-request decision objects in `internal/domain/policy` | 0 | [class diagram](/contexts/warehouse-ops-agent/class-diagram), [canvas](/contexts/warehouse-ops-agent/aggregate-design-canvas) |
 
 ## Aggregates across context boundaries

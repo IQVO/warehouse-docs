@@ -57,12 +57,12 @@ Reading them in that order is the fastest way to understand any one context.
 
 ## Three things worth knowing up front
 
-**The fleet is bigger than "fifteen services".** Twelve of the fifteen
+**The fleet is bigger than "fifteen services".** Thirteen of the fifteen
 contexts on this site ship four binaries and two databases each, because the analytical
 read side is a separate process family from the operational one.
-`warehouse-ops-agent` is one binary with no database, and the two newest
-contexts (`inbound-receiving`, `slotting-optimization`) are decided but not
-built. That is
+`warehouse-ops-agent` is one binary with no database, and the newest,
+`slotting-optimization`, is one binary and one database, built but not
+deployed yet. That is
 [Containers](/architecture/containers).
 
 **The domain layer depends on nothing, and CI proves it.** Every context has an

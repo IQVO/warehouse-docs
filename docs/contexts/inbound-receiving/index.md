@@ -19,26 +19,29 @@ window, and the receipt that counts a delivery against the ASN and records
 any discrepancy. It books no stock itself: good units reach
 `inventory-storage` as events.
 
-:::info[What is live, what is not deployed, and what is planned]
+:::info[What is live and what is planned]
 Per this context's own [Context Map](/contexts/inbound-receiving/context-map),
-checked against each side's `develop`:
+checked against each side's `develop` and `warehouse-infra` `develop`:
 
-**Code merged on both sides:** the service
+**Built:** the service
 ([IQVO/inbound-receiving](https://github.com/IQVO/inbound-receiving), ADRs
-0001 to 0004) ships the REST API, the transactional outbox and two opt-in
-local-copy consumers (`known_skus` from `ProductRegistered`, `dock_doors` from
-the facility-layout slot events). `inventory-storage` has the consumer for the
-handover event `ReceiptLineReceived` on its `develop` (its ADR 0037), started
-only when `INBOUND_RECEIPT_CONSUMER_GROUP` is set. It books `Good` lines only.
+0001 to 0006) ships four binaries: `cmd/api` (REST, the transactional outbox
+and two local-copy consumers, `known_skus` from `ProductRegistered` and
+`dock_doors` from the facility-layout slot events), `cmd/mcp` (seven read-only
+MCP tools, ADR 0005), and the analytics read side `cmd/inbound-projector` and
+`cmd/inbound-reports` (receiving performance and freshness reports, ADR 0006).
+Its web remote `inbound_mfe` is mounted by `warehouse-console`, and it ships a
+Helm chart (`charts/inbound-receiving`).
 
-**Not deployed:** `warehouse-infra` `develop` does not run `inbound-receiving`
-yet (no cluster wiring, no consumer group set), so no edge is live end to end.
+**Live in the reference deployment:** `warehouse-infra` runs it with
+`EVENT_PUBLISHER=kafka` and both local copies in `kafka` mode;
+`inventory-storage` consumes the handover event `ReceiptLineReceived` (its ADR
+0037, group set in the deployment) and books `Good` lines only;
+`warehouse-ops-agent` reads it over MCP (its ADR 0021).
 
 **Planned, not built:** `warehouse-planning` consuming `DockAppointmentBooked`
-as inbound-labor demand (its CapacityPlan has no inbound process path), a
-read-only MCP server for `warehouse-ops-agent`, a console remote and the
-analytics read side. Eight of the nine published event types have no consumer
-today.
+as inbound-labor demand (its CapacityPlan has no inbound process path). Eight
+of the nine published event types have no consumer today.
 :::
 
 It owns three aggregates, each its own consistency boundary: **`Asn`**,
@@ -72,15 +75,16 @@ It owns three aggregates, each its own consistency boundary: **`Asn`**,
   [Use Cases](/contexts/inbound-receiving/use-cases).
 - [Async API](/contexts/inbound-receiving/async-api): the Kafka narrative.
 - Generated references: [REST](/api-reference/rest/inbound-receiving/inbound-receiving-api)
-  and [AsyncAPI](/api-reference/async/inbound-receiving).
+  (including the two `reports` paths served by `cmd/inbound-reports`) and
+  [AsyncAPI](/api-reference/async/inbound-receiving).
 
 ## Elsewhere
 
 - **Repository**: [github.com/IQVO/inbound-receiving](https://github.com/IQVO/inbound-receiving).
   Its ADRs live under `docs/adr/`: 0001 (bounded context), 0002 (aggregates and
   invariants), 0003 (local copies and the handover), 0004 (CloudEvents
-  envelope and type catalogue); MCP adoption and the analytics read side follow
-  in later phases.
+  envelope and type catalogue), 0005 (MCP server adoption), 0006 (analytics
+  read side).
 - **Fleet-level**: [Context Map](/strategic-design/context-map) (K22 to K24
   and K28), the [Event Standard](/strategic-design/event-standard-cloudevents)
   (subdomain table and type catalogue),

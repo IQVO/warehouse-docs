@@ -21,10 +21,10 @@ Every orange sticky is a real domain event: it appears in a synced
 Every hotspot is a gap that is already documented somewhere, and the
 [hotspot table](#hotspots-and-their-sources) cites the source for each one.
 Nothing on this page is a guess. The two newest contexts,
-`inbound-receiving` and `slotting-optimization`, are deliberately not drawn
-on the wall yet: `inbound-receiving` sits before the first stow and
-`slotting-optimization` outside the order-to-ship line, and their events are
-not in a synced `asyncapi.yaml` until their contracts merge.
+`inbound-receiving` (before the first stow) and `slotting-optimization`
+(beside the order-to-ship line), have their own phase,
+[Phase 0b](#phase-0b-inbound-receiving-and-forward-pick-slotting), drawn from
+their synced `asyncapi.yaml` files.
 
 ## Legend
 
@@ -73,8 +73,9 @@ flowchart LR
   owned by one context. An arrow that crosses lanes is an integration. It is
   a Kafka event, or a synchronous call where the label says so.
 - **Pivotal events** have a thick border. They mark the hand-offs:
-  shift plan committed, demand accepted, work released, work completed,
-  package manifested and shipment confirmed.
+  receipt line received, slot plan approved, shift plan committed, demand
+  accepted, work released, work completed, package manifested and shipment
+  confirmed.
 - **Hotspots** hang off the sticky they concern with a dotted line. Their
   number points to the source in [the table](#hotspots-and-their-sources).
 - Analytics-only events, such as `OrderReceived` or `TaskCreated`, are
@@ -125,8 +126,13 @@ flowchart LR
         direction LR
         PM1["Product Classified"]:::event
     end
+    subgraph S_IR["inbound-receiving"]
+        direction LR
+        IR1["Receipt Line Received"]:::pivotal
+    end
     subgraph S_INV["inventory-storage"]
         direction LR
+        IN0["Stock Received"]:::event
         IN1["Item Stowed"]:::event
         IN2["Stock Reserved"]:::event
     end
@@ -151,6 +157,7 @@ flowchart LR
     end
 
     FL1 --> FL2 --> IN1
+    IR1 --> IN0 --> IN1
     PM1 --> IN1
     PM1 -.-> OM1
     PM1 -.-> WP2
@@ -182,7 +189,10 @@ and published shortages are cached locally by `order-management`, and its
 promise and order view read from those caches. `TaskPerformanceRecorded`
 reaches the next staffing proposal. `Product Classified` feeds the local
 classification copies that stow, order intake, release and package sealing
-read (product-master ADR 0003). The `FE4` to `NF3` arrow is dotted on
+read (product-master ADR 0003). `Receipt Line Received` is the inbound
+handover that `inventory-storage` books as `Stock Received` before the stow
+(see [Phase 0b](#phase-0b-inbound-receiving-and-forward-pick-slotting), which
+also draws `slotting-optimization`). The `FE4` to `NF3` arrow is dotted on
 purpose. No event or call links a manifested package to the network order,
 and an operator closes the loop by hand (hotspot H26).
 
@@ -274,7 +284,7 @@ flowchart LR
     C3 -.- H3
     E6 -.- H5
     H33["H33 a SKU classified just before its first stow may reach a copy late"]:::hotspot
-    H34["H34 no event consumer of the physical profile yet"]:::hotspot
+    H34["H34 the only physical-profile consumer, slotting-optimization, is not deployed"]:::hotspot
     E11 -.- H33
     E12 -.- H34
 
@@ -293,6 +303,108 @@ Sources: [facility-layout flows 1 and 3](/contexts/facility-layout/domain-messag
 [labor-performance flow 2](/contexts/labor-performance/domain-message-flow),
 [inventory-storage flow 3](/contexts/inventory-storage/domain-message-flow),
 [product-master domain message flow](/contexts/product-master/domain-message-flow).
+
+## Phase 0b: inbound receiving and forward-pick slotting
+
+Two `wms` contexts work beside the order-to-ship line. `inbound-receiving`
+covers everything before the first stow: an ASN announces a delivery, a dock
+appointment books a door, and a receipt counts the delivery line by line. Its
+`Receipt Line Received` is the handover that `inventory-storage` books as
+received stock. `slotting-optimization` decides which SKUs deserve a forward
+pick slot from local copies of demand, product facts and slots, and a human
+approves the plan. Every event below is a message in the context's synced
+`apis/<context>/asyncapi.yaml`.
+
+```mermaid
+flowchart LR
+    SUPL["Supplier or carrier"]:::actor
+    DOCK["Dock staff"]:::actor
+    PLNR["Slotting planner"]:::actor
+    PMX["product-master"]:::external
+    FLX["facility-layout"]:::external
+    OMX["order-management"]:::external
+    subgraph S_IR["inbound-receiving"]
+        direction LR
+        R1["Known SKUs and inbound dock doors, local copies"]:::readmodel
+        C1["Register ASN, Cancel ASN"]:::command
+        E1["ASN Registered, ASN Cancelled"]:::event
+        C2["Book, Check In, Cancel Appointment"]:::command
+        E2["Dock Appointment Booked"]:::event
+        E3["Dock Appointment Checked In, Cancelled"]:::event
+        C3["Open Receipt, Receive Line"]:::command
+        E4["Receipt Opened"]:::event
+        E5["Receipt Line Received"]:::pivotal
+        C4["Close Receipt"]:::command
+        E6["Receipt Closed"]:::event
+        E7["Dock Appointment Completed"]:::event
+    end
+    subgraph S_INV["inventory-storage"]
+        direction LR
+        P1["Book Good lines through Receive Stock"]:::policy
+        E8["Stock Received"]:::event
+    end
+    subgraph S_SO["slotting-optimization"]
+        direction LR
+        R2["Demand lines, product profiles, zones and slots, local copies"]:::readmodel
+        C5["Generate Slot Plan"]:::command
+        E9["Slot Plan Generated"]:::event
+        C6["Approve or Reject Slot Plan"]:::command
+        E10["Slot Plan Approved"]:::pivotal
+        E11["Slot Plan Rejected"]:::event
+    end
+
+    PMX -- "Product Registered" --> R1
+    FLX -- "Location Slot events" --> R1
+    SUPL --> C1 --> E1
+    SUPL --> C2
+    R1 --> C1
+    R1 --> C2
+    C2 --> E2
+    C2 --> E3
+    DOCK --> C3
+    R1 --> C3
+    C3 --> E4
+    C3 --> E5 --> P1 --> E8
+    DOCK --> C4 --> E6
+    C4 --> E7
+    PMX -- "Product Classified, Dimensions Declared, Measured" --> R2
+    FLX -- "Zone and Location Slot events" --> R2
+    OMX -- "Site Sku Demand Changed" --> R2
+    PLNR --> C5
+    R2 --> C5 --> E9
+    PLNR --> C6
+    C6 --> E10
+    C6 --> E11
+
+    H36["H36 Dock Appointment Booked has no consumer, inbound-labor demand planned"]:::hotspot
+    H37["H37 Slot Plan Approved has no consumer, the moves are not executed"]:::hotspot
+    H38["H38 slotting-optimization is not deployed, its local copies are not fed"]:::hotspot
+    E2 -.- H36
+    E10 -.- H37
+    R2 -.- H38
+
+    classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
+    classDef command fill:#4aa3df,stroke:#1f6f9f,color:#0b1e2d
+    classDef event fill:#f6a04d,stroke:#9a5b1c,color:#1f1300
+    classDef pivotal fill:#f6a04d,stroke:#000000,stroke-width:5px,color:#1f1300,font-weight:bold
+    classDef policy fill:#c39bd3,stroke:#7d3c98,color:#1f0f26
+    classDef readmodel fill:#7dcea0,stroke:#1e8449,color:#0b2614
+    classDef external fill:#f1948a,stroke:#922b21,color:#2b0a07
+    classDef hotspot fill:#e74c3c,stroke:#78281f,color:#ffffff
+```
+
+`Dock Appointment Completed` is raised by `Close Receipt` for a receipt opened
+from an appointment. `inventory-storage` books only `Good` quantities from
+`Receipt Line Received` and logs `Damaged` lines without booking them (its ADR
+0037). `Slot Plan Approved` carries the full forward-slot map and the moves
+(`Assign`, `Relocate`, `Vacate`); approving supersedes the site's previous
+Approved plan, which raises no event of its own.
+
+Sources: [inbound-receiving domain message flow](/contexts/inbound-receiving/domain-message-flow),
+[inbound-receiving EventStorming](/contexts/inbound-receiving/eventstorming),
+[slotting-optimization domain message flow](/contexts/slotting-optimization/domain-message-flow),
+[slotting-optimization EventStorming](/contexts/slotting-optimization/eventstorming),
+and the two contexts' `apis/<context>/asyncapi.yaml`.
 
 ## Phase 1: demand intake and allocation
 
@@ -681,7 +793,10 @@ this site, and the corroborating context page is linked instead.
 | H31 | workforce-management | The default `INSTALLED_CAPACITY_MODE=permissive` rejects every shift-plan commit | [workforce-management EventStorming](/contexts/workforce-management/eventstorming). [workforce-management context map](/contexts/workforce-management/context-map). |
 | ~~H32~~ | fulfillment-execution | ~~`apis/openapi.yaml` expands CPT as "Committed Processing Time"~~ **Resolved 2026-10-06.** Now reads "Critical Pull Time". | [fulfillment-execution Ubiquitous Language](/contexts/fulfillment-execution/ubiquitous-language) |
 | H33 | product-master | A SKU classified moments before its first stow may reach a consumer's local copy late | [product-master EventStorming](/contexts/product-master/eventstorming) (product-master ADR 0001, Consequences) |
-| H34 | product-master | No event consumer of the physical profile (`ProductDimensionsDeclared`, `ProductMeasured`) yet | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0002, "later phases") |
+| H34 | product-master | No live event consumer of the physical profile (`ProductDimensionsDeclared`, `ProductMeasured`). **Partly resolved 2026-10-11:** `slotting-optimization` consumes both into its product copy (built on its `develop`), but it is not deployed yet (H38) | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0002, "later phases"), [slotting-optimization context map](/contexts/slotting-optimization/context-map) |
+| H36 | inbound-receiving | `DockAppointmentBooked` has no consumer: inbound-labor demand in `warehouse-planning` is planned, not built (K28) | [inbound-receiving context map](/contexts/inbound-receiving/context-map), row 4 |
+| H37 | slotting-optimization | `SlotPlanApproved` has no consumer: executing the moves as MOVE and REPLENISH work is planned, not built (K29) | [slotting-optimization context map](/contexts/slotting-optimization/context-map), [domain events](/contexts/slotting-optimization/domain-events) |
+| H38 | slotting-optimization | Not deployed: no Dockerfile, no chart and no `warehouse-infra` wiring, so its three local copies are not fed in the reference cluster | [slotting-optimization Business Context](/contexts/slotting-optimization/business-context), Honest scope today |
 | H35 | product-master | Stage E (remove the legacy importer, the inventory-storage backfill and the deprecated classification endpoint) has no date | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0003, stage E) |
 
 Other wired-but-unused edges are not drawn, because they sit outside
@@ -714,6 +829,8 @@ sticky inventory and the code evidence:
 | `network-fulfillment` | [/contexts/network-fulfillment/eventstorming](/contexts/network-fulfillment/eventstorming) |
 | `warehouse-planning` | [/contexts/warehouse-planning/eventstorming](/contexts/warehouse-planning/eventstorming) |
 | `product-master` | [/contexts/product-master/eventstorming](/contexts/product-master/eventstorming) |
+| `inbound-receiving` | [/contexts/inbound-receiving/eventstorming](/contexts/inbound-receiving/eventstorming) |
+| `slotting-optimization` | [/contexts/slotting-optimization/eventstorming](/contexts/slotting-optimization/eventstorming) |
 | `network-inventory-planning` | [/contexts/network-inventory-planning/eventstorming](/contexts/network-inventory-planning/eventstorming) |
 
 `network-inventory-planning`'s inter-warehouse transfer flow is not one of the five

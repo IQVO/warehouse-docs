@@ -40,8 +40,9 @@ are deliberately not one-to-one. The domain layer has no knowledge of SQL.
 
 ## Databases
 
-Twelve contexts on this site persist. Each has an **OLTP** database and a separate
-**analytical** database. The OLTP binary (and its MCP sibling) owns the first.
+Fourteen contexts on this site persist. Thirteen have an **OLTP** database and a
+separate **analytical** database; `slotting-optimization` has only its OLTP
+database (no analytics read side yet). The OLTP binary (and its MCP sibling) owns the first.
 The analytical one is written only by that context's projector binary and
 read only by its reports binary (see [Containers](/architecture/containers)).
 `warehouse-ops-agent` has no database at all: its circuit breaker, config and
@@ -63,8 +64,10 @@ explains why).
 | `warehouse-planning` | 10 | 2 | `process_capacity_constraint` to `process_capacity` | [ER](/contexts/warehouse-planning/entity-relationship) |
 | `product-master` | 3 | 3 | none | [ER](/contexts/product-master/entity-relationship) |
 | `network-inventory-planning` | 8 | 4 | `transfer_audit` to `inter_warehouse_transfer` | [ER](/contexts/network-inventory-planning/entity-relationship) |
+| `inbound-receiving` | 11 | 6 | `asn_lines` and `receipts` to `asns`; `appointment_asns` to `appointments`; `receipt_lines` to `receipts` | [ER](/contexts/inbound-receiving/entity-relationship) |
+| `slotting-optimization` | 11 | 0 (no analytics database) | `slot_plan_assignments`, `slot_plan_moves` and `slot_plan_unassigned` to `slot_plans` | [ER](/contexts/slotting-optimization/entity-relationship) |
 | `warehouse-ops-agent` | 0 | 0 | no database | [ER](/contexts/warehouse-ops-agent/entity-relationship) |
-| **Total** | **97** | **39** | | |
+| **Total** | **119** | **45** | | |
 
 The `inventory-storage`, `order-management`, `wes-work-planning`,
 `fulfillment-execution` and `product-master` rows were re-counted from each
@@ -73,7 +76,11 @@ migration added a classification copy to each consumer. Some synced ER pages
 predate it: `fulfillment-execution`'s does not show
 `product_classification_copy`, and `inventory-storage`'s does not show the
 transfer tables. The `network-inventory-planning` row was counted from its
-migrations on `develop` (2026-10-08).
+migrations on `develop` (2026-10-08). The `inbound-receiving` and
+`slotting-optimization` rows were counted from their migrations on `develop`
+(2026-10-11): `CREATE TABLE` statements in
+`internal/adapters/outbound/postgres/migrations/` and, for
+`inbound-receiving`, `analytics/migrations/`.
 
 Most FKs in the fleet run from a child table to its parent **inside one
 aggregate** (an `Order` and its lines, a `WorkPool` and its entries, a

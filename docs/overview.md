@@ -12,13 +12,13 @@ This site is the fleet-wide reference for the **warehouse-systems**
 ecosystem. The ecosystem is fifteen independently deployable Go services
 with hexagonal architecture that together implement a warehouse fulfillment
 platform: fourteen domain bounded contexts plus `warehouse-ops-agent`. Each
-service has its own REST and MCP surface. The fourteen domain contexts own a
-Postgres database and publish Kafka events. `warehouse-ops-agent` is the
-exception: a thin read-side agent with no database and no Kafka. This site
-documents all fourteen domain contexts and the agent.
-`inbound-receiving` and `slotting-optimization` (decided 2026-10-08) are
-registered here with business-context and canvas pages only; their
-generated API references are added once their contracts merge.
+service has its own REST surface and, except `slotting-optimization`, an MCP
+surface. The fourteen domain contexts own a Postgres database and publish
+Kafka events. `warehouse-ops-agent` is the exception: a thin read-side agent
+with no database and no Kafka. This site documents all fourteen domain
+contexts and the agent, each with its synced artifact pack and, where it has
+specs, generated API references. `slotting-optimization`, the newest, is
+built on its `develop` but not deployed in the reference cluster yet.
 
 No single repository's docs site can show the **strategic** picture: the
 context map, the core-domain classification, the shared ubiquitous language,
@@ -51,9 +51,9 @@ organization.
 | [`network-inventory-planning`](/contexts/network-inventory-planning) | Core | `wes` |
 
 The newest contexts on this site, `inbound-receiving` and
-`slotting-optimization` (decided 2026-10-08), cover what happens before the
-first stow (ASN, dock appointment, receipt, discrepancies) and which SKUs
-deserve a forward pick slot. `network-inventory-planning` recommends and
+`slotting-optimization` (decided 2026-10-08, both built since), cover what
+happens before the first stow (ASN, dock appointment, receipt, discrepancies)
+and which SKUs deserve a forward pick slot. `network-inventory-planning` recommends and
 orchestrates inter-warehouse stock transfers as an operator-approved saga
 without ever moving stock itself. `product-master`, before them, is the single source of
 truth for what a SKU is: its handling classification (taken over from
