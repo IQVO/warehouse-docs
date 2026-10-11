@@ -8,12 +8,9 @@ slug: /contexts
 
 # Bounded Contexts
 
-Every bounded context below has the same page set, in this order, except
-`inbound-receiving` and `slotting-optimization`, which are decided
-(2026-10-08) but not built and so carry only the pages written for this
-site: **Business Context** and **Bounded Context Canvas**.
-`product-master` adds one extra synced page, **Use Cases**, after the
-Sequence Diagrams. The
+Every bounded context below has the same page set, in this order.
+`product-master`, `inbound-receiving` and `slotting-optimization` add one
+extra synced page, **Use Cases**, after the Sequence Diagrams. The
 ddd-crew tool behind each page, or the page's source if no ddd-crew tool
 applies, is given in brackets:
 
@@ -54,7 +51,8 @@ applies, is given in brackets:
     `inventory-storage`, `wes-work-planning`, `fulfillment-execution`,
     `workforce-management`, `process-path-management`,
     `labor-performance`, `network-fulfillment`, `warehouse-planning`,
-    `product-master` and `network-inventory-planning`.
+    `product-master`, `inbound-receiving`, `slotting-optimization` and
+    `network-inventory-planning`.
     (Hand-written for this site.)
 
 :::info[Synced pages]
@@ -88,8 +86,8 @@ own pack, replace them with synced copies.
 | [network-fulfillment](/contexts/network-fulfillment) | Supporting | `wes` | External network edge (anti-corruption layer) |
 | [warehouse-planning](/contexts/warehouse-planning) | Core | `wes` | WES — capacity planning |
 | [product-master](/contexts/product-master) | Supporting | `wms` | WMS — product master data (classification and physical profile; four live `ProductClassified` local-copy consumers) |
-| [inbound-receiving](/contexts/inbound-receiving) | Supporting | `wms` | WMS — everything before the first stow: ASN, dock appointment, receipt, discrepancies. Decided 2026-10-08, not built |
-| [slotting-optimization](/contexts/slotting-optimization) | Supporting | `wms` | WMS — which SKUs deserve a forward pick slot: velocity-ranked slot plans a human approves. Decided 2026-10-08, not built |
+| [inbound-receiving](/contexts/inbound-receiving) | Supporting | `wms` | WMS — everything before the first stow: ASN, dock appointment, receipt, discrepancies; hands good units to `inventory-storage` as events. Deployed |
+| [slotting-optimization](/contexts/slotting-optimization) | Supporting | `wms` | WMS — which SKUs deserve a forward pick slot: velocity-ranked slot plans a human approves. Built, not deployed yet |
 | [network-inventory-planning](/contexts/network-inventory-planning) | Core | `wes` | WES — inter-warehouse transfer planning (advisory proposals, operator-approved transfer saga) |
 
 See [Strategic Design](/strategic-design) for how these fifteen contexts relate to

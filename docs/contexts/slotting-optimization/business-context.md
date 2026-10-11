@@ -2,122 +2,128 @@
 id: business-context
 title: Business Context
 sidebar_label: Business Context
-description: Why deciding which SKUs deserve a forward pick slot is its own bounded context — the abc-velocity-v1 policy, human approval, stickiness, and the planned (not built) execution of moves.
+description: Why deciding which SKUs deserve a forward pick slot is its own bounded context — the SlotPlan, the abc-velocity-v1 policy, human approval, stickiness, and the planned (not built) execution of moves.
 ---
 
 # Business Context
 
-Sourced from the plan and decision log of 2026-10-08 for the two new WMS-tier
-contexts, `inbound-receiving` and `slotting-optimization`. The context's own
-ADRs 0001 to 0004 are being written in the
-[IQVO/slotting-optimization](https://github.com/IQVO/slotting-optimization)
-repository (`docs/adr/`, none on `develop` when this page was written) and,
-once merged, are the authority where they differ from this page.
+Written here from the context's own
+[introduction](https://iqvo.github.io/slotting-optimization/docs/overview/introduction)
+and its ADRs 0001 to 0004 (all Accepted, 2026-10-08, under `docs/adr/` in
+[IQVO/slotting-optimization](https://github.com/IQVO/slotting-optimization)),
+checked against the code on `develop`. Where the code has moved past an ADR's
+wording, the code is authoritative.
 
 ## The gap
 
-`facility-layout` already models forward (`FWD`) and reserve (`RSV`) zones,
-but nothing in the fleet decides **which SKUs deserve a forward pick slot**.
+`facility-layout` models forward (`FWD`) and reserve (`RSV`) zones, but
+nothing else in the fleet decided **which SKUs deserve a forward pick slot**.
 Without that decision, the fast movers sit wherever chaotic storage put them
 and pickers walk further than they need to. The competitor research behind
 this work (Manhattan Active SCE 26.2, Blue Yonder WMS Oct-2025, SAP EWM 2025
 FPS01, Infor WMS, and the Gartner WMS Magic Quadrant of April 2026) treats
 slotting and labor as expected capabilities.
 
-## What it plans to own
+## What it owns
 
-One aggregate, **`SlotPlan`** (decision 4): a proposed SKU-to-forward-slot
-assignment for one site and one lookback window. It moves through
-**generate** (a `Draft`), then **approve** or **reject**. Approval is always a
-human act (decision 7). An approved plan can supersede an earlier one.
+| Fact | Value |
+| --- | --- |
+| Subdomain class | **Supporting** (ADR 0001) |
+| Tier | **WMS** (CloudEvents subdomain segment `wms`) |
+| Aggregate | `SlotPlan` (package `internal/domain/slotplan`, ADR 0002) |
+| Policy | `abc-velocity-v1` (package `internal/domain/planning`, ADR 0002) |
+| Binaries | one: `cmd/api` (REST on `HTTP_ADDR`, default `:8080`, plus three Kafka consumers and the outbox relay as goroutines) |
+| Data store | one Postgres database (embedded migrations), or in-memory adapters when `DATABASE_URL` is unset |
+| Kafka | publishes `warehouse.slotting-optimization.events`; consumes `warehouse.order-management.events`, `warehouse.product-master.events`, `warehouse.facility.events` (ADR 0003, ADR 0004) |
+| Auth | none (fleet-wide decision) |
+| MCP | none on `develop` (ADR 0001 names MCP read tools as a later phase) |
+
+- **The SlotPlan.** A proposal for one site and one demand window
+  (`[windowFrom, windowTo)`, default 28 days back from now): the assignments
+  `{sku, slot, abcClass, picks, units}`, the moves against the site's
+  currently Approved plan (`Assign`, `Relocate`, `Vacate`) and the SKUs it
+  could not place, with a reason (`NoPhysicalProfile`, `NoEligibleSlot`,
+  `NoCapacityFit`).
+- **The decision on it.** `Draft` then `Approved` or `Rejected`. Approving a
+  plan supersedes the site's previous Approved plan in the same transaction,
+  so a site has at most one Approved plan (`Superseded` is the fourth state).
+  Approval is always a human act.
+- **The published forward-slot map.** `SlotPlanApproved` carries every
+  `{sku, slot}` of the plan and the moves, so a consumer needs no lookup.
 
 ## The v1 policy: `abc-velocity-v1`
 
-Decision 7, deterministic and explainable:
+Deterministic and explainable (ADR 0002; see the
+[Ubiquitous Language](/contexts/slotting-optimization/ubiquitous-language)
+for the exact rules):
 
-1. **Rank** SKUs by order-line picks in the lookback window: units first, then
-   SKU ascending as the tie-breakers.
-2. **Eligible forward slots** are those with role `Storage`, active, in a zone
-   whose code is in `FORWARD_ZONE_CODES` (default `FWD`), compatible with the
-   SKU's temperature class and hazmat flag, and large enough that one
+1. **Velocity**: per SKU over the window, picks = number of ACTIVE demand
+   lines, units = their summed units. Candidates are ordered picks desc,
+   units desc, SKU asc, and get an ABC class (A while the picks of the
+   candidates ranked before a SKU are below 80 % of all picks, B below 95 %,
+   else C).
+2. **Forward slots** are active location slots with role `Storage` in a zone
+   of the site whose code is in `FORWARD_ZONE_CODES` (default `FWD`).
+3. **Eligibility**: compatible (hazmat and temperature class) and one
    effective unit fits the slot's volume and weight.
-3. **Order the slots** by a replaceable `SlotRankingPolicy` port. In v1 that is
+4. **Slot ranking** is a replaceable `SlotRankingPolicy` port. In v1 that is
    the lexical location code, because `facility-layout` events carry no travel
    distance.
-4. **Stickiness**: a SKU that keeps a top-N rank and still fits its current
-   slot **keeps** that slot. This is the churn limit.
-5. **One SKU per forward slot** in v1.
+5. **Stickiness**: a SKU keeps its previous slot if that slot is still
+   eligible and free. This is the churn limit.
+6. **One SKU per forward slot** in v1.
 
-A machine-learning or affinity policy is a later version behind the same
-port.
+A machine-learning or affinity policy would be a later version behind the
+same port.
 
-An approved plan carries the full forward-pick map (`assignments`) and the
-list of `moves`, each of kind `Assign`, `Relocate` or `Vacate`, so a consumer
-needs no lookup.
+## Main capabilities
 
-## The decisions that shape it
+| Capability | Interface | Use case |
+| --- | --- | --- |
+| Generate a Draft plan for a site | `POST /slot-plans` (requires `Idempotency-Key` with Postgres) | `GeneratePlan` |
+| Approve a Draft (supersedes the previous Approved plan) | `POST /slot-plans/{planId}/approve` | `ApprovePlan` |
+| Reject a Draft with an optional reason | `POST /slot-plans/{planId}/reject` | `RejectPlan` |
+| Read plans | `GET /slot-plans`, `GET /slot-plans/{planId}` | `ListPlans`, `GetPlan` |
+| Read the current forward-slot map of a site | `GET /forward-slots` | `ListForwardSlots` |
+| Read SKU velocity (the planner's demand input) | `GET /sku-velocity` | `ListSkuVelocity` |
+| Keep the demand, product and layout copies current | Kafka consumers (`DEMAND_MODE`, `PRODUCT_MODE`, `LAYOUT_MODE` = `kafka`) | `ApplyDemandChanged`, `ApplyProductClassified`, `ApplyPhysicalProfile`, `ApplyZoneRegistered`, `ApplyLocationSlotRegistered`, `ApplyLocationSlotDecommissioned` |
+| Publish plan decisions | transactional outbox + relay (`EVENT_PUBLISHER=kafka`) | every write use case |
 
-| # | Decision (FINAL, from the 2026-10-08 plan) |
-| --- | --- |
-| 1 | A new repository, `IQVO/slotting-optimization`, from the harness template (v2), module `github.com/claudioed/slotting-optimization`. Slotting is a planning computation, receiving is a transactional document workflow, so they are not merged. |
-| 2 | CloudEvents subdomain **`wms`**: slotting plans storage locations, so it sits with stock, layout and master data. |
-| 3 | Strategic classification **Supporting**: slotting policy differs per retailer, and the competitive core stays the WES conductor. The policy is a replaceable object. |
-| 6 | Local copies, event-fed: `SiteSkuDemandChanged` from `order-management`; `ProductClassified`, `ProductDimensionsDeclared` and `ProductMeasured` from `product-master`; `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned` from `facility-layout`. Declarative inputs only, no calls to siblings. Each local-copy mode defaults to `permissive`; the cluster sets `kafka`. |
-| 7 | The `abc-velocity-v1` policy above, with human approval: generate (Draft) then Approve or Reject. |
-| 8 | **Execution of approved moves is a documented PLANNED edge, not built.** Moving stock (MOVE and REPLENISH work through the `process-path-management` catalogue, `wes-work-planning` and `fulfillment-execution`) touches three Core and Generic contexts and a new task type, so it is its own ADR-gated phase. |
-| 10 | No authentication (the fleet revert), no cross-context synchronous calls, a transactional outbox, `Idempotency-Key` on create `POST`s, optimistic concurrency, CloudEvents 1.0 through the repository's own helper, testcontainers only. |
+The full catalogue is on [Use Cases](/contexts/slotting-optimization/use-cases).
 
 ## What it deliberately does not do
 
-- **Move any stock.** Approving a plan publishes `SlotPlanApproved`. Nothing in
-  the fleet executes the moves yet.
-- **Decide travel distance.** The v1 slot order is lexical on the location code
-  because the facility events carry no distance.
-- **Own product or layout facts.** It reads product-master and
-  facility-layout data through local copies and publishes none of it.
+- **Own demand, product facts or the slot layout.** It keeps three event-fed
+  local copies of them (demand from `order-management`, product
+  classification and unit size from `product-master`, zones and slots from
+  `facility-layout`) and never calls a sibling at request time.
+- **Move any stock.** Approving a plan publishes `SlotPlanApproved`. Executing
+  the moves on the floor (MOVE and REPLENISH work through the
+  `process-path-management` catalogue, `wes-work-planning` and
+  `fulfillment-execution`) is a **planned, not built** edge (ADR 0001,
+  ADR 0002) that needs ADRs in those contexts and a new task type.
+- **Decide travel distance.** The v1 slot order is lexical on the location
+  code.
 - **Learn.** No machine-learning policy and no affinity (items bought
   together) in v1.
 
-## No live cross-context lookup
-
-Like `product-master`, this context makes no synchronous call to a sibling.
-Pick velocity comes from the `order-management` demand feed, SKU physical and
-handling facts from `product-master`, and zones and slots from
-`facility-layout`, each as a local copy. Events leave through a transactional
-outbox only.
-
-## Contract summary
-
-Pinned in the plan. Every event is CloudEvents 1.0 in structured mode with
-`source=/warehouse/slotting-optimization`, topic
-`warehouse.slotting-optimization.events` and, for analytics,
-`warehouse.slotting-optimization.analytics`. The type prefix is
-`com.warehouse.wms.slotting-optimization.` and the Kafka key is `plan_id` for
-every type.
-
-| Type (after the prefix) | Consumer today |
-| --- | --- |
-| `slotplan.SlotPlanGenerated` | none |
-| `slotplan.SlotPlanApproved` | none; planned: MOVE work execution (not built); to be read by `warehouse-ops-agent` and the console |
-| `slotplan.SlotPlanRejected` | none |
-
-REST, behind Kong at `/api/slotting-optimization` (problem type base
-`https://errors.slotting-optimization.warehouse-systems.dev/<slug>`):
-`POST /slot-plans` (generate, body `siteId` and `lookbackDays`, both
-optional), `GET /slot-plans`, `GET /slot-plans/{planId}`,
-`POST /slot-plans/{planId}/approve`, `POST /slot-plans/{planId}/reject`,
-`GET /forward-slots` (the current approved assignment map) and
-`GET /sku-velocity` (`limit`, `windowDays`).
+There is no edge to `inventory-storage` (an approved plan moves no stock and
+does not change stow behaviour), `inbound-receiving` or `warehouse-planning`
+(ADR 0001).
 
 ## Honest scope today
 
-- The repository is bootstrapped with `develop` protected and the template
-  instantiated. There is no domain code, no published AsyncAPI and no OpenAPI
-  yet, so this site holds no `apis/slotting-optimization/` specs and no
-  generated reference. A later change adds them once the contract PRs merge.
-- Nothing consumes `SlotPlanApproved`. Executing the moves, and any change to
-  `process-path-management`, `wes-work-planning` or `fulfillment-execution`
-  to do so, is not started.
-- The planned build waves also cover an MCP server, an analytics read side, a
-  `warehouse-ops-agent` MCP client, a console remote with a tile and the
-  `warehouse-infra` wiring. None of them exists yet.
+- The service is built on `IQVO/slotting-optimization` `develop`: REST API,
+  outbox and relay, and the three local-copy consumers. This site holds its
+  `apis/slotting-optimization/` specs, the generated references and the
+  synced artifact pack.
+- It is **not deployed**: no `Dockerfile`, no `charts/` directory, and no
+  values file, Kong route or ArgoCD application in `warehouse-infra`
+  `develop`. The planned edge route is Kong `:8000` under
+  `/api/slotting-optimization` (ADR 0001).
+- **Nothing consumes its events**: a search of `warehouse-ops-agent`,
+  `warehouse-console` and `wes-work-planning` on `develop` finds no
+  subscriber of `warehouse.slotting-optimization.events`.
+- An MCP server, an analytics read side (`warehouse.slotting-optimization.analytics`
+  is reserved, nothing publishes there), a `warehouse-ops-agent` client and a
+  console remote are later phases. None of them exists yet.

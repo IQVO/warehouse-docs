@@ -44,7 +44,7 @@ context's own projector and are never read by a sibling.
 | Topic | Producer | Event types consumed by a sibling | Consumers |
 | --- | --- | --- | --- |
 | `warehouse.order-management.events` | order-management | `OrderAllocated`, `OrderPartiallyAllocated` | wes-work-planning, warehouse-planning |
-| | | `SiteSkuDemandChanged` | network-inventory-planning |
+| | | `SiteSkuDemandChanged` | network-inventory-planning; slotting-optimization (built, not deployed) |
 | `warehouse.inventory.events` | inventory-storage | `StockReserved`, `ReservationRevoked` | wes-work-planning |
 | | | `TransferStockAllocated`, `TransferStockAllocationRejected`, `TransferReceiptStaged`, `TransferStockStowed` | network-inventory-planning |
 | | | legacy `ProductClassified` (emitted only by the one-shot backfill) | product-master's legacy importer (migration only, removed at stage E) |
@@ -57,29 +57,28 @@ context's own projector and are never read by a sibling.
 | `warehouse.labor-performance.events` | labor-performance | `TaskPerformanceRecorded` | workforce-management |
 | `warehouse.process-path-management.events` | process-path-management | `ProcessPathCreated`, `ProcessPathUpdated`, `ProcessPathDeactivated` | fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment |
 | | | `CPTScheduleChanged` | order-management, network-fulfillment |
-| `warehouse.facility.events` | facility-layout | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | inventory-storage (all three), warehouse-planning (the two slot events) |
+| `warehouse.facility.events` | facility-layout | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | inventory-storage (all three), warehouse-planning and inbound-receiving (the two slot events); slotting-optimization (all three, built, not deployed) |
 | | | `SiteCapabilityChanged` | network-inventory-planning |
 | `warehouse.warehouse-planning.events` | warehouse-planning | `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected` | order-management (`BottleneckDetected` is ignored); `CapacityPlanPublished` also network-inventory-planning |
 | `warehouse.network-fulfillment.events` | network-fulfillment | none | no consumer (wired but unused) |
 | `warehouse.network-inventory-planning.events` | network-inventory-planning | `TransferAllocationRequested` | inventory-storage |
 | | | `WorkDemandReleased` | wes-work-planning |
-| `warehouse.product-master.events` | product-master | `ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies) |
-| `warehouse.inbound-receiving.events` | inbound-receiving | `ReceiptLineReceived` | inventory-storage (in progress, not live) |
+| `warehouse.product-master.events` | product-master | `ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies); slotting-optimization (built, not deployed) |
+| | | `ProductRegistered` | inbound-receiving (local copy of known SKUs) |
+| | | `ProductDimensionsDeclared`, `ProductMeasured` | slotting-optimization (built, not deployed) |
+| `warehouse.inbound-receiving.events` | inbound-receiving | `ReceiptLineReceived` | inventory-storage (its ADR 0037) |
 | | | `DockAppointmentBooked` | none; warehouse-planning inbound-labor demand is planned, not built |
 | `warehouse.slotting-optimization.events` | slotting-optimization | `SlotPlanApproved` | none; MOVE work execution is planned, not built |
 
 Several published types have no sibling consumer today. These are
 `OrderRepromised`, nine of the eleven `warehouse.work-planning.events`
 types (for example `PathPlanDriftDetected` and `WorkUnitCompleted`),
-`BottleneckDetected`, `TransferPlanApproved`, every `warehouse.network-fulfillment.events` type, the
-four `warehouse.product-master.events` types other than
-`ProductClassified` (consumers of three are in progress: inbound-receiving
-for `ProductRegistered`, slotting-optimization for the two physical-profile
-types), every `warehouse.inbound-receiving.events` type except the
-in-progress `ReceiptLineReceived`, and every
-`warehouse.slotting-optimization.events` type. The rows for
-`inbound-receiving` and `slotting-optimization` are the decided contract
-(2026-10-08); no scenario below traverses them yet.
+`BottleneckDetected`, `TransferPlanApproved`, every `warehouse.network-fulfillment.events` type,
+`ProductDescriptionChanged` and, until slotting-optimization is deployed,
+`ProductDimensionsDeclared` and `ProductMeasured`, every
+`warehouse.inbound-receiving.events` type except `ReceiptLineReceived`, and
+every `warehouse.slotting-optimization.events` type. No scenario below
+traverses the `inbound-receiving` or `slotting-optimization` rows yet.
 They are listed as hotspots on
 [Big Picture EventStorming](/strategic-design/eventstorming-big-picture).
 `warehouse-ops-agent` has no Kafka I/O at all. It only issues `qry:`

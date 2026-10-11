@@ -13,6 +13,7 @@ import networkFulfillmentSidebar from './docs/api-reference/rest/network-fulfill
 import warehousePlanningSidebar from './docs/api-reference/rest/warehouse-planning/sidebar';
 import productMasterSidebar from './docs/api-reference/rest/product-master/sidebar';
 import inboundReceivingSidebar from './docs/api-reference/rest/inbound-receiving/sidebar';
+import slottingOptimizationSidebar from './docs/api-reference/rest/slotting-optimization/sidebar';
 import networkInventoryPlanningSidebar from './docs/api-reference/rest/network-inventory-planning/sidebar';
 
 /**
@@ -66,23 +67,23 @@ const ASYNC_NARRATIVE = new Set([
   'warehouse-planning',
   'product-master',
   'inbound-receiving',
+  'slotting-optimization',
   'network-inventory-planning',
 ]);
 
 // Pages a context has beyond the shared page set, appended after it.
-// product-master and inbound-receiving keep their own docs site with a
-// use-case catalogue next to the pack.
+// product-master, inbound-receiving and slotting-optimization keep their own
+// docs site with a use-case catalogue next to the pack.
 const CONTEXT_EXTRA_PAGES: Record<string, string[]> = {
   'product-master': ['use-cases'],
   'inbound-receiving': ['use-cases'],
+  'slotting-optimization': ['use-cases'],
 };
 
-// Contexts decided but not built yet list only the pages written for this
-// site, instead of the synced artifact pack their repositories do not have.
-// Add the full pack (and the async-api narrative) when the repositories ship it.
-const CONTEXT_PAGE_OVERRIDES: Record<string, string[]> = {
-  'slotting-optimization': ['business-context', 'bounded-context-canvas'],
-};
+// Contexts that list only pages written for this site instead of the synced
+// artifact pack (a context decided but not built yet). Empty today: add an
+// entry only while a context's repository does not ship its pack.
+const CONTEXT_PAGE_OVERRIDES: Record<string, string[]> = {};
 
 function contextCategory(ctx: string, hasAsyncNarrative: boolean) {
   const base = CONTEXT_PAGE_OVERRIDES[ctx] ?? [...CONTEXT_PAGES, ...(CONTEXT_EXTRA_PAGES[ctx] ?? [])];
@@ -224,6 +225,11 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'inbound-receiving',
       items: [...inboundReceivingSidebar, 'api-reference/async/inbound-receiving'],
+    },
+    {
+      type: 'category',
+      label: 'slotting-optimization',
+      items: [...slottingOptimizationSidebar, 'api-reference/async/slotting-optimization'],
     },
     {
       type: 'category',

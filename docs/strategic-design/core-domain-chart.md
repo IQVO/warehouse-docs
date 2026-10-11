@@ -2,7 +2,7 @@
 id: core-domain-chart
 title: Core Domain Chart
 sidebar_label: Core Domain Chart
-description: The thirteen contexts documented on this site on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart.
+description: The fifteen contexts documented on this site on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart.
 ---
 
 # Core Domain Chart
@@ -21,7 +21,7 @@ context's own chart in this fleet uses the same layout:
 
 ```mermaid
 quadrantChart
-    title warehouse-systems - thirteen contexts
+    title warehouse-systems - fifteen contexts
     x-axis Low model complexity --> High model complexity
     y-axis Low business differentiation --> High business differentiation
     quadrant-1 Core
@@ -41,6 +41,8 @@ quadrantChart
     process-path-management: [0.58, 0.22]
     product-master: [0.36, 0.30]
     network-inventory-planning: [0.68, 0.80]
+    inbound-receiving: [0.44, 0.30]
+    slotting-optimization: [0.46, 0.42]
 ```
 
 Every coordinate is copied from the context's **own** chart. The contexts
@@ -49,10 +51,10 @@ measurements. The five Core contexts sit close together, so some of their
 labels overlap; so do `product-master` and `network-fulfillment` in the
 Supporting quadrant. `network-inventory-planning` has no pack of its own yet,
 so its point is the one on its page here, authored from its code and ADR 0001.
-`inbound-receiving` and `slotting-optimization` are classified Supporting (see
-[Subdomain Classification](/strategic-design/subdomain-classification)) but
-have no Core Domain Chart of their own yet, so they are not plotted:
-this page copies coordinates from context charts and invents none.
+`inbound-receiving` and `slotting-optimization` now ship their own charts, so
+both are plotted from them; `inbound-receiving` also sits close to
+`product-master` and `workforce-management`. This page copies coordinates
+from context charts and invents none.
 
 ## Where each point comes from
 
@@ -71,6 +73,8 @@ this page copies coordinates from context charts and invents none.
 | `process-path-management` | 0.58, 0.22 | Generic | Generic | point `process-path-management`, [chart](/contexts/process-path-management/core-domain-chart) |
 | `product-master` | 0.36, 0.30 | Supporting | Supporting | point `product-master`, [chart](/contexts/product-master/core-domain-chart) |
 | `network-inventory-planning` | 0.68, 0.80 | Core | Core | point `network-inventory-planning`, authored in this repository because the context repo has no pack yet. [chart](/contexts/network-inventory-planning/core-domain-chart) |
+| `inbound-receiving` | 0.44, 0.30 | Supporting | Supporting | point `inbound-receiving`, [chart](/contexts/inbound-receiving/core-domain-chart) |
+| `slotting-optimization` | 0.46, 0.42 | Supporting | Supporting | point `slotting-optimization`, the whole context. Its chart adds `abc-velocity-v1 planner` at 0.49, 0.48 and `approval workflow` at 0.25, 0.25, both Supporting. [chart](/contexts/slotting-optimization/core-domain-chart) |
 
 Every context's own chart puts its own point in the quadrant that matches the
 fleet classification in [Subdomain Classification](/strategic-design/subdomain-classification).
@@ -115,8 +119,9 @@ This page keeps each context's own placement and the fleet classification.
     0001). It sits just below the other Core points because forecasting and
     optimisation are not built yet.
 - **Supporting: `workforce-management`, `labor-performance`,
-  `network-fulfillment`, `warehouse-ops-agent`, `product-master`, and
-  `order-management` on the border.** Each one is necessary, but the differentiating knowledge it uses
+  `network-fulfillment`, `warehouse-ops-agent`, `product-master`,
+  `inbound-receiving`, `slotting-optimization`, and `order-management` on the
+  border.** Each one is necessary, but the differentiating knowledge it uses
   belongs to another context:
   - `workforce-management` records human rebalancing decisions.
   - `labor-performance` measures finished work against standards.
@@ -126,6 +131,12 @@ This page keeps each context's own placement and the fleet classification.
   - `product-master` must be right and be the single source of SKU master
     data, but nobody chooses the warehouse for how it records handling tags
     and dimensions (its ADR 0001).
+  - `inbound-receiving` keeps an accurate receipt and discrepancy record,
+    but ASN, appointment and discrepancy rules are replaceable policy
+    objects (its ADR 0001).
+  - `slotting-optimization` decides forward-pick slots with a deterministic,
+    replaceable `abc-velocity-v1` policy behind a port; the competitive core
+    stays the WES conductor (its ADR 0001).
   - `order-management`'s promise rules lift it above a commodity order
     front end, but they are not the platform's differentiator.
 - **Generic: `facility-layout`, `process-path-management`.** Both are well

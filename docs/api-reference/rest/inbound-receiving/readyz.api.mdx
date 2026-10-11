@@ -45,13 +45,13 @@ import Translate from "@docusaurus/Translate";
 </ParamsDetails>
 
 <RequestSchema
-  title={"Body"}
+  {...require("./readyz.RequestSchema.json")}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  responses={{"200":{"description":"Ready.","content":{"application/json":{"schema":{"type":"object","required":["status"],"properties":{"status":{"type":"string","example":"ok"}},"title":"Status"}}}},"503":{"description":"Not ready.","content":{"application/json":{"schema":{"type":"object","required":["status"],"properties":{"status":{"type":"string","example":"ok"}},"title":"Status"}}}}}}
+  {...require("./readyz.StatusCodes.json")}
 >
   
 </StatusCodes>
