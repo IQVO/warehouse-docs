@@ -13,7 +13,7 @@ This page is a copy of [`docs/docs/ddd/entity-relationship.md`](https://github.c
 
 The OLTP schema created by the single migration
 `internal/adapters/outbound/postgres/migrations/0001_slotting_schema.up.sql`,
-applied at boot (see [Runbook](https://iqvo.github.io/slotting-optimization/docs/operations/runbook#migrations)). Text
+applied at boot (see [Runbook](/contexts/slotting-optimization/runbook#migrations)). Text
 keys compared or ordered in Go (plan ids, SKUs, slot codes) use the `"C"`
 collation so database order equals the in-memory adapters' byte order.
 
@@ -160,7 +160,7 @@ Source: `internal/adapters/outbound/postgres/migrations/0001_slotting_schema.up.
 | `idx_zones_site_zone_code`, `idx_slots_zone` (partial, `active`) | the forward-slot join |
 | `outbox_events_event_id_topic_key` (unique `event_id, topic`) | one row per CloudEvent per topic |
 | `idx_outbox_events_unpublished` (partial, `published_at IS NULL`) | the relay scans only the unpublished tail |
-| `idx_idempotency_keys_created_at` | age-based cleanup ([Runbook](https://iqvo.github.io/slotting-optimization/docs/operations/runbook#housekeeping)) |
+| `idx_idempotency_keys_created_at` | age-based cleanup ([Runbook](/contexts/slotting-optimization/runbook#housekeeping)) |
 
 `slots.zone_id` has no foreign key on purpose: zone and slot events may
 arrive in any order, and the join happens at plan time.

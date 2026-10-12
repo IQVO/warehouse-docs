@@ -2,26 +2,29 @@
 id: entity-relationship
 title: Entity-relationship diagram
 sidebar_label: Entity-relationship
+description: The final OLTP and analytical schemas of network-inventory-planning after every migration.
 ---
 
 # Entity-relationship diagram
 
-:::info[Authored in warehouse-docs]
-`network-inventory-planning` does not yet ship a `docs/docs/ddd/` pack, so this page was written here from the repository's code and ADRs on `develop` (commit `8d25980`) instead of being synced. When the repository publishes its pack, replace this page with a synced copy.
+:::info[Synced from network-inventory-planning]
+This page is a copy of [`docs/docs/ddd/entity-relationship.md`](https://github.com/IQVO/network-inventory-planning/blob/develop/docs/docs/ddd/entity-relationship.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
-The final schemas after applying every migration in order. This service has
-**two** Postgres databases:
 
-- the **OLTP** database (`DATABASE_URL`), migrated by `cmd/network-inventory-planning`
-  and `cmd/mcp` from `internal/adapters/outbound/postgres/migrations/0001` to `0004`;
-- the separate **analytical** database (`ANALYTICS_DATABASE_URL`), migrated and
-  written only by `cmd/nip-projector` from `analytics/migrations/0001`
+The schemas after applying every migration in order. The service has **two**
+Postgres databases:
+
+- the **OLTP** database (`DATABASE_URL`), migrated by
+  `cmd/network-inventory-planning` and `cmd/mcp` from
+  `internal/adapters/outbound/postgres/migrations` `0001` to `0004`;
+- the **analytical** database (`ANALYTICS_DATABASE_URL`), migrated and written
+  only by `cmd/nip-projector` from `analytics/migrations/0001`
   ([ADR 0009](https://github.com/IQVO/network-inventory-planning/blob/develop/docs/docs/adr/0009-analytics-read-side.md)).
 
 Migrations run through golang-migrate. The OLTP step reads
-`MIGRATIONS_DATABASE_URL` and falls back to `DATABASE_URL`, because a transaction
-pooler cannot honour golang-migrate's session advisory lock
+`MIGRATIONS_DATABASE_URL` and falls back to `DATABASE_URL`, because a
+transaction pooler cannot hold golang-migrate's session advisory lock
 ([ADR 0006](https://github.com/IQVO/network-inventory-planning/blob/develop/docs/docs/adr/0006-migrations-over-a-direct-connection.md)).
 
 ## OLTP database
@@ -29,7 +32,6 @@ pooler cannot honour golang-migrate's session advisory lock
 ```mermaid
 erDiagram
   inter_warehouse_transfer ||--o{ transfer_audit : "has, ON DELETE CASCADE"
-
   inter_warehouse_transfer {
     text transfer_id PK
     text idempotency_key "UNIQUE"
@@ -66,7 +68,7 @@ erDiagram
     text topic
     text event_type
     bytea key
-    bytea value "already-encoded CloudEvent"
+    bytea value "encoded CloudEvent"
     jsonb headers
     timestamptz created_at
     timestamptz published_at "nullable"
@@ -102,7 +104,7 @@ erDiagram
     text location
     text path_id
     timestamptz window_start
-    timestamptz window_end "CHECK end after start"
+    timestamptz window_end "CHECK after start"
     double_precision assigned_demand
     double_precision capacity_over_window
     double_precision shortage
@@ -120,26 +122,26 @@ erDiagram
   }
 ```
 
-Source: `internal/adapters/outbound/postgres/migrations/0001_planning_read_models.up.sql`,
-`0002_transfer_saga_and_outbox.up.sql`, `0003_work_demand_release.up.sql`,
-`0004_rebalance_runs.up.sql`. Only `transfer_audit` has a foreign key. Everything
-else is deliberately free of foreign keys: the read models mirror sibling facts and
-do not reference one another, `processed_events` is a guard keyed by consumer and
-event id, and `outbox_events` is a queue.
+Source: `internal/adapters/outbound/postgres/migrations/0001_planning_read_models.up.sql`, `0002_transfer_saga_and_outbox.up.sql`, `0003_work_demand_release.up.sql`, `0004_rebalance_runs.up.sql`
 
-Notes that the columns alone do not show:
+Only `transfer_audit` has a foreign key. The read models mirror sibling facts
+and do not reference one another, `processed_events` is a guard keyed by
+consumer and event id, and `outbox_events` is a queue.
 
-- `state` carries the eleven-state CHECK widened by migration 0003, which also
-  re-created the constraints under stable names and added
-  `transfer_picked_quantity_check`: a picked quantity exists only from `PICKED`
-  onwards and never exceeds `quantity`.
-- `inter_warehouse_transfer.idempotency_key` is UNIQUE: it is the approval
-  endpoint's `Idempotency-Key`.
-- `outbox_events` holds a `topic` per row, so one approval writes rows for both
-  the integration topic and the analytics topic. The relay claims unpublished rows
-  `FOR UPDATE SKIP LOCKED` in id order.
-- `site_sku_demand` is indexed on `(site_id, due_at)` and
-  `published_capacity_plan` on `(site_id, window_start)`.
+What the columns do not show:
+
+- Migration 0003 widened the state CHECK to eleven states, re-created the
+  constraints under stable names (`inter_warehouse_transfer_state_check`,
+  `_quantity_check`, `_origin_dest_check`, `_reservation_id_check`) and added
+  `transfer_picked_quantity_check`: a picked quantity exists only from
+  `PICKED` on and never exceeds `quantity`.
+- Indexes: `idx_transfer_state`, `idx_transfer_origin (origin_site_id, sku)`,
+  `idx_outbox_events_unpublished (id) WHERE published_at IS NULL`,
+  `idx_site_sku_demand_site_due (site_id, due_at)`,
+  `idx_published_capacity_plan_site_window (site_id, window_start)`,
+  `rebalance_runs_started_at_idx (started_at DESC)`.
+- `outbox_events.topic` is per row, so one approval writes rows for both the
+  integration and the analytics topic.
 
 ## Analytical database
 
@@ -163,7 +165,7 @@ erDiagram
     text event_id PK
     text transfer_id
     text state
-    bigint age_seconds "in the current state"
+    bigint age_seconds "since the last transition"
     bigint threshold_seconds
     timestamptz occurred_at
   }
@@ -177,19 +179,17 @@ erDiagram
   }
 ```
 
-Source: `analytics/migrations/0001_saga_facts.up.sql`. The model is append-only: one
-row per CloudEvents `id`, written in the same transaction as its
-`analytics_processed_events` mark. It is a derived copy that can be dropped and
-rebuilt from the topic, so it has no foreign keys and no link to the OLTP tables.
-The projector is the only writer; `nip-reports` reads it through a read-only pool
-and computes percentiles, rejection rates and day buckets from these tables.
+Source: `analytics/migrations/0001_saga_facts.up.sql`
+
+Append-only: one row per CloudEvents `id`, written in the same transaction as
+its `analytics_processed_events` mark. It is a derived copy that can be
+rebuilt from the topic, so it has no foreign keys and no link to the OLTP
+tables. `nip-reports` reads it through a read-only pool.
 
 ## Table is not aggregate
 
 Only `inter_warehouse_transfer` with its `transfer_audit` rows maps to an
-aggregate (`InterWarehouseTransfer`, see the
-[Aggregate Design Canvas](/contexts/network-inventory-planning/aggregate-design-canvas)).
-`site_capability`, `site_sku_demand` and `published_capacity_plan` are local
-copies of sibling facts. `rebalance_runs` is a record of a scheduled pass.
-`outbox_events` and `processed_events` are infrastructure. The analytical tables
-are projections.
+aggregate (see [Aggregate design canvas](/contexts/network-inventory-planning/aggregate-design-canvas)). The
+three planning tables are local copies of sibling facts, `rebalance_runs` is a
+record of scheduled passes, `outbox_events` and `processed_events` are
+infrastructure, and the analytical tables are projections.

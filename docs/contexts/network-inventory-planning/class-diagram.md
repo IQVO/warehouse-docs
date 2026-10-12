@@ -2,18 +2,20 @@
 id: class-diagram
 title: Class diagrams
 sidebar_label: Class diagrams
+description: UML class diagrams of the network-inventory-planning domain, ports and adapters.
 ---
 
 # Class diagrams
 
-:::info[Authored in warehouse-docs]
-`network-inventory-planning` does not yet ship a `docs/docs/ddd/` pack, so this page was written here from the repository's code and ADRs on `develop` (commit `8d25980`) instead of being synced. When the repository publishes its pack, replace this page with a synced copy.
+:::info[Synced from network-inventory-planning]
+This page is a copy of [`docs/docs/ddd/class-diagram.md`](https://github.com/IQVO/network-inventory-planning/blob/develop/docs/docs/ddd/class-diagram.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
-UML class diagrams of `internal/domain/**`, split by package, then the ports and
-adapters around them. Only types and methods that exist on `develop` are drawn;
-trivial getters are summarised. Fields of `InterWarehouseTransfer` are unexported
-in the code and shown as attributes for readability.
+
+UML class diagrams of `internal/domain/**`, then the ports and adapters around
+them. Only types and methods that exist in the code are drawn; plain getters
+are left out. The fields of `InterWarehouseTransfer` are unexported in the
+code and shown as private attributes.
 
 ## Package `transfer`: the saga aggregate
 
@@ -58,7 +60,6 @@ classDiagram
     RECEIVED
     UNFULFILLABLE
     CANCELLED
-    +NonTerminal() bool
   }
   class AuditEntry {
     +int64 Seq
@@ -107,12 +108,12 @@ classDiagram
   InterWarehouseTransfer ..> StateAdvanced : derives
 ```
 
-Source: `internal/domain/transfer/saga.go`, `workflow.go`, `events.go`,
-`analytics.go`. `DemandReleased` is built by the use cases from a loaded transfer,
-not raised by the aggregate. Omits: `ProposalInput`, `Snapshot`/`Rehydrate`
-(persistence support) and the plain getters.
+Source: `internal/domain/transfer/saga.go`, `workflow.go`, `events.go`, `analytics.go`
 
-## Package `transfer`: planner, approval, stuck detection and runs
+`DemandReleased` is built by the use cases (`pickDemand`, `dispatchDemand`)
+from a loaded transfer, not raised by the aggregate.
+
+## Package `transfer`: planner, stuck detection, runs
 
 ```mermaid
 classDiagram
@@ -159,13 +160,6 @@ classDiagram
     +int LeadTimePenalty
     +Total() int
   }
-  class ReasonCode {
-    <<enumeration>>
-    DESTINATION_BELOW_TARGET
-    ORIGIN_ABOVE_SAFETY_STOCK
-    APPROVED_LANE
-  }
-  class ApprovalFacts
   class StuckCheck {
     +Evaluate(views, now) Stuck[]
   }
@@ -177,25 +171,24 @@ classDiagram
     +int64 ID
     +Time StartedAt
     +int ProposalCount
+    +int RejectedCount
     +RebalanceOutcome Outcome
-    +string FailClosedReason
   }
   Planner ..> Position : reads
   Planner ..> Policy : reads
   Planner ..> Lane : reads
   Planner ..> Proposal : produces
   Proposal *-- ScoreBreakdown
-  Proposal --> ReasonCode
   StuckCheck --> StuckThresholds
   StuckCheck ..> StuckView : reads
 ```
 
-Source: `internal/domain/transfer/model.go`, `planner.go`, `approval.go`,
-`stuck.go`, `analytics.go`. `ValidateApproval` is a package function over
-`ProposalInput` and `ApprovalFacts`, not a type. Omits: the `Snapshot` and `Stuck`
-result structs.
+Source: `internal/domain/transfer/model.go`, `planner.go`, `stuck.go`, `analytics.go`
 
-## Package `planning`: local read-model facts and the snapshot
+`ValidateApproval` (`approval.go`) and `ParseStuckThresholds` are package
+functions, not types.
+
+## Package `planning`
 
 ```mermaid
 classDiagram
@@ -224,16 +217,17 @@ classDiagram
   class PublishedCapacityPlan {
     +string PlanID
     +string SiteID
+    +string Location
+    +string PathID
     +Time WindowStart
     +Time WindowEnd
     +float64 CapacityOverWindow
-    +float64 Shortage
     +Time PublishedAt
     +Covers(dueAt) bool
     +Supersedes(other) bool
   }
-  class SnapshotInput {
-    +Duration MaxStaleness
+  class Facts {
+    +Watermark() Time
   }
   class PlanningSnapshot {
     +Time AsOf
@@ -241,22 +235,13 @@ classDiagram
     +Map DemandBySiteSKU
     +Map CapacityBySite
   }
-  class DemandState {
-    <<enumeration>>
-    ACTIVE
-    REMOVED
-  }
-  SnapshotInput o-- SiteCapability
-  SnapshotInput o-- SiteSkuDemand
-  SnapshotInput o-- PublishedCapacityPlan
-  SiteSkuDemand --> DemandState
-  SnapshotInput ..> PlanningSnapshot : BuildSnapshot
+  Facts o-- SiteCapability
+  Facts o-- SiteSkuDemand
+  Facts o-- PublishedCapacityPlan
+  Facts ..> PlanningSnapshot : BuildSnapshot
 ```
 
-Source: `internal/domain/planning/capability.go`, `demand.go`, `capacity_plan.go`,
-`snapshot.go`. `BuildSnapshot` is a package function. Omits: the constructors with
-their validation (`NewSiteCapability`, `NewSiteSkuDemand`,
-`NewPublishedCapacityPlan`).
+Source: `internal/domain/planning/capability.go`, `demand.go`, `capacity_plan.go`, `facts.go`, `snapshot.go`
 
 ## Ports and adapters
 
@@ -279,7 +264,7 @@ classDiagram
   }
   class PlanningSnapshotRepository {
     <<interface>>
-    +Load() facts
+    +Load() Facts
   }
   class ProcessedEventRepository {
     <<interface>>
@@ -296,11 +281,10 @@ classDiagram
   }
   class StuckTransferReader {
     <<interface>>
-    +ListNonTerminal()
+    +ListNonTerminal(limit)
   }
   class ApproveTransfer
   class SimulateTransferOptions
-  class GenerateTransferProposals
   class RunScheduledRebalance
   class CheckStuckTransfers
   class GetTransfer
@@ -309,13 +293,8 @@ classDiagram
   class TransferRepo
   class TransferQueryRepo
   class OutboxWriter
-  class OutboxRelay
   class SnapshotRepo
   class RebalanceRunRepo
-  class Handler
-  class Deps
-  class TransferReplyConsumer
-  class TransferFactConsumer
   ApproveTransfer --> TransferRepository
   ApproveTransfer --> TransferEventPublisher
   ApproveTransfer --> PlanningSnapshotRepository
@@ -324,72 +303,19 @@ classDiagram
   RunScheduledRebalance --> RebalanceRunRepository
   RunScheduledRebalance --> TransferEventPublisher
   CheckStuckTransfers --> StuckTransferReader
+  CheckStuckTransfers --> TransferEventPublisher
   GetTransfer --> TransferQuery
   ListTransfers --> TransferQuery
   FindStuckTransfers --> TransferQuery
   TransferRepo ..|> TransferRepository
+  TransferRepo ..|> StuckTransferReader
   TransferQueryRepo ..|> TransferQuery
   OutboxWriter ..|> TransferEventPublisher
   SnapshotRepo ..|> PlanningSnapshotRepository
   RebalanceRunRepo ..|> RebalanceRunRepository
-  Handler --> ApproveTransfer
-  Handler --> SimulateTransferOptions
-  Handler --> GenerateTransferProposals
-  Handler --> GetTransfer
-  Handler --> ListTransfers
-  Deps --> GetTransfer
-  Deps --> ListTransfers
-  Deps --> FindStuckTransfers
-  Deps --> SimulateTransferOptions
-  TransferReplyConsumer --> UnitOfWork
-  TransferFactConsumer --> UnitOfWork
 ```
 
-Source: `internal/application/ports/*.go`, `internal/application/usecases/*.go`,
-`internal/adapters/**`. Class names are the code's identifiers; the adapters live in
-`inbound/http` (`Handler`), `inbound/mcp` (`Deps`, which carries the tool use
-cases), `inbound/kafka` and `outbound/postgres`. `OutboxWriter` and `OutboxRelay`
-both work on the `outbox_events` table: the writer inserts inside the use case's
-transaction, the relay drains it afterwards. Omits: the analytics store, projector and reports (they are a
-separate read side, see below), the consumers for the three read models and the
-use cases that apply replies and facts.
+Source: `internal/application/ports/*.go`, `internal/application/usecases/*.go`, `internal/adapters/outbound/postgres/*.go`, `cmd/network-inventory-planning/main.go`
 
-## Hexagonal view
-
-```mermaid
-flowchart LR
-  subgraph IN[Inbound adapters]
-    HTTP["HTTP handler :8080"]
-    MCP["MCP server :8090"]
-    KAFKA["Kafka consumers x5"]
-    REP["nip-reports :8092"]
-    PROJ["nip-projector"]
-  end
-  subgraph APP[Application]
-    UC["Use cases and ports"]
-  end
-  subgraph DOM[Domain]
-    TR["transfer"]
-    PL["planning"]
-  end
-  subgraph OUT[Outbound adapters]
-    PG["Postgres OLTP, outbox, runs"]
-    RELAY["Outbox relay to Kafka"]
-    AN["Analytical store"]
-  end
-  HTTP --> UC
-  MCP --> UC
-  KAFKA --> UC
-  UC --> TR
-  UC --> PL
-  UC --> PG
-  PG --> RELAY
-  PROJ --> AN
-  REP --> AN
-```
-
-Source: `cmd/network-inventory-planning/main.go`, `cmd/mcp/main.go`,
-`cmd/nip-projector/main.go`, `cmd/nip-reports/main.go`. The domain imports no
-adapter; the architecture fitness tests in `internal/architecture` enforce the
-layering. The reports and the projector are a separate read side over a second
-database and use no OLTP use case.
+`TransferRepo` serves both the saga repository and the stuck-transfer reader
+(`wireHealthTicker` passes `postgres.NewTransferRepo(pool)` as the reader).
