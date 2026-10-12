@@ -104,11 +104,11 @@ for the open question.
 - [Async API](/contexts/network-inventory-planning/async-api): the Kafka
   integration in narrative form.
 
-Unlike most contexts, the pages from Ubiquitous Language to Sequence Diagrams are
-**not synced**: the repository has no `docs/docs/ddd/` pack yet, so they were
-written here from its code and ADRs (develop `8d25980`) and each says so. The
-Business Context and the Async API narrative are hand-written for this site, as
-everywhere.
+Like every context, the pages from Ubiquitous Language to Use Cases and the
+Operations group are **synced** from the repository's own docs site
+([iqvo.github.io/network-inventory-planning](https://iqvo.github.io/network-inventory-planning/)),
+which it has shipped since October 2026. The Business Context and the Async
+API narrative are hand-written for this site, as everywhere.
 
 ## Surfaces
 

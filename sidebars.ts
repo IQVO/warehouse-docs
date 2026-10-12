@@ -53,6 +53,19 @@ const CONTEXT_PAGES = [
   'class-diagram',
   'entity-relationship',
   'sequence-diagrams',
+  'use-cases',
+];
+
+// Operational pages every context repository ships since the 2026-10 docs
+// coverage campaign (operations/{configuration,runbook,observability,
+// troubleshooting}.md and development/testing.md), synced like the pack and
+// grouped in an "Operations" sub-category after it.
+const CONTEXT_OPS_PAGES = [
+  'configuration',
+  'runbook',
+  'observability',
+  'troubleshooting',
+  'testing',
 ];
 
 // Contexts with a hand-written contexts/<ctx>/async-api narrative page.
@@ -72,13 +85,9 @@ const ASYNC_NARRATIVE = new Set([
 ]);
 
 // Pages a context has beyond the shared page set, appended after it.
-// product-master, inbound-receiving and slotting-optimization keep their own
-// docs site with a use-case catalogue next to the pack.
-const CONTEXT_EXTRA_PAGES: Record<string, string[]> = {
-  'product-master': ['use-cases'],
-  'inbound-receiving': ['use-cases'],
-  'slotting-optimization': ['use-cases'],
-};
+// Empty today: every context now ships the same synced set (pack, use cases
+// and the operational pages).
+const CONTEXT_EXTRA_PAGES: Record<string, string[]> = {};
 
 // Contexts that list only pages written for this site instead of the synced
 // artifact pack (a context decided but not built yet). Empty today: add an
@@ -88,11 +97,22 @@ const CONTEXT_PAGE_OVERRIDES: Record<string, string[]> = {};
 function contextCategory(ctx: string, hasAsyncNarrative: boolean) {
   const base = CONTEXT_PAGE_OVERRIDES[ctx] ?? [...CONTEXT_PAGES, ...(CONTEXT_EXTRA_PAGES[ctx] ?? [])];
   const pages = hasAsyncNarrative ? [...base, 'async-api'] : base;
+  const ops = CONTEXT_PAGE_OVERRIDES[ctx] ? [] : CONTEXT_OPS_PAGES;
   return {
     type: 'category' as const,
     label: ctx,
     link: {type: 'doc' as const, id: `contexts/${ctx}/index`},
-    items: pages.map((page) => `contexts/${ctx}/${page}`),
+    items: [
+      ...pages.map((page) => `contexts/${ctx}/${page}`),
+      ...(ops.length
+        ? [{
+            type: 'category' as const,
+            label: 'Operations',
+            collapsed: true,
+            items: ops.map((page) => `contexts/${ctx}/${page}`),
+          }]
+        : []),
+    ],
   };
 }
 
@@ -123,6 +143,11 @@ const sidebars: SidebarsConfig = {
         'strategic-design/audit-decisions-2026-10',
         'strategic-design/ubiquitous-language',
       ],
+    },
+    {
+      type: 'category',
+      label: 'Fleet health',
+      items: ['fleet-health/docs-coverage', 'fleet-health/ecosystem-gaps'],
     },
     'glossary',
   ],
