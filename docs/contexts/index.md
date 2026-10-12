@@ -8,9 +8,7 @@ slug: /contexts
 
 # Bounded Contexts
 
-Every bounded context below has the same page set, in this order.
-`product-master`, `inbound-receiving` and `slotting-optimization` add one
-extra synced page, **Use Cases**, after the Sequence Diagrams. The
+Every bounded context below has the same page set, in this order. The
 ddd-crew tool behind each page, or the page's source if no ddd-crew tool
 applies, is given in brackets:
 
@@ -46,7 +44,10 @@ applies, is given in brackets:
     aggregates. (Context repository, Mermaid.)
 12. **Sequence Diagrams**: the main runtime interactions. (Context
     repository, Mermaid.)
-13. **Async API**: the Kafka integration in narrative form, with a link to
+13. **Use Cases**: every application use case with its trigger (REST,
+    Kafka, MCP or scheduler), inputs, invariants and the events it raises.
+    (Context repository.)
+14. **Async API**: the Kafka integration in narrative form, with a link to
     the generated AsyncAPI reference. This page exists only for
     `inventory-storage`, `wes-work-planning`, `fulfillment-execution`,
     `workforce-management`, `process-path-management`,
@@ -56,7 +57,7 @@ applies, is given in brackets:
     (Hand-written for this site.)
 
 :::info[Synced pages]
-Pages 2 to 12 are **copies** synced from each context repository's
+Pages 2 to 13 are **copies** synced from each context repository's
 `develop` branch. Each one carries a "Synced from" note and is derived from
 that repository's code. To correct one, edit it in the owning repository
 and re-sync. Do not edit the copy here. Only the Business Context, the
@@ -64,13 +65,14 @@ overview (index) page and the Async API narrative are written for this
 site.
 :::
 
-:::note[One exception: network-inventory-planning]
-`network-inventory-planning` does not yet ship a `docs/docs/ddd/` pack in its
-own repository, so there is nothing to sync. Its pages 2 to 12 were written
-here, from the code on its `develop` branch (commit `8d25980`) and its ADRs,
-and each one says so in a note at the top. When the repository publishes its
-own pack, replace them with synced copies.
-:::
+Each context also has a collapsed **Operations** group with five more synced
+pages, added by the October 2026
+[documentation-coverage campaign](/fleet-health/docs-coverage):
+**Configuration** (every environment variable per binary), **Runbook**
+(deployment, probes, migrations, topics, consumer groups, routine
+procedures), **Observability** (metric instruments, spans, dashboards),
+**Troubleshooting** (symptom, cause, check, fix) and **Testing** (the test
+pyramid, `make` targets and CI jobs).
 
 | Context | Classification | CloudEvents subdomain | Tier |
 | --- | --- | --- | --- |
@@ -87,7 +89,7 @@ own pack, replace them with synced copies.
 | [warehouse-planning](/contexts/warehouse-planning) | Core | `wes` | WES — capacity planning |
 | [product-master](/contexts/product-master) | Supporting | `wms` | WMS — product master data (classification and physical profile; four live `ProductClassified` local-copy consumers) |
 | [inbound-receiving](/contexts/inbound-receiving) | Supporting | `wms` | WMS — everything before the first stow: ASN, dock appointment, receipt, discrepancies; hands good units to `inventory-storage` as events. Deployed |
-| [slotting-optimization](/contexts/slotting-optimization) | Supporting | `wms` | WMS — which SKUs deserve a forward pick slot: velocity-ranked slot plans a human approves. Built, not deployed yet |
+| [slotting-optimization](/contexts/slotting-optimization) | Supporting | `wms` | WMS — which SKUs deserve a forward pick slot: velocity-ranked slot plans a human approves. Built, not deployed yet (no Dockerfile or chart; see [Ecosystem gaps](/fleet-health/ecosystem-gaps)) |
 | [network-inventory-planning](/contexts/network-inventory-planning) | Core | `wes` | WES — inter-warehouse transfer planning (advisory proposals, operator-approved transfer saga) |
 
 See [Strategic Design](/strategic-design) for how these fifteen contexts relate to
