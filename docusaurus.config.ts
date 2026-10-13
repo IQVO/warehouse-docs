@@ -68,6 +68,12 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          orderManagementReports: {
+            specPath: 'apis/order-management/openapi-reports.yaml',
+            outputDir: 'docs/api-reference/rest/order-management-reports',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
           inventoryStorage: {
             specPath: 'apis/inventory-storage/openapi.yaml',
             outputDir: 'docs/api-reference/rest/inventory-storage',
@@ -80,9 +86,21 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          wesWorkPlanningReports: {
+            specPath: 'apis/wes-work-planning/openapi-reports.yaml',
+            outputDir: 'docs/api-reference/rest/wes-work-planning-reports',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
           fulfillmentExecution: {
             specPath: 'apis/fulfillment-execution/openapi.yaml',
             outputDir: 'docs/api-reference/rest/fulfillment-execution',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          fulfillmentExecutionReports: {
+            specPath: 'apis/fulfillment-execution/openapi-reports.yaml',
+            outputDir: 'docs/api-reference/rest/fulfillment-execution-reports',
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
@@ -92,15 +110,33 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          workforceManagementReports: {
+            specPath: 'apis/workforce-management/openapi-reports.yaml',
+            outputDir: 'docs/api-reference/rest/workforce-management-reports',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
           facilityLayout: {
             specPath: 'apis/facility-layout/openapi.yaml',
             outputDir: 'docs/api-reference/rest/facility-layout',
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          facilityLayoutReports: {
+            specPath: 'apis/facility-layout/openapi-reports.yaml',
+            outputDir: 'docs/api-reference/rest/facility-layout-reports',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
           processPathManagement: {
             specPath: 'apis/process-path-management/openapi.yaml',
             outputDir: 'docs/api-reference/rest/process-path-management',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          processPathManagementReports: {
+            specPath: 'apis/process-path-management/openapi-reports.yaml',
+            outputDir: 'docs/api-reference/rest/process-path-management-reports',
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },

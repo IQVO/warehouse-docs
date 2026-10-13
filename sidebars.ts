@@ -1,12 +1,18 @@
 import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 
 import orderManagementSidebar from './docs/api-reference/rest/order-management/sidebar';
+import orderManagementReportsSidebar from './docs/api-reference/rest/order-management-reports/sidebar';
 import inventoryStorageSidebar from './docs/api-reference/rest/inventory-storage/sidebar';
 import wesWorkPlanningSidebar from './docs/api-reference/rest/wes-work-planning/sidebar';
+import wesWorkPlanningReportsSidebar from './docs/api-reference/rest/wes-work-planning-reports/sidebar';
 import fulfillmentExecutionSidebar from './docs/api-reference/rest/fulfillment-execution/sidebar';
+import fulfillmentExecutionReportsSidebar from './docs/api-reference/rest/fulfillment-execution-reports/sidebar';
 import workforceManagementSidebar from './docs/api-reference/rest/workforce-management/sidebar';
+import workforceManagementReportsSidebar from './docs/api-reference/rest/workforce-management-reports/sidebar';
 import facilityLayoutSidebar from './docs/api-reference/rest/facility-layout/sidebar';
+import facilityLayoutReportsSidebar from './docs/api-reference/rest/facility-layout-reports/sidebar';
 import processPathManagementSidebar from './docs/api-reference/rest/process-path-management/sidebar';
+import processPathManagementReportsSidebar from './docs/api-reference/rest/process-path-management-reports/sidebar';
 import laborPerformanceSidebar from './docs/api-reference/rest/labor-performance/sidebar';
 import laborPerformanceReportsSidebar from './docs/api-reference/rest/labor-performance-reports/sidebar';
 import networkFulfillmentSidebar from './docs/api-reference/rest/network-fulfillment/sidebar';
@@ -185,7 +191,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'order-management',
-      items: [...orderManagementSidebar, 'api-reference/async/order-management'],
+      items: [...orderManagementSidebar, ...orderManagementReportsSidebar, 'api-reference/async/order-management'],
     },
     {
       type: 'category',
@@ -195,27 +201,27 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'wes-work-planning',
-      items: [...wesWorkPlanningSidebar, 'api-reference/async/wes-work-planning'],
+      items: [...wesWorkPlanningSidebar, ...wesWorkPlanningReportsSidebar, 'api-reference/async/wes-work-planning'],
     },
     {
       type: 'category',
       label: 'fulfillment-execution',
-      items: [...fulfillmentExecutionSidebar, 'api-reference/async/fulfillment-execution'],
+      items: [...fulfillmentExecutionSidebar, ...fulfillmentExecutionReportsSidebar, 'api-reference/async/fulfillment-execution'],
     },
     {
       type: 'category',
       label: 'workforce-management',
-      items: [...workforceManagementSidebar, 'api-reference/async/workforce-management'],
+      items: [...workforceManagementSidebar, ...workforceManagementReportsSidebar, 'api-reference/async/workforce-management'],
     },
     {
       type: 'category',
       label: 'facility-layout',
-      items: [...facilityLayoutSidebar, 'api-reference/async/facility-layout'],
+      items: [...facilityLayoutSidebar, ...facilityLayoutReportsSidebar, 'api-reference/async/facility-layout'],
     },
     {
       type: 'category',
       label: 'process-path-management',
-      items: [...processPathManagementSidebar, 'api-reference/async/process-path-management'],
+      items: [...processPathManagementSidebar, ...processPathManagementReportsSidebar, 'api-reference/async/process-path-management'],
     },
     {
       type: 'category',
