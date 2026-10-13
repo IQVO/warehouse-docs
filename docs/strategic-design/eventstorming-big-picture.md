@@ -554,11 +554,9 @@ flowchart LR
     H12["H12 Usable Inventory Observed feeds no decision"]:::hotspot
     H14["H14 Path Plan Drift Detected has no consumer"]:::hotspot
     H15["H15 Bottleneck Detected has no consumer"]:::hotspot
-    H31["H31 default INSTALLED_CAPACITY_MODE permissive rejects every commit"]:::hotspot
     R4 -.- H12
     E8 -.- H14
     E6 -.- H15
-    C2 -.- H31
 
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
     classDef command fill:#4aa3df,stroke:#1f6f9f,color:#0b1e2d
@@ -784,19 +782,19 @@ this site, and the corroborating context page is linked instead.
 | H22 | labor-performance | `REBIN` and other unknown task types are never scored | [labor-performance EventStorming](/contexts/labor-performance/eventstorming) |
 | ~~H23~~ | fulfillment-execution | ~~No in-process scheduler for `expire-leases` or `sweep-cpt-misses`~~ **Resolved 2026-10-06.** The chart CronJobs now run both sweeps by default (ADR 0037). | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H24 | fulfillment-execution | `TaskCPTMissed` re-fires on every sweep pass | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
-| H25 | order-management | No known consumer of `OrderRepromised` | [order-management EventStorming](/contexts/order-management/eventstorming) H5. [order-management context map](/contexts/order-management/context-map). |
+| H25 | order-management | No known consumer of `OrderRepromised` | [order-management EventStorming](/contexts/order-management/eventstorming) H5. [order-management context map](/contexts/order-management/context-map). **Decided 2026-10-12: kept unconsumed** (it carries no new cutoff instant; warehouse-planning ADR 0004, [ecosystem gaps tracker](/fleet-health/ecosystem-gaps) E4). |
 | H26 | network-fulfillment | No persisted WorkUnitId-to-NetworkRef mapping, so shipment confirmation is an explicit call (ADR 0014) | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), section 3 |
 | ~~H27~~ | network-fulfillment | ~~Confirming a shipment before acknowledgement surfaces as HTTP 500~~ **Resolved 2026-10-06.** Now 409 `confirm-before-acknowledge` (ADR 0015). | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming) |
 | H28 | network-fulfillment | `AcknowledgementDeadlineAtRisk` fires only after the deadline, while ADR 0001 says "approaching" | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), sticky inventory |
 | H29 | network-fulfillment | `warehouse.network-fulfillment.events` is wired but unused: no consumer in the fleet | [network-fulfillment context map](/contexts/network-fulfillment/context-map) |
 | H30 | network-fulfillment | The capability offer is never submitted outward. `SubmitAvailability` is unused. | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), section 4 |
-| H31 | workforce-management | The default `INSTALLED_CAPACITY_MODE=permissive` rejects every shift-plan commit | [workforce-management EventStorming](/contexts/workforce-management/eventstorming). [workforce-management context map](/contexts/workforce-management/context-map). |
+| ~~H31~~ | workforce-management | ~~The default `INSTALLED_CAPACITY_MODE=permissive` rejects every shift-plan commit~~ **Resolved 2026-10-13.** The chart now sets `INSTALLED_CAPACITY_MODE=http` and the fulfillment-execution base URL by default (workforce-management#164); the binary default stays `permissive` for local runs. | [workforce-management EventStorming](/contexts/workforce-management/eventstorming). [Ecosystem gaps tracker](/fleet-health/ecosystem-gaps) 10b. |
 | ~~H32~~ | fulfillment-execution | ~~`apis/openapi.yaml` expands CPT as "Committed Processing Time"~~ **Resolved 2026-10-06.** Now reads "Critical Pull Time". | [fulfillment-execution Ubiquitous Language](/contexts/fulfillment-execution/ubiquitous-language) |
 | H33 | product-master | A SKU classified moments before its first stow may reach a consumer's local copy late | [product-master EventStorming](/contexts/product-master/eventstorming) (product-master ADR 0001, Consequences) |
 | H34 | product-master | No live event consumer of the physical profile (`ProductDimensionsDeclared`, `ProductMeasured`). **Partly resolved 2026-10-11:** `slotting-optimization` consumes both into its product copy (built on its `develop`), but it is not deployed yet (H38) | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0002, "later phases"), [slotting-optimization context map](/contexts/slotting-optimization/context-map) |
 | H36 | inbound-receiving | `DockAppointmentBooked` has no consumer: inbound-labor demand in `warehouse-planning` is planned, not built (K28) | [inbound-receiving context map](/contexts/inbound-receiving/context-map), row 4 |
-| H37 | slotting-optimization | `SlotPlanApproved` has no consumer: executing the moves as MOVE and REPLENISH work is planned, not built (K29) | [slotting-optimization context map](/contexts/slotting-optimization/context-map), [domain events](/contexts/slotting-optimization/domain-events) |
-| H38 | slotting-optimization | Not deployed: no Dockerfile, no chart and no `warehouse-infra` wiring, so its three local copies are not fed in the reference cluster | [slotting-optimization Business Context](/contexts/slotting-optimization/business-context), Honest scope today |
+| H37 | slotting-optimization | `SlotPlanApproved` has no consumer: executing the moves as MOVE and REPLENISH work is planned, not built (K29). **Decided 2026-10-12: stays open by decision**; slotting-optimization ADR 0007 (Proposed) names the executor options. | [slotting-optimization context map](/contexts/slotting-optimization/context-map), [domain events](/contexts/slotting-optimization/domain-events) |
+| H38 | slotting-optimization | Not deployed: no `warehouse-infra` wiring, so its three local copies are not fed in the reference cluster. (The Dockerfile and chart existed since 2026-10-08.) **Partly resolved 2026-10-13:** warehouse-infra#75 wires it on `develop`; it runs once warehouse-infra is released and applied. | [slotting-optimization Business Context](/contexts/slotting-optimization/business-context), [ecosystem gaps tracker](/fleet-health/ecosystem-gaps) 6 |
 | H35 | product-master | Stage E (remove the legacy importer, the inventory-storage backfill and the deprecated classification endpoint) has no date | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0003, stage E) |
 
 Other wired-but-unused edges are not drawn, because they sit outside
