@@ -40,6 +40,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm --prefix tools/asyncapi-gen ci --no-audit --no-fund
+      # tsc over docusaurus.config.ts, sidebars.ts (incl. every generated
+      # api-reference sidebar it imports) and src/. TypeScript 7 removed
+      # `baseUrl` (TS5102); tsconfig.json overrides it with `null` + `paths`.
+      - run: npm run typecheck
       - run: npm run build
 
   build:
