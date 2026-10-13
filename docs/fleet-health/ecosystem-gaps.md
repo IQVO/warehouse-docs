@@ -1,326 +1,209 @@
 ---
 id: ecosystem-gaps
-title: Ecosystem gaps, October 2026
-sidebar_label: Ecosystem gaps (2026-10)
-description: What the October 2026 documentation-coverage campaign found missing or broken across the fleet, ranked by impact, with the evidence for each gap and the context that owns the fix.
+title: Ecosystem gaps tracker, October 2026
+sidebar_label: Ecosystem gaps (tracker)
+description: Status of every gap the October 2026 documentation-coverage campaign found across the fleet — fixed (with the merged pull request), kept by decision (with the ADR), or still open — re-verified against each repository's develop branch.
 ---
 
-# Ecosystem gaps, October 2026
+# Ecosystem gaps tracker, October 2026
 
 Between 2026-10-09 and 2026-10-12 every application repository got a full
-operational documentation set (configuration, runbook, observability,
-troubleshooting, testing, integration, use cases; see
+operational documentation set (see
 [Documentation coverage](./docs-coverage.md)). Writing those pages meant
 reading every binary, chart, consumer and route against the code on
-`develop`. This page lists what that reading found: capabilities that do not
-work end to end, operational risks, contract defects and documentation that
-is still missing.
+`develop`, and that reading found the gaps below. A gap-fix wave
+(2026-10-12 to 2026-10-13) then fixed them, one pull request per
+repository, with every decision recorded in a decision log (D1 to D33).
+The wave also found three escapes of its own (healthy messages
+dead-lettered on shutdown, a lost analytics apply, Kafka writers on
+`acks=0`); they are fixed fleet-wide and listed under
+[Escapes found during the fix wave](#escapes-found-during-the-fix-wave).
+Every repository was released to `main` and the kind cluster was
+deployed on 2026-10-13.
 
-How to read it:
+This page is now a **tracker**. Every gap has one status:
 
-- Every gap names the **owning context** and the **evidence** (file and line
-  on `develop` at the time of writing). Docs describe the code as it is: none
-  of these were "fixed" in the docs PRs, they were documented as current
-  behaviour.
-- **Verified** means the evidence was re-checked independently of the agent
-  that reported it. Everything else was read from code by one reviewer and
-  should be confirmed before work starts.
-- Severity: **S1** a business capability does not work end to end;
-  **S2** an operational failure mode with no guard; **S3** a contract or API
-  defect a client can hit; **S4** observability blind spot; **S5** drift
-  between code, comments, charts and docs; **S6** delivery and docs gaps.
+- **Fixed in `<repo>#<pr>`**: the pull request is merged into that
+  repository's `develop` (checked with `gh pr view`). Links go to the PR.
+- **Kept by decision**: the behaviour stays on purpose; the cell names the
+  ADR (or code comment) that records why.
+- **Open**: not fixed yet, with what is missing.
 
-## Summary
+:::info[How this was verified]
+Every row was re-checked on 2026-10-13 against `origin/develop` of each
+repository with the wave's read-only scripts (`verify-ecogaps.sh` 1 to 4:
+`git grep` / `git show` per claim) plus targeted checks, and every pull
+request this page cites was confirmed `MERGED` with `gh pr view`. "Fixed"
+means merged to `develop`. **Released** (merged to `main`, live on the
+repository's own docs site) and **deployed** (applied to the kind cluster)
+are separate: see gap 17a for the release round and
+[Deployed to the kind cluster](#deployed-to-the-kind-cluster) for the
+cluster. Context pages on this site were re-synced from the same `develop`
+commits.
+:::
 
-| # | Gap | Owner | Severity |
-|---|-----|-------|----------|
-| 1 | Inter-warehouse transfers cannot run: nothing publishes `SiteCapabilityChanged` | facility-layout → network-inventory-planning | S1 · verified |
-| 2 | Scheduled rebalancing always proposes nothing | network-inventory-planning | S1 · verified |
-| 3 | Transfer saga goes silent after approval | network-inventory-planning | S1 |
-| 4 | A malformed allocation reply blocks `warehouse.inventory.events` forever | network-inventory-planning | S2 · verified |
-| 5 | Console order entry fails against a real order-management | order-management (web) | S1 · verified |
-| 6 | Console network-fulfillment report screen calls a route that does not exist | warehouse-console | S1 · verified |
-| 7 | slotting-optimization is built but cannot be deployed, and nobody consumes its plans | slotting-optimization, warehouse-infra | S1 · verified |
-| 8 | Outbox relay has no attempt cap in inventory-storage | inventory-storage | S2 · verified |
-| 9 | Analytics projectors can die silently while probes stay green | process-path-management, workforce-management | S2 |
-| 10 | Chart ConfigMaps that no Deployment mounts | facility-layout, inbound-receiving | S2 · verified (facility-layout) |
-| 11 | Optional MCP tool inputs are published as required | 5 contexts | S3 |
-| 12 | MCP safety annotations that are wrong | wes-work-planning, fulfillment-execution | S3 · verified (wes-work-planning) |
-| 13 | Report routes outside the OpenAPI contracts | 8 contexts + warehouse-ops-agent | S3 |
-| 14 | Every 5xx dashboard panel is empty | warehouse-infra (fleet) | S4 |
-| 15 | Binaries with no telemetry, or charts feeding env they never read | 5 contexts | S4 |
-| 16 | Boot-retry, sweeper and log-level drift between code and comments | fleet template | S5 |
-| 17 | Docs and delivery gaps that remain after the campaign | fleet | S6 |
+Severity: **S1** a business capability does not work end to end;
+**S2** an operational failure mode with no guard; **S3** a contract or API
+defect a client can hit; **S4** observability blind spot; **S5** drift
+between code, comments, charts and docs; **S6** delivery and docs gaps.
+Gaps are numbered by severity; the "was" column keeps the number the first
+version of this page used.
 
-## S1: capabilities that do not work end to end
+## Status at a glance
 
-### 1. Inter-warehouse transfers cannot run
+| Status | Rows |
+| --- | --- |
+| Fixed | 49 |
+| Kept by decision | 6 |
+| Open | 3 |
+| **Total** | **58** |
 
-- **facility-layout** declares `com.warehouse.wms.facility-layout.site.SiteCapabilityChanged`
-  (DTO, partition key, AsyncAPI entry, fitness test) but on `develop`
-  `shared.NewSiteCapabilityChanged` is called only from `*_test.go`
-  (`internal/domain/shared/events.go:60-78`). No use case, REST route or MCP
-  tool raises it.
-- **network-inventory-planning** fills its `site_capability` read model from
-  exactly that event (`internal/adapters/inbound/kafka/consumers.go:36-110`),
-  and transfer simulation and approval fail closed when capability facts are
-  missing. This matches the `503` with empty facts seen on the kind cluster on
-  2026-10-08.
-- **Fix (facility-layout):** a command that sets a site's transfer
-  capability (`transferOriginEnabled`, `transferDestinationEnabled`) and
-  raises the event through the outbox, with a new ADR. While there, align the
-  payload casing: `SiteCapabilityChanged` uses `snake_case`, every other
-  facility-layout event uses `camelCase` (`internal/adapters/kafka/cloudevents/wire.go:37`).
-  The consumer must be updated in the same change.
+A row with a mixed outcome counts under its worst status (15d is Open).
+E1, E2 and E5 only point at another row and are not counted twice.
 
-### 2. Scheduled rebalancing always proposes nothing
+Open rows: [15d](#s4-observability-blind-spots) facility-layout trace
+context across the outbox, [16d](#s5-drift-between-code-comments-and-charts)
+coverage scope drift, [18b](#escapes-found-during-the-fix-wave) a static
+sensor for the consumer-shutdown escape.
 
-`internal/application/usecases/scheduled_rebalance.go:88-94` calls
-`Planner.Generate(positions, nil, nil)`: no policies and no lanes are
-projected in v1, and the planner proposes only when policies exist. Every
-scheduled run is recorded as a completed run with zero proposals. Owner:
-network-inventory-planning (project policies and lanes, or stop scheduling
-the run until they exist).
+## S1: capabilities that did not work end to end
 
-### 3. Transfer saga goes silent after approval
-
-`cmd/network-inventory-planning/main.go:353-359` wires the
-receipt-staged, stow, dispatched and arrival appliers without a publisher, so
-`IN_TRANSIT`, `ARRIVED`, `RECEIVED` and `UNFULFILLABLE` emit no
-`TransferStateAdvanced`. ADR 0007 ("every saga transition") and
-`apis/asyncapi.yaml:67` say they should. `InterWarehouseTransfer.Cancel`
-exists but no use case, route or consumer calls it. Owner:
-network-inventory-planning.
-
-### 5. Console order entry fails against a real order-management
-
-The order-management remote (`web/src/api.ts:36-48`) posts `POST /orders`
-without an `Idempotency-Key`. When the service runs with a database the
-idempotency middleware answers `400 idempotency-key-required`
-(`internal/adapters/inbound/http/idempotency.go:78-79`). Kong already allows
-the header through CORS. Owner: order-management (`web/`).
-
-### 6. Console network-fulfillment report screen calls a missing route
-
-`src/features/context-reports/networkFulfillment.config.tsx:144` requests
-`/reports/network-orders`; network-fulfillment serves
-`/reports/acknowledgement` and `/reports/acknowledgement/freshness`
-(`internal/adapters/inbound/http/reports_handler.go:170-171`). The screen
-gets a `404`. Owner: warehouse-console.
-
-### 7. slotting-optimization cannot be deployed, and nobody consumes it
-
-The repository has no `Dockerfile` and no `charts/` directory, yet
-`ci.yml` has `docker-publish` and `release` jobs that would build and package
-them (push-to-main only, so they have never run). warehouse-infra has no
-Kong route, Terraform service entry or dashboard for it, and no context
-consumes `warehouse.slotting-optimization.events` (not wes-work-planning, not
-the console, not the ops agent). Its GitHub Pages site is not enabled either.
-Owners: slotting-optimization (packaging), warehouse-infra (deploy), and a
-decision on who consumes approved slot plans.
+| # | Was | Gap | Owner | Status |
+| --- | --- | --- | --- | --- |
+| 1 | 1 | Nothing raised `SiteCapabilityChanged`, so inter-warehouse transfers could not run (network-inventory-planning fails closed without capability facts). | facility-layout | **Fixed** in [facility-layout#173](https://github.com/IQVO/facility-layout/pull/173): `PUT /sites/{siteCode}/transfer-capability` raises the event through the outbox with a per-site `capabilityRevision` (facility-layout ADR 0035). |
+| 1b | 1 | `SiteCapabilityChanged` uses a `snake_case` payload; every other facility-layout event is `camelCase`. | facility-layout | **Kept by decision**: recasing would be a breaking `.v2` with zero benefit; facility-layout ADR 0035 records the inconsistency (D2). |
+| 2 | 2 | The scheduled rebalance always proposed nothing (`Planner.Generate(positions, nil, nil)`). | network-inventory-planning | **Fixed** in [network-inventory-planning#38](https://github.com/IQVO/network-inventory-planning/pull/38): operator-managed Rebalance Policy and Transfer Lane catalogues (`PUT/GET /v1/rebalance-policies`, `/v1/transfer-lanes`); the scheduled pass plans from them (ADR 0015). |
+| 3 | 3 | The transfer saga went silent after approval: no `TransferStateAdvanced` for `IN_TRANSIT`, `ARRIVED`, `RECEIVED`, `UNFULFILLABLE`. | network-inventory-planning | **Fixed** in [network-inventory-planning#36](https://github.com/IQVO/network-inventory-planning/pull/36) (every applier gets the outbox publisher); [network-inventory-planning#38](https://github.com/IQVO/network-inventory-planning/pull/38) adds the test that every transition outboxes the event (D3). |
+| 3b | 3 | `InterWarehouseTransfer.Cancel` has no caller. | network-inventory-planning | **Kept by decision**: no ADR says who may cancel a transfer or how the origin reservation is compensated, so the transition stays reserved; network-inventory-planning ADR 0015 lists it as a Proposed follow-up (D7). |
+| 4 | 5 | The order-management web remote posted `POST /orders` without an `Idempotency-Key`, so a real order-management answered `400`. | order-management | **Fixed** in [order-management#183](https://github.com/IQVO/order-management/pull/183): one `crypto.randomUUID()` per submission, reused on retry (ADR 0038). |
+| 5 | 6 | The console network-fulfillment report called `/reports/network-orders`, a route that does not exist. | warehouse-console | **Fixed** in [warehouse-console#79](https://github.com/IQVO/warehouse-console/pull/79): the screen reads `/reports/acknowledgement` and its freshness route. |
+| 6 | 7 | slotting-optimization could not be deployed. The first version of this page also said it had no `Dockerfile` and no chart: **that was wrong** (both landed 2026-10-08, commits `4f8a4e1` and `d40e217`). What was missing was the infra wiring. | warehouse-infra | **Fixed** in [warehouse-infra#75](https://github.com/IQVO/warehouse-infra/pull/75): services map entry, Kong route, initdb role and database, dashboard (D10). The repository's Pages site now answers `200`, and since the 2026-10-13 deploy its ArgoCD app is Healthy and Kong answers its health route. |
+| 6b | 7 | Nobody consumes approved slot plans. | slotting-optimization | **Kept by decision**: who executes a plan (wes-work-planning moves vs inventory-storage relocation) is undecided; slotting-optimization ADR 0007 names the options with status Proposed ([slotting-optimization#17](https://github.com/IQVO/slotting-optimization/pull/17), D11). |
 
 ## S2: operational failure modes with no guard
 
-### 4. A malformed allocation reply blocks a partition forever (network-inventory-planning)
-
-`MarkAllocated` / `MarkUnfulfillable` return plain errors for a line-id
-mismatch or an unknown rejection reason (`internal/domain/transfer/saga.go:331-334`).
-`usecases.IsDeterministic` classifies only not-found and illegal-transition
-errors (`approve_transfer.go:241-243`), so
-`transfer_reply_consumer.go:266-271` returns the error and the message is
-retried forever, blocking every later message on that
-`warehouse.inventory.events` partition. Fix: classify domain validation
-errors as deterministic (skip and dead-letter). The same context's
-`site_sku_demand` upsert has no ordering guard, so an older redelivery
-overwrites a newer value (`planning_repositories.go:86`).
-
-### 8. Outbox relay with no attempt cap (inventory-storage)
-
-`cmd/inventory/adapters.go:199` builds the relay without `WithMaxAttempts`:
-a row that can never be sent blocks the relay forever, with no DLQ. Other
-contexts' relays should be checked for the same option.
-
-### 9. Projectors that die silently
-
-When the analytics consumer loop exits (commit or DLQ write failure), the
-projector logs the error and keeps serving `/healthz` and `/readyz` as `200`
-(process-path-management `cmd/pathmgmt-projector/main.go:130-136`,
-workforce-management `cmd/workforce-projector/main.go:149-154`). Nothing
-consumes until someone restarts the pod. Fix: flip readiness or exit the
-process.
-
-### 10. ConfigMaps that nothing mounts
-
-facility-layout's chart renders `OUTBOX_RELAY_INTERVAL`,
-`HOUSEKEEPING_INTERVAL`, `IDEMPOTENCY_KEY_TTL` and `OUTBOX_RETENTION` into a
-ConfigMap that no Deployment mounts (no `envFrom` in
-`charts/facility-layout/templates`), so the `config.*` values have no effect.
-inbound-receiving's chart has the same pattern. Both look like a template
-inheritance: check every chart.
-
-### Other operational risks
-
-| Context | Gap | Evidence |
-|---|---|---|
-| inbound-receiving | No sweeper for `outbox_events`, `processed_events`, `idempotency_keys`, `analytics_processed_events`: unbounded growth | runbook, code reading |
-| workforce-management | Chart does not set `INSTALLED_CAPACITY_MODE` / `FULFILLMENT_EXECUTION_BASE_URL`; with the permissive code default every shift-plan commit answers `503` unless `extraEnv` sets them | `charts/workforce-management/templates/deployment.yaml` |
-| fulfillment-execution | Kafka catalogue mode waits up to 60 s before the HTTP listener starts; the startupProbe also allows 60 s, so a slow replay ends in a probe kill instead of a clear boot error | `cmd/execution/main.go:316`, `values.yaml:277-282` |
-| process-path-management | warehouse-infra points the readiness probe at `/healthz`, so the `/readyz` shutdown flip (ADR 0012) is not used in kind | `helm-values/process-path-management.yaml:41-43` |
-| warehouse-ops-agent | warehouse-infra sets neither `prometheus.url` nor `runtimeSignals.lokiUrl`: `/runtime-signals` reports zeros in kind; 8 of 12 MCP clients are built even with an empty endpoint and fail at call time | `terraform/ops-agent.tf`, `cmd/agent/main.go:200-247` |
-| process-path-management, labor-performance | Housekeeping cannot be disabled: `durationEnv` replaces `0` with the default, although comments, charts and ADR 0018 say `0s` disables it | `cmd/pathmgmt/main.go:468-477`, `cmd/labor/main.go:541` |
+| # | Was | Gap | Owner | Status |
+| --- | --- | --- | --- | --- |
+| 7 | 4 | A malformed allocation reply (line-id mismatch, unknown rejection reason) was retried forever, blocking a `warehouse.inventory.events` partition. | network-inventory-planning | **Fixed** in [network-inventory-planning#38](https://github.com/IQVO/network-inventory-planning/pull/38): domain validation failures are deterministic, dead-lettered and never retried (D4). |
+| 7b | 4 | The `site_sku_demand` upsert had no ordering guard: an older redelivery overwrote newer demand. | network-inventory-planning | **Fixed** in [network-inventory-planning#38](https://github.com/IQVO/network-inventory-planning/pull/38) (D5). |
+| 8 | 8 | Outbox relays had no attempt cap: one poison row blocked a relay forever. The first version named only inventory-storage; **no** relay in the fleet passed a cap. | every context with an outbox | **Fixed** in every relay (`OUTBOX_MAX_ATTEMPTS`, default 20, `0` = unlimited; each repository has its own ADR): [inventory-storage#184](https://github.com/IQVO/inventory-storage/pull/184), [order-management#183](https://github.com/IQVO/order-management/pull/183), [process-path-management#143](https://github.com/IQVO/process-path-management/pull/143), [workforce-management#165](https://github.com/IQVO/workforce-management/pull/165), [wes-work-planning#175](https://github.com/IQVO/wes-work-planning/pull/175), [fulfillment-execution#189](https://github.com/IQVO/fulfillment-execution/pull/189), [labor-performance#148](https://github.com/IQVO/labor-performance/pull/148), [inbound-receiving#20](https://github.com/IQVO/inbound-receiving/pull/20), [product-master#27](https://github.com/IQVO/product-master/pull/27), [warehouse-planning#49](https://github.com/IQVO/warehouse-planning/pull/49), [slotting-optimization#17](https://github.com/IQVO/slotting-optimization/pull/17), [network-fulfillment#81](https://github.com/IQVO/network-fulfillment/pull/81), [network-inventory-planning#43](https://github.com/IQVO/network-inventory-planning/pull/43), [facility-layout#178](https://github.com/IQVO/facility-layout/pull/178). |
+| 9 | 9 | Analytics projectors kept answering `200` on `/healthz` and `/readyz` after their consumer loop died. | process-path-management, workforce-management | **Fixed** in [process-path-management#143](https://github.com/IQVO/process-path-management/pull/143) and [workforce-management#164](https://github.com/IQVO/workforce-management/pull/164): the projector exits non-zero so the pod restarts (D13). |
+| 10 | 10 | Chart ConfigMaps that no Deployment mounted, so `config.*` values did nothing. The first version named two charts; the full list was eleven. | fleet charts | **Fixed** with `envFrom: configMapRef` plus a render test: [facility-layout#173](https://github.com/IQVO/facility-layout/pull/173), [inbound-receiving#20](https://github.com/IQVO/inbound-receiving/pull/20), [inventory-storage#184](https://github.com/IQVO/inventory-storage/pull/184), [labor-performance#148](https://github.com/IQVO/labor-performance/pull/148), [order-management#183](https://github.com/IQVO/order-management/pull/183), [process-path-management#143](https://github.com/IQVO/process-path-management/pull/143), [product-master#27](https://github.com/IQVO/product-master/pull/27), [warehouse-planning#49](https://github.com/IQVO/warehouse-planning/pull/49), [wes-work-planning#175](https://github.com/IQVO/wes-work-planning/pull/175), [fulfillment-execution#189](https://github.com/IQVO/fulfillment-execution/pull/189), [workforce-management#164](https://github.com/IQVO/workforce-management/pull/164) (D14). New contexts are guarded by the template's `repo_lint` rule R10 (configmap-mount) from [warehouse-harness-template#21](https://github.com/IQVO/warehouse-harness-template/pull/21) (gap 17i). |
+| 10a | other | inbound-receiving had no sweeper: `outbox_events`, `processed_events`, `idempotency_keys` grew without bound. | inbound-receiving | **Fixed** in [inbound-receiving#20](https://github.com/IQVO/inbound-receiving/pull/20) (housekeeping sweeper, inbound-receiving ADR 0010). |
+| 10b | other | workforce-management's chart set neither `INSTALLED_CAPACITY_MODE` nor `FULFILLMENT_EXECUTION_BASE_URL`: every shift-plan commit answered `503`. | workforce-management | **Fixed** in [workforce-management#164](https://github.com/IQVO/workforce-management/pull/164): the chart defaults the edge to fulfillment-execution over HTTP, pinned by its render test. |
+| 10c | other | fulfillment-execution waited up to 60 s for the Kafka catalogue replay before starting its HTTP listener, so a slow replay ended in a probe kill. | fulfillment-execution | **Fixed** in [fulfillment-execution#190](https://github.com/IQVO/fulfillment-execution/pull/190): the listener starts first and `/readyz` answers `503` until the replay catches up (ADR 0044). |
+| 10d | other | warehouse-infra pointed process-path-management's readiness probe at `/healthz`, hiding the `/readyz` shutdown drain. | warehouse-infra | **Fixed** in [warehouse-infra#75](https://github.com/IQVO/warehouse-infra/pull/75) (D24). |
+| 10e | other | The ops agent's `/runtime-signals` reported zeros in kind (no `prometheus.url`, no `runtimeSignals.lokiUrl`), and it built MCP clients with empty endpoints. | warehouse-infra, warehouse-ops-agent | **Fixed** in [warehouse-infra#75](https://github.com/IQVO/warehouse-infra/pull/75) (real Prometheus and Loki URLs) and [warehouse-ops-agent#139](https://github.com/IQVO/warehouse-ops-agent/pull/139) (an upstream client is built only when its endpoint is set). |
+| 10f | other | Housekeeping could not be disabled: `durationEnv` turned `0` into the default although comments, charts and ADRs say `0` disables it. | process-path-management, labor-performance | **Fixed** in [process-path-management#143](https://github.com/IQVO/process-path-management/pull/143) and [labor-performance#148](https://github.com/IQVO/labor-performance/pull/148): the housekeeping settings use a parser where `0` disables (D15). |
 
 ## S3: contract and API defects
 
-### 11. Optional MCP inputs published as required
-
-Report tools describe filters (`pathId`, `granularity`, `sku`, `binId`,
-`taskType`, `stationId`) as optional, but the input structs have no
-`omitempty`, so the go-sdk schema in `tools/list` marks them required and a
-call without them fails with `missing properties`. Seen in
-process-path-management, inventory-storage, wes-work-planning,
-fulfillment-execution and workforce-management (`internal/adapters/inbound/mcp/report_tool.go`
-in each). A fleet sensor (a fitness test that every optional field has
-`omitempty`) would stop it recurring.
-
-### 12. MCP annotations that are wrong
-
-- wes-work-planning: `get_backlog_telemetry` and
-  `get_rebalance_recommendation` are annotated `ReadOnlyHint: true`
-  (`internal/adapters/inbound/mcp/tools.go:110-118`) but their use cases
-  publish `BacklogThresholdBreached`, `PathThrottled` and
-  `LaborReassignmentFlagged`.
-- fulfillment-execution: the server instructions say "Read-only access"
-  (`internal/adapters/inbound/mcp/server.go:15`) while `complete_task` is a
-  destructive write tool on the same server.
-
-An agent that trusts these annotations will call a writing tool without the
-confirmation it gives writes.
-
-### 13. Routes outside the contracts
-
-- The `/reports/...` routes of the `*-reports` binaries are not in
-  `apis/openapi.yaml` in order-management, wes-work-planning,
-  fulfillment-execution, workforce-management, facility-layout,
-  process-path-management and labor-performance (labor-performance has a
-  separate `openapi-reports.yaml`; the others have none). Contract tests do
-  not cover them and the generated API reference does not show them.
-- warehouse-ops-agent has no `apis/openapi.yaml` at all: its 13 routes are
-  documented only by hand (`docs/docs/api/http-routes.md`).
+| # | Was | Gap | Owner | Status |
+| --- | --- | --- | --- | --- |
+| 11 | 11 | Optional MCP report-tool inputs had no `omitempty`, so `tools/list` marked them required and calls without them failed. | 6 contexts | **Fixed** in [inventory-storage#184](https://github.com/IQVO/inventory-storage/pull/184), [wes-work-planning#175](https://github.com/IQVO/wes-work-planning/pull/175), [fulfillment-execution#188](https://github.com/IQVO/fulfillment-execution/pull/188), [workforce-management#165](https://github.com/IQVO/workforce-management/pull/165), [process-path-management#143](https://github.com/IQVO/process-path-management/pull/143), [facility-layout#173](https://github.com/IQVO/facility-layout/pull/173); every repository with MCP tools now runs the fitness test `TestMCPOptionalToolInputsCarryOmitempty` (D16). |
+| 12 | 12 | wes-work-planning annotated `get_backlog_telemetry` and `get_rebalance_recommendation` read-only although they publish events. | wes-work-planning | **Fixed** in [wes-work-planning#174](https://github.com/IQVO/wes-work-planning/pull/174): `readOnlyHint=false`, `destructiveHint=true` (ADR-0037). |
+| 12b | 12 | fulfillment-execution's MCP server instructions said "Read-only access" next to the `complete_task` write tool. | fulfillment-execution | **Fixed** in [fulfillment-execution#188](https://github.com/IQVO/fulfillment-execution/pull/188): the instructions name the write tool and ask for confirmation. |
+| 13 | 13 | The `*-reports` binaries' routes were outside every contract (no spec, no contract test, no generated reference). The first version said "8 contexts"; six were open. | 6 contexts | **Fixed** with an `apis/openapi-reports.yaml` per binary: [order-management#183](https://github.com/IQVO/order-management/pull/183), [wes-work-planning#175](https://github.com/IQVO/wes-work-planning/pull/175), [fulfillment-execution#189](https://github.com/IQVO/fulfillment-execution/pull/189), [workforce-management#165](https://github.com/IQVO/workforce-management/pull/165), [facility-layout#173](https://github.com/IQVO/facility-layout/pull/173), [process-path-management#143](https://github.com/IQVO/process-path-management/pull/143) (D18). This site generates a **Reports REST** section for each (see the [API reference](/api-reference)). |
+| 13b | 13 | warehouse-ops-agent has no OpenAPI spec. | warehouse-ops-agent | **Kept by decision**: the ops agent has no spec by design and documents its routes on a hand-written page ([warehouse-ops-agent API surface](/api-reference/warehouse-ops-agent)) (D19). |
 
 ### Events with no producer or no consumer
 
-| Event | State |
-|---|---|
-| `SiteCapabilityChanged` (facility-layout) | declared, never raised (gap 1) |
-| `RateDeviationDetected` (wes-work-planning) | `NewRateDeviationDetected` never called; the analytics column is always 0 |
-| `OrderRepromised` (order-management) | published since ADR 0018, consumed by no context |
-| slotting-optimization events | published, consumed by no context (gap 7) |
-| `TransferStateAdvanced` after approval (network-inventory-planning) | declared for every transition, emitted for none after approval (gap 3) |
-
-Dead schema: fulfillment-execution creates `domain_events` in
-`migrations/0001_init.up.sql:27` and never reads or writes it.
+| # | Event | State found | Status |
+| --- | --- | --- | --- |
+| E1 | `SiteCapabilityChanged` (facility-layout) | declared, never raised | **Fixed**: gap 1. |
+| E2 | `TransferStateAdvanced` after approval (network-inventory-planning) | emitted for no transition after approval | **Fixed**: gap 3. |
+| E3 | `RateDeviationDetected` (wes-work-planning) | `NewRateDeviationDetected` never called; the report column is always 0 | **Kept by decision**: no ADR defines when it is raised (ADR-0003 calls the rate rule unbuilt, ADR-0020 defers it), so it stays reserved; the AsyncAPI description and the report say so and a sensor test fails if code starts raising it without an ADR ([wes-work-planning#174](https://github.com/IQVO/wes-work-planning/pull/174), D26). |
+| E4 | `OrderRepromised` (order-management) | published, consumed by no context | **Kept by decision**: it carries CPT ids and a reason but no new cutoff instant, so it cannot move an order between windows; warehouse-planning ADR 0004 and `order_demand_consumer.go:32` record why it is not consumed (D32). |
+| E5 | slotting-optimization events | published, consumed by no context | **Kept by decision**: gap 6b. |
+| E6 | fulfillment-execution `domain_events` table | created by migration 0001, never read or written | **Fixed** in [fulfillment-execution#191](https://github.com/IQVO/fulfillment-execution/pull/191): migration 0018 drops it (ADR 0045; the owner approved the drop, superseding D23). |
 
 ## S4: observability blind spots
 
-### 14. Every 5xx panel is empty
-
-The warehouse-infra context dashboards filter the error panels on
-`http_response_status_code` / `http_status_code`. `otelchi` v0.12.3, used by
-every service, records only `http.method`, `http.scheme`, `http.route` and
-`service.name` on `http.server.request.duration`. The panels are empty for
-every context, and no service can report a 5xx rate. Fix once: a status-code
-attribute in a shared middleware, or a dashboard that uses Kong's metrics.
-Also: workforce-management's labor panel groups by
-`workforce_assignment_outcome` but the attribute is now `outcome`;
-inbound-receiving and slotting-optimization have no dashboard; the
-process-path-management outbox-lag gauge has no panel.
-
-### 15. Telemetry holes
-
-- No OpenTelemetry setup at all: `cmd/planning-projector` (warehouse-planning),
-  `cmd/inbound-projector` (inbound-receiving), `cmd/pathmgmt-projector` and
-  `cmd/pathmgmt-reports` (process-path-management, whose chart still injects
-  `OTEL_*` they never read).
-- Reports Deployments without `ENVIRONMENT` (product-master,
-  inbound-receiving): their telemetry reports `deployment.environment.name=local`.
-- warehouse-planning's chart sets no `OTEL_EXPORTER_OTLP_ENDPOINT`,
-  `SERVICE_VERSION`, `ENVIRONMENT` or `SHUTDOWN_DRAIN_DELAY`.
-- Traces stop at the outbox: relayed messages carry no originating trace
-  context (facility-layout `relay_sink.go:50`; the outbox stores no headers),
-  and the ops agent's outbound MCP/REST/Prometheus/Loki/Anthropic clients have
-  no `otelhttp` transport.
-- labor-performance's MCP governance charter requires invocation and denial
-  counters; none are emitted.
+| # | Was | Gap | Owner | Status |
+| --- | --- | --- | --- | --- |
+| 14 | 14 | Every 5xx dashboard panel was empty: the panels filtered on a status-code label that `otelchi` v0.12.3 never records. | warehouse-infra | **Fixed** in [warehouse-infra#75](https://github.com/IQVO/warehouse-infra/pull/75): the 5xx panels use Kong's `kong_http_requests_total` per route (D20). |
+| 14b | 14 | workforce-management's labor panel grouped by `workforce_assignment_outcome`; the attribute is `outcome`. | warehouse-infra | **Fixed** in [warehouse-infra#75](https://github.com/IQVO/warehouse-infra/pull/75). |
+| 14c | 14 | inbound-receiving and slotting-optimization had no dashboard; process-path-management's outbox-lag gauge had no panel. | warehouse-infra | **Fixed**: inbound-receiving in [warehouse-infra#72](https://github.com/IQVO/warehouse-infra/pull/72) (already merged when the first version was written, so that part was stale); slotting-optimization and the process-path-management outbox panel in [warehouse-infra#75](https://github.com/IQVO/warehouse-infra/pull/75). |
+| 15 | 15 | No OpenTelemetry setup in `cmd/planning-projector`, `cmd/inbound-projector`, `cmd/pathmgmt-projector`, `cmd/pathmgmt-reports`. | 3 contexts | **Fixed** in [warehouse-planning#49](https://github.com/IQVO/warehouse-planning/pull/49), [inbound-receiving#20](https://github.com/IQVO/inbound-receiving/pull/20), [process-path-management#143](https://github.com/IQVO/process-path-management/pull/143) (`telemetry.Setup`, D21). |
+| 15b | 15 | Reports Deployments without `ENVIRONMENT` reported `deployment.environment.name=local`. | product-master, inbound-receiving | **Fixed** in [product-master#27](https://github.com/IQVO/product-master/pull/27) and [inbound-receiving#20](https://github.com/IQVO/inbound-receiving/pull/20). |
+| 15c | 15 | warehouse-planning's chart set no `OTEL_EXPORTER_OTLP_ENDPOINT`, `SERVICE_VERSION`, `ENVIRONMENT`. | warehouse-planning | **Fixed** in [warehouse-planning#49](https://github.com/IQVO/warehouse-planning/pull/49). |
+| 15d | 15 | Traces stopped at the outbox: relayed messages carried no originating trace context. | every context with an outbox | **Open** for facility-layout only: its `outbox_events` has no `headers` column and `relay_sink.go` injects the relay's own context, not the request's. Fixed elsewhere (outbox `headers` + relay forwarding + the two trace tests, D27): [order-management#183](https://github.com/IQVO/order-management/pull/183), [process-path-management#143](https://github.com/IQVO/process-path-management/pull/143), [workforce-management#165](https://github.com/IQVO/workforce-management/pull/165), [wes-work-planning#175](https://github.com/IQVO/wes-work-planning/pull/175), [fulfillment-execution#189](https://github.com/IQVO/fulfillment-execution/pull/189), [labor-performance#148](https://github.com/IQVO/labor-performance/pull/148), [inbound-receiving#20](https://github.com/IQVO/inbound-receiving/pull/20), [product-master#27](https://github.com/IQVO/product-master/pull/27), [warehouse-planning#49](https://github.com/IQVO/warehouse-planning/pull/49), [slotting-optimization#17](https://github.com/IQVO/slotting-optimization/pull/17), [network-fulfillment#81](https://github.com/IQVO/network-fulfillment/pull/81), [network-inventory-planning#43](https://github.com/IQVO/network-inventory-planning/pull/43); inventory-storage already stored and forwarded the headers. |
+| 15e | 15 | The ops agent's outbound MCP, REST, Prometheus, Loki and Anthropic clients had no `otelhttp` transport. | warehouse-ops-agent | **Fixed** in [warehouse-ops-agent#139](https://github.com/IQVO/warehouse-ops-agent/pull/139). |
+| 15f | 15 | labor-performance's MCP governance charter requires invocation and denial counters; none were emitted. | labor-performance | **Fixed** in [labor-performance#148](https://github.com/IQVO/labor-performance/pull/148) (ADR 0033, D28). |
 
 ## S5: drift between code, comments and charts
 
-These cost a reader time but break nothing on their own. They were documented
-correctly in the new pages and left in the code:
+| # | Was | Gap | Status |
+| --- | --- | --- | --- |
+| 16 | 16 | Every `internal/bootretry` said "~31s (1+2+4+8+16)"; the real backoff is 15 s. | **Fixed** in every backend repository's gap-fix PR (D22), e.g. [order-management#183](https://github.com/IQVO/order-management/pull/183), [inventory-storage#184](https://github.com/IQVO/inventory-storage/pull/184), [warehouse-planning#49](https://github.com/IQVO/warehouse-planning/pull/49); no `~31s` is left under `internal/`, `cmd/` or `charts/` on any `develop`. |
+| 16b | 16 | `LOG_LEVEL=warning` silently became `info` in some binaries. | **Fixed** in [order-management#183](https://github.com/IQVO/order-management/pull/183), [inventory-storage#184](https://github.com/IQVO/inventory-storage/pull/184), [product-master#27](https://github.com/IQVO/product-master/pull/27), [workforce-management#165](https://github.com/IQVO/workforce-management/pull/165) (the D22 parity item in each repository's gap-fix PR). |
+| 16c | 16 | inventory-storage read `KAFKA_BROKERS` twice with different defaults. | **Fixed** in [inventory-storage#184](https://github.com/IQVO/inventory-storage/pull/184): read once in `cmd/inventory/config.go`. |
+| 16d | 16 | `Makefile` and `ci.yml` measure coverage over different package sets. | **Open**: process-path-management's `COVERAGE_PKGS` adds `./internal/analytics/...` and warehouse-ops-agent's `COVERPKG` adds `./internal/adapters/inbound/...`, while both `ci.yml` jobs use `-coverpkg=./internal/domain/...,./internal/application/...`. No decision row covered it. |
+| 16e | 16 | Copy-paste comments: product-master CI comments described the StockUnit aggregate; inbound-receiving's relay comment called the partition key "the SKU". | **Fixed** in [product-master#27](https://github.com/IQVO/product-master/pull/27) and [inbound-receiving#20](https://github.com/IQVO/inbound-receiving/pull/20). |
+| 16f | 16 | Console chart `image.repository` differed from what CI publishes; `src/config.ts` said no Kong reports route exists. | **Fixed** in [warehouse-console#79](https://github.com/IQVO/warehouse-console/pull/79) (`ghcr.io/iqvo/warehouse-console`; the comment now describes the Kong reports route). |
+| 16g | 16 | order-management still shipped the retired `docker-compose.kafka.yml`, binding the kind broker's port. | **Fixed** in [order-management#183](https://github.com/IQVO/order-management/pull/183). |
 
-- **Boot retry budget**: every template-derived `internal/bootretry` says
-  "~31s (1+2+4+8+16)"; the loop sleeps only between its 5 attempts, so the
-  real backoff is 15 s. The same figure is repeated in several charts'
-  `values.yaml`.
-- **Log level**: `LOG_LEVEL=warning` is accepted by some binaries and
-  silently becomes `info` in others (order-management, inventory-storage,
-  product-master, workforce-management API binaries).
-- **Kafka brokers**: inventory-storage reads `KAFKA_BROKERS` twice with
-  different defaults (`cmd/inventory/config.go:96`, `adapters.go:147`).
-- **Coverage scope**: `Makefile` and `ci.yml` measure different package sets
-  (process-path-management, warehouse-ops-agent).
-- **Copy-paste from inventory-storage**: CI comments in product-master
-  describe the StockUnit aggregate; inbound-receiving's relay comment calls the
-  partition key "the SKU" (it is the ASN number or appointment id).
-- **Console**: the chart's default `image.repository`
-  (`iqvo/warehouse-console`) differs from what CI publishes
-  (`ghcr.io/iqvo/warehouse-console`); `src/config.ts` and two `.claude`
-  skills still say no Kong reports route exists (warehouse-infra now creates
-  it).
-- **Local Kafka**: order-management still ships `docker-compose.kafka.yml`,
-  retired fleet-wide, which binds the same port 9092 as the kind broker.
+## S6: documentation and delivery gaps
 
-## S6: documentation and delivery gaps that remain
+| # | Was | Gap | Status |
+| --- | --- | --- | --- |
+| 17a | 17 | Published sites lag `develop`: each repository's docs site publishes only from `main`. | **Fixed**: every repository was released to `main` on 2026-10-13. Final develop→main round: [order-management#195](https://github.com/IQVO/order-management/pull/195), [inventory-storage#197](https://github.com/IQVO/inventory-storage/pull/197), [wes-work-planning#188](https://github.com/IQVO/wes-work-planning/pull/188), [fulfillment-execution#204](https://github.com/IQVO/fulfillment-execution/pull/204), [workforce-management#178](https://github.com/IQVO/workforce-management/pull/178), [facility-layout#186](https://github.com/IQVO/facility-layout/pull/186), [process-path-management#156](https://github.com/IQVO/process-path-management/pull/156), [labor-performance#162](https://github.com/IQVO/labor-performance/pull/162), [network-fulfillment#92](https://github.com/IQVO/network-fulfillment/pull/92), [warehouse-planning#58](https://github.com/IQVO/warehouse-planning/pull/58), [product-master#35](https://github.com/IQVO/product-master/pull/35), [network-inventory-planning#47](https://github.com/IQVO/network-inventory-planning/pull/47), [inbound-receiving#30](https://github.com/IQVO/inbound-receiving/pull/30), [slotting-optimization#22](https://github.com/IQVO/slotting-optimization/pull/22), [warehouse-infra#78](https://github.com/IQVO/warehouse-infra/pull/78), [warehouse-harness-template#25](https://github.com/IQVO/warehouse-harness-template/pull/25). Each release carries every gap fix, the three escape fixes (gaps 18 to 20) and the Kong-test wiring (gap 17j). After the round, `git log --no-merges origin/main..origin/develop` is empty in all 19 repositories (warehouse-ops-agent, warehouse-console and warehouse-ui-kit included). |
+| 17b | 17 | Docs were not built on pull requests. The first version named three repositories; nine Docusaurus sites lacked the trigger. | **Fixed** (build-only `pull_request` trigger, D25) in [order-management#183](https://github.com/IQVO/order-management/pull/183), [wes-work-planning#175](https://github.com/IQVO/wes-work-planning/pull/175), [workforce-management#164](https://github.com/IQVO/workforce-management/pull/164), [facility-layout#178](https://github.com/IQVO/facility-layout/pull/178), [fulfillment-execution#189](https://github.com/IQVO/fulfillment-execution/pull/189), [labor-performance#148](https://github.com/IQVO/labor-performance/pull/148), [process-path-management#143](https://github.com/IQVO/process-path-management/pull/143), [warehouse-ops-agent#139](https://github.com/IQVO/warehouse-ops-agent/pull/139), [warehouse-console#79](https://github.com/IQVO/warehouse-console/pull/79). network-fulfillment has plain Markdown docs and no docs workflow, so there is nothing to build. The template's `repo_lint` rule R8 (docs-pr) guards new contexts ([warehouse-harness-template#21](https://github.com/IQVO/warehouse-harness-template/pull/21), gap 17i). |
+| 17c | 17 | No fleet-level operations content: no cross-context incident runbook, no SLO page, and alerts that were suggestions no repository provisioned. | **Fixed**: the alert rules in [warehouse-infra#75](https://github.com/IQVO/warehouse-infra/pull/75) (35 rules, promtool-tested); the pages on this site: [incident runbook](../fleet-operations/incident-runbook.md), [Fleet SLOs](../fleet-operations/slos.md), [alert catalogue](../fleet-operations/alert-catalogue.md) (D30). Since the 2026-10-13 deploy Prometheus loads all 35 rules in 15 groups, every one healthy (see [Deployed to the kind cluster](#deployed-to-the-kind-cluster)). |
+| 17d | 17 | Contracts without generated reference: the report APIs and the ops agent's HTTP API. | **Fixed** for the report APIs (gap 13; generated here). The ops agent's API stays hand-written: **Kept by decision** (gap 13b). |
+| 17e | 17 | Agent guides: inbound-receiving had no `CLAUDE.md`/`AGENTS.md`; stale `.claude` lines in six repositories. | **Fixed** in [inbound-receiving#18](https://github.com/IQVO/inbound-receiving/pull/18) (guides added; the first version was already stale), [order-management#181](https://github.com/IQVO/order-management/pull/181), [warehouse-planning#47](https://github.com/IQVO/warehouse-planning/pull/47), [warehouse-ops-agent#134](https://github.com/IQVO/warehouse-ops-agent/pull/134), [product-master#25](https://github.com/IQVO/product-master/pull/25), [warehouse-console#77](https://github.com/IQVO/warehouse-console/pull/77). |
+| 17f | 17 | Supply chain: open Dependabot alerts. | **Fixed**: [order-management#183](https://github.com/IQVO/order-management/pull/183) first, then the fleet-wide D29 sweep (npm `overrides`, lock regenerated, no `npm audit fix --force`): [inventory-storage#192](https://github.com/IQVO/inventory-storage/pull/192), [wes-work-planning#183](https://github.com/IQVO/wes-work-planning/pull/183), [fulfillment-execution#199](https://github.com/IQVO/fulfillment-execution/pull/199), [workforce-management#173](https://github.com/IQVO/workforce-management/pull/173), [facility-layout#181](https://github.com/IQVO/facility-layout/pull/181), [process-path-management#151](https://github.com/IQVO/process-path-management/pull/151), [labor-performance#157](https://github.com/IQVO/labor-performance/pull/157), [warehouse-ops-agent#142](https://github.com/IQVO/warehouse-ops-agent/pull/142), [warehouse-console#86](https://github.com/IQVO/warehouse-console/pull/86). On 2026-10-13 every repository with Dependabot alerts enabled has 0 open alerts. What remains is `npm audit` noise on `braces` under the Docusaurus toolchain, which has no upstream patch to move to. |
+| 17g | 17 | Chart Service-selector tests not run by CI. The first version named two repositories; five lacked the job. | **Fixed** (`chart-tests` job, D25) in [order-management#183](https://github.com/IQVO/order-management/pull/183), [wes-work-planning#175](https://github.com/IQVO/wes-work-planning/pull/175), [inventory-storage#184](https://github.com/IQVO/inventory-storage/pull/184), [fulfillment-execution#189](https://github.com/IQVO/fulfillment-execution/pull/189), [workforce-management#164](https://github.com/IQVO/workforce-management/pull/164). A Kong config test the same job never ran was found later (gap 17j); the template's `repo_lint` rule R9 (chart-tests-ci) now fails on any chart test no workflow runs ([warehouse-harness-template#21](https://github.com/IQVO/warehouse-harness-template/pull/21), gap 17i). |
+| 17h | 17 | This site's `npm run typecheck` failed with TS5102 and no workflow ran it. | **Fixed** in [warehouse-docs#42](https://github.com/IQVO/warehouse-docs/pull/42), the PR that publishes this tracker: `tsconfig.json` overrides `baseUrl` and the `build-check` job runs the typecheck (D31). |
+| 17i | other | The fixes above lived only in the product repositories: a context created from `warehouse-harness-template` would start with every gap again. | **Fixed** in [warehouse-harness-template#21](https://github.com/IQVO/warehouse-harness-template/pull/21) (wave 9; released in [warehouse-harness-template#22](https://github.com/IQVO/warehouse-harness-template/pull/22)): the MCP `omitempty` and outbox relay cap fitness sensors, and three `repo_lint` rules, R8 docs-pr (gap 17b), R9 chart-tests-ci (gaps 17g and 17j) and R10 configmap-mount (gap 10), with INCIDENTS rows. |
+| 17j | other | Found by the new R9 rule: `charts/*/tests/test_kong_config.py` (the Kong route audit) was run by no workflow in twelve repositories. | **Fixed**: wired into each repository's `chart-tests` job (network-fulfillment: `helm-lint`) in [facility-layout#180](https://github.com/IQVO/facility-layout/pull/180), [fulfillment-execution#198](https://github.com/IQVO/fulfillment-execution/pull/198), [inbound-receiving#27](https://github.com/IQVO/inbound-receiving/pull/27), [inventory-storage#191](https://github.com/IQVO/inventory-storage/pull/191), [labor-performance#156](https://github.com/IQVO/labor-performance/pull/156), [network-fulfillment#87](https://github.com/IQVO/network-fulfillment/pull/87), [order-management#190](https://github.com/IQVO/order-management/pull/190), [process-path-management#150](https://github.com/IQVO/process-path-management/pull/150), [product-master#33](https://github.com/IQVO/product-master/pull/33), [warehouse-planning#55](https://github.com/IQVO/warehouse-planning/pull/55), [wes-work-planning#182](https://github.com/IQVO/wes-work-planning/pull/182), [workforce-management#172](https://github.com/IQVO/workforce-management/pull/172). |
 
-The campaign closed the page-level gaps (every application now scores 100
-on the coverage audit). What is still missing:
+## Escapes found during the fix wave
 
-- **Published sites lag `develop`.** Every per-repo docs site builds only on
-  push to `main`, so the new pages go live only with each repo's next
-  develop→main release. slotting-optimization has no Pages site enabled.
-- **Docs are not built on pull requests** in order-management,
-  wes-work-planning and workforce-management (`docs.yml` runs on `main`
-  only): a broken link is found after the release, not in review.
-- **Fleet-level operations content does not exist.** Every runbook stops at
-  its context's boundary. There is no cross-context incident runbook (a
-  stuck order across order-management → wes-work-planning →
-  fulfillment-execution), no fleet SLO page and no alert catalogue: the
-  alerts on the observability pages are suggestions that no repository
-  provisions.
-- **Contracts without generated reference**: the report APIs (gap 13) and
-  the whole warehouse-ops-agent HTTP API have only hand-written pages.
-- **Agent guides**: inbound-receiving has no `CLAUDE.md` / `AGENTS.md`;
-  stale `.claude` lines were found in order-management, warehouse-planning,
-  warehouse-ops-agent, product-master, inbound-receiving and
-  warehouse-console (drafts kept with the campaign plan, to apply in one
-  rules PR per repo).
-- **Supply chain**: order-management's default branch had 5 open Dependabot
-  alerts (2 critical, 1 high) on 2026-10-12.
-- **Tests not wired into CI**: the chart Service-selector tests
-  (`charts/*/tests/test_service_selectors.py`) in order-management and
-  wes-work-planning are never run by `ci.yml`.
-- **This site's own typecheck is broken**: `npm run typecheck` fails with
-  TS5102 (`baseUrl` removed in TypeScript 7, inherited from
-  `@docusaurus/tsconfig` 3.10.2), and no workflow runs it, so nothing notices.
+Three defects surfaced while the wave was running. Each was fixed with a
+failing test first, rolled out to every affected repository, and recorded
+as an incident in `warehouse-harness-template`'s INCIDENTS log (the fleet
+rule: every escape = fix + sensor + rollout + INCIDENTS row).
 
-## Suggested order of work
+| # | Was | Gap | Owner | Status |
+| --- | --- | --- | --- | --- |
+| 18 | new | Kafka consumers dead-lettered a **healthy** message, or returned `context.Canceled` from `Run` so a normal stop looked like a crash, when a pod shutdown cancelled the context mid-handle. Found in network-fulfillment; the audit of 13 repositories found eight more. | 9 contexts | **Fixed** in [network-fulfillment#89](https://github.com/IQVO/network-fulfillment/pull/89) (reference), then [order-management#192](https://github.com/IQVO/order-management/pull/192), [inventory-storage#194](https://github.com/IQVO/inventory-storage/pull/194), [wes-work-planning#185](https://github.com/IQVO/wes-work-planning/pull/185), [fulfillment-execution#201](https://github.com/IQVO/fulfillment-execution/pull/201), [workforce-management#175](https://github.com/IQVO/workforce-management/pull/175), [facility-layout#183](https://github.com/IQVO/facility-layout/pull/183), [process-path-management#153](https://github.com/IQVO/process-path-management/pull/153), [labor-performance#159](https://github.com/IQVO/labor-performance/pull/159). Before dead-lettering, a consumer returns if its run context is done; `Run` treats that as a clean stop and leaves the offset uncommitted, so the message is redelivered and the processed-events dedupe absorbs it. fulfillment-execution now commits each offset only after the message is settled (ADR 0046, fetch-then-commit). Guard: a shutdown integration test per repository (real Kafka: cancel `Run` mid-handle, assert it returns `nil` and the DLQ stays empty). product-master, warehouse-planning, network-inventory-planning, inbound-receiving and slotting-optimization were already correct. INCIDENTS row: [warehouse-harness-template#23](https://github.com/IQVO/warehouse-harness-template/pull/23). |
+| 18b | new | No static sensor for gap 18's class: a new consumer can dead-letter a cancelled message again and only a hand-written shutdown test would catch it. | warehouse-harness-template | **Open**: the per-repository integration tests guard today's consumers; no fitness test or template sensor checks new ones yet. |
+| 19 | new | Two analytics consumers wrote the dedupe claim (`MarkProcessed`) and the projection in **separate** transactions: a crash or stop between them left the claim, so the redelivery saw the event as already processed and the apply was lost. | network-fulfillment, process-path-management | **Fixed** in [network-fulfillment#90](https://github.com/IQVO/network-fulfillment/pull/90) (ADR 0023) and [process-path-management#154](https://github.com/IQVO/process-path-management/pull/154) (ADR 0032): claim and apply commit in one analytics unit of work, retried and dead-lettered as one step. Guard: `TestAnalyticsConsumer_CrashBetweenClaimAndApply_RedeliveryAppliesExactlyOnce` in both repositories (real Kafka and Postgres). The gap 18 audit named only these two consumers. |
+| 20 | new | kafka-go's `Writer.RequiredAcks` defaults to `RequireNone` (`acks=0`): the broker never confirms, so a broker blip or leader move silently drops the message while `WriteMessages` returns `nil`. Several DLQ writers, and network-fulfillment's two event publishers, used the default. | 7 contexts (writers), every Go context (sensor) | **Fixed** (writers set `RequireAll`, synchronous) in [order-management#194](https://github.com/IQVO/order-management/pull/194), [wes-work-planning#187](https://github.com/IQVO/wes-work-planning/pull/187), [warehouse-planning#57](https://github.com/IQVO/warehouse-planning/pull/57), [network-inventory-planning#46](https://github.com/IQVO/network-inventory-planning/pull/46), [network-fulfillment#91](https://github.com/IQVO/network-fulfillment/pull/91), [process-path-management#155](https://github.com/IQVO/process-path-management/pull/155), [workforce-management#177](https://github.com/IQVO/workforce-management/pull/177); order-management's test seed writers too. Sensor: the fitness test `TestKafkaWritersSetRequiredAcks` (with `TestKafkaWriterAcksSensorBites`) fails on any kafka-go `Writer` literal without `RequiredAcks`; it ships with each fix above and alone in [inventory-storage#196](https://github.com/IQVO/inventory-storage/pull/196), [fulfillment-execution#203](https://github.com/IQVO/fulfillment-execution/pull/203), [facility-layout#185](https://github.com/IQVO/facility-layout/pull/185), [labor-performance#161](https://github.com/IQVO/labor-performance/pull/161), [product-master#34](https://github.com/IQVO/product-master/pull/34), [inbound-receiving#29](https://github.com/IQVO/inbound-receiving/pull/29), [slotting-optimization#21](https://github.com/IQVO/slotting-optimization/pull/21), and in the template ([warehouse-harness-template#24](https://github.com/IQVO/warehouse-harness-template/pull/24), with its INCIDENTS row). |
 
-1. facility-layout: publish `SiteCapabilityChanged` (unblocks gap 1), then
-   network-inventory-planning gaps 2-4 in one wave.
-2. Console and order-management web fixes (gaps 5 and 6): small, user-visible.
-3. Fleet sensors that stop recurrence: MCP `omitempty` fitness test (gap 11),
-   ConfigMap-mounted chart test (gap 10), outbox relay attempt cap (gap 8),
-   projector liveness (gap 9).
-4. One observability pass in warehouse-infra (gaps 14-15).
-5. slotting-optimization packaging and a consumer decision (gap 7).
-6. Release develop→main per repo so the new docs go live; enable Pages for
-   slotting-optimization.
+## Deployed to the kind cluster
+
+The owner approved the deploy on 2026-10-13. It ran in two applies, each
+from a reviewed `terraform plan` with every checkout fast-forwarded to
+`origin/develop` first:
+
+1. 17:10 (UTC-3): the gap fixes. The plan added 14, changed 15 and replaced
+   10 resources (slotting-optimization's Application, database Secret and
+   image, kube-state-metrics, the alert rules, new dashboards); Postgres
+   stayed on its volume.
+2. About 19:35 (UTC-3): the escape fixes (gaps 18 to 20). The plan rebuilt
+   the 14 changed service images and moved their Applications to the new
+   tags, nothing else. The
+slotting-optimization database role was created by hand, since the
+existing Postgres volume skips `initdb`. Verified after the apply:
+
+- ArgoCD: 16 of 16 applications Synced and Healthy.
+- Kong: the health route answers for all 14 contexts, including
+  `/api/slotting-optimization` (gap 6).
+- Prometheus: 15 groups and 35 alert rules loaded, every rule healthy,
+  kube-state-metrics series present (gap 17c). `WarehousePodRestarting`
+  fired on slotting-optimization's crash loop before its role existed,
+  which proves the alert path end to end.
+- facility-layout `GET /sites/{siteCode}/transfer-capability` answers
+  `200` (gap 1; revision 0 with both capabilities false until an
+  operator sends the `PUT`, facility-layout ADR 0035), and
+  network-inventory-planning `/v1/rebalance-policies` and
+  `/v1/transfer-lanes` answer `200` (gap 2).
+
+After the second apply the same checks passed again (ArgoCD 16 of 16,
+Kong 14 of 14, no alert firing, no pod crash-looping on the new images).
+The deployed checkouts contain the escape fixes: for example
+network-fulfillment `f13b403` includes #91 (writer acks) and #90 (claim and
+apply in one transaction), and fulfillment-execution `723304b` includes
+#201 (fetch-then-commit, ADR 0046).

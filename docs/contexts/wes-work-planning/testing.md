@@ -150,8 +150,14 @@ service **in memory** on `127.0.0.1:18086` (`CONTRACT_PORT`), waits for
 (`CONTRACT_MAX_EXAMPLES` overrides 100). `commitShiftPlan` is excluded because
 its `plannedHeads <= installedStations` invariant cannot be expressed in
 OpenAPI 3.0.3; it is covered by BDD and unit tests instead. The
-`/reports/*` routes of `cmd/wes-reports` are not in `apis/openapi.yaml` and
-are therefore not contract-tested.
+`/reports/*` routes of `cmd/wes-reports` are specified separately in
+`apis/openapi-reports.yaml` ([ADR-0038](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0038-reports-api-openapi-contract.md))
+and contract-tested in Go, without Schemathesis or a database:
+`TestReportsContract_RoutesMatchSpec` (the router's routes, walked with
+`chi.Walk`, equal the spec's paths) and `TestReportsContract_ResponsesMatchSpec`
+(every documented status of every operation, driven through the real router
+with a fake store; each body has every required property and no
+undocumented one) in `internal/adapters/inbound/http/reports_contract_test.go`.
 
 ## Mutation testing (gremlins)
 
@@ -176,6 +182,7 @@ measurements in that file: `./internal/domain/release` 36/36 killed,
 | `TestKafkaIntegrationTestsUseTestcontainers` / `TestPostgresIntegrationTestsUseTestcontainers` (+ `TestPostgresIntegrationSensorFailsOnBadFixtures`) | integration tests start their own containers; no env-gated skips, no hard-coded `localhost:9092` |
 | `TestCloudEventsOnly` | CloudEvents is the only envelope; no envelope-mode toggle ([ADR-0027](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0027-cloudevents-mandatory-event-envelope.md)) |
 | `TestReplayConsumersSetCommitInterval` | a process-unique replay consumer must set `CommitInterval` |
+| `TestKafkaWritersSetRequiredAcks`, `TestKafkaWriterAcksSensorBites` | every kafka-go `Writer{...}` literal in a non-test file under `internal/` or `cmd/` sets `RequiredAcks` (kafka-go defaults to `RequireNone`, acks=0, which silently drops messages on a broker blip); the sensor is proven to fail |
 | `TestEventCatalogueMatchesContract` (+ `TestEventCatalogueDetector`) | every own CloudEvents type in `apis/asyncapi.yaml` appears in a CloudEvents ADR |
 
 `violation_test.go` holds the fixtures that prove the detectors can fail.

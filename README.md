@@ -76,9 +76,19 @@ for repo in order-management inventory-storage wes-work-planning \
   git -C "$repo" show origin/develop:apis/asyncapi.yaml \
     > "warehouse-docs/apis/$repo/asyncapi.yaml" 2>/dev/null
 done
-git -C labor-performance show origin/develop:apis/openapi-reports.yaml \
-  > "warehouse-docs/apis/labor-performance/openapi-reports.yaml" 2>/dev/null
+for repo in order-management wes-work-planning fulfillment-execution \
+            workforce-management facility-layout process-path-management \
+            labor-performance; do
+  git -C "$repo" show origin/develop:apis/openapi-reports.yaml \
+    > "warehouse-docs/apis/$repo/openapi-reports.yaml" 2>/dev/null
+done
 ```
+
+Seven contexts also ship an `apis/openapi-reports.yaml` for their separate
+`*-reports` binary; each has a `<camelCaseId>Reports` entry in
+`docusaurus.config.ts` and its generated `sidebar.ts` imported in
+`sidebars.ts`. The fleet-ops skill's `sync_docs_pack_to_aggregator.py` copies
+all three specs plus the synced context pages in one run.
 
 `warehouse-ops-agent` has no `apis/` directory. Fourteen contexts ship both an
 `openapi.yaml` and an `asyncapi.yaml` (`inbound-receiving` and
@@ -90,13 +100,28 @@ Next, regenerate the API reference pages (see below). Commit the refreshed
 specs and the regenerated docs together. If a spec is wrong, fix it in the
 owning repository and re-sync. Never hand-edit the copy.
 
+### Alert rules
+
+`alerting/warehouse-alert-rules.json` is a copy of warehouse-infra's
+`terraform/alerting/warehouse-alert-rules.json` (the Prometheus rules the
+fleet provisions); `alerting/SOURCE` names the commit it came from. The
+[Alert catalogue](https://iqvo.github.io/warehouse-docs/fleet-operations/alert-catalogue)
+page is generated from it:
+
+```bash
+npm run gen-alert-catalogue -- --sync   # copy from ../warehouse-infra origin/develop, then render
+npm run gen-alert-catalogue -- --check  # what build-check runs: page matches the copy
+```
+
 ## Local development
 
 ```bash
 npm ci
-npm run gen-api-docs:all     # regenerate REST reference from apis/*/openapi.yaml
+npm run clean-api-docs:all   # drop generated REST pages (needed before a new tag/operation)
+npm run gen-api-docs:all     # regenerate REST reference from apis/*/openapi*.yaml
 npm run gen-async-docs:all   # regenerate AsyncAPI static HTML from apis/*/asyncapi.yaml
 npm run validate:mermaid     # parse and render every Mermaid diagram in a real browser
+npm run typecheck            # tsc --noEmit over docusaurus.config.ts, sidebars.ts, src/
 npm start                    # dev server at http://localhost:3000
 ```
 

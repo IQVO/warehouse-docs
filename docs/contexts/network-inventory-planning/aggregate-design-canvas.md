@@ -92,7 +92,7 @@ approval is persisted in `ALLOCATING`. `RECEIVED`, `UNFULFILLABLE` and
 - Transient failures are retried on the same message (200ms doubling to 5s).
 - A mismatched allocation or rejection reply returns a plain error and is
   therefore retried like a transient one (a gap, see
-  [Troubleshooting](https://github.com/IQVO/network-inventory-planning/blob/develop/docs/docs/operations/troubleshooting.md)).
+  [Troubleshooting](/contexts/network-inventory-planning/troubleshooting)).
 - Stuck transfers are only observed (`TransferStuckDetected`); nothing cancels,
   retries or releases automatically.
 - `allocation_expires_at` is stored but no policy acts on it.
