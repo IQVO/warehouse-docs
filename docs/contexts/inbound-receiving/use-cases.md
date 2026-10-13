@@ -66,7 +66,7 @@ are the ports in `internal/analytics/report`
 | `report.Reader.PerformanceDays` + `Current` | `GET /reports/receiving-performance` on `cmd/inbound-reports` | Per-UTC-day counts and p50/p95 timings over `[from, to)` (default the last 30 days, at most 366) plus today's open receipts and expected arrivals. |
 | `report.Reader.LastEventAt` | `GET /reports/freshness` | `as_of` and `lag_seconds` of the projection. |
 
-Response shapes: [Runbook — Reports API](/contexts/inbound-receiving/runbook#reports-api-cmdinbound-reports).
+Response shapes: [Runbook — Reports API](https://github.com/IQVO/inbound-receiving/blob/develop/docs/docs/operations/runbook.md#reports-api-cmdinbound-reports).
 
 ## Cross-cutting behaviour
 
@@ -83,4 +83,4 @@ Acceptance scenarios are in `features/*.feature` (7 files, 71 scenarios:
 `register_asn`, `dock_appointments`, `receiving`, `idempotent_replays`,
 `list_receipts_and_docks`, `dock_door_registry`, `probes`; godog,
 `features_test.go` and `features_wave2_test.go`). See
-[Testing](/contexts/inbound-receiving/testing).
+[Testing](https://github.com/IQVO/inbound-receiving/blob/develop/docs/docs/development/testing.md).

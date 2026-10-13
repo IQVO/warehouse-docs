@@ -738,7 +738,7 @@
               "name": "RateDeviationDetected",
               "title": "Rate Deviation Detected",
               "summary": "A path's actual throughput deviated materially from plan.",
-              "description": "**Reserved: declared for a future detection rule (ADR 0020 defers it); not emitted today.** Decided 2026-10-06: kept declared, neither emitted nor removed.\n\nRaised when a process path's observed throughput diverges materially from the rate committed in its PathPlan — the plan-vs-actual signal for flow balancing. **Not yet wired to the outbound Kafka adapter — documented here as part of the domain-event catalog, in-process only today.** The event type is declared in `internal/domain/shared/events.go` and the publisher's payload switch already handles it, but no application use case currently raises it, so nothing is emitted onto the topic. The example below shows the shape it would take once wired.",
+              "description": "**Reserved: declared for a future detection rule (ADR 0020 defers it); not emitted today.** Decided 2026-10-06: kept declared, neither emitted nor removed. Re-checked 2026-10-12 (gap fix D26): no ADR defines when it is raised, so it stays reserved; the architecture fitness test TestRateDeviationDetectedStaysReserved fails if production code starts raising it without that ADR.\n\nRaised when a process path's observed throughput diverges materially from the rate committed in its PathPlan — the plan-vs-actual signal for flow balancing. **Not yet wired to the outbound Kafka adapter — documented here as part of the domain-event catalog, in-process only today.** The event type is declared in `internal/domain/shared/events.go` and the publisher's payload switch already handles it, but no application use case currently raises it, so nothing is emitted onto the topic. The example below shows the shape it would take once wired.",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -1567,7 +1567,7 @@
               "name": "RateDeviationDetectedAnalytics",
               "title": "RateDeviationDetected (analytics stream)",
               "summary": "Analytics-shaped RateDeviationDetected occurrence on warehouse.wes.analytics.",
-              "description": "Reserved: declared for a future detection rule (ADR 0020 defers it); not emitted today.",
+              "description": "Reserved: declared for a future detection rule (ADR 0020 defers it); not emitted today. No ADR defines when a rate deviation is raised, so no use case raises it (an architecture fitness test, TestRateDeviationDetectedStaysReserved, fails if production code starts to). The projector still counts it, so the report's rateDeviationDetected column is always 0 until a rule is decided.",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {

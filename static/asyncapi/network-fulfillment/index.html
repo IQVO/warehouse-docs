@@ -35,7 +35,11 @@ carries the Kafka header
 other envelope. All of <code>specversion</code>, <code>id</code>, <code>source</code>, <code>type</code>, <code>subject</code>,
 <code>time</code>, <code>datacontenttype</code> and <code>dataschema</code> are REQUIRED. W3C trace
 context, when present, travels in Kafka headers, never as extension
-attributes. The Kafka message key is the network order reference
+attributes: an event written through the transactional outbox inside a
+span carries that span's <code>traceparent</code> (and <code>tracestate</code> / <code>baggage</code>
+when present), stored with the outbox row and sent by the relay
+(ADR 0022). Consumers may extract these headers and must not require
+them. The Kafka message key is the network order reference
 (<code>networkRef</code>, identical to <code>subject</code>), so every event for one order
 lands on the same partition.</p>
 <p><strong>Type naming.</strong> <code>type</code> is
