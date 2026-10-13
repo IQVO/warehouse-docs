@@ -174,10 +174,17 @@ rule: every escape = fix + sensor + rollout + INCIDENTS row).
 
 ## Deployed to the kind cluster
 
-The owner approved the deploy on 2026-10-13. At 17:10 (UTC-3) every
-checkout was fast-forwarded to `origin/develop` and warehouse-infra was
-applied (`terraform apply` twice; the reviewed plan added 14, changed 15
-and replaced 10 resources, Postgres stayed on its volume). The
+The owner approved the deploy on 2026-10-13. It ran in two applies, each
+from a reviewed `terraform plan` with every checkout fast-forwarded to
+`origin/develop` first:
+
+1. 17:10 (UTC-3): the gap fixes. The plan added 14, changed 15 and replaced
+   10 resources (slotting-optimization's Application, database Secret and
+   image, kube-state-metrics, the alert rules, new dashboards); Postgres
+   stayed on its volume.
+2. About 19:35 (UTC-3): the escape fixes (gaps 18 to 20). The plan rebuilt
+   the 14 changed service images and moved their Applications to the new
+   tags, nothing else. The
 slotting-optimization database role was created by hand, since the
 existing Postgres volume skips `initdb`. Verified after the apply:
 
@@ -194,6 +201,9 @@ existing Postgres volume skips `initdb`. Verified after the apply:
   network-inventory-planning `/v1/rebalance-policies` and
   `/v1/transfer-lanes` answer `200` (gap 2).
 
-The escape fixes (gaps 18 to 20) merged after this deploy (18:08 to 19:26
-UTC-3). They are released to `main` but reach the cluster only with the
-next `terraform apply` / ArgoCD sync.
+After the second apply the same checks passed again (ArgoCD 16 of 16,
+Kong 14 of 14, no alert firing, no pod crash-looping on the new images).
+The deployed checkouts contain the escape fixes: for example
+network-fulfillment `f13b403` includes #91 (writer acks) and #90 (claim and
+apply in one transaction), and fulfillment-execution `723304b` includes
+#201 (fetch-then-commit, ADR 0046).
