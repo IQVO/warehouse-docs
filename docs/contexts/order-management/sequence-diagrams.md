@@ -21,7 +21,7 @@ system. All diagrams assume the Postgres + Kafka configuration; with no
 `DATABASE_URL` there is no idempotency middleware, no outbox and no
 transaction, and with `EVENT_PUBLISHER=log` events are only logged.
 
-The [use cases page](/contexts/order-management/use-cases) has the same flows in prose; the
+The [use cases page](https://github.com/IQVO/order-management/blob/develop/docs/docs/ddd/use-cases.md) has the same flows in prose; the
 [domain message flow](/contexts/order-management/domain-message-flow) shows them across contexts.
 
 ## 1. ReceiveOrder — `POST /orders`
