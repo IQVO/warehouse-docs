@@ -231,7 +231,7 @@
                 }
               ],
               "summary": "A site's transfer capability state changed.",
-              "description": "A complete, PII-free last-write-wins snapshot of site transfer capability. Kafka key and CloudEvents subject: `site_code`. Consumers compare `capability_revision` and retain the latest complete snapshot; they must not infer either capability from facility topology.\n",
+              "description": "A complete, PII-free last-write-wins snapshot of site transfer capability. Kafka key and CloudEvents subject: `site_code`. Consumers compare `capability_revision` and retain the latest complete snapshot; they must not infer either capability from facility topology. Raised by `PUT /sites/{siteCode}/transfer-capability` through the transactional outbox, once per real change; `capability_revision` starts at 1 and increases by exactly one per change of the same site (ADR-0035). The payload stays snake_case although every other facility-layout payload is camelCase: recasing it would be a breaking `.v2` for network-inventory-planning (ADR-0035, decision D2).\n",
               "payload": {
                 "allOf": [
                   "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[0].payload.allOf[0]",

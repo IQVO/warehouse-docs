@@ -21,7 +21,7 @@ system. All diagrams assume the Postgres + Kafka configuration; with no
 `DATABASE_URL` there is no idempotency middleware, no outbox and no
 transaction, and with `EVENT_PUBLISHER=log` events are only logged.
 
-The [use cases page](/contexts/order-management/use-cases) has the same flows in prose; the
+The [use cases page](https://github.com/IQVO/order-management/blob/develop/docs/docs/ddd/use-cases.md) has the same flows in prose; the
 [domain message flow](/contexts/order-management/domain-message-flow) shows them across contexts.
 
 ## 1. ReceiveOrder — `POST /orders`
@@ -443,12 +443,12 @@ sequenceDiagram
   participant PJ as order-projector
 
   loop every OUTBOX_RELAY_INTERVAL, default 1s
-    RL->>DB: BEGIN, SELECT unpublished outbox_events FOR UPDATE SKIP LOCKED
+    RL->>DB: BEGIN, SELECT unpublished outbox_events with attempts below OUTBOX_MAX_ATTEMPTS FOR UPDATE SKIP LOCKED
     loop each claimed row
       RL->>RS: Send(topic, key=OrderId, CloudEvents value, headers)
       RS->>K: WriteMessages, hash balancer, RequireAll
       alt send failed
-        RL->>DB: UPDATE attempts and last_error, COMMIT, retry next tick
+        RL->>DB: UPDATE attempts and last_error, COMMIT, retry next tick (parked and logged at ERROR once attempts reach the cap, ADR 0040)
       else sent
         RL->>DB: UPDATE published_at
       end

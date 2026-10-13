@@ -4,7 +4,7 @@
   "info": {
     "title": "Network Fulfillment Events",
     "version": "2.0.0",
-    "description": "Domain-event catalog for **Network Fulfillment**, a Supporting bounded\ncontext in the WES (Warehouse Execution Systems) subdomain: the\nanti-corruption layer between the warehouse-systems fleet and an\nexternal retail fulfillment network. One aggregate raises every event\ndocumented here:\n\n- `NetworkOrder` (package `internal/domain/networkorder`) — one network\n  purchase order and its acknowledgement lifecycle. Raises\n  `NetworkOrderReceived`, `NetworkOrderSubmitted`,\n  `NetworkOrderAcknowledged` (v2: raised when the order settles\n  `ACKNOWLEDGED`, ADR 0016), `NetworkOrderRejected`,\n  `NetworkOrderShipmentConfirmed` and (from the\n  acknowledgement sweep, without a state transition)\n  `AcknowledgementDeadlineAtRisk`.\n\n**Envelope (mandatory, ADR 0008).** Every message on every channel of\nthis service is a CloudEvents 1.0 event in *structured content mode*\n(Kafka protocol binding): the Kafka message value is the JSON event\nformat, content type `application/cloudevents+json`, and every message\ncarries the Kafka header\n`content-type: application/cloudevents+json; charset=UTF-8`. There is no\nother envelope. All of `specversion`, `id`, `source`, `type`, `subject`,\n`time`, `datacontenttype` and `dataschema` are REQUIRED. W3C trace\ncontext, when present, travels in Kafka headers, never as extension\nattributes. The Kafka message key is the network order reference\n(`networkRef`, identical to `subject`), so every event for one order\nlands on the same partition.\n\n**Type naming.** `type` is\n`com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`. For\nthis context the subdomain is `wes`, the bounded context is\n`network-fulfillment` and the entity is `networkorder`, e.g.\n`com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderReceived`.\nThe SAME `type` is used for the occurrence on the integration and on\nthe analytics channel; `dataschema`\n(`urn:warehouse:network-fulfillment:<events|analytics>:<EventName>:v<N>`)\nnames the payload shape. A breaking change gets a new `.v2`\ntype and a new dataschema version, never a mutation of these:\n`NetworkOrderAcknowledged` changed meaning in ADR 0016 and is published\nas `...networkorder.NetworkOrderAcknowledged.v2` /\n`...:NetworkOrderAcknowledged:v2`.\n\n**Consumers** must dispatch on the full `type`, ignore unknown types,\ndedupe on `id` (stable across outbox redelivery), and dead-letter or\nskip — never parse as a legacy shape — anything that fails CloudEvents\nvalidation.\n",
+    "description": "Domain-event catalog for **Network Fulfillment**, a Supporting bounded\ncontext in the WES (Warehouse Execution Systems) subdomain: the\nanti-corruption layer between the warehouse-systems fleet and an\nexternal retail fulfillment network. One aggregate raises every event\ndocumented here:\n\n- `NetworkOrder` (package `internal/domain/networkorder`) — one network\n  purchase order and its acknowledgement lifecycle. Raises\n  `NetworkOrderReceived`, `NetworkOrderSubmitted`,\n  `NetworkOrderAcknowledged` (v2: raised when the order settles\n  `ACKNOWLEDGED`, ADR 0016), `NetworkOrderRejected`,\n  `NetworkOrderShipmentConfirmed` and (from the\n  acknowledgement sweep, without a state transition)\n  `AcknowledgementDeadlineAtRisk`.\n\n**Envelope (mandatory, ADR 0008).** Every message on every channel of\nthis service is a CloudEvents 1.0 event in *structured content mode*\n(Kafka protocol binding): the Kafka message value is the JSON event\nformat, content type `application/cloudevents+json`, and every message\ncarries the Kafka header\n`content-type: application/cloudevents+json; charset=UTF-8`. There is no\nother envelope. All of `specversion`, `id`, `source`, `type`, `subject`,\n`time`, `datacontenttype` and `dataschema` are REQUIRED. W3C trace\ncontext, when present, travels in Kafka headers, never as extension\nattributes: an event written through the transactional outbox inside a\nspan carries that span's `traceparent` (and `tracestate` / `baggage`\nwhen present), stored with the outbox row and sent by the relay\n(ADR 0022). Consumers may extract these headers and must not require\nthem. The Kafka message key is the network order reference\n(`networkRef`, identical to `subject`), so every event for one order\nlands on the same partition.\n\n**Type naming.** `type` is\n`com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`. For\nthis context the subdomain is `wes`, the bounded context is\n`network-fulfillment` and the entity is `networkorder`, e.g.\n`com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderReceived`.\nThe SAME `type` is used for the occurrence on the integration and on\nthe analytics channel; `dataschema`\n(`urn:warehouse:network-fulfillment:<events|analytics>:<EventName>:v<N>`)\nnames the payload shape. A breaking change gets a new `.v2`\ntype and a new dataschema version, never a mutation of these:\n`NetworkOrderAcknowledged` changed meaning in ADR 0016 and is published\nas `...networkorder.NetworkOrderAcknowledged.v2` /\n`...:NetworkOrderAcknowledged:v2`.\n\n**Consumers** must dispatch on the full `type`, ignore unknown types,\ndedupe on `id` (stable across outbox redelivery), and dead-letter or\nskip — never parse as a legacy shape — anything that fails CloudEvents\nvalidation.\n",
     "contact": {
       "name": "Network Fulfillment — IQVO",
       "url": "https://github.com/IQVO/network-fulfillment",
@@ -73,13 +73,18 @@
                   },
                   "traceparent": {
                     "type": "string",
-                    "description": "W3C trace context, when the producer propagates one.",
+                    "description": "W3C trace context of the span that wrote the event (outbox\nmode, ADR 0022), when there was one. Optional.\n",
                     "x-parser-schema-id": "<anonymous-schema-2>"
                   },
                   "tracestate": {
                     "type": "string",
-                    "description": "W3C trace state, when present.",
+                    "description": "W3C trace state, when present. Optional.",
                     "x-parser-schema-id": "<anonymous-schema-3>"
+                  },
+                  "baggage": {
+                    "type": "string",
+                    "description": "W3C baggage, when the writing request carried any. Optional.",
+                    "x-parser-schema-id": "<anonymous-schema-4>"
                   }
                 },
                 "x-parser-schema-id": "KafkaHeaders"
@@ -125,13 +130,13 @@
                           "1.0"
                         ],
                         "description": "CloudEvents specification version.",
-                        "x-parser-schema-id": "<anonymous-schema-4>"
+                        "x-parser-schema-id": "<anonymous-schema-5>"
                       },
                       "id": {
                         "type": "string",
                         "format": "uuid",
                         "description": "UUID v4 minted once per occurrence and persisted with the outbox\nrow, so a redelivery carries the same id. `(source, id)` is the\nconsumer idempotency key.\n",
-                        "x-parser-schema-id": "<anonymous-schema-5>"
+                        "x-parser-schema-id": "<anonymous-schema-6>"
                       },
                       "source": {
                         "type": "string",
@@ -140,44 +145,44 @@
                           "/warehouse/network-fulfillment"
                         ],
                         "description": "The producing service.",
-                        "x-parser-schema-id": "<anonymous-schema-6>"
+                        "x-parser-schema-id": "<anonymous-schema-7>"
                       },
                       "type": {
                         "type": "string",
                         "pattern": "^com\\.warehouse\\.wes\\.network-fulfillment\\.networkorder\\.[A-Z][A-Za-z]+(\\.v[0-9]+)?$",
                         "description": "`com.warehouse.wes.network-fulfillment.networkorder.<EventName>`, with a `.v<N>` suffix for a breaking version (e.g. `NetworkOrderAcknowledged.v2`, ADR 0016).",
-                        "x-parser-schema-id": "<anonymous-schema-7>"
+                        "x-parser-schema-id": "<anonymous-schema-8>"
                       },
                       "subject": {
                         "type": "string",
                         "minLength": 1,
                         "description": "The network order reference (networkRef) the event is about.",
-                        "x-parser-schema-id": "<anonymous-schema-8>"
+                        "x-parser-schema-id": "<anonymous-schema-9>"
                       },
                       "time": {
                         "type": "string",
                         "format": "date-time",
                         "description": "The domain event's occurred-at instant, UTC, RFC 3339.",
-                        "x-parser-schema-id": "<anonymous-schema-9>"
+                        "x-parser-schema-id": "<anonymous-schema-10>"
                       },
                       "datacontenttype": {
                         "type": "string",
                         "enum": [
                           "application/json"
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-10>"
+                        "x-parser-schema-id": "<anonymous-schema-11>"
                       },
                       "dataschema": {
                         "type": "string",
                         "format": "uri",
                         "pattern": "^urn:warehouse:network-fulfillment:(events|analytics):[A-Z][A-Za-z]+:v[0-9]+$",
                         "description": "Names the payload shape and stream.",
-                        "x-parser-schema-id": "<anonymous-schema-11>"
+                        "x-parser-schema-id": "<anonymous-schema-12>"
                       },
                       "data": {
                         "type": "object",
                         "description": "The domain event payload.",
-                        "x-parser-schema-id": "<anonymous-schema-12>"
+                        "x-parser-schema-id": "<anonymous-schema-13>"
                       }
                     },
                     "x-parser-schema-id": "CloudEvent"
@@ -188,12 +193,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderReceived",
-                        "x-parser-schema-id": "<anonymous-schema-14>"
+                        "x-parser-schema-id": "<anonymous-schema-15>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:events:NetworkOrderReceived:v1",
-                        "x-parser-schema-id": "<anonymous-schema-15>"
+                        "x-parser-schema-id": "<anonymous-schema-16>"
                       },
                       "data": {
                         "type": "object",
@@ -210,41 +215,41 @@
                           "networkRef": {
                             "type": "string",
                             "description": "Network order reference (this context's NetworkRef). Also the CloudEvents `subject` and the Kafka key.",
-                            "x-parser-schema-id": "<anonymous-schema-16>"
+                            "x-parser-schema-id": "<anonymous-schema-17>"
                           },
                           "siteId": {
                             "type": "string",
                             "description": "Fulfilling site.",
-                            "x-parser-schema-id": "<anonymous-schema-17>"
+                            "x-parser-schema-id": "<anonymous-schema-18>"
                           },
                           "requiredShipBy": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Ship-by deadline the network demands.",
-                            "x-parser-schema-id": "<anonymous-schema-18>"
+                            "x-parser-schema-id": "<anonymous-schema-19>"
                           },
                           "acknowledgeBy": {
                             "type": "string",
                             "format": "date-time",
                             "description": "End of the acknowledgement window.",
-                            "x-parser-schema-id": "<anonymous-schema-19>"
+                            "x-parser-schema-id": "<anonymous-schema-20>"
                           },
                           "lineCount": {
                             "type": "integer",
                             "description": "Number of lines translated into our vocabulary.",
-                            "x-parser-schema-id": "<anonymous-schema-20>"
+                            "x-parser-schema-id": "<anonymous-schema-21>"
                           },
                           "at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Domain occurred-at (same instant as the CloudEvents `time`).",
-                            "x-parser-schema-id": "<anonymous-schema-21>"
+                            "x-parser-schema-id": "<anonymous-schema-22>"
                           }
                         },
                         "x-parser-schema-id": "NetworkOrderReceivedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-13>"
+                    "x-parser-schema-id": "<anonymous-schema-14>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderReceivedEvent"
@@ -310,12 +315,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderSubmitted",
-                        "x-parser-schema-id": "<anonymous-schema-23>"
+                        "x-parser-schema-id": "<anonymous-schema-24>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:events:NetworkOrderSubmitted:v1",
-                        "x-parser-schema-id": "<anonymous-schema-24>"
+                        "x-parser-schema-id": "<anonymous-schema-25>"
                       },
                       "data": {
                         "type": "object",
@@ -331,35 +336,35 @@
                           "networkRef": {
                             "type": "string",
                             "description": "Network order reference; also the `subject`.",
-                            "x-parser-schema-id": "<anonymous-schema-25>"
+                            "x-parser-schema-id": "<anonymous-schema-26>"
                           },
                           "siteId": {
                             "type": "string",
                             "description": "Fulfilling site.",
-                            "x-parser-schema-id": "<anonymous-schema-26>"
+                            "x-parser-schema-id": "<anonymous-schema-27>"
                           },
                           "localOrderId": {
                             "type": "string",
                             "description": "order-management held order id correlated to this network order.",
-                            "x-parser-schema-id": "<anonymous-schema-27>"
+                            "x-parser-schema-id": "<anonymous-schema-28>"
                           },
                           "receivedAt": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the order was received.",
-                            "x-parser-schema-id": "<anonymous-schema-28>"
+                            "x-parser-schema-id": "<anonymous-schema-29>"
                           },
                           "at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the order moved to SUBMITTED (same instant as `time`).",
-                            "x-parser-schema-id": "<anonymous-schema-29>"
+                            "x-parser-schema-id": "<anonymous-schema-30>"
                           }
                         },
                         "x-parser-schema-id": "NetworkOrderSubmittedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-22>"
+                    "x-parser-schema-id": "<anonymous-schema-23>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderSubmittedEvent"
@@ -424,12 +429,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderAcknowledged.v2",
-                        "x-parser-schema-id": "<anonymous-schema-31>"
+                        "x-parser-schema-id": "<anonymous-schema-32>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:events:NetworkOrderAcknowledged:v2",
-                        "x-parser-schema-id": "<anonymous-schema-32>"
+                        "x-parser-schema-id": "<anonymous-schema-33>"
                       },
                       "data": {
                         "type": "object",
@@ -446,35 +451,35 @@
                           "networkRef": {
                             "type": "string",
                             "description": "Network order reference; also the `subject`.",
-                            "x-parser-schema-id": "<anonymous-schema-33>"
+                            "x-parser-schema-id": "<anonymous-schema-34>"
                           },
                           "siteId": {
                             "type": "string",
                             "description": "Fulfilling site.",
-                            "x-parser-schema-id": "<anonymous-schema-34>"
+                            "x-parser-schema-id": "<anonymous-schema-35>"
                           },
                           "localOrderId": {
                             "type": "string",
                             "description": "order-management order id correlated to this network order.",
-                            "x-parser-schema-id": "<anonymous-schema-35>"
+                            "x-parser-schema-id": "<anonymous-schema-36>"
                           },
                           "receivedAt": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the order was received.",
-                            "x-parser-schema-id": "<anonymous-schema-36>"
+                            "x-parser-schema-id": "<anonymous-schema-37>"
                           },
                           "at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the order settled ACKNOWLEDGED (same instant as `time`).",
-                            "x-parser-schema-id": "<anonymous-schema-37>"
+                            "x-parser-schema-id": "<anonymous-schema-38>"
                           }
                         },
                         "x-parser-schema-id": "NetworkOrderAcknowledgedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-30>"
+                    "x-parser-schema-id": "<anonymous-schema-31>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderAcknowledgedEvent"
@@ -539,12 +544,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderRejected",
-                        "x-parser-schema-id": "<anonymous-schema-39>"
+                        "x-parser-schema-id": "<anonymous-schema-40>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:events:NetworkOrderRejected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-40>"
+                        "x-parser-schema-id": "<anonymous-schema-41>"
                       },
                       "data": {
                         "type": "object",
@@ -559,12 +564,12 @@
                           "networkRef": {
                             "type": "string",
                             "description": "Network order reference; also the `subject`.",
-                            "x-parser-schema-id": "<anonymous-schema-41>"
+                            "x-parser-schema-id": "<anonymous-schema-42>"
                           },
                           "siteId": {
                             "type": "string",
                             "description": "Fulfilling site.",
-                            "x-parser-schema-id": "<anonymous-schema-42>"
+                            "x-parser-schema-id": "<anonymous-schema-43>"
                           },
                           "reason": {
                             "type": "string",
@@ -575,19 +580,19 @@
                               "SUBMISSION_FAILED"
                             ],
                             "description": "Why the order was rejected.",
-                            "x-parser-schema-id": "<anonymous-schema-43>"
+                            "x-parser-schema-id": "<anonymous-schema-44>"
                           },
                           "at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Domain occurred-at (same instant as `time`).",
-                            "x-parser-schema-id": "<anonymous-schema-44>"
+                            "x-parser-schema-id": "<anonymous-schema-45>"
                           }
                         },
                         "x-parser-schema-id": "NetworkOrderRejectedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-38>"
+                    "x-parser-schema-id": "<anonymous-schema-39>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderRejectedEvent"
@@ -651,12 +656,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderShipmentConfirmed",
-                        "x-parser-schema-id": "<anonymous-schema-46>"
+                        "x-parser-schema-id": "<anonymous-schema-47>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:events:NetworkOrderShipmentConfirmed:v1",
-                        "x-parser-schema-id": "<anonymous-schema-47>"
+                        "x-parser-schema-id": "<anonymous-schema-48>"
                       },
                       "data": {
                         "type": "object",
@@ -671,29 +676,29 @@
                           "networkRef": {
                             "type": "string",
                             "description": "Network order reference; also the `subject`.",
-                            "x-parser-schema-id": "<anonymous-schema-48>"
+                            "x-parser-schema-id": "<anonymous-schema-49>"
                           },
                           "siteId": {
                             "type": "string",
                             "description": "Fulfilling site.",
-                            "x-parser-schema-id": "<anonymous-schema-49>"
+                            "x-parser-schema-id": "<anonymous-schema-50>"
                           },
                           "localOrderId": {
                             "type": "string",
                             "description": "order-management order id.",
-                            "x-parser-schema-id": "<anonymous-schema-50>"
+                            "x-parser-schema-id": "<anonymous-schema-51>"
                           },
                           "at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Domain occurred-at (same instant as `time`).",
-                            "x-parser-schema-id": "<anonymous-schema-51>"
+                            "x-parser-schema-id": "<anonymous-schema-52>"
                           }
                         },
                         "x-parser-schema-id": "NetworkOrderShipmentConfirmedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-45>"
+                    "x-parser-schema-id": "<anonymous-schema-46>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderShipmentConfirmedEvent"
@@ -757,12 +762,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.AcknowledgementDeadlineAtRisk",
-                        "x-parser-schema-id": "<anonymous-schema-53>"
+                        "x-parser-schema-id": "<anonymous-schema-54>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:events:AcknowledgementDeadlineAtRisk:v1",
-                        "x-parser-schema-id": "<anonymous-schema-54>"
+                        "x-parser-schema-id": "<anonymous-schema-55>"
                       },
                       "data": {
                         "type": "object",
@@ -777,30 +782,30 @@
                           "networkRef": {
                             "type": "string",
                             "description": "Network order reference; also the `subject`.",
-                            "x-parser-schema-id": "<anonymous-schema-55>"
+                            "x-parser-schema-id": "<anonymous-schema-56>"
                           },
                           "siteId": {
                             "type": "string",
                             "description": "Fulfilling site.",
-                            "x-parser-schema-id": "<anonymous-schema-56>"
+                            "x-parser-schema-id": "<anonymous-schema-57>"
                           },
                           "acknowledgeBy": {
                             "type": "string",
                             "format": "date-time",
                             "description": "The SLA instant this order has missed (or is at risk of missing).",
-                            "x-parser-schema-id": "<anonymous-schema-57>"
+                            "x-parser-schema-id": "<anonymous-schema-58>"
                           },
                           "at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When this sweep pass observed the risk (same instant as `time`). Re-fires on every pass for as long as the order stays unanswered — not edge-triggered.",
-                            "x-parser-schema-id": "<anonymous-schema-58>"
+                            "x-parser-schema-id": "<anonymous-schema-59>"
                           }
                         },
                         "x-parser-schema-id": "AcknowledgementDeadlineAtRiskData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-52>"
+                    "x-parser-schema-id": "<anonymous-schema-53>"
                   }
                 ],
                 "x-parser-schema-id": "AcknowledgementDeadlineAtRiskEvent"
@@ -881,16 +886,16 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderReceived",
-                        "x-parser-schema-id": "<anonymous-schema-60>"
+                        "x-parser-schema-id": "<anonymous-schema-61>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:analytics:NetworkOrderReceived:v1",
-                        "x-parser-schema-id": "<anonymous-schema-61>"
+                        "x-parser-schema-id": "<anonymous-schema-62>"
                       },
                       "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-59>"
+                    "x-parser-schema-id": "<anonymous-schema-60>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderReceivedAnalyticsEvent"
@@ -956,16 +961,16 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderSubmitted",
-                        "x-parser-schema-id": "<anonymous-schema-63>"
+                        "x-parser-schema-id": "<anonymous-schema-64>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:analytics:NetworkOrderSubmitted:v1",
-                        "x-parser-schema-id": "<anonymous-schema-64>"
+                        "x-parser-schema-id": "<anonymous-schema-65>"
                       },
                       "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[1].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-62>"
+                    "x-parser-schema-id": "<anonymous-schema-63>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderSubmittedAnalyticsEvent"
@@ -1030,16 +1035,16 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderAcknowledged.v2",
-                        "x-parser-schema-id": "<anonymous-schema-66>"
+                        "x-parser-schema-id": "<anonymous-schema-67>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:analytics:NetworkOrderAcknowledged:v2",
-                        "x-parser-schema-id": "<anonymous-schema-67>"
+                        "x-parser-schema-id": "<anonymous-schema-68>"
                       },
                       "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[2].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-65>"
+                    "x-parser-schema-id": "<anonymous-schema-66>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderAcknowledgedAnalyticsEvent"
@@ -1104,16 +1109,16 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderRejected",
-                        "x-parser-schema-id": "<anonymous-schema-69>"
+                        "x-parser-schema-id": "<anonymous-schema-70>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:analytics:NetworkOrderRejected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-70>"
+                        "x-parser-schema-id": "<anonymous-schema-71>"
                       },
                       "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[3].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-68>"
+                    "x-parser-schema-id": "<anonymous-schema-69>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderRejectedAnalyticsEvent"
@@ -1177,16 +1182,16 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderShipmentConfirmed",
-                        "x-parser-schema-id": "<anonymous-schema-72>"
+                        "x-parser-schema-id": "<anonymous-schema-73>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:analytics:NetworkOrderShipmentConfirmed:v1",
-                        "x-parser-schema-id": "<anonymous-schema-73>"
+                        "x-parser-schema-id": "<anonymous-schema-74>"
                       },
                       "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[4].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-71>"
+                    "x-parser-schema-id": "<anonymous-schema-72>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderShipmentConfirmedAnalyticsEvent"
@@ -1250,16 +1255,16 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.AcknowledgementDeadlineAtRisk",
-                        "x-parser-schema-id": "<anonymous-schema-75>"
+                        "x-parser-schema-id": "<anonymous-schema-76>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:analytics:AcknowledgementDeadlineAtRisk:v1",
-                        "x-parser-schema-id": "<anonymous-schema-76>"
+                        "x-parser-schema-id": "<anonymous-schema-77>"
                       },
                       "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-74>"
+                    "x-parser-schema-id": "<anonymous-schema-75>"
                   }
                 ],
                 "x-parser-schema-id": "AcknowledgementDeadlineAtRiskAnalyticsEvent"
