@@ -159,7 +159,8 @@ Source: `cmd/wes/handlers.go`, `cmd/wes/serving.go`, `cmd/mcp/main.go`,
   `cutoffAt` is `400`.
 - **Events**: `BacklogThresholdBreached` whenever the backlog exceeds the
   alarm threshold (so this read publishes — including through the MCP tool
-  and resource, which are annotated read-only);
+  and resource; the tool is therefore annotated non-read-only, destructive,
+  [ADR-0037](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0037-mcp-annotations-for-event-raising-tools.md));
   `PathCapacityChanged` when `cutoffAt` is supplied
   ([ADR-0018](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md)).
 
@@ -171,7 +172,9 @@ Source: `cmd/wes/handlers.go`, `cmd/wes/serving.go`, `cmd/mcp/main.go`,
   alarm threshold) or `ReassignLabor` (a `ReleaseFed` pool at its WIP limit
   with backlog waiting) ([ADR-0003](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0003-flow-balancing-as-domain-service.md)).
 - **Events**: `PathThrottled` with `ThrottleUpstream`;
-  `LaborReassignmentFlagged` with `ReassignLabor`.
+  `LaborReassignmentFlagged` with `ReassignLabor` (so the MCP tool is
+  annotated non-read-only, destructive,
+  [ADR-0037](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0037-mcp-annotations-for-event-raising-tools.md)).
 
 ### ConfigurePool
 

@@ -363,7 +363,7 @@ classDiagram
 Source: `internal/application/ports/ports.go`,
 `internal/application/usecases/reserve_stock.go`, `stow_stock.go`.
 Omitted: the other nine use cases, which follow the same struct-of-ports
-shape (see [Use Cases](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/ddd/use-cases.md)); `ctx` is `context.Context`.
+shape (see [Use Cases](/contexts/inventory-storage/use-cases)); `ctx` is `context.Context`.
 
 ## 4. Hexagonal ports and adapters
 

@@ -25,6 +25,10 @@ How values are parsed:
 - **`OUTBOX_RELAY_INTERVAL`** goes through `durationEnv`. An unset, malformed,
   zero or negative value falls back to the default, so the relay cannot be
   turned off this way.
+- **`OUTBOX_MAX_ATTEMPTS`** goes through `intEnv`. Unset falls back to `20`;
+  an explicit `0` is kept and means unlimited; a malformed or negative value
+  logs `invalid integer env var, using default` at WARN and uses `20`, so a
+  typo cannot silently remove the cap (ADR-0036).
 - **Housekeeping knobs** (`HOUSEKEEPING_INTERVAL`, `IDEMPOTENCY_KEY_TTL`,
   `OUTBOX_RETENTION`) go through `durationEnvRaw`. Only an unset or malformed
   value falls back. An explicit `0`/`0s` is kept and disables that knob
@@ -43,7 +47,7 @@ Only the default `OTEL_SERVICE_NAME` differs between binaries.
 | `SERVICE_VERSION` | `dev` | no | `service.version` resource attribute. In `cmd/facility` a value injected at build time with `-ldflags "-X main.serviceVersion=..."` wins over this variable. | `cmd/*/main.go` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4317` | no | OTLP/gRPC Collector endpoint for traces, metrics and logs. Both `host:port` and `http(s)://host:port` work, because the scheme and a trailing `/` are stripped. Export is insecure (no TLS) and non-blocking: if the Collector is unreachable, telemetry is dropped and the process still starts. | `cmd/*/main.go`, `internal/adapters/outbound/telemetry/telemetry.go` |
 | `ENVIRONMENT` | `local` | no | `deployment.environment.name` resource attribute. | `internal/adapters/outbound/telemetry/telemetry.go` |
-| `LOG_LEVEL` | `info` | no | Minimum level for the JSON slog logger (`debug`, `info`, `warn`, `error`). | `cmd/*/main.go` |
+| `LOG_LEVEL` | `info` | no | Minimum level for the JSON slog logger (`debug`, `info`, `warn` or `warning`, `error`; case-insensitive; anything else means `info`). | `cmd/*/main.go` |
 
 ## `facility` (REST API, outbox relay, housekeeping sweeper)
 
@@ -56,6 +60,7 @@ Only the default `OTEL_SERVICE_NAME` differs between binaries.
 | `EVENT_PUBLISHER` | *(empty → log publisher)* | no | `kafka` turns on Kafka publishing. Any other value, including unset, logs events instead of publishing them. See the mode matrix below. | `cmd/facility/main.go` |
 | `KAFKA_BROKERS` | `localhost:9092` | no | Comma-separated bootstrap brokers for the integration publisher, analytics publisher and outbox relay sink. Read only when `EVENT_PUBLISHER=kafka`. | `cmd/facility/main.go` |
 | `OUTBOX_RELAY_INTERVAL` | `1s` | no | Sleep between empty passes of the outbox relay (ADR-0018). Zero, negative or malformed values fall back to `1s`. | `cmd/facility/main.go` |
+| `OUTBOX_MAX_ATTEMPTS` | `20` | no | Outbox relay attempt cap ([ADR-0036](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0036-outbox-relay-attempt-cap.md)): a row that has failed this many sends is excluded from the relay's claims and logged once at ERROR (`outbox_id`, `topic`, `event_type`, `key`). It stays in `outbox_events` until re-armed (see [Runbook](/contexts/facility-layout/runbook#an-outbox-row-hit-the-attempt-cap)); later rows, including rows with the same key, overtake it. `0` = unlimited (one poison row blocks the relay forever). A malformed or negative value logs a WARN and uses `20`. Read only when the relay runs (`DATABASE_URL` + `EVENT_PUBLISHER=kafka`). | `cmd/facility/main.go`, `internal/adapters/outbound/postgres/outbox_relay.go` |
 | `HOUSEKEEPING_INTERVAL` | `1h` | no | How often the housekeeping sweeper wakes up (ADR-0026). `0` disables the sweeper. | `cmd/facility/main.go`, `internal/adapters/outbound/postgres/sweeper.go` |
 | `IDEMPOTENCY_KEY_TTL` | `24h` | no | Age after which `idempotency_keys` rows are deleted. This bounds how late a client retry still gets the cached response (ADR-0019). `0` disables this half of the sweep. | same |
 | `OUTBOX_RETENTION` | `168h` (7 days) | no | Age after which **published** `outbox_events` rows are deleted. Unpublished rows are never swept. `0` disables this half of the sweep. | same |
@@ -104,10 +109,10 @@ Publisher mode matrix (`buildAdapters` in `cmd/facility/main.go`):
 - **Boot retry.** Each binary retries its first Postgres operations (running
   migrations, then pinging the pool) through `internal/adapters/outbound/bootretry`:
   5 attempts with backoff delays of 1s, 2s, 4s and 8s, so **15s of waiting
-  in total** before it gives up and exits with the last real error. The
-  package comment says "~31s (1+2+4+8+16)", but no delay follows the fifth
-  attempt, so the real budget is 15s plus the duration of the attempts. The
-  retry covers the Istio native-sidecar first-dial reset (ADR-0028).
+  in total** before it gives up and exits with the last real error. No delay
+  follows the fifth attempt, so the real budget is 15s plus the duration of
+  the attempts. The retry covers the Istio native-sidecar first-dial reset
+  (ADR-0028).
 - **Fail-closed analytics.** `facility-projector` and `facility-reports`
   refuse to start without `ANALYTICS_DATABASE_URL`. `facility` and `mcp`
   instead fall back to in-memory storage when `DATABASE_URL` is empty. That
@@ -122,3 +127,18 @@ Publisher mode matrix (`buildAdapters` in `cmd/facility/main.go`):
 See also: [Runbook](/contexts/facility-layout/runbook) for how the Helm chart sets these
 variables, and [Observability](/contexts/facility-layout/observability) for the telemetry they
 control.
+
+## How the Helm chart delivers `facility`'s variables
+
+`charts/facility-layout/templates/configmap.yaml` renders `config.*` (plus
+`kafka.brokers` when `kafka.enabled`) into a ConfigMap named after the
+release: `HTTP_ADDR`, `MIGRATIONS_PATH`, `EVENT_PUBLISHER`,
+`OUTBOX_RELAY_INTERVAL`, `OUTBOX_MAX_ATTEMPTS` (`config.outboxMaxAttempts`,
+default `20`), `HOUSEKEEPING_INTERVAL`, `IDEMPOTENCY_KEY_TTL`,
+`OUTBOX_RETENTION`, `KAFKA_BROKERS`. The api Deployment mounts it with
+`envFrom: configMapRef` (gap fix D14, 2026-10-12), so every `config.*` value
+reaches `cmd/facility`. Explicit `env` entries (the same values, plus the
+Secret-backed DSNs and the OTel variables) and `extraEnv` win over the
+ConfigMap for the same key. The projector, reports and MCP Deployments do not
+mount the ConfigMap; their variables are set explicitly in their own
+templates.

@@ -14,22 +14,25 @@ This page is a copy of [`docs/operations/observability.md`](https://github.com/I
 What each process emits, where it goes, and what to watch. Read from
 `internal/adapters/outbound/telemetry/`, `internal/adapters/inbound/http/`,
 the four `main.go` files and the OTel modules pinned in `go.mod`
-(`otelhttp` v0.70.0, `contrib/instrumentation/runtime` v0.72.0, `otel`
+(`otelchi` v0.12.3, `contrib/instrumentation/runtime` v0.72.0, `otel`
 v1.47.0). Dashboards are in `warehouse-infra`, see below.
 
 ## Signals per process
 
 | Process | Traces | Metrics | Logs |
 | --- | --- | --- | --- |
-| `netfulfil` | OTLP/gRPC push (ADR 0019) | OTLP/gRPC push every 30 s, plus a Prometheus `GET /metrics` | JSON to stdout |
-| `mcp` | none | none | JSON to stdout |
-| `netfulfil-projector` | none | none | JSON to stdout, level from `LOG_LEVEL` |
-| `netfulfil-reports` | none | none | JSON to stdout, one line per request, level from `LOG_LEVEL` |
+| `netfulfil` | OTLP/gRPC push (ADR 0019, 0020) | OTLP/gRPC push every 30 s, plus a Prometheus `GET /metrics` | JSON to stdout, one line per request, level from `LOG_LEVEL` |
+| `mcp` | OTLP/gRPC push (ADR 0020) | OTLP/gRPC push every 30 s | JSON to stdout, level from `LOG_LEVEL` |
+| `netfulfil-projector` | none | OTLP/gRPC push every 30 s (Go-runtime only, ADR 0020) | JSON to stdout, level from `LOG_LEVEL` |
+| `netfulfil-reports` | OTLP/gRPC push (ADR 0020) | OTLP/gRPC push every 30 s | JSON to stdout, one line per request, level from `LOG_LEVEL` |
 
-The chart sets `OTEL_*` variables on all four pods, but only `netfulfil`
-calls `telemetry.Setup`; ADR 0019 scopes the other three out.
+All four processes now call `telemetry.Setup` (ADR 0019 scoped this to
+`netfulfil` only; ADR 0020 closes that gap for the other three).
+`netfulfil-projector`'s admin HTTP surface stays unwired to otelchi — it
+serves nothing besides `GET /healthz` — so it reports Go-runtime metrics
+but no HTTP RED metrics; see ADR 0020 for why.
 
-## OpenTelemetry export (`netfulfil`)
+## OpenTelemetry export (all four processes)
 
 `telemetry.Setup` (`internal/adapters/outbound/telemetry/telemetry.go`) runs
 first in `main`, before the HTTP handler is built:
@@ -49,28 +52,41 @@ first in `main`, before the HTTP handler is built:
 
 ### Traces
 
-`otelhttp.NewHandler` wraps the REST mux (`Server.Routes`), inside the CORS
-middleware. Every request becomes one server span named
-`<METHOD> <route pattern>`, for example `GET /network-orders/{networkRef}` or
-`POST /network-orders/{networkRef}/shipment-confirmation` (otelhttp's
-`SpanName`, using the `ServeMux` pattern as `http.route`). An incoming
+`otelchi.Middleware` wraps the chi router (`Server.Routes` in `netfulfil`;
+`NewReportsRouter` in `netfulfil-reports`; `newRouter` in `mcp`), with
+`otelchi.WithChiRoutes` so the span/metric route label is the chi pattern
+up front rather than once per concrete path. Every request becomes one
+server span named `<METHOD> <route pattern>`, for example
+`GET /network-orders/{networkRef}` or
+`POST /network-orders/{networkRef}/shipment-confirmation`. An incoming
 `traceparent` header is honoured.
 
 There are no other spans. The order-management and inventory-storage HTTP
 clients use a plain `http.Client`, so outbound calls are not traced and no
 trace context is sent to order-management. The poller, the tickers, the
-outbox relay and the Kafka publishers open no spans and add no trace headers
-to messages.
+outbox relay and the Kafka publishers open no spans.
+
+**Trace context across the outbox** ([ADR 0022](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0022-trace-context-crosses-the-outbox.md)).
+In outbox mode `OutboxPublisher.Publish` injects the active span's W3C
+`traceparent` (and `tracestate` / `baggage` when present) into each
+`outbox_events.headers` row, after the CloudEvents `content-type`; the relay
+sends the stored headers with the Kafka message, so a consumer that extracts
+them continues the producer's trace. Today that covers events raised inside a
+REST request span (`NetworkOrderShipmentConfirmed` from the
+shipment-confirmation endpoint). Events raised by the poller and the tickers
+carry no `traceparent`, because those passes open no span. Direct mode (no
+`DATABASE_URL`) adds no trace header. This service's own consumers open no
+spans, so they do not extract.
 
 ### Metric instruments
 
-From `otelhttp` v0.70.0 (server side, one set per request):
+From `otelchi/metric` v0.12.3 (ADR-0013 Tier 1 item 2; server side, one set
+per request, on `netfulfil`, `netfulfil-reports` and `mcp`):
 
 | Instrument | Type | Unit | Attributes |
 | --- | --- | --- | --- |
-| `http.server.request.duration` | histogram | `s` | `http.request.method`, `url.scheme`, `server.address`, `server.port`, `network.protocol.name`, `network.protocol.version`, `http.response.status_code`, `http.route` |
-| `http.server.request.body.size` | histogram | `By` | same |
-| `http.server.response.body.size` | histogram | `By` | same |
+| `http.server.request.duration` | histogram | `s` | `http.request.method`, `http.route`, `http.response.status_code`, and other OTel HTTP semantic-convention attributes |
+| `http.server.active_requests` | up-down counter | `{request}` | `http.request.method` |
 
 From `contrib/instrumentation/runtime` v0.72.0 (`runtime.Start`; all are
 asynchronous (observable) instruments, read on each 30 s collection):
@@ -133,10 +149,13 @@ its own.
 
 ## Logs
 
-Every process uses `log/slog` with a JSON handler on stdout. `netfulfil` and
-`mcp` log at Info and above (no level knob); the projector and reports honour
-`LOG_LEVEL`. There is no request log on the `netfulfil` REST server and no
-trace id in log lines.
+Every process uses `log/slog` with a JSON handler on stdout, at Info and
+above by default. All four honour `LOG_LEVEL` (`debug`, `info`,
+`warn`/`warning`, `error`; anything else is Info). `netfulfil` now logs one `http request` line per request
+(`RequestLogger`, same shape `netfulfil-reports` already used), stamped
+with the chi request id from `middleware.RequestID`; there is still no
+OTel trace id in log lines (the slog handler is plain, not
+trace-correlated).
 
 Messages worth knowing, with their fields (all from the code):
 
@@ -156,12 +175,15 @@ Messages worth knowing, with their fields (all from the code):
 | `submitted orders reconciled` | INFO | `examined`, `confirmed`, `failed`, `pending` | netfulfil | |
 | `capability offer recompute completed` | INFO | `examined`, `throughput_constrained` | netfulfil | |
 | `capability offer: usable inventory lookup failed` | ERROR | `sku`, `err` | netfulfil | inventory-storage call failed for one SKU |
-| `outbox relay pass failed` | ERROR | `error` | netfulfil | rows stay unpublished and are retried |
+| `outbox relay pass failed` | ERROR | `error` | netfulfil | a database failure of a relay pass (begin, claim, mark published); rows stay unpublished and are retried. Send failures are logged by the two lines below instead |
+| `outbox relay: send failed, stopping this pass at the failed row` | WARN | `outbox_id`, `topic`, `event_type`, `attempts`, `error` | netfulfil | the broker rejected a row below the attempt cap; the next pass retries it |
+| `outbox relay: row reached the attempt cap and is excluded from future claims; re-arm it with attempts = 0 after fixing the cause` | ERROR | `outbox_id`, `topic`, `event_type`, `key`, `attempts`, `max_attempts`, `error` | netfulfil | once per row, when it reaches `OUTBOX_MAX_ATTEMPTS` ([ADR 0021](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0021-outbox-relay-attempt-cap.md)); consumers never got that event ([runbook](/contexts/network-fulfillment/runbook#an-outbox-row-hit-the-attempt-cap)) |
+| `outbox relay running` | INFO | `topic`, `analytics_topic`, `max_attempts` | netfulfil | outbox mode is on, with the attempt cap in force |
 | `stub network acknowledgement` | INFO | `networkRef`, `accepted` | netfulfil | what the stub gateway was told |
 | `analytics: message is not a valid CloudEvent, sending to dead-letter topic` | WARN | `topic`, `partition`, `offset`, `error` | projector | |
 | `analytics: exhausted retries, sending to dead-letter topic` | WARN | `topic`, `dlq_topic`, `phase`, `ce_id`, `ce_type`, `attempts`, `error` | projector | |
 | `analytics consumer stopped` | ERROR | `error` | projector | the consumer loop exited; the process keeps serving `/healthz` |
-| `http request` | INFO, ERROR for 5xx | `method`, `path`, `status`, `duration_ms`, `bytes`, `request_id` | reports | one line per request |
+| `http request` | INFO, ERROR for 5xx | `method`, `path`, `status`, `duration_ms`, `bytes`, `request_id` | netfulfil, reports | one line per request |
 
 ## Dashboards
 
@@ -182,8 +204,12 @@ it has:
 - Loki panels on `{app="network-fulfillment"}`: the log stream, volume by
   level, and ERROR/WARN lines.
 
-Only the API pod exports OTel metrics, so the RED and runtime panels show
-`netfulfil` alone.
+Only `netfulfil` exports a Prometheus `GET /metrics` endpoint, so that
+panel group stays `netfulfil`-only. The RED panels on
+`http_server_request_duration_seconds_*`, filtered to
+`service_name=~"(network-fulfillment|netfulfil).*"`, now have data from
+`netfulfil`, `netfulfil-reports` and `mcp` (ADR 0020); the projector
+contributes only the Go-runtime panels.
 
 ## Suggested alerts
 
@@ -199,3 +225,5 @@ None of these exist yet; they follow from the code above.
 | Analytics stale | `GET /reports/acknowledgement/freshness` `lagSeconds` high while orders are arriving | projector stopped; note the lag also grows when no event is published at all |
 | 5xx on the API | `http_server_request_duration_seconds_count{http_response_status_code=~"5.."}` | |
 | DLQ growth | message count on `warehouse.network-fulfillment.analytics.dlq` | poison or failing projection |
+| Outbox row excluded | any ERROR `outbox relay: row reached the attempt cap ...` (log alert), or `SELECT count(*) FROM outbox_events WHERE published_at IS NULL AND attempts >= 20` > 0 | an event consumers never received; re-arm it after fixing the cause (ADR 0021) |
+| Outbox backlog | `SELECT count(*), min(created_at) FROM outbox_events WHERE published_at IS NULL` growing for > 5 min | the relay is stuck on a failing row below the cap, or the broker is down |

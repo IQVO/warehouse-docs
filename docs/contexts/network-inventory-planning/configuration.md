@@ -35,6 +35,7 @@ Source: `cmd/network-inventory-planning/main.go`, `internal/adapters/outbound/te
 | `TRANSFER_REPLY_CONSUMER_GROUP` | none | no | Group of the `transfer-reply` consumer on `warehouse.inventory.events` (allocation replies and destination facts). Empty = off, and approved transfers never leave `ALLOCATING`. | `kafka.transferReplyConsumerGroup` |
 | `TRANSFER_FACT_CONSUMER_GROUP` | none | no | Group of the `transfer-fact` consumer on `warehouse.fulfillment.events`. Empty = off, and allocated transfers never leave `ALLOCATED`. | `kafka.transferFactConsumerGroup` |
 | `OUTBOX_RELAY_ENABLED` | empty (off) | no | Any non-empty value starts the outbox relay (needs `KAFKA_BROKERS`). Empty: events stay as rows in `outbox_events` until a relay runs. | `config.outboxRelayEnabled` (default `"true"`) |
+| `OUTBOX_MAX_ATTEMPTS` | `20` | no | Outbox relay attempt cap ([ADR 0016](https://github.com/IQVO/network-inventory-planning/blob/develop/docs/docs/adr/0016-outbox-relay-attempt-cap.md)): a row that has failed this many sends is excluded from the relay's claims and logged at ERROR (`outbox_id`, `topic`, `event_type`, `key`). It stays in `outbox_events` with `attempts` and `last_error` until an operator re-arms it (`UPDATE outbox_events SET attempts = 0 WHERE id = ...`, see the [Runbook](/contexts/network-inventory-planning/runbook#outbox-relay)); later rows, including rows with the same key, overtake it. `0` = unlimited (one poison row then blocks the relay forever). A negative or unparsable value logs a WARN and uses `20`. | `config.outboxMaxAttempts` (default `"20"`) |
 | `PLANNING_MAX_STALENESS` | `10m` | no | Freshness budget of every fact in the fail-closed planning snapshot (simulation, approval, scheduled rebalance). Must be a positive Go duration; anything else **fails the boot**. | `config.maxStaleness` |
 | `TRANSFER_PICK_PATH_ID` | none | for approval | Process path id carried by the pick-leg `WorkDemandReleased` (ADR 0005). Unset: approval answers 503 `config-incomplete`. | `config.transferPickPathId` |
 | `TRANSFER_PICK_CPT_OFFSET` | `2h` | no | CPT horizon of the pick demand (release time + offset). An invalid or non-positive value is logged at WARN and the default is used. | `config.transferPickCptOffset` |
@@ -47,8 +48,10 @@ Source: `cmd/network-inventory-planning/main.go`, `internal/adapters/outbound/te
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | `localhost:4317` | no | OTLP/gRPC endpoint (insecure) for traces and metrics (ADR 0012). Export never blocks startup. | `otel.endpoint` (rendered when `otel.enabled`, default `otel-collector.observability.svc.cluster.local:4317`) |
 | `ENVIRONMENT` | `local` | no | `deployment.environment.name` resource attribute. | `environment` |
 
-The API process logs with Go's default `slog` logger; it does not read
-`LOG_LEVEL`.
+The API process logs with Go's default `slog` logger. `LOG_LEVEL` sets its
+level: `debug`, `info` (default), `warn`/`warning`, `error`, case-insensitive;
+anything else is `info`. The chart does not render it for the API; use
+`extraEnv`.
 
 ## `mcp`
 

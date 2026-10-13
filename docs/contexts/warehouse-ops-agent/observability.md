@@ -48,8 +48,8 @@ default), pointing at
 
 | Instrument | Type | Unit | Attributes | When it is recorded | Source |
 |---|---|---|---|---|---|
-| `ops_agent_llm_arbitrations_total` | Int64Counter | `{arbitration}` | `use_case` (today only `flow_balance_advisory`), `mode` (`shadow` or `on`), `source` (`deterministic`, `llm`, `fallback`) | once per flow-balance decision that went through the reasoner | `internal/adapters/outbound/telemetry/arbitration_metrics.go` |
-| `ops_agent_llm_agreement_total` | Int64Counter | `{agreement}` | `use_case`, `mode`, `agree` (bool) | only when the model returned a valid plan; `agree` is `true` when its action equals the deterministic one | same file |
+| `ops_agent.llm.arbitrations` | Int64Counter | `{arbitration}` | `use.case` (today only `flow_balance_advisory`), `mode` (`shadow` or `on`), `source` (`deterministic`, `llm`, `fallback`) | once per flow-balance decision that went through the reasoner | `internal/adapters/outbound/telemetry/arbitration_metrics.go` |
+| `ops_agent.llm.agreement` | Int64Counter | `{agreement}` | `use.case`, `mode`, `agree` (bool) | only when the model returned a valid plan; `agree` is `true` when its action equals the deterministic one | same file |
 | `circuit_breaker.state` | Int64Gauge | `{state}` | `dependency` (today only `anthropic-llm`) | on every breaker state change: `0` closed, `1` half-open, `2` open | `internal/adapters/outbound/telemetry/circuit_breaker_metrics.go` |
 
 All three are registered by `wireReasoner` (`cmd/agent/reasoner.go`), and
@@ -59,8 +59,14 @@ change, so "no series" means "closed since startup", not "unknown".
 
 The meters are named `warehouse-ops-agent/llm` and
 `warehouse-ops-agent/resilience`. Through the Collector's Prometheus
-exporter the series become `ops_agent_llm_arbitrations_total`,
-`ops_agent_llm_agreement_total` and `circuit_breaker_state`.
+exporter the dot-separated OTel instrument names and attribute keys above
+(ADR-0013's Tier-2 naming convention) still become the SAME Prometheus
+series as before this convention was adopted —
+`ops_agent_llm_arbitrations_total`, `ops_agent_llm_agreement_total` and
+`circuit_breaker_state`, with the `use_case` label unchanged — because the
+exporter already converts `.` to `_` and appends `_total` to a counter
+whose name doesn't already end in it. No dashboard or alert built on
+those Prometheus names needs to change.
 
 The shadow-mode rollout gate from
 [ADR 0004](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0004-llm-reasoner-behind-the-policy-layer.md) is the
@@ -105,12 +111,21 @@ only in logs.
 | the chi route pattern, e.g. `/daily-brief`, `/flow-balance/{pathId}`, `/mcp` | server | otelchi's standard HTTP attributes | `otelchi.Middleware` with `WithChiRoutes` (`router.go`) |
 | `mcp.tool <name>`, e.g. `mcp.tool get_daily_brief` | internal | `mcp.tool.name`; status `Error` with the message when the tool fails | `addTool` in `internal/adapters/inbound/mcp/tools.go` |
 | `llm.tool_call` | internal | `llm.tool_call.upstream`, `llm.tool_call.tool`; status `Error` on a refusal or a failed call | `executeToolCall` in `internal/adapters/outbound/llm/anthropic/reasoner.go` |
+| `HTTP GET`, `HTTP POST`, `HTTP DELETE` (otelhttp's default name) | client | otelhttp's standard HTTP client attributes (method, URL, server address, status code) | every outbound call: the MCP clients, the console-bff REST clients, the Prometheus and Loki readers and the Anthropic reasoner, all built by `httpclient.New` in `internal/adapters/outbound/httpclient/httpclient.go` |
 
-Outbound calls are **not** instrumented: the MCP client, the REST clients
-and the Prometheus, Loki and Anthropic clients use a plain `http.Client`
-with no `otelhttp` transport. They create no client spans and send no
-`traceparent`, so a trace stops at this agent and does not continue into
-the upstream context.
+Outbound calls are instrumented. Every outbound `http.Client` comes from
+`httpclient.New`, whose transport is `otelhttp.NewTransport`. Each call
+gets a client span and sends a W3C `traceparent`, so a trace continues
+from this agent into the upstream context (its MCP or REST server span
+becomes a child of the agent's client span). The same transport records
+otelhttp's client metrics `http.client.request.duration` and
+`http.client.request.body.size`.
+
+The fitness test `TestOutboundHTTPClientsUseOtelhttp`
+(`internal/architecture/otelhttp_fitness_test.go`) fails when a non-test
+file outside `internal/adapters/outbound/httpclient` builds an
+`http.Client` literal, calls `new(http.Client)` or uses
+`http.DefaultClient`.
 
 ## Logs
 
