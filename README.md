@@ -100,6 +100,19 @@ Next, regenerate the API reference pages (see below). Commit the refreshed
 specs and the regenerated docs together. If a spec is wrong, fix it in the
 owning repository and re-sync. Never hand-edit the copy.
 
+### Alert rules
+
+`alerting/warehouse-alert-rules.json` is a copy of warehouse-infra's
+`terraform/alerting/warehouse-alert-rules.json` (the Prometheus rules the
+fleet provisions); `alerting/SOURCE` names the commit it came from. The
+[Alert catalogue](https://iqvo.github.io/warehouse-docs/fleet-operations/alert-catalogue)
+page is generated from it:
+
+```bash
+npm run gen-alert-catalogue -- --sync   # copy from ../warehouse-infra origin/develop, then render
+npm run gen-alert-catalogue -- --check  # what build-check runs: page matches the copy
+```
+
 ## Local development
 
 ```bash

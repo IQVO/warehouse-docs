@@ -44,6 +44,9 @@ jobs:
       # api-reference sidebar it imports) and src/. TypeScript 7 removed
       # `baseUrl` (TS5102); tsconfig.json overrides it with `null` + `paths`.
       - run: npm run typecheck
+      # The alert catalogue page is generated from alerting/ (a copy of
+      # warehouse-infra's rules): fail when someone edits one without the other.
+      - run: npm run gen-alert-catalogue -- --check
       - run: npm run build
 
   build:

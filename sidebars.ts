@@ -155,6 +155,15 @@ const sidebars: SidebarsConfig = {
       label: 'Fleet health',
       items: ['fleet-health/docs-coverage', 'fleet-health/ecosystem-gaps'],
     },
+    {
+      type: 'category',
+      label: 'Fleet operations',
+      items: [
+        'fleet-operations/incident-runbook',
+        'fleet-operations/slos',
+        'fleet-operations/alert-catalogue',
+      ],
+    },
     'glossary',
   ],
 
