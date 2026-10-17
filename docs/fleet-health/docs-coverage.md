@@ -7,12 +7,14 @@ description: How completely each application repository documents its own code, 
 
 # Documentation coverage
 
-Between 2026-10-09 and 2026-10-12 every application repository in the fleet
-(15 domain contexts, the console shell and the UI kit) got the same
-operational documentation set, written from the code on `develop` and merged
-through each repository's normal PR checks. Fleet mean coverage went from
-**67 to 100** out of 100. The problems found while writing those pages
-are on [Ecosystem gaps](./ecosystem-gaps.md).
+Between 2026-10-09 and 2026-10-12 every application repository then in the
+fleet (15 backend contexts, the console shell and the UI kit, 17 repositories)
+got the same operational documentation set, written from the code on `develop`
+and merged through each repository's normal PR checks. Fleet mean coverage went
+from **67 to 100** out of 100. On 2026-10-17 the fleet grew to 19 repositories
+(17 backend contexts, the console shell and the UI kit): see
+[State on 2026-10-17](#state-on-2026-10-17). The problems found while writing
+those pages are on [Ecosystem gaps](./ecosystem-gaps.md).
 
 ## What every repository now documents
 
@@ -67,6 +69,38 @@ last campaign PR merged (**after**). "Pages" counts hand-written pages
 Two contexts started without a documentation site at all:
 `network-inventory-planning` and `slotting-optimization` each got a
 Docusaurus site, mirroring `inbound-receiving`'s tooling, in their campaign PR.
+
+## State on 2026-10-17
+
+The same audit, run on `origin/develop` of all 19 repositories, gives 18 at
+**100** and one at **86**: a fleet mean of 99.3 (computed as
+(18 × 100 + 86) / 19). Two contexts were added to the audit's backend list on
+2026-10-17, and four content fixes closed the last undocumented fact the audit
+listed in four older repositories.
+
+| Repository | Before | Now | Pages | Pending | PR |
+|---|---:|---:|---|---|---|
+| `pick-face-replenishment` | 26 | 100 | 2 → 25 | — | [#7](https://github.com/IQVO/pick-face-replenishment/pull/7) |
+| `task-interleaving` | 56 | 86 | 2 → 21 | configuration, operations, observability, troubleshooting (pending its service merge) | [#6](https://github.com/IQVO/task-interleaving/pull/6) |
+
+Both PRs scaffolded the Docusaurus site, the API reference pages, the DDD pack
+and the structure pages, and merged on 2026-10-17. **Before** is the audit at
+the first parent of each merge. `task-interleaving` has only its domain and
+contracts on `develop` (no `cmd/`), so it has no binary to configure, operate,
+observe or troubleshoot. Its content score is already 100 and its structure
+score stays at 73 until the service merges; that PR must add the four pages in
+the same change. No placeholder pages were written to move the number.
+
+| Repository | Content fix | PR |
+|---|---|---|
+| `product-master` | the `product_master.products.registered` instrument | [#44](https://github.com/IQVO/product-master/pull/44) |
+| `inbound-receiving` | the `inbound_receiving.receipts.units_received` instrument | [#39](https://github.com/IQVO/inbound-receiving/pull/39) |
+| `slotting-optimization` | the `slotting_optimization.slot_plans.decided` instrument | [#32](https://github.com/IQVO/slotting-optimization/pull/32) |
+| `network-inventory-planning` | `OTEL_SERVICE_NAME` for `mcp`, `nip-projector` and `nip-reports` | [#56](https://github.com/IQVO/network-inventory-planning/pull/56) |
+
+All six PRs are merged. Frontends are scored with the library rule described
+below: a `release` page counts as the operations page of a repository with no
+deployment, which is how the UI kit reaches 100.
 
 ## How the score is computed
 

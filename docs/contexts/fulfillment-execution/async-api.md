@@ -209,7 +209,9 @@ Completing a `RELOCATE` task takes those inputs on `POST /tasks/{id}/complete`
 (`quantity`, `fromBin`, `toBin`) and the MCP `complete_task` tool; without
 them the completion is refused with a `422` (`relocation-confirmation-required`,
 `invalid-relocation-confirmation`, or `not-relocation-task` for a task of
-another type). `inventory-storage` applies the event as a stock move and raises
+another type). A `fromBin` or `toBin` that is present but blank (no character
+outside ECMA-262 `\s`, the contract's `pattern: '\S'`) is a `400`, not a `422`.
+`inventory-storage` applies the event as a stock move and raises
 `StockRelocated` (its ADR-0039); `wes-work-planning` reads `work_unit_id` as
 for any task, which also releases the moves of the same plan that waited on
 this one.

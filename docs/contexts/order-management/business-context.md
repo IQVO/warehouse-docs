@@ -86,8 +86,10 @@ order has travelled:
   local state change.
 - **After allocation** — `inventory-storage` is holding reservations that
   must be handed back.
-- **After release** — `wes-work-planning` has accepted the work, and
-  downstream of that, physical picking may already be underway. The order
+- **After release** — the work has been released to `wes-work-planning`
+  (which admits it; with the opt-in `RELEASE_CONFIRMATION_MODE=kafka` this
+  context learns that from `WorkUnitCreated`, ADR 0043), and downstream of
+  that, physical picking may already be underway. The order
   has left this context's control and entered the physical warehouse.
 
 That last step is a genuine boundary, not a technicality: once work is

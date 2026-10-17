@@ -74,8 +74,10 @@ context's own projector and are never read by a sibling.
 | | | `ReplenishmentCompleted`, `ReplenishmentCancelled` | none |
 
 Several published types have no sibling consumer today. These are
-`OrderRepromised`, nine of the eleven `warehouse.work-planning.events`
-types (for example `PathPlanDriftDetected` and `WorkUnitCompleted`),
+`OrderRepromised`, eight of the eleven `warehouse.work-planning.events`
+types (all but `WorkReleased`, `PathCapacityChanged` and `WorkUnitCreated`,
+which `order-management` reads only with `RELEASE_CONFIRMATION_MODE=kafka`; for
+example `PathPlanDriftDetected` and `WorkUnitCompleted`),
 `BottleneckDetected`, `TransferPlanApproved`, every `warehouse.network-fulfillment.events` type,
 `ProductDescriptionChanged`, every
 `warehouse.inbound-receiving.events` type except `ReceiptLineReceived`,

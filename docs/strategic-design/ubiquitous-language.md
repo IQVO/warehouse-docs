@@ -76,9 +76,10 @@ no Shared Kernel".
 
 ## Terms of pick-face-replenishment
 
-`pick-face-replenishment` is built on `develop` and ships a synced glossary
-([Ubiquitous Language](/contexts/pick-face-replenishment/ubiquitous-language)),
-which is the source for these terms.
+`pick-face-replenishment` is merged on `develop` but not deployed and ships a synced glossary
+([Ubiquitous Language](/contexts/pick-face-replenishment/ubiquitous-language)), which is the source for its terms.
+`task-interleaving` has only domain and contracts, and the producer-side changes of other contexts it needs
+are not built: its definitions are the pinned design, not a synced glossary, so the owner column names the context.
 
 | Term | Meaning | Owner |
 | --- | --- | --- |

@@ -50,13 +50,13 @@ classification. For example, `facility-layout` is `wms` and Generic, while
 
 Count: five Core, eight Supporting, two Generic, and one Generic/Supporting.
 
-### Scaffolded, not yet built (2026-10-17)
+### Scaffolded 2026-10-17, not yet running
 
-One further context is classified but does not run yet: scaffolded
-2026-10-17, contracts and domain in progress; consumers and the producer-side
-changes of other contexts are planned, not built. It is not in the count
-above and has no synced canvas or Core Domain Chart yet, so the links come
-with the context.
+One further context is classified but does not run: `task-interleaving`, scaffolded 2026-10-17 with only its
+domain and contracts on `develop`; its consumers and the producer-side changes of other contexts it needs are
+not built. It is not in the count above and has no synced canvas or Core Domain Chart yet, so the links come
+with the context. `pick-face-replenishment` is merged on `develop` (REST API, three consumers, outbox publisher)
+but not registered in `warehouse-infra`; it is in the count above and has its synced pages.
 
 | Bounded context | Classification | CloudEvents subdomain | Business model | Evolution | Why |
 | --- | --- | --- | --- | --- | --- |

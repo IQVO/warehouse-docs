@@ -69,16 +69,20 @@ identity and becomes the upstream that supplies it to the others.
   ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
   the `Order` aggregate, with its state transitions, invariants, commands,
   events, throughput and size.
-- [Domain Events](/contexts/order-management/domain-events): the ten
-  past-tense events this context declares. Three of them
-  (`OrderAllocated`, `OrderPartiallyAllocated` and `OrderRepromised`) go to
-  the integration topic `warehouse.order-management.events`. The page also
+- [Domain Events](/contexts/order-management/domain-events): the twelve
+  past-tense events this context declares. Four of them
+  (`OrderAllocated`, `OrderPartiallyAllocated`, `OrderRepromised` and
+  `SiteSkuDemandChanged`) go to the integration topic
+  `warehouse.order-management.events`; `OrderReleaseUnconfirmed`
+  ([ADR 0043](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0043-release-confirmation-from-workunitcreated.md))
+  is analytics-only. The page also
   covers the CloudEvents types it consumes from sibling contexts. On
-  `develop` it also consumes `product-master`'s `ProductClassified` into a
+  `develop` it consumes `product-master`'s `ProductClassified` into a
   local `product_classification_copy`
   ([ADR 0036](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0036-product-classification-local-copy.md);
-  `PRODUCT_CLASSIFICATION_MODE=kafka` in the reference deployment), which
-  the synced page does not list yet.
+  `PRODUCT_CLASSIFICATION_MODE=kafka` in the reference deployment), and, opt-in
+  with `RELEASE_CONFIRMATION_MODE=kafka` (off by default), `wes-work-planning`'s
+  `WorkUnitCreated` to confirm each released order line.
 - [Domain Message Flow](/contexts/order-management/domain-message-flow)
   ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):
   key scenarios as commands, events and queries.
