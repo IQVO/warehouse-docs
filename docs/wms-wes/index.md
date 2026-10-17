@@ -77,7 +77,7 @@ stands for the event families listed on the tier pages.
   location masters, slotting and labor management. Replenishment of forward
   pick slots is built as a request generator (`pick-face-replenishment`, not
   deployed, execution chain not built) and task interleaving is not in
-  production yet; its owner `task-interleaving` was scaffolded on 2026-10-17 and is in progress. Wave planning is replaced on
+  production yet; its owner `task-interleaving` was scaffolded on 2026-10-17; only its domain and contracts are on `develop`, no service yet. Wave planning is replaced on
   purpose by waveless release.
 - **WES, real and equipment-free.** `wes-work-planning` and
   `fulfillment-execution` release, balance and dispatch work the way the
