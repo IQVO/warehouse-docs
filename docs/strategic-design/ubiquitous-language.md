@@ -76,8 +76,9 @@ no Shared Kernel".
 
 ## Planned terms: pick-face-replenishment and task-interleaving
 
-Scaffolded 2026-10-17, contracts and domain in progress; consumers and the
-producer-side changes of other contexts are planned, not built. These
+Scaffolded 2026-10-17. `pick-face-replenishment` is merged on `develop` but not
+deployed; `task-interleaving` has only domain and contracts; the producer-side
+changes of other contexts they need are not built. These
 definitions are the pinned design, not synced glossaries (neither context has
 a glossary page yet, so the owner column names the context).
 
