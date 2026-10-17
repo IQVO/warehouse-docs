@@ -90,8 +90,10 @@ now has an owner that is built but not deployed, `pick-face-replenishment`
 (`wms`), which raises replenishment requests. The stock-ledger end
 (`inventory-storage`: the `BinStockLevelChanged` producer and the
 `REPLENISHMENT` relocation) and the task end (`fulfillment-execution`: the
-`REPLENISH` task) of its execution chain are built; the planner is not,
-because `wes-work-planning` has no `REPLENISH` work. Task interleaving has an
+`REPLENISH` task) of its execution chain are built, and so is the planner
+(`wes-work-planning` ADR 0042 plans one `REPLENISH` work unit per request on the
+`REPLENISH` path of `process-path-management`'s ADR 0036). Its consumer is
+opt-in and off in the reference deployment. Task interleaving has an
 owner that is built but not deployed, `task-interleaving` (`wes`), which
 issues an advisory hint after each completed task; `fulfillment-execution`
 does not consume the hint yet. See the

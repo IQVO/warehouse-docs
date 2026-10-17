@@ -387,7 +387,7 @@ flowchart LR
 | `warehouse.product-master.events` | product-master | 5 | inventory-storage, order-management, wes-work-planning, fulfillment-execution (`ProductClassified`, into local copies); inbound-receiving (`ProductRegistered`, opt-in); slotting-optimization (`ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured`, opt-in) |
 | `warehouse.inbound-receiving.events` | inbound-receiving | 9 | inventory-storage (`ReceiptLineReceived`, opt-in, its ADR 0037) |
 | `warehouse.slotting-optimization.events` | slotting-optimization | 3 | wes-work-planning (`SlotPlanApproved`, plans one `RELOCATE` work unit per move, its ADR-0040); pick-face-replenishment (`SlotPlanApproved`, opt-in); `SlotPlanGenerated` and `SlotPlanRejected` have no consumer |
-| `warehouse.pick-face-replenishment.events` | pick-face-replenishment | 3 | none yet: `ReplenishmentRequested` is intended for wes-work-planning (planned, not built: it has no consumer and no `REPLENISH` work unit); `ReplenishmentCompleted` and `ReplenishmentCancelled` have no consumer |
+| `warehouse.pick-face-replenishment.events` | pick-face-replenishment | 3 | wes-work-planning (`ReplenishmentRequested` and `ReplenishmentCancelled`, plans one `REPLENISH` work unit per request, its ADR-0042; opt-in `REPLENISHMENT_MODE=kafka`, off in the reference deployment); `ReplenishmentCompleted` has no consumer (wes-work-planning ignores it) |
 | `warehouse.task-interleaving.events` | task-interleaving | 1 | none yet: `InterleavingHintIssued` is intended for fulfillment-execution (planned, not built: it does not read it) |
 
 The type counts are the messages each producer's `asyncapi.yaml` declares on

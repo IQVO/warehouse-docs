@@ -427,8 +427,11 @@ choosing the fullest reserve bin. A planner can also sweep a site or ask for
 a request by hand, and a request is cancelled by a planner, by a newer
 approved slot plan that drops the assignment, or by removing the policy. It
 is completed only by `inventory-storage`'s `Stock Relocated` with reason
-`REPLENISHMENT`. Dashed arrows below are built on both ends but not running
-(the context is not deployed, H39) or have one end missing (H40).
+`REPLENISHMENT`. `wes-work-planning` turns each request into one `REPLENISH`
+work unit (its ADR 0042, opt-in and off in the reference deployment), so the
+loop is complete on `develop` (H40, resolved). Dashed arrows below are built
+on both ends but not running: the context is not deployed (H39) and the
+planner's consumer is switched off.
 
 ```mermaid
 flowchart LR
@@ -462,12 +465,10 @@ flowchart LR
     R4 --> P5 --> E17
     INVX -.->|"Stock Relocated, reason REPLENISHMENT, built, not deployed"| P6
     P6 --> E18
-    E16 -.->|"no consumer, REPLENISH work not planned by WP"| WPX
+    E16 -.->|"Replenishment Requested, one REPLENISH work unit per request, WP consumer off, built, not deployed"| WPX
 
     H39["H39 the context is not deployed in the reference cluster"]:::hotspot
-    H40["H40 the planner is missing: no REPLENISH work"]:::hotspot
     S_PFR -.- H39
-    E16 -.- H40
 
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
     classDef command fill:#4aa3df,stroke:#1f6f9f,color:#0b1e2d
@@ -482,7 +483,7 @@ flowchart LR
 Sources: [pick-face-replenishment domain message flow](/contexts/pick-face-replenishment/domain-message-flow),
 [pick-face-replenishment EventStorming](/contexts/pick-face-replenishment/eventstorming),
 its `apis/pick-face-replenishment/asyncapi.yaml` and the fleet
-[context map](/strategic-design/context-map) (K39, K40 and K42 to K44).
+[context map](/strategic-design/context-map) (K39, K40 and K42 to K44, K44 now wired-but-unused).
 
 ### Task interleaving at the station
 
@@ -936,7 +937,7 @@ this site, and the corroborating context page is linked instead.
 | ~~H37~~ | slotting-optimization | ~~`SlotPlanApproved` has no consumer: executing the moves as MOVE and REPLENISH work is planned, not built (K29)~~ **Resolved 2026-10-14.** Decided by slotting-optimization ADR 0010 (supersedes ADR 0007) and built as RELOCATE work: `wes-work-planning` ADR 0040 plans one work unit per move, `fulfillment-execution` ADR 0047 runs the task, `inventory-storage` ADR 0039 moves the stock and raises `StockRelocated`, which slotting-optimization records as the plan's `execution` progress (K29, K37, K38). | [slotting-optimization context map](/contexts/slotting-optimization/context-map), [domain events](/contexts/slotting-optimization/domain-events) |
 | ~~H38~~ | slotting-optimization | ~~Not deployed: no `warehouse-infra` wiring, so its three local copies are not fed in the reference cluster~~ **Resolved 2026-10-16 on `develop`.** warehouse-infra#75 registers it (database, Kong route, ArgoCD application) and `helm-values/slotting-optimization.yaml` turns on `EVENT_PUBLISHER=kafka` and the four consumers (the three local copies and `RELOCATION_MODE`). It runs once warehouse-infra is applied, and the `RELOCATE` process path must be seeded first. | [slotting-optimization Business Context](/contexts/slotting-optimization/business-context), [ecosystem gaps tracker](/fleet-health/ecosystem-gaps) 6 |
 | H39 | pick-face-replenishment | Not deployed: `warehouse-infra` `develop` has no database, Kong route, ArgoCD application, values file or dashboard for it, and its repository has no Dockerfile or Helm chart. Its two live inputs (K39, K40) feed no running instance. | [pick-face-replenishment Business Context](/contexts/pick-face-replenishment/business-context), [Runbook](/contexts/pick-face-replenishment/runbook) (deployment status) |
-| H40 | pick-face-replenishment | A request cannot yet reach the floor: `inventory-storage` publishes `BinStockLevelChanged` and records a completed `REPLENISH` task as a `REPLENISHMENT` relocation (its ADR 0040, ADR 0041) and `fulfillment-execution` runs `REPLENISH` tasks (its ADR 0050), but nothing consumes `ReplenishmentRequested`: `wes-work-planning` has no `REPLENISH` work unit and `process-path-management` no `REPLENISH` path (K42 to K44) | [pick-face-replenishment context map](/contexts/pick-face-replenishment/context-map), [Async API](/contexts/pick-face-replenishment/async-api) |
+| ~~H40~~ | pick-face-replenishment | ~~A request cannot yet reach the floor: nothing consumes `ReplenishmentRequested`~~ **Resolved 2026-10-17 on `develop`.** `wes-work-planning` ADR 0042 plans one `REPLENISH` work unit per request (consumer `internal/adapters/inbound/kafka/replenishment_consumer.go`, opt-in `REPLENISHMENT_MODE=kafka`) and `process-path-management` ADR 0036 declares the `REPLENISH` path; `fulfillment-execution` ADR 0050 and `inventory-storage` ADR 0040 and 0041 were already built. K44 is **wired-but-unused**: the consumer is off by default and `pick-face-replenishment` is not deployed (H39). | [pick-face-replenishment context map](/contexts/pick-face-replenishment/context-map), [Async API](/contexts/pick-face-replenishment/async-api) |
 | H41 | task-interleaving | Not deployed: `warehouse-infra` `develop` has no database, Kong route, ArgoCD application, values file or dashboard for it, and its repository has no Dockerfile or Helm chart. Its three inputs (K41, K45, K46) feed no running instance. | [task-interleaving Business Context](/contexts/task-interleaving/business-context), [Runbook](/contexts/task-interleaving/runbook) (deployment status) |
 | H42 | task-interleaving | The hint has no reader: `fulfillment-execution` has no consumer of `InterleavingHintIssued`, no hint table and no `claimNext` tie-break (its ADR 0049 and ADR 0050 list it as out of scope) (K47) | [task-interleaving context map](/contexts/task-interleaving/context-map), [Async API](/contexts/task-interleaving/async-api) |
 | H35 | product-master | Stage E (remove the legacy importer, the inventory-storage backfill and the deprecated classification endpoint) has no date | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0003, stage E) |
