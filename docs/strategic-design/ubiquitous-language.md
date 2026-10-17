@@ -44,6 +44,8 @@ wins. For one alphabetical index across every context, see
 | `network-inventory-planning` | InterWarehouseTransfer, Proposal, ScoreBreakdown, PlanningSnapshot, SiteCapability, SiteSkuDemand, WorkDemand, Picked quantity, StuckTransfer, RebalanceRun | [Ubiquitous Language](/contexts/network-inventory-planning/ubiquitous-language) |
 | `inbound-receiving` | ASN, Dock appointment, Receipt, Receipt line, Condition (Good or Damaged), Discrepancy (Short, Over, Damaged), Dock door | [Ubiquitous Language](/contexts/inbound-receiving/ubiquitous-language) |
 | `slotting-optimization` | Slot plan (Draft, Approved, Rejected, Superseded), Forward slot, Velocity, ABC class, Stickiness, Policy (`abc-velocity-v1`), Assignment, Move (Assign, Relocate, Vacate), Unassigned | [Ubiquitous Language](/contexts/slotting-optimization/ubiquitous-language) |
+| `pick-face-replenishment` (planned) | Pick face, Reserve bin, Min/max, Replenishment request, Projected level | none yet (see [Planned terms](#planned-terms-pick-face-replenishment-and-task-interleaving)) |
+| `task-interleaving` (planned) | Station trip, Interleaving hint, Detour | none yet (see [Planned terms](#planned-terms-pick-face-replenishment-and-task-interleaving)) |
 
 ## Shared terms
 
@@ -71,6 +73,26 @@ no Shared Kernel".
 | **Discrepancy** | At receipt close, a line whose count differs from the ASN: **Short** (fewer than expected), **Over** (more than expected) or **Damaged** (damaged units). Carried on `ReceiptClosed` as `kind`, `expected_qty`, `received_qty` and `damaged_qty`. In `product-master` the same word means something else (measured versus declared dimensions); see below. | `inbound-receiving` | no consumer yet |
 | **Receipt condition** | `Good` or `Damaged` on `ReceiptLineReceived`. Only `Good` units become receivable stock in `inventory-storage`; damaged units stay on the receipt and quarantine is a later ADR. | `inbound-receiving` | `inventory-storage` (live: its ADR 0037 consumer runs in the reference deployment) |
 | **Forward-pick slot** | A storage-role, active slot in a forward zone (`FORWARD_ZONE_CODES`, default `FWD`) that holds one SKU for picking. The approved SKU-to-slot map is published on `SlotPlanApproved`. | `slotting-optimization` | consumed by `wes-work-planning` as one `RELOCATE` work unit per move (its ADR-0040) |
+
+## Planned terms: pick-face-replenishment and task-interleaving
+
+Scaffolded 2026-10-17, contracts and domain in progress; consumers and the
+producer-side changes of other contexts are planned, not built. These
+definitions are the pinned design, not synced glossaries (neither context has
+a glossary page yet, so the owner column names the context).
+
+| Term | Meaning | Owner |
+| --- | --- | --- |
+| **Pick face** | The forward-pick slot that holds one SKU for picking, seen as a stock level against a min/max. Not a new location type: it is a [Forward-pick slot](#shared-terms) of `slotting-optimization` plus the bin level. | `pick-face-replenishment` (uses the slot defined by `slotting-optimization`) |
+| **Forward pick slot** | Already defined above as **Forward-pick slot**. Linked, not redefined. Its assignment arrives as the full forward map on `SlotPlanApproved`. | `slotting-optimization` |
+| **Reserve bin** | A bin in a reserve zone (`RESERVE_ZONE_CODES`, default `RSV`) of the same site that holds the SKU. The source of a replenishment. v1 picks the one with the largest `on_hand - reserved` (`fullest-reserve-bin-v1`). | `pick-face-replenishment` |
+| **Min/max** | The v1 replenishment policy per site and SKU (`MIN_MAX`): below `min_qty` a request is raised to refill toward `max_qty`, rounded down to a `multiple`. Demand-cover is a documented planned policy version. | `pick-face-replenishment` |
+| **Projected level** | `on_hand - reserved + open_inbound` of a pick face at detection. A request quantity never takes it above `max_qty`. | `pick-face-replenishment` |
+| **Replenishment request** | The aggregate `ReplenishmentRequest`: `Requested`, then `Completed` or `Cancelled`. At most one open per site, forward bin and SKU. It is closed only by a `StockRelocated` with reason `REPLENISHMENT`. | `pick-face-replenishment` |
+| **Station trip** | The aggregate `StationTrip`: one per station, holding its last known position and at most one active hint. | `task-interleaving` |
+| **Interleaving hint** | An advisory, expiring ranked list of up to `max_candidates` open tasks near where a station just finished (`InterleavingHintIssued`). `fulfillment-execution` may use it only as a tie-break inside one priority band, and ignores it when absent or expired. It is never an assignment. | `task-interleaving` |
+| **Detour** | `detour_m`: the travel distance cost of a candidate task from the station's position, measured by the `rectilinear-v1` travel model and capped by `max_detour_m`; candidates are ranked by it, ascending. | `task-interleaving` |
+| **Waveless release** | Already defined: continuous, priority-ordered admission of work. See `wes-work-planning` in [Same word, different model](#same-word-different-model) under "Release" and the [fulfillment-execution glossary](/contexts/fulfillment-execution/ubiquitous-language). Linked, not redefined. | `wes-work-planning` |
 
 ## Same word, different model
 

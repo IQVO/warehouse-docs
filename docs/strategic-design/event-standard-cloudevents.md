@@ -130,6 +130,7 @@ Subdomain and bounded-context segments (authoritative):
 | product-master | wms | product-master | /warehouse/product-master |
 | inbound-receiving        | wms       | inbound-receiving        | /warehouse/inbound-receiving |
 | slotting-optimization    | wms       | slotting-optimization    | /warehouse/slotting-optimization |
+| pick-face-replenishment  | wms       | pick-face-replenishment  | /warehouse/pick-face-replenishment |
 | order-management         | wes       | order-management         | /warehouse/order-management |
 | process-path-management  | wes       | process-path-management  | /warehouse/process-path-management |
 | warehouse-planning       | wes       | warehouse-planning       | /warehouse/warehouse-planning |
@@ -139,6 +140,16 @@ Subdomain and bounded-context segments (authoritative):
 | fulfillment-execution    | wes       | fulfillment-execution    | /warehouse/fulfillment-execution |
 | wes-work-planning        | wes       | work-planning            | /warehouse/wes-work-planning |
 | network-inventory-planning | wes     | network-inventory-planning | /warehouse/network-inventory-planning |
+| task-interleaving        | wes       | task-interleaving        | /warehouse/task-interleaving |
+
+`pick-face-replenishment` and `task-interleaving`: scaffolded 2026-10-17,
+contracts and domain in progress; consumers and the producer-side changes of
+other contexts are planned, not built. Their rows above and in the catalogue
+below are the pinned design, not deployed producers. Topics:
+`warehouse.pick-face-replenishment.events` / `.analytics` (type prefix
+`com.warehouse.wms.pick-face-replenishment.`) and
+`warehouse.task-interleaving.events` / `.analytics` (type prefix
+`com.warehouse.wes.task-interleaving.`).
 
 Entity segments for repos that had no catalogue yet:
 
@@ -151,6 +162,8 @@ Entity segments for repos that had no catalogue yet:
 - network-inventory-planning: `TransferPlanApproved` / `TransferAllocationRequested` → `transfer`; `WorkDemandReleased` → `workdemand` (the name wes-work-planning's consumed contract uses); the analytics occurrences `TransferStateAdvanced` / `TransferStuckDetected` / `RebalanceRunCompleted` → `saga` (network-inventory-planning ADR 0004)
 - inbound-receiving: `ASN*` → `asn`; `DockAppointment*` → `dockappointment`; `Receipt*` → `receipt` (inbound-receiving ADR 0004)
 - slotting-optimization: every `SlotPlan*` event → `slotplan` (slotting-optimization ADR 0004)
+- pick-face-replenishment (planned, in progress): `ReplenishmentRequested` / `ReplenishmentCompleted` / `ReplenishmentCancelled` → `replenishment`; `ReplenishmentPolicyDeclared` (analytics only) → `policy`
+- task-interleaving (planned, in progress): `InterleavingHintIssued` / `InterleavingHintConsumed` / `InterleavingHintExpired` → `stationtrip`; `InterleavingPolicyDeclared` (analytics only) → `policy`
 
 Repos that already have an AsyncAPI catalogue keep the entity segments
 already documented there. Events not yet in a catalogue get the entity of
@@ -163,9 +176,10 @@ a suffix match) and these must be byte-identical on both sides:
 
 | `type` | consumed by |
 | --- | --- |
-| `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | inventory-storage, warehouse-planning, inbound-receiving, slotting-optimization |
-| `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | inventory-storage, warehouse-planning, inbound-receiving, slotting-optimization |
-| `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | inventory-storage, slotting-optimization |
+| `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | inventory-storage, warehouse-planning, inbound-receiving, slotting-optimization; planned: pick-face-replenishment, task-interleaving (in progress) |
+| `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | inventory-storage, warehouse-planning, inbound-receiving, slotting-optimization; planned: pick-face-replenishment, task-interleaving (in progress) |
+| `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | inventory-storage, slotting-optimization; planned: pick-face-replenishment (in progress) |
+| `com.warehouse.wms.facility-layout.locationslot.LocationGeometryUpdated` | planned: task-interleaving (in progress); published by facility-layout |
 | `com.warehouse.wms.facility-layout.site.SiteCapabilityChanged` | network-inventory-planning |
 | `com.warehouse.wms.inventory-storage.reservation.StockReserved` | wes-work-planning |
 | `com.warehouse.wms.inventory-storage.reservation.ReservationRevoked` | wes-work-planning |
@@ -173,7 +187,8 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wms.inventory-storage.reservation.TransferStockAllocationRejected` | network-inventory-planning |
 | `com.warehouse.wms.inventory-storage.stock.TransferReceiptStaged` | network-inventory-planning |
 | `com.warehouse.wms.inventory-storage.stock.TransferStockStowed` | network-inventory-planning |
-| `com.warehouse.wms.inventory-storage.stock.StockRelocated` | slotting-optimization (plan execution progress; inventory-storage ADR 0039, slotting-optimization ADR 0010) |
+| `com.warehouse.wms.inventory-storage.stock.StockRelocated` | slotting-optimization (plan execution progress; inventory-storage ADR 0039, slotting-optimization ADR 0010); planned: pick-face-replenishment closes a request on `reason == REPLENISHMENT` (in progress) |
+| `com.warehouse.wms.inventory-storage.stock.BinStockLevelChanged` | planned, not yet published: pick-face-replenishment (in progress; additive producer change on inventory-storage, consumer ships first) |
 | `com.warehouse.wms.inventory-storage.product.ProductClassified` | retiring: backfill-only after inventory-storage ADR 0034, consumed by product-master's legacy importer until stage E |
 | `com.warehouse.wms.product-master.product.ProductRegistered` | inbound-receiving |
 | `com.warehouse.wms.product-master.product.ProductDescriptionChanged` | (published contract; no consumer yet) |
@@ -190,8 +205,11 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` | inventory-storage (its ADR 0037) |
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed` | (published contract; no consumer yet) |
 | `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanGenerated` | (published contract; no consumer yet) |
-| `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved` | wes-work-planning (one `RELOCATE` work unit per move, its ADR-0040; slotting-optimization ADR 0010) |
+| `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved` | wes-work-planning (one `RELOCATE` work unit per move, its ADR-0040; slotting-optimization ADR 0010); planned: pick-face-replenishment (forward map; in progress) |
 | `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanRejected` | (published contract; no consumer yet) |
+| `com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentRequested` | planned, not yet published: wes-work-planning (one `REPLENISH` work unit; pick-face-replenishment in progress) |
+| `com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentCompleted` | planned, not yet published (published contract; no consumer yet) |
+| `com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentCancelled` | planned, not yet published (published contract; no consumer yet) |
 | `com.warehouse.wes.order-management.order.OrderAllocated` | wes-work-planning |
 | `com.warehouse.wes.order-management.order.OrderPartiallyAllocated` | wes-work-planning |
 | `com.warehouse.wes.order-management.order.OrderRepromised` | (published contract) |
@@ -202,7 +220,9 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged` | order-management |
 | `com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded` | workforce-management (and labor-performance itself) |
 | `com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted` | wes-work-planning, warehouse-planning |
-| `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` | wes-work-planning, labor-performance, inventory-storage (picks, and RELOCATE moves via the additive RELOCATE fields, fulfillment-execution ADR 0047) |
+| `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` | wes-work-planning, labor-performance, inventory-storage (picks, and RELOCATE moves via the additive RELOCATE fields, fulfillment-execution ADR 0047); planned: task-interleaving (in progress) |
+| `com.warehouse.wes.fulfillment-execution.task.TaskAvailable` | planned, not yet published: task-interleaving (in progress; additive producer change on fulfillment-execution, consumer ships first) |
+| `com.warehouse.wes.fulfillment-execution.task.TaskClaimed` | planned, not yet published on the integration topic: task-interleaving (in progress; already an analytics occurrence) |
 | `com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed` | order-management |
 | `com.warehouse.wes.fulfillment-execution.package.PackageManifested` | order-management |
 | `com.warehouse.wes.fulfillment-execution.transfer.TransferPicked` | network-inventory-planning |
@@ -217,6 +237,7 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wes.network-inventory-planning.transfer.TransferPlanApproved` | (published contract; no consumer yet) |
 | `com.warehouse.wes.network-inventory-planning.transfer.TransferAllocationRequested` | inventory-storage |
 | `com.warehouse.wes.network-inventory-planning.workdemand.WorkDemandReleased` | wes-work-planning |
+| `com.warehouse.wes.task-interleaving.stationtrip.InterleavingHintIssued` | planned, not yet published: fulfillment-execution (advisory tie-break inside one priority band; task-interleaving in progress) |
 
 ## 5. Consumer rules
 

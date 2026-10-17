@@ -47,8 +47,13 @@ four consumers, so the edges are **live**. The `RELOCATE` process path must be
 seeded in `process-path-management` first. Nothing in `warehouse-ops-agent`
 calls the MCP server yet.
 
-**Planned, not built:** `REPLENISH` (min/max) work, an analytics read side and
-a console remote.
+**Not owned here:** `REPLENISH` (min/max) work belongs to
+`pick-face-replenishment` (scaffolded 2026-10-17, contracts and domain in
+progress; consumers and the producer-side changes of other contexts are
+planned, not built). It will consume this context's `SlotPlanApproved` as the
+forward map.
+
+**Planned, not built:** an analytics read side and a console remote.
 :::
 
 It owns one aggregate, **`SlotPlan`** (package `internal/domain/slotplan`),
