@@ -225,9 +225,9 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanGenerated` | (published contract; no consumer yet) |
 | `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved` | wes-work-planning (one `RELOCATE` work unit per move, its ADR-0040; slotting-optimization ADR 0010); pick-face-replenishment (forward map; consumer built, not deployed) |
 | `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanRejected` | (published contract; no consumer yet) |
-| `com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentRequested` | published by pick-face-replenishment's code (not deployed); planned consumer, not built: wes-work-planning has no consumer and no `REPLENISH` work unit |
-| `com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentCompleted` | (published contract; not deployed; no consumer yet) |
-| `com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentCancelled` | (published contract; not deployed; no consumer yet) |
+| `com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentRequested` | wes-work-planning (one `REPLENISH` work unit per request id, its ADR 0042; opt-in `REPLENISHMENT_MODE=kafka`, off in the reference deployment; the producer is built, not deployed; context map K44, wired-but-unused) |
+| `com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentCompleted` | (published contract; not deployed; no consumer: wes-work-planning reads the topic and ignores this type, its ADR 0042) |
+| `com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentCancelled` | wes-work-planning (cancels the request's `REPLENISH` unit while it is still Pending, its ADR 0042; same opt-in as `ReplenishmentRequested`; producer built, not deployed) |
 | `com.warehouse.wes.order-management.order.OrderAllocated` | wes-work-planning |
 | `com.warehouse.wes.order-management.order.OrderPartiallyAllocated` | wes-work-planning |
 | `com.warehouse.wes.order-management.order.OrderRepromised` | (published contract) |
@@ -246,7 +246,7 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wes.fulfillment-execution.transfer.TransferPicked` | network-inventory-planning |
 | `com.warehouse.wes.fulfillment-execution.transfer.TransferDispatched` | network-inventory-planning |
 | `com.warehouse.wes.fulfillment-execution.transfer.TransferArrived` | network-inventory-planning (reserved kind; scan-driven receiving can bypass it) |
-| `com.warehouse.wes.work-planning.workunit.WorkReleased` | fulfillment-execution |
+| `com.warehouse.wes.work-planning.workunit.WorkReleased` | fulfillment-execution (also the additive `relocation` object on the `RELOCATE` path, its ADR 0047, and the additive `replenishment` object on the `REPLENISH` path, its ADR 0050, produced by wes-work-planning's ADR 0042) |
 | `com.warehouse.wes.work-planning.workunit.WorkUnitCreated` | order-management (its ADR 0043; reads only the optional `reference` and `line_no` that wes-work-planning's ADR 0041 added; off by default, `RELEASE_CONFIRMATION_MODE`, not set in the reference deployment) |
 | `com.warehouse.wes.work-planning.workpool.PathCapacityChanged` | order-management |
 | `com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanCreated` | order-management (its ADR 0031; opt-in `PLANNED_CAPACITY_CONSUMER_GROUP`, set in the reference deployment) |

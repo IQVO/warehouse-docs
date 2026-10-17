@@ -64,8 +64,11 @@ set in the reference deployment), `inbound-receiving`'s `ReceiptLineReceived`
 allocation commands (ADR-0030) and `fulfillment-execution`'s `TaskCompleted`
 from `warehouse.fulfillment.events` (`TASK_COMPLETED_CONSUMER_MODE=kafka`, set
 in the reference deployment): a `PICK` completion confirms the picked line's
-reservation (ADR-0035 and ADR-0036), and a `RELOCATE` completion moves stock
-between two bins through `RelocateStock` (ADR 0039).
+reservation (ADR-0035 and ADR-0036), a `RELOCATE` completion moves stock
+between two bins through `RelocateStock` (ADR 0039), and a `REPLENISH` completion does
+the same with reason `REPLENISHMENT` (ADR 0041).
+It also publishes `BinStockLevelChanged` (ADR 0040), the absolute per-bin level
+feed that `pick-face-replenishment` reads.
 Its legacy `ProductClassified` is emitted only by the one-shot
 `republish-product-classifications` backfill, for `product-master`'s
 migration importer.
@@ -91,7 +94,12 @@ stale. It is reached two ways, and both raise
 - a completed `RELOCATE` task from `fulfillment-execution`, applied by the
   `TaskCompleted` consumer from the additive `sku`, `from_bin`, `to_bin`,
   `quantity` and `relocation_ref` fields (reason `SLOTTING`, `source_ref` =
-  `relocation_ref`, the move reference `<plan_id>:<move_seq>`).
+  `relocation_ref`, the move reference `<plan_id>:<move_seq>`);
+- a completed `REPLENISH` task (ADR 0041), applied by the same consumer from the
+  same fields plus the required `request_ref` (reason `REPLENISHMENT`, `source_ref`
+  = `request_ref`, the `pick-face-replenishment` request id). No `REPLENISH` task is
+  created in the reference deployment today: the planner's consumer in
+  `wes-work-planning` is off and `pick-face-replenishment` is not deployed (K44).
 
 `slotting-optimization` consumes `StockRelocated` to show how far an approved
 slot plan has been executed. See [Business Context](/contexts/inventory-storage/business-context#relocation-slot-plans-reach-the-ledger)

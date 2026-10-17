@@ -41,7 +41,7 @@ single writer of it), so it is a context of its own (ADR 0001).
 | Aggregates | `ReplenishmentPolicy` (package `internal/domain/policy`) and `ReplenishmentRequest` (package `internal/domain/replenishment`), ADR 0002 |
 | Detector | the pure function `Detect` in `internal/domain/detection`, with the `SourceBinPolicy` port (v1: `fullest-reserve-bin-v1`) |
 | Binaries | one: `cmd/api` (REST on `HTTP_ADDR`, default `:8080`, plus up to three Kafka consumers and the outbox relay as goroutines). There is **no** `cmd/mcp` |
-| Data store | one Postgres database (embedded migrations), or in-memory adapters when `DATABASE_URL` is unset |
+| Data store | one Postgres database (embedded migrations). `DATABASE_URL` and `KAFKA_BROKERS` are mandatory (a boot error naming the variable); the in-memory adapters are test doubles only (its ADR 0006) |
 | Kafka | publishes `warehouse.pick-face-replenishment.events` and `warehouse.pick-face-replenishment.analytics`; consumes `warehouse.inventory.events`, `warehouse.slotting-optimization.events` and `warehouse.facility.events` (ADR 0003, ADR 0004) |
 | Auth | none (fleet-wide decision) |
 
@@ -97,10 +97,10 @@ later version behind the same port. It does not exist today.
 | Raise a request by hand | `POST /replenishments` | `RaiseManualRequest` |
 | Read requests | `GET /replenishments`, `GET /replenishments/{requestId}` | `GetRequest`, `ListRequests` |
 | Cancel a request | `POST /replenishments/{requestId}/cancel` | `CancelRequest` |
-| Raise requests as bin levels or the forward map change | Kafka consumers (`INVENTORY_MODE`, `SLOTTING_MODE`, `LAYOUT_MODE` = `kafka`) | `ApplyBinLevel`, `ApplyRelocation`, `ApplyForwardAssignmentMap`, `ApplyZone`, `ApplyLocationRegistered`, `ApplyLocationDecommissioned` |
-| Publish requests and their outcome | transactional outbox + relay (needs `DATABASE_URL` and `KAFKA_BROKERS`) | every write use case |
+| Raise requests as bin levels or the forward map change | Kafka consumers (always on; `INVENTORY_MODE`, `SLOTTING_MODE` and `LAYOUT_MODE` default to `kafka`) | `ApplyBinLevel`, `ApplyRelocation`, `ApplyForwardAssignmentMap`, `ApplyZone`, `ApplyLocationRegistered`, `ApplyLocationDecommissioned` |
+| Publish requests and their outcome | transactional outbox + relay (always on; both are mandatory) | every write use case |
 
-The write endpoints take an `Idempotency-Key` that is enforced with Postgres.
+The write endpoints require an `Idempotency-Key` in every deployment (enforced with Postgres).
 The full catalogue is on [Use Cases](/contexts/pick-face-replenishment/use-cases).
 
 ## What it deliberately does not do
@@ -111,7 +111,9 @@ The full catalogue is on [Use Cases](/contexts/pick-face-replenishment/use-cases
   at all.
 - **Create floor work.** It publishes `ReplenishmentRequested`;
   `wes-work-planning` and `fulfillment-execution` own work and task state. A
-  request already released as floor work is not recalled by a cancel here.
+  cancel withdraws the planned unit only while `wes-work-planning` still holds it
+  Pending (its ADR 0042); a request already released as floor work is not
+  recalled.
 - **Write the stock ledger.** It requests a move; `inventory-storage` records
   it.
 - **Guess.** With no level, no assignment, no reserve location copy or no
@@ -136,17 +138,21 @@ It has no edge to `inbound-receiving`, `order-management` or `product-master`
   (its Runbook says so). It runs only from a locally built binary or image.
   Its declared Kong URL, `http://localhost:8000/api/pick-face-replenishment`,
   therefore routes nowhere yet.
-- **The execution chain is not complete.** The inputs from
-  `slotting-optimization`, `facility-layout` and `inventory-storage` are
+- **The execution chain is complete on `develop`, and switched off.** The inputs
+  from `slotting-optimization`, `facility-layout` and `inventory-storage` are
   published by producers on `develop` (`inventory-storage` publishes
   `BinStockLevelChanged` and records a completed `REPLENISH` task as a
-  `StockRelocated` with reason `REPLENISHMENT`, its ADR 0040 and ADR 0041), and
-  `fulfillment-execution` runs `REPLENISH` tasks (its ADR 0050). `wes-work-planning`
-  has no `REPLENISH` work path (P3b) and `process-path-management` no
-  `REPLENISH` path, so nothing turns a `ReplenishmentRequested` into floor
-  work. Both consumed contracts were pinned consumer-first (ADR 0003) and the
-  producers now match them (field names equal, key `<bin>:<sku>`). Until the
-  planner exists a request can be raised and cancelled but not completed.
+  `StockRelocated` with reason `REPLENISHMENT`, its ADR 0040 and ADR 0041).
+  The output side exists as well: `wes-work-planning` consumes
+  `ReplenishmentRequested` and `ReplenishmentCancelled` and plans one
+  `REPLENISH` work unit per request (its ADR 0042), `process-path-management`
+  declares the `REPLENISH` path (its ADR 0036) and `fulfillment-execution` runs
+  `REPLENISH` tasks (its ADR 0050). Both consumed contracts were pinned
+  consumer-first (ADR 0003) and the producers now match them (field names
+  equal, key `<bin>:<sku>`). The planner's consumer is opt-in
+  (`REPLENISHMENT_MODE=kafka`; the default consumes nothing) and
+  `warehouse-infra` does not set it, so no request reaches the floor in the
+  reference cluster.
 - An analytics read side (`warehouse.pick-face-replenishment.analytics` is
   written, but nothing reads it), a `warehouse-ops-agent` client and a console
   remote are later phases. None of them exists yet.

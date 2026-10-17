@@ -18,8 +18,8 @@ fleet-wide, mandatory [Event Standard](/strategic-design/event-standard-cloudeve
 
 | Direction | Topic | Event(s) | Adapter |
 | --- | --- | --- | --- |
-| Consume | `warehouse.work-planning.events` | `WorkReleased` (including `RELOCATE` work, which carries a `relocation` object, ADR-0047) | `internal/adapters/inbound/kafka/consumer.go` |
-| Publish | `warehouse.fulfillment.events` | `TaskCompleted` (with additive RELOCATE fields), `TaskCPTMissed`, `PackageManifested`, and the transfer facts | `internal/adapters/outbound/kafka/publisher.go` |
+| Consume | `warehouse.work-planning.events` | `WorkReleased` (including `RELOCATE` work, which carries a `relocation` object, ADR-0047, and `REPLENISH` work, which carries a `replenishment` object, ADR-0050) | `internal/adapters/inbound/kafka/consumer.go` |
+| Publish | `warehouse.fulfillment.events` | `TaskCompleted` (with additive RELOCATE and REPLENISH fields), `TaskAvailable` and `TaskClaimed` (the open-task pool), `TaskCPTMissed`, `PackageManifested`, and the transfer facts | `internal/adapters/outbound/kafka/publisher.go` |
 | Publish (internal) | `warehouse.fulfillment.analytics` | ten event types (all but `TaskCPTMissed` and the two Rebin events), consumed only by this service's `cmd/fulfillment-projector` | `internal/adapters/outbound/kafka/analytics_publisher.go` |
 | Consume (opt-in) | `warehouse.process-path-management.events` | process-path catalogue events | `internal/adapters/outbound/kafkacatalog` — only when `PATH_CATALOGUE_SOURCE=kafka` |
 | Consume (opt-in) | `warehouse.product-master.events` | `ProductClassified` only, into the `product_classification_copy` table read per scanned SKU at seal time for DOT segregation ([ADR-0039](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0039-product-classification-local-copy.md)) | `internal/adapters/inbound/kafka/product_classified_consumer.go`, `internal/adapters/outbound/productclassificationcopy` — only when `PRODUCT_CLASSIFICATION_MODE=kafka`, group `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`; set in the reference deployment. `http` (the former REST lookup to `inventory-storage`) fails the boot |
@@ -133,6 +133,42 @@ unknown `kind`, a bin the kind requires but lacks, equal bins, a blank
 any other path is dead-lettered to `warehouse.work-planning.events.dlq` and no
 task is created. `ref` (the plan id) is not stored.
 
+### `WorkReleased` for a pick-face top-up: the `replenishment` object
+
+Work that `wes-work-planning` releases on the `REPLENISH` path (one work unit per
+`pick-face-replenishment` request, its ADR-0042) carries one more optional, nested
+object, next to `relocation`
+([ADR-0050](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0050-replenish-tasks-execute-pick-face-replenishment.md)):
+
+```json
+{
+  "path_id": "REPLENISH",
+  "work_unit_id": "replenish-req-9",
+  "cpt": "2026-09-30T16:00:00Z",
+  "ref": "req-9",
+  "replenishment": {
+    "request_id": "req-9",
+    "sku": "SKU-1",
+    "from_bin": "WH1-RSV-AMB-B02-03-02-C",
+    "to_bin": "WH1-FWD-AMB-A01-01-01-A",
+    "quantity": 24,
+    "priority": "URGENT"
+  }
+}
+```
+
+All six fields are required (`quantity` at least 1, `to_bin` different from
+`from_bin`, `priority` `NORMAL` or `URGENT` in exact case). The consumer turns it into a
+`REPLENISH` task (capability `replenish` from the catalogue, never created through
+`POST /tasks`) that is announced on `TaskAvailable` like a `RELOCATE` task. The pairing
+rule is ADR-0047's, extended: `REPLENISH`-path work without the object
+(`ErrReplenishmentMoveMissing`), the object on another path, a `relocation` object on the
+`REPLENISH` path, or an invalid move is dead-lettered to
+`warehouse.work-planning.events.dlq` and no task is created. `URGENT` does not sort ahead
+of `NORMAL` in `claimNext` (it orders by CPT only); `wes-work-planning` expresses the
+urgency through an earlier CPT. Nothing in the reference deployment releases
+`REPLENISH` work today, because the planner's consumer is switched off (fleet edge K44).
+
 ## Publishing: `TaskCompleted`
 
 ```json
@@ -180,6 +216,17 @@ Two groups of optional, additive fields keep the event at v1:
   `Vacate` (destination), so these are what actually moved, not just what was
   planned. `relocation_ref` is `<plan_id>:<move_seq>`, copied from
   `WorkReleased.data.relocation`. Every other task type omits all five.
+- **REPLENISH only** (ADR-0050): a `REPLENISH` task's `TaskCompleted` carries
+  `task_type: "REPLENISH"`, `sku`, `from_bin`, `to_bin`, the operator-confirmed
+  `quantity` and the additive `request_ref` (the `pick-face-replenishment` request id,
+  copied from `WorkReleased.data.replenishment.request_id`); `relocation_ref`,
+  `order_ref` and `line_no` are absent. `inventory-storage` applies it as a
+  `RelocateStock` with reason `REPLENISHMENT` and `source_ref` = `request_ref`
+  (its ADR-0041), which `pick-face-replenishment` matches back to close the request.
+  Completing a `REPLENISH` task takes `quantity` (required) and optional
+  `fromBin`/`toBin` scans that must equal the planned bins, refused with a `422`
+  (`replenishment-confirmation-required`, `invalid-replenishment-confirmation`)
+  otherwise.
 
 ```json
 {

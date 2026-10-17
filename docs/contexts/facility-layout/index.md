@@ -66,7 +66,8 @@ consumes no other context's events. Its relationships, per its own
 - **REST**: `wes-work-planning` calls `GET /distance` for travel distance
   (`TRAVEL_DISTANCE_MODE=http`). `fulfillment-execution` has an opt-in
   `GET /locations/{locationCode}` lookup for a slot's functional `role`
-  (`LOCATION_ROLE_MODE=http`, default `permissive`). `inventory-storage`
+  (`LOCATION_ROLE_MODE=http`, default `permissive`; `warehouse-infra` `develop` sets `http` since
+  its #92, with a `terraform apply` pending). `inventory-storage`
   keeps `GET /locations/{locationCode}/classification` as a wired rollback
   path (`LOCATION_LOOKUP_MODE=http`). The geometry and role features behind
   these calls come from ADR 0016 (location roles) and ADR 0017 (geometry and

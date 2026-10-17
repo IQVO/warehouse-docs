@@ -51,10 +51,12 @@ calls the MCP server yet.
 `pick-face-replenishment` (`wms`, Supporting), [built on `develop`](/contexts/pick-face-replenishment)
 (2026-10-17). It consumes this context's `SlotPlanApproved` as the forward map, but it is
 not deployed: `warehouse-infra` `develop` has no values file, route or ArgoCD application for it, so the edge is
-wired-but-unused (K39 in the fleet [Context Map](/strategic-design/context-map)). Most of the
-loop it needs is built: `inventory-storage` publishes `BinStockLevelChanged` and the
-`REPLENISHMENT` relocation reason (its ADR 0040 and ADR 0041) and `fulfillment-execution` runs
-`REPLENISH` tasks (its ADR 0050). `wes-work-planning` has no `REPLENISH` work, so nothing plans them yet.
+wired-but-unused (K39 in the fleet [Context Map](/strategic-design/context-map)). The whole
+loop it needs is built on `develop`: `inventory-storage` publishes `BinStockLevelChanged` and the
+`REPLENISHMENT` relocation reason (its ADR 0040 and ADR 0041), `wes-work-planning` plans `REPLENISH`
+work from `ReplenishmentRequested` (its ADR 0042, opt-in and off in the reference deployment),
+`process-path-management` declares the `REPLENISH` path (its ADR 0036) and `fulfillment-execution`
+runs `REPLENISH` tasks (its ADR 0050). Nothing runs it yet (K44, wired-but-unused).
 This context's own `RecordRelocation` ignores a `REPLENISHMENT` relocation: since its PR #35 only reason
 `SLOTTING` executes a slot-plan move.
 

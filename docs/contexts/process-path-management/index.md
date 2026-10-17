@@ -20,6 +20,14 @@ each path also declares a p95 cycle time and eligibility rules, and the
 context owns a second aggregate — a site-scoped **CPT schedule** — so
 `order-management` can derive its delivery promise from path capability.
 
+The catalogue also carries the work paths of the floor-work chains that are not
+customer orders: `RELOCATE` for approved slot-plan moves (ADR 0033), `DISPATCH`
+for transfer legs (ADR 0035) and `REPLENISH` for pick-face top-ups (ADR 0036, intake
+`REPLENISHMENT`, required capability `replenish`), which
+`wes-work-planning` plans from `pick-face-replenishment`'s requests and
+`fulfillment-execution` executes (fleet edge K44, wired-but-unused until the
+`wes-work-planning` consumer is switched on).
+
 It replaces a static YAML file
 (`warehouse-infra/config/process-paths/sortable-fc.yaml`) that
 `fulfillment-execution`, `wes-work-planning`, and `workforce-management`
