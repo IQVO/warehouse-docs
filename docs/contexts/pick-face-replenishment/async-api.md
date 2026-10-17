@@ -28,7 +28,7 @@ producer or consumer publishes today.
 
 | Topic | Direction | Notes |
 | --- | --- | --- |
-| `warehouse.pick-face-replenishment.events` | **Published** | `ReplenishmentRequested`, `ReplenishmentCompleted` and `ReplenishmentCancelled` from the `ReplenishmentRequest` aggregate, written by the transactional outbox relay. Key = the request id. No consumer exists in any repository checked: `wes-work-planning` is the intended one for `ReplenishmentRequested` (planned). |
+| `warehouse.pick-face-replenishment.events` | **Published** | `ReplenishmentRequested`, `ReplenishmentCompleted` and `ReplenishmentCancelled` from the `ReplenishmentRequest` aggregate, written by the transactional outbox relay. Key = the request id. `wes-work-planning` consumes `ReplenishmentRequested` and `ReplenishmentCancelled` (its ADR 0042, opt-in and off in the reference deployment); `ReplenishmentCompleted` has no consumer. |
 | `warehouse.pick-face-replenishment.analytics` | **Published** | The same three request events again (same `type`, same CloudEvents `id`, dataschema `...:analytics:<EventName>:v1`) plus the analytics-only `ReplenishmentPolicyDeclared` (key and subject `<site_id>/<sku>`). No reader exists yet. |
 | `warehouse.inventory.events` | Consumed | Only `BinStockLevelChanged` (key `<bin>:<sku>`) and `StockRelocated` (key `relocation_id`). Started only when `INVENTORY_MODE=kafka`, group from `INVENTORY_CONSUMER_GROUP`. |
 | `warehouse.slotting-optimization.events` | Consumed | Only `SlotPlanApproved`. Started only when `SLOTTING_MODE=kafka`, group from `SLOTTING_CONSUMER_GROUP`. |
@@ -96,8 +96,9 @@ Example from the spec (`ReplenishmentRequested`):
 Removing a policy raises no event of its own: its open requests are cancelled
 with reason `POLICY_REMOVED`. `ReplenishmentRequested` is the only event that
 asks the floor to do something. `ReplenishmentCancelled` tells a downstream to
-drop work it has not released; a request already planned or released as floor
-work is not recalled by this service.
+drop work it has not released (`wes-work-planning` cancels the unit only while it
+is Pending); a request already released as floor work is not recalled by this
+service.
 
 ## Publishing: the transactional outbox
 
@@ -114,20 +115,33 @@ consumers dedupe on it. The relay runs only when `DATABASE_URL` and
 
 ## Who consumes these events
 
-**Nobody does today.** The intended consumer of `ReplenishmentRequested` is
-`wes-work-planning`, which would plan one `REPLENISH` work unit per request
-(producer-side change P3b of the context's ADR 0001) and release it with the
-additive `replenishment` object on `WorkReleased`. The rest of the chain is
-built on `develop`: `fulfillment-execution` creates a `REPLENISH` task from that
-object (its ADR 0050) and reports `TaskCompleted` with `request_ref`, and
-`inventory-storage` applies it as `RelocateStock` with reason `REPLENISHMENT`
-and `source_ref` = the request id (its ADR 0041), closing the loop with a
-`StockRelocated`. What does not exist on `develop` is the planning hop:
-`wes-work-planning` has no consumer of this topic, no `REPLENISH` work unit and
-no `replenishment` object, and `process-path-management` has no `REPLENISH`
-path. `ReplenishmentCompleted`, `ReplenishmentCancelled` and the analytics topic
-have no consumer in any repository checked. This is the fleet's edge K44
-(absent-planned); see the [context map](/contexts/pick-face-replenishment/context-map).
+`wes-work-planning` consumes `ReplenishmentRequested` and
+`ReplenishmentCancelled` from this topic (its ADR 0042,
+`internal/adapters/inbound/kafka/replenishment_consumer.go`), under its own stable
+group `REPLENISHMENT_CONSUMER_GROUP` and its own
+`warehouse.pick-face-replenishment.events.dlq`. Each request becomes exactly one
+`REPLENISH` work unit (id `replenish-<request_id>`, reference = request id) on the
+`REPLENISH` path that `process-path-management` declares (its ADR 0036), released
+with the additive `replenishment` object on `WorkReleased` (`request_id`, `sku`,
+`from_bin` = this event's `source_bin`, `to_bin` = its `forward_bin`, `quantity`,
+`priority`). `policy_min` and `policy_max` are ignored. A cancel withdraws the
+unit only while it is still Pending. `URGENT` requests get a CPT of
+`requested_at` + `REPLENISHMENT_URGENT_CPT_HORIZON` (default 1 h) and `NORMAL`
+ones `REPLENISHMENT_CPT_HORIZON` (default 8 h), so urgent work sits in the front
+band of an earliest-CPT-first queue.
+
+The rest of the chain is built on `develop`: `fulfillment-execution` creates a
+`REPLENISH` task from that object (its ADR 0050) and reports `TaskCompleted` with
+`request_ref`, and `inventory-storage` applies it as `RelocateStock` with reason
+`REPLENISHMENT` and `source_ref` = the request id (its ADR 0041), closing the loop
+with a `StockRelocated`. `ReplenishmentCompleted` is read and ignored by
+`wes-work-planning`, and it and the analytics topic have no other consumer in any
+repository checked. This is the fleet's edge K44 (**wired-but-unused**): the
+consumer is opt-in (`REPLENISHMENT_MODE=kafka`; the default `permissive` consumes
+nothing), `warehouse-infra` does not set it, and this service is not deployed
+there. A request whose `REPLENISH` path is missing from the catalogue is
+dead-lettered until the path exists. See the
+[context map](/contexts/pick-face-replenishment/context-map).
 
 ## Consuming: local copies and closing requests
 

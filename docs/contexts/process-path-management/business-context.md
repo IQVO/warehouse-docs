@@ -83,7 +83,9 @@ owns a site-scoped CPT schedule (`CPTScheduleChanged`), from which
 environment-variable lead time. The catalogue has also grown beyond the
 original four families: ADR 0008 added `PREP`, `PROBLEM_SOLVE`,
 `WATER_SPIDER`, `AMNESTY`, `RETURNS`, `TRANSFER` and `DAMAGE` as ordinary
-data under the same model, and ADR 0009 added an optional, declarative
+data under the same model, ADRs 0033, 0035 and 0036 added the `RELOCATE`,
+`DISPATCH` and `REPLENISH` work paths (the last carries the new `REPLENISHMENT`
+demand source and is what pick-face top-ups are released on), and ADR 0009 added an optional, declarative
 destination location role. This context also ships its own analytics data
 product (ADR 0007). See the
 [Bounded Context Canvas](./bounded-context-canvas) and

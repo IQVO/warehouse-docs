@@ -111,7 +111,9 @@ The full catalogue is on [Use Cases](/contexts/pick-face-replenishment/use-cases
   at all.
 - **Create floor work.** It publishes `ReplenishmentRequested`;
   `wes-work-planning` and `fulfillment-execution` own work and task state. A
-  request already released as floor work is not recalled by a cancel here.
+  cancel withdraws the planned unit only while `wes-work-planning` still holds it
+  Pending (its ADR 0042); a request already released as floor work is not
+  recalled.
 - **Write the stock ledger.** It requests a move; `inventory-storage` records
   it.
 - **Guess.** With no level, no assignment, no reserve location copy or no
@@ -136,17 +138,21 @@ It has no edge to `inbound-receiving`, `order-management` or `product-master`
   (its Runbook says so). It runs only from a locally built binary or image.
   Its declared Kong URL, `http://localhost:8000/api/pick-face-replenishment`,
   therefore routes nowhere yet.
-- **The execution chain is not complete.** The inputs from
-  `slotting-optimization`, `facility-layout` and `inventory-storage` are
+- **The execution chain is complete on `develop`, and switched off.** The inputs
+  from `slotting-optimization`, `facility-layout` and `inventory-storage` are
   published by producers on `develop` (`inventory-storage` publishes
   `BinStockLevelChanged` and records a completed `REPLENISH` task as a
-  `StockRelocated` with reason `REPLENISHMENT`, its ADR 0040 and ADR 0041), and
-  `fulfillment-execution` runs `REPLENISH` tasks (its ADR 0050). `wes-work-planning`
-  has no `REPLENISH` work path (P3b) and `process-path-management` no
-  `REPLENISH` path, so nothing turns a `ReplenishmentRequested` into floor
-  work. Both consumed contracts were pinned consumer-first (ADR 0003) and the
-  producers now match them (field names equal, key `<bin>:<sku>`). Until the
-  planner exists a request can be raised and cancelled but not completed.
+  `StockRelocated` with reason `REPLENISHMENT`, its ADR 0040 and ADR 0041).
+  The output side exists as well: `wes-work-planning` consumes
+  `ReplenishmentRequested` and `ReplenishmentCancelled` and plans one
+  `REPLENISH` work unit per request (its ADR 0042), `process-path-management`
+  declares the `REPLENISH` path (its ADR 0036) and `fulfillment-execution` runs
+  `REPLENISH` tasks (its ADR 0050). Both consumed contracts were pinned
+  consumer-first (ADR 0003) and the producers now match them (field names
+  equal, key `<bin>:<sku>`). The planner's consumer is opt-in
+  (`REPLENISHMENT_MODE=kafka`; the default consumes nothing) and
+  `warehouse-infra` does not set it, so no request reaches the floor in the
+  reference cluster.
 - An analytics read side (`warehouse.pick-face-replenishment.analytics` is
   written, but nothing reads it), a `warehouse-ops-agent` client and a console
   remote are later phases. None of them exists yet.

@@ -37,33 +37,39 @@ one binary, `cmd/api`, and **no MCP server**.
 database, no Kong route, no ArgoCD application, no values file, no dashboard.
 The repository itself has no Dockerfile and no Helm chart on `develop` (its
 Runbook lists both as absent). So every edge to and from this context is built
-on one side at most and **not wired in the reference cluster**.
+on `develop` (both ends) but **not wired in the reference cluster**.
 
 **What is built around it, checked on each sibling's `develop`:** the inputs
 from `slotting-optimization` (`SlotPlanApproved`) and `facility-layout` (zones
-and location slots) are published by live producers, and since the latest
-sibling changes so are the two `inventory-storage` inputs:
-`inventory-storage` publishes `BinStockLevelChanged` (its ADR 0040) and records
-a completed `REPLENISH` task as a `StockRelocated` with the reason
-`REPLENISHMENT` and `source_ref` equal to the request id (its ADR 0041).
-`fulfillment-execution` creates a `REPLENISH` task from
-`WorkReleased.data.replenishment`, announces it and reports `TaskCompleted`
-with `request_ref` (its ADR 0050), and `slotting-optimization` no longer
-mistakes a `REPLENISHMENT` move for a slot-plan move (its PR #35). Two ends of
-the chain exist, but the middle does not:
+and location slots) are published by live producers, and so are the two
+`inventory-storage` inputs: `inventory-storage` publishes `BinStockLevelChanged`
+(its ADR 0040) and records a completed `REPLENISH` task as a `StockRelocated`
+with the reason `REPLENISHMENT` and `source_ref` equal to the request id (its
+ADR 0041). The output side is built too, hop by hop (fleet edge K44):
 
-- Nothing consumes `ReplenishmentRequested`: `wes-work-planning` has no
-  consumer of the topic, no `REPLENISH` work unit and no `replenishment`
-  object on `WorkReleased` (P3b), and `process-path-management` has no
-  `REPLENISH` path.
+1. `wes-work-planning` consumes `ReplenishmentRequested` and
+   `ReplenishmentCancelled` and plans one `REPLENISH` work unit per request id
+   (its ADR 0042, `internal/adapters/inbound/kafka/replenishment_consumer.go`).
+   The consumer is opt-in: `REPLENISHMENT_MODE=kafka` with a stable
+   `REPLENISHMENT_CONSUMER_GROUP`; the default `permissive` consumes nothing.
+2. `process-path-management` declares the `REPLENISH` path (its ADR 0036:
+   `catalogue/paths.json`, intake `REPLENISHMENT`), applied by its
+   `scripts/seed_catalogue.py`.
+3. `wes-work-planning` releases the unit with the additive `replenishment`
+   object on `WorkReleased`, and `fulfillment-execution` creates a `REPLENISH`
+   task from it, announces it and reports `TaskCompleted` with `request_ref`
+   (its ADR 0050).
+4. `inventory-storage` applies that completion as the `REPLENISHMENT`
+   relocation that closes the request (K43), and `slotting-optimization` no
+   longer mistakes a `REPLENISHMENT` move for a slot-plan move (its PR #35).
 
-So today a request can be raised and cancelled, but no floor work is created
-for it and it cannot be completed. Everything is moot until this service is
-deployed.
+So on `develop` a request can be raised, planned, executed and completed. Today
+nothing runs the loop: this service is not deployed, `warehouse-infra` does not
+set `REPLENISHMENT_MODE` for `wes-work-planning`, and the `REPLENISH` path
+reaches a cluster only when the catalogue seed next runs.
 
-**Planned, not built:** the `wes-work-planning` planner (a `REPLENISH` work
-unit, a `REPLENISH` path), an analytics read side, a `warehouse-ops-agent`
-client and a console remote, and a demand-cover policy behind the same port as
+**Planned, not built:** an analytics read side, a `warehouse-ops-agent` client
+and a console remote, and a demand-cover policy behind the same port as
 `MIN_MAX`.
 :::
 
@@ -126,7 +132,8 @@ It owns two aggregates and one pure function:
   type catalogue) and 0005 (evaluation semantics and persistence) are all
   Accepted (2026-10-17).
 - **Fleet-level**: [Context Map](/strategic-design/context-map) (K39, K40 and
-  K42 to K44),
+  K42 to K44, all
+  wired-but-unused),
   the [Event Standard](/strategic-design/event-standard-cloudevents)
   (subdomain table and type catalogue),
   [Subdomain Classification](/strategic-design/subdomain-classification) and

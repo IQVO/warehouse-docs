@@ -55,8 +55,8 @@ spec document.
 
 | `type` (suffix after `com.warehouse.wes.work-planning.`) | `data` | Published when | Consumed by |
 |---|---|---|---|
-| `workunit.WorkReleased` | `{"path_id","work_unit_id","cpt","ref"}` (+ optional `required_capabilities`, `fragile`, `gift_wrap`, and on the `RELOCATE` path a `relocation` object, ADR-0040) | `ReleaseNextWork` releases a unit | **`fulfillment-execution`** → creates a `Task` (a `RELOCATE` task when `relocation` is present) |
-| `workunit.WorkUnitCreated` | `{"path_id","work_unit_id"}` (+ optional `reference` and `line_no`, strictly additive, ADR-0041) | a work unit is admitted: `EnqueueWorkUnit`, or the slot-plan intake that plans `RELOCATE` units | **`order-management`** — its release-confirmation consumer (ADR 0043) reads only `reference` (the order id for order work) and `line_no` to confirm a released order line. Opt-in and off by default (`RELEASE_CONFIRMATION_MODE=kafka`), which the reference deployment does not set. `reference` is also published for transfer work (the demand id) and `RELOCATE` work (the plan id), and `line_no` only for order lines; each is omitted when unknown, and the analytics stream carries neither |
+| `workunit.WorkReleased` | `{"path_id","work_unit_id","cpt","ref"}` (+ optional `required_capabilities`, `fragile`, `gift_wrap`, and on the `RELOCATE` path a `relocation` object, ADR-0040; on the `REPLENISH` path a `replenishment` object, ADR-0042) | `ReleaseNextWork` releases a unit | **`fulfillment-execution`** → creates a `Task` (a `RELOCATE` task when `relocation` is present, a `REPLENISH` task when `replenishment` is present, its ADR 0050) |
+| `workunit.WorkUnitCreated` | `{"path_id","work_unit_id"}` (+ optional `reference` and `line_no`, strictly additive, ADR-0041) | a work unit is admitted: `EnqueueWorkUnit`, the slot-plan intake that plans `RELOCATE` units, or the replenishment intake that plans `REPLENISH` units | **`order-management`** — its release-confirmation consumer (ADR 0043) reads only `reference` (the order id for order work) and `line_no` to confirm a released order line. Opt-in and off by default (`RELEASE_CONFIRMATION_MODE=kafka`), which the reference deployment does not set. `reference` is also published for transfer work (the demand id) and `RELOCATE` work (the plan id), and `line_no` only for order lines; each is omitted when unknown, and the analytics stream carries neither |
 | `workpool.PathCapacityChanged` | `{"path_id","cutoff_at","remaining_units","known"}` | `SampleBacklog` is called with `cutoffAt` set (`GET /paths/{pathId}/telemetry?cutoffAt=…`, ADR-0018) | **`order-management`** — its `kafkapathcapacity` adapter (own per-process consumer group, filters for this one event type) caches remaining capacity keyed by path and cutoff instant. Also **`network-fulfillment`** (`pathcapacitycache`), wired but unused: it starts only with `CAPABILITY_OFFER_ENABLED=true`, which the reference deployment does not set |
 
 ```json
@@ -117,9 +117,10 @@ partition to one member and the other consumes nothing while reporting
 healthy. Each topic has its own `<topic>.dlq`.
 
 With `PATH_CATALOGUE_SOURCE=kafka` a separate consumer replays
-process-path-management's topic, and with `PRODUCT_CLASSIFICATION_MODE=kafka`
-another one keeps the product classification copy — see the last two
-sections below.
+process-path-management's topic, with `PRODUCT_CLASSIFICATION_MODE=kafka`
+another one keeps the product classification copy, and with
+`REPLENISHMENT_MODE=kafka` a dedicated consumer reads
+pick-face-replenishment's topic — see the sections below.
 
 ### `warehouse.workforce.events` — `ShiftPlanCommitted`, from `workforce-management`
 
@@ -195,7 +196,10 @@ slot plan that were waiting on it into the pool, in the same transaction.
 `task_type` is optional on the wire and only logged, to explain a completion
 for a work unit this context never planned (for example a PACK task
 `fulfillment-execution` created itself, which names the order id); that
-completion is skipped at INFO, not retried or dead-lettered. A `RELOCATE`
+completion is skipped at INFO, not retried or dead-lettered. So is a
+`TaskCompleted` with a NEW event id for a work unit that is already completed
+(`TaskCompletedAlreadyCompleted`, ADR-0043): a stale fact, marked processed. A
+`RELOCATE`
 completion carries the additive `sku`, `from_bin`, `to_bin`, `quantity` and
 `relocation_ref` fields (fulfillment-execution ADR-0047) for
 `inventory-storage`, which this context ignores.
@@ -290,6 +294,45 @@ one optional `relocation` object (`plan_id`, `move_seq`, `kind`, `sku`,
 `from_bin`, `to_bin`); `fulfillment-execution` turns it into a `RELOCATE`
 task (its ADR-0047).
 
+### `warehouse.pick-face-replenishment.events` — `ReplenishmentRequested`, `ReplenishmentCancelled`, from `pick-face-replenishment`
+
+Consumed only when `REPLENISHMENT_MODE=kafka` (the default `permissive`
+consumes nothing), under the stable group `REPLENISHMENT_CONSUMER_GROUP`
+(unset, or without `KAFKA_BROKERS` or `DATABASE_URL`, is a boot error), with its
+own `warehouse.pick-face-replenishment.events.dlq`
+([ADR-0042](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0042-pick-face-replenishment-work.md);
+`internal/adapters/inbound/kafka/replenishment_consumer.go`, started from
+`cmd/wes/replenishment.go`). The mirrored contract is in `apis/asyncapi.yaml`
+(operation `consumeReplenishmentEvents`); this context reads `request_id`,
+`site_id`, `sku`, `source_bin`, `forward_bin`, `quantity`, `priority` and
+`requested_at` and ignores `policy_min` and `policy_max`.
+
+- Each `ReplenishmentRequested` becomes exactly ONE `REPLENISH` work unit: id
+  `replenish-<request_id>`, `ref` and the REST `reference` = the request id, path
+  `REPLENISH`, `work_kind = REPLENISH`. A redelivery of the same CloudEvents `id`
+  or a second, different event for an already-planned request id is a no-op.
+- Priority is expressed through the CPT, because the unit has no priority
+  field: `requested_at` + `REPLENISHMENT_CPT_HORIZON` (default `8h`) for
+  `NORMAL`, + `REPLENISHMENT_URGENT_CPT_HORIZON` (default `1h`, capped at the
+  normal horizon) for `URGENT`.
+- `ReplenishmentCancelled` cancels the request's unit only while it is still
+  `Pending`; released or completed work runs to completion, and a cancellation
+  for an unknown request is a no-op. `ReplenishmentCompleted` and every other
+  type are ignored.
+- The released unit goes out as an ordinary `WorkReleased` v1 whose `data` gains
+  one optional `replenishment` object (`request_id`, `sku`, `from_bin` = the
+  event's `source_bin`, `to_bin` = its `forward_bin`, `quantity`, `priority`),
+  present only on `REPLENISH` units, which never carry `relocation`.
+  `fulfillment-execution` turns it into a `REPLENISH` task (its ADR 0050).
+- The `REPLENISH` path must be in the process-path catalogue first
+  (process-path-management ADR 0036, intake `REPLENISHMENT`), or requests are
+  dead-lettered until it is. The CloudEvents `id` claim and the effect commit in
+  one transaction; invalid CloudEvents are WARN-skipped; a payload that can
+  never be applied is dead-lettered at once, other failures after the retries.
+
+The reference deployment does not set `REPLENISHMENT_MODE`
+(`warehouse-infra` `develop`), so this consumer is off there.
+
 ### `warehouse.process-path-management.events` — the process-path catalogue, from `process-path-management`
 
 Consumed only when `PATH_CATALOGUE_SOURCE=kafka` (the default `file` source
@@ -361,6 +404,7 @@ at) (alreadyProcessed bool, err error)`.
 | `OrderAllocated` / `OrderPartiallyAllocated` | `EnqueueWorkUnit` is **not** called a second time per line |
 | `WorkDemandReleased` | the demand leg is **not** enqueued twice (work unit id = `demand_id`) |
 | `SlotPlanApproved` | the plan's `RELOCATE` units are **not** planned twice (ids are `<plan_id>-move-<move_seq>`; the same plan under a new event id is a no-op) |
+| `ReplenishmentRequested` | no second `REPLENISH` unit: the id is `replenish-<request_id>`, and a different event for a planned request id is a no-op |
 | `ProductClassified` | the copy is **not** rewritten; an older `version` is a no-op even with a new `id` |
 
 The `TaskCompleted` case matters operationally beyond the dedup table
@@ -383,6 +427,10 @@ nobody reads.
 | `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` | *(none)* | Required with `kafka`: the stable consumer group of the classification copy. |
 | `PATH_CATALOGUE_SOURCE` | `file` | `kafka` replays `warehouse.process-path-management.events` into the catalogue; requires `KAFKA_BROKERS`. |
 | `RELOCATION_CPT_HORIZON` | `24h` | Go duration added to a slot plan's `approved_at` to give its `RELOCATE` work units a CPT (ADR-0040). |
+| `REPLENISHMENT_MODE` | `permissive` | `kafka` runs the pick-face-replenishment consumer; any value other than `kafka` or `permissive` is a boot error (ADR-0042). |
+| `REPLENISHMENT_CONSUMER_GROUP` | *(none)* | Required with `kafka`: the stable consumer group, shared by every replica. |
+| `REPLENISHMENT_CPT_HORIZON` | `8h` | CPT of a `NORMAL` request = `requested_at` + this Go duration. |
+| `REPLENISHMENT_URGENT_CPT_HORIZON` | `1h` | CPT of an `URGENT` request; capped at the normal horizon. |
 
 ## Generated reference
 

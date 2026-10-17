@@ -44,6 +44,18 @@ CloudEvents `type`:
 `com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged`
 (keyed by `site_id`, ADR 0010).
 
+The `intake` array of a `ProcessPath*` payload (the demand sources allowed to
+route work onto the path, ADR 0034) is a closed vocabulary: `CUSTOMER_ORDER`,
+`STOCK_TRANSFER`, `SLOT_RELOCATION`, `INVENTORY_CONTROL` and, since
+[ADR 0036](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0036-replenish-process-path.md),
+`REPLENISHMENT`. The new value is additive (no new event type, no new field) and
+is declared on exactly one path, `REPLENISH` (`matchPrefix` `replenish`, required
+capability `replenish`), the path `wes-work-planning` releases pick-face top-ups
+on and `fulfillment-execution` runs as a `REPLENISH` task. A consumer that
+validates `intake` against a fixed enum must accept the new value. The path
+is catalogue data declared in `catalogue/paths.json` and reaches a cluster when
+`scripts/seed_catalogue.py` runs (the post-deploy seed in `warehouse-infra`).
+
 ## The envelope
 
 Every warehouse-systems publisher emits CloudEvents 1.0 in structured
