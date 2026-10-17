@@ -47,6 +47,10 @@ jobs:
       # The alert catalogue page is generated from alerting/ (a copy of
       # warehouse-infra's rules): fail when someone edits one without the other.
       - run: npm run gen-alert-catalogue -- --check
+      # Four Business Capability Architecture pages are generated from
+      # scripts/capability-map/capabilities.py: fail when a page and the model
+      # disagree (stdlib-only Python, preinstalled on the runner).
+      - run: python3 scripts/capability-map/generate.py --check
       - run: npm run build
 
   build:
