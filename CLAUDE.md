@@ -98,8 +98,9 @@ docs/
                                 section) and the qualification of every
                                 context against them. Verdicts come from
                                 code on develop, not from the CloudEvents
-                                `wms`/`wes` segment (a naming fact, never
-                                to be renamed)
+                                `wms`/`wes` segment (a fixed contract label
+                                defined in the Event Standard, never
+                                renamed)
   business-capability-architecture/
                                 index.md hand-written (TOGAF/BIZBOK method);
                                 capability-map, capability-catalogue,
@@ -224,7 +225,11 @@ rule, and every page on this site must document it that way:
   (`wms` for the WMS-tier contexts facility-layout, inventory-storage,
   product-master, inbound-receiving, slotting-optimization and
   pick-face-replenishment, `wes` for every other context;
-  wes-work-planning's segment is `work-planning`).
+  wes-work-planning's segment is `work-planning`). The segment is a fixed
+  contract label, not an industry category: `wms` = item, location and
+  inventory masters plus the contexts that keep stock in place (receiving,
+  slotting, replenishment); `wes` = everything else. Never rename it; the
+  industry category of each context lives on the WMS & WES pages.
   Breaking payload
   change => new `.v2` type + new dataschema version.
 - Consumers dispatch on the FULL `type`, ignore unknown types, dedupe on

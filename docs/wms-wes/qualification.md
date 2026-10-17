@@ -19,9 +19,12 @@ Two labels appear side by side throughout this section. Do not confuse them:
 - **Fleet tier.** The `<subdomain>` segment of every CloudEvents `type` the
   context publishes, `com.warehouse.<subdomain>.<context>.<entity>.<Event>`.
   `wms` is facility-layout, inventory-storage, product-master,
-  inbound-receiving and slotting-optimization; `wes` is every other context
-  ([Event Standard](/strategic-design/event-standard-cloudevents)). This label
-  is a fleet naming decision and is part of every event contract.
+  inbound-receiving and slotting-optimization (and
+  pick-face-replenishment, in progress); `wes` is every other context. The
+  [Event Standard](/strategic-design/event-standard-cloudevents#what-the-subdomain-segment-means)
+  defines it as a fixed contract label, not an industry category: `wms` is the
+  item, location and inventory masters plus the contexts that keep stock in
+  place, `wes` is everything else.
 - **Industry category.** What Gartner, MHI and Interact Analysis would call
   the software, using the tests below.
 
@@ -225,10 +228,11 @@ tier", with no methods until an integration is commissioned.
 2. **`wes` means everything outside the WMS master-data and inventory tier**,
    not a warehouse execution system in the industry's narrow sense. Seven of the ten `wes`
    contexts are labor management, planning, network or channel software, or the
-   agent. This is a naming observation, not a defect: the segment is part of
-   every published CloudEvents `type`, so changing it would be a breaking
-   contract change in every producer and consumer. This page does not
-   propose it.
+   agent. The Event Standard defines the segment exactly that way
+   (2026-10-17): a fixed contract label, never renamed, because it is part of
+   every published CloudEvents `type` and a rename would break every producer
+   and consumer while telling no consumer anything new. The industry category
+   lives on this page instead.
 3. **The WES is real but equipment-free.** Release, flow balancing and pull
    dispatch exist. Criterion 1 is met on backlog and capacity signals, not on
    equipment utilization, because no WCS exists.
