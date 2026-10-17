@@ -10,7 +10,7 @@ slug: /contexts/slotting-optimization
 
 <span className="badge-supporting">Supporting Subdomain</span>
 
-**Slotting Optimization** is one of the fleet's fifteen domain bounded
+**Slotting Optimization** is one of the fleet's sixteen domain bounded
 contexts. It sits in the `wms` tier of the CloudEvents subdomain taxonomy, the
 fifth `wms` context after `facility-layout`, `inventory-storage`,
 `product-master` and `inbound-receiving`. It decides **which SKUs deserve a
