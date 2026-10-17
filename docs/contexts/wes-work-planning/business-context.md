@@ -239,6 +239,35 @@ It reports `known=false` for flow-fed paths rather than dress an alarm
 threshold up as a ceiling, and — like flow balancing — it publishes only
 when a caller asks (`GET /paths/{pathId}/telemetry?cutoffAt=…`).
 
+## Slot plans are work too
+
+Orders are not the only thing that puts work on the floor. When
+`slotting-optimization` approves a slot plan, the stock of some SKUs has to be
+carried from one bin to another, and that is physical floor work like any
+other. The platform has one conductor for floor work, so this context plans it
+([ADR-0040](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0040-slot-plan-relocation-work.md)):
+
+- **One work unit per move.** `SlotPlanApproved` is consumed from
+  `warehouse.slotting-optimization.events`; each entry of `moves` becomes a
+  `RELOCATE` work unit (id `<plan_id>-move-<move_seq>`, reference = the plan
+  id) on the `RELOCATE` process path, validated against the process-path
+  catalogue. It is released through the same `ReleaseNextWork` flow, ordered
+  by CPT like everything else. A slot plan has no customer cutoff, so the CPT
+  is the approval time plus `RELOCATION_CPT_HORIZON` (default `24h`).
+- **Sequencing.** A move into a slot that another move of the same plan
+  vacates waits, kept out of the pool, until that vacating move's
+  `TaskCompleted` arrives. A swap (a cycle) is broken at its lowest `move_seq`.
+- **Supersession.** A newer approved plan for the site cancels the older
+  plans' work that has not been released yet. Released and in-progress work
+  runs to completion. The decision is per site by approval time, so a lost or
+  out-of-order event cannot leave stale work behind.
+- **What it does not decide.** The quantity and the open side of an `Assign`
+  or `Vacate` move are the operator's, confirmed at execution by
+  `fulfillment-execution`, and the stock itself moves in `inventory-storage`.
+  This context records only that the work unit completed.
+
+The consumed contract is on [Async API](./async-api).
+
 See [Ubiquitous Language](./ubiquitous-language) for the exact vocabulary
 and the traps that come with sitting at the intersection of several other
 contexts.

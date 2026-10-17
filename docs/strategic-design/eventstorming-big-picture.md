@@ -284,9 +284,7 @@ flowchart LR
     C3 -.- H3
     E6 -.- H5
     H33["H33 a SKU classified just before its first stow may reach a copy late"]:::hotspot
-    H34["H34 the only physical-profile consumer, slotting-optimization, is not deployed"]:::hotspot
     E11 -.- H33
-    E12 -.- H34
 
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
     classDef command fill:#4aa3df,stroke:#1f6f9f,color:#0b1e2d
@@ -313,7 +311,11 @@ appointment books a door, and a receipt counts the delivery line by line. Its
 received stock. `slotting-optimization` decides which SKUs deserve a forward
 pick slot from local copies of demand, product facts and slots, and a human
 approves the plan. Every event below is a message in the context's synced
-`apis/<context>/asyncapi.yaml`.
+`apis/<context>/asyncapi.yaml`. Beyond the plan decision, the diagram follows
+an approved plan to the floor: `wes-work-planning` plans one `RELOCATE` work
+unit per move, `fulfillment-execution` runs the task, `inventory-storage`
+moves the stock and raises `Stock Relocated`, and `slotting-optimization`
+turns that into the plan's execution progress.
 
 ```mermaid
 flowchart LR
@@ -342,10 +344,19 @@ flowchart LR
         direction LR
         P1["Book Good lines through Receive Stock"]:::policy
         E8["Stock Received"]:::event
+        P3["Relocate Stock from a completed RELOCATE task"]:::policy
+        E14["Stock Relocated"]:::event
+    end
+    subgraph S_WES["wes-work-planning and fulfillment-execution"]
+        direction LR
+        P2["Plan one RELOCATE work unit per move"]:::policy
+        E12["Work Released"]:::event
+        E13["Task Completed, RELOCATE"]:::event
     end
     subgraph S_SO["slotting-optimization"]
         direction LR
         R2["Demand lines, product profiles, zones and slots, local copies"]:::readmodel
+        R3["Plan execution progress, executed moves per plan"]:::readmodel
         C5["Generate Slot Plan"]:::command
         E9["Slot Plan Generated"]:::event
         C6["Approve or Reject Slot Plan"]:::command
@@ -375,13 +386,10 @@ flowchart LR
     PLNR --> C6
     C6 --> E10
     C6 --> E11
+    E10 --> P2 --> E12 --> E13 --> P3 --> E14 --> R3
 
     H36["H36 Dock Appointment Booked has no consumer, inbound-labor demand planned"]:::hotspot
-    H37["H37 Slot Plan Approved has no consumer, the moves are not executed"]:::hotspot
-    H38["H38 slotting-optimization is not deployed, its local copies are not fed"]:::hotspot
     E2 -.- H36
-    E10 -.- H37
-    R2 -.- H38
 
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
     classDef command fill:#4aa3df,stroke:#1f6f9f,color:#0b1e2d
@@ -776,7 +784,7 @@ this site, and the corroborating context page is linked instead.
 | ~~H16~~ | workforce-management | ~~The headcount proposal divides by `MeanActualSeconds`, a duration, where a per-head rate is expected~~ **Resolved 2026-10-06.** Now converts to a per-hour rate, 3600 / seconds (ADR 0033). | [workforce-management Ubiquitous Language](/contexts/workforce-management/ubiquitous-language) |
 | H17 | fulfillment-execution | A claim does not require a station check-in | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H18 | fulfillment-execution | `ItemPicked` is defined but never raised | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
-| ~~H19~~ | inventory-storage | ~~No sibling context calls `POST /reservations/{id}/confirm-pick`~~ **Resolved 2026-10-07.** A consumer confirms an order's reservations on its last completed PICK, driven by `TaskCompleted.order_ref` (inventory-storage ADR 0035, fulfillment-execution ADR 0040). It is off by default. | [inventory-storage EventStorming](/contexts/inventory-storage/eventstorming) |
+| ~~H19~~ | inventory-storage | ~~No sibling context calls `POST /reservations/{id}/confirm-pick`~~ **Resolved 2026-10-07.** A consumer confirms an order's reservations on its last completed PICK, driven by `TaskCompleted.order_ref` (inventory-storage ADR 0035, fulfillment-execution ADR 0040), and since ADR 0036 per picked line. It is off by default in the binary and on (`taskCompletedConsumerMode: kafka`) in the reference deployment, where it also applies RELOCATE moves (K37). | [inventory-storage EventStorming](/contexts/inventory-storage/eventstorming) |
 | H20 | fulfillment-execution | Rebin events never leave the process | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H21 | fulfillment-execution | The sort lane is decided, but no WCS acts on it | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H22 | labor-performance | `REBIN` and other unknown task types are never scored | [labor-performance EventStorming](/contexts/labor-performance/eventstorming) |
@@ -791,10 +799,10 @@ this site, and the corroborating context page is linked instead.
 | ~~H31~~ | workforce-management | ~~The default `INSTALLED_CAPACITY_MODE=permissive` rejects every shift-plan commit~~ **Resolved 2026-10-13.** The chart now sets `INSTALLED_CAPACITY_MODE=http` and the fulfillment-execution base URL by default (workforce-management#164); the binary default stays `permissive` for local runs. | [workforce-management EventStorming](/contexts/workforce-management/eventstorming). [Ecosystem gaps tracker](/fleet-health/ecosystem-gaps) 10b. |
 | ~~H32~~ | fulfillment-execution | ~~`apis/openapi.yaml` expands CPT as "Committed Processing Time"~~ **Resolved 2026-10-06.** Now reads "Critical Pull Time". | [fulfillment-execution Ubiquitous Language](/contexts/fulfillment-execution/ubiquitous-language) |
 | H33 | product-master | A SKU classified moments before its first stow may reach a consumer's local copy late | [product-master EventStorming](/contexts/product-master/eventstorming) (product-master ADR 0001, Consequences) |
-| H34 | product-master | No live event consumer of the physical profile (`ProductDimensionsDeclared`, `ProductMeasured`). **Partly resolved 2026-10-11:** `slotting-optimization` consumes both into its product copy (built on its `develop`), but it is not deployed yet (H38) | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0002, "later phases"), [slotting-optimization context map](/contexts/slotting-optimization/context-map) |
+| ~~H34~~ | product-master | ~~No live event consumer of the physical profile (`ProductDimensionsDeclared`, `ProductMeasured`)~~ **Resolved 2026-10-16.** `slotting-optimization` consumes both into its product copy (`PRODUCT_MODE=kafka`) and `warehouse-infra` `develop` deploys it (K25, H38) | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0002, "later phases"), [slotting-optimization context map](/contexts/slotting-optimization/context-map) |
 | H36 | inbound-receiving | `DockAppointmentBooked` has no consumer: inbound-labor demand in `warehouse-planning` is planned, not built (K28) | [inbound-receiving context map](/contexts/inbound-receiving/context-map), row 4 |
-| H37 | slotting-optimization | `SlotPlanApproved` has no consumer: executing the moves as MOVE and REPLENISH work is planned, not built (K29). **Decided 2026-10-12: stays open by decision**; slotting-optimization ADR 0007 (Proposed) names the executor options. | [slotting-optimization context map](/contexts/slotting-optimization/context-map), [domain events](/contexts/slotting-optimization/domain-events) |
-| H38 | slotting-optimization | Not deployed: no `warehouse-infra` wiring, so its three local copies are not fed in the reference cluster. (The Dockerfile and chart existed since 2026-10-08.) **Partly resolved 2026-10-13:** warehouse-infra#75 wires it on `develop`; it runs once warehouse-infra is released and applied. | [slotting-optimization Business Context](/contexts/slotting-optimization/business-context), [ecosystem gaps tracker](/fleet-health/ecosystem-gaps) 6 |
+| ~~H37~~ | slotting-optimization | ~~`SlotPlanApproved` has no consumer: executing the moves as MOVE and REPLENISH work is planned, not built (K29)~~ **Resolved 2026-10-14.** Decided by slotting-optimization ADR 0010 (supersedes ADR 0007) and built as RELOCATE work: `wes-work-planning` ADR 0040 plans one work unit per move, `fulfillment-execution` ADR 0047 runs the task, `inventory-storage` ADR 0039 moves the stock and raises `StockRelocated`, which slotting-optimization records as the plan's `execution` progress (K29, K37, K38). | [slotting-optimization context map](/contexts/slotting-optimization/context-map), [domain events](/contexts/slotting-optimization/domain-events) |
+| ~~H38~~ | slotting-optimization | ~~Not deployed: no `warehouse-infra` wiring, so its three local copies are not fed in the reference cluster~~ **Resolved 2026-10-16 on `develop`.** warehouse-infra#75 registers it (database, Kong route, ArgoCD application) and `helm-values/slotting-optimization.yaml` turns on `EVENT_PUBLISHER=kafka` and the four consumers (the three local copies and `RELOCATION_MODE`). It runs once warehouse-infra is applied, and the `RELOCATE` process path must be seeded first. | [slotting-optimization Business Context](/contexts/slotting-optimization/business-context), [ecosystem gaps tracker](/fleet-health/ecosystem-gaps) 6 |
 | H35 | product-master | Stage E (remove the legacy importer, the inventory-storage backfill and the deprecated classification endpoint) has no date | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0003, stage E) |
 
 Other wired-but-unused edges are not drawn, because they sit outside

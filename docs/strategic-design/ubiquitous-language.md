@@ -70,7 +70,7 @@ no Shared Kernel".
 | **ASN** | Advance ship notice: a supplier's declaration of what is arriving, keyed by `asn_number`, with lines of `sku` and `expected_qty`. The expectation a receipt is counted against. | `inbound-receiving` | no consumer yet (`ASNRegistered` and `ASNCancelled` are a published contract) |
 | **Discrepancy** | At receipt close, a line whose count differs from the ASN: **Short** (fewer than expected), **Over** (more than expected) or **Damaged** (damaged units). Carried on `ReceiptClosed` as `kind`, `expected_qty`, `received_qty` and `damaged_qty`. In `product-master` the same word means something else (measured versus declared dimensions); see below. | `inbound-receiving` | no consumer yet |
 | **Receipt condition** | `Good` or `Damaged` on `ReceiptLineReceived`. Only `Good` units become receivable stock in `inventory-storage`; damaged units stay on the receipt and quarantine is a later ADR. | `inbound-receiving` | `inventory-storage` (live: its ADR 0037 consumer runs in the reference deployment) |
-| **Forward-pick slot** | A storage-role, active slot in a forward zone (`FORWARD_ZONE_CODES`, default `FWD`) that holds one SKU for picking. The approved SKU-to-slot map is published on `SlotPlanApproved`. | `slotting-optimization` | no consumer yet; planned: MOVE work execution (not built) |
+| **Forward-pick slot** | A storage-role, active slot in a forward zone (`FORWARD_ZONE_CODES`, default `FWD`) that holds one SKU for picking. The approved SKU-to-slot map is published on `SlotPlanApproved`. | `slotting-optimization` | consumed by `wes-work-planning` as one `RELOCATE` work unit per move (its ADR-0040) |
 
 ## Same word, different model
 

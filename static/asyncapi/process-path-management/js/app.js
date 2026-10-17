@@ -4,7 +4,7 @@
   "info": {
     "title": "Process Path Management — Published Events",
     "version": "1.0.0",
-    "description": "Publisher-side event contract for the **Process Path Management**\nbounded context. Unlike `labor-performance`'s own `apis/asyncapi.yaml`\n(which documents what that service SUBSCRIBES TO), this document\ndescribes what this service PUBLISHES: it is the SOURCE of the\nprocess-path published language for the fleet, never a consumer of\nanyone else's events.\n\n## Message format: CloudEvents 1.0 (mandatory, ADR 0016)\n\nEvery message on `warehouse.process-path-management.events` AND\n`warehouse.process-path-management.analytics` is a CloudEvents 1.0\nevent in structured content mode (Kafka protocol binding). The Kafka\nmessage value is the JSON event format and every message carries the\nKafka header `content-type: application/cloudevents+json; charset=UTF-8`.\nW3C trace context travels in the `traceparent` (and, when present,\n`tracestate`) Kafka headers of every message raised inside a traced\noperation (ADR 0027); a message raised outside any trace carries no\ntrace headers. Baggage is never propagated. The CloudEvent body does\nnot carry the trace context.\nThere is no other envelope, no dual-write and no envelope toggle.\n\n```json\n{\n  \"specversion\": \"1.0\",\n  \"id\": \"4f1c2a7e-9d31-4a6b-8f0e-6b2c1d5e7a90\",\n  \"source\": \"/warehouse/process-path-management\",\n  \"type\": \"com.warehouse.wes.process-path-management.processpath.ProcessPathCreated\",\n  \"subject\": \"PICK\",\n  \"time\": \"2026-09-06T00:00:00Z\",\n  \"datacontenttype\": \"application/json\",\n  \"dataschema\": \"urn:warehouse:process-path-management:events:ProcessPathCreated:v1\",\n  \"data\": { \"path_id\": \"PICK\", \"...\": \"...\" }\n}\n```\n\n- `id` is minted once per domain event and persisted with the outbox\n  row, so a redelivery carries the same `id`; `(source, id)` is the\n  consumer idempotency key.\n- `subject` is the aggregate id (`path_id` for ProcessPath* events,\n  `site_id` for CPTScheduleChanged) — the same value as the Kafka key.\n- `type` = `com.warehouse.wes.process-path-management.<entity>.<EventName>`.\n  These exact strings are a cross-service contract (consumed by\n  fulfillment-execution, wes-work-planning, workforce-management and\n  order-management); consumers dispatch on the FULL `type`.\n- `dataschema` = `urn:warehouse:process-path-management:<events|analytics>:<EventName>:v1`\n  distinguishes the integration payload from the analytics payload of\n  the same occurrence (today both carry the identical `data` shape).\n- A breaking payload change ships as a new `.v2` type with a new\n  dataschema version, never by mutating an existing one.\n\n## Single, shared topic for four event types\n\nA single topic (not one per event type) per stream. Consumers dispatch\non the CloudEvents `type`. `ProcessPathCreated`, `ProcessPathUpdated`,\nand `ProcessPathDeactivated` are keyed by `path_id`;\n`CPTScheduleChanged` (ADR 0010) is keyed by `site_id` — a different\naggregate on the same topic, so a consumer replaying the topic sees a\ngiven path's or a given site's events in publish order, never\ninterleaved with another aggregate's out of order.\n\n## ADR 0010: the fulfillment capability contract\n\n`ProcessPathCreated`/`ProcessPathUpdated` gained two additive fields —\n`cycle_time_p95` (the operator-declared p95 end-to-end cycle time) and\n`eligibility` (the rules a unit of work must satisfy to be routed to\nthis path) — and this topic now also carries `CPTScheduleChanged`, a\nnew event type for the site-scoped Critical Pull Time schedule. Every\nconsumer's decoder must tolerate an unknown `type` (ignore it,\nnot fail) and tolerate unknown/absent fields on the payloads it\nalready knows, exactly as it already must for any future addition —\nsee ADR 0010's Consequences section.\n\n## Consumers\n\n`fulfillment-execution`, `wes-work-planning`, `workforce-management`\n(ProcessPath* catalogue caches) and `order-management` (ProcessPath*\nand CPTScheduleChanged) consume the integration topic. The analytics\ntopic is consumed only by this service's own projector\n(`cmd/pathmgmt-projector`). See `docs/docs/ecosystem/context-map.md`.\n",
+    "description": "Publisher-side event contract for the **Process Path Management**\nbounded context. Unlike `labor-performance`'s own `apis/asyncapi.yaml`\n(which documents what that service SUBSCRIBES TO), this document\ndescribes what this service PUBLISHES: it is the SOURCE of the\nprocess-path published language for the fleet, never a consumer of\nanyone else's events.\n\n## Message format: CloudEvents 1.0 (mandatory, ADR 0016)\n\nEvery message on `warehouse.process-path-management.events` AND\n`warehouse.process-path-management.analytics` is a CloudEvents 1.0\nevent in structured content mode (Kafka protocol binding). The Kafka\nmessage value is the JSON event format and every message carries the\nKafka header `content-type: application/cloudevents+json; charset=UTF-8`.\nW3C trace context travels in the `traceparent` (and, when present,\n`tracestate`) Kafka headers of every message raised inside a traced\noperation (ADR 0027); a message raised outside any trace carries no\ntrace headers. Baggage is never propagated. The CloudEvent body does\nnot carry the trace context.\nThere is no other envelope, no dual-write and no envelope toggle.\n\n```json\n{\n  \"specversion\": \"1.0\",\n  \"id\": \"4f1c2a7e-9d31-4a6b-8f0e-6b2c1d5e7a90\",\n  \"source\": \"/warehouse/process-path-management\",\n  \"type\": \"com.warehouse.wes.process-path-management.processpath.ProcessPathCreated\",\n  \"subject\": \"PICK\",\n  \"time\": \"2026-09-06T00:00:00Z\",\n  \"datacontenttype\": \"application/json\",\n  \"dataschema\": \"urn:warehouse:process-path-management:events:ProcessPathCreated:v1\",\n  \"data\": { \"path_id\": \"PICK\", \"...\": \"...\" }\n}\n```\n\n- `id` is minted once per domain event and persisted with the outbox\n  row, so a redelivery carries the same `id`; `(source, id)` is the\n  consumer idempotency key.\n- `subject` is the aggregate id (`path_id` for ProcessPath* events,\n  `site_id` for CPTScheduleChanged) — the same value as the Kafka key.\n- `type` = `com.warehouse.wes.process-path-management.<entity>.<EventName>`.\n  These exact strings are a cross-service contract (consumed by\n  fulfillment-execution, wes-work-planning, workforce-management and\n  order-management); consumers dispatch on the FULL `type`.\n- `dataschema` = `urn:warehouse:process-path-management:<events|analytics>:<EventName>:v1`\n  distinguishes the integration payload from the analytics payload of\n  the same occurrence (today both carry the identical `data` shape).\n- A breaking payload change ships as a new `.v2` type with a new\n  dataschema version, never by mutating an existing one.\n\n## Single, shared topic for four event types\n\nA single topic (not one per event type) per stream. Consumers dispatch\non the CloudEvents `type`. `ProcessPathCreated`, `ProcessPathUpdated`,\nand `ProcessPathDeactivated` are keyed by `path_id`;\n`CPTScheduleChanged` (ADR 0010) is keyed by `site_id` — a different\naggregate on the same topic, so a consumer replaying the topic sees a\ngiven path's or a given site's events in publish order, never\ninterleaved with another aggregate's out of order.\n\n## ADR 0010: the fulfillment capability contract\n\n`ProcessPathCreated`/`ProcessPathUpdated` gained two additive fields —\n`cycle_time_p95` (the operator-declared p95 end-to-end cycle time) and\n`eligibility` (the rules a unit of work must satisfy to be routed to\nthis path) — and this topic now also carries `CPTScheduleChanged`, a\nnew event type for the site-scoped Critical Pull Time schedule. Every\nconsumer's decoder must tolerate an unknown `type` (ignore it,\nnot fail) and tolerate unknown/absent fields on the payloads it\nalready knows, exactly as it already must for any future addition —\nsee ADR 0010's Consequences section.\n\n## ADR 0034: process-path intake\n\n`ProcessPathCreated`/`ProcessPathUpdated` gained an additive `intake`\narray: the demand sources (`CUSTOMER_ORDER`, `STOCK_TRANSFER`,\n`SLOT_RELOCATION`, `INVENTORY_CONTROL`) allowed to route work onto the\npath. order-management's path selection considers only paths whose\nintake contains `CUSTOMER_ORDER`; `[]` means the path is reached only by\nan explicit path id (PACK, REBIN, SLAM).\n\n## Consumers\n\n`fulfillment-execution`, `wes-work-planning`, `workforce-management`\n(ProcessPath* catalogue caches) and `order-management` (ProcessPath*\nand CPTScheduleChanged) consume the integration topic. The analytics\ntopic is consumed only by this service's own projector\n(`cmd/pathmgmt-projector`). See `docs/docs/ecosystem/context-map.md`.\n",
     "contact": {
       "name": "Process Path Management Team",
       "url": "https://github.com/claudioed/process-path-management",
@@ -234,6 +234,25 @@
                               }
                             },
                             "x-parser-schema-id": "EligibilityData"
+                          },
+                          "intake": {
+                            "type": "array",
+                            "uniqueItems": true,
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "CUSTOMER_ORDER",
+                                "STOCK_TRANSFER",
+                                "SLOT_RELOCATION",
+                                "INVENTORY_CONTROL"
+                              ],
+                              "x-parser-schema-id": "<anonymous-schema-27>"
+                            },
+                            "description": "The set of demand sources allowed to route work onto this path (ADR 0034), in canonical (sorted) order. Always present on ProcessPathCreated/Updated; `[]` means the path is reached only by an explicit path id from an upstream stage (PACK, REBIN, SLAM) and no demand source may select it. CUSTOMER_ORDER is order-management's order lines, STOCK_TRANSFER network-inventory-planning's transfer legs (via WES), SLOT_RELOCATION approved slot-plan moves (via WES), INVENTORY_CONTROL internal amnesty/damage/problem-solve work. A consumer that receives no `intake` (a producer older than ADR 0034) must treat it as unknown, not as `[]`.",
+                            "example": [
+                              "CUSTOMER_ORDER"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-26>"
                           }
                         },
                         "x-parser-schema-id": "ProcessPathData"
@@ -264,7 +283,11 @@
                       "required_capabilities": [
                         "pick"
                       ],
-                      "cycle_time_p95": "24h0m0s"
+                      "cycle_time_p95": "24h0m0s",
+                      "eligibility": {},
+                      "intake": [
+                        "CUSTOMER_ORDER"
+                      ]
                     }
                   }
                 },
@@ -288,7 +311,9 @@
                         "pack"
                       ],
                       "destination_location_role": "Drop",
-                      "cycle_time_p95": "6h0m0s"
+                      "cycle_time_p95": "6h0m0s",
+                      "eligibility": {},
+                      "intake": []
                     }
                   }
                 },
@@ -321,7 +346,10 @@
                           "hazmat"
                         ],
                         "non_sortable": true
-                      }
+                      },
+                      "intake": [
+                        "CUSTOMER_ORDER"
+                      ]
                     }
                   }
                 }
@@ -330,7 +358,7 @@
             {
               "name": "ProcessPathUpdated",
               "title": "Process Path Updated",
-              "summary": "An Active path's matchPrefix, requiredCapabilities, cycleTimeP95, or eligibility was revised.",
+              "summary": "An Active path's matchPrefix, requiredCapabilities, cycleTimeP95, eligibility, or intake was revised.",
               "description": "Raised when RevisePath actually changes something. Not raised for a no-op update.",
               "contentType": "application/cloudevents+json",
               "tags": [
@@ -347,15 +375,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated",
-                        "x-parser-schema-id": "<anonymous-schema-27>"
+                        "x-parser-schema-id": "<anonymous-schema-29>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:process-path-management:events:ProcessPathUpdated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-28>"
+                        "x-parser-schema-id": "<anonymous-schema-30>"
                       },
                       "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-26>"
+                    "x-parser-schema-id": "<anonymous-schema-28>"
                   }
                 ],
                 "x-parser-schema-id": "ProcessPathUpdatedCloudEvent"
@@ -381,7 +409,11 @@
                         "pick",
                         "hazmat"
                       ],
-                      "cycle_time_p95": "24h0m0s"
+                      "cycle_time_p95": "24h0m0s",
+                      "eligibility": {},
+                      "intake": [
+                        "CUSTOMER_ORDER"
+                      ]
                     }
                   }
                 }
@@ -407,11 +439,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated",
-                        "x-parser-schema-id": "<anonymous-schema-30>"
+                        "x-parser-schema-id": "<anonymous-schema-32>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:process-path-management:events:ProcessPathDeactivated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-31>"
+                        "x-parser-schema-id": "<anonymous-schema-33>"
                       },
                       "data": {
                         "type": "object",
@@ -422,14 +454,14 @@
                           "path_id": {
                             "type": "string",
                             "example": "PACK",
-                            "description": "required_capabilities/match_prefix/direct/cycle_time_p95/ eligibility are omitted (not empty-arrayed/zeroed) on a deactivation — it carries no definition data, only the PathId and the fact that it happened.",
-                            "x-parser-schema-id": "<anonymous-schema-32>"
+                            "description": "required_capabilities/match_prefix/direct/cycle_time_p95/ eligibility/intake are omitted (not empty-arrayed/zeroed) on a deactivation — it carries no definition data, only the PathId and the fact that it happened.",
+                            "x-parser-schema-id": "<anonymous-schema-34>"
                           }
                         },
                         "x-parser-schema-id": "ProcessPathDeactivatedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-29>"
+                    "x-parser-schema-id": "<anonymous-schema-31>"
                   }
                 ],
                 "x-parser-schema-id": "ProcessPathDeactivatedCloudEvent"
@@ -474,11 +506,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged",
-                        "x-parser-schema-id": "<anonymous-schema-34>"
+                        "x-parser-schema-id": "<anonymous-schema-36>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:process-path-management:events:CPTScheduleChanged:v1",
-                        "x-parser-schema-id": "<anonymous-schema-35>"
+                        "x-parser-schema-id": "<anonymous-schema-37>"
                       },
                       "data": {
                         "type": "object",
@@ -492,13 +524,13 @@
                             "type": "string",
                             "description": "The fulfillment site this schedule belongs to. Uses facility-layout's site identifier vocabulary but is not validated against it (this service has zero inbound dependency, ADR 0001).",
                             "example": "sp1",
-                            "x-parser-schema-id": "<anonymous-schema-36>"
+                            "x-parser-schema-id": "<anonymous-schema-38>"
                           },
                           "timezone": {
                             "type": "string",
                             "description": "IANA zone, e.g. America/Sao_Paulo.",
                             "example": "America/Sao_Paulo",
-                            "x-parser-schema-id": "<anonymous-schema-37>"
+                            "x-parser-schema-id": "<anonymous-schema-39>"
                           },
                           "cutoffs": {
                             "type": "array",
@@ -516,13 +548,13 @@
                                   "type": "string",
                                   "description": "Stable id, unique within the site.",
                                   "example": "sp1-1500",
-                                  "x-parser-schema-id": "<anonymous-schema-39>"
+                                  "x-parser-schema-id": "<anonymous-schema-41>"
                                 },
                                 "local_time": {
                                   "type": "string",
                                   "description": "Recurring daily cutoff, \"HH:MM\" 24-hour form.",
                                   "example": "15:00",
-                                  "x-parser-schema-id": "<anonymous-schema-40>"
+                                  "x-parser-schema-id": "<anonymous-schema-42>"
                                 },
                                 "days_of_week": {
                                   "type": "array",
@@ -537,7 +569,7 @@
                                       "Sat",
                                       "Sun"
                                     ],
-                                    "x-parser-schema-id": "<anonymous-schema-42>"
+                                    "x-parser-schema-id": "<anonymous-schema-44>"
                                   },
                                   "example": [
                                     "Mon",
@@ -546,37 +578,37 @@
                                     "Thu",
                                     "Fri"
                                   ],
-                                  "x-parser-schema-id": "<anonymous-schema-41>"
+                                  "x-parser-schema-id": "<anonymous-schema-43>"
                                 },
                                 "ship_method": {
                                   "type": "string",
                                   "description": "Free-form label (\"ground\", \"same-day\"); no carrier integration exists in this fleet.",
                                   "example": "ground",
-                                  "x-parser-schema-id": "<anonymous-schema-43>"
+                                  "x-parser-schema-id": "<anonymous-schema-45>"
                                 },
                                 "eligible_path_ids": {
                                   "type": "array",
                                   "items": {
                                     "type": "string",
-                                    "x-parser-schema-id": "<anonymous-schema-45>"
+                                    "x-parser-schema-id": "<anonymous-schema-47>"
                                   },
                                   "description": "The path families that can make this cutoff. Consumers compute the next concrete occurrence of a cutoff themselves from (local_time, days_of_week, timezone) — this service never publishes absolute timestamps for a recurring rule.",
                                   "example": [
                                     "PICK",
                                     "PACK"
                                   ],
-                                  "x-parser-schema-id": "<anonymous-schema-44>"
+                                  "x-parser-schema-id": "<anonymous-schema-46>"
                                 }
                               },
                               "x-parser-schema-id": "CutoffData"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-38>"
+                            "x-parser-schema-id": "<anonymous-schema-40>"
                           }
                         },
                         "x-parser-schema-id": "CPTScheduleData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-33>"
+                    "x-parser-schema-id": "<anonymous-schema-35>"
                   }
                 ],
                 "x-parser-schema-id": "CPTScheduleChangedCloudEvent"
@@ -659,15 +691,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathCreated",
-                        "x-parser-schema-id": "<anonymous-schema-47>"
+                        "x-parser-schema-id": "<anonymous-schema-49>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:process-path-management:analytics:ProcessPathCreated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-48>"
+                        "x-parser-schema-id": "<anonymous-schema-50>"
                       },
                       "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-46>"
+                    "x-parser-schema-id": "<anonymous-schema-48>"
                   }
                 ],
                 "x-parser-schema-id": "ProcessPathCreatedAnalyticsCloudEvent"
@@ -693,7 +725,10 @@
                         "pick"
                       ],
                       "cycle_time_p95": "24h0m0s",
-                      "eligibility": {}
+                      "eligibility": {},
+                      "intake": [
+                        "CUSTOMER_ORDER"
+                      ]
                     }
                   }
                 }
@@ -718,15 +753,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated",
-                        "x-parser-schema-id": "<anonymous-schema-50>"
+                        "x-parser-schema-id": "<anonymous-schema-52>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:process-path-management:analytics:ProcessPathUpdated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-51>"
+                        "x-parser-schema-id": "<anonymous-schema-53>"
                       },
                       "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-49>"
+                    "x-parser-schema-id": "<anonymous-schema-51>"
                   }
                 ],
                 "x-parser-schema-id": "ProcessPathUpdatedAnalyticsCloudEvent"
@@ -753,7 +788,10 @@
                         "hazmat"
                       ],
                       "cycle_time_p95": "24h0m0s",
-                      "eligibility": {}
+                      "eligibility": {},
+                      "intake": [
+                        "CUSTOMER_ORDER"
+                      ]
                     }
                   }
                 }
@@ -778,15 +816,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated",
-                        "x-parser-schema-id": "<anonymous-schema-53>"
+                        "x-parser-schema-id": "<anonymous-schema-55>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:process-path-management:analytics:ProcessPathDeactivated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-54>"
+                        "x-parser-schema-id": "<anonymous-schema-56>"
                       },
                       "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[2].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-52>"
+                    "x-parser-schema-id": "<anonymous-schema-54>"
                   }
                 ],
                 "x-parser-schema-id": "ProcessPathDeactivatedAnalyticsCloudEvent"
@@ -830,15 +868,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged",
-                        "x-parser-schema-id": "<anonymous-schema-56>"
+                        "x-parser-schema-id": "<anonymous-schema-58>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:process-path-management:analytics:CPTScheduleChanged:v1",
-                        "x-parser-schema-id": "<anonymous-schema-57>"
+                        "x-parser-schema-id": "<anonymous-schema-59>"
                       },
                       "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[3].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-55>"
+                    "x-parser-schema-id": "<anonymous-schema-57>"
                   }
                 ],
                 "x-parser-schema-id": "CPTScheduleChangedAnalyticsCloudEvent"

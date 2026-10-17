@@ -1178,6 +1178,138 @@
           ]
         }
       }
+    },
+    "warehouse.inventory.events": {
+      "description": "inventory-storage's integration topic (its ADR 0039). This service\nconsumes `StockRelocated` only (ADR 0010), under a stable consumer group\nread from env `RELOCATION_CONSUMER_GROUP` when `RELOCATION_MODE=kafka`,\nto record the execution progress of its slot plans. Every other type on\nthe topic is ignored.\n",
+      "publish": {
+        "operationId": "consumeInventoryStorageRelocations",
+        "summary": "Consume relocations to record slot-plan execution progress.",
+        "description": "A relocation is matched to a plan's move by `source_ref` first: the\nmove reference `<plan_id>:<move_seq>` (fulfillment-execution's\n`relocation_ref`, carried by inventory-storage as the relocation's\nsource_ref) names the move at that 0-based position of the plan's moves.\nOnly when `source_ref` is no move reference is it matched by\n`site_code`, `sku` and the bins on the site's Approved plan. The\nCloudEvents `id` is claimed with the effect in one transaction; a\nrelocation is recorded once per `relocation_id`. A relocation of no\nknown move is claimed and counted, never dead-lettered. A\n`StockRelocated` whose data cannot be decoded or misses a required\nfield is dead-lettered at once to `warehouse.inventory.events.dlq`.\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "StockRelocated",
+              "title": "StockRelocated (consumed, inventory-storage)",
+              "summary": "A quantity of one SKU moved from one bin to another bin of the same site.",
+              "description": "`type` = `com.warehouse.wms.inventory-storage.stock.StockRelocated`,\ndataschema `urn:warehouse:inventory-storage:events:StockRelocated:v1`.\nSubject and Kafka key = `relocation_id`. Restated from\ninventory-storage's contract (its ADR 0039), never imported.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "relocation_id",
+                          "site_code",
+                          "sku",
+                          "from_bin",
+                          "to_bin",
+                          "quantity",
+                          "reason",
+                          "source_ref",
+                          "occurred_at"
+                        ],
+                        "properties": {
+                          "relocation_id": {
+                            "type": "string",
+                            "description": "The relocation id; recorded once per id.",
+                            "x-parser-schema-id": "<anonymous-schema-94>"
+                          },
+                          "site_code": {
+                            "type": "string",
+                            "description": "The site both bins belong to (this service's site id).",
+                            "x-parser-schema-id": "<anonymous-schema-95>"
+                          },
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-96>"
+                          },
+                          "from_bin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-97>"
+                          },
+                          "to_bin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-98>"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-99>"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "SLOTTING",
+                              "CONSOLIDATION",
+                              "MANUAL"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-100>"
+                          },
+                          "source_ref": {
+                            "type": "string",
+                            "maxLength": 200,
+                            "description": "`<plan_id>:<move_seq>` on slot-plan moves (matched first); a task id, a ticket or \"\" otherwise.",
+                            "x-parser-schema-id": "<anonymous-schema-101>"
+                          },
+                          "occurred_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-102>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-93>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-92>"
+                  }
+                ],
+                "x-parser-schema-id": "StockRelocatedEvent"
+              },
+              "examples": [
+                {
+                  "name": "slottingMoveFromATask",
+                  "summary": "Seven units of SKU-R1 moved between two WH1 bins by a completed RELOCATE task of plan-9's move 0.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3c9e1a52-7b4d-4e18-a6f2-5d0b8c7e9f21",
+                    "source": "/warehouse/inventory-storage",
+                    "type": "com.warehouse.wms.inventory-storage.stock.StockRelocated",
+                    "subject": "rel-42",
+                    "time": "2026-10-13T12:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inventory-storage:events:StockRelocated:v1",
+                    "data": {
+                      "relocation_id": "rel-42",
+                      "site_code": "WH1",
+                      "sku": "SKU-R1",
+                      "from_bin": "WH1-STOR-AMB-A01-01-01-A",
+                      "to_bin": "WH1-STOR-AMB-A02-01-01-A",
+                      "quantity": 7,
+                      "reason": "SLOTTING",
+                      "source_ref": "plan-9:0",
+                      "occurred_at": "2026-10-13T12:00:00Z"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
     }
   },
   "components": {
@@ -1191,7 +1323,8 @@
       "ProductMeasured": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[2]",
       "ZoneRegistered": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[0]",
       "LocationSlotRegistered": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1]",
-      "LocationSlotDecommissioned": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[2]"
+      "LocationSlotDecommissioned": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[2]",
+      "StockRelocated": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0]"
     },
     "schemas": {
       "CloudEventEnvelope": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
@@ -1207,7 +1340,8 @@
       "PhysicalProfileEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[1].payload",
       "ZoneRegisteredEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[0].payload",
       "LocationSlotRegisteredEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1].payload",
-      "LocationSlotDecommissionedEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[2].payload"
+      "LocationSlotDecommissionedEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[2].payload",
+      "StockRelocatedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0].payload"
     }
   },
   "x-parser-spec-parsed": true,

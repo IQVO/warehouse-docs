@@ -88,6 +88,12 @@ Every integration test starts its own containers, so no `DATABASE_URL` or
 The `integration` CI job and `make integration` both run
 `go test -tags=integration ./...`, so every file above runs in CI.
 
+A Kafka integration test creates every topic it reads or writes and waits for the
+partition leader before the first produce (`conn.CreateTopics` returns before the
+broker has elected one). Writing to a topic that was only "created" fails on a cold
+broker with `Unknown Topic Or Partition`; the outbox trace test flaked that way until
+its `ensureTraceTopic` helper did both steps.
+
 ## Contract tests
 
 `scripts/contract-test.sh` builds `cmd/workforce` and starts it on
@@ -137,6 +143,8 @@ They run in the `test` job.
 | `TestMCPOptionalToolInputsCarryOmitempty` (+ `TestMCPOptionalToolInputsSensorFailsOnBadFixtures`) | Every MCP tool input field whose `jsonschema` description says "optional" carries `omitempty`, or the SDK marks it required and calls without it fail (gap fix D16). |
 | `TestOutboxRelaysPassAttemptCap` (+ `TestOutboxRelayCapSensorFailsOnBadFixtures`) | Every non-test `NewOutboxRelay` call under `cmd/` or `internal/composition/` passes `WithMaxAttempts` ([ADR 0036](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0036-outbox-relay-attempt-cap.md)), so one poison row cannot block the relay forever. |
 | `TestKafkaWritersSetRequiredAcks` (+ `TestKafkaWriterAcksSensorBites`) | Every kafka-go `Writer` composite literal in a non-test file under `internal/` or `cmd/` sets `RequiredAcks` (the import alias is resolved per file). kafka-go defaults it to `RequireNone` (acks=0): the broker never confirms the write, so a broker blip silently drops the message while `WriteMessages` returns nil. The twin proves the sensor flags a bad fixture under any alias. |
+| `TestDeadLetterCallsGuardCancellation` (+ `TestDeadLetterShutdownSensorBites`, `kafka_dlq_shutdown_fitness_test.go`) | Every function in a non-test file under `internal/adapters/inbound/kafka` that sends to the dead-letter topic must reference `ctx.Err()` (any context-named value) or `context.Canceled` in its own body, or carry a `//dlq:deterministic <reason>` comment on the call line or the line above it. A handler that fails because the process is stopping must not dead-letter a good message and commit past it (network-fulfillment #89); a guard in the caller does not count. The sensor test proves the detector flags the pre-fix shape. |
+| `TestKafkaWriterTopicNotSetTwice` (+ `TestKafkaWriterTopicSensorBites`, `kafka_writer_topic_fitness_test.go`) | kafka-go rejects every write whose `Message.Topic` is set when the `Writer` also has a `Topic`. Per Go package under `internal/` and `cmd/`: once any kafka-go `Message` literal sets `Topic`, every `Writer` literal in that package must leave `Topic` empty, unless it carries `//kafka:fixed-topic-writer <reason>` and no Topic-setting Message is provably written through it. Writers configured after construction and `WriterConfig` are not covered. (Escape: warehouse-planning's domain DLQ writer, where no dead letter ever landed.) |
 
 ## MCP evals
 
@@ -165,7 +173,7 @@ Triggers: push and pull_request on `main` and `develop`, a weekly cron
 | `lint` | golangci-lint v2.13.1 | every run |
 | `guide-lint` | `scripts/harness/guide_lint.py`, `repo_lint.py`, and the harness self-tests | every run |
 | `complexity` | golangci-lint with only `gocyclo,gocognit,cyclop,funlen,nestif` (gocyclo gate 15), plus an informational `gocyclo -over 10` report | every run |
-| `test` | `go build`, `go vet`, `go test ./... -race` with coverage, 90 % gate | every run |
+| `test` | `go build`, `go vet`, then `make coverage` (`go test ./... -race` with the Makefile's coverage scope and 90 % gate) | every run |
 | `bdd` | `go test ./... -run TestFeatures -v` | every run |
 | `contract` | Schemathesis 4.28.0 through `scripts/contract-test.sh` against a `postgres:16` service container | every run |
 | `evals-tests` | MCP E1, E2, E3 evals | every run |

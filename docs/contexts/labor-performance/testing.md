@@ -55,8 +55,14 @@ Source: `Makefile`, `.github/workflows/ci.yml`, `features/`, `internal/**/*_test
   `cmd/mcp/wiring_test.go`).
 - **Coverage gate:** `make coverage` runs with
   `-coverpkg=./internal/domain/...,./internal/application/...,./internal/analytics/...`
-  and fails below **90%**. CI enforces it in the `test` job and uploads
-  `coverage.out` as an artifact.
+  and fails below **90%**. CI enforces it in the `test` job (which runs
+  `make coverage` itself) and uploads `coverage.out` as an artifact.
+
+The Makefile is the single source of the coverage scope and threshold
+(gap 16d): the CI `test` job runs `make coverage` instead of its own
+`go test -coverpkg=...` command, so the local and the PR gate cannot drift;
+harness `repo_lint` rule R11 (coverage-scope) forbids a workflow passing
+`-coverpkg` itself. Change the scope or the threshold in the Makefile only.
 
 ## BDD acceptance tests (godog)
 
@@ -189,6 +195,8 @@ A separate feature file,
 | `TestOutboxRelaysPassAttemptCap` (+ `TestOutboxRelayCapSensorFailsOnBadFixtures`) | Every non-test file under `cmd/` that calls `NewOutboxRelay` passes `WithMaxAttempts`, so the relay attempt cap is always explicit ([ADR 0032](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0032-outbox-relay-attempt-cap.md)). |
 | `TestMCPOptionalToolInputsCarryOmitempty` (+ `TestMCPOptionalToolInputsSensorFailsOnBadFixtures`) | An MCP tool input field whose `jsonschema` description says it is optional (the word "optional", or "when/if omitted") carries `omitempty` in its `json` tag. Without it the MCP SDK marks the field required and a call that leaves it out is rejected before the handler runs (gap fix D16). |
 | `TestKafkaWritersSetRequiredAcks` (+ `TestKafkaWriterAcksSensorBites`) | Every kafka-go `Writer` composite literal in a non-test file under `internal/` or `cmd/` sets `RequiredAcks` (the import alias is resolved per file). kafka-go defaults it to `RequireNone` (acks=0): the broker never confirms the write, so a broker blip silently drops the message while `WriteMessages` returns nil. The twin proves the sensor flags a bad fixture under any alias. |
+| `TestDeadLetterCallsGuardCancellation` (+ `TestDeadLetterShutdownSensorBites`, `kafka_dlq_shutdown_fitness_test.go`) | Every function in a non-test file under `internal/adapters/inbound/kafka` that sends to the dead-letter topic must reference `ctx.Err()` (any context-named value) or `context.Canceled` in its own body, or carry a `//dlq:deterministic <reason>` comment on the call line or the line above it. A handler that fails because the process is stopping must not dead-letter a good message and commit past it (network-fulfillment #89); a guard in the caller does not count. The sensor test proves the detector flags the pre-fix shape. |
+| `TestKafkaWriterTopicNotSetTwice` (+ `TestKafkaWriterTopicSensorBites`, `kafka_writer_topic_fitness_test.go`) | kafka-go rejects every write whose `Message.Topic` is set when the `Writer` also has a `Topic`. Per Go package under `internal/` and `cmd/`: once any kafka-go `Message` literal sets `Topic`, every `Writer` literal in that package must leave `Topic` empty, unless it carries `//kafka:fixed-topic-writer <reason>` and no Topic-setting Message is provably written through it. Writers configured after construction and `WriterConfig` are not covered. (Escape: warehouse-planning's domain DLQ writer, where no dead letter ever landed.) |
 
 ## Other CI jobs
 

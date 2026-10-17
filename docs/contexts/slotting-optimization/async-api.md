@@ -2,7 +2,7 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: Kafka integration for slotting-optimization — one published integration topic with three SlotPlan events, three consumed sibling topics feeding local copies, dead-lettering and the CloudEvents envelope.
+description: Kafka integration for slotting-optimization — one published integration topic with three SlotPlan events, four consumed sibling topics (three feeding local copies, one feeding the plan execution progress), dead-lettering and the CloudEvents envelope.
 ---
 
 # Async API
@@ -19,11 +19,12 @@ producer use cases and consumed contracts, see
 
 | Topic | Direction | Notes |
 | --- | --- | --- |
-| `warehouse.slotting-optimization.events` | **Published** | Three events from the `SlotPlan` aggregate, written by the transactional outbox relay. Key = the plan id. |
+| `warehouse.slotting-optimization.events` | **Published** | Three events from the `SlotPlan` aggregate, written by the transactional outbox relay. Key = the plan id. `wes-work-planning` consumes `SlotPlanApproved`. |
 | `warehouse.order-management.events` | Consumed | Only `SiteSkuDemandChanged`, into the `demand_lines` local copy. Started only when `DEMAND_MODE=kafka`, group from `DEMAND_CONSUMER_GROUP`. |
 | `warehouse.product-master.events` | Consumed | Only `ProductClassified`, `ProductDimensionsDeclared` and `ProductMeasured`, into the `product_profiles` local copy. Started only when `PRODUCT_MODE=kafka`, group from `PRODUCT_CONSUMER_GROUP`. |
 | `warehouse.facility.events` | Consumed | Only `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned`, into the `zones` and `slots` local copies. Started only when `LAYOUT_MODE=kafka`, group from `LAYOUT_CONSUMER_GROUP`. |
-| `<consumed topic>.dlq` | Published (dead letters) | One per consumed topic, written only after a transient failure exhausts its retries (see below). |
+| `warehouse.inventory.events` | Consumed | Only `com.warehouse.wms.inventory-storage.stock.StockRelocated`, into `slot_plan_move_executions` (the plans' execution progress, ADR 0010). Started only when `RELOCATION_MODE=kafka`, group from `RELOCATION_CONSUMER_GROUP` (no default). |
+| `<consumed topic>.dlq` | Published (dead letters) | One per consumed topic, written after a transient failure exhausts its retries, or at once for a `StockRelocated` that cannot be decoded (see below). |
 | `warehouse.slotting-optimization.analytics` | Reserved | Named in ADR 0004 for a later analytics read side. Nothing publishes to it, so the spec does not declare it as a channel. |
 
 ## The envelope
@@ -93,16 +94,27 @@ default) only logs the messages; `EVENT_PUBLISHER=kafka` requires
 
 ## Who consumes these events
 
-**Nobody, today.** A search of `warehouse-ops-agent`, `warehouse-console` and
-`wes-work-planning` on `develop` finds no subscriber. The planned consumer is
-the execution of approved moves as MOVE and REPLENISH work through
-`process-path-management`, `wes-work-planning` and `fulfillment-execution`
-(fleet edge K29): **planned, not built**, and gated on ADRs in those
-contexts. The service is not deployed in `warehouse-infra` either.
+**`wes-work-planning` consumes `SlotPlanApproved`**, and nobody consumes
+`SlotPlanGenerated` or `SlotPlanRejected`. Its inbound consumer reads this
+topic as its sixth stream, under its existing consumer group, whenever
+`KAFKA_BROKERS` is set (`kafka.enabled` in `warehouse-infra`'s
+`helm-values/wes-work-planning.yaml`), with its own
+`warehouse.slotting-optimization.events.dlq`. Per plan it plans one `RELOCATE`
+work unit per entry of `moves` (id `<plan_id>-move-<move_seq>`, `move_seq` =
+the move's 0-based position in `moves`), holds back a move into a slot that
+another move of the plan vacates until that vacate completes, and cancels the
+not-yet-released work of an older plan of the same site (wes-work-planning
+ADR-0040). A plan that breaks the contract, or that arrives before the
+`RELOCATE` process path exists in the catalogue, is retried and then
+dead-lettered. The rest of the chain is `fulfillment-execution` (the `RELOCATE`
+task, its ADR 0047), `inventory-storage` (`RelocateStock`, its ADR 0039) and
+back to this context as `StockRelocated` (below). This is fleet edge K29, with
+K37 and K38 closing the loop; all three are live in `warehouse-infra`
+`develop`.
 
-## Consuming: local copies
+## Consuming: local copies and the execution progress
 
-All three consumers dispatch on the full `type` and ignore every other type
+All four consumers dispatch on the full `type` and ignore every other type
 on their topic. The CloudEvents `id` claim (`processed_events`) and the
 effect run in one transaction, and the offset is committed only afterwards,
 so a redelivery is a no-op (`outcome=duplicate`). The product copy also
@@ -114,7 +126,26 @@ started; the copy is whatever the database already holds).
 | --- | --- |
 | Not a valid CloudEvents 1.0 message, malformed payload, values the use case refuses | logged at WARN and committed past: never retried, never dead-lettered |
 | Transient failure (for example Postgres) | the same message is retried with capped backoff, 5 attempts in total, then published to `<topic>.dlq` with `x-dlq-source-topic`, `x-dlq-source-partition`, `x-dlq-source-offset`, `x-dlq-error` and `x-dlq-failed-at` headers |
+| `StockRelocated` whose data cannot be decoded, misses a required field or carries a quantity below 1 | deterministic poison: dead-lettered at once to `warehouse.inventory.events.dlq`, no retries |
+| `StockRelocated` that matches no move (unknown plan or move, other site, a manual or consolidation relocation) | claimed, logged at INFO and counted (`outcome=unmatched`, with a reason), never dead-lettered |
 | Producer down or silent | nothing breaks; the copy goes stale and a plan lists unplaceable SKUs with a reason instead of guessing |
+
+### `StockRelocated` and the plan's `execution`
+
+`inventory-storage` raises `StockRelocated` for `POST /relocations` and for
+every completed `RELOCATE` task. This context acts on `relocation_id`,
+`site_code`, `sku`, `from_bin`, `to_bin`, `quantity`, `source_ref` and
+`occurred_at`. On the slot-plan path `source_ref` is the move reference
+`<plan_id>:<move_seq>` that `fulfillment-execution` carries as
+`relocation_ref`; it matches when the plan of that id is Approved or
+Superseded, belongs to `site_code`, and has a move at `move_seq` for that SKU.
+When `source_ref` is no move reference, the move of the site's current
+Approved plan with that SKU whose bins agree with its kind matches instead. A
+match is recorded once per `relocation_id` in `slot_plan_move_executions`, and
+nothing is published in response. The result is the optional `execution`
+object on `GET /slot-plans/{planId}` (and the MCP `get_slot_plan`): moves
+total, moves executed, last executed at, and per move an executed flag and
+quantity.
 
 See the producers' contracts on
 [Integration](https://iqvo.github.io/slotting-optimization/docs/ecosystem/integration)

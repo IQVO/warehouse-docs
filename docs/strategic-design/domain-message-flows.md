@@ -44,41 +44,44 @@ context's own projector and are never read by a sibling.
 | Topic | Producer | Event types consumed by a sibling | Consumers |
 | --- | --- | --- | --- |
 | `warehouse.order-management.events` | order-management | `OrderAllocated`, `OrderPartiallyAllocated` | wes-work-planning, warehouse-planning |
-| | | `SiteSkuDemandChanged` | network-inventory-planning; slotting-optimization (built, not deployed) |
+| | | `SiteSkuDemandChanged` | network-inventory-planning, slotting-optimization |
 | `warehouse.inventory.events` | inventory-storage | `StockReserved`, `ReservationRevoked` | wes-work-planning |
+| | | `StockRelocated` (from `POST /relocations` and from a completed `RELOCATE` task) | slotting-optimization (plan execution progress) |
 | | | `TransferStockAllocated`, `TransferStockAllocationRejected`, `TransferReceiptStaged`, `TransferStockStowed` | network-inventory-planning |
 | | | legacy `ProductClassified` (emitted only by the one-shot backfill) | product-master's legacy importer (migration only, removed at stage E) |
-| `warehouse.work-planning.events` | wes-work-planning | `WorkReleased` | fulfillment-execution |
+| `warehouse.work-planning.events` | wes-work-planning | `WorkReleased` (including `RELOCATE` work for slot-plan moves) | fulfillment-execution |
 | | | `PathCapacityChanged` | order-management, network-fulfillment |
-| `warehouse.fulfillment.events` | fulfillment-execution | `TaskCompleted` | wes-work-planning, labor-performance |
+| `warehouse.fulfillment.events` | fulfillment-execution | `TaskCompleted` (RELOCATE tasks add `sku`, `from_bin`, `to_bin`, `quantity`, `relocation_ref`) | wes-work-planning, labor-performance, inventory-storage (picks and RELOCATE moves) |
 | | | `TransferPicked`, `TransferDispatched`, `TransferArrived` | network-inventory-planning |
 | | | `TaskCPTMissed`, `PackageManifested` | order-management |
 | `warehouse.workforce.events` | workforce-management | `ShiftPlanCommitted` | wes-work-planning, warehouse-planning |
 | `warehouse.labor-performance.events` | labor-performance | `TaskPerformanceRecorded` | workforce-management |
 | `warehouse.process-path-management.events` | process-path-management | `ProcessPathCreated`, `ProcessPathUpdated`, `ProcessPathDeactivated` | fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment |
 | | | `CPTScheduleChanged` | order-management, network-fulfillment |
-| `warehouse.facility.events` | facility-layout | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | inventory-storage (all three), warehouse-planning and inbound-receiving (the two slot events); slotting-optimization (all three, built, not deployed) |
+| `warehouse.facility.events` | facility-layout | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | inventory-storage (all three), warehouse-planning and inbound-receiving (the two slot events); slotting-optimization (all three) |
 | | | `SiteCapabilityChanged` | network-inventory-planning |
 | `warehouse.warehouse-planning.events` | warehouse-planning | `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected` | order-management (`BottleneckDetected` is ignored); `CapacityPlanPublished` also network-inventory-planning |
 | `warehouse.network-fulfillment.events` | network-fulfillment | none | no consumer (wired but unused) |
 | `warehouse.network-inventory-planning.events` | network-inventory-planning | `TransferAllocationRequested` | inventory-storage |
 | | | `WorkDemandReleased` | wes-work-planning |
-| `warehouse.product-master.events` | product-master | `ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies); slotting-optimization (built, not deployed) |
+| `warehouse.product-master.events` | product-master | `ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies); slotting-optimization |
 | | | `ProductRegistered` | inbound-receiving (local copy of known SKUs) |
-| | | `ProductDimensionsDeclared`, `ProductMeasured` | slotting-optimization (built, not deployed) |
+| | | `ProductDimensionsDeclared`, `ProductMeasured` | slotting-optimization |
 | `warehouse.inbound-receiving.events` | inbound-receiving | `ReceiptLineReceived` | inventory-storage (its ADR 0037) |
 | | | `DockAppointmentBooked` | none; warehouse-planning inbound-labor demand is planned, not built |
-| `warehouse.slotting-optimization.events` | slotting-optimization | `SlotPlanApproved` | none; MOVE work execution is planned, not built |
+| `warehouse.slotting-optimization.events` | slotting-optimization | `SlotPlanApproved` | wes-work-planning (one `RELOCATE` work unit per move, its ADR-0040) |
 
 Several published types have no sibling consumer today. These are
 `OrderRepromised`, nine of the eleven `warehouse.work-planning.events`
 types (for example `PathPlanDriftDetected` and `WorkUnitCompleted`),
 `BottleneckDetected`, `TransferPlanApproved`, every `warehouse.network-fulfillment.events` type,
-`ProductDescriptionChanged` and, until slotting-optimization is deployed,
-`ProductDimensionsDeclared` and `ProductMeasured`, every
+`ProductDescriptionChanged`, every
 `warehouse.inbound-receiving.events` type except `ReceiptLineReceived`, and
-every `warehouse.slotting-optimization.events` type. No scenario below
-traverses the `inbound-receiving` or `slotting-optimization` rows yet.
+`SlotPlanGenerated` and `SlotPlanRejected` on
+`warehouse.slotting-optimization.events`. No scenario below
+traverses the `inbound-receiving` or `slotting-optimization` rows yet (the
+slot-plan execution chain is the sequence on the
+[slotting-optimization sequence diagrams](/contexts/slotting-optimization/sequence-diagrams)).
 They are listed as hotspots on
 [Big Picture EventStorming](/strategic-design/eventstorming-big-picture).
 `warehouse-ops-agent` has no Kafka I/O at all. It only issues `qry:`

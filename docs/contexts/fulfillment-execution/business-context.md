@@ -121,7 +121,7 @@ earliest-CPT-first ordering.
 
 ## The task lifecycle, in business language
 
-A process path — Pick, Pack, Rebin, or SLAM — is modelled as a **named task
+A process path — Pick, Pack, Rebin, SLAM or Relocate — is modelled as a **named task
 type, a queue**, not a step in a linear workflow. A station pulls from a
 queue; it does not wait for a workflow to advance. That distinction matters
 in three concrete ways: the question "what is the most urgent work I can
@@ -151,6 +151,20 @@ separately tunable.
   **diverted** rather than labelled — a weight mismatch means the carton's
   contents do not match what the system believes is inside it, and shipping
   it would mean shipping the wrong thing at the wrong postage.
+- **Relocate (slot-plan moves).** Approved slot plans from
+  `slotting-optimization` are floor work too: carry a SKU's stock from one bin
+  to another so fast movers sit in forward pick slots. `wes-work-planning`
+  releases one unit per move on the `RELOCATE` path
+  ([ADR-0047](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0047-relocate-tasks-execute-slot-plan-moves.md)),
+  which becomes a `RELOCATE` task requiring the `relocate` capability and
+  carrying the planned move (SKU, source and destination bin). Two facts are
+  only known on the floor, so the **operator supplies them at completion**:
+  the counted quantity (v1 moves the whole on-hand quantity of the SKU at the
+  source bin) and the bin the plan left open — the source of an `Assign`, the
+  reserve destination of a `Vacate`. A completion without them is refused, so
+  a `RELOCATE` task can never close on a guess. The `TaskCompleted` it
+  publishes then carries what actually moved, and `inventory-storage` records
+  it on the ledger.
 
 A released work unit becomes a task type via a real lookup against the
 fleet's declared process-path catalogue — required capabilities come from
@@ -165,8 +179,10 @@ headcount, a shared **published language**, never a shared Go type.
   `OccupantId`; there is no roster, no certification record, no shift
   window. Those live in `workforce-management`, which stops at the
   process-path boundary.
-- **It does not own stock truth.** A `Task` carries an `orderRef`, not a SKU
-  ledger position. Reservations and bin-accurate location are
+- **It does not own stock truth.** An order `Task` carries an `orderRef`, not
+  a SKU ledger position, and a `RELOCATE` task carries a planned move but never
+  edits the ledger: it reports what the operator moved on `TaskCompleted`, and
+  reservations, bin-accurate location and the move itself are
   `inventory-storage`'s job.
 - **It does not decide how much work to release.** Only how a released unit
   completes.

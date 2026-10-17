@@ -32,13 +32,14 @@ classDiagram
         -DestinationLocationRole destinationLocationRole
         -Duration cycleTimeP95
         -Eligibility eligibility
+        -Intake intake
         -Status status
         -Time createdAt
         -Time updatedAt
         -int version
-        +Define(id, matchPrefix, direct, requiredCapabilities, destinationLocationRole, cycleTimeP95, eligibility, now) ProcessPath
+        +Define(id, matchPrefix, direct, requiredCapabilities, destinationLocationRole, cycleTimeP95, eligibility, intake, now) ProcessPath
         +Rehydrate(...) ProcessPath
-        +Revise(matchPrefix, requiredCapabilities, cycleTimeP95, eligibility, now) bool
+        +Revise(matchPrefix, requiredCapabilities, cycleTimeP95, eligibility, intake, now) bool
         +Deactivate(now)
         +IsActive() bool
         +Version() int
@@ -136,7 +137,11 @@ Omits: read accessors (`MatchPrefix()`, `Cutoffs()`, ...), the private
 `validate`/equality helpers and the `Err...` sentinels (listed on the
 [Aggregate Design Canvas](/contexts/process-path-management/aggregate-design-canvas)).
 `maxUnitsPerLine` is a `*int` (nil means unbounded). `Unset` is
-`DestinationLocationRoleUnset = ""`. The `Cutoff` to `PathId` link is a
+`DestinationLocationRoleUnset = ""`. `Intake` (`internal/domain/shared/intake.go`,
+[ADR 0034](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0034-process-path-intake.md)) is a value object: a validated,
+duplicate-free, sorted set of `DemandSource` (`CUSTOMER_ORDER`,
+`STOCK_TRANSFER`, `SLOT_RELOCATION`, `INVENTORY_CONTROL`); the empty set is
+valid. It is drawn as a field, not a separate box, to keep the diagram narrow. The `Cutoff` to `PathId` link is a
 reference by id only: `CPTSchedule` never holds a `ProcessPath`; the
 Active-path rule lives in the `DefineCPTSchedule` use case.
 
@@ -161,6 +166,7 @@ classDiagram
         +DestinationLocationRole DestinationLocationRole
         +CycleTimeP95 Duration
         +Eligibility Eligibility
+        +Intake Intake
         +At Time
     }
 
@@ -173,6 +179,7 @@ classDiagram
         +DestinationLocationRole DestinationLocationRole
         +CycleTimeP95 Duration
         +Eligibility Eligibility
+        +Intake Intake
         +At Time
     }
 
