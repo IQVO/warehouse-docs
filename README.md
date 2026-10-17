@@ -2,8 +2,8 @@
 
 Fleet-wide documentation for the **warehouse-systems** ecosystem. It holds
 the strategic and tactical Domain-Driven Design artifacts, the generated REST
-and AsyncAPI references, and the business context for fifteen backend
-contexts: fourteen domain bounded contexts plus `warehouse-ops-agent`. Built with [Docusaurus](https://docusaurus.io/) and
+and AsyncAPI references, and the business context for sixteen backend
+contexts: fifteen domain bounded contexts plus `warehouse-ops-agent`. Built with [Docusaurus](https://docusaurus.io/) and
 published to **GitHub Pages** through GitHub Actions.
 
 Live site: https://iqvo.github.io/warehouse-docs/
@@ -32,7 +32,11 @@ Live site: https://iqvo.github.io/warehouse-docs/
     `aggregate-design-canvas`, `domain-message-flow`, `eventstorming`,
     `ubiquitous-language`, `class-diagram`, `entity-relationship`,
     `sequence-diagrams`, `domain-events`; `product-master`,
-    `inbound-receiving` and `slotting-optimization` also have `use-cases`). Each synced page has a "Synced from" note. Edit those pages
+    `inbound-receiving`, `slotting-optimization` and
+    `pick-face-replenishment` also have `use-cases`, and
+    `pick-face-replenishment` also has the five operations pages
+    `configuration`, `runbook`, `observability`, `troubleshooting` and
+    `testing`). Each synced page has a "Synced from" note. Edit those pages
     upstream, never here. The exception is `network-inventory-planning`, whose
     repository has no `docs/docs/ddd/` pack yet: its pages were written here from
     its code and ADRs and say so in a note at the top; replace them with synced
@@ -42,8 +46,8 @@ Live site: https://iqvo.github.io/warehouse-docs/
 
   The Bounded Contexts sidebar is generated from the `CONTEXTS` and
   `CONTEXT_PAGES` arrays in `sidebars.ts`, plus `CONTEXT_EXTRA_PAGES`
-  (`use-cases`) and `ASYNC_NARRATIVE` (`async-api`). `inbound-receiving` and
-  `slotting-optimization` have the full pack, plus `use-cases` and
+  (`use-cases`) and `ASYNC_NARRATIVE` (`async-api`). `inbound-receiving`,
+  `slotting-optimization` and `pick-face-replenishment` have the full pack, plus `use-cases` and
   `async-api`. `CONTEXT_PAGE_OVERRIDES` is empty: it is only for a context
   whose repository does not ship its pack yet.
 - **API Reference** (`docs/api-reference/`): generated REST docs
@@ -70,7 +74,8 @@ for repo in order-management inventory-storage wes-work-planning \
             fulfillment-execution workforce-management facility-layout \
             process-path-management labor-performance network-fulfillment \
             warehouse-planning product-master inbound-receiving \
-            slotting-optimization network-inventory-planning; do
+            slotting-optimization network-inventory-planning \
+            pick-face-replenishment; do
   git -C "$repo" show origin/develop:apis/openapi.yaml \
     > "warehouse-docs/apis/$repo/openapi.yaml" 2>/dev/null
   git -C "$repo" show origin/develop:apis/asyncapi.yaml \
@@ -90,11 +95,11 @@ Seven contexts also ship an `apis/openapi-reports.yaml` for their separate
 `sidebars.ts`. The fleet-ops skill's `sync_docs_pack_to_aggregator.py` copies
 all three specs plus the synced context pages in one run.
 
-`warehouse-ops-agent` has no `apis/` directory. Fourteen contexts ship both an
-`openapi.yaml` and an `asyncapi.yaml` (`inbound-receiving` and
-`slotting-optimization` were added to the sync loop above,
-`docusaurus.config.ts`, `sidebars.ts` and `scripts/gen-async-docs.mjs` when
-their contracts merged).
+`warehouse-ops-agent` has no `apis/` directory. Fifteen contexts ship both an
+`openapi.yaml` and an `asyncapi.yaml` (`inbound-receiving`,
+`slotting-optimization` and `pick-face-replenishment` were added to the sync
+loop above, `docusaurus.config.ts`, `sidebars.ts` and
+`scripts/gen-async-docs.mjs` when their contracts merged).
 
 Next, regenerate the API reference pages (see below). Commit the refreshed
 specs and the regenerated docs together. If a spec is wrong, fix it in the
@@ -136,14 +141,15 @@ Pages must be set to **Source: GitHub Actions** for this repository
 
 ## Scope
 
-This site documents fifteen backend contexts: the fourteen domain bounded
+This site documents sixteen backend contexts: the fifteen domain bounded
 contexts `order-management`, `inventory-storage`, `wes-work-planning`,
 `fulfillment-execution`, `workforce-management`, `facility-layout`,
 `process-path-management`, `labor-performance`, `network-fulfillment`,
 `warehouse-planning`, `product-master`, `network-inventory-planning`,
-`inbound-receiving` and `slotting-optimization`, plus `warehouse-ops-agent`.
-Both `inbound-receiving` and `slotting-optimization` ship their artifact
-pack and specs.
+`inbound-receiving`, `slotting-optimization` and `pick-face-replenishment`,
+plus `warehouse-ops-agent`.
+`inbound-receiving`, `slotting-optimization` and `pick-face-replenishment`
+ship their artifact pack and specs.
 The frontend repositories (`warehouse-console`, `warehouse-ui-kit`) and the
 deployment repository (`warehouse-infra`) are referenced where relevant.
 They are not bounded contexts in the Evans/Vernon sense, so they have no DDD

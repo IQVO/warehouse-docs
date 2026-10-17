@@ -40,7 +40,7 @@ Everything else in the platform — physical location structure
 (`labor-performance`) — exists to feed that orchestration loop trustworthy,
 current facts, never to make decisions on its own.
 
-## The fifteen contexts on this site, one sentence each
+## The sixteen contexts on this site, one sentence each
 
 | Context | One-sentence purpose |
 | --- | --- |
@@ -59,6 +59,7 @@ current facts, never to make decisions on its own.
 | `network-inventory-planning` | Recommends inter-warehouse stock transfers from fail-closed local facts and carries an operator-approved transfer through reservation, floor work and destination stow as a saga, without ever moving stock itself. |
 | `inbound-receiving` | Everything before the first stow: the advance ship notice, the dock appointment and the receipt with its discrepancies (Short, Over, Damaged); hands good units to `inventory-storage` as events. Decided 2026-10-08, built and deployed in the reference cluster. |
 | `slotting-optimization` | Decides which SKUs deserve a forward pick slot: ranks SKUs by pick velocity, proposes a slot plan under the `abc-velocity-v1` policy, and publishes the approved forward-pick map after a human approves it; the moves are then executed as `RELOCATE` work by `wes-work-planning` and `fulfillment-execution` and recorded by `inventory-storage`, and this context reads the progress back. Decided 2026-10-08, built and deployed in the reference cluster. |
+| `pick-face-replenishment` | Keeps every forward pick face stocked: holds a min/max policy per site and SKU, watches bin levels through event-fed local copies and, when a face reaches its minimum, requests a move from the fullest reserve bin; it closes the request when `inventory-storage` records the relocation. It never creates floor work and never writes the ledger. Decided and merged 2026-10-17: built, not deployed in the reference cluster, and the execution chain behind it (`REPLENISH` work, the `BinStockLevelChanged` producer, the `REPLENISHMENT` relocation reason) is planned, not built. |
 
 See [Subdomain Classification](./subdomain-classification) for the
 Core/Supporting/Generic verdict on each, and [Context Map](./context-map)
@@ -73,7 +74,7 @@ actual inbound and outbound value streams described in Amazon's own public
 material and industry trade coverage. This table is that flow, stage by
 stage, against what this platform actually implements — so "which of these
 is real code, and which is deliberately out of scope" is answerable in one
-place instead of scattered across fifteen repos' own docs.
+place instead of scattered across sixteen repos' own docs.
 
 | Real Amazon FC stage | What physically happens | Built here? |
 | --- | --- | --- |

@@ -48,11 +48,10 @@ seeded in `process-path-management` first. Nothing in `warehouse-ops-agent`
 calls the MCP server yet.
 
 **Not owned here:** `REPLENISH` (min/max) work belongs to
-`pick-face-replenishment` (`wms`, Supporting), whose service is merged on
-`develop` (2026-10-17). It consumes this context's `SlotPlanApproved` as the
-forward map, but it is not deployed: `warehouse-infra` `develop` has no values
-file, route or ArgoCD application for it, so the edge is wired-but-unused (K39
-in the fleet [Context Map](/strategic-design/context-map)). The producers that
+`pick-face-replenishment` (`wms`, Supporting), [built on `develop`](/contexts/pick-face-replenishment)
+(2026-10-17). It consumes this context's `SlotPlanApproved` as the forward map, but it is
+not deployed: `warehouse-infra` `develop` has no values file, route or ArgoCD application for it, so the edge is
+wired-but-unused (K39 in the fleet [Context Map](/strategic-design/context-map)). The producers that
 would close its loop are not built: `inventory-storage` does not publish
 `BinStockLevelChanged` or the `REPLENISHMENT` relocation reason, and
 `wes-work-planning` has no `REPLENISH` work.

@@ -627,7 +627,7 @@ MODEL = [
 # "src" is the BCA ledger id of the source that names the capability.
 GAPS = [
     {"name": "Replenishment", "l1": "Inventory Management", "desc": "The ability to refill forward pick slots from reserve stock before they run empty.",
-     "src": [12], "why": "Not in production. Owner registered: the pick-face-replenishment context (wms, Supporting), scaffolded 2026-10-17 and in progress; its producers in inventory-storage and fulfillment-execution are not built. Until then warehouse-planning knows REPLENISHMENT only as a capacity-constraint type."},
+     "src": [12], "why": "Not in production. Owner registered: the pick-face-replenishment context (wms, Supporting), built on develop on 2026-10-17 but not deployed; it raises replenishment requests, and its execution chain (REPLENISH work in wes-work-planning and fulfillment-execution, the BinStockLevelChanged producer and the REPLENISHMENT relocation reason in inventory-storage) is not built. Until then warehouse-planning knows REPLENISHMENT only as a capacity-constraint type."},
     {"name": "Returns Management", "l1": "Inbound Management", "desc": "The ability to receive, inspect and dispose of returned products.",
      "src": [10], "why": "No returns flow in any context."},
     {"name": "Task Interleaving", "l1": "Warehouse Task Execution", "desc": "The ability to combine tasks of different types into one trip.",
