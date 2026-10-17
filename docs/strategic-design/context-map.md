@@ -27,6 +27,12 @@ from `fulfillment-execution` to `inventory-storage` (K37) and `StockRelocated`
 back to `slotting-optimization` (K38). Of the two edges that needed a
 consumer-side ADR first, K28 (`inbound-receiving` to `warehouse-planning`)
 stays **absent-planned**.
+
+Two further contexts were scaffolded on 2026-10-17 and are not part of the
+counts above: `pick-face-replenishment` (`wms`, Supporting) and
+`task-interleaving` (`wes`, Supporting). Contracts and domain are in progress;
+consumers and the producer-side changes of other contexts are planned, not
+built. Their edges are K39 to K47 and are all dashed and **absent-planned**.
 `network-inventory-planning` (NIP), the newest context with code behind it,
 plans and orchestrates inter-warehouse transfers; its edges are K30 to K36 and
 A15 below. Each context's repository has its own context map, synced to this
@@ -101,6 +107,7 @@ flowchart LR
         PM["product-master<br/>Supporting"]
         INB["inbound-receiving<br/>Supporting"]
         SLOT["slotting-optimization<br/>Supporting"]
+        PFR["pick-face-replenishment<br/>Supporting<br/>scaffolded, in progress"]
     end
 
     subgraph WES["wes subdomain"]
@@ -114,6 +121,7 @@ flowchart LR
         NIP["network-inventory-planning<br/>Core"]
         NF["network-fulfillment<br/>Supporting"]
         OA["warehouse-ops-agent<br/>Supporting"]
+        TI["task-interleaving<br/>Supporting<br/>scaffolded, in progress"]
     end
 
     CON["warehouse-console<br/>frontend shell, not a context"]
@@ -213,12 +221,29 @@ flowchart LR
     FE ==>|"Kafka TransferPicked, Dispatched,<br/>TransferArrived (reserved)"| NIP
     NIP -->|"MCP read tools"| OA
 
+    %% pick-face-replenishment (wms) and task-interleaving (wes), scaffolded
+    %% 2026-10-17, contracts and domain in progress. NO service runs yet, so
+    %% every edge below is dashed: planned / in progress, not built. The
+    %% producer-side changes of other contexts (inventory-storage
+    %% BinStockLevelChanged and reason REPLENISHMENT, fulfillment-execution
+    %% TaskAvailable/TaskClaimed and the hint consumer, wes-work-planning
+    %% REPLENISH work unit) are also not built. WHEN A LEG SHIPS: flip that
+    %% leg to a solid thick arrow and its row (K39 to K47) from absent-planned
+    %% to live, only after BOTH ends run in warehouse-infra develop.
+    SLOT -.->|"Kafka SlotPlanApproved, forward map,<br/>planned / in progress"| PFR
+    FL -.->|"Kafka ZoneRegistered, LocationSlot events,<br/>planned / in progress"| PFR
+    FL -.->|"Kafka LocationSlot events, LocationGeometryUpdated,<br/>planned / in progress"| TI
+    INV -.->|"Kafka BinStockLevelChanged (pending producer change),<br/>StockRelocated, planned / in progress"| PFR
+    PFR -.->|"Kafka ReplenishmentRequested,<br/>planned / in progress"| WP
+    FE -.->|"Kafka TaskAvailable, TaskClaimed (pending producer change),<br/>TaskCompleted, planned / in progress"| TI
+    TI -.->|"Kafka InterleavingHintIssued, advisory,<br/>planned / in progress"| FE
+
     classDef core fill:#1e3a8a,stroke:#1e293b,color:#fff;
     classDef supp fill:#6d28d9,stroke:#4c1d95,color:#fff;
     classDef gen fill:#475569,stroke:#94a3b8,color:#fff;
     classDef ext fill:#f1f5f9,stroke:#64748b,color:#334155,stroke-dasharray: 5 5;
     class INV,WP,FE,WPL,NIP core;
-    class OM,WFM,LP,NF,OA,PM,INB,SLOT supp;
+    class OM,WFM,LP,NF,OA,PM,INB,SLOT,PFR,TI supp;
     class FL,PPM gen;
     class RN,WCS,CON,NOSUB ext;
 ```
@@ -236,6 +261,10 @@ to K24 and its thin one to the agent is A13. The three thick edges into
 `slotting-optimization` are K25 to K27 and its execution chain is the thick
 K29, K37 and K38 (the `wes-work-planning` → `fulfillment-execution` hop is
 K11). Only K28 is planned with no build behind it.
+The dashed edges K39 to K47 belong to `pick-face-replenishment` and
+`task-interleaving` (scaffolded 2026-10-17, contracts and domain in progress;
+consumers and the producer-side changes of other contexts are planned, not
+built), so they are planned too. No edge to either context is live.
 The crossed edge is deliberately absent. `order-management` is coloured with
 the Supporting contexts because it is classified Generic/Supporting (see
 [Subdomain Classification](/strategic-design/subdomain-classification)).
@@ -296,6 +325,23 @@ Omitted from the diagram:
 | K36 | `fulfillment-execution` → `network-inventory-planning` | OHS + PL / ACL (hand-mirrored `TransferFactData`) | `warehouse.fulfillment.events`: `TransferPicked`, `TransferDispatched`, `TransferArrived` (reserved, scan-driven receiving can bypass it) | **live**. Opt-in (`TRANSFER_FACT_CONSUMER_GROUP`), set in the reference deployment | [NIP](/contexts/network-inventory-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
 | K37 | `fulfillment-execution` → `inventory-storage` | OHS + PL / CF | `warehouse.fulfillment.events`: `TaskCompleted`. A `PICK` completion confirms the picked line's reservation (INV ADR 0035 and 0036). A `RELOCATE` completion carries the additive `sku`, `from_bin`, `to_bin`, `quantity` and `relocation_ref` (`<plan_id>:<move_seq>`, FE ADR 0047) and runs `RelocateStock`, the same use case as `POST /relocations` (INV ADR 0039) | **live**. Opt-in (`TASK_COMPLETED_CONSUMER_MODE`, default `off`), set to `kafka` in `helm-values/inventory-storage.yaml` (`taskCompletedConsumerMode`, group `inventory-storage-confirm-pick`). Poison messages go to `warehouse.fulfillment.events.dlq`. Without the mode, completed slot-plan moves never reach the stock ledger | [FE](/contexts/fulfillment-execution/context-map), [INV](/contexts/inventory-storage/context-map) |
 | K38 | `inventory-storage` → `slotting-optimization` | OHS + PL / CF (execution-progress read model) | `warehouse.inventory.events`: `stock.StockRelocated` (raised by `POST /relocations` and by K37) | **live**. `RELOCATION_MODE=kafka`, group `slotting-optimization-relocation` (`helm-values/slotting-optimization.yaml`). A relocation is matched to a plan's move by `source_ref` = `<plan_id>:<move_seq>` (else by site, SKU and bins on the current Approved plan) and recorded once per `relocation_id`; unmatched ones are counted, never dead-lettered. Shown as `execution` on `GET /slot-plans/{planId}` (slotting ADR 0010, INV ADR 0039) | [INV](/contexts/inventory-storage/context-map), [slotting-optimization](/contexts/slotting-optimization/context-map) |
+| K39 | `slotting-optimization` → `pick-face-replenishment` | PL / ACL (local copy of the site's forward-pick map); C/S | `warehouse.slotting-optimization.events`: `slotplan.SlotPlanApproved`. `assignments` is the full forward map, replaced wholesale per site. A newer plan that no longer assigns a SKU to its forward bin cancels the open request (`ASSIGNMENT_CHANGED`) | **absent-planned / in progress**. `pick-face-replenishment` was scaffolded 2026-10-17, contracts and domain in progress; consumers are planned, not built. Flip to **live** when its `forward_assignments` consumer runs in `warehouse-infra` `develop` | none yet |
+| K40 | `facility-layout` → `pick-face-replenishment` | OHS + PL / ACL (local copy of zones and slots, to tell reserve bins from forward bins); C/S | `warehouse.facility.events`: `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | **absent-planned / in progress**. Same status as K39. Types are verified against the producer; the consumer is not built | none yet |
+| K41 | `facility-layout` → `task-interleaving` | OHS + PL / ACL (local copy of location geometry, input of the `rectilinear-v1` travel model); C/S | `warehouse.facility.events`: `LocationSlotRegistered`, `LocationSlotDecommissioned`, `LocationGeometryUpdated`, plus `ZoneRegistered` for the site of a location | **absent-planned / in progress**. `task-interleaving` was scaffolded 2026-10-17, contracts and domain in progress; consumers are planned, not built. Flip to **live** when its layout consumer runs in `warehouse-infra` `develop` | none yet |
+| K42 | `inventory-storage` → `pick-face-replenishment` | OHS + PL / ACL (per-bin level read model, highest `version` wins); C/S | `warehouse.inventory.events`: `stock.BinStockLevelChanged`, key `<bin>:<sku>` | **absent-planned / in progress**. The type does not exist on the producer yet: `inventory-storage` publishes `StockPicked` only on its analytics topic, with no bin. It needs an additive producer change (consumer ships first), planned, not built. Flip to **live** when both the producer change and the consumer run | none yet |
+| K43 | `inventory-storage` → `pick-face-replenishment` | OHS + PL / ACL (closes the request); C/S | `warehouse.inventory.events`: `stock.StockRelocated`. Acted on only when `reason == REPLENISHMENT` and `source_ref` is the request id; every other reason is ignored | **absent-planned / in progress**. The type is live for K38, but the `REPLENISHMENT` reason value is new and additive, so the producer side is planned, not built. `slotting-optimization`'s K38 consumer must keep ignoring reasons other than its own | none yet |
+| K44 | `pick-face-replenishment` → `wes-work-planning` | C/S; PL / ACL on the WP side | `warehouse.pick-face-replenishment.events`: `replenishment.ReplenishmentRequested`. It plans one `REPLENISH` work unit, released on a `REPLENISH` process path. `wes-work-planning` then releases it to `fulfillment-execution`, and `inventory-storage` applies the move as `RelocateStock` with reason `REPLENISHMENT`, the same shape as K29, K11, K37 and K38 | **absent-planned / in progress**. Neither the publisher nor the consumer is built, and the `REPLENISH` process path and the `REPLENISH` task type do not exist yet. Flip K44 to **live** only when all of them run | none yet |
+| K45 | `fulfillment-execution` → `task-interleaving` | OHS + PL / ACL (open-task pool and claim read model); C/S | `warehouse.fulfillment.events`: `task.TaskAvailable`, `task.TaskClaimed` | **absent-planned / in progress**. Both are new on the integration topic (`TaskClaimed` exists today only as an analytics occurrence, and neither carries a location). They need an additive producer change on `fulfillment-execution` (consumer ships first), planned, not built | none yet |
+| K46 | `fulfillment-execution` → `task-interleaving` | OHS + PL / ACL (advances the station position) | `warehouse.fulfillment.events`: `task.TaskCompleted` (K14, K15 and K37 already read it; only `task_id` is required, the end position comes from the local pool copy) | **absent-planned / in progress**. The type is live for other consumers; this consumer is not built | none yet |
+| K47 | `task-interleaving` → `fulfillment-execution` | C/S, advisory; PL / ACL on the FE side | `warehouse.task-interleaving.events`: `stationtrip.InterleavingHintIssued`. `fulfillment-execution` would store it locally and use it only as a tie-break inside one priority band, never across a CPT or priority boundary, fail-open when absent or expired. `claimNext` stays the only claim path and there is no `assign` | **absent-planned / in progress**. Neither end is built. Flip to **live** when the publisher and the `fulfillment-execution` hint table both run | none yet |
+
+`pick-face-replenishment` and `task-interleaving`: scaffolded 2026-10-17,
+contracts and domain in progress; consumers and the producer-side changes of
+other contexts are planned, not built. Their own events (the topics
+`warehouse.pick-face-replenishment.events` and
+`warehouse.task-interleaving.events`) have no deployed producer, so K39 to K47
+are the pinned design, not wires. Both are Supporting, neither makes a
+synchronous call to a sibling, and no sibling calls them.
 
 Published types with no consumer, as stated by their owners:
 
@@ -435,6 +481,18 @@ The context maps declare these pairs as having no relationship, by decision:
   read receipts, and receiving does not read slot plans. Their local copies
   are built only from the topics named above.
 
+- **`pick-face-replenishment` and `task-interleaving` ↔ every context not
+  named in K39 to K47.** Planned, not built. Neither would make a synchronous
+  call to a sibling, in either direction (event-fed local copies only). They
+  have no relationship with each other: replenishment does not read hints, and
+  interleaving does not read replenishment requests, although a `REPLENISH`
+  task reaches `task-interleaving` through K45 and K46 like any other task.
+  `pick-face-replenishment` never creates floor work (that is
+  `wes-work-planning` and `fulfillment-execution`) and never writes the stock
+  ledger (that is `inventory-storage`). `task-interleaving` never assigns work:
+  `claimNext` stays the only claim path. `warehouse-ops-agent` has no client
+  for either.
+
 ## Where the per-context maps disagree
 
 The rows above follow the code and the reference deployment. These are the
@@ -479,6 +537,11 @@ different pattern for the downstream side. The edge table shows both:
   **live**. K29 was absent-planned "MOVE and REPLENISH work"; the decision
   (slotting ADR 0010, which supersedes ADR 0007) chose RELOCATE work. Both now
   have synced per-context maps.
+- `pick-face-replenishment` and `task-interleaving` (scaffolded 2026-10-17)
+  were added as planned contexts with edges K39 to K47. K29's "MOVE and
+  REPLENISH work" history is unchanged: replenishment is now owned by
+  `pick-face-replenishment` (in progress) rather than by
+  `slotting-optimization`.
 - K20 was marked live "in code" only, with the reference deployment
   behind. Since 2026-10-07 `warehouse-infra` deploys `product-master` and
   runs all four consumers in `kafka` mode, so K20 is live by the same rule
