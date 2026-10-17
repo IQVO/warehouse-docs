@@ -1,7 +1,7 @@
 ---
 id: qualification
 title: Qualifying each bounded context as WMS or WES
-sidebar_label: Qualification of the 15 contexts
+sidebar_label: Qualification of the 16 contexts
 description: The five tests from the industry reference applied to every bounded context of the fleet, with the verdict, the ISA-95 level, the decision horizon, the Interact Analysis WES criteria and where the industry category differs from the fleet's CloudEvents tier.
 ---
 
@@ -9,8 +9,10 @@ description: The five tests from the industry reference applied to every bounded
 
 This page applies the five tests from the
 [industry reference](/wms-wes/industry-reference#the-tests-this-site-applies)
-to the fifteen contexts on this site. Every verdict is backed by code on
-`develop` (routes, events, domain packages). The detailed evidence for each
+to the sixteen contexts on this site. Every verdict is backed by code on
+`develop` (routes, events, domain packages), except for
+`pick-face-replenishment`, whose row is marked **not yet qualified**: no
+verdict has been derived for it yet. The detailed evidence for each
 context is in its card on [WMS tier](/wms-wes/wms-tier) or
 [WES tier](/wms-wes/wes-tier).
 
@@ -74,6 +76,7 @@ decides "the timing and location of order processing".[5][6]
 | [`inventory-storage`](/wms-wes/wms-tier#inventory-storage) | `wms` | **WMS core**: put away, store, count, allocate, move | 3 | seconds (per transaction) | Core | yes |
 | [`inbound-receiving`](/wms-wes/wms-tier#inbound-receiving) | `wms` | **WMS core**: receive; plus WMS-extended dock scheduling | 3 | hours | Supporting | yes |
 | [`slotting-optimization`](/wms-wes/wms-tier#slotting-optimization) | `wms` | **WMS extended**: slotting | 3 | days to weeks | Supporting | yes |
+| [`pick-face-replenishment`](/contexts/pick-face-replenishment) | `wms` | **not yet qualified**: Gartner's 2015 list names replenishment among WMS functions[2], but core or extended is not decided | not yet qualified | not yet qualified | Supporting | not yet qualified |
 | [`wes-work-planning`](/wms-wes/wes-tier#wes-work-planning) | `wes` | **WES**: dynamic release and flow balancing | 3 | minutes | Core | yes |
 | [`fulfillment-execution`](/wms-wes/wes-tier#fulfillment-execution) | `wes` | **WES**: task dispatch to stations; runs the WMS pick, pack and ship-verify transactions | 3 | seconds to minutes | Core | yes |
 | [`process-path-management`](/wms-wes/wes-tier#process-path-management) | `wes` | **WES configuration**: process paths and shipping cutoffs | 3 | days | Generic | yes |
@@ -101,6 +104,7 @@ latency. The DDD class column repeats the
 | WES (execution and configuration) | 3: wes-work-planning, fulfillment-execution, process-path-management |
 | Above the WMS | 4: warehouse-planning, order-management, network-inventory-planning, network-fulfillment |
 | Cross-tier decision support | 1: warehouse-ops-agent |
+| Not yet qualified | 1: pick-face-replenishment |
 | WCS | 0: the seam is reserved in fulfillment-execution, nothing implements it |
 
 ## The picture: industry category against fleet tier
@@ -115,6 +119,7 @@ flowchart LR
         INV["inventory-storage"]
         INB["inbound-receiving"]
         SO["slotting-optimization"]
+        PFR["pick-face-replenishment"]
     end
     subgraph FWES["Fleet tier wes"]
         direction TB
@@ -136,12 +141,14 @@ flowchart LR
         C3["WES"]
         C4["Above the WMS"]
         C5["Cross-tier support"]
+        C6["Not yet qualified"]
     end
     FL --> C1
     PM --> C1
     INV --> C1
     INB --> C1
     SO --> C2
+    PFR -.-> C6
     WWP --> C3
     FE --> C3
     PPM --> C3
@@ -157,14 +164,15 @@ flowchart LR
     classDef wes fill:#dbeafe,stroke:#1e3a8a,color:#172554
     classDef above fill:#ede9fe,stroke:#6d28d9,color:#2e1065
     classDef other fill:#f1f5f9,stroke:#475569,color:#0f172a
-    class FL,PM,INV,INB,SO,C1,C2 wms
+    class FL,PM,INV,INB,SO,PFR,C1,C2 wms
     class WWP,FE,PPM,WFM,LP,WPL,OM,NIP,NF,OA,C3 wes
     class C4 above
-    class C5 other
+    class C5,C6 other
 ```
 
 Thin arrows: the industry category matches the fleet tier. Thick arrows: it
-does not. All five `wms` contexts are WMS software by the industry tests. Of
+does not. The dotted arrow marks a context with no verdict yet. Five of the six `wms` contexts are WMS software by the industry tests;
+`pick-face-replenishment` is not yet qualified. Of
 the ten `wes` contexts, three are WES software. The other seven are labor
 management (an extended WMS capability for Gartner[1][2]), software above the
 WMS, or the read-only agent.
@@ -201,7 +209,7 @@ The bottom-left quadrant is the WES and the transactional WMS. The bottom-right
 quadrant is the slower WMS: master data, labor standards, slotting and
 capacity plans. The top half is everything that looks beyond one warehouse's
 floor. The positions are qualitative, chosen from the horizons in the verdict
-table.
+table. `pick-face-replenishment` is not placed because its horizon is not yet qualified.
 
 ## WES criteria, applied
 
@@ -223,8 +231,9 @@ tier", with no methods until an integration is commissioned.
 
 ## What this means for the fleet
 
-1. **Every `wms` context is WMS software.** The fleet's `wms` label and the
-   industry agree completely.
+1. **Five of the six `wms` contexts are WMS software.** The fleet's `wms` label
+   and the industry agree for those five. `pick-face-replenishment` is not yet
+   qualified.
 2. **`wes` means everything outside the WMS master-data and inventory tier**,
    not a warehouse execution system in the industry's narrow sense. Seven of the ten `wes`
    contexts are labor management, planning, network or channel software, or the
