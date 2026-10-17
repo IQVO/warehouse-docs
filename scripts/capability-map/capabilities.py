@@ -627,11 +627,11 @@ MODEL = [
 # "src" is the BCA ledger id of the source that names the capability.
 GAPS = [
     {"name": "Replenishment", "l1": "Inventory Management", "desc": "The ability to refill forward pick slots from reserve stock before they run empty.",
-     "src": [12], "why": "No replenishment task or trigger on develop. warehouse-planning knows REPLENISHMENT only as a capacity-constraint type."},
+     "src": [12], "why": "Not in production. Owner registered: the pick-face-replenishment context (wms, Supporting), scaffolded 2026-10-17 and in progress; its producers in inventory-storage and fulfillment-execution are not built. Until then warehouse-planning knows REPLENISHMENT only as a capacity-constraint type."},
     {"name": "Returns Management", "l1": "Inbound Management", "desc": "The ability to receive, inspect and dispose of returned products.",
      "src": [10], "why": "No returns flow in any context."},
     {"name": "Task Interleaving", "l1": "Warehouse Task Execution", "desc": "The ability to combine tasks of different types into one trip.",
-     "src": [12], "why": "Pull dispatch hands one task at a time; no interleaving policy exists."},
+     "src": [12], "why": "Not in production: pull dispatch hands one task at a time. Owner registered: the task-interleaving context (wes, Supporting), scaffolded 2026-10-17 and in progress."},
     {"name": "Equipment Control", "l1": "Warehouse Task Execution", "desc": "The ability to drive conveyors, sorters, AS/RS and robot fleets deterministically.",
      "src": [13], "why": "fulfillment-execution reserves an EquipmentCommandPort with no methods; no WCS is integrated."},
     {"name": "Value-added Services and Kitting", "l1": "Warehouse Task Execution", "desc": "The ability to perform kitting, light assembly and other value-added work.",
