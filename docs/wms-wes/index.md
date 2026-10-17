@@ -75,9 +75,9 @@ stands for the event families listed on the tier pages.
 - **WMS: the core is complete, two classic functions are missing.** Receive, put away, store,
   count, allocate, pick, pack and ship-verify all exist, plus the item and
   location masters, slotting and labor management. Replenishment of forward
-  pick slots and task interleaving are not in production yet; two new
-  contexts that will own them (`pick-face-replenishment`,
-  `task-interleaving`) were scaffolded on 2026-10-17 and are in progress. Wave planning is replaced on
+  pick slots is built as a request generator (`pick-face-replenishment`, not
+  deployed, execution chain not built) and task interleaving is not in
+  production yet; its owner `task-interleaving` was scaffolded on 2026-10-17 and is in progress. Wave planning is replaced on
   purpose by waveless release.
 - **WES, real and equipment-free.** `wes-work-planning` and
   `fulfillment-execution` release, balance and dispatch work the way the

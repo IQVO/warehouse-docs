@@ -118,7 +118,8 @@ It owns two aggregates and one pure function:
   local copies and the consumed contracts), 0004 (CloudEvents envelope and
   type catalogue) and 0005 (evaluation semantics and persistence) are all
   Accepted (2026-10-17).
-- **Fleet-level**: [Context Map](/strategic-design/context-map) (K39 to K44),
+- **Fleet-level**: [Context Map](/strategic-design/context-map) (K39, K40 and
+  K42 to K44),
   the [Event Standard](/strategic-design/event-standard-cloudevents)
   (subdomain table and type catalogue),
   [Subdomain Classification](/strategic-design/subdomain-classification) and

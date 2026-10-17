@@ -2,7 +2,7 @@
 id: index
 title: Bounded Contexts
 sidebar_label: Bounded Contexts
-description: The fourteen domain bounded contexts and the operator agent, each with its ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
+description: The fifteen domain bounded contexts and the operator agent, each with its ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
 slug: /contexts
 ---
 
@@ -52,8 +52,8 @@ applies, is given in brackets:
     `inventory-storage`, `wes-work-planning`, `fulfillment-execution`,
     `workforce-management`, `process-path-management`,
     `labor-performance`, `network-fulfillment`, `warehouse-planning`,
-    `product-master`, `inbound-receiving`, `slotting-optimization` and
-    `network-inventory-planning`.
+    `product-master`, `inbound-receiving`, `slotting-optimization`,
+    `network-inventory-planning` and `pick-face-replenishment`.
     (Hand-written for this site.)
 
 :::info[Synced pages]
@@ -91,8 +91,9 @@ pyramid, `make` targets and CI jobs).
 | [inbound-receiving](/contexts/inbound-receiving) | Supporting | `wms` | WMS — everything before the first stow: ASN, dock appointment, receipt, discrepancies; hands good units to `inventory-storage` as events. Deployed |
 | [slotting-optimization](/contexts/slotting-optimization) | Supporting | `wms` | WMS — which SKUs deserve a forward pick slot: velocity-ranked slot plans a human approves. Built, not deployed yet (no Dockerfile or chart; see [Ecosystem gaps](/fleet-health/ecosystem-gaps)) |
 | [network-inventory-planning](/contexts/network-inventory-planning) | Core | `wes` | WES — inter-warehouse transfer planning (advisory proposals, operator-approved transfer saga) |
+| [pick-face-replenishment](/contexts/pick-face-replenishment) | Supporting | `wms` | WMS — keeps forward pick faces stocked from reserve bins (min/max policy, fullest reserve bin). Built, not deployed (no `warehouse-infra` entry, no Dockerfile or chart); the `REPLENISH` execution chain is planned |
 
-See [Strategic Design](/strategic-design) for how these fifteen contexts relate to
+See [Strategic Design](/strategic-design) for how these sixteen contexts relate to
 each other at the fleet level, and the
 [DDD Starter Modelling Process](/strategic-design/ddd-starter-modelling-process)
 for which modelling step each page belongs to.

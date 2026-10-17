@@ -48,10 +48,10 @@ seeded in `process-path-management` first. Nothing in `warehouse-ops-agent`
 calls the MCP server yet.
 
 **Not owned here:** `REPLENISH` (min/max) work belongs to
-`pick-face-replenishment` (scaffolded 2026-10-17, contracts and domain in
-progress; consumers and the producer-side changes of other contexts are
-planned, not built). It will consume this context's `SlotPlanApproved` as the
-forward map.
+`pick-face-replenishment`, now [built on `develop`](/contexts/pick-face-replenishment)
+(2026-10-17; not deployed, and the execution chain behind it is planned, not
+built). It consumes this context's `SlotPlanApproved` as the forward map
+(K39, built consumer, wired-but-unused until it is deployed).
 
 **Planned, not built:** an analytics read side and a console remote.
 :::

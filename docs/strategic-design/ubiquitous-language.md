@@ -2,7 +2,7 @@
 id: ubiquitous-language
 title: Ubiquitous Language (Fleet Overview)
 sidebar_label: Ubiquitous Language
-description: How the vocabulary is organised across the fifteen backend contexts, which terms are genuinely shared, and which words mean different things in different contexts.
+description: How the vocabulary is organised across the sixteen backend contexts, which terms are genuinely shared, and which words mean different things in different contexts.
 ---
 
 # Ubiquitous Language: Fleet Overview
@@ -44,8 +44,8 @@ wins. For one alphabetical index across every context, see
 | `network-inventory-planning` | InterWarehouseTransfer, Proposal, ScoreBreakdown, PlanningSnapshot, SiteCapability, SiteSkuDemand, WorkDemand, Picked quantity, StuckTransfer, RebalanceRun | [Ubiquitous Language](/contexts/network-inventory-planning/ubiquitous-language) |
 | `inbound-receiving` | ASN, Dock appointment, Receipt, Receipt line, Condition (Good or Damaged), Discrepancy (Short, Over, Damaged), Dock door | [Ubiquitous Language](/contexts/inbound-receiving/ubiquitous-language) |
 | `slotting-optimization` | Slot plan (Draft, Approved, Rejected, Superseded), Forward slot, Velocity, ABC class, Stickiness, Policy (`abc-velocity-v1`), Assignment, Move (Assign, Relocate, Vacate), Unassigned | [Ubiquitous Language](/contexts/slotting-optimization/ubiquitous-language) |
-| `pick-face-replenishment` (planned) | Pick face, Reserve bin, Min/max, Replenishment request, Projected level | none yet (see [Planned terms](#planned-terms-pick-face-replenishment-and-task-interleaving)) |
-| `task-interleaving` (planned) | Station trip, Interleaving hint, Detour | none yet (see [Planned terms](#planned-terms-pick-face-replenishment-and-task-interleaving)) |
+| `pick-face-replenishment` | Pick face, Reserve bin, Min/max (policy), Replenishment request (Requested, Completed, Cancelled), Projected level, Priority (NORMAL, URGENT), Source bin policy | [Ubiquitous Language](/contexts/pick-face-replenishment/ubiquitous-language) |
+| `task-interleaving` (planned) | Station trip, Interleaving hint, Detour | none yet (see [Planned terms](#planned-terms-task-interleaving)) |
 
 ## Shared terms
 
@@ -74,12 +74,11 @@ no Shared Kernel".
 | **Receipt condition** | `Good` or `Damaged` on `ReceiptLineReceived`. Only `Good` units become receivable stock in `inventory-storage`; damaged units stay on the receipt and quarantine is a later ADR. | `inbound-receiving` | `inventory-storage` (live: its ADR 0037 consumer runs in the reference deployment) |
 | **Forward-pick slot** | A storage-role, active slot in a forward zone (`FORWARD_ZONE_CODES`, default `FWD`) that holds one SKU for picking. The approved SKU-to-slot map is published on `SlotPlanApproved`. | `slotting-optimization` | consumed by `wes-work-planning` as one `RELOCATE` work unit per move (its ADR-0040) |
 
-## Planned terms: pick-face-replenishment and task-interleaving
+## Terms of pick-face-replenishment
 
-Scaffolded 2026-10-17, contracts and domain in progress; consumers and the
-producer-side changes of other contexts are planned, not built. These
-definitions are the pinned design, not synced glossaries (neither context has
-a glossary page yet, so the owner column names the context).
+`pick-face-replenishment` is built on `develop` and ships a synced glossary
+([Ubiquitous Language](/contexts/pick-face-replenishment/ubiquitous-language)),
+which is the source for these terms.
 
 | Term | Meaning | Owner |
 | --- | --- | --- |
@@ -87,8 +86,18 @@ a glossary page yet, so the owner column names the context).
 | **Forward pick slot** | Already defined above as **Forward-pick slot**. Linked, not redefined. Its assignment arrives as the full forward map on `SlotPlanApproved`. | `slotting-optimization` |
 | **Reserve bin** | A bin in a reserve zone (`RESERVE_ZONE_CODES`, default `RSV`) of the same site that holds the SKU. The source of a replenishment. v1 picks the one with the largest `on_hand - reserved` (`fullest-reserve-bin-v1`). | `pick-face-replenishment` |
 | **Min/max** | The v1 replenishment policy per site and SKU (`MIN_MAX`): below `min_qty` a request is raised to refill toward `max_qty`, rounded down to a `multiple`. Demand-cover is a documented planned policy version. | `pick-face-replenishment` |
-| **Projected level** | `on_hand - reserved + open_inbound` of a pick face at detection. A request quantity never takes it above `max_qty`. | `pick-face-replenishment` |
-| **Replenishment request** | The aggregate `ReplenishmentRequest`: `Requested`, then `Completed` or `Cancelled`. At most one open per site, forward bin and SKU. It is closed only by a `StockRelocated` with reason `REPLENISHMENT`. | `pick-face-replenishment` |
+| **Projected level** | `on_hand - reserved` of a pick face plus the quantity of its open request, at detection. A request quantity never takes it above `max_qty`. | `pick-face-replenishment` |
+| **Replenishment request** | The aggregate `ReplenishmentRequest`: `Requested`, then `Completed` or `Cancelled`. At most one open per site, forward bin and SKU. It is closed only by a `StockRelocated` with reason `REPLENISHMENT` (which `inventory-storage` does not publish yet). | `pick-face-replenishment` |
+
+## Planned terms: task-interleaving
+
+Scaffolded 2026-10-17, contracts and domain in progress; consumers and the
+producer-side changes of other contexts are planned, not built. These
+definitions are the pinned design, not a synced glossary (the context has no
+glossary page yet, so the owner column names the context).
+
+| Term | Meaning | Owner |
+| --- | --- | --- |
 | **Station trip** | The aggregate `StationTrip`: one per station, holding its last known position and at most one active hint. | `task-interleaving` |
 | **Interleaving hint** | An advisory, expiring ranked list of up to `max_candidates` open tasks near where a station just finished (`InterleavingHintIssued`). `fulfillment-execution` may use it only as a tie-break inside one priority band, and ignores it when absent or expired. It is never an assignment. | `task-interleaving` |
 | **Detour** | `detour_m`: the travel distance cost of a candidate task from the station's position, measured by the `rectilinear-v1` travel model and capped by `max_detour_m`; candidates are ranked by it, ascending. | `task-interleaving` |
