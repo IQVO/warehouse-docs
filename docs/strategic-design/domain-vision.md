@@ -58,7 +58,7 @@ current facts, never to make decisions on its own.
 | `product-master` | The single source of truth for what a SKU is: its handling classification (taken over from `inventory-storage`) and its declared and measured physical profile, published as events that four contexts keep local copies of. |
 | `network-inventory-planning` | Recommends inter-warehouse stock transfers from fail-closed local facts and carries an operator-approved transfer through reservation, floor work and destination stow as a saga, without ever moving stock itself. |
 | `inbound-receiving` | Everything before the first stow: the advance ship notice, the dock appointment and the receipt with its discrepancies (Short, Over, Damaged); hands good units to `inventory-storage` as events. Decided 2026-10-08, built and deployed in the reference cluster. |
-| `slotting-optimization` | Decides which SKUs deserve a forward pick slot: ranks SKUs by pick velocity, proposes a slot plan under the `abc-velocity-v1` policy, and publishes the approved forward-pick map after a human approves it. Decided 2026-10-08, built, not deployed yet; executing the moves is planned, not built. |
+| `slotting-optimization` | Decides which SKUs deserve a forward pick slot: ranks SKUs by pick velocity, proposes a slot plan under the `abc-velocity-v1` policy, and publishes the approved forward-pick map after a human approves it; the moves are then executed as `RELOCATE` work by `wes-work-planning` and `fulfillment-execution` and recorded by `inventory-storage`, and this context reads the progress back. Decided 2026-10-08, built and deployed in the reference cluster. |
 
 See [Subdomain Classification](./subdomain-classification) for the
 Core/Supporting/Generic verdict on each, and [Context Map](./context-map)

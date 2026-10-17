@@ -73,7 +73,14 @@ composition roots in `cmd/wes` and `cmd/mcp` (classification wiring, shutdown
 order, housekeeper wiring).
 
 The CI `test` job enforces the **90 %** coverage gate on
-`./internal/domain/...` and `./internal/application/...` only.
+`./internal/domain/...` and `./internal/application/...` only, by running
+`make coverage`.
+
+The Makefile is the single source of the coverage scope and threshold
+(gap 16d): the CI `test` job runs `make coverage` instead of its own
+`go test -coverpkg=...` command, so the local and the PR gate cannot drift;
+harness `repo_lint` rule R11 (coverage-scope) forbids a workflow passing
+`-coverpkg` itself. Change the scope or the threshold in the Makefile only.
 
 ## BDD acceptance (godog)
 
@@ -126,8 +133,9 @@ CI runs them in the `evals-tests` job.
 (`testcontainers-go/modules/kafka`); nothing reads `DATABASE_URL` or
 `KAFKA_BROKERS` from the environment, which the fitness tests enforce. They
 cover the Postgres repositories and migrations (including the
-`0001`–`0013` chain, pool limits and `statement_timeout`, optimistic
-concurrency on `work_pools`, gift-wrap / line-no / transfer columns), the
+`0001`–`0014` chain, pool limits and `statement_timeout`, optimistic
+concurrency on `work_pools`, gift-wrap / line-no / transfer / relocation
+columns and `slot_plans`), the
 outbox and its lag gauge, the housekeeper, the idempotency middleware, the
 Kafka consumer (atomic processed mark, DLQ and DLQ auto-create,
 `WorkDemandReleased`), partition affinity of the `Hash` balancer, the Kafka
@@ -183,6 +191,8 @@ measurements in that file: `./internal/domain/release` 36/36 killed,
 | `TestCloudEventsOnly` | CloudEvents is the only envelope; no envelope-mode toggle ([ADR-0027](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0027-cloudevents-mandatory-event-envelope.md)) |
 | `TestReplayConsumersSetCommitInterval` | a process-unique replay consumer must set `CommitInterval` |
 | `TestKafkaWritersSetRequiredAcks`, `TestKafkaWriterAcksSensorBites` | every kafka-go `Writer{...}` literal in a non-test file under `internal/` or `cmd/` sets `RequiredAcks` (kafka-go defaults to `RequireNone`, acks=0, which silently drops messages on a broker blip); the sensor is proven to fail |
+| `TestDeadLetterCallsGuardCancellation` (+ `TestDeadLetterShutdownSensorBites`, `kafka_dlq_shutdown_fitness_test.go`) | Every function in a non-test file under `internal/adapters/inbound/kafka` that sends to the dead-letter topic must reference `ctx.Err()` (any context-named value) or `context.Canceled` in its own body, or carry a `//dlq:deterministic <reason>` comment on the call line or the line above it. A handler that fails because the process is stopping must not dead-letter a good message and commit past it (network-fulfillment #89); a guard in the caller does not count. The sensor test proves the detector flags the pre-fix shape. |
+| `TestKafkaWriterTopicNotSetTwice` (+ `TestKafkaWriterTopicSensorBites`, `kafka_writer_topic_fitness_test.go`) | kafka-go rejects every write whose `Message.Topic` is set when the `Writer` also has a `Topic`. Per Go package under `internal/` and `cmd/`: once any kafka-go `Message` literal sets `Topic`, every `Writer` literal in that package must leave `Topic` empty, unless it carries `//kafka:fixed-topic-writer <reason>` and no Topic-setting Message is provably written through it. Writers configured after construction and `WriterConfig` are not covered. (Escape: warehouse-planning's domain DLQ writer, where no dead letter ever landed.) |
 | `TestEventCatalogueMatchesContract` (+ `TestEventCatalogueDetector`) | every own CloudEvents type in `apis/asyncapi.yaml` appears in a CloudEvents ADR |
 
 `violation_test.go` holds the fixtures that prove the detectors can fail.
@@ -207,7 +217,7 @@ Triggers: push and pull request on `main` and `develop`, a weekly schedule
 | `lint` | golangci-lint v2.13.1 | every push/PR |
 | `guide-lint` | the four harness scripts above | every push/PR |
 | `complexity` | golangci-lint `--enable-only gocyclo,gocognit,cyclop,funlen,nestif` + informational gocyclo report (over 10; gate 15) | every push/PR |
-| `test` | `go build`, `go vet`, `go test ./... -race` with coverage, 90 % gate | every push/PR |
+| `test` | `go build`, `go vet`, then `make coverage` (`go test ./... -race` with the Makefile's coverage scope and 90 % gate) | every push/PR |
 | `bdd` | `go test ./... -run TestFeatures -v` | every push/PR |
 | `contract` | `scripts/contract-test.sh` with Schemathesis 4.28.0 | every push/PR |
 | `evals-tests` | `go test ./internal/adapters/inbound/mcp/... -race -run '^TestEval\|^TestMCPEvalSuite' -v` | every push/PR |

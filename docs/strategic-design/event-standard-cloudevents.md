@@ -163,9 +163,9 @@ a suffix match) and these must be byte-identical on both sides:
 
 | `type` | consumed by |
 | --- | --- |
-| `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | inventory-storage, warehouse-planning, inbound-receiving, slotting-optimization (built, not deployed) |
-| `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | inventory-storage, warehouse-planning, inbound-receiving, slotting-optimization (built, not deployed) |
-| `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | inventory-storage, slotting-optimization (built, not deployed) |
+| `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | inventory-storage, warehouse-planning, inbound-receiving, slotting-optimization |
+| `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | inventory-storage, warehouse-planning, inbound-receiving, slotting-optimization |
+| `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | inventory-storage, slotting-optimization |
 | `com.warehouse.wms.facility-layout.site.SiteCapabilityChanged` | network-inventory-planning |
 | `com.warehouse.wms.inventory-storage.reservation.StockReserved` | wes-work-planning |
 | `com.warehouse.wms.inventory-storage.reservation.ReservationRevoked` | wes-work-planning |
@@ -173,12 +173,13 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wms.inventory-storage.reservation.TransferStockAllocationRejected` | network-inventory-planning |
 | `com.warehouse.wms.inventory-storage.stock.TransferReceiptStaged` | network-inventory-planning |
 | `com.warehouse.wms.inventory-storage.stock.TransferStockStowed` | network-inventory-planning |
+| `com.warehouse.wms.inventory-storage.stock.StockRelocated` | slotting-optimization (plan execution progress; inventory-storage ADR 0039, slotting-optimization ADR 0010) |
 | `com.warehouse.wms.inventory-storage.product.ProductClassified` | retiring: backfill-only after inventory-storage ADR 0034, consumed by product-master's legacy importer until stage E |
 | `com.warehouse.wms.product-master.product.ProductRegistered` | inbound-receiving |
 | `com.warehouse.wms.product-master.product.ProductDescriptionChanged` | (published contract; no consumer yet) |
-| `com.warehouse.wms.product-master.product.ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies; inventory-storage ADR 0034, order-management ADR 0036, wes-work-planning ADR 0035, fulfillment-execution ADR 0039), slotting-optimization (built, not deployed) |
-| `com.warehouse.wms.product-master.product.ProductDimensionsDeclared` | slotting-optimization (built, not deployed) |
-| `com.warehouse.wms.product-master.product.ProductMeasured` | slotting-optimization (built, not deployed) |
+| `com.warehouse.wms.product-master.product.ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies; inventory-storage ADR 0034, order-management ADR 0036, wes-work-planning ADR 0035, fulfillment-execution ADR 0039), slotting-optimization |
+| `com.warehouse.wms.product-master.product.ProductDimensionsDeclared` | slotting-optimization |
+| `com.warehouse.wms.product-master.product.ProductMeasured` | slotting-optimization |
 | `com.warehouse.wms.inbound-receiving.asn.ASNRegistered` | (published contract; no consumer yet) |
 | `com.warehouse.wms.inbound-receiving.asn.ASNCancelled` | (published contract; no consumer yet) |
 | `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked` | planned: warehouse-planning inbound-labor demand (not built) |
@@ -189,19 +190,19 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` | inventory-storage (its ADR 0037) |
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed` | (published contract; no consumer yet) |
 | `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanGenerated` | (published contract; no consumer yet) |
-| `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved` | (published contract; no consumer yet); planned: MOVE work execution (not built) |
+| `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved` | wes-work-planning (one `RELOCATE` work unit per move, its ADR-0040; slotting-optimization ADR 0010) |
 | `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanRejected` | (published contract; no consumer yet) |
 | `com.warehouse.wes.order-management.order.OrderAllocated` | wes-work-planning |
 | `com.warehouse.wes.order-management.order.OrderPartiallyAllocated` | wes-work-planning |
 | `com.warehouse.wes.order-management.order.OrderRepromised` | (published contract) |
-| `com.warehouse.wes.order-management.siteskudemand.SiteSkuDemandChanged` | network-inventory-planning, slotting-optimization (built, not deployed) |
+| `com.warehouse.wes.order-management.siteskudemand.SiteSkuDemandChanged` | network-inventory-planning, slotting-optimization |
 | `com.warehouse.wes.process-path-management.processpath.ProcessPathCreated` | fulfillment-execution, wes-work-planning, workforce-management, order-management |
 | `com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated` | same four |
 | `com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated` | same four |
 | `com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged` | order-management |
 | `com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded` | workforce-management (and labor-performance itself) |
 | `com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted` | wes-work-planning, warehouse-planning |
-| `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` | wes-work-planning, labor-performance |
+| `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` | wes-work-planning, labor-performance, inventory-storage (picks, and RELOCATE moves via the additive RELOCATE fields, fulfillment-execution ADR 0047) |
 | `com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed` | order-management |
 | `com.warehouse.wes.fulfillment-execution.package.PackageManifested` | order-management |
 | `com.warehouse.wes.fulfillment-execution.transfer.TransferPicked` | network-inventory-planning |

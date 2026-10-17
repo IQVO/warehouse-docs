@@ -114,6 +114,38 @@ caller re-derive the calculation. A `StockUnit` that is `UNLOCATED` or
 `REMOVED` contributes zero usable quantity regardless of its recorded
 quantity, because lost stock must never be promised to a customer.
 
+## Relocation: slot plans reach the ledger
+
+Chaotic storage decides where stock lands at stow. It says nothing about
+moving stock afterwards, and the slotting context needs exactly that: when a
+planner approves a slot plan, the fast movers have to be carried to their
+forward slots. The business rule is the same as for every other stock change:
+**a move is a ledger fact, recorded once and atomically, and it never moves
+stock that is already promised.**
+
+- **Whole bins, one site.** A relocation takes a quantity of one SKU out of one
+  bin and puts it into another bin of the *same site*. Both bins and the stock
+  units change in one transaction, so there is never a moment where the stock
+  is in neither or in both. Site-level on-hand is unchanged by a relocation.
+- **Only usable stock moves.** Reserved quantity stays where it is, because a
+  reservation's pick location names the bin. If the operator counted more than
+  the usable quantity there (stock was reserved meanwhile), nothing is moved
+  and the case goes to an operator rather than being partly applied.
+- **Exactly once.** A replayed `POST /relocations` returns the stored result,
+  and a redelivered completion event is a no-op, so a relocation never counts
+  twice.
+- **Two doors, one use case.** Inventory control can relocate by hand
+  (`POST /relocations`, reasons `MANUAL`, `CONSOLIDATION` or `SLOTTING`), and a
+  completed `RELOCATE` task on the floor does the same through
+  `fulfillment-execution`'s `TaskCompleted`. In both the context raises
+  `StockRelocated`, which is how `slotting-optimization` learns that a move of
+  its plan has happened.
+
+This context does not plan the move, decide which SKU goes where or tell an
+operator what to carry. Slotting proposes, `wes-work-planning` plans and
+staffs, `fulfillment-execution` executes with an operator, and this context
+only records the outcome (slotting ADR 0010, this context's ADR 0039).
+
 ## Position in the WMS / WES / WCS layering
 
 | Tier | Time horizon | Answers | This service |
@@ -137,6 +169,7 @@ interleaving, and labour policy all change weekly, but stock truth must not.
 | Physical delivery fails routinely | A revoked reservation returns quantity to usable; reservations expire on a timeout. |
 | Only usable stock constrains release | Usable = on-hand − reserved − held/unlocated, exposed as a first-class read model. |
 | Loss must be visible, never silent | `Unlocated`, discrepancy detection, and cycle-count completion events all say so explicitly. |
+| Moving stock must not break a promise | `RelocateStock` moves only usable stock, between two bins of one site, in one transaction, and raises `StockRelocated` exactly once. |
 | WES needs stock reality, not write access | Integration events publish stock reality; no sibling context gets write access to an aggregate — callers such as `order-management` can only issue commands (reserve, revoke) that run through this service's own invariants. |
 
 See [Ubiquitous Language](/contexts/inventory-storage/ubiquitous-language) for the exact vocabulary

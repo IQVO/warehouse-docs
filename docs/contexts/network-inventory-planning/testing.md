@@ -80,6 +80,8 @@ Kafka tests must start a broker through testcontainers: the fitness test
 | `TestCloudEventsOnly` | every producer and consumer goes through the CloudEvents package |
 | `TestReplayConsumersSetCommitInterval` | a reader with a process-unique group id (full-replay cache consumer) must set `CommitInterval`; NIP has no such reader today |
 | `TestKafkaWritersSetRequiredAcks`, `TestKafkaWriterAcksSensorBites` | every kafka-go `Writer{...}` literal in a non-test file under `internal/` or `cmd/` sets `RequiredAcks` (kafka-go defaults to `RequireNone`, acks=0, which silently drops messages on a broker blip); the sensor is proven to fail |
+| `TestDeadLetterCallsGuardCancellation` (+ `TestDeadLetterShutdownSensorBites`, `kafka_dlq_shutdown_fitness_test.go`) | Every function in a non-test file under `internal/adapters/inbound/kafka` that sends to the dead-letter topic must reference `ctx.Err()` (any context-named value) or `context.Canceled` in its own body, or carry a `//dlq:deterministic <reason>` comment on the call line or the line above it. A handler that fails because the process is stopping must not dead-letter a good message and commit past it (network-fulfillment #89); a guard in the caller does not count. The sensor test proves the detector flags the pre-fix shape. |
+| `TestKafkaWriterTopicNotSetTwice` (+ `TestKafkaWriterTopicSensorBites`, `kafka_writer_topic_fitness_test.go`) | kafka-go rejects every write whose `Message.Topic` is set when the `Writer` also has a `Topic`. Per Go package under `internal/` and `cmd/`: once any kafka-go `Message` literal sets `Topic`, every `Writer` literal in that package must leave `Topic` empty, unless it carries `//kafka:fixed-topic-writer <reason>` and no Topic-setting Message is provably written through it. Writers configured after construction and `WriterConfig` are not covered. (Escape: warehouse-planning's domain DLQ writer, where no dead letter ever landed.) |
 | `TestEventCatalogueMatchesContract`, `TestEventCatalogueDetector` | every published type appears in the event catalogue contract |
 
 ### Contract tests
@@ -141,7 +143,7 @@ test that prints `SKIP` fails the job. Locally:
 | `lint` | push, PR | golangci-lint v2.14.0 |
 | `guide-lint` | push, PR (blocking: a stale guide reference or a failing hook self-test fails the run) | `scripts/harness/guide_lint.py`, `test_hook.py` |
 | `complexity` | push, PR | golangci-lint with only `gocyclo, gocognit, cyclop, funlen, nestif`, plus an informational gocyclo report |
-| `test` | push, PR | build, vet, race tests with coverage, 90% gate |
+| `test` | push, PR | build, vet, then `make coverage` (race tests with the Makefile's coverage scope and 90% gate) |
 | `bdd` | push, PR | `go test ./... -run TestFeatures -v` |
 | `integration` | push, PR | `go test -tags=integration ./... -race -count=1` (a `postgres:16` service is provisioned, but the tests start their own containers) |
 | `mutation-fast` | push, PR | gremlins on `internal/domain/transfer` and `internal/analytics/report` |

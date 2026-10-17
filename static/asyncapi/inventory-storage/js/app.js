@@ -59,7 +59,7 @@
   "defaultContentType": "application/cloudevents+json",
   "channels": {
     "warehouse.inventory.events": {
-      "description": "The outbound integration topic for this bounded context (the `Topic` constant in `internal/adapters/outbound/kafka/publisher.go`). Reaching it: `StockReserved` and `ReservationRevoked` (keyed by reservation id), the transfer replies and receipt/stow events (keyed by transfer line id), and the legacy `ProductClassified` (keyed by SKU), which since ADR 0034 only the one-shot `republish-product-classifications` backfill emits (product-master's legacy importer consumes it). The primary downstream consumer is wes-work-planning, which dispatches on their full `type` strings and projects them into its `UsableInventoryObserved` read model, keyed by SKU.\n",
+      "description": "The outbound integration topic for this bounded context (the `Topic` constant in `internal/adapters/outbound/kafka/publisher.go`). Reaching it: `StockReserved` and `ReservationRevoked` (keyed by reservation id), the transfer replies and receipt/stow events (keyed by transfer line id), `StockRelocated` (keyed by relocation id, ADR 0039), and the legacy `ProductClassified` (keyed by SKU), which since ADR 0034 only the one-shot `republish-product-classifications` backfill emits (product-master's legacy importer consumes it). The primary downstream consumer is wes-work-planning, which dispatches on their full `type` strings and projects them into its `UsableInventoryObserved` read model, keyed by SKU.\n",
       "subscribe": {
         "operationId": "consumeInventoryStorageEvents",
         "summary": "Consume inventory-storage domain events.",
@@ -937,6 +937,143 @@
               ]
             },
             {
+              "name": "StockRelocated",
+              "title": "Stock Relocated",
+              "summary": "A quantity of one SKU moved from one bin to another bin of the same site — on hand unchanged, location changed, exactly once.",
+              "description": "Raised by the RelocateStock use case (ADR 0039), reached two ways: POST /relocations (Idempotency-Key) and the RELOCATE branch of the TaskCompleted consumer (a completed slot-plan RELOCATE task from fulfillment-execution). In ONE transaction the source bin's occupancy fell and the destination bin's rose by `quantity`, the touched source StockUnits were decremented, ONE new StockUnit was created at `to_bin`, the immutable `relocations` row was written and this outbox row enqueued. Site-level on-hand is unchanged.\n\nExactly once per relocation: a replayed POST returns the stored response and a redelivered TaskCompleted (same CloudEvents id) is a no-op, so neither publishes again. `source_ref` is always present (`\"\"` when none); on the task path it is the task's `relocation_ref`, or its task id when the producer sent none.\n\n**Integration topic only** (no analytics variant). Kafka key and CloudEvents `subject` are the relocation id (ADR 0021). slotting-optimization consumes it to close a slot plan's move.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "stock",
+                  "description": "Raised on the intra-site relocation path (ADR 0039)."
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents envelope for a StockRelocated domain event (ADR 0039).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "description": "Fixed event type for StockRelocated.",
+                        "const": "com.warehouse.wms.inventory-storage.stock.StockRelocated",
+                        "x-parser-schema-id": "<anonymous-schema-86>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "description": "urn:warehouse:inventory-storage:events:StockRelocated:v1",
+                        "pattern": "^urn:warehouse:inventory-storage:events:StockRelocated:v1$",
+                        "x-parser-schema-id": "<anonymous-schema-87>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Business payload for StockRelocated (v1, frozen). `quantity` units of `sku` left `from_bin` and are now in `to_bin`, both bins of `site_code`.",
+                        "required": [
+                          "relocation_id",
+                          "site_code",
+                          "sku",
+                          "from_bin",
+                          "to_bin",
+                          "quantity",
+                          "reason",
+                          "source_ref",
+                          "occurred_at"
+                        ],
+                        "properties": {
+                          "relocation_id": {
+                            "type": "string",
+                            "description": "The Relocation's id (GET /relocations/{id}); also the Kafka key and `subject`.",
+                            "x-parser-schema-id": "<anonymous-schema-89>"
+                          },
+                          "site_code": {
+                            "type": "string",
+                            "description": "The site both bins belong to.",
+                            "x-parser-schema-id": "<anonymous-schema-90>"
+                          },
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-91>"
+                          },
+                          "from_bin": {
+                            "type": "string",
+                            "description": "The source bin's location code.",
+                            "x-parser-schema-id": "<anonymous-schema-92>"
+                          },
+                          "to_bin": {
+                            "type": "string",
+                            "description": "The destination bin's location code (never equal to from_bin).",
+                            "x-parser-schema-id": "<anonymous-schema-93>"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-94>"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "SLOTTING",
+                              "CONSOLIDATION",
+                              "MANUAL"
+                            ],
+                            "description": "Why the stock moved. A RELOCATE task is always SLOTTING (it executes a slot plan).",
+                            "x-parser-schema-id": "<anonymous-schema-95>"
+                          },
+                          "source_ref": {
+                            "type": "string",
+                            "maxLength": 200,
+                            "description": "The caller's reference (a slot-plan move, the task's relocation_ref, or the task id); always present, \"\" when none.",
+                            "x-parser-schema-id": "<anonymous-schema-96>"
+                          },
+                          "occurred_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-97>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-88>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-85>"
+                  }
+                ],
+                "x-parser-schema-id": "StockRelocatedEvent"
+              },
+              "examples": [
+                {
+                  "name": "slottingMoveFromATask",
+                  "summary": "Seven units of SKU-R1 moved between two WH1 bins by a completed RELOCATE task.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3c9e1a52-7b4d-4e18-a6f2-5d0b8c7e9f21",
+                    "source": "/warehouse/inventory-storage",
+                    "type": "com.warehouse.wms.inventory-storage.stock.StockRelocated",
+                    "subject": "rel-42",
+                    "time": "2026-10-13T12:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inventory-storage:events:StockRelocated:v1",
+                    "data": {
+                      "relocation_id": "rel-42",
+                      "site_code": "WH1",
+                      "sku": "SKU-R1",
+                      "from_bin": "WH1-STOR-AMB-A01-01-01-A",
+                      "to_bin": "WH1-STOR-AMB-A02-01-01-A",
+                      "quantity": 7,
+                      "reason": "SLOTTING",
+                      "source_ref": "plan-9#3",
+                      "occurred_at": "2026-10-13T12:00:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
               "name": "ProductClassified",
               "title": "Product Classified (legacy, backfill only)",
               "summary": "A SKU's handling classification, re-emitted by the one-shot backfill.",
@@ -963,13 +1100,13 @@
                         "type": "string",
                         "description": "Fixed event type for ProductClassified.",
                         "const": "com.warehouse.wms.inventory-storage.product.ProductClassified",
-                        "x-parser-schema-id": "<anonymous-schema-86>"
+                        "x-parser-schema-id": "<anonymous-schema-99>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "urn:warehouse:inventory-storage:events:ProductClassified:v1 on the integration topic, ...:analytics:ProductClassified:v1 on the analytics topic.",
                         "pattern": "^urn:warehouse:inventory-storage:(events|analytics):ProductClassified:v1$",
-                        "x-parser-schema-id": "<anonymous-schema-87>"
+                        "x-parser-schema-id": "<anonymous-schema-100>"
                       },
                       "data": {
                         "type": "object",
@@ -982,7 +1119,7 @@
                           "sku": {
                             "type": "string",
                             "description": "The classified SKU (also the CloudEvents subject and Kafka key).",
-                            "x-parser-schema-id": "<anonymous-schema-89>"
+                            "x-parser-schema-id": "<anonymous-schema-102>"
                           },
                           "handling_tags": {
                             "type": "array",
@@ -997,9 +1134,9 @@
                                 "Oversized",
                                 "HighValue"
                               ],
-                              "x-parser-schema-id": "<anonymous-schema-91>"
+                              "x-parser-schema-id": "<anonymous-schema-104>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-90>"
+                            "x-parser-schema-id": "<anonymous-schema-103>"
                           },
                           "temperature_class": {
                             "type": "string",
@@ -1009,20 +1146,20 @@
                               "Frozen"
                             ],
                             "description": "Present if and only if handling_tags includes TemperatureSensitive.",
-                            "x-parser-schema-id": "<anonymous-schema-92>"
+                            "x-parser-schema-id": "<anonymous-schema-105>"
                           },
                           "dot_hazard_class": {
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 9,
                             "description": "Top-level US DOT hazard class; present only for a Hazmat classification with one recorded (ADR 0010).",
-                            "x-parser-schema-id": "<anonymous-schema-93>"
+                            "x-parser-schema-id": "<anonymous-schema-106>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-88>"
+                        "x-parser-schema-id": "<anonymous-schema-101>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-85>"
+                    "x-parser-schema-id": "<anonymous-schema-98>"
                   }
                 ],
                 "x-parser-schema-id": "ProductClassifiedEvent"
@@ -1118,13 +1255,13 @@
                         "type": "string",
                         "description": "Fixed event type for StockReceived.",
                         "const": "com.warehouse.wms.inventory-storage.stock.StockReceived",
-                        "x-parser-schema-id": "<anonymous-schema-95>"
+                        "x-parser-schema-id": "<anonymous-schema-108>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "urn:warehouse:inventory-storage:analytics:StockReceived:v1",
                         "pattern": "^urn:warehouse:inventory-storage:analytics:StockReceived:v1$",
-                        "x-parser-schema-id": "<anonymous-schema-96>"
+                        "x-parser-schema-id": "<anonymous-schema-109>"
                       },
                       "data": {
                         "type": "object",
@@ -1137,19 +1274,19 @@
                           "sku": {
                             "type": "string",
                             "description": "The stock keeping unit the goods were received against.",
-                            "x-parser-schema-id": "<anonymous-schema-98>"
+                            "x-parser-schema-id": "<anonymous-schema-111>"
                           },
                           "quantity": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "Quantity received and staged. Always positive; the domain rejects a non-positive receipt.\n",
-                            "x-parser-schema-id": "<anonymous-schema-99>"
+                            "x-parser-schema-id": "<anonymous-schema-112>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-97>"
+                        "x-parser-schema-id": "<anonymous-schema-110>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-94>"
+                    "x-parser-schema-id": "<anonymous-schema-107>"
                   }
                 ],
                 "x-parser-schema-id": "StockReceivedEvent"
@@ -1202,13 +1339,13 @@
                         "type": "string",
                         "description": "Fixed event type for ItemStowed.",
                         "const": "com.warehouse.wms.inventory-storage.stock.ItemStowed",
-                        "x-parser-schema-id": "<anonymous-schema-101>"
+                        "x-parser-schema-id": "<anonymous-schema-114>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "urn:warehouse:inventory-storage:analytics:ItemStowed:v1",
                         "pattern": "^urn:warehouse:inventory-storage:analytics:ItemStowed:v1$",
-                        "x-parser-schema-id": "<anonymous-schema-102>"
+                        "x-parser-schema-id": "<anonymous-schema-115>"
                       },
                       "data": {
                         "type": "object",
@@ -1222,24 +1359,24 @@
                           "sku": {
                             "type": "string",
                             "description": "The stock keeping unit that was stowed (the item scan).",
-                            "x-parser-schema-id": "<anonymous-schema-104>"
+                            "x-parser-schema-id": "<anonymous-schema-117>"
                           },
                           "bin_id": {
                             "type": "string",
                             "description": "The bin the quantity was placed into (the location scan). Chaotic storage: any SKU may occupy any free bin.\n",
-                            "x-parser-schema-id": "<anonymous-schema-105>"
+                            "x-parser-schema-id": "<anonymous-schema-118>"
                           },
                           "quantity": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "Quantity placed into the bin. Always positive.",
-                            "x-parser-schema-id": "<anonymous-schema-106>"
+                            "x-parser-schema-id": "<anonymous-schema-119>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-103>"
+                        "x-parser-schema-id": "<anonymous-schema-116>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-100>"
+                    "x-parser-schema-id": "<anonymous-schema-113>"
                   }
                 ],
                 "x-parser-schema-id": "ItemStowedEvent"
@@ -1293,13 +1430,13 @@
                         "type": "string",
                         "description": "Fixed event type for ItemUnlocated.",
                         "const": "com.warehouse.wms.inventory-storage.stock.ItemUnlocated",
-                        "x-parser-schema-id": "<anonymous-schema-108>"
+                        "x-parser-schema-id": "<anonymous-schema-121>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "urn:warehouse:inventory-storage:analytics:ItemUnlocated:v1",
                         "pattern": "^urn:warehouse:inventory-storage:analytics:ItemUnlocated:v1$",
-                        "x-parser-schema-id": "<anonymous-schema-109>"
+                        "x-parser-schema-id": "<anonymous-schema-122>"
                       },
                       "data": {
                         "type": "object",
@@ -1314,29 +1451,29 @@
                           "stock_unit_id": {
                             "type": "string",
                             "description": "Identifier of the StockUnit that was flagged Unlocated.",
-                            "x-parser-schema-id": "<anonymous-schema-111>"
+                            "x-parser-schema-id": "<anonymous-schema-124>"
                           },
                           "sku": {
                             "type": "string",
                             "description": "The stock keeping unit that could not be found.",
-                            "x-parser-schema-id": "<anonymous-schema-112>"
+                            "x-parser-schema-id": "<anonymous-schema-125>"
                           },
                           "bin_id": {
                             "type": "string",
                             "description": "The bin the stock was believed to be in.",
-                            "x-parser-schema-id": "<anonymous-schema-113>"
+                            "x-parser-schema-id": "<anonymous-schema-126>"
                           },
                           "quantity": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "Quantity that could not be accounted for, now removed from usable inventory.\n",
-                            "x-parser-schema-id": "<anonymous-schema-114>"
+                            "x-parser-schema-id": "<anonymous-schema-127>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-110>"
+                        "x-parser-schema-id": "<anonymous-schema-123>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-107>"
+                    "x-parser-schema-id": "<anonymous-schema-120>"
                   }
                 ],
                 "x-parser-schema-id": "ItemUnlocatedEvent"
@@ -1392,13 +1529,13 @@
                         "type": "string",
                         "description": "Fixed event type for StockPicked.",
                         "const": "com.warehouse.wms.inventory-storage.reservation.StockPicked",
-                        "x-parser-schema-id": "<anonymous-schema-116>"
+                        "x-parser-schema-id": "<anonymous-schema-129>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "urn:warehouse:inventory-storage:analytics:StockPicked:v1",
                         "pattern": "^urn:warehouse:inventory-storage:analytics:StockPicked:v1$",
-                        "x-parser-schema-id": "<anonymous-schema-117>"
+                        "x-parser-schema-id": "<anonymous-schema-130>"
                       },
                       "data": {
                         "type": "object",
@@ -1412,24 +1549,24 @@
                           "reservation_id": {
                             "type": "string",
                             "description": "Identifier of the reservation that was consumed by this pick. A reservation can be consumed only once.\n",
-                            "x-parser-schema-id": "<anonymous-schema-119>"
+                            "x-parser-schema-id": "<anonymous-schema-132>"
                           },
                           "sku": {
                             "type": "string",
                             "description": "The stock keeping unit that was picked.",
-                            "x-parser-schema-id": "<anonymous-schema-120>"
+                            "x-parser-schema-id": "<anonymous-schema-133>"
                           },
                           "quantity": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "Quantity physically removed from its bin and permanently deducted from on-hand.\n",
-                            "x-parser-schema-id": "<anonymous-schema-121>"
+                            "x-parser-schema-id": "<anonymous-schema-134>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-118>"
+                        "x-parser-schema-id": "<anonymous-schema-131>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-115>"
+                    "x-parser-schema-id": "<anonymous-schema-128>"
                   }
                 ],
                 "x-parser-schema-id": "StockPickedEvent"
@@ -1483,13 +1620,13 @@
                         "type": "string",
                         "description": "Fixed event type for ReservationExpired.",
                         "const": "com.warehouse.wms.inventory-storage.reservation.ReservationExpired",
-                        "x-parser-schema-id": "<anonymous-schema-123>"
+                        "x-parser-schema-id": "<anonymous-schema-136>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "urn:warehouse:inventory-storage:analytics:ReservationExpired:v1",
                         "pattern": "^urn:warehouse:inventory-storage:analytics:ReservationExpired:v1$",
-                        "x-parser-schema-id": "<anonymous-schema-124>"
+                        "x-parser-schema-id": "<anonymous-schema-137>"
                       },
                       "data": {
                         "type": "object",
@@ -1502,18 +1639,18 @@
                           "reservation_id": {
                             "type": "string",
                             "description": "Identifier of the reservation whose timeout elapsed. Its quantity returns to usable inventory.\n",
-                            "x-parser-schema-id": "<anonymous-schema-126>"
+                            "x-parser-schema-id": "<anonymous-schema-139>"
                           },
                           "sku": {
                             "type": "string",
                             "description": "The reservation's SKU, enriched by the publisher through ports.ReservationRepo. Empty if the reservation could not be found (best-effort enrichment).\n",
-                            "x-parser-schema-id": "<anonymous-schema-127>"
+                            "x-parser-schema-id": "<anonymous-schema-140>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-125>"
+                        "x-parser-schema-id": "<anonymous-schema-138>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-122>"
+                    "x-parser-schema-id": "<anonymous-schema-135>"
                   }
                 ],
                 "x-parser-schema-id": "ReservationExpiredEvent"
@@ -1567,13 +1704,13 @@
                         "type": "string",
                         "description": "Fixed event type for CycleCountCompleted.",
                         "const": "com.warehouse.wms.inventory-storage.bin.CycleCountCompleted",
-                        "x-parser-schema-id": "<anonymous-schema-129>"
+                        "x-parser-schema-id": "<anonymous-schema-142>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "urn:warehouse:inventory-storage:analytics:CycleCountCompleted:v1",
                         "pattern": "^urn:warehouse:inventory-storage:analytics:CycleCountCompleted:v1$",
-                        "x-parser-schema-id": "<anonymous-schema-130>"
+                        "x-parser-schema-id": "<anonymous-schema-143>"
                       },
                       "data": {
                         "type": "object",
@@ -1588,30 +1725,30 @@
                           "bin_id": {
                             "type": "string",
                             "description": "The bin whose contents were verified.",
-                            "x-parser-schema-id": "<anonymous-schema-132>"
+                            "x-parser-schema-id": "<anonymous-schema-145>"
                           },
                           "counted": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Quantity physically counted in the bin.",
-                            "x-parser-schema-id": "<anonymous-schema-133>"
+                            "x-parser-schema-id": "<anonymous-schema-146>"
                           },
                           "system": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Quantity the system believed was in the bin.",
-                            "x-parser-schema-id": "<anonymous-schema-134>"
+                            "x-parser-schema-id": "<anonymous-schema-147>"
                           },
                           "discrepancy": {
                             "type": "boolean",
                             "description": "Whether counted and system quantities differed. When true, a DiscrepancyDetected event accompanies this one.\n",
-                            "x-parser-schema-id": "<anonymous-schema-135>"
+                            "x-parser-schema-id": "<anonymous-schema-148>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-131>"
+                        "x-parser-schema-id": "<anonymous-schema-144>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-128>"
+                    "x-parser-schema-id": "<anonymous-schema-141>"
                   }
                 ],
                 "x-parser-schema-id": "CycleCountCompletedEvent"
@@ -1666,13 +1803,13 @@
                         "type": "string",
                         "description": "Fixed event type for DiscrepancyDetected.",
                         "const": "com.warehouse.wms.inventory-storage.bin.DiscrepancyDetected",
-                        "x-parser-schema-id": "<anonymous-schema-137>"
+                        "x-parser-schema-id": "<anonymous-schema-150>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "urn:warehouse:inventory-storage:analytics:DiscrepancyDetected:v1",
                         "pattern": "^urn:warehouse:inventory-storage:analytics:DiscrepancyDetected:v1$",
-                        "x-parser-schema-id": "<anonymous-schema-138>"
+                        "x-parser-schema-id": "<anonymous-schema-151>"
                       },
                       "data": {
                         "type": "object",
@@ -1686,25 +1823,25 @@
                           "bin_id": {
                             "type": "string",
                             "description": "The bin whose count did not match system records.",
-                            "x-parser-schema-id": "<anonymous-schema-140>"
+                            "x-parser-schema-id": "<anonymous-schema-153>"
                           },
                           "counted": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Quantity physically counted in the bin.",
-                            "x-parser-schema-id": "<anonymous-schema-141>"
+                            "x-parser-schema-id": "<anonymous-schema-154>"
                           },
                           "system": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Quantity the system believed was in the bin.",
-                            "x-parser-schema-id": "<anonymous-schema-142>"
+                            "x-parser-schema-id": "<anonymous-schema-155>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-139>"
+                        "x-parser-schema-id": "<anonymous-schema-152>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-136>"
+                    "x-parser-schema-id": "<anonymous-schema-149>"
                   }
                 ],
                 "x-parser-schema-id": "DiscrepancyDetectedEvent"
@@ -1778,46 +1915,46 @@
                 "enum": [
                   "1.0"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-143>"
+                "x-parser-schema-id": "<anonymous-schema-156>"
               },
               "id": {
                 "type": "string",
                 "description": "CloudEvents id; the dedupe key (claimed in processed_events).",
-                "x-parser-schema-id": "<anonymous-schema-144>"
+                "x-parser-schema-id": "<anonymous-schema-157>"
               },
               "source": {
                 "type": "string",
                 "enum": [
                   "/warehouse/product-master"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-145>"
+                "x-parser-schema-id": "<anonymous-schema-158>"
               },
               "type": {
                 "type": "string",
                 "const": "com.warehouse.wms.product-master.product.ProductClassified",
-                "x-parser-schema-id": "<anonymous-schema-146>"
+                "x-parser-schema-id": "<anonymous-schema-159>"
               },
               "subject": {
                 "type": "string",
                 "description": "The SKU (also the Kafka key).",
-                "x-parser-schema-id": "<anonymous-schema-147>"
+                "x-parser-schema-id": "<anonymous-schema-160>"
               },
               "time": {
                 "type": "string",
                 "format": "date-time",
-                "x-parser-schema-id": "<anonymous-schema-148>"
+                "x-parser-schema-id": "<anonymous-schema-161>"
               },
               "datacontenttype": {
                 "type": "string",
                 "enum": [
                   "application/json"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-149>"
+                "x-parser-schema-id": "<anonymous-schema-162>"
               },
               "dataschema": {
                 "type": "string",
                 "description": "urn:warehouse:product-master:events:ProductClassified:v1",
-                "x-parser-schema-id": "<anonymous-schema-150>"
+                "x-parser-schema-id": "<anonymous-schema-163>"
               },
               "data": {
                 "type": "object",
@@ -1830,7 +1967,7 @@
                 "properties": {
                   "sku": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-152>"
+                    "x-parser-schema-id": "<anonymous-schema-165>"
                   },
                   "handling_tags": {
                     "type": "array",
@@ -1845,9 +1982,9 @@
                         "Oversized",
                         "HighValue"
                       ],
-                      "x-parser-schema-id": "<anonymous-schema-154>"
+                      "x-parser-schema-id": "<anonymous-schema-167>"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-153>"
+                    "x-parser-schema-id": "<anonymous-schema-166>"
                   },
                   "temperature_class": {
                     "type": "string",
@@ -1857,14 +1994,14 @@
                       "Frozen"
                     ],
                     "description": "Present if and only if handling_tags includes TemperatureSensitive.",
-                    "x-parser-schema-id": "<anonymous-schema-155>"
+                    "x-parser-schema-id": "<anonymous-schema-168>"
                   },
                   "dot_hazard_class": {
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 9,
                     "description": "Present only for a Hazmat classification with one recorded.",
-                    "x-parser-schema-id": "<anonymous-schema-156>"
+                    "x-parser-schema-id": "<anonymous-schema-169>"
                   },
                   "classification_source": {
                     "type": "string",
@@ -1873,17 +2010,17 @@
                       "legacy-import"
                     ],
                     "description": "Stored verbatim as product_classifications.classification_source.",
-                    "x-parser-schema-id": "<anonymous-schema-157>"
+                    "x-parser-schema-id": "<anonymous-schema-170>"
                   },
                   "version": {
                     "type": "integer",
                     "format": "int64",
                     "minimum": 1,
                     "description": "product-master's Product.version; applied only when greater than the stored version.",
-                    "x-parser-schema-id": "<anonymous-schema-158>"
+                    "x-parser-schema-id": "<anonymous-schema-171>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-151>"
+                "x-parser-schema-id": "<anonymous-schema-164>"
               }
             },
             "x-parser-schema-id": "ProductMasterProductClassifiedEvent"
@@ -1919,11 +2056,11 @@
       }
     },
     "warehouse.fulfillment.events": {
-      "description": "fulfillment-execution's integration topic, its Published Language for task facts (the `FulfillmentTopic` constant in `internal/adapters/inbound/kafka/task_completed_consumer.go`). CONSUMED by this service (ADR 0035), not published: key = `subject` = task id, `source=/warehouse/fulfillment-execution`. Only `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` is acted on; `TaskCPTMissed`, `PackageManifested` and the `Transfer*` facts share the topic and are committed past untouched. The consumer runs only when `TASK_COMPLETED_CONSUMER_MODE=kafka` (default `off`; also requires `DATABASE_URL` and `KAFKA_BROKERS`), under the fixed group `TASK_COMPLETED_CONSUMER_GROUP` (default `inventory-storage-confirm-pick`). Poison messages and messages whose handling kept failing are written to `warehouse.fulfillment.events.dlq`.\n",
+      "description": "fulfillment-execution's integration topic, its Published Language for task facts (the `FulfillmentTopic` constant in `internal/adapters/inbound/kafka/task_completed_consumer.go`). CONSUMED by this service (ADR 0035), not published: key = `subject` = task id, `source=/warehouse/fulfillment-execution`. Only `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` is acted on (task_type `PICK`, ADR 0035/0036, and `RELOCATE`, ADR 0039); `TaskCPTMissed`, `PackageManifested` and the `Transfer*` facts share the topic and are committed past untouched. The consumer runs only when `TASK_COMPLETED_CONSUMER_MODE=kafka` (default `off`; also requires `DATABASE_URL` and `KAFKA_BROKERS`), under the fixed group `TASK_COMPLETED_CONSUMER_GROUP` (default `inventory-storage-confirm-pick`). Poison messages and messages whose handling kept failing are written to `warehouse.fulfillment.events.dlq`.\n",
       "publish": {
         "operationId": "confirmPicksFromTaskCompleted",
-        "summary": "Confirm the picked line's reservation (line_no), or fall back to confirming the order on its last TaskCompleted.",
-        "description": "At-least-once, fixed group: FetchMessage, then CommitMessages only after the message settles. For `task_type = PICK` with a non-empty `order_ref` (the OrderId order-management reserved against, stored here as `demand_ref`) there are two paths.\n\nPER-LINE (ADR 0036, audit decision 18): when the event carries the additive `line_no`, exactly the ACTIVE reservation(s) with `demand_ref = order_ref` and `line_no` equal to the event's are confirmed through the existing ConfirmPick logic (stock decremented, bin capacity released, `StockPicked` raised); normally exactly one, since earlier attempts of the line are REVOKED. CONFIRMED and REVOKED ones are skipped; an EXPIRED one (ADR 0003) is skipped, logged and counted (`inventory.pick_confirmations{outcome=expired}`), never an error. Other lines of the order are never touched, so a line whose pick has not arrived stays ACTIVE and reserved. Nothing is counted on this path (no `order_pick_progress` row).\n\nCOUNTING FALLBACK (ADR 0035, kept for backward compatibility): when the event has no `line_no`, or names a line that no reservation of the order carries but the order has reservations created before `line_no` existed (NULL), the pick is COUNTED for the order (table `order_pick_progress`) against those reservations only; when the count reaches their ACTIVE + CONFIRMED number (REVOKED and EXPIRED are not awaited), i.e. on the LAST pick, every ACTIVE one is confirmed. Earlier picks only record progress and settle as successful no-ops. Counter rows older than `ORDER_PICK_PROGRESS_RETENTION` (default 720h) are swept. The \"one pick early\" edge of that counting does not exist on the per-line path.\n\nThe CloudEvents `id` claim in `processed_events`, the counter increment (fallback only) and all confirmations commit in ONE transaction, so a failure rolls everything back and the redelivery is applied in full; a redelivered id is a no-op, and a further PICK event for an already confirmed line confirms nothing new. No reservations for the order (a transfer or non-inventory order), a line with no reservation and no line-less ones to fall back to, a non-PICK task, a missing `order_ref` (a producer that predates the field) and every other event type are successful no-ops. A Task carries no SKU or quantity, so SHORT PICKS ARE NOT MODELLED. A `line_no` that is not an integer between 1 and 2147483647 is a malformed payload: dead-lettered at once.\n\nA transient failure retries the same message with capped backoff (5 attempts), then dead-letters it; an undecodable payload is dead-lettered at once; a message that is not a CloudEvent is skipped with a sampled WARN.\n",
+        "summary": "Confirm the picked line's reservation (line_no), or fall back to confirming the order on its last TaskCompleted; apply a completed RELOCATE task as an intra-site stock move.",
+        "description": "At-least-once, fixed group: FetchMessage, then CommitMessages only after the message settles. For `task_type = PICK` with a non-empty `order_ref` (the OrderId order-management reserved against, stored here as `demand_ref`) there are two paths.\n\nPER-LINE (ADR 0036, audit decision 18): when the event carries the additive `line_no`, exactly the ACTIVE reservation(s) with `demand_ref = order_ref` and `line_no` equal to the event's are confirmed through the existing ConfirmPick logic (stock decremented, bin capacity released, `StockPicked` raised); normally exactly one, since earlier attempts of the line are REVOKED. CONFIRMED and REVOKED ones are skipped; an EXPIRED one (ADR 0003) is skipped, logged and counted (`inventory.pick_confirmations{outcome=expired}`), never an error. Other lines of the order are never touched, so a line whose pick has not arrived stays ACTIVE and reserved. Nothing is counted on this path (no `order_pick_progress` row).\n\nCOUNTING FALLBACK (ADR 0035, kept for backward compatibility): when the event has no `line_no`, or names a line that no reservation of the order carries but the order has reservations created before `line_no` existed (NULL), the pick is COUNTED for the order (table `order_pick_progress`) against those reservations only; when the count reaches their ACTIVE + CONFIRMED number (REVOKED and EXPIRED are not awaited), i.e. on the LAST pick, every ACTIVE one is confirmed. Earlier picks only record progress and settle as successful no-ops. Counter rows older than `ORDER_PICK_PROGRESS_RETENTION` (default 720h) are swept. The \"one pick early\" edge of that counting does not exist on the per-line path.\n\nThe CloudEvents `id` claim in `processed_events`, the counter increment (fallback only) and all confirmations commit in ONE transaction, so a failure rolls everything back and the redelivery is applied in full; a redelivered id is a no-op, and a further PICK event for an already confirmed line confirms nothing new. No reservations for the order (a transfer or non-inventory order), a line with no reservation and no line-less ones to fall back to, a non-PICK task, a missing `order_ref` (a producer that predates the field) and every other event type are successful no-ops. A Task carries no SKU or quantity, so SHORT PICKS ARE NOT MODELLED. A `line_no` that is not an integer between 1 and 2147483647 is a malformed payload: dead-lettered at once.\n\nRELOCATE (ADR 0039, decision E1): a `task_type = RELOCATE` completion carries the additive `sku`, `from_bin`, `to_bin`, `quantity` and `relocation_ref` and is applied by ApplyRelocationTask, never by confirm-pick: the same RelocateStock as POST /relocations (reason SLOTTING, site = the source bin's site, source_ref = `relocation_ref` or the task id) moves the stock and enqueues `StockRelocated`, with the CloudEvents `id` claimed in `processed_events` under consumer `task-completed-relocate` in the SAME transaction, so a redelivery is a no-op and a failure un-claims the id. A completion that can never apply (a missing or invalid field, an unknown bin, bins of different sites, the same bin, too little usable stock, a full destination) is dead-lettered at once; a transient failure (database, concurrent modification) is retried; a shutdown mid-move commits nothing and dead-letters nothing.\n\nA transient failure retries the same message with capped backoff (5 attempts), then dead-letters it; an undecodable payload is dead-lettered at once; a message that is not a CloudEvent is skipped with a sampled WARN.\n",
         "tags": [
           {
             "name": "fulfillment-execution",
@@ -1934,7 +2071,7 @@
           "name": "FulfillmentTaskCompleted",
           "title": "Task Completed (from fulfillment-execution, consumed)",
           "summary": "A station finished a claimed task; a PICK task makes this service confirm the picked line's reservation (or, without a line, the order's on its last pick).",
-          "description": "CONSUMED, not produced (ADR 0035, ADR 0036). Pinned by fulfillment-execution's `apis/asyncapi.yaml`: type `com.warehouse.wes.fulfillment-execution.task.TaskCompleted`, `source=/warehouse/fulfillment-execution`, subject and Kafka key = task id. This service reads only `task_id`, `task_type`, `order_ref` and `line_no`; every other field (`station_id`, `work_unit_id`, `associate_id`, `duration_seconds`) is ignored. `order_ref` is the additive optional field of ADR 0035 (v1, omitted when empty): the task's order reference, i.e. the OrderId order-management used as `demand_ref`. `line_no` is the additive optional field of ADR 0036 (v1, omitted when unknown): the order line the task was for. A message without `order_ref`, or with any `task_type` other than `PICK`, is a successful no-op; one without `line_no` takes the ADR 0035 counting path.\n",
+          "description": "CONSUMED, not produced (ADR 0035, ADR 0036). Pinned by fulfillment-execution's `apis/asyncapi.yaml`: type `com.warehouse.wes.fulfillment-execution.task.TaskCompleted`, `source=/warehouse/fulfillment-execution`, subject and Kafka key = task id. This service reads only `task_id`, `task_type`, `order_ref`, `line_no` and, on RELOCATE tasks, `sku`, `from_bin`, `to_bin`, `quantity` and `relocation_ref`; every other field (`station_id`, `work_unit_id`, `associate_id`, `duration_seconds`) is ignored. `order_ref` is the additive optional field of ADR 0035 (v1, omitted when empty): the task's order reference, i.e. the OrderId order-management used as `demand_ref`. `line_no` is the additive optional field of ADR 0036 (v1, omitted when unknown): the order line the task was for. A message without `order_ref`, or with any `task_type` other than `PICK` or `RELOCATE`, is a successful no-op; one without `line_no` takes the ADR 0035 counting path. The RELOCATE fields are the additive fields of ADR 0039 (decision E1, v1): fulfillment-execution sends them on RELOCATE tasks only, and a RELOCATE completion is applied as an intra-site move (`StockRelocated`).\n",
           "contentType": "application/cloudevents+json",
           "tags": [
             {
@@ -1961,46 +2098,46 @@
                 "enum": [
                   "1.0"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-159>"
+                "x-parser-schema-id": "<anonymous-schema-172>"
               },
               "id": {
                 "type": "string",
-                "description": "CloudEvents id; the dedupe key (claimed in processed_events under consumer `task-completed-confirm-pick`).",
-                "x-parser-schema-id": "<anonymous-schema-160>"
+                "description": "CloudEvents id; the dedupe key (claimed in processed_events under consumer `task-completed-confirm-pick`, or `task-completed-relocate` for RELOCATE tasks).",
+                "x-parser-schema-id": "<anonymous-schema-173>"
               },
               "source": {
                 "type": "string",
                 "enum": [
                   "/warehouse/fulfillment-execution"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-161>"
+                "x-parser-schema-id": "<anonymous-schema-174>"
               },
               "type": {
                 "type": "string",
                 "const": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
-                "x-parser-schema-id": "<anonymous-schema-162>"
+                "x-parser-schema-id": "<anonymous-schema-175>"
               },
               "subject": {
                 "type": "string",
                 "description": "The task id (also the Kafka key).",
-                "x-parser-schema-id": "<anonymous-schema-163>"
+                "x-parser-schema-id": "<anonymous-schema-176>"
               },
               "time": {
                 "type": "string",
                 "format": "date-time",
-                "x-parser-schema-id": "<anonymous-schema-164>"
+                "x-parser-schema-id": "<anonymous-schema-177>"
               },
               "datacontenttype": {
                 "type": "string",
                 "enum": [
                   "application/json"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-165>"
+                "x-parser-schema-id": "<anonymous-schema-178>"
               },
               "dataschema": {
                 "type": "string",
                 "description": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
-                "x-parser-schema-id": "<anonymous-schema-166>"
+                "x-parser-schema-id": "<anonymous-schema-179>"
               },
               "data": {
                 "type": "object",
@@ -2010,7 +2147,7 @@
                 "properties": {
                   "task_id": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-168>"
+                    "x-parser-schema-id": "<anonymous-schema-181>"
                   },
                   "task_type": {
                     "type": "string",
@@ -2020,25 +2157,53 @@
                       "SLAM",
                       "REBIN",
                       "DISPATCH",
-                      "ARRIVAL"
+                      "ARRIVAL",
+                      "RELOCATE"
                     ],
-                    "description": "Only PICK is acted on; omitted by the producer when the task could not be found.",
-                    "x-parser-schema-id": "<anonymous-schema-169>"
+                    "description": "PICK and RELOCATE are acted on; omitted by the producer when the task could not be found.",
+                    "x-parser-schema-id": "<anonymous-schema-182>"
                   },
                   "order_ref": {
                     "type": "string",
                     "description": "The completed task's order reference = the OrderId order-management reserved against (this service's reservation `demand_ref`). Every PICK task of an order (one per order line) carries the same value. Additive and optional (ADR 0035): omitted when empty, in which case nothing is counted or confirmed.\n",
-                    "x-parser-schema-id": "<anonymous-schema-170>"
+                    "x-parser-schema-id": "<anonymous-schema-183>"
                   },
                   "line_no": {
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 2147483647,
                     "description": "The order line this task was for (the `line_no` the reservation of that line was made with). Additive and optional (ADR 0036): omitted when unknown. When present, exactly the ACTIVE reservation(s) of (`order_ref`, `line_no`) are confirmed and nothing is counted; when absent the ADR 0035 last-pick counting applies. A value outside 1..2147483647 (the 32-bit line_no column) or a non-integer is a malformed payload (dead-lettered).\n",
-                    "x-parser-schema-id": "<anonymous-schema-171>"
+                    "x-parser-schema-id": "<anonymous-schema-184>"
+                  },
+                  "sku": {
+                    "type": "string",
+                    "description": "RELOCATE only (additive, ADR 0039): the SKU moved. Required on a RELOCATE completion (missing or invalid = dead-lettered); absent on every other task type.\n",
+                    "x-parser-schema-id": "<anonymous-schema-185>"
+                  },
+                  "from_bin": {
+                    "type": "string",
+                    "description": "RELOCATE only (additive, ADR 0039): the source bin's location code; its site is the move's site.\n",
+                    "x-parser-schema-id": "<anonymous-schema-186>"
+                  },
+                  "to_bin": {
+                    "type": "string",
+                    "description": "RELOCATE only (additive, ADR 0039): the destination bin's location code; must be a different bin of the same site.\n",
+                    "x-parser-schema-id": "<anonymous-schema-187>"
+                  },
+                  "quantity": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "RELOCATE only (additive, ADR 0039): the units moved. Missing, zero or negative on a RELOCATE completion = dead-lettered.\n",
+                    "x-parser-schema-id": "<anonymous-schema-188>"
+                  },
+                  "relocation_ref": {
+                    "type": "string",
+                    "maxLength": 200,
+                    "description": "RELOCATE only (additive, ADR 0039, optional): the slot-plan move the task executes; stored as the relocation's source_ref (the task id is used when absent).\n",
+                    "x-parser-schema-id": "<anonymous-schema-189>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-167>"
+                "x-parser-schema-id": "<anonymous-schema-180>"
               }
             },
             "x-parser-schema-id": "FulfillmentTaskCompletedEvent"
@@ -2090,6 +2255,33 @@
                   "order_ref": "ORD-1001"
                 }
               }
+            },
+            {
+              "name": "relocateTaskCompleted",
+              "summary": "A slot-plan RELOCATE task completed (ADR 0039); seven units of SKU-R1 move between two WH1 bins.",
+              "payload": {
+                "specversion": "1.0",
+                "id": "8b3e4c5d-6f70-4182-9c9d-1e2f3a4b5c6d",
+                "source": "/warehouse/fulfillment-execution",
+                "type": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+                "subject": "task-9r01",
+                "time": "2026-10-13T12:00:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
+                "data": {
+                  "task_id": "task-9r01",
+                  "station_id": "station-03",
+                  "work_unit_id": "wu-9r01",
+                  "associate_id": "worker-42",
+                  "duration_seconds": 61,
+                  "task_type": "RELOCATE",
+                  "sku": "SKU-R1",
+                  "from_bin": "WH1-STOR-AMB-A01-01-01-A",
+                  "to_bin": "WH1-STOR-AMB-A02-01-01-A",
+                  "quantity": 7,
+                  "relocation_ref": "plan-9#3"
+                }
+              }
             }
           ]
         }
@@ -2138,46 +2330,46 @@
                 "enum": [
                   "1.0"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-172>"
+                "x-parser-schema-id": "<anonymous-schema-190>"
               },
               "id": {
                 "type": "string",
                 "description": "CloudEvents id; the dedupe key (claimed in processed_events under consumer `inbound-receipt-line`).",
-                "x-parser-schema-id": "<anonymous-schema-173>"
+                "x-parser-schema-id": "<anonymous-schema-191>"
               },
               "source": {
                 "type": "string",
                 "enum": [
                   "/warehouse/inbound-receiving"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-174>"
+                "x-parser-schema-id": "<anonymous-schema-192>"
               },
               "type": {
                 "type": "string",
                 "const": "com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived",
-                "x-parser-schema-id": "<anonymous-schema-175>"
+                "x-parser-schema-id": "<anonymous-schema-193>"
               },
               "subject": {
                 "type": "string",
                 "description": "The receipt id (the Kafka key is the ASN number).",
-                "x-parser-schema-id": "<anonymous-schema-176>"
+                "x-parser-schema-id": "<anonymous-schema-194>"
               },
               "time": {
                 "type": "string",
                 "format": "date-time",
-                "x-parser-schema-id": "<anonymous-schema-177>"
+                "x-parser-schema-id": "<anonymous-schema-195>"
               },
               "datacontenttype": {
                 "type": "string",
                 "enum": [
                   "application/json"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-178>"
+                "x-parser-schema-id": "<anonymous-schema-196>"
               },
               "dataschema": {
                 "type": "string",
                 "description": "urn:warehouse:inbound-receiving:events:ReceiptLineReceived:v1",
-                "x-parser-schema-id": "<anonymous-schema-179>"
+                "x-parser-schema-id": "<anonymous-schema-197>"
               },
               "data": {
                 "type": "object",
@@ -2193,27 +2385,27 @@
                 "properties": {
                   "receipt_id": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-181>"
+                    "x-parser-schema-id": "<anonymous-schema-199>"
                   },
                   "asn_number": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-182>"
+                    "x-parser-schema-id": "<anonymous-schema-200>"
                   },
                   "line_no": {
                     "type": "integer",
                     "minimum": 1,
-                    "x-parser-schema-id": "<anonymous-schema-183>"
+                    "x-parser-schema-id": "<anonymous-schema-201>"
                   },
                   "sku": {
                     "type": "string",
                     "description": "Must be non-empty; an empty SKU is logged and committed past.",
-                    "x-parser-schema-id": "<anonymous-schema-184>"
+                    "x-parser-schema-id": "<anonymous-schema-202>"
                   },
                   "quantity": {
                     "type": "integer",
                     "minimum": 1,
                     "description": "Units received on this occurrence. A value <= 0 is logged and committed past.",
-                    "x-parser-schema-id": "<anonymous-schema-185>"
+                    "x-parser-schema-id": "<anonymous-schema-203>"
                   },
                   "condition": {
                     "type": "string",
@@ -2222,15 +2414,15 @@
                       "Damaged"
                     ],
                     "description": "Only Good is booked as stock (ADR 0037); Damaged is counted and ignored; any other value is logged and committed past.",
-                    "x-parser-schema-id": "<anonymous-schema-186>"
+                    "x-parser-schema-id": "<anonymous-schema-204>"
                   },
                   "received_at": {
                     "type": "string",
                     "format": "date-time",
-                    "x-parser-schema-id": "<anonymous-schema-187>"
+                    "x-parser-schema-id": "<anonymous-schema-205>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-180>"
+                "x-parser-schema-id": "<anonymous-schema-198>"
               }
             },
             "x-parser-schema-id": "InboundReceivingReceiptLineReceivedEvent"
@@ -2318,13 +2510,13 @@
                   "type": "string",
                   "description": "Fixed event type for LocationRecorded.",
                   "const": "com.warehouse.wms.inventory-storage.stock.LocationRecorded",
-                  "x-parser-schema-id": "<anonymous-schema-189>"
+                  "x-parser-schema-id": "<anonymous-schema-207>"
                 },
                 "dataschema": {
                   "type": "string",
                   "description": "Reserved for if LocationRecorded is ever published; it is in-process only today.",
                   "pattern": "^urn:warehouse:inventory-storage:events:LocationRecorded:v1$",
-                  "x-parser-schema-id": "<anonymous-schema-190>"
+                  "x-parser-schema-id": "<anonymous-schema-208>"
                 },
                 "data": {
                   "type": "object",
@@ -2337,18 +2529,18 @@
                     "stock_unit_id": {
                       "type": "string",
                       "description": "Identifier of the StockUnit whose location is now known.",
-                      "x-parser-schema-id": "<anonymous-schema-192>"
+                      "x-parser-schema-id": "<anonymous-schema-210>"
                     },
                     "bin_id": {
                       "type": "string",
                       "description": "The bin that authoritatively holds that StockUnit.",
-                      "x-parser-schema-id": "<anonymous-schema-193>"
+                      "x-parser-schema-id": "<anonymous-schema-211>"
                     }
                   },
-                  "x-parser-schema-id": "<anonymous-schema-191>"
+                  "x-parser-schema-id": "<anonymous-schema-209>"
                 }
               },
-              "x-parser-schema-id": "<anonymous-schema-188>"
+              "x-parser-schema-id": "<anonymous-schema-206>"
             }
           ],
           "x-parser-schema-id": "LocationRecordedEvent"
@@ -2374,7 +2566,7 @@
           }
         ]
       },
-      "ProductClassified": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[6]",
+      "ProductClassified": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[7]",
       "ProductMasterProductClassified": "$ref:$.channels.warehouse.product-master.events.publish.message",
       "FulfillmentTaskCompleted": "$ref:$.channels.warehouse.fulfillment.events.publish.message",
       "InboundReceivingReceiptLineReceived": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message",
@@ -2383,6 +2575,7 @@
       "TransferStockAllocationRejected": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[3]",
       "TransferReceiptStaged": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[4]",
       "TransferStockStowed": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[5]",
+      "StockRelocated": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[6]",
       "ReservationExpired": "$ref:$.channels.warehouse.inventory.analytics.subscribe.message.oneOf[5]",
       "ReservationRevoked": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[1]",
       "StockPicked": "$ref:$.channels.warehouse.inventory.analytics.subscribe.message.oneOf[4]",
@@ -2395,7 +2588,7 @@
       "StockReceivedEvent": "$ref:$.channels.warehouse.inventory.analytics.subscribe.message.oneOf[0].payload",
       "ItemStowedEvent": "$ref:$.channels.warehouse.inventory.analytics.subscribe.message.oneOf[1].payload",
       "LocationRecordedEvent": "$ref:$.components.messages.LocationRecorded.payload",
-      "ProductClassifiedEvent": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[6].payload",
+      "ProductClassifiedEvent": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[7].payload",
       "ProductMasterProductClassifiedEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.payload",
       "FulfillmentTaskCompletedEvent": "$ref:$.channels.warehouse.fulfillment.events.publish.message.payload",
       "InboundReceivingReceiptLineReceivedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.payload",
@@ -2409,7 +2602,8 @@
       "TransferStockAllocatedEvent": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[2].payload",
       "TransferStockAllocationRejectedEvent": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[3].payload",
       "TransferReceiptStagedEvent": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[4].payload",
-      "TransferStockStowedEvent": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[5].payload"
+      "TransferStockStowedEvent": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[5].payload",
+      "StockRelocatedEvent": "$ref:$.channels.warehouse.inventory.events.subscribe.message.oneOf[6].payload"
     }
   },
   "x-parser-spec-parsed": true,

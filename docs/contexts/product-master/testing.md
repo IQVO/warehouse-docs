@@ -108,6 +108,8 @@ The CI `integration` job runs the same command as `make integration`
 | `TestMCPOptionalToolInputsCarryOmitempty`, `TestMCPOptionalToolInputsSensorFailsOnBadFixtures` | every MCP tool input field whose `jsonschema` description calls it optional ("optional" or "omitted") carries `omitempty`, so the SDK does not mark it required (gap fix D16) |
 | `TestOutboxRelaysPassAttemptCap`, `TestOutboxRelayCapSensorFailsOnBadFixtures` | every non-test file under `cmd/` that builds an outbox relay (`NewRelay`) passes `WithMaxAttempts(...)` ([ADR 0007](https://iqvo.github.io/product-master/docs/adr/0007-outbox-relay-attempt-cap)) |
 | `TestKafkaWritersSetRequiredAcks`, `TestKafkaWriterAcksSensorBites` | Every kafka-go `Writer` composite literal in a non-test file under `internal/` or `cmd/` sets `RequiredAcks` (the import alias is resolved per file). kafka-go defaults it to `RequireNone` (acks=0): the broker never confirms the write, so a broker blip silently drops the message while `WriteMessages` returns nil. The twin proves the sensor flags a bad fixture under any alias. |
+| `TestDeadLetterCallsGuardCancellation` (+ `TestDeadLetterShutdownSensorBites`, `kafka_dlq_shutdown_fitness_test.go`) | Every function in a non-test file under `internal/adapters/inbound/kafka` that sends to the dead-letter topic must reference `ctx.Err()` (any context-named value) or `context.Canceled` in its own body, or carry a `//dlq:deterministic <reason>` comment on the call line or the line above it. A handler that fails because the process is stopping must not dead-letter a good message and commit past it (network-fulfillment #89); a guard in the caller does not count. The sensor test proves the detector flags the pre-fix shape. |
+| `TestKafkaWriterTopicNotSetTwice` (+ `TestKafkaWriterTopicSensorBites`, `kafka_writer_topic_fitness_test.go`) | kafka-go rejects every write whose `Message.Topic` is set when the `Writer` also has a `Topic`. Per Go package under `internal/` and `cmd/`: once any kafka-go `Message` literal sets `Topic`, every `Writer` literal in that package must leave `Topic` empty, unless it carries `//kafka:fixed-topic-writer <reason>` and no Topic-setting Message is provably written through it. Writers configured after construction and `WriterConfig` are not covered. (Escape: warehouse-planning's domain DLQ writer, where no dead letter ever landed.) |
 
 ### Mutation testing
 
@@ -127,6 +129,12 @@ lived.
 `make coverage` and the `test` CI job measure coverage over
 `./internal/domain/...`, `./internal/application/...` and
 `./internal/analytics/...` and fail below **90%**.
+
+The Makefile is the single source of the coverage scope and threshold
+(gap 16d): the CI `test` job runs `make coverage` instead of its own
+`go test -coverpkg=...` command, so the local and the PR gate cannot drift;
+harness `repo_lint` rule R11 (coverage-scope) forbids a workflow passing
+`-coverpkg` itself. Change the scope or the threshold in the Makefile only.
 
 ## Make targets
 
@@ -158,7 +166,7 @@ before each push.
 | `lint` | golangci-lint v2.14.0 | every push and PR |
 | `guide-lint` | `scripts/harness/guide_lint.py`, `scripts/harness/test_hook.py` (advisory, `continue-on-error`) | every push and PR |
 | `complexity` | golangci-lint with only gocyclo, gocognit, cyclop, funlen, nestif; plus an informational gocyclo report | every push and PR |
-| `test` | build, vet, unit tests with coverage, 90% gate | every push and PR |
+| `test` | build, vet, then `make coverage` (unit tests with the Makefile's coverage scope and 90% gate) | every push and PR |
 | `bdd` | `go test ./... -run TestFeatures -v` | every push and PR |
 | `integration` | `go test -tags=integration ./... -race -count=1` | every push and PR |
 | `mutation-fast` | gremlins on `./internal/domain/product` | every push and PR |

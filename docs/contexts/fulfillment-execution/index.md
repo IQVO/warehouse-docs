@@ -11,7 +11,8 @@ slug: /contexts/fulfillment-execution
 <span className="badge-core">Core Subdomain</span>
 
 **Fulfillment Execution** turns released work into completed physical
-operations: the **task lifecycle** for Pick, Pack, Rebin, and SLAM. It sits
+operations: the **task lifecycle** for Pick, Pack, Rebin, SLAM and slot-plan
+Relocate. It sits
 in the WES tier, downstream of `wes-work-planning` (which decides *how much*
 work should be released and *when*) and answers a narrower, harder question —
 *how does a released unit of work safely get from the pool into a completed
@@ -22,13 +23,20 @@ task (`claimNext(stationId, capabilities)`); the system selects work, not
 workers. There is deliberately no `assign(task, station)` operation. A claim
 is a time-boxed **lease** — if it is not renewed or completed before expiry,
 the task returns to the pool rather than vanishing. This context has the
-longest ADR trail in the fleet: thirty-five decisions (0001 to 0035) on
+longest ADR trail in the fleet: forty-eight decisions (0001 to 0048) on
 `develop`, including the pull-dispatch rule itself, the lease mechanism,
 per-package DOT hazard segregation, a structural (unimplemented)
 anti-corruption seam reserved for the WCS/equipment tier this platform
-deliberately does not build, and — most recently — a CPT-missed sweep,
-`PackageManifested`, and an on-time-to-CPT KPI that feed order-management's
-promise loop.
+deliberately does not build, a CPT-missed sweep, `PackageManifested`, and an
+on-time-to-CPT KPI that feed order-management's promise loop, and — most
+recently — the `RELOCATE` task that executes approved slot-plan moves
+(ADR 0047).
+
+Besides orders, this context also runs **slot-plan moves**: work that
+`wes-work-planning` releases on the `RELOCATE` path becomes a `RELOCATE` task
+carrying one move (SKU, source and destination bin). The operator carries the
+stock, counts it and scans the bins, and the completion's `TaskCompleted`
+carries what moved for `inventory-storage` to record on the ledger.
 
 ## This context's pages
 
@@ -72,8 +80,8 @@ promise loop.
   the main runtime interactions.
 - [Async API](/contexts/fulfillment-execution/async-api): the Kafka
   integration in narrative form, including the shared fan-out topic that
-  three downstream consumers (`wes-work-planning`, `labor-performance` and
-  `order-management`) read.
+  four downstream consumers (`wes-work-planning`, `labor-performance`,
+  `order-management` and `inventory-storage`) read.
 
 Every page above except the Business Context and the Async API narrative
 is synced from the `fulfillment-execution` repository.
