@@ -59,8 +59,9 @@ the topic. **Sub** means it reads another context's topic.
 | `inbound-receiving` | `apis/inbound-receiving/openapi.yaml` (v1.0.0) | 19 (incl. the two `reports` paths served by `inbound-reports` on `:8092`) | Pub `warehouse.inbound-receiving.events` (9), Pub `warehouse.inbound-receiving.analytics` (9; read only by its own projector); Sub `warehouse.product-master.events` (1), Sub `warehouse.facility.events` (2) | [REST](/api-reference/rest/inbound-receiving/inbound-receiving-api) · [Async](/api-reference/async/inbound-receiving) |
 | `slotting-optimization` | `apis/slotting-optimization/openapi.yaml` (v1.0.0) | 9 (incl. `/healthz` and `/readyz`) | Pub `warehouse.slotting-optimization.events` (3); Sub `warehouse.order-management.events` (1), Sub `warehouse.product-master.events` (3), Sub `warehouse.facility.events` (3) | [REST](/api-reference/rest/slotting-optimization/slotting-optimization-api) · [Async](/api-reference/async/slotting-optimization) |
 | `network-inventory-planning` | `apis/network-inventory-planning/openapi.yaml` (v1.0.0) | 16 (incl. the five `reports` paths served by `nip-reports` on `:8092`) | Pub `warehouse.network-inventory-planning.events` (3), Pub `warehouse.network-inventory-planning.analytics` (3); Sub `warehouse.facility.events` (1), Sub `warehouse.order-management.events` (1), Sub `warehouse.warehouse-planning.events` (1), Sub `warehouse.inventory.events` (4), Sub `warehouse.fulfillment.events` (3) | [REST](/api-reference/rest/network-inventory-planning/network-inventory-planning-api) · [Async](/api-reference/async/network-inventory-planning) |
+| `pick-face-replenishment` | `apis/pick-face-replenishment/openapi.yaml` (v1.0.0) | 12 (incl. `/healthz` and `/readyz`) | Pub `warehouse.pick-face-replenishment.events` (3), Pub `warehouse.pick-face-replenishment.analytics` (1, the analytics-only `ReplenishmentPolicyDeclared`; the three request events are mirrored there); Sub `warehouse.inventory.events` (2), Sub `warehouse.slotting-optimization.events` (1), Sub `warehouse.facility.events` (3) | [REST](/api-reference/rest/pick-face-replenishment/pick-face-replenishment-api) · [Async](/api-reference/async/pick-face-replenishment) |
 
-Fourteen contexts publish an `apis/asyncapi.yaml`; `warehouse-ops-agent` has
+Fifteen contexts publish an `apis/asyncapi.yaml`; `warehouse-ops-agent` has
 none.
 REST operation counts were re-read from every spec synced from each
 repository's `develop` on 2026-10-13, after the ecosystem gap-fix wave
@@ -72,6 +73,8 @@ below are older: the counts for `order-management`, `inventory-storage`, `produc
 synced from each repository's `develop` on 2026-10-11 (`inbound-receiving`
 gained the two analytics `reports` paths and the analytics channel;
 `slotting-optimization` has nine path × method pairs and four channels);
+`pick-face-replenishment` was counted from the specs synced when it was
+onboarded (2026-10-17: twelve path × method pairs and five channels);
 `wes-work-planning` and `fulfillment-execution` were re-read from the specs
 synced on 2026-10-07;
 `network-inventory-planning` was
