@@ -32,6 +32,8 @@ const CONTEXTS = [
   'inbound-receiving',
   'slotting-optimization',
   'network-inventory-planning',
+  'pick-face-replenishment',
+  'task-interleaving',
 ];
 
 const asyncapiBin = path.join(root, 'tools', 'asyncapi-gen', 'node_modules', '.bin', 'asyncapi');

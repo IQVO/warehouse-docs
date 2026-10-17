@@ -9,7 +9,7 @@ description: What a warehouse management system, a warehouse execution system an
 
 This page records what the industry means by **WMS**, **WES** and **WCS**
 before the [qualification](/wms-wes/qualification) applies those definitions
-to the fifteen contexts of this fleet. Every definition below comes from a
+to the seventeen contexts of this fleet. Every definition below comes from a
 named source, listed under [Sources](#sources) at the end of the page. Where
 the sources disagree, the page says so.
 
@@ -173,6 +173,8 @@ The sources name the neighbouring categories:
 | --- | --- | --- |
 | Labor management (LMS) | Gartner counts "managing labor" as an *extended* WMS capability[1] and lists workforce/labor management among the specialist components that supplement a WMS[2]. WES vendors are stretching into labor orchestration[8]. | WMS-extended, with a WES overlap |
 | Slotting optimization | "optimizing the locating of inventory within a facility" is extended WMS[1]; slotting optimization is a specialist WMS component[2]. | WMS-extended |
+| Replenishment | Gartner's longer 2015 list names "replenishment" among WMS functions[2]. It does not say whether that is core or extended. In this fleet, forward pick-face replenishment is owned by `pick-face-replenishment` (built, not deployed). | WMS function; core or extended not yet qualified |
+| Task interleaving | Gartner's longer 2015 list names "task interleaving" among WMS functions[2]. It does not say whether that is core or extended. In this fleet, the advisory next-task hint is owned by `task-interleaving` (built, not deployed). | WMS function; core or extended not yet qualified |
 | Yard and dock appointment scheduling | Listed with labor and slotting as components that "supplement a WMS".[2] | WMS-extended |
 | Order management, ERP | ERP and order systems sit above the WMS and hand it orders. MHI notes WES integrations with ERP as well as WMS.[4] | Planning and order tier (ISA-95 level 4) |
 | Network inventory deployment and warehouse transfers | APQC files these under "Operate warehousing": "4.4.3.1  Manage and track inventory deployment" and "4.4.3. 8 Manage warehouse transfers (20957)".[14] Deciding *where* stock should be across sites spans more than one warehouse, so it is above any single WMS. | Network tier, above the WMS |

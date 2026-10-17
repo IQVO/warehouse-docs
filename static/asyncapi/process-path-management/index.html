@@ -82,6 +82,13 @@ array: the demand sources (<code>CUSTOMER_ORDER</code>, <code>STOCK_TRANSFER</co
 path. order-management's path selection considers only paths whose
 intake contains <code>CUSTOMER_ORDER</code>; <code>[]</code> means the path is reached only by
 an explicit path id (PACK, REBIN, SLAM).</p>
+<h2 id="adr-0036-replenishment-demand-source-and-the-replenish-path">ADR 0036: REPLENISHMENT demand source and the REPLENISH path</h2>
+<p>The closed <code>intake</code> vocabulary gained <code>REPLENISHMENT</code> (additive: no new
+event type, no payload field). It is declared on exactly one path,
+<code>REPLENISH</code> (<code>match_prefix</code> <code>replenish</code>, required capability
+<code>replenish</code>), the path wes-work-planning releases pick-face top-ups on.
+Consumers that decode <code>intake</code> as free strings need no change; a
+consumer that validates against a fixed enum must accept the new value.</p>
 <h2 id="consumers">Consumers</h2>
 <p><code>fulfillment-execution</code>, <code>wes-work-planning</code>, <code>workforce-management</code>
 (ProcessPath* catalogue caches) and <code>order-management</code> (ProcessPath*

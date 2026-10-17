@@ -11,7 +11,10 @@ The ten contexts whose events carry the `wes` segment
 (`com.warehouse.wes.<context>.…`; `warehouse-ops-agent` publishes no events
 but is filed here). The industry tests on the
 [industry reference](/wms-wes/industry-reference#the-tests-this-site-applies)
-split them into four groups, and this page follows that split:
+split them into four groups, and this page follows that split. An
+eleventh `wes` context, `task-interleaving` (built, not deployed), is **not yet
+qualified** and has no card here yet; see the
+[qualification](/wms-wes/qualification):
 
 | Group | Contexts |
 | --- | --- |

@@ -8,7 +8,7 @@ description: UML class diagrams of the aggregates, entities and value objects in
 # Domain Model
 
 The fleet-level view of what lives under `internal/domain/**` in each of the
-fifteen contexts documented on this site: which aggregate roots each one owns, the invariant
+seventeen contexts documented on this site: which aggregate roots each one owns, the invariant
 that makes each one a consistency boundary, and how aggregates in different
 contexts refer to each other.
 
@@ -34,14 +34,17 @@ in the outbound Postgres adapter.
 
 ## The fleet at a glance
 
-39 aggregate roots across fourteen contexts. The fifteenth, `warehouse-ops-agent`,
-owns none, and that is a design decision. The two newest contexts, decided on
-2026-10-08, are built and counted: `inbound-receiving` has three aggregates
-(`Asn`, `DockAppointment`, `Receipt`) and `slotting-optimization` has one
-(`SlotPlan`). Counts are the per-aggregate sections of each context's
+43 aggregate roots across sixteen contexts. The seventeenth, `warehouse-ops-agent`,
+owns none, and that is a design decision. The four newest contexts are built and counted:
+`inbound-receiving` (decided on 2026-10-08) has three aggregates
+(`Asn`, `DockAppointment`, `Receipt`), `slotting-optimization` (2026-10-08) has one
+(`SlotPlan`) `pick-face-replenishment` (2026-10-17) has two
+(`ReplenishmentPolicy`, `ReplenishmentRequest`) and `task-interleaving` (2026-10-17) has two
+(`StationTrip`, `InterleavingPolicy`). Counts are the per-aggregate sections of each context's
 Aggregate Design Canvas, cross-checked against the `<<AggregateRoot>>`
-classes in its class diagram (`slotting-optimization`'s class diagram draws
-`SlotPlan` without the stereotype; its canvas covers that one aggregate).
+classes in its class diagram (the class diagrams of `slotting-optimization`,
+`pick-face-replenishment` and `task-interleaving` draw their aggregates without the
+stereotype; their canvases cover them).
 
 | Context | Aggregate roots | # | Detailed pages |
 | --- | --- | --- | --- |
@@ -59,6 +62,8 @@ classes in its class diagram (`slotting-optimization`'s class diagram draws
 | `network-inventory-planning` | `InterWarehouseTransfer` (the saga; entities `AuditEntry`, `Allocation`, `StowAllocation`). Planner, snapshot and read-model facts are value objects and services, not aggregates | 1 | [class diagram](/contexts/network-inventory-planning/class-diagram), [canvas](/contexts/network-inventory-planning/aggregate-design-canvas) |
 | `inbound-receiving` | `Asn`, `DockAppointment`, `Receipt` (entity `ReceiptLine`) | 3 | [class diagram](/contexts/inbound-receiving/class-diagram), [canvas](/contexts/inbound-receiving/aggregate-design-canvas) |
 | `slotting-optimization` | `SlotPlan` (assignments, moves and unassigned SKUs as value objects; the `abc-velocity-v1` planner is a domain service) | 1 | [class diagram](/contexts/slotting-optimization/class-diagram), [canvas](/contexts/slotting-optimization/aggregate-design-canvas) |
+| `pick-face-replenishment` | `ReplenishmentRequest` (states `Requested`, `Completed`, `Cancelled`), `ReplenishmentPolicy` (the versioned `MIN_MAX` rule of one site and SKU). The detector in `internal/domain/detection` is a stateless function, not an aggregate | 2 | [class diagram](/contexts/pick-face-replenishment/class-diagram), [canvas](/contexts/pick-face-replenishment/aggregate-design-canvas) |
+| `task-interleaving` | `StationTrip` (the station's position and its hint, in the states `Active`, `Consumed`, `Expired`, `Superseded`), `InterleavingPolicy` (the versioned per-site settings). The recommender in `internal/domain/recommend` and the `rectilinear-v1` travel model are pure functions behind a port, not aggregates | 2 | [class diagram](/contexts/task-interleaving/class-diagram), [canvas](/contexts/task-interleaving/aggregate-design-canvas) |
 | `warehouse-ops-agent` | none: per-request decision objects in `internal/domain/policy` | 0 | [class diagram](/contexts/warehouse-ops-agent/class-diagram), [canvas](/contexts/warehouse-ops-agent/aggregate-design-canvas) |
 
 ## Aggregates across context boundaries
@@ -351,6 +356,37 @@ request, not aggregates. [Canvas](/contexts/facility-layout/aggregate-design-can
 
 [Canvas](/contexts/network-inventory-planning/aggregate-design-canvas).
 
+### pick-face-replenishment
+
+- `ReplenishmentRequest`: one decision to move stock from one reserve bin to
+  one forward bin, `Requested` to `Completed` or `Cancelled`, both final. At
+  most one is open per (site, forward bin, SKU), checked by the use case and
+  backed by a partial unique index. `quantity >= 1` and the projected level
+  plus the quantity cannot exceed the policy maximum. Only a `REPLENISHMENT`
+  relocation whose `source_ref` is the request id completes it.
+- `ReplenishmentPolicy`: the `MIN_MAX` rule of one (site, SKU), with
+  `0 <= minQty < maxQty` and `multiple >= 1`. It is versioned and changed
+  through `If-Match`. Removing it cancels the site's and SKU's open requests
+  with `POLICY_REMOVED` in the same unit of work.
+
+[Canvas](/contexts/pick-face-replenishment/aggregate-design-canvas).
+
+### task-interleaving
+
+- `StationTrip`: one per station, holding the position (the end of the last
+  completed task) and at most one hint, `Active` to `Consumed`, `Expired` or
+  `Superseded` (all three final). The position moves forward in time only: a
+  completion that is not strictly newer is ignored and raises nothing. A hint
+  lists 1 to `MaxCandidates` distinct eligible candidates within the detour
+  limit, ranked by detour then task id, and expires at `now + HintTTL`; a claim
+  consumes it only while unexpired and only when the task is a candidate.
+- `InterleavingPolicy`: the per-site settings, with `MaxDetourM > 0`,
+  `MaxCandidates` 1 to 5, `HintTTL > 0`, a non-empty set of eligible task
+  types and `VerticalWeight >= 0`. It is versioned and changed through
+  `If-Match`. A site without one is inert.
+
+[Canvas](/contexts/task-interleaving/aggregate-design-canvas).
+
 ### warehouse-ops-agent
 
 No aggregate root and no persisted state. `internal/domain/policy` is
@@ -380,5 +416,5 @@ place of invariants. [Canvas](/contexts/warehouse-ops-agent/aggregate-design-can
    order-management, `SaveClaim` in fulfillment-execution, and the
    `WorkPool` version check in wes-work-planning).
 6. **The domain layer imports nothing framework-shaped.** Every one of the
-   thirteen repositories has `internal/architecture/*_test.go` fitness tests
+   seventeen repositories has `internal/architecture/*_test.go` fitness tests
    that fail the build if it does. See [Components](/architecture/components).

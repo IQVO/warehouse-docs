@@ -10,7 +10,7 @@ slug: /contexts/inbound-receiving
 
 <span className="badge-supporting">Supporting Subdomain</span>
 
-**Inbound Receiving** is one of the fleet's fourteen domain bounded contexts.
+**Inbound Receiving** is one of the fleet's sixteen domain bounded contexts.
 It sits in the `wms` tier of the CloudEvents subdomain taxonomy, the fourth
 `wms` context after `facility-layout`, `inventory-storage` and
 `product-master`. It owns what happens **before the first stow**: the

@@ -627,11 +627,11 @@ MODEL = [
 # "src" is the BCA ledger id of the source that names the capability.
 GAPS = [
     {"name": "Replenishment", "l1": "Inventory Management", "desc": "The ability to refill forward pick slots from reserve stock before they run empty.",
-     "src": [12], "why": "Not in production. Owner registered: the pick-face-replenishment context (wms, Supporting), scaffolded 2026-10-17 and in progress; its producers in inventory-storage and fulfillment-execution are not built. Until then warehouse-planning knows REPLENISHMENT only as a capacity-constraint type."},
+     "src": [12], "why": "Not in production. Owner registered: the pick-face-replenishment context (wms, Supporting), built on develop on 2026-10-17 but not deployed; it raises replenishment requests. The stock-ledger end (inventory-storage: the BinStockLevelChanged producer and the REPLENISHMENT relocation of a completed REPLENISH task) and the task end (fulfillment-execution: the REPLENISH task) of its execution chain are built, and so are wes-work-planning's REPLENISH work (ADR 0042, an opt-in consumer that is off in the reference deployment) and process-path-management's REPLENISH path (ADR 0036), so the chain exists on develop but no request reaches the floor until pick-face-replenishment is deployed and the consumer is switched on. Until then, warehouse-planning knows REPLENISHMENT only as a capacity-constraint type."},
     {"name": "Returns Management", "l1": "Inbound Management", "desc": "The ability to receive, inspect and dispose of returned products.",
      "src": [10], "why": "No returns flow in any context."},
     {"name": "Task Interleaving", "l1": "Warehouse Task Execution", "desc": "The ability to combine tasks of different types into one trip.",
-     "src": [12], "why": "Not in production: pull dispatch hands one task at a time. Owner registered: the task-interleaving context (wes, Supporting), scaffolded 2026-10-17 and in progress."},
+     "src": [12], "why": "Not in production: pull dispatch hands one task at a time. Owner registered: the task-interleaving context (wes, Supporting), built on develop on 2026-10-17 but not deployed; it issues an advisory hint of nearby open tasks after each completed task, and fulfillment-execution does not consume the hint yet (claimNext is unchanged)."},
     {"name": "Equipment Control", "l1": "Warehouse Task Execution", "desc": "The ability to drive conveyors, sorters, AS/RS and robot fleets deterministically.",
      "src": [13], "why": "fulfillment-execution reserves an EquipmentCommandPort with no methods; no WCS is integrated."},
     {"name": "Value-added Services and Kitting", "l1": "Warehouse Task Execution", "desc": "The ability to perform kitting, light assembly and other value-added work.",

@@ -276,10 +276,17 @@ a live cluster as part of writing this page.
 
 After deploying a release that adds or changes an entry in
 `catalogue/paths.json` (for example `RELOCATE`,
-[ADR 0033](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0033-relocate-process-path.md), or the per-path `intake`,
+[ADR 0033](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0033-relocate-process-path.md), `DISPATCH`,
+[ADR 0035](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0035-dispatch-process-path.md), `REPLENISH`,
+[ADR 0036](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0036-replenish-process-path.md), or the per-path `intake`,
 [ADR 0034](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0034-process-path-intake.md)), converge the store through
 the API. Run it before the first consumer needs the path: for `RELOCATE`,
-that means before slotting-optimization approves a plan. After the release
+that means before slotting-optimization approves a plan; for `DISPATCH`,
+before network-inventory-planning releases the first transfer dispatch leg
+(until then fulfillment-execution dead-letters the demand); for `REPLENISH`,
+before wes-work-planning releases the first replenishment (until then the
+work is refused as an unknown path id). Re-running it on an environment that
+already holds `REPLENISH` changes nothing. After the release
 that adds migration `0009_intake`, every existing path stores intake `[]`
 until the seed runs; order-management then falls back to `PICK` for every
 order line (its fail-open rule), so seeding is not urgent, but it is what

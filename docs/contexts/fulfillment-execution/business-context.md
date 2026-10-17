@@ -165,6 +165,17 @@ separately tunable.
   a `RELOCATE` task can never close on a guess. The `TaskCompleted` it
   publishes then carries what actually moved, and `inventory-storage` records
   it on the ledger.
+- **Replenish (pick-face top-ups).** `pick-face-replenishment` asks for stock to be
+  carried from a reserve bin to a forward pick face, and `wes-work-planning`
+  releases one unit per request on the `REPLENISH` path
+  ([ADR-0050](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0050-replenish-tasks-execute-pick-face-replenishment.md)),
+  which becomes a `REPLENISH` task requiring the `replenish` capability. Unlike a
+  `RELOCATE`, both bins and a planned quantity are known at release, so the operator
+  only **confirms**: the counted quantity is required, the bin scans are optional
+  and must equal the planned bins. The `TaskCompleted` adds the request id as
+  `request_ref`, and `inventory-storage` records the move with reason
+  `REPLENISHMENT`. `URGENT` does not sort ahead of `NORMAL` here (`claimNext`
+  orders by CPT; the planner gives urgent requests an earlier one).
 
 A released work unit becomes a task type via a real lookup against the
 fleet's declared process-path catalogue — required capabilities come from
@@ -180,7 +191,7 @@ headcount, a shared **published language**, never a shared Go type.
   window. Those live in `workforce-management`, which stops at the
   process-path boundary.
 - **It does not own stock truth.** An order `Task` carries an `orderRef`, not
-  a SKU ledger position, and a `RELOCATE` task carries a planned move but never
+  a SKU ledger position, and a `RELOCATE` or `REPLENISH` task carries a planned move but never
   edits the ledger: it reports what the operator moved on `TaskCompleted`, and
   reservations, bin-accurate location and the move itself are
   `inventory-storage`'s job.

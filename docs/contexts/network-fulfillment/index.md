@@ -2,7 +2,7 @@
 id: index
 title: Network Fulfillment
 sidebar_label: Network Fulfillment
-description: The Anti-Corruption Layer between the fleet and an external retail fulfillment network — a Supporting subdomain that owns NetworkOrder and CapabilityOffer, polls network demand (stub only), asks order-management whether each deadline is feasible, and publishes five CloudEvents types.
+description: The Anti-Corruption Layer between the fleet and an external retail fulfillment network — a Supporting subdomain that owns NetworkOrder and CapabilityOffer, polls network demand (stub only), asks order-management whether each deadline is feasible, and publishes seven CloudEvents types.
 slug: /contexts/network-fulfillment
 ---
 
@@ -46,7 +46,7 @@ gateway runs only against a stub: `NETWORK_MODE` defaults to `stub`, and
 - **Outbound:** REST to `order-management` (raise, release and cancel a
   held order; live), and an opt-in REST read of `inventory-storage` usable
   stock.
-- **Events:** with `EVENT_PUBLISHER=kafka`, five CloudEvents types
+- **Events:** with `EVENT_PUBLISHER=kafka`, seven CloudEvents types
   (`com.warehouse.wes.network-fulfillment.networkorder.*`) go to
   `warehouse.network-fulfillment.events` and to
   `warehouse.network-fulfillment.analytics`, through a transactional outbox
@@ -83,10 +83,11 @@ edge and its status.
 - [Aggregate Design Canvas](/contexts/network-fulfillment/aggregate-design-canvas)
   ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
   the `NetworkOrder` aggregate, with its states, invariants and commands.
-- [Domain Events](/contexts/network-fulfillment/domain-events): the five
-  published events (`NetworkOrderReceived`, `NetworkOrderAcknowledged`,
-  `NetworkOrderRejected`, `NetworkOrderShipmentConfirmed`,
-  `AcknowledgementDeadlineAtRisk`), the three consumed topics, and the
+- [Domain Events](/contexts/network-fulfillment/domain-events): the seven
+  published events (`NetworkOrderReceived`, `NetworkOrderSubmitted`,
+  `NetworkOrderAcknowledged`, `NetworkOrderRejected`,
+  `NetworkOrderShipmentConfirmed`, `AcknowledgementDeadlineAtRisk`,
+  `OrphanedHoldCancelled`), the three consumed topics, and the
   spec-vs-code discrepancies found.
 - [Domain Message Flow](/contexts/network-fulfillment/domain-message-flow)
   ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):

@@ -17,10 +17,17 @@ other contexts' topics in.
 
 | Topic | Direction | Messages | Status |
 | --- | --- | --- | --- |
-| `warehouse.network-fulfillment.events` | **Published** (integration topic, this context is the only publisher) | `NetworkOrderReceived`, `NetworkOrderAcknowledged`, `NetworkOrderRejected`, `NetworkOrderShipmentConfirmed`, `AcknowledgementDeadlineAtRisk` | Published when `EVENT_PUBLISHER=kafka`. **No fleet consumer**: no other context's code or AsyncAPI on `develop` references this topic |
-| `warehouse.network-fulfillment.analytics` | **Published and consumed** (own analytics stream) | The same occurrences as the integration topic (the spec's analytics channel lists the first four) | Read only by this context's own projector, `cmd/netfulfil-projector` |
+| `warehouse.network-fulfillment.events` | **Published** (integration topic, this context is the only publisher) | `NetworkOrderReceived`, `NetworkOrderSubmitted`, `NetworkOrderAcknowledged`, `NetworkOrderRejected`, `NetworkOrderShipmentConfirmed`, `AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled` | Published when `EVENT_PUBLISHER=kafka`. **No fleet consumer**: no other context's code or AsyncAPI on `develop` references this topic |
+| `warehouse.network-fulfillment.analytics` | **Published and consumed** (own analytics stream) | The same seven occurrences as the integration topic (the spec's analytics channel lists all seven) | Read only by this context's own projector, `cmd/netfulfil-projector`, which acts on three of them (see [Consuming](#consuming)) |
 | `warehouse.process-path-management.events` | **Consumed** (producer: `process-path-management`) | `ProcessPathCreated`, `ProcessPathUpdated`, `ProcessPathDeactivated`, `CPTScheduleChanged` | **Wired, opt-in** (`CAPABILITY_OFFER_ENABLED=true`, default off) |
 | `warehouse.work-planning.events` | **Consumed** (producer: `wes-work-planning`) | `PathCapacityChanged` only; every other type on the topic is ignored | **Wired, opt-in** (`CAPABILITY_OFFER_ENABLED=true`, default off) |
+
+`OrphanedHoldCancelled` is raised by the orphaned-hold sweep (ADR 0024), once
+per `order-management` hold it frees after `acknowledgeBy` plus
+`ORPHAN_HOLD_GRACE` (default `1h`). The sweep is on by default
+(`ORPHAN_HOLD_SWEEP_ENABLED`) and never changes the order's state;
+`RejectOverdueOrders` still owns the rejection. The analytics projector
+ignores this type.
 
 With the default configuration this context consumes nothing from other
 contexts. The two consumed topics feed the `CapabilityOffer` recompute (cycle

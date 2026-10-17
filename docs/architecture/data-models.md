@@ -40,9 +40,12 @@ are deliberately not one-to-one. The domain layer has no knowledge of SQL.
 
 ## Databases
 
-Fourteen contexts on this site persist. Thirteen have an **OLTP** database and a
-separate **analytical** database; `slotting-optimization` has only its OLTP
-database (no analytics read side yet). The OLTP binary (and its MCP sibling) owns the first.
+Sixteen contexts on this site persist. Thirteen have an **OLTP** database and a
+separate **analytical** database; `slotting-optimization`,
+`pick-face-replenishment` and `task-interleaving` have only an OLTP database (no analytics read side
+yet). The schemas of `pick-face-replenishment` and `task-interleaving` are defined by their migrations but no
+database is provisioned for either, because neither is deployed in the reference
+cluster. The OLTP binary (and its MCP sibling) owns the first.
 The analytical one is written only by that context's projector binary and
 read only by its reports binary (see [Containers](/architecture/containers)).
 `warehouse-ops-agent` has no database at all: its circuit breaker, config and
@@ -66,8 +69,10 @@ explains why).
 | `network-inventory-planning` | 8 | 4 | `transfer_audit` to `inter_warehouse_transfer` | [ER](/contexts/network-inventory-planning/entity-relationship) |
 | `inbound-receiving` | 11 | 6 | `asn_lines` and `receipts` to `asns`; `appointment_asns` to `appointments`; `receipt_lines` to `receipts` | [ER](/contexts/inbound-receiving/entity-relationship) |
 | `slotting-optimization` | 11 | 0 (no analytics database) | `slot_plan_assignments`, `slot_plan_moves` and `slot_plan_unassigned` to `slot_plans` | [ER](/contexts/slotting-optimization/entity-relationship) |
+| `pick-face-replenishment` | 10 | 0 (no analytics database) | none: the schema declares no foreign keys | [ER](/contexts/pick-face-replenishment/entity-relationship) |
+| `task-interleaving` | 10 | 0 (no analytics database) | three: `hints` to `station_trips`, `station_trips.current_hint_id` to `hints`, and `candidates` to `hints` | [ER](/contexts/task-interleaving/entity-relationship) |
 | `warehouse-ops-agent` | 0 | 0 | no database | [ER](/contexts/warehouse-ops-agent/entity-relationship) |
-| **Total** | **119** | **45** | | |
+| **Total** | **139** | **45** | | |
 
 The `inventory-storage`, `order-management`, `wes-work-planning`,
 `fulfillment-execution` and `product-master` rows were re-counted from each
@@ -80,7 +85,13 @@ migrations on `develop` (2026-10-08). The `inbound-receiving` and
 `slotting-optimization` rows were counted from their migrations on `develop`
 (2026-10-11): `CREATE TABLE` statements in
 `internal/adapters/outbound/postgres/migrations/` and, for
-`inbound-receiving`, `analytics/migrations/`.
+`inbound-receiving`, `analytics/migrations/`. The `pick-face-replenishment`
+row was counted from `migrations/0001_replenishment_schema.up.sql` (nine
+tables) and `migrations/0002_forward_assignment_maps.up.sql` (one table) on
+its `develop` (2026-10-17). The `task-interleaving` row was counted from
+`migrations/0001_interleaving_schema.up.sql` (ten `CREATE TABLE` statements)
+on its `develop` (2026-10-17). The totals are the sums of the rows above
+(OLTP 139, analytics 45).
 
 Most FKs in the fleet run from a child table to its parent **inside one
 aggregate** (an `Order` and its lines, a `WorkPool` and its entries, a
@@ -92,8 +103,14 @@ separate aggregates of their own:
   back its no-orphan-slots rule.
 - **inventory-storage**: `stock_units.bin_id` to `bins`, and
   `reservation_allocations.stock_unit_id` to `stock_units`.
+- **task-interleaving**: `hints` to `station_trips` and back through
+  `station_trips.current_hint_id`, and `candidates` to `hints`. The two
+  aggregates it owns (`InterleavingPolicy`, `StationTrip`) reference nothing
+  of each other; the FKs bind a trip to its hints inside the `StationTrip`
+  aggregate.
 
-fulfillment-execution, labor-performance and product-master have no FKs at all. Their
+fulfillment-execution, labor-performance, product-master and
+pick-face-replenishment have no FKs at all. Their
 aggregates reference each other only by identity.
 
 ## Tables by role
@@ -112,6 +129,8 @@ aggregates reference each other only by identity.
 | `product-master` | `products` (the `Product` aggregate, classification and physical profile in one row) | none (the legacy importer writes into `products`) | `outbox_events`, `processed_events` |
 | `network-inventory-planning` | `inter_warehouse_transfer`, `transfer_audit` (the immutable audit trail), `rebalance_runs` | `site_capability` (facility-layout), `site_sku_demand` (order-management), `published_capacity_plan` (warehouse-planning) | `outbox_events`, `processed_events` |
 | `warehouse-planning` | `process_capacity`, `process_capacity_constraint`, `capacity_plans`; plus the locally declared `process_paths` and stored `station_standards` value objects | `location_slot_registration`, `location_slot_tally` (facility-layout), `order_demand` (order-management) | `outbox_events`, `processed_events` |
+| `pick-face-replenishment` | `policies` (`ReplenishmentPolicy`), `replenishment_requests` (`ReplenishmentRequest`) | `bin_stock_levels` (inventory-storage's bin levels), `forward_assignments` and `forward_assignment_maps` (slotting-optimization's `SlotPlanApproved`, with a stale-map guard), `zones` and `locations` (facility-layout) | `outbox_events`, `idempotency_keys`, `processed_events` |
+| `task-interleaving` | `interleaving_policies` (`InterleavingPolicy`), `station_trips`, `hints` and `candidates` (`StationTrip` and its hints) | `task_pool` (fulfillment-execution's `TaskAvailable`, `TaskClaimed`, `TaskCompleted`), `zones` and `locations` with geometry (facility-layout) | `outbox_events`, `idempotency_keys`, `processed_events` |
 
 Patterns that the table makes visible:
 
@@ -124,8 +143,10 @@ Patterns that the table makes visible:
   `processed_events` (or a per-consumer ledger, as in order-management) is
   keyed on the inbound CloudEvents `id`. labor-performance goes one step
   further and uses that `id` as the primary key of `task_performances`.
-- **HTTP idempotency.** Eight contexts store `Idempotency-Key` replays in
-  `idempotency_keys`. network-fulfillment and warehouse-planning do not
+- **HTTP idempotency.** Twelve contexts store `Idempotency-Key` replays in
+  `idempotency_keys`: the eight listed in the table above before `product-master`, plus `inbound-receiving`,
+  `slotting-optimization` (neither has a row in that table), `pick-face-replenishment` and `task-interleaving`, each of whose
+  migrations create that table. network-fulfillment and warehouse-planning do not
   implement that middleware, and product-master needs none: every write is an
   idempotent `PUT`. network-inventory-planning keeps its approval idempotency in a
   unique `idempotency_key` column on the transfer itself, not in an

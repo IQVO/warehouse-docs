@@ -2,7 +2,7 @@
 id: core-domain-chart
 title: Core Domain Chart
 sidebar_label: Core Domain Chart
-description: The fifteen contexts documented on this site on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart.
+description: The seventeen contexts documented on this site on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart.
 ---
 
 # Core Domain Chart
@@ -21,7 +21,7 @@ context's own chart in this fleet uses the same layout:
 
 ```mermaid
 quadrantChart
-    title warehouse-systems - fifteen contexts
+    title warehouse-systems - seventeen contexts
     x-axis Low model complexity --> High model complexity
     y-axis Low business differentiation --> High business differentiation
     quadrant-1 Core
@@ -43,17 +43,21 @@ quadrantChart
     network-inventory-planning: [0.68, 0.80]
     inbound-receiving: [0.44, 0.30]
     slotting-optimization: [0.46, 0.42]
+    pick-face-replenishment: [0.34, 0.36]
+    task-interleaving: [0.34, 0.38]
 ```
 
 Every coordinate is copied from the context's **own** chart. The contexts
 mark these positions as judgements grounded in code evidence, not
 measurements. The five Core contexts sit close together, so some of their
 labels overlap; so do `product-master` and `network-fulfillment` in the
-Supporting quadrant. `network-inventory-planning` has no pack of its own yet,
-so its point is the one on its page here, authored from its code and ADR 0001.
-`inbound-receiving` and `slotting-optimization` now ship their own charts, so
-both are plotted from them; `inbound-receiving` also sits close to
-`product-master` and `workforce-management`. This page copies coordinates
+Supporting quadrant.
+`inbound-receiving`, `slotting-optimization`, `pick-face-replenishment` and
+`task-interleaving` ship their own charts, so all four are plotted from them;
+`inbound-receiving` also sits close to
+`product-master` and `workforce-management`, and `pick-face-replenishment`
+and `task-interleaving` close to `network-fulfillment` and `labor-performance`
+(and to each other). This page copies coordinates
 from context charts and invents none.
 
 ## Where each point comes from
@@ -72,9 +76,11 @@ from context charts and invents none.
 | `facility-layout` | 0.62, 0.18 | Generic | Generic | point `facility-layout`, [chart](/contexts/facility-layout/core-domain-chart) |
 | `process-path-management` | 0.58, 0.22 | Generic | Generic | point `process-path-management`, [chart](/contexts/process-path-management/core-domain-chart) |
 | `product-master` | 0.36, 0.30 | Supporting | Supporting | point `product-master`, [chart](/contexts/product-master/core-domain-chart) |
-| `network-inventory-planning` | 0.68, 0.80 | Core | Core | point `network-inventory-planning`, authored in this repository because the context repo has no pack yet. [chart](/contexts/network-inventory-planning/core-domain-chart) |
+| `network-inventory-planning` | 0.68, 0.80 | Core | Core | point `network-inventory-planning`. [chart](/contexts/network-inventory-planning/core-domain-chart) |
 | `inbound-receiving` | 0.44, 0.30 | Supporting | Supporting | point `inbound-receiving`, [chart](/contexts/inbound-receiving/core-domain-chart) |
 | `slotting-optimization` | 0.46, 0.42 | Supporting | Supporting | point `slotting-optimization`, the whole context. Its chart adds `abc-velocity-v1 planner` at 0.49, 0.48 and `approval workflow` at 0.25, 0.25, both Supporting. [chart](/contexts/slotting-optimization/core-domain-chart) |
+| `pick-face-replenishment` | 0.34, 0.36 | Supporting | Supporting | point `pick-face-replenishment`, the whole context. Its chart adds `min-max policy` at 0.15, 0.30, `detector and source bin choice` at 0.40, 0.40 and `request lifecycle` at 0.35, 0.28, all Supporting. [chart](/contexts/pick-face-replenishment/core-domain-chart) |
+| `task-interleaving` | 0.34, 0.38 | Supporting | Supporting | point `task-interleaving`, the whole context. Its chart adds `rectilinear-v1 recommender` at 0.40, 0.44 and `policy declaration` at 0.15, 0.18, all Supporting. [chart](/contexts/task-interleaving/core-domain-chart) |
 
 Every context's own chart puts its own point in the quadrant that matches the
 fleet classification in [Subdomain Classification](/strategic-design/subdomain-classification).
@@ -120,7 +126,7 @@ This page keeps each context's own placement and the fleet classification.
     optimisation are not built yet.
 - **Supporting: `workforce-management`, `labor-performance`,
   `network-fulfillment`, `warehouse-ops-agent`, `product-master`,
-  `inbound-receiving`, `slotting-optimization`, and `order-management` on the
+  `inbound-receiving`, `slotting-optimization`, `pick-face-replenishment`, `task-interleaving`, and `order-management` on the
   border.** Each one is necessary, but the differentiating knowledge it uses
   belongs to another context:
   - `workforce-management` records human rebalancing decisions.
@@ -137,6 +143,12 @@ This page keeps each context's own placement and the fleet classification.
   - `slotting-optimization` decides forward-pick slots with a deterministic,
     replaceable `abc-velocity-v1` policy behind a port; the competitive core
     stays the WES conductor (its ADR 0001).
+  - `pick-face-replenishment` keeps forward faces stocked with a min/max
+    policy and a fullest-reserve-bin choice, both replaceable policy objects;
+    it never creates floor work or writes the ledger (its ADR 0001).
+  - `task-interleaving` ranks nearby open tasks with a replaceable
+    `rectilinear-v1` travel model and issues an advisory hint; it never
+    assigns work or writes task state (its ADR 0001).
   - `order-management`'s promise rules lift it above a commodity order
     front end, but they are not the platform's differentiator.
 - **Generic: `facility-layout`, `process-path-management`.** Both are well

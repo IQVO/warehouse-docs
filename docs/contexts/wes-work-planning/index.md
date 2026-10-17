@@ -16,10 +16,12 @@ continuously** — waveless, one unit at a time, earliest-CPT-first — and
 performs **flow balancing** from live buffer telemetry so that every parcel
 makes its truck without the floor ever being starved or flooded.
 
-It sits downstream of six upstream event suppliers (`inventory-storage`,
+It sits downstream of seven upstream event suppliers (`inventory-storage`,
 `workforce-management`, `order-management`, [`network-inventory-planning`](/contexts/network-inventory-planning)'s
 transfer work demand (ADR-0033), `slotting-optimization`'s approved slot
-plans (ADR-0040: one `RELOCATE` work unit per move) and `product-master`,
+plans (ADR-0040: one `RELOCATE` work unit per move), `pick-face-replenishment`'s
+replenishment requests (ADR-0042: one `REPLENISH` work unit per request, an
+opt-in consumer that is off in the reference deployment) and `product-master`,
 whose `ProductClassified` it keeps as a local copy for release-time hazmat and
 fragile hints), conforms to two Generic
 contexts (`process-path-management`'s catalogue and `facility-layout`'s
@@ -68,8 +70,9 @@ justification.
   the `WorkPool` aggregate, with its state, invariants, corrective
   policies, commands, events, throughput and size.
 - [Domain Events](/contexts/wes-work-planning/domain-events): the eleven
-  past-tense domain events, including the two that siblings consume today
-  (`WorkReleased` and `PathCapacityChanged`), and the events this context
+  past-tense domain events, including the three that siblings consume today
+  (`WorkReleased`, `PathCapacityChanged` and, opt-in and off by default in
+  `order-management`, `WorkUnitCreated`), and the events this context
   consumes.
 - [Domain Message Flow](/contexts/wes-work-planning/domain-message-flow)
   ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):

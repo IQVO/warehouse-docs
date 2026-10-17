@@ -20,9 +20,11 @@ Every orange sticky is a real domain event: it appears in a synced
 `apis/<context>/asyncapi.yaml` or on that context's Domain Events page.
 Every hotspot is a gap that is already documented somewhere, and the
 [hotspot table](#hotspots-and-their-sources) cites the source for each one.
-Nothing on this page is a guess. The two newest contexts,
-`inbound-receiving` (before the first stow) and `slotting-optimization`
-(beside the order-to-ship line), have their own phase,
+Nothing on this page is a guess. The four newest contexts,
+`inbound-receiving` (before the first stow), `slotting-optimization`
+(beside the order-to-ship line), `pick-face-replenishment` (keeping the
+forward faces stocked) and `task-interleaving` (hinting the next nearby task
+at a station), have their own phase,
 [Phase 0b](#phase-0b-inbound-receiving-and-forward-pick-slotting), drawn from
 their synced `asyncapi.yaml` files.
 
@@ -414,6 +416,137 @@ Sources: [inbound-receiving domain message flow](/contexts/inbound-receiving/dom
 [slotting-optimization EventStorming](/contexts/slotting-optimization/eventstorming),
 and the two contexts' `apis/<context>/asyncapi.yaml`.
 
+### Replenishment of the forward faces
+
+`pick-face-replenishment` (the sixth `wms` context, built on `develop`, not
+deployed) keeps the faces that `slotting-optimization` assigned stocked. A
+planner declares a min/max policy per site and SKU. From local copies of bin
+levels, the forward map and the layout, a detector raises a
+`Replenishment Requested` when a face's projected level reaches its minimum,
+choosing the fullest reserve bin. A planner can also sweep a site or ask for
+a request by hand, and a request is cancelled by a planner, by a newer
+approved slot plan that drops the assignment, or by removing the policy. It
+is completed only by `inventory-storage`'s `Stock Relocated` with reason
+`REPLENISHMENT`. `wes-work-planning` turns each request into one `REPLENISH`
+work unit (its ADR 0042, opt-in and off in the reference deployment), so the
+loop is complete on `develop` (H40, resolved). Dashed arrows below are built
+on both ends but not running: the context is not deployed (H39) and the
+planner's consumer is switched off.
+
+```mermaid
+flowchart LR
+    RPL["Planner"]:::actor
+    INVX["inventory-storage"]:::external
+    SLOX["slotting-optimization"]:::external
+    LAYX["facility-layout"]:::external
+    WPX["wes-work-planning"]:::external
+    subgraph S_PFR["pick-face-replenishment"]
+        direction LR
+        R4["Bin levels, forward map, zones and locations, local copies"]:::readmodel
+        C7["Declare Policy"]:::command
+        E15["Replenishment Policy Declared, analytics only"]:::event
+        P4["Detect a face at or below its minimum, fullest-reserve-bin-v1"]:::policy
+        C8["Evaluate Site, Request Replenishment"]:::command
+        E16["Replenishment Requested"]:::pivotal
+        C9["Cancel Replenishment"]:::command
+        P5["Cancel when the slot plan drops the assignment or the policy is removed"]:::policy
+        E17["Replenishment Cancelled"]:::event
+        P6["Complete the request named by source_ref"]:::policy
+        E18["Replenishment Completed"]:::event
+    end
+
+    INVX -.->|"Bin Stock Level Changed, built, not deployed"| R4
+    SLOX -->|"Slot Plan Approved"| R4
+    LAYX -->|"Zone and Location Slot events"| R4
+    RPL --> C7 --> E15
+    R4 --> P4 --> E16
+    RPL --> C8 --> E16
+    RPL --> C9 --> E17
+    R4 --> P5 --> E17
+    INVX -.->|"Stock Relocated, reason REPLENISHMENT, built, not deployed"| P6
+    P6 --> E18
+    E16 -.->|"Replenishment Requested, one REPLENISH work unit per request, WP consumer off, built, not deployed"| WPX
+
+    H39["H39 the context is not deployed in the reference cluster"]:::hotspot
+    S_PFR -.- H39
+
+    classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
+    classDef command fill:#4aa3df,stroke:#1f6f9f,color:#0b1e2d
+    classDef event fill:#f6a04d,stroke:#9a5b1c,color:#1f1300
+    classDef pivotal fill:#f6a04d,stroke:#000000,stroke-width:5px,color:#1f1300,font-weight:bold
+    classDef policy fill:#c39bd3,stroke:#7d3c98,color:#1f0f26
+    classDef readmodel fill:#7dcea0,stroke:#1e8449,color:#0b2614
+    classDef external fill:#f1948a,stroke:#922b21,color:#2b0a07
+    classDef hotspot fill:#e74c3c,stroke:#78281f,color:#ffffff
+```
+
+Sources: [pick-face-replenishment domain message flow](/contexts/pick-face-replenishment/domain-message-flow),
+[pick-face-replenishment EventStorming](/contexts/pick-face-replenishment/eventstorming),
+its `apis/pick-face-replenishment/asyncapi.yaml` and the fleet
+[context map](/strategic-design/context-map) (K39, K40 and K42 to K44, K44 now wired-but-unused).
+
+### Task interleaving at the station
+
+`task-interleaving` (a `wes` context, built on `develop`, not deployed) listens
+to the task lifecycle of `fulfillment-execution` and the geometry of
+`facility-layout`. `Task Available` and `Task Claimed` keep a copy of the
+open-task pool (announced for `RELOCATE` and `REPLENISH` tasks only), and a
+`Task Completed` moves the station to where the task ended. If the site has
+declared an interleaving policy, a rule then ranks the open tasks by detour and
+issues an `Interleaving Hint Issued` with up to five candidates. The hint is
+`Consumed` when the station claims a candidate before it expires, `Expired`
+otherwise, and is only advice: `claimNext` stays the one claim path. Dashed
+arrows are built on both ends but not running (the context is not deployed,
+H41) or have one end missing (H42).
+
+```mermaid
+flowchart LR
+    PLN["Planner"]:::actor
+    FEX["fulfillment-execution"]:::external
+    FLX["facility-layout"]:::external
+    subgraph S_TI["task-interleaving"]
+        direction LR
+        R5["Open-task pool, zones, locations and geometry, local copies"]:::readmodel
+        C10["Declare Interleaving Policy"]:::command
+        E19["Interleaving Policy Declared, analytics only"]:::event
+        P7["Rank open tasks by detour after a completion, rectilinear-v1"]:::policy
+        E20["Interleaving Hint Issued"]:::pivotal
+        P8["Mark the hint consumed when a candidate is claimed"]:::policy
+        E21["Interleaving Hint Consumed, analytics only"]:::event
+        P9["Expire the hint at its TTL"]:::policy
+        E22["Interleaving Hint Expired, analytics only"]:::event
+    end
+
+    FEX -.->|"Task Available, Task Claimed, Task Completed, built, not deployed"| R5
+    FLX -.->|"Location Slot events and Location Geometry Updated, built, not deployed"| R5
+    PLN --> C10 --> E19
+    R5 --> P7 --> E20
+    E20 --> P8
+    FEX -.->|"Task Claimed of a candidate"| P8
+    P8 --> E21
+    E20 --> P9 --> E22
+    E20 -.->|"no consumer, hint not read by FE"| FEX
+
+    H41["H41 the context is not deployed in the reference cluster"]:::hotspot
+    H42["H42 nothing reads the hint: fulfillment-execution has no tie-break"]:::hotspot
+    S_TI -.- H41
+    E20 -.- H42
+
+    classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
+    classDef command fill:#4aa3df,stroke:#1f6f9f,color:#0b1e2d
+    classDef event fill:#f6a04d,stroke:#9a5b1c,color:#1f1300
+    classDef pivotal fill:#f6a04d,stroke:#000000,stroke-width:5px,color:#1f1300,font-weight:bold
+    classDef policy fill:#c39bd3,stroke:#7d3c98,color:#1f0f26
+    classDef readmodel fill:#7dcea0,stroke:#1e8449,color:#0b2614
+    classDef external fill:#f1948a,stroke:#922b21,color:#2b0a07
+    classDef hotspot fill:#e74c3c,stroke:#78281f,color:#ffffff
+```
+
+Sources: [task-interleaving domain message flow](/contexts/task-interleaving/domain-message-flow),
+[task-interleaving EventStorming](/contexts/task-interleaving/eventstorming),
+its `apis/task-interleaving/asyncapi.yaml` and the fleet
+[context map](/strategic-design/context-map) (K41 and K45 to K47).
+
 ## Phase 1: demand intake and allocation
 
 Two entry points converge on `OrderAllocated`. A direct customer order
@@ -803,6 +936,10 @@ this site, and the corroborating context page is linked instead.
 | H36 | inbound-receiving | `DockAppointmentBooked` has no consumer: inbound-labor demand in `warehouse-planning` is planned, not built (K28) | [inbound-receiving context map](/contexts/inbound-receiving/context-map), row 4 |
 | ~~H37~~ | slotting-optimization | ~~`SlotPlanApproved` has no consumer: executing the moves as MOVE and REPLENISH work is planned, not built (K29)~~ **Resolved 2026-10-14.** Decided by slotting-optimization ADR 0010 (supersedes ADR 0007) and built as RELOCATE work: `wes-work-planning` ADR 0040 plans one work unit per move, `fulfillment-execution` ADR 0047 runs the task, `inventory-storage` ADR 0039 moves the stock and raises `StockRelocated`, which slotting-optimization records as the plan's `execution` progress (K29, K37, K38). | [slotting-optimization context map](/contexts/slotting-optimization/context-map), [domain events](/contexts/slotting-optimization/domain-events) |
 | ~~H38~~ | slotting-optimization | ~~Not deployed: no `warehouse-infra` wiring, so its three local copies are not fed in the reference cluster~~ **Resolved 2026-10-16 on `develop`.** warehouse-infra#75 registers it (database, Kong route, ArgoCD application) and `helm-values/slotting-optimization.yaml` turns on `EVENT_PUBLISHER=kafka` and the four consumers (the three local copies and `RELOCATION_MODE`). It runs once warehouse-infra is applied, and the `RELOCATE` process path must be seeded first. | [slotting-optimization Business Context](/contexts/slotting-optimization/business-context), [ecosystem gaps tracker](/fleet-health/ecosystem-gaps) 6 |
+| H39 | pick-face-replenishment | Not deployed: `warehouse-infra` `develop` has no database, Kong route, ArgoCD application, values file or dashboard for it, and its repository has no Dockerfile or Helm chart. Its two live inputs (K39, K40) feed no running instance. | [pick-face-replenishment Business Context](/contexts/pick-face-replenishment/business-context), [Runbook](/contexts/pick-face-replenishment/runbook) (deployment status) |
+| ~~H40~~ | pick-face-replenishment | ~~A request cannot yet reach the floor: nothing consumes `ReplenishmentRequested`~~ **Resolved 2026-10-17 on `develop`.** `wes-work-planning` ADR 0042 plans one `REPLENISH` work unit per request (consumer `internal/adapters/inbound/kafka/replenishment_consumer.go`, opt-in `REPLENISHMENT_MODE=kafka`) and `process-path-management` ADR 0036 declares the `REPLENISH` path; `fulfillment-execution` ADR 0050 and `inventory-storage` ADR 0040 and 0041 were already built. K44 is **wired-but-unused**: the consumer is off by default and `pick-face-replenishment` is not deployed (H39). | [pick-face-replenishment context map](/contexts/pick-face-replenishment/context-map), [Async API](/contexts/pick-face-replenishment/async-api) |
+| H41 | task-interleaving | Not deployed: `warehouse-infra` `develop` has no database, Kong route, ArgoCD application, values file or dashboard for it, and its repository has no Dockerfile or Helm chart. Its three inputs (K41, K45, K46) feed no running instance. | [task-interleaving Business Context](/contexts/task-interleaving/business-context), [Runbook](/contexts/task-interleaving/runbook) (deployment status) |
+| H42 | task-interleaving | The hint has no reader: `fulfillment-execution` has no consumer of `InterleavingHintIssued`, no hint table and no `claimNext` tie-break (its ADR 0049 and ADR 0050 list it as out of scope) (K47) | [task-interleaving context map](/contexts/task-interleaving/context-map), [Async API](/contexts/task-interleaving/async-api) |
 | H35 | product-master | Stage E (remove the legacy importer, the inventory-storage backfill and the deprecated classification endpoint) has no date | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0003, stage E) |
 
 Other wired-but-unused edges are not drawn, because they sit outside
@@ -837,6 +974,8 @@ sticky inventory and the code evidence:
 | `product-master` | [/contexts/product-master/eventstorming](/contexts/product-master/eventstorming) |
 | `inbound-receiving` | [/contexts/inbound-receiving/eventstorming](/contexts/inbound-receiving/eventstorming) |
 | `slotting-optimization` | [/contexts/slotting-optimization/eventstorming](/contexts/slotting-optimization/eventstorming) |
+| `pick-face-replenishment` | [/contexts/pick-face-replenishment/eventstorming](/contexts/pick-face-replenishment/eventstorming) |
+| `task-interleaving` | [/contexts/task-interleaving/eventstorming](/contexts/task-interleaving/eventstorming) |
 | `network-inventory-planning` | [/contexts/network-inventory-planning/eventstorming](/contexts/network-inventory-planning/eventstorming) |
 
 `network-inventory-planning`'s inter-warehouse transfer flow is not one of the five

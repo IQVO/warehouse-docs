@@ -30,13 +30,20 @@ anti-corruption seam reserved for the WCS/equipment tier this platform
 deliberately does not build, a CPT-missed sweep, `PackageManifested`, and an
 on-time-to-CPT KPI that feed order-management's promise loop, and — most
 recently — the `RELOCATE` task that executes approved slot-plan moves
-(ADR 0047).
+(ADR 0047) and the `REPLENISH` task that executes pick-face top-ups
+(ADR 0050).
 
 Besides orders, this context also runs **slot-plan moves**: work that
 `wes-work-planning` releases on the `RELOCATE` path becomes a `RELOCATE` task
 carrying one move (SKU, source and destination bin). The operator carries the
 stock, counts it and scans the bins, and the completion's `TaskCompleted`
 carries what moved for `inventory-storage` to record on the ledger.
+Work released on the `REPLENISH` path is the same shape for pick-face top-ups: a
+`REPLENISH` task carries the planned move (request id, SKU, reserve and pick-face
+bins, quantity, `NORMAL` or `URGENT`), the operator confirms the quantity, and the
+completion's `TaskCompleted` adds the request id as `request_ref`. The release is
+produced by `wes-work-planning` (its ADR 0042, opt-in and off in the reference
+deployment), so no `REPLENISH` task exists there today.
 
 ## This context's pages
 

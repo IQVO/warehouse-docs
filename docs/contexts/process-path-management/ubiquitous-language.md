@@ -93,6 +93,18 @@ the path is never chosen for order fulfilment
 ([ADR 0033](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0033-relocate-process-path.md),
 [ADR 0034](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0034-process-path-intake.md)).
 
+**DISPATCH** is the path that carries the dispatch leg of an inter-warehouse
+stock transfer. Capability `dispatch`; its intake is `STOCK_TRANSFER` only.
+The path id is the fulfillment-execution task type, so it is `DISPATCH`, not
+`TRANSFER_DISPATCH`
+([ADR 0035](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0035-dispatch-process-path.md)).
+
+**REPLENISH** is the path that carries pick-face top-ups (a replenishment
+planned by wes-work-planning from a pick-face-replenishment request).
+Capability `replenish`; its intake is `REPLENISHMENT` only, the one demand
+source that may route work onto it
+([ADR 0036](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0036-replenish-process-path.md)).
+
 ## Capability
 
 > `Capability` is a named qualification a station/associate must hold to
@@ -109,7 +121,8 @@ authoritative SOURCE for which capabilities a given path requires.
 > path ([ADR 0034](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0034-process-path-intake.md)). A `DemandSource`
 > is one of `CUSTOMER_ORDER` (order-management order lines),
 > `STOCK_TRANSFER` (network-inventory-planning transfer legs, via WES),
-> `SLOT_RELOCATION` (approved slot-plan moves, via WES) or
+> `SLOT_RELOCATION` (approved slot-plan moves, via WES),
+> `REPLENISHMENT` (pick-face top-ups, via WES; [ADR 0036](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0036-replenish-process-path.md)) or
 > `INVENTORY_CONTROL` (amnesty, damage, problem solve).
 
 A set: distinct values, canonical order, unknown or repeated values rejected

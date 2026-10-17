@@ -140,6 +140,14 @@ stock that is already promised.**
   `fulfillment-execution`'s `TaskCompleted`. In both the context raises
   `StockRelocated`, which is how `slotting-optimization` learns that a move of
   its plan has happened.
+- **A third reason: pick-face replenishment.** A completed `REPLENISH` task
+  (ADR 0041) is applied the same way with reason `REPLENISHMENT` and
+  `source_ref` = the replenishment request id, and the context publishes the
+  absolute bin level on `BinStockLevelChanged` (ADR 0040), which is how
+  `pick-face-replenishment` sees a pick face fall to its minimum and learns that
+  its request was carried out. `slotting-optimization` ignores that reason. The
+  chain is built on `develop` end to end but not running in the reference
+  deployment (fleet edges K42 to K44).
 
 This context does not plan the move, decide which SKU goes where or tell an
 operator what to carry. Slotting proposes, `wes-work-planning` plans and

@@ -24,8 +24,8 @@ reference (every message schema, in full), see
 | **Balancer** | `Hash` on the Kafka key (the reservation id), `AllowAutoTopicCreation: true` — one reservation's events land on one partition, so they stay ordered per reservation (inventory-storage ADR-0021); there is no per-SKU ordering |
 | **Broker** | `KAFKA_BROKERS`, default `localhost:9092` (shared broker at `~/warehouse-systems/docker-compose.kafka.yml`) |
 | **Selected by** | `EVENT_PUBLISHER=kafka` (default is `log`, so tests and local runs never need a broker). With Postgres, events go through a transactional outbox (`outbox_events`, ADR-0017) drained by a relay in `cmd/inventory` |
-| **Direction** | Publish on this topic. (Separately, this service consumes `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned` from `warehouse.facility.events` into its location-classification cache when `LOCATION_LOOKUP_MODE=kafka`, which the reference deployment sets — invalid messages go to `warehouse.facility.events.dlq`, ADR-0013 —, `product-master`'s `ProductClassified` from `warehouse.product-master.events` into its `product_classifications` copy under `PRODUCT_MASTER_CONSUMER_GROUP`, also set in the reference deployment, ADR-0034, `ReceiptLineReceived` from `warehouse.inbound-receiving.events` under `INBOUND_RECEIPT_CONSUMER_GROUP`, ADR-0037, and `fulfillment-execution`'s `TaskCompleted` from `warehouse.fulfillment.events` when `TASK_COMPLETED_CONSUMER_MODE=kafka`, which the reference deployment sets: `PICK` confirms reservations, ADR-0035 and ADR-0036, and `RELOCATE` moves stock, ADR-0039, see below. See [Domain Events](/contexts/inventory-storage/domain-events).) |
-| **Consumers** | `wes-work-planning`, projecting `StockReserved` and `ReservationRevoked` into its own `UsableInventoryObserved` read model, keyed by SKU (per `wes-work-planning`, the projection feeds no decision yet); `slotting-optimization`, consuming `StockRelocated` into its plans' execution progress (`RELOCATION_MODE=kafka`, group `RELOCATION_CONSUMER_GROUP`, ADR-0039 and slotting ADR 0010); `product-master`'s legacy importer, reading the legacy `ProductClassified` during the migration only; [`network-inventory-planning`](/contexts/network-inventory-planning), reading the transfer replies and destination facts (its `TRANSFER_REPLY_CONSUMER_GROUP`); it is also the producer of the `TransferAllocationRequested` command this service consumes |
+| **Direction** | Publish on this topic. (Separately, this service consumes `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned` from `warehouse.facility.events` into its location-classification cache when `LOCATION_LOOKUP_MODE=kafka`, which the reference deployment sets — invalid messages go to `warehouse.facility.events.dlq`, ADR-0013 —, `product-master`'s `ProductClassified` from `warehouse.product-master.events` into its `product_classifications` copy under `PRODUCT_MASTER_CONSUMER_GROUP`, also set in the reference deployment, ADR-0034, `ReceiptLineReceived` from `warehouse.inbound-receiving.events` under `INBOUND_RECEIPT_CONSUMER_GROUP`, ADR-0037, and `fulfillment-execution`'s `TaskCompleted` from `warehouse.fulfillment.events` when `TASK_COMPLETED_CONSUMER_MODE=kafka`, which the reference deployment sets: `PICK` confirms reservations, ADR-0035 and ADR-0036, `RELOCATE` moves stock, ADR-0039, and `REPLENISH` moves stock with reason `REPLENISHMENT`, ADR-0041, see below. See [Domain Events](/contexts/inventory-storage/domain-events).) |
+| **Consumers** | `wes-work-planning`, projecting `StockReserved` and `ReservationRevoked` into its own `UsableInventoryObserved` read model, keyed by SKU (per `wes-work-planning`, the projection feeds no decision yet); `slotting-optimization`, consuming `StockRelocated` into its plans' execution progress (`RELOCATION_MODE=kafka`, group `RELOCATION_CONSUMER_GROUP`, ADR-0039 and slotting ADR 0010; only reason `SLOTTING` executes a plan move); `pick-face-replenishment`, consuming `BinStockLevelChanged` (ADR-0040) and `StockRelocated` with reason `REPLENISHMENT` (ADR-0041) once it is deployed (built, not registered in `warehouse-infra`); `product-master`'s legacy importer, reading the legacy `ProductClassified` during the migration only; [`network-inventory-planning`](/contexts/network-inventory-planning), reading the transfer replies and destination facts (its `TRANSFER_REPLY_CONSUMER_GROUP`); it is also the producer of the `TransferAllocationRequested` command this service consumes |
 | **Default content type** | `application/cloudevents+json` |
 
 There is a second, separate topic, `warehouse.inventory.analytics`, carrying
@@ -36,7 +36,7 @@ the cross-context integration contract described on this page.
 
 ## What events are on the topic
 
-The synced `apis/asyncapi.yaml` declares eight types on the integration
+The synced `apis/asyncapi.yaml` declares nine types on the integration
 topic:
 
 - `StockReserved` and `ReservationRevoked`, the reservation contract that
@@ -50,6 +50,13 @@ topic:
   `RelocateStock` for `POST /relocations` and for a completed `RELOCATE` task
   (ADR-0039), consumed by `slotting-optimization`. Integration topic only: it
   has no analytics variant. Key and `subject` are the relocation id;
+- `BinStockLevelChanged`
+  (`com.warehouse.wms.inventory-storage.stock.BinStockLevelChanged`, ADR-0040),
+  the absolute `on_hand` and `reserved` of one SKU in one bin after a ledger
+  change, with a per-(bin, sku) `version` and a `reason` (`STOW`, `PICK`,
+  `RELOCATE`, `REPLENISHMENT`, `COUNT`, `RESERVE`, `REVOKE`; `UNLOCATED` is
+  reserved). Key `<bin>:<sku>`, raised in the same transaction as the change
+  through the outbox, consumed by `pick-face-replenishment`;
 - the legacy `com.warehouse.wms.inventory-storage.product.ProductClassified`.
   Since [ADR-0034](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0034-product-master-owns-classification.md)
   `product-master` owns classification, `PUT /products/{sku}/classification`
@@ -200,7 +207,7 @@ dead-letters nothing.
 **Out: `StockRelocated`.** One event per relocation, from either door, on
 `warehouse.inventory.events` through the outbox: `relocation_id`, `site_code`,
 `sku`, `from_bin`, `to_bin`, `quantity` (at least 1), `reason`
-(`SLOTTING`, `CONSOLIDATION` or `MANUAL`), `source_ref` (`""` when none) and
+(`SLOTTING`, `CONSOLIDATION`, `MANUAL` or, for a completed `REPLENISH` task, `REPLENISHMENT`), `source_ref` (`""` when none) and
 `occurred_at`. Because it is raised for every relocation, most
 `StockRelocated` events (manual, consolidation) belong to no slot plan, and
 `slotting-optimization` counts those as unmatched without storing them.
@@ -221,6 +228,29 @@ sequenceDiagram
     K2->>S: consume
     S->>S: match plan_id:move_seq, record once per relocation_id
 ```
+
+## Replenishment: `REPLENISH` completions in, `REPLENISHMENT` relocations out
+
+The ledger end of the pick-face replenishment chain (inventory-storage
+ADR-0041, `pick-face-replenishment` → `wes-work-planning` → `fulfillment-execution`
+→ this service → `pick-face-replenishment`). The `TaskCompleted` consumer that
+confirms picks and applies `RELOCATE` moves has a third branch: a
+`task_type = REPLENISH` completion carries the same additive `sku`, `from_bin`,
+`to_bin` and `quantity` plus the REQUIRED `request_ref`
+(`internal/application/usecases/apply_replenish_task.go`, wired in
+`cmd/inventory/confirmpick.go`). It runs the same `RelocateStock` with reason
+`REPLENISHMENT`, the site taken from the source bin and `source_ref` =
+`request_ref`, with no task-id fallback, because `pick-face-replenishment` closes a
+request by `source_ref == request_id`. The CloudEvents `id` is claimed in
+`processed_events` (consumer `task-completed-replenish`) in the same transaction;
+a completion without `request_ref` is dead-lettered at once to
+`warehouse.fulfillment.events.dlq`. The move enqueues `StockRelocated` (reason
+`REPLENISHMENT`) and two `BinStockLevelChanged` events, the source bin and then
+the destination bin, like a `RELOCATE`. `slotting-optimization` ignores a
+`REPLENISHMENT` relocation. No `REPLENISH` task exists in the reference
+deployment, because the planner's consumer in `wes-work-planning` is off and
+`pick-face-replenishment` is not deployed (fleet edges K43 and K44,
+wired-but-unused).
 
 ## Idempotency and consumer-group notes
 

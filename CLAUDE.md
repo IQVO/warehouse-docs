@@ -2,10 +2,10 @@
 
 Fleet-wide documentation for the **warehouse-systems** ecosystem: strategic
 and tactical Domain-Driven Design artifacts, generated REST and AsyncAPI
-references, and business context for fifteen backend contexts: fourteen domain
-bounded contexts plus `warehouse-ops-agent` (`inbound-receiving` and
-`slotting-optimization` are decided, not built: business-context and canvas
-pages only).
+references, and business context for seventeen backend contexts: sixteen domain
+bounded contexts plus `warehouse-ops-agent` (`pick-face-replenishment` and
+`task-interleaving` are built on `develop` and onboarded here, but neither is
+deployed in `warehouse-infra`).
 Built with [Docusaurus](https://docusaurus.io/), published to GitHub Pages.
 
 Live site: https://iqvo.github.io/warehouse-docs/
@@ -29,7 +29,7 @@ never copies).
 - Single Docusaurus site, no develop/main split — this repo builds and
   deploys straight off `main` on every push (unlike the fleet's GitFlow
   service repos).
-- **Scope**: fifteen backend contexts —
+- **Scope**: seventeen backend contexts —
   `order-management`, `inventory-storage`, `wes-work-planning`,
   `fulfillment-execution`, `workforce-management`, `facility-layout`,
   `process-path-management`, `labor-performance`, `warehouse-ops-agent`,
@@ -43,14 +43,18 @@ never copies).
   handling classification taken over from inventory-storage, and the
   declared vs measured physical profile; topics
   `warehouse.product-master.events` + `.analytics`; ADRs under `docs/adr/`;
-  its pack adds a synced `use-cases` page, `CONTEXT_EXTRA_PAGES` in
+  every context syncs a `use-cases` page, it is in `CONTEXT_PAGES` in
   `sidebars.ts`),
   `network-inventory-planning` (Core: network-wide inventory position and the
   inter-warehouse transfer saga; topics `warehouse.network-inventory-planning.events`
-  + `.analytics`; ADRs under `docs/docs/adr/`; it ships no ddd pack of its own yet,
-  so its pages 2-12 are AUTHORED in this repo from its code and ADRs, each noting
-  so — the exception to the synced-copies rule below), `inbound-receiving` and
-  `slotting-optimization` (Supporting; decided, not built).
+  + `.analytics`; ADRs under `docs/docs/adr/`), `inbound-receiving` and
+  `slotting-optimization` (Supporting; built, each with a synced pack and
+  operations pages), `pick-face-replenishment` (`wms`, Supporting;
+  built on `develop`, not deployed in `warehouse-infra`; ADRs under
+  `docs/adr/`) and `task-interleaving` (`wes`, Supporting; the advisory
+  next-task hint; built on `develop`, not deployed in `warehouse-infra`; topics
+  `warehouse.task-interleaving.events` + `.analytics`; ADRs under
+  `docs/adr/`; no MCP server).
   The frontend repos (`warehouse-console`, `warehouse-ui-kit`) and
   `warehouse-infra` are referenced where relevant but are not bounded
   contexts in the Evans/Vernon sense — out of scope for DDD artifacts here.
@@ -59,7 +63,7 @@ never copies).
   `warehouse-planning`, `network-inventory-planning`; Supporting =
   `workforce-management`, `labor-performance`, `warehouse-ops-agent`,
   `network-fulfillment`, `product-master`, `inbound-receiving`,
-  `slotting-optimization`;
+  `slotting-optimization`, `pick-face-replenishment`, `task-interleaving`;
   Generic = `facility-layout`, `process-path-management`;
   `order-management` = Generic/Supporting.
 - **Fleet facts**: REST and MCP are UNAUTHENTICATED fleet-wide (by
@@ -136,9 +140,9 @@ scripts/gen-async-docs.mjs      invokes tools/asyncapi-gen's installed
                                 re-resolves the whole tree fresh every call,
                                 10+ min cold vs <1 min cached). Its CONTEXTS
                                 array lists every context with an
-                                asyncapi.yaml — all twelve (every context
-                                with an asyncapi.yaml; not warehouse-ops-agent
-                                nor the two undecided ones; incl.
+                                asyncapi.yaml — all sixteen (every context
+                                with an asyncapi.yaml; not warehouse-ops-agent;
+                                incl.
                                 network-fulfillment, product-master and
                                 network-inventory-planning)
 scripts/capability-map/         capabilities.py = the L1/L2/L3 capability
@@ -159,12 +163,14 @@ Every context directory has the same page set, in this sidebar order:
 | --- | --- |
 | `index.md` | hand-written here (most carry a custom `slug: /contexts/<ctx>` — use absolute links only) |
 | `business-context.md` | hand-written here |
-| `ubiquitous-language.md`, `core-domain-chart.md`, `bounded-context-canvas.md`, `context-map.md`, `aggregate-design-canvas.md`, `domain-events.md`, `domain-message-flow.md`, `eventstorming.md`, `class-diagram.md`, `entity-relationship.md`, `sequence-diagrams.md` | **SYNCED COPIES** of the context repo's own ddd-crew artifact pack on `develop` (code-grounded). Each starts with a `:::info[Synced from <repo>]` note linking its source. NEVER rewrite them here: fix the content upstream in the context repo, then re-sync. If one breaks the build, make the minimal link/MDX fix and report it as an upstream fix needed |
-| `async-api.md` | hand-written Kafka narrative (topics, envelope example from the spec, publishing, consumer/dedupe/DLQ behaviour), only for contexts that have one: inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, process-path-management, labor-performance, network-fulfillment, warehouse-planning, product-master, network-inventory-planning |
+| `ubiquitous-language.md`, `core-domain-chart.md`, `bounded-context-canvas.md`, `context-map.md`, `aggregate-design-canvas.md`, `domain-events.md`, `domain-message-flow.md`, `eventstorming.md`, `class-diagram.md`, `entity-relationship.md`, `sequence-diagrams.md`, `use-cases.md`, and the Operations group `configuration.md`, `runbook.md`, `observability.md`, `troubleshooting.md`, `testing.md` | **SYNCED COPIES** of the context repo's own ddd-crew artifact pack on `develop` (code-grounded). Each starts with a `:::info[Synced from <repo>]` note linking its source. NEVER rewrite them here: fix the content upstream in the context repo, then re-sync. If one breaks the build, make the minimal link/MDX fix and report it as an upstream fix needed |
+| `async-api.md` | hand-written Kafka narrative (topics, envelope example from the spec, publishing, consumer/dedupe/DLQ behaviour), only for contexts that have one: inventory-storage, wes-work-planning, fulfillment-execution, workforce-management, process-path-management, labor-performance, network-fulfillment, warehouse-planning, product-master, network-inventory-planning, inbound-receiving, slotting-optimization, pick-face-replenishment, task-interleaving |
 
 The Bounded Contexts sidebar is GENERATED in `sidebars.ts` from the
-`CONTEXTS` array (the fifteen contexts) × `CONTEXT_PAGES` (the page order
-above), plus any `CONTEXT_EXTRA_PAGES` (product-master's `use-cases`) and
+`CONTEXTS` array (the seventeen contexts) × `CONTEXT_PAGES` (the page order
+above, including `use-cases`) plus the `Operations` group from
+`CONTEXT_OPS_PAGES` (configuration, runbook, observability, troubleshooting,
+testing), any `CONTEXT_EXTRA_PAGES` (empty today) and
 `async-api` for the contexts in `ASYNC_NARRATIVE`. Adding a
 context or a page = edit those arrays, not hand-written sidebar entries.
 
@@ -179,7 +185,9 @@ cd ..   # warehouse-systems/ (siblings checked out)
 for repo in order-management inventory-storage wes-work-planning \
             fulfillment-execution workforce-management facility-layout \
             process-path-management labor-performance network-fulfillment \
-            warehouse-planning product-master network-inventory-planning; do
+            warehouse-planning product-master network-inventory-planning \
+            inbound-receiving slotting-optimization pick-face-replenishment \
+            task-interleaving; do
   git -C "$repo" show origin/develop:apis/openapi.yaml \
     > "warehouse-docs/apis/$repo/openapi.yaml" 2>/dev/null
   git -C "$repo" show origin/develop:apis/asyncapi.yaml \
@@ -189,7 +197,7 @@ git -C labor-performance show origin/develop:apis/openapi-reports.yaml \
   > "warehouse-docs/apis/labor-performance/openapi-reports.yaml" 2>/dev/null
 ```
 
-All twelve contexts in the loop ship BOTH files (network-fulfillment and
+All sixteen contexts in the loop ship BOTH files (network-fulfillment and
 order-management included). `warehouse-ops-agent` has neither — it's a
 Customer, not an Open Host Service, with no `apis/` dir of its own (see its
 own CLAUDE.md); its surface is documented in prose at
@@ -240,9 +248,9 @@ rule, and every page on this site must document it that way:
 
 Full standard, subdomain table and the fleet's cross-service type
 catalogue: `docs/strategic-design/event-standard-cloudevents.md`. Each of
-the twelve Kafka-using service repos documented here also records it as its
+the sixteen Kafka-using service repos documented here also records it as its
 own ADR (under `docs/docs/adr/`, or `docs/adr/` for network-fulfillment,
-warehouse-planning and product-master — product-master's is ADR 0004;
+warehouse-planning, product-master, inbound-receiving, slotting-optimization, pick-face-replenishment and task-interleaving — product-master's is ADR 0004;
 network-inventory-planning's is ADR 0004 under `docs/docs/adr/`);
 `warehouse-ops-agent` uses no Kafka.
 

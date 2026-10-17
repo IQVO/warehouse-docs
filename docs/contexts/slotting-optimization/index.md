@@ -10,7 +10,7 @@ slug: /contexts/slotting-optimization
 
 <span className="badge-supporting">Supporting Subdomain</span>
 
-**Slotting Optimization** is one of the fleet's fourteen domain bounded
+**Slotting Optimization** is one of the fleet's sixteen domain bounded
 contexts. It sits in the `wms` tier of the CloudEvents subdomain taxonomy, the
 fifth `wms` context after `facility-layout`, `inventory-storage`,
 `product-master` and `inbound-receiving`. It decides **which SKUs deserve a
@@ -48,12 +48,23 @@ seeded in `process-path-management` first. Nothing in `warehouse-ops-agent`
 calls the MCP server yet.
 
 **Not owned here:** `REPLENISH` (min/max) work belongs to
-`pick-face-replenishment` (scaffolded 2026-10-17, contracts and domain in
-progress; consumers and the producer-side changes of other contexts are
-planned, not built). It will consume this context's `SlotPlanApproved` as the
-forward map.
+`pick-face-replenishment` (`wms`, Supporting), [built on `develop`](/contexts/pick-face-replenishment)
+(2026-10-17). It consumes this context's `SlotPlanApproved` as the forward map, but it is
+not deployed: `warehouse-infra` `develop` has no values file, route or ArgoCD application for it, so the edge is
+wired-but-unused (K39 in the fleet [Context Map](/strategic-design/context-map)). The whole
+loop it needs is built on `develop`: `inventory-storage` publishes `BinStockLevelChanged` and the
+`REPLENISHMENT` relocation reason (its ADR 0040 and ADR 0041), `wes-work-planning` plans `REPLENISH`
+work from `ReplenishmentRequested` (its ADR 0042, opt-in and off in the reference deployment),
+`process-path-management` declares the `REPLENISH` path (its ADR 0036) and `fulfillment-execution`
+runs `REPLENISH` tasks (its ADR 0050). Nothing runs it yet (K44, wired-but-unused).
+This context's own `RecordRelocation` ignores a `REPLENISHMENT` relocation: since its PR #35 only reason
+`SLOTTING` executes a slot-plan move.
 
-**Planned, not built:** an analytics read side and a console remote.
+**Planned, not built** (checked on `develop`): an analytics read side
+(`warehouse.slotting-optimization.analytics` is reserved by ADR 0004 and
+nothing is published there; the AsyncAPI declares no such channel) and a
+console remote (there is no `web/` directory and `warehouse-console` has no
+slotting feature).
 :::
 
 It owns one aggregate, **`SlotPlan`** (package `internal/domain/slotplan`),

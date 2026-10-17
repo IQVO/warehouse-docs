@@ -2,7 +2,7 @@
 id: domain-events
 title: Domain events
 sidebar_label: Domain events
-description: The twelve past-tense facts this context publishes, their CloudEvents type convention, their payload shapes, and who consumes them.
+description: The fourteen past-tense facts this context publishes, their CloudEvents type convention, their payload shapes, and who consumes them.
 ---
 
 # Domain events
@@ -12,7 +12,7 @@ This page is a copy of [`docs/docs/ddd/domain-events.md`](https://github.com/IQV
 :::
 
 
-This bounded context emits twelve past-tense domain events. Together they are
+This bounded context emits fourteen past-tense domain events. Together they are
 its **Published Language** — the vocabulary downstream Conformists key off.
 
 :::info[Published to Kafka, specified in AsyncAPI]
@@ -23,7 +23,7 @@ call, to the separate `warehouse.facility.analytics` topic that feeds the
 [analytical data product](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/analytics/catalog-growth-report.md)
 ([ADR 0010](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0010-analytical-data-product.md)). The integration topic,
 its CloudEvents 1.0 envelope
-([ADR 0024](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0024-cloudevents-mandatory-envelope.md)) and all twelve messages are specified in
+([ADR 0024](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0024-cloudevents-mandatory-envelope.md)) and all fourteen messages are specified in
 [`apis/asyncapi.yaml`](https://github.com/IQVO/facility-layout/blob/main/apis/asyncapi.yaml)
 (AsyncAPI 2.6.0).
 

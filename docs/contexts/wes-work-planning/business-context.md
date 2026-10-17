@@ -268,6 +268,33 @@ other. The platform has one conductor for floor work, so this context plans it
 
 The consumed contract is on [Async API](./async-api).
 
+## Pick-face replenishment is work too
+
+The second demand source of that kind is `pick-face-replenishment`: when a forward
+pick face falls to its minimum, it asks for stock to be carried from a reserve bin,
+and this context plans that move
+([ADR-0042](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0042-pick-face-replenishment-work.md)),
+mirroring the `RELOCATE` chain:
+
+- **One work unit per request.** `ReplenishmentRequested` becomes ONE `REPLENISH`
+  work unit (id `replenish-<request_id>`, reference = the request id) on the
+  `REPLENISH` process path (`process-path-management`'s ADR 0036), released through
+  the same `ReleaseNextWork` flow. `ReplenishmentCancelled` withdraws it only while
+  it is still Pending; released work runs to completion.
+- **Priority is the CPT.** A work unit has no priority field and every queue
+  releases earliest CPT first, so an `URGENT` request gets
+  `REPLENISHMENT_URGENT_CPT_HORIZON` (default `1h`) and a `NORMAL` one
+  `REPLENISHMENT_CPT_HORIZON` (default `8h`) after `requested_at`.
+- **What it does not decide.** The move itself (bins, quantity, priority) is
+  carried to `fulfillment-execution` as an optional `replenishment` object on
+  `WorkReleased`, and the stock moves in `inventory-storage`. The pick-face policy
+  stays in `pick-face-replenishment`.
+- **Opt-in.** The consumer runs only with `REPLENISHMENT_MODE=kafka` (a stable
+  `REPLENISHMENT_CONSUMER_GROUP`, Postgres and Kafka required). The default
+  consumes nothing, and `warehouse-infra` `develop` does not enable it, so in the
+  reference deployment no `REPLENISH` work is planned (fleet edge K44,
+  wired-but-unused).
+
 See [Ubiquitous Language](./ubiquitous-language) for the exact vocabulary
 and the traps that come with sitting at the intersection of several other
 contexts.

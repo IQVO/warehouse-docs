@@ -2,7 +2,7 @@
 id: index
 title: Bounded Contexts
 sidebar_label: Bounded Contexts
-description: The fourteen domain bounded contexts and the operator agent, each with its ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
+description: The sixteen domain bounded contexts and the operator agent, each with its ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
 slug: /contexts
 ---
 
@@ -52,8 +52,9 @@ applies, is given in brackets:
     `inventory-storage`, `wes-work-planning`, `fulfillment-execution`,
     `workforce-management`, `process-path-management`,
     `labor-performance`, `network-fulfillment`, `warehouse-planning`,
-    `product-master`, `inbound-receiving`, `slotting-optimization` and
-    `network-inventory-planning`.
+    `product-master`, `inbound-receiving`, `slotting-optimization`,
+    `network-inventory-planning`, `pick-face-replenishment` and
+    `task-interleaving`.
     (Hand-written for this site.)
 
 :::info[Synced pages]
@@ -89,10 +90,12 @@ pyramid, `make` targets and CI jobs).
 | [warehouse-planning](/contexts/warehouse-planning) | Core | `wes` | WES — capacity planning |
 | [product-master](/contexts/product-master) | Supporting | `wms` | WMS — product master data (classification and physical profile; four live `ProductClassified` local-copy consumers) |
 | [inbound-receiving](/contexts/inbound-receiving) | Supporting | `wms` | WMS — everything before the first stow: ASN, dock appointment, receipt, discrepancies; hands good units to `inventory-storage` as events. Deployed |
-| [slotting-optimization](/contexts/slotting-optimization) | Supporting | `wms` | WMS — which SKUs deserve a forward pick slot: velocity-ranked slot plans a human approves. Built, not deployed yet (no Dockerfile or chart; see [Ecosystem gaps](/fleet-health/ecosystem-gaps)) |
+| [slotting-optimization](/contexts/slotting-optimization) | Supporting | `wms` | WMS — which SKUs deserve a forward pick slot: velocity-ranked slot plans a human approves. Registered in `warehouse-infra` `develop` (database, Kong route, ArgoCD application, Dockerfile and chart in its repository); it runs once that is applied |
 | [network-inventory-planning](/contexts/network-inventory-planning) | Core | `wes` | WES — inter-warehouse transfer planning (advisory proposals, operator-approved transfer saga) |
+| [pick-face-replenishment](/contexts/pick-face-replenishment) | Supporting | `wms` | WMS — keeps forward pick faces stocked from reserve bins (min/max policy, fullest reserve bin). Built, not deployed (no `warehouse-infra` entry, no Dockerfile or chart). The `inventory-storage` and `fulfillment-execution` ends of the `REPLENISH` chain are built; `wes-work-planning` and `process-path-management` have no `REPLENISH` work or path yet |
+| [task-interleaving](/contexts/task-interleaving) | Supporting | `wes` | WES — after each completed task, an advisory, expiring hint of nearby open tasks. Built, not deployed (no `warehouse-infra` entry, no Dockerfile or chart); `fulfillment-execution` does not consume the hint yet |
 
-See [Strategic Design](/strategic-design) for how these fifteen contexts relate to
+See [Strategic Design](/strategic-design) for how these seventeen contexts relate to
 each other at the fleet level, and the
 [DDD Starter Modelling Process](/strategic-design/ddd-starter-modelling-process)
 for which modelling step each page belongs to.
