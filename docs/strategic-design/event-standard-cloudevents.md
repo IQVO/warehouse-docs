@@ -151,6 +151,24 @@ below are the pinned design, not deployed producers. Topics:
 `warehouse.task-interleaving.events` / `.analytics` (type prefix
 `com.warehouse.wes.task-interleaving.`).
 
+### What the subdomain segment means
+
+The `<subdomain>` segment is a fixed label of the published contract, not an
+industry software category (decided 2026-10-17):
+
+- **`wms`** marks the WMS tier: the item, location and inventory masters and
+  the contexts that keep stock in place (receiving, slotting, replenishment).
+- **`wes`** marks every other context, whether it executes work, manages
+  labor, takes orders, plans capacity or balances the network.
+
+A new context takes `wms` only under that definition. An existing segment is
+never renamed to match an industry classification: every producer and consumer
+matches the full `type`, so a rename is a breaking change everywhere at once
+and tells no consumer anything new. By the industry definitions, only three of
+the `wes` contexts are warehouse execution software; the
+[qualification](/wms-wes/qualification) records each context's industry
+category (WMS, WES, labor management, above the WMS) with the evidence.
+
 Entity segments for repos that had no catalogue yet:
 
 - order-management: every `Order*` event → `order`
