@@ -35,7 +35,7 @@ third. So the interesting decision is **what to advertise and what to
 commit to** — and the fleet already owns every fact needed to decide both
 well.
 
-## The idea worth building (planned, not built)
+## The idea worth building (computed, not yet advertised)
 
 Most integrations of this shape advertise physical stock on hand. This
 fleet can do better, because it knows whether the building can actually
@@ -52,9 +52,14 @@ advertisedQuantity = min(
 400 units in the building but a path that can only carry 120 more before
 the 18:00 cutoff means advertising 400 sells a promise the floor cannot
 keep; advertising 120 sells capability honestly. [ADR 0001](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0001-network-fulfillment-bounded-context.md)
-names this **CapabilityOffer** and calls it "the feature" — and it is
-**not built yet**. What exists today is the commitment half: receiving
-demand and answering it honestly.
+names this **CapabilityOffer** and calls it "the feature". Its value is
+computed and persisted today (the `RecomputeCapabilityOffers` use case, opt-in
+with `CAPABILITY_OFFER_ENABLED=true`, default off) and served read-only on
+`/capability-offers`. The outward half is **not built**: the use case
+deliberately does not call `NetworkGateway.SubmitAvailability`, and the only
+gateway is a stub, so nothing advertises the quantity to a network. What runs
+for real today is the commitment half: receiving demand and answering it
+honestly.
 
 ## What is built: answering demand honestly
 
@@ -79,7 +84,11 @@ demand and feeds each unit to `ReceiveNetworkDemand`, which:
 
 A separate `SweepAcknowledgementDeadlines` ticker rejects any order still
 unanswered past its 24-hour `acknowledgeBy` instant and cancels its held
-local order, if any. Today all of this runs against a **stub** network
+local order, if any. `SweepOrphanedHolds` (ADR 0024, on by default, grace
+`ORPHAN_HOLD_GRACE` = `1h`) is the backstop: it cancels an
+`order-management` hold that nobody decided or whose cancel was never
+confirmed, and reports each one as `OrphanedHoldCancelled` without changing
+the order's state. Today all of this runs against a **stub** network
 gateway seeded from `NETWORK_SEED_FILE`; no call to a real network is made
 anywhere.
 

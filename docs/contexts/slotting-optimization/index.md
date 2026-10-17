@@ -48,12 +48,20 @@ seeded in `process-path-management` first. Nothing in `warehouse-ops-agent`
 calls the MCP server yet.
 
 **Not owned here:** `REPLENISH` (min/max) work belongs to
-`pick-face-replenishment` (scaffolded 2026-10-17, contracts and domain in
-progress; consumers and the producer-side changes of other contexts are
-planned, not built). It will consume this context's `SlotPlanApproved` as the
-forward map.
+`pick-face-replenishment` (`wms`, Supporting), whose service is merged on
+`develop` (2026-10-17). It consumes this context's `SlotPlanApproved` as the
+forward map, but it is not deployed: `warehouse-infra` `develop` has no values
+file, route or ArgoCD application for it, so the edge is wired-but-unused (K39
+in the fleet [Context Map](/strategic-design/context-map)). The producers that
+would close its loop are not built: `inventory-storage` does not publish
+`BinStockLevelChanged` or the `REPLENISHMENT` relocation reason, and
+`wes-work-planning` has no `REPLENISH` work.
 
-**Planned, not built:** an analytics read side and a console remote.
+**Planned, not built** (checked on `develop`): an analytics read side
+(`warehouse.slotting-optimization.analytics` is reserved by ADR 0004 and
+nothing is published there; the AsyncAPI declares no such channel) and a
+console remote (there is no `web/` directory and `warehouse-console` has no
+slotting feature).
 :::
 
 It owns one aggregate, **`SlotPlan`** (package `internal/domain/slotplan`),
