@@ -140,5 +140,5 @@ this context has no Kafka integration.
   See also the [ADR index](/adr).
 - The [API surface page](/api-reference/warehouse-ops-agent) on this site
   describes its REST and MCP surface in prose.
-- Fleet-wide [Strategic Design](/strategic-design): how the fourteen contexts
+- Fleet-wide [Strategic Design](/strategic-design): how the sixteen contexts
   documented on this site relate.

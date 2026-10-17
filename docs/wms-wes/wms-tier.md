@@ -87,7 +87,7 @@ now has an owner that is built but not deployed, `pick-face-replenishment`
 (`wms`), which raises replenishment requests but whose execution chain
 (`REPLENISH` work, the `BinStockLevelChanged` producer, the `REPLENISHMENT`
 relocation reason) is not built. Task interleaving has a registered owner,
-`task-interleaving` (`wes`), scaffolded on 2026-10-17 and still in progress; see the
+`task-interleaving` (`wes`), scaffolded on 2026-10-17 (only its domain and contracts are on `develop`, no service yet); see the
 [context map](/strategic-design/context-map). Until they ship,
 `warehouse-planning` knows `REPLENISHMENT` only as a type of capacity
 constraint. `ship` stops at the SLAM weigh-check, label and manifest event in
