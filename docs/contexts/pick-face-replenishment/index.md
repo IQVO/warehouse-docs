@@ -28,7 +28,9 @@ and [integration page](https://iqvo.github.io/pick-face-replenishment/docs/ecosy
 checked against `develop` (and, for deployment, `warehouse-infra` `develop`):
 
 **Built on `develop`:** the REST API (twelve operations), the transactional
-outbox and relay, and **three** opt-in Kafka consumers (bin levels and
+outbox and relay, and **three** Kafka consumers, always on since its ADR 0006
+(`DATABASE_URL`, `KAFKA_BROKERS` and the three consumer groups are mandatory
+and a missing one is a boot error; `permissive` is rejected), for bin levels and
 relocations from `inventory-storage`, the forward map from
 `slotting-optimization`, zones and locations from `facility-layout`). There is
 one binary, `cmd/api`, and **no MCP server**.

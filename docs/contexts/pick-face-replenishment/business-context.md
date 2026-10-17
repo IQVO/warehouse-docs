@@ -41,7 +41,7 @@ single writer of it), so it is a context of its own (ADR 0001).
 | Aggregates | `ReplenishmentPolicy` (package `internal/domain/policy`) and `ReplenishmentRequest` (package `internal/domain/replenishment`), ADR 0002 |
 | Detector | the pure function `Detect` in `internal/domain/detection`, with the `SourceBinPolicy` port (v1: `fullest-reserve-bin-v1`) |
 | Binaries | one: `cmd/api` (REST on `HTTP_ADDR`, default `:8080`, plus up to three Kafka consumers and the outbox relay as goroutines). There is **no** `cmd/mcp` |
-| Data store | one Postgres database (embedded migrations), or in-memory adapters when `DATABASE_URL` is unset |
+| Data store | one Postgres database (embedded migrations). `DATABASE_URL` and `KAFKA_BROKERS` are mandatory (a boot error naming the variable); the in-memory adapters are test doubles only (its ADR 0006) |
 | Kafka | publishes `warehouse.pick-face-replenishment.events` and `warehouse.pick-face-replenishment.analytics`; consumes `warehouse.inventory.events`, `warehouse.slotting-optimization.events` and `warehouse.facility.events` (ADR 0003, ADR 0004) |
 | Auth | none (fleet-wide decision) |
 
@@ -97,10 +97,10 @@ later version behind the same port. It does not exist today.
 | Raise a request by hand | `POST /replenishments` | `RaiseManualRequest` |
 | Read requests | `GET /replenishments`, `GET /replenishments/{requestId}` | `GetRequest`, `ListRequests` |
 | Cancel a request | `POST /replenishments/{requestId}/cancel` | `CancelRequest` |
-| Raise requests as bin levels or the forward map change | Kafka consumers (`INVENTORY_MODE`, `SLOTTING_MODE`, `LAYOUT_MODE` = `kafka`) | `ApplyBinLevel`, `ApplyRelocation`, `ApplyForwardAssignmentMap`, `ApplyZone`, `ApplyLocationRegistered`, `ApplyLocationDecommissioned` |
-| Publish requests and their outcome | transactional outbox + relay (needs `DATABASE_URL` and `KAFKA_BROKERS`) | every write use case |
+| Raise requests as bin levels or the forward map change | Kafka consumers (always on; `INVENTORY_MODE`, `SLOTTING_MODE` and `LAYOUT_MODE` default to `kafka`) | `ApplyBinLevel`, `ApplyRelocation`, `ApplyForwardAssignmentMap`, `ApplyZone`, `ApplyLocationRegistered`, `ApplyLocationDecommissioned` |
+| Publish requests and their outcome | transactional outbox + relay (always on; both are mandatory) | every write use case |
 
-The write endpoints take an `Idempotency-Key` that is enforced with Postgres.
+The write endpoints require an `Idempotency-Key` in every deployment (enforced with Postgres).
 The full catalogue is on [Use Cases](/contexts/pick-face-replenishment/use-cases).
 
 ## What it deliberately does not do

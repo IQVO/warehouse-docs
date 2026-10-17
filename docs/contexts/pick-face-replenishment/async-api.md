@@ -30,9 +30,9 @@ producer or consumer publishes today.
 | --- | --- | --- |
 | `warehouse.pick-face-replenishment.events` | **Published** | `ReplenishmentRequested`, `ReplenishmentCompleted` and `ReplenishmentCancelled` from the `ReplenishmentRequest` aggregate, written by the transactional outbox relay. Key = the request id. `wes-work-planning` consumes `ReplenishmentRequested` and `ReplenishmentCancelled` (its ADR 0042, opt-in and off in the reference deployment); `ReplenishmentCompleted` has no consumer. |
 | `warehouse.pick-face-replenishment.analytics` | **Published** | The same three request events again (same `type`, same CloudEvents `id`, dataschema `...:analytics:<EventName>:v1`) plus the analytics-only `ReplenishmentPolicyDeclared` (key and subject `<site_id>/<sku>`). No reader exists yet. |
-| `warehouse.inventory.events` | Consumed | Only `BinStockLevelChanged` (key `<bin>:<sku>`) and `StockRelocated` (key `relocation_id`). Started only when `INVENTORY_MODE=kafka`, group from `INVENTORY_CONSUMER_GROUP`. |
-| `warehouse.slotting-optimization.events` | Consumed | Only `SlotPlanApproved`. Started only when `SLOTTING_MODE=kafka`, group from `SLOTTING_CONSUMER_GROUP`. |
-| `warehouse.facility.events` | Consumed | Only `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned`. Started only when `LAYOUT_MODE=kafka`, group from `LAYOUT_CONSUMER_GROUP`. |
+| `warehouse.inventory.events` | Consumed | Only `BinStockLevelChanged` (key `<bin>:<sku>`) and `StockRelocated` (key `relocation_id`). Always on (`INVENTORY_MODE` defaults to `kafka`; `permissive` is a boot error), group from the required `INVENTORY_CONSUMER_GROUP`. |
+| `warehouse.slotting-optimization.events` | Consumed | Only `SlotPlanApproved`. Always on (`SLOTTING_MODE` defaults to `kafka`), group from the required `SLOTTING_CONSUMER_GROUP`. |
+| `warehouse.facility.events` | Consumed | Only `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned`. Always on (`LAYOUT_MODE` defaults to `kafka`), group from the required `LAYOUT_CONSUMER_GROUP`. |
 | `<consumed topic>.dlq` | Published (dead letters) | One per consumed topic, written after a transient failure exhausts its retries, or at once for an undecodable payload of a handled type (see below). |
 
 ## The envelope
@@ -110,8 +110,8 @@ The relay's Kafka writer waits for all in-sync replicas (acks=all), hashes on
 the key, and has a 10 ms batch timeout. A row that fails `OUTBOX_MAX_ATTEMPTS`
 times (default 20; `0` is unlimited) is excluded from future claims until it is
 re-armed by hand. Delivery is at-least-once with the same `id` on a retry, so
-consumers dedupe on it. The relay runs only when `DATABASE_URL` and
-`KAFKA_BROKERS` are both set.
+consumers dedupe on it. The relay is always on: `DATABASE_URL` and
+`KAFKA_BROKERS` are mandatory, and a missing one is a boot error (its ADR 0006).
 
 ## Who consumes these events
 
@@ -148,8 +148,7 @@ dead-lettered until the path exists. See the
 All three consumers dispatch on the full `type` and ignore every other type on
 their topic. The CloudEvents `id` claim (`processed_events`) and the effect run
 in one transaction, and the offset is committed only afterwards, so a
-redelivery is a no-op (`duplicate`). Each mode defaults to `permissive` (no
-consumer started; the copy is whatever the database already holds).
+redelivery is a no-op (`duplicate`). The shipped binary has no `permissive` mode any more (its ADR 0006): each `*_MODE` defaults to `kafka` and `permissive` is rejected at boot.
 
 | Type | Effect | Producer today |
 | --- | --- | --- |
