@@ -55,7 +55,7 @@
       "subscribe": {
         "operationId": "consumeFulfillmentIntegrationEvents",
         "summary": "Consume Fulfillment Execution integration events.",
-        "description": "Receive the TaskCompleted, TaskCPTMissed and PackageManifested CloudEvents this bounded context publishes.",
+        "description": "Receive the TaskAvailable, TaskClaimed, TaskCompleted, TaskCPTMissed and PackageManifested CloudEvents this bounded context publishes.",
         "tags": [
           {
             "name": "fulfillment-execution"
@@ -64,10 +64,10 @@
         "message": {
           "oneOf": [
             {
-              "name": "TaskCompleted",
-              "title": "TaskCompleted",
-              "summary": "A station finished a claimed task.",
-              "description": "Raised when the station holding the active claim completes the task. Published on `warehouse.fulfillment.events`, keyed (and `subject`-ed) by task id, enriched at publish time with `work_unit_id` (the task's order reference, so Work Planning can call RecordCompletion), and `associate_id`, `duration_seconds`, `task_type` for labor-performance (ADR-0014, ADR-0023), and the optional `order_ref` (the order key inventory-storage uses to confirm picks, ADR-0040) and `line_no` (the order line, so it can confirm that line's reservation, ADR-0041). A RELOCATE task's TaskCompleted also carries the executed slot-plan move in the additive fields `sku`, `from_bin`, `to_bin`, `quantity` and `relocation_ref` (ADR-0047), which inventory-storage applies to its ledger as a RelocateStock (its ADR 0039); they are omitted on every other task type. Consumed by wes-work-planning, labor-performance and inventory-storage.",
+              "name": "TaskAvailable",
+              "title": "TaskAvailable",
+              "summary": "A task entered or re-entered the open-task pool and is claimable.",
+              "description": "Raised in the same transaction as the state change, through the transactional outbox (ADR-0020), whenever a task ENTERS the pool (released from WorkReleased, or created through the API) or RE-ENTERS it (the lease-expiry sweep returned a claimed task to Pending, with a new `available_at`). Never raised on an idempotent replay or a rejected command. Published on `warehouse.fulfillment.events`, keyed by task id. Consumed by task-interleaving (its local copy of the open-task pool). A task whose location this service cannot determine is NOT announced (the consumer rejects an event without `site_id` and `from_location`): today only RELOCATE and REPLENISH tasks carry bins, so only they are announced (ADR-0049, ADR-0050). A REPLENISH task knows both bins, so it is announced with the source bin first and the destination (pick face) bin last. A PICK / PACK / SLAM / REBIN / transfer task has no location in this service.",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -183,7 +183,7 @@
                     "properties": {
                       "type": {
                         "type": "string",
-                        "const": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+                        "const": "com.warehouse.wes.fulfillment-execution.task.TaskAvailable",
                         "x-parser-schema-id": "<anonymous-schema-15>"
                       },
                       "source": {
@@ -193,8 +193,311 @@
                       },
                       "dataschema": {
                         "type": "string",
-                        "const": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
+                        "const": "urn:warehouse:fulfillment-execution:events:TaskAvailable:v1",
                         "x-parser-schema-id": "<anonymous-schema-17>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "task_id",
+                          "task_type",
+                          "site_id",
+                          "from_location",
+                          "to_location",
+                          "required_capabilities",
+                          "priority_band",
+                          "available_at"
+                        ],
+                        "properties": {
+                          "task_id": {
+                            "type": "string",
+                            "description": "The pooled task; also the Kafka key and CloudEvents subject.",
+                            "x-parser-schema-id": "<anonymous-schema-19>"
+                          },
+                          "task_type": {
+                            "type": "string",
+                            "enum": [
+                              "PICK",
+                              "PACK",
+                              "SLAM",
+                              "REBIN",
+                              "DISPATCH",
+                              "ARRIVAL",
+                              "RELOCATE",
+                              "REPLENISH"
+                            ],
+                            "description": "The task's type (the process path claimNext scans).",
+                            "x-parser-schema-id": "<anonymous-schema-20>"
+                          },
+                          "site_id": {
+                            "type": "string",
+                            "description": "The site the task is worked at - the first segment of the bin's facility-layout LocationCode (`site-area-zone-aisle-bay-level-position`), derived from the task's own bins, never looked up in another context.",
+                            "x-parser-schema-id": "<anonymous-schema-21>"
+                          },
+                          "from_location": {
+                            "type": "string",
+                            "description": "Where the operator must go first. RELOCATE - the source bin (for an Assign move, whose source the operator scans at completion, the destination bin). REPLENISH - the source (reserve) bin.",
+                            "x-parser-schema-id": "<anonymous-schema-22>"
+                          },
+                          "to_location": {
+                            "type": "string",
+                            "description": "Where the operator ends. RELOCATE - the destination bin (for a Vacate move, whose destination the operator scans at completion, the source bin). REPLENISH - the destination (pick face) bin.",
+                            "x-parser-schema-id": "<anonymous-schema-23>"
+                          },
+                          "required_capabilities": {
+                            "type": "array",
+                            "description": "The capabilities claimNext matches a station against, sorted; an empty array (never null) when the task requires none.",
+                            "items": {
+                              "type": "string",
+                              "x-parser-schema-id": "<anonymous-schema-25>"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-24>"
+                          },
+                          "cpt": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "The task's committed promise time (UTC). Omitted when the task has none.",
+                            "x-parser-schema-id": "<anonymous-schema-26>"
+                          },
+                          "priority_band": {
+                            "type": "string",
+                            "description": "OPAQUE. Equal across exactly the tasks claimNext orders as peers (same task type and same CPT instant), different for any two it orders strictly. Today `<task_type>:<cpt UTC RFC 3339>`; consumers compare for equality only and must not parse it (ADR-0049). claimNext orders by CPT only, so the NORMAL or URGENT priority of a REPLENISH task does not enter the band (ADR-0050).",
+                            "x-parser-schema-id": "<anonymous-schema-27>"
+                          },
+                          "available_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "The instant the task became claimable (UTC) - the creation instant, or the sweep instant on re-entry after a lease expiry.",
+                            "x-parser-schema-id": "<anonymous-schema-28>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-18>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-14>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-4>"
+              },
+              "examples": [
+                {
+                  "name": "taskAvailable",
+                  "summary": "A RELOCATE task released with a CPT and two required capabilities.",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.task.TaskAvailable",
+                    "subject": "task-rel-1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:events:TaskAvailable:v1",
+                    "data": {
+                      "task_id": "task-rel-1",
+                      "task_type": "RELOCATE",
+                      "site_id": "WH1",
+                      "from_location": "WH1-RSV-AMB-B02-03-02-C",
+                      "to_location": "WH1-FWD-AMB-A01-01-01-A",
+                      "required_capabilities": [
+                        "forklift",
+                        "relocate"
+                      ],
+                      "cpt": "2026-09-30T16:00:00Z",
+                      "priority_band": "RELOCATE:2026-09-30T16:00:00Z",
+                      "available_at": "2026-09-30T15:00:00Z"
+                    }
+                  }
+                },
+                {
+                  "name": "taskAvailableReplenish",
+                  "summary": "A REPLENISH task (ADR-0050) - both bins are known, so source bin first and pick face last.",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.task.TaskAvailable",
+                    "subject": "task-rep-1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:events:TaskAvailable:v1",
+                    "data": {
+                      "task_id": "task-rep-1",
+                      "task_type": "REPLENISH",
+                      "site_id": "WH1",
+                      "from_location": "WH1-RSV-AMB-B02-03-02-C",
+                      "to_location": "WH1-FWD-AMB-A01-01-01-A",
+                      "required_capabilities": [
+                        "forklift",
+                        "replenish"
+                      ],
+                      "cpt": "2026-09-30T16:00:00Z",
+                      "priority_band": "REPLENISH:2026-09-30T16:00:00Z",
+                      "available_at": "2026-09-30T15:00:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "TaskClaimed",
+              "title": "TaskClaimed",
+              "summary": "A station claimed a task; it left the open-task pool.",
+              "description": "Raised in the same transaction as the claim, through the transactional outbox (ADR-0020), for every task type. Never raised when the claim is rejected or loses the at-most-once race. Published on `warehouse.fulfillment.events` (the richer integration row), keyed by task id; the analytics-topic TaskClaimed `{task_id, task_type, station_id}` is unchanged. Consumed by task-interleaving (removes the task from its pool copy and learns the station's next position).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "task"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.fulfillment-execution.task.TaskClaimed",
+                        "x-parser-schema-id": "<anonymous-schema-31>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-32>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:events:TaskClaimed:v1",
+                        "x-parser-schema-id": "<anonymous-schema-33>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "task_id",
+                          "task_type",
+                          "station_id",
+                          "claimed_at"
+                        ],
+                        "properties": {
+                          "task_id": {
+                            "type": "string",
+                            "description": "The claimed task; also the Kafka key and CloudEvents subject.",
+                            "x-parser-schema-id": "<anonymous-schema-35>"
+                          },
+                          "task_type": {
+                            "type": "string",
+                            "enum": [
+                              "PICK",
+                              "PACK",
+                              "SLAM",
+                              "REBIN",
+                              "DISPATCH",
+                              "ARRIVAL",
+                              "RELOCATE",
+                              "REPLENISH"
+                            ],
+                            "description": "The task's type; empty only if the task row can no longer be read.",
+                            "x-parser-schema-id": "<anonymous-schema-36>"
+                          },
+                          "station_id": {
+                            "type": "string",
+                            "description": "The station that now holds the lease.",
+                            "x-parser-schema-id": "<anonymous-schema-37>"
+                          },
+                          "claimed_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "The claim instant (UTC).",
+                            "x-parser-schema-id": "<anonymous-schema-38>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-34>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-30>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-29>"
+              },
+              "examples": [
+                {
+                  "name": "taskClaimed",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.task.TaskClaimed",
+                    "subject": "task-rel-1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:events:TaskClaimed:v1",
+                    "data": {
+                      "task_id": "task-rel-1",
+                      "task_type": "RELOCATE",
+                      "station_id": "station-07",
+                      "claimed_at": "2026-09-30T15:00:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "TaskCompleted",
+              "title": "TaskCompleted",
+              "summary": "A station finished a claimed task.",
+              "description": "Raised when the station holding the active claim completes the task. Published on `warehouse.fulfillment.events`, keyed (and `subject`-ed) by task id, enriched at publish time with `work_unit_id` (the task's order reference, so Work Planning can call RecordCompletion), and `associate_id`, `duration_seconds`, `task_type` for labor-performance (ADR-0014, ADR-0023), and the optional `order_ref` (the order key inventory-storage uses to confirm picks, ADR-0040) and `line_no` (the order line, so it can confirm that line's reservation, ADR-0041). A RELOCATE task's TaskCompleted also carries the executed slot-plan move in the additive fields `sku`, `from_bin`, `to_bin`, `quantity` and `relocation_ref` (ADR-0047), which inventory-storage applies to its ledger as a RelocateStock (its ADR 0039); they are omitted on every other task type. A REPLENISH task's TaskCompleted (ADR-0050) carries the same `sku`, `from_bin`, `to_bin` and `quantity` plus the additive `request_ref` (the replenishment request id) instead of `relocation_ref`; inventory-storage applies it as a RelocateStock with reason REPLENISHMENT (its ADR 0041), `source_ref` = `request_ref`. Consumed by wes-work-planning, labor-performance and inventory-storage.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "task"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+                        "x-parser-schema-id": "<anonymous-schema-41>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/fulfillment-execution",
+                        "x-parser-schema-id": "<anonymous-schema-42>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
+                        "x-parser-schema-id": "<anonymous-schema-43>"
                       },
                       "data": {
                         "type": "object",
@@ -207,28 +510,28 @@
                           "task_id": {
                             "type": "string",
                             "description": "Completed task id.",
-                            "x-parser-schema-id": "<anonymous-schema-19>"
+                            "x-parser-schema-id": "<anonymous-schema-45>"
                           },
                           "station_id": {
                             "type": "string",
                             "description": "Station that completed the task.",
-                            "x-parser-schema-id": "<anonymous-schema-20>"
+                            "x-parser-schema-id": "<anonymous-schema-46>"
                           },
                           "work_unit_id": {
                             "type": "string",
                             "description": "The completed task's order reference (empty only when the task can no longer be found at publish time).",
-                            "x-parser-schema-id": "<anonymous-schema-21>"
+                            "x-parser-schema-id": "<anonymous-schema-47>"
                           },
                           "associate_id": {
                             "type": "string",
                             "description": "Occupant checked into the completing station at publish time; omitted when none (e.g. a robot station).",
-                            "x-parser-schema-id": "<anonymous-schema-22>"
+                            "x-parser-schema-id": "<anonymous-schema-48>"
                           },
                           "duration_seconds": {
                             "type": "integer",
                             "description": "Seconds between claim and completion; omitted when the claim time is unknown.",
                             "format": "int64",
-                            "x-parser-schema-id": "<anonymous-schema-23>"
+                            "x-parser-schema-id": "<anonymous-schema-49>"
                           },
                           "task_type": {
                             "type": "string",
@@ -239,15 +542,16 @@
                               "REBIN",
                               "DISPATCH",
                               "ARRIVAL",
-                              "RELOCATE"
+                              "RELOCATE",
+                              "REPLENISH"
                             ],
                             "description": "The completed task's own type; omitted only when the task can no longer be found.",
-                            "x-parser-schema-id": "<anonymous-schema-24>"
+                            "x-parser-schema-id": "<anonymous-schema-50>"
                           },
                           "order_ref": {
                             "type": "string",
                             "description": "The order the completed task belongs to; the key inventory-storage uses to confirm picks. Optional and additive (the event stays v1) and omitted when the task has no order reference. Distinct from work_unit_id, which for order work is the per-line work unit id.",
-                            "x-parser-schema-id": "<anonymous-schema-25>"
+                            "x-parser-schema-id": "<anonymous-schema-51>"
                           },
                           "line_no": {
                             "type": "integer",
@@ -255,48 +559,55 @@
                             "minimum": 1,
                             "maximum": 2147483647,
                             "description": "The 1-based order line the completed task's work was released for (copied from WorkReleased.line_no, ADR-0041); with order_ref it lets inventory-storage confirm the pick of exactly that line's reservation. Optional and additive (the event stays v1) and omitted when unknown (transfer work, a release without line_no, or an older task). Never derived from the work_unit_id.",
-                            "x-parser-schema-id": "<anonymous-schema-26>"
+                            "x-parser-schema-id": "<anonymous-schema-52>"
                           },
                           "sku": {
                             "type": "string",
                             "minLength": 1,
-                            "description": "RELOCATE only (ADR-0047; additive, the event stays v1). The SKU the executed slot-plan move relocated, from WorkReleased.data.relocation.sku. Omitted on every other task type.",
-                            "x-parser-schema-id": "<anonymous-schema-27>"
+                            "description": "RELOCATE and REPLENISH only (ADR-0047, ADR-0050; additive, the event stays v1). The SKU the executed move relocated, from WorkReleased.data.relocation.sku / WorkReleased.data.replenishment.sku. Omitted on every other task type.",
+                            "x-parser-schema-id": "<anonymous-schema-53>"
                           },
                           "from_bin": {
                             "type": "string",
                             "minLength": 1,
-                            "description": "RELOCATE only. The bin the stock left - the planned from_bin, or for an Assign move the bin the operator scanned at completion.",
-                            "x-parser-schema-id": "<anonymous-schema-28>"
+                            "description": "RELOCATE and REPLENISH only. The bin the stock left - the planned from_bin, or for a RELOCATE Assign move the bin the operator scanned at completion.",
+                            "x-parser-schema-id": "<anonymous-schema-54>"
                           },
                           "to_bin": {
                             "type": "string",
                             "minLength": 1,
-                            "description": "RELOCATE only. The bin the stock went to - the planned to_bin, or for a Vacate move the reserve bin the operator scanned at completion. Always different from from_bin.",
-                            "x-parser-schema-id": "<anonymous-schema-29>"
+                            "description": "RELOCATE and REPLENISH only. The bin the stock went to - the planned to_bin, or for a RELOCATE Vacate move the reserve bin the operator scanned at completion. Always different from from_bin.",
+                            "x-parser-schema-id": "<anonymous-schema-55>"
                           },
                           "quantity": {
                             "type": "integer",
                             "format": "int32",
                             "minimum": 1,
-                            "description": "RELOCATE only. The units the operator counted and confirmed at completion (v1 moves the whole on-hand quantity of the SKU at from_bin).",
-                            "x-parser-schema-id": "<anonymous-schema-30>"
+                            "description": "RELOCATE and REPLENISH only. The units the operator counted and confirmed at completion (RELOCATE v1 moves the whole on-hand quantity of the SKU at from_bin; for REPLENISH it is the confirmed count, which may differ from the planned quantity).",
+                            "x-parser-schema-id": "<anonymous-schema-56>"
                           },
                           "relocation_ref": {
                             "type": "string",
                             "minLength": 3,
                             "maxLength": 200,
                             "description": "RELOCATE only. The move reference `<plan_id>:<move_seq>` copied from WorkReleased.data.relocation; inventory-storage records it as the StockRelocated source_ref, and slotting-optimization matches it back to the plan's move.",
-                            "x-parser-schema-id": "<anonymous-schema-31>"
+                            "x-parser-schema-id": "<anonymous-schema-57>"
+                          },
+                          "request_ref": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "description": "REPLENISH only (ADR-0050; additive, the event stays v1; mirrors relocation_ref). The replenishment request id copied from WorkReleased.data.replenishment.request_id; inventory-storage records it as the StockRelocated source_ref (reason REPLENISHMENT) and pick-face-replenishment closes the request by it. Omitted on every other task type.",
+                            "x-parser-schema-id": "<anonymous-schema-58>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-18>"
+                        "x-parser-schema-id": "<anonymous-schema-44>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-14>"
+                    "x-parser-schema-id": "<anonymous-schema-40>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-4>"
+                "x-parser-schema-id": "<anonymous-schema-39>"
               },
               "examples": [
                 {
@@ -355,6 +666,36 @@
                       "relocation_ref": "plan-7:3"
                     }
                   }
+                },
+                {
+                  "name": "taskCompletedReplenish",
+                  "summary": "A REPLENISH task (ADR-0050) - the operator confirmed 20 of the 24 planned units; the additive fields are present with request_ref (no relocation_ref) and order_ref / line_no are absent.",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8",
+                    "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "source": "/warehouse/fulfillment-execution",
+                    "type": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+                    "subject": "task-rep-1",
+                    "time": "2026-09-30T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
+                    "data": {
+                      "task_id": "task-rep-1",
+                      "station_id": "station-07",
+                      "work_unit_id": "replenish-req-9",
+                      "duration_seconds": 90,
+                      "task_type": "REPLENISH",
+                      "sku": "SKU-1",
+                      "from_bin": "WH1-RSV-AMB-B02-03-02-C",
+                      "to_bin": "WH1-FWD-AMB-A01-01-01-A",
+                      "quantity": 20,
+                      "request_ref": "req-9"
+                    }
+                  }
                 }
               ]
             },
@@ -388,17 +729,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed",
-                        "x-parser-schema-id": "<anonymous-schema-34>"
+                        "x-parser-schema-id": "<anonymous-schema-61>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-35>"
+                        "x-parser-schema-id": "<anonymous-schema-62>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:events:TaskCPTMissed:v1",
-                        "x-parser-schema-id": "<anonymous-schema-36>"
+                        "x-parser-schema-id": "<anonymous-schema-63>"
                       },
                       "data": {
                         "type": "object",
@@ -411,12 +752,12 @@
                           "task_id": {
                             "type": "string",
                             "description": "Task still open past its CPT.",
-                            "x-parser-schema-id": "<anonymous-schema-38>"
+                            "x-parser-schema-id": "<anonymous-schema-65>"
                           },
                           "order_ref": {
                             "type": "string",
                             "description": "The task's order reference.",
-                            "x-parser-schema-id": "<anonymous-schema-39>"
+                            "x-parser-schema-id": "<anonymous-schema-66>"
                           },
                           "task_type": {
                             "type": "string",
@@ -429,22 +770,22 @@
                               "ARRIVAL"
                             ],
                             "description": "The overdue task's own type; omitted when unknown.",
-                            "x-parser-schema-id": "<anonymous-schema-40>"
+                            "x-parser-schema-id": "<anonymous-schema-67>"
                           },
                           "cpt": {
                             "type": "string",
                             "description": "The missed CPT deadline.",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-41>"
+                            "x-parser-schema-id": "<anonymous-schema-68>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-37>"
+                        "x-parser-schema-id": "<anonymous-schema-64>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-33>"
+                    "x-parser-schema-id": "<anonymous-schema-60>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-32>"
+                "x-parser-schema-id": "<anonymous-schema-59>"
               },
               "examples": [
                 {
@@ -502,17 +843,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.package.PackageManifested",
-                        "x-parser-schema-id": "<anonymous-schema-44>"
+                        "x-parser-schema-id": "<anonymous-schema-71>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-45>"
+                        "x-parser-schema-id": "<anonymous-schema-72>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:events:PackageManifested:v1",
-                        "x-parser-schema-id": "<anonymous-schema-46>"
+                        "x-parser-schema-id": "<anonymous-schema-73>"
                       },
                       "data": {
                         "type": "object",
@@ -524,21 +865,21 @@
                           "package_id": {
                             "type": "string",
                             "description": "Manifested package id.",
-                            "x-parser-schema-id": "<anonymous-schema-48>"
+                            "x-parser-schema-id": "<anonymous-schema-75>"
                           },
                           "order_ref": {
                             "type": "string",
                             "description": "The package's order reference.",
-                            "x-parser-schema-id": "<anonymous-schema-49>"
+                            "x-parser-schema-id": "<anonymous-schema-76>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-47>"
+                        "x-parser-schema-id": "<anonymous-schema-74>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-43>"
+                    "x-parser-schema-id": "<anonymous-schema-70>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-42>"
+                "x-parser-schema-id": "<anonymous-schema-69>"
               },
               "examples": [
                 {
@@ -591,17 +932,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.transfer.TransferPicked",
-                        "x-parser-schema-id": "<anonymous-schema-52>"
+                        "x-parser-schema-id": "<anonymous-schema-79>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-53>"
+                        "x-parser-schema-id": "<anonymous-schema-80>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:events:TransferPicked:v1",
-                        "x-parser-schema-id": "<anonymous-schema-54>"
+                        "x-parser-schema-id": "<anonymous-schema-81>"
                       },
                       "data": {
                         "type": "object",
@@ -616,22 +957,22 @@
                           "transfer_ref": {
                             "type": "string",
                             "description": "The transfer saga's correlation id.",
-                            "x-parser-schema-id": "<anonymous-schema-55>"
+                            "x-parser-schema-id": "<anonymous-schema-82>"
                           },
                           "demand_id": {
                             "type": "string",
                             "description": "The work-demand reference the release carried; omitted when absent.",
-                            "x-parser-schema-id": "<anonymous-schema-56>"
+                            "x-parser-schema-id": "<anonymous-schema-83>"
                           },
                           "work_unit_id": {
                             "type": "string",
                             "description": "The completed task's work unit id (its order reference).",
-                            "x-parser-schema-id": "<anonymous-schema-57>"
+                            "x-parser-schema-id": "<anonymous-schema-84>"
                           },
                           "task_id": {
                             "type": "string",
                             "description": "The completing task id — also the Kafka key and CloudEvents subject.",
-                            "x-parser-schema-id": "<anonymous-schema-58>"
+                            "x-parser-schema-id": "<anonymous-schema-85>"
                           },
                           "work_kind": {
                             "type": "string",
@@ -640,31 +981,31 @@
                               "TRANSFER_DISPATCH",
                               "TRANSFER_ARRIVAL"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-59>"
+                            "x-parser-schema-id": "<anonymous-schema-86>"
                           },
                           "site_id": {
                             "type": "string",
                             "description": "Site the fact is about; omitted when the release carried none.",
-                            "x-parser-schema-id": "<anonymous-schema-60>"
+                            "x-parser-schema-id": "<anonymous-schema-87>"
                           },
                           "sku": {
                             "type": "string",
                             "description": "SKU the transfer moves; omitted when the release carried none.",
-                            "x-parser-schema-id": "<anonymous-schema-61>"
+                            "x-parser-schema-id": "<anonymous-schema-88>"
                           },
                           "quantity": {
                             "type": "integer",
                             "description": "Units of sku; omitted when the release carried none.",
-                            "x-parser-schema-id": "<anonymous-schema-62>"
+                            "x-parser-schema-id": "<anonymous-schema-89>"
                           }
                         },
                         "x-parser-schema-id": "TransferFactData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-51>"
+                    "x-parser-schema-id": "<anonymous-schema-78>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-50>"
+                "x-parser-schema-id": "<anonymous-schema-77>"
               },
               "examples": [
                 {
@@ -723,24 +1064,24 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.transfer.TransferDispatched",
-                        "x-parser-schema-id": "<anonymous-schema-65>"
+                        "x-parser-schema-id": "<anonymous-schema-92>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-66>"
+                        "x-parser-schema-id": "<anonymous-schema-93>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:events:TransferDispatched:v1",
-                        "x-parser-schema-id": "<anonymous-schema-67>"
+                        "x-parser-schema-id": "<anonymous-schema-94>"
                       },
-                      "data": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[3].payload.allOf[1].properties.data"
+                      "data": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-64>"
+                    "x-parser-schema-id": "<anonymous-schema-91>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-63>"
+                "x-parser-schema-id": "<anonymous-schema-90>"
               },
               "examples": [
                 {
@@ -799,24 +1140,24 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.transfer.TransferArrived",
-                        "x-parser-schema-id": "<anonymous-schema-70>"
+                        "x-parser-schema-id": "<anonymous-schema-97>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-71>"
+                        "x-parser-schema-id": "<anonymous-schema-98>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:events:TransferArrived:v1",
-                        "x-parser-schema-id": "<anonymous-schema-72>"
+                        "x-parser-schema-id": "<anonymous-schema-99>"
                       },
-                      "data": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[3].payload.allOf[1].properties.data"
+                      "data": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-69>"
+                    "x-parser-schema-id": "<anonymous-schema-96>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-68>"
+                "x-parser-schema-id": "<anonymous-schema-95>"
               },
               "examples": [
                 {
@@ -895,17 +1236,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.task.TaskCreated",
-                        "x-parser-schema-id": "<anonymous-schema-75>"
+                        "x-parser-schema-id": "<anonymous-schema-102>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-76>"
+                        "x-parser-schema-id": "<anonymous-schema-103>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:analytics:TaskCreated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-77>"
+                        "x-parser-schema-id": "<anonymous-schema-104>"
                       },
                       "data": {
                         "type": "object",
@@ -917,7 +1258,7 @@
                           "task_id": {
                             "type": "string",
                             "description": "Task id.",
-                            "x-parser-schema-id": "<anonymous-schema-79>"
+                            "x-parser-schema-id": "<anonymous-schema-106>"
                           },
                           "task_type": {
                             "type": "string",
@@ -929,16 +1270,16 @@
                               "REBIN"
                             ],
                             "description": "The task's process path, enriched via a TaskRepo lookup; empty when the task cannot be found.",
-                            "x-parser-schema-id": "<anonymous-schema-80>"
+                            "x-parser-schema-id": "<anonymous-schema-107>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-78>"
+                        "x-parser-schema-id": "<anonymous-schema-105>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-74>"
+                    "x-parser-schema-id": "<anonymous-schema-101>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-73>"
+                "x-parser-schema-id": "<anonymous-schema-100>"
               },
               "examples": [
                 {
@@ -994,17 +1335,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.task.TaskClaimed",
-                        "x-parser-schema-id": "<anonymous-schema-83>"
+                        "x-parser-schema-id": "<anonymous-schema-110>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-84>"
+                        "x-parser-schema-id": "<anonymous-schema-111>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:analytics:TaskClaimed:v1",
-                        "x-parser-schema-id": "<anonymous-schema-85>"
+                        "x-parser-schema-id": "<anonymous-schema-112>"
                       },
                       "data": {
                         "type": "object",
@@ -1017,7 +1358,7 @@
                           "task_id": {
                             "type": "string",
                             "description": "Task id.",
-                            "x-parser-schema-id": "<anonymous-schema-87>"
+                            "x-parser-schema-id": "<anonymous-schema-114>"
                           },
                           "task_type": {
                             "type": "string",
@@ -1029,21 +1370,21 @@
                               "REBIN"
                             ],
                             "description": "The task's process path, enriched via a TaskRepo lookup; empty when the task cannot be found.",
-                            "x-parser-schema-id": "<anonymous-schema-88>"
+                            "x-parser-schema-id": "<anonymous-schema-115>"
                           },
                           "station_id": {
                             "type": "string",
                             "description": "Station id.",
-                            "x-parser-schema-id": "<anonymous-schema-89>"
+                            "x-parser-schema-id": "<anonymous-schema-116>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-86>"
+                        "x-parser-schema-id": "<anonymous-schema-113>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-82>"
+                    "x-parser-schema-id": "<anonymous-schema-109>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-81>"
+                "x-parser-schema-id": "<anonymous-schema-108>"
               },
               "examples": [
                 {
@@ -1100,17 +1441,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.task.LeaseExpired",
-                        "x-parser-schema-id": "<anonymous-schema-92>"
+                        "x-parser-schema-id": "<anonymous-schema-119>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-93>"
+                        "x-parser-schema-id": "<anonymous-schema-120>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:analytics:LeaseExpired:v1",
-                        "x-parser-schema-id": "<anonymous-schema-94>"
+                        "x-parser-schema-id": "<anonymous-schema-121>"
                       },
                       "data": {
                         "type": "object",
@@ -1122,7 +1463,7 @@
                           "task_id": {
                             "type": "string",
                             "description": "Task id.",
-                            "x-parser-schema-id": "<anonymous-schema-96>"
+                            "x-parser-schema-id": "<anonymous-schema-123>"
                           },
                           "task_type": {
                             "type": "string",
@@ -1134,16 +1475,16 @@
                               "REBIN"
                             ],
                             "description": "The task's process path, enriched via a TaskRepo lookup; empty when the task cannot be found.",
-                            "x-parser-schema-id": "<anonymous-schema-97>"
+                            "x-parser-schema-id": "<anonymous-schema-124>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-95>"
+                        "x-parser-schema-id": "<anonymous-schema-122>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-91>"
+                    "x-parser-schema-id": "<anonymous-schema-118>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-90>"
+                "x-parser-schema-id": "<anonymous-schema-117>"
               },
               "examples": [
                 {
@@ -1199,17 +1540,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
-                        "x-parser-schema-id": "<anonymous-schema-100>"
+                        "x-parser-schema-id": "<anonymous-schema-127>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-101>"
+                        "x-parser-schema-id": "<anonymous-schema-128>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:analytics:TaskCompleted:v1",
-                        "x-parser-schema-id": "<anonymous-schema-102>"
+                        "x-parser-schema-id": "<anonymous-schema-129>"
                       },
                       "data": {
                         "type": "object",
@@ -1222,7 +1563,7 @@
                           "task_id": {
                             "type": "string",
                             "description": "Task id.",
-                            "x-parser-schema-id": "<anonymous-schema-104>"
+                            "x-parser-schema-id": "<anonymous-schema-131>"
                           },
                           "task_type": {
                             "type": "string",
@@ -1234,17 +1575,17 @@
                               "REBIN"
                             ],
                             "description": "The task's process path, enriched via a TaskRepo lookup; empty when the task cannot be found.",
-                            "x-parser-schema-id": "<anonymous-schema-105>"
+                            "x-parser-schema-id": "<anonymous-schema-132>"
                           },
                           "station_id": {
                             "type": "string",
                             "description": "Station id.",
-                            "x-parser-schema-id": "<anonymous-schema-106>"
+                            "x-parser-schema-id": "<anonymous-schema-133>"
                           },
                           "order_ref": {
                             "type": "string",
                             "description": "The order the completed task belongs to; the key inventory-storage uses to confirm picks. Optional and additive (the event stays v1) and omitted when the task has no order reference or cannot be found.",
-                            "x-parser-schema-id": "<anonymous-schema-107>"
+                            "x-parser-schema-id": "<anonymous-schema-134>"
                           },
                           "line_no": {
                             "type": "integer",
@@ -1252,16 +1593,16 @@
                             "minimum": 1,
                             "maximum": 2147483647,
                             "description": "The 1-based order line the completed task's work was released for (ADR-0041). Optional and additive (the event stays v1) and omitted when unknown or when the task cannot be found.",
-                            "x-parser-schema-id": "<anonymous-schema-108>"
+                            "x-parser-schema-id": "<anonymous-schema-135>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-103>"
+                        "x-parser-schema-id": "<anonymous-schema-130>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-99>"
+                    "x-parser-schema-id": "<anonymous-schema-126>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-98>"
+                "x-parser-schema-id": "<anonymous-schema-125>"
               },
               "examples": [
                 {
@@ -1320,17 +1661,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.task.ItemPicked",
-                        "x-parser-schema-id": "<anonymous-schema-111>"
+                        "x-parser-schema-id": "<anonymous-schema-138>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-112>"
+                        "x-parser-schema-id": "<anonymous-schema-139>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:analytics:ItemPicked:v1",
-                        "x-parser-schema-id": "<anonymous-schema-113>"
+                        "x-parser-schema-id": "<anonymous-schema-140>"
                       },
                       "data": {
                         "type": "object",
@@ -1342,7 +1683,7 @@
                           "task_id": {
                             "type": "string",
                             "description": "Task id.",
-                            "x-parser-schema-id": "<anonymous-schema-115>"
+                            "x-parser-schema-id": "<anonymous-schema-142>"
                           },
                           "task_type": {
                             "type": "string",
@@ -1354,16 +1695,16 @@
                               "REBIN"
                             ],
                             "description": "The task's process path, enriched via a TaskRepo lookup; empty when the task cannot be found.",
-                            "x-parser-schema-id": "<anonymous-schema-116>"
+                            "x-parser-schema-id": "<anonymous-schema-143>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-114>"
+                        "x-parser-schema-id": "<anonymous-schema-141>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-110>"
+                    "x-parser-schema-id": "<anonymous-schema-137>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-109>"
+                "x-parser-schema-id": "<anonymous-schema-136>"
               },
               "examples": [
                 {
@@ -1419,17 +1760,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.package.PackageSealed",
-                        "x-parser-schema-id": "<anonymous-schema-119>"
+                        "x-parser-schema-id": "<anonymous-schema-146>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-120>"
+                        "x-parser-schema-id": "<anonymous-schema-147>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:analytics:PackageSealed:v1",
-                        "x-parser-schema-id": "<anonymous-schema-121>"
+                        "x-parser-schema-id": "<anonymous-schema-148>"
                       },
                       "data": {
                         "type": "object",
@@ -1440,16 +1781,16 @@
                           "package_id": {
                             "type": "string",
                             "description": "Package id.",
-                            "x-parser-schema-id": "<anonymous-schema-123>"
+                            "x-parser-schema-id": "<anonymous-schema-150>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-122>"
+                        "x-parser-schema-id": "<anonymous-schema-149>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-118>"
+                    "x-parser-schema-id": "<anonymous-schema-145>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-117>"
+                "x-parser-schema-id": "<anonymous-schema-144>"
               },
               "examples": [
                 {
@@ -1504,17 +1845,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.package.WeightDiscrepancyDetected",
-                        "x-parser-schema-id": "<anonymous-schema-126>"
+                        "x-parser-schema-id": "<anonymous-schema-153>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-127>"
+                        "x-parser-schema-id": "<anonymous-schema-154>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:analytics:WeightDiscrepancyDetected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-128>"
+                        "x-parser-schema-id": "<anonymous-schema-155>"
                       },
                       "data": {
                         "type": "object",
@@ -1527,28 +1868,28 @@
                           "package_id": {
                             "type": "string",
                             "description": "Package id.",
-                            "x-parser-schema-id": "<anonymous-schema-130>"
+                            "x-parser-schema-id": "<anonymous-schema-157>"
                           },
                           "expected_g": {
                             "type": "number",
                             "description": "Expected weight.",
                             "format": "double",
-                            "x-parser-schema-id": "<anonymous-schema-131>"
+                            "x-parser-schema-id": "<anonymous-schema-158>"
                           },
                           "actual_g": {
                             "type": "number",
                             "description": "Measured weight.",
                             "format": "double",
-                            "x-parser-schema-id": "<anonymous-schema-132>"
+                            "x-parser-schema-id": "<anonymous-schema-159>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-129>"
+                        "x-parser-schema-id": "<anonymous-schema-156>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-125>"
+                    "x-parser-schema-id": "<anonymous-schema-152>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-124>"
+                "x-parser-schema-id": "<anonymous-schema-151>"
               },
               "examples": [
                 {
@@ -1605,17 +1946,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.package.LabelApplied",
-                        "x-parser-schema-id": "<anonymous-schema-135>"
+                        "x-parser-schema-id": "<anonymous-schema-162>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-136>"
+                        "x-parser-schema-id": "<anonymous-schema-163>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:analytics:LabelApplied:v1",
-                        "x-parser-schema-id": "<anonymous-schema-137>"
+                        "x-parser-schema-id": "<anonymous-schema-164>"
                       },
                       "data": {
                         "type": "object",
@@ -1626,16 +1967,16 @@
                           "package_id": {
                             "type": "string",
                             "description": "Package id.",
-                            "x-parser-schema-id": "<anonymous-schema-139>"
+                            "x-parser-schema-id": "<anonymous-schema-166>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-138>"
+                        "x-parser-schema-id": "<anonymous-schema-165>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-134>"
+                    "x-parser-schema-id": "<anonymous-schema-161>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-133>"
+                "x-parser-schema-id": "<anonymous-schema-160>"
               },
               "examples": [
                 {
@@ -1690,17 +2031,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.package.PackageDiverted",
-                        "x-parser-schema-id": "<anonymous-schema-142>"
+                        "x-parser-schema-id": "<anonymous-schema-169>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-143>"
+                        "x-parser-schema-id": "<anonymous-schema-170>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:analytics:PackageDiverted:v1",
-                        "x-parser-schema-id": "<anonymous-schema-144>"
+                        "x-parser-schema-id": "<anonymous-schema-171>"
                       },
                       "data": {
                         "type": "object",
@@ -1711,16 +2052,16 @@
                           "package_id": {
                             "type": "string",
                             "description": "Package id.",
-                            "x-parser-schema-id": "<anonymous-schema-146>"
+                            "x-parser-schema-id": "<anonymous-schema-173>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-145>"
+                        "x-parser-schema-id": "<anonymous-schema-172>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-141>"
+                    "x-parser-schema-id": "<anonymous-schema-168>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-140>"
+                "x-parser-schema-id": "<anonymous-schema-167>"
               },
               "examples": [
                 {
@@ -1775,17 +2116,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.fulfillment-execution.package.PackageManifested",
-                        "x-parser-schema-id": "<anonymous-schema-149>"
+                        "x-parser-schema-id": "<anonymous-schema-176>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/fulfillment-execution",
-                        "x-parser-schema-id": "<anonymous-schema-150>"
+                        "x-parser-schema-id": "<anonymous-schema-177>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:fulfillment-execution:analytics:PackageManifested:v1",
-                        "x-parser-schema-id": "<anonymous-schema-151>"
+                        "x-parser-schema-id": "<anonymous-schema-178>"
                       },
                       "data": {
                         "type": "object",
@@ -1801,12 +2142,12 @@
                           "package_id": {
                             "type": "string",
                             "description": "Package id.",
-                            "x-parser-schema-id": "<anonymous-schema-153>"
+                            "x-parser-schema-id": "<anonymous-schema-180>"
                           },
                           "order_ref": {
                             "type": "string",
                             "description": "The package's order reference.",
-                            "x-parser-schema-id": "<anonymous-schema-154>"
+                            "x-parser-schema-id": "<anonymous-schema-181>"
                           },
                           "task_type": {
                             "type": "string",
@@ -1818,31 +2159,31 @@
                               "REBIN"
                             ],
                             "description": "Originating SLAM task type; empty when unresolved.",
-                            "x-parser-schema-id": "<anonymous-schema-155>"
+                            "x-parser-schema-id": "<anonymous-schema-182>"
                           },
                           "station_id": {
                             "type": "string",
                             "description": "Originating SLAM station; empty when unresolved.",
-                            "x-parser-schema-id": "<anonymous-schema-156>"
+                            "x-parser-schema-id": "<anonymous-schema-183>"
                           },
                           "on_time": {
                             "type": "boolean",
                             "description": "Manifested at or before the originating SLAM task's CPT (ADR-0026).",
-                            "x-parser-schema-id": "<anonymous-schema-157>"
+                            "x-parser-schema-id": "<anonymous-schema-184>"
                           },
                           "resolved": {
                             "type": "boolean",
                             "description": "Whether the originating SLAM task could be resolved; when false the projector skips recording.",
-                            "x-parser-schema-id": "<anonymous-schema-158>"
+                            "x-parser-schema-id": "<anonymous-schema-185>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-152>"
+                        "x-parser-schema-id": "<anonymous-schema-179>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-148>"
+                    "x-parser-schema-id": "<anonymous-schema-175>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-147>"
+                "x-parser-schema-id": "<anonymous-schema-174>"
               },
               "examples": [
                 {
@@ -1914,17 +2255,17 @@
                   "type": {
                     "type": "string",
                     "const": "com.warehouse.wes.work-planning.workunit.WorkReleased",
-                    "x-parser-schema-id": "<anonymous-schema-161>"
+                    "x-parser-schema-id": "<anonymous-schema-188>"
                   },
                   "source": {
                     "type": "string",
                     "const": "/warehouse/wes-work-planning",
-                    "x-parser-schema-id": "<anonymous-schema-162>"
+                    "x-parser-schema-id": "<anonymous-schema-189>"
                   },
                   "dataschema": {
                     "type": "string",
                     "const": "urn:warehouse:wes-work-planning:events:WorkReleased:v1",
-                    "x-parser-schema-id": "<anonymous-schema-163>"
+                    "x-parser-schema-id": "<anonymous-schema-190>"
                   },
                   "data": {
                     "type": "object",
@@ -1937,23 +2278,23 @@
                       "path_id": {
                         "type": "string",
                         "description": "Process path id, resolved against the process-path catalogue.",
-                        "x-parser-schema-id": "<anonymous-schema-165>"
+                        "x-parser-schema-id": "<anonymous-schema-192>"
                       },
                       "work_unit_id": {
                         "type": "string",
                         "description": "Becomes the Task's order reference.",
-                        "x-parser-schema-id": "<anonymous-schema-166>"
+                        "x-parser-schema-id": "<anonymous-schema-193>"
                       },
                       "cpt": {
                         "type": "string",
                         "description": "CPT deadline.",
                         "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-167>"
+                        "x-parser-schema-id": "<anonymous-schema-194>"
                       },
                       "ref": {
                         "type": "string",
-                        "description": "Release reference. For order-originated work this is the order id; it is kept on the Task and published as TaskCompleted.order_ref (ADR-0040). For transfer work it is the demand id. For RELOCATE work it is the slot plan id and is not kept (ADR-0047).",
-                        "x-parser-schema-id": "<anonymous-schema-168>"
+                        "description": "Release reference. For order-originated work this is the order id; it is kept on the Task and published as TaskCompleted.order_ref (ADR-0040). For transfer work it is the demand id. For RELOCATE work it is the slot plan id and is not kept (ADR-0047); for REPLENISH work it is the request id and is not kept either (ADR-0050).",
+                        "x-parser-schema-id": "<anonymous-schema-195>"
                       },
                       "line_no": {
                         "type": "integer",
@@ -1961,22 +2302,22 @@
                         "minimum": 1,
                         "maximum": 2147483647,
                         "description": "Optional (additive; the event stays v1). The 1-based order line this work unit is for; wes-work-planning sets it for order-originated work (explicitly, not encoded in work_unit_id). It is kept on the Task as source_line_no and published as TaskCompleted.line_no (ADR-0041). Absent from producers that predate it, and never honoured for transfer work. A value above 2147483647 (the 32-bit column width) is ignored by this consumer rather than rejected, so the task is still created with its line unknown.",
-                        "x-parser-schema-id": "<anonymous-schema-169>"
+                        "x-parser-schema-id": "<anonymous-schema-196>"
                       },
                       "fragile": {
                         "type": "boolean",
                         "description": "Optional fragile packing hint (default false).",
-                        "x-parser-schema-id": "<anonymous-schema-170>"
+                        "x-parser-schema-id": "<anonymous-schema-197>"
                       },
                       "gift_wrap": {
                         "type": "boolean",
                         "description": "Optional gift-wrap request (default false).",
-                        "x-parser-schema-id": "<anonymous-schema-171>"
+                        "x-parser-schema-id": "<anonymous-schema-198>"
                       },
                       "transfer_ref": {
                         "type": "string",
                         "description": "Present only for inter-warehouse-transfer work (the transfer saga's correlation id). Its presence turns the created Task into transfer work whose completion publishes exactly one transfer fact.",
-                        "x-parser-schema-id": "<anonymous-schema-172>"
+                        "x-parser-schema-id": "<anonymous-schema-199>"
                       },
                       "work_kind": {
                         "type": "string",
@@ -1986,22 +2327,22 @@
                           "TRANSFER_ARRIVAL"
                         ],
                         "description": "Kind of transfer work; selects the completion fact. Required whenever transfer_ref is present, unknown values are rejected.",
-                        "x-parser-schema-id": "<anonymous-schema-173>"
+                        "x-parser-schema-id": "<anonymous-schema-200>"
                       },
                       "site_id": {
                         "type": "string",
                         "description": "Site the transfer fact is about (origin for pick/dispatch, destination for arrival).",
-                        "x-parser-schema-id": "<anonymous-schema-174>"
+                        "x-parser-schema-id": "<anonymous-schema-201>"
                       },
                       "sku": {
                         "type": "string",
                         "description": "SKU the transfer moves.",
-                        "x-parser-schema-id": "<anonymous-schema-175>"
+                        "x-parser-schema-id": "<anonymous-schema-202>"
                       },
                       "quantity": {
                         "type": "integer",
                         "description": "Units of sku the transfer moves.",
-                        "x-parser-schema-id": "<anonymous-schema-176>"
+                        "x-parser-schema-id": "<anonymous-schema-203>"
                       },
                       "relocation": {
                         "type": "object",
@@ -2017,14 +2358,14 @@
                             "type": "string",
                             "minLength": 1,
                             "description": "The approved slot plan's id (SlotPlanApproved.data.plan_id).",
-                            "x-parser-schema-id": "<anonymous-schema-178>"
+                            "x-parser-schema-id": "<anonymous-schema-205>"
                           },
                           "move_seq": {
                             "type": "integer",
                             "format": "int32",
                             "minimum": 0,
                             "description": "The move's 0-based position in SlotPlanApproved.data.moves. With plan_id it forms the move reference `<plan_id>:<move_seq>` published as TaskCompleted.relocation_ref (keep plan_id + move_seq within 200 characters).",
-                            "x-parser-schema-id": "<anonymous-schema-179>"
+                            "x-parser-schema-id": "<anonymous-schema-206>"
                           },
                           "kind": {
                             "type": "string",
@@ -2034,37 +2375,93 @@
                               "Vacate"
                             ],
                             "description": "The SlotPlanApproved move kind, exact case. Relocate needs from_bin and to_bin; Assign needs to_bin (the source is scanned at completion); Vacate needs from_bin (the reserve destination is scanned at completion).",
-                            "x-parser-schema-id": "<anonymous-schema-180>"
+                            "x-parser-schema-id": "<anonymous-schema-207>"
                           },
                           "sku": {
                             "type": "string",
                             "minLength": 1,
                             "description": "The SKU to move (SlotPlanApproved move sku).",
-                            "x-parser-schema-id": "<anonymous-schema-181>"
+                            "x-parser-schema-id": "<anonymous-schema-208>"
                           },
                           "from_bin": {
                             "type": "string",
                             "minLength": 1,
                             "description": "Source bin (SlotPlanApproved move from_slot). Omitted for an Assign (the operator scans the source); if sent for an Assign it is fixed.",
-                            "x-parser-schema-id": "<anonymous-schema-182>"
+                            "x-parser-schema-id": "<anonymous-schema-209>"
                           },
                           "to_bin": {
                             "type": "string",
                             "minLength": 1,
                             "description": "Destination bin (SlotPlanApproved move to_slot). Omitted for a Vacate (the operator scans a reserve bin); if sent for a Vacate it is fixed.",
-                            "x-parser-schema-id": "<anonymous-schema-183>"
+                            "x-parser-schema-id": "<anonymous-schema-210>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-177>"
+                        "x-parser-schema-id": "<anonymous-schema-204>"
+                      },
+                      "replenishment": {
+                        "type": "object",
+                        "description": "Present ONLY on work released on the REPLENISH process path (ADR-0050; additive, the event stays v1). One pick-face replenishment request of pick-face-replenishment, planned by wes-work-planning. It turns the created Task into a REPLENISH task whose completion takes the operator-confirmed quantity and publishes the executed move on TaskCompleted with request_ref. A REPLENISH release without this object, this object on any other path (the RELOCATE path included), a `relocation` object on the REPLENISH path, or an object that is not a valid move (a blank request_id, sku or bin, from_bin equal to to_bin, a missing or non-positive quantity, a priority other than NORMAL or URGENT) is rejected and dead-lettered; no task is created.",
+                        "required": [
+                          "request_id",
+                          "sku",
+                          "from_bin",
+                          "to_bin",
+                          "quantity",
+                          "priority"
+                        ],
+                        "properties": {
+                          "request_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "description": "The replenishment request id (pick-face-replenishment). Published as TaskCompleted.request_ref.",
+                            "x-parser-schema-id": "<anonymous-schema-212>"
+                          },
+                          "sku": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "The SKU to replenish.",
+                            "x-parser-schema-id": "<anonymous-schema-213>"
+                          },
+                          "from_bin": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Source (reserve) bin.",
+                            "x-parser-schema-id": "<anonymous-schema-214>"
+                          },
+                          "to_bin": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "Destination bin (the pick face). Always different from from_bin.",
+                            "x-parser-schema-id": "<anonymous-schema-215>"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "format": "int32",
+                            "minimum": 1,
+                            "description": "The planned units to move. The operator confirms the actual count at completion; it may differ.",
+                            "x-parser-schema-id": "<anonymous-schema-216>"
+                          },
+                          "priority": {
+                            "type": "string",
+                            "enum": [
+                              "NORMAL",
+                              "URGENT"
+                            ],
+                            "description": "The request urgency. Recorded on the task and shown on its read model; claimNext orders by CPT only (ADR-0050), so urgency is expressed upstream by an earlier CPT.",
+                            "x-parser-schema-id": "<anonymous-schema-217>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-211>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-164>"
+                    "x-parser-schema-id": "<anonymous-schema-191>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-160>"
+                "x-parser-schema-id": "<anonymous-schema-187>"
               }
             ],
-            "x-parser-schema-id": "<anonymous-schema-159>"
+            "x-parser-schema-id": "<anonymous-schema-186>"
           },
           "examples": [
             {
@@ -2121,6 +2518,38 @@
                   }
                 }
               }
+            },
+            {
+              "name": "workReleasedReplenish",
+              "summary": "REPLENISH work (ADR-0050) - one pick-face replenishment request; ref is the request id and the replenishment object carries the move.",
+              "headers": {
+                "content-type": "application/cloudevents+json; charset=UTF-8",
+                "traceparent": "00-8812c36621d214139a08949823716b93-14ddf02dbd8913ba-01"
+              },
+              "payload": {
+                "specversion": "1.0",
+                "id": "3c8e1f47-9a2d-4b6e-8f10-7d5a2c9e4b68",
+                "source": "/warehouse/wes-work-planning",
+                "type": "com.warehouse.wes.work-planning.workunit.WorkReleased",
+                "subject": "replenish-req-9",
+                "time": "2026-09-30T15:00:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:wes-work-planning:events:WorkReleased:v1",
+                "data": {
+                  "path_id": "REPLENISH",
+                  "work_unit_id": "replenish-req-9",
+                  "cpt": "2026-09-30T16:00:00Z",
+                  "ref": "req-9",
+                  "replenishment": {
+                    "request_id": "req-9",
+                    "sku": "SKU-1",
+                    "from_bin": "WH1-RSV-AMB-B02-03-02-C",
+                    "to_bin": "WH1-FWD-AMB-A01-01-01-A",
+                    "quantity": 24,
+                    "priority": "URGENT"
+                  }
+                }
+              }
             }
           ]
         }
@@ -2166,17 +2595,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathCreated",
-                        "x-parser-schema-id": "<anonymous-schema-186>"
+                        "x-parser-schema-id": "<anonymous-schema-220>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/process-path-management",
-                        "x-parser-schema-id": "<anonymous-schema-187>"
+                        "x-parser-schema-id": "<anonymous-schema-221>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:process-path-management:events:ProcessPathCreated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-188>"
+                        "x-parser-schema-id": "<anonymous-schema-222>"
                       },
                       "data": {
                         "type": "object",
@@ -2187,40 +2616,40 @@
                           "path_id": {
                             "type": "string",
                             "description": "Process path id.",
-                            "x-parser-schema-id": "<anonymous-schema-190>"
+                            "x-parser-schema-id": "<anonymous-schema-224>"
                           },
                           "match_prefix": {
                             "type": "string",
                             "description": "Case-insensitive path_id prefix this path matches.",
-                            "x-parser-schema-id": "<anonymous-schema-191>"
+                            "x-parser-schema-id": "<anonymous-schema-225>"
                           },
                           "direct": {
                             "type": "boolean",
                             "description": "Direct (non-sortable) path.",
-                            "x-parser-schema-id": "<anonymous-schema-192>"
+                            "x-parser-schema-id": "<anonymous-schema-226>"
                           },
                           "required_capabilities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-194>"
+                              "x-parser-schema-id": "<anonymous-schema-228>"
                             },
                             "description": "Station capabilities required.",
-                            "x-parser-schema-id": "<anonymous-schema-193>"
+                            "x-parser-schema-id": "<anonymous-schema-227>"
                           },
                           "destination_location_role": {
                             "type": "string",
                             "description": "Optional destination location role.",
-                            "x-parser-schema-id": "<anonymous-schema-195>"
+                            "x-parser-schema-id": "<anonymous-schema-229>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-189>"
+                        "x-parser-schema-id": "<anonymous-schema-223>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-185>"
+                    "x-parser-schema-id": "<anonymous-schema-219>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-184>"
+                "x-parser-schema-id": "<anonymous-schema-218>"
               },
               "examples": [
                 {
@@ -2277,17 +2706,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated",
-                        "x-parser-schema-id": "<anonymous-schema-198>"
+                        "x-parser-schema-id": "<anonymous-schema-232>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/process-path-management",
-                        "x-parser-schema-id": "<anonymous-schema-199>"
+                        "x-parser-schema-id": "<anonymous-schema-233>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:process-path-management:events:ProcessPathUpdated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-200>"
+                        "x-parser-schema-id": "<anonymous-schema-234>"
                       },
                       "data": {
                         "type": "object",
@@ -2298,40 +2727,40 @@
                           "path_id": {
                             "type": "string",
                             "description": "Process path id.",
-                            "x-parser-schema-id": "<anonymous-schema-202>"
+                            "x-parser-schema-id": "<anonymous-schema-236>"
                           },
                           "match_prefix": {
                             "type": "string",
                             "description": "Case-insensitive path_id prefix this path matches.",
-                            "x-parser-schema-id": "<anonymous-schema-203>"
+                            "x-parser-schema-id": "<anonymous-schema-237>"
                           },
                           "direct": {
                             "type": "boolean",
                             "description": "Direct (non-sortable) path.",
-                            "x-parser-schema-id": "<anonymous-schema-204>"
+                            "x-parser-schema-id": "<anonymous-schema-238>"
                           },
                           "required_capabilities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-206>"
+                              "x-parser-schema-id": "<anonymous-schema-240>"
                             },
                             "description": "Station capabilities required.",
-                            "x-parser-schema-id": "<anonymous-schema-205>"
+                            "x-parser-schema-id": "<anonymous-schema-239>"
                           },
                           "destination_location_role": {
                             "type": "string",
                             "description": "Optional destination location role.",
-                            "x-parser-schema-id": "<anonymous-schema-207>"
+                            "x-parser-schema-id": "<anonymous-schema-241>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-201>"
+                        "x-parser-schema-id": "<anonymous-schema-235>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-197>"
+                    "x-parser-schema-id": "<anonymous-schema-231>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-196>"
+                "x-parser-schema-id": "<anonymous-schema-230>"
               },
               "examples": [
                 {
@@ -2389,17 +2818,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated",
-                        "x-parser-schema-id": "<anonymous-schema-210>"
+                        "x-parser-schema-id": "<anonymous-schema-244>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/process-path-management",
-                        "x-parser-schema-id": "<anonymous-schema-211>"
+                        "x-parser-schema-id": "<anonymous-schema-245>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:process-path-management:events:ProcessPathDeactivated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-212>"
+                        "x-parser-schema-id": "<anonymous-schema-246>"
                       },
                       "data": {
                         "type": "object",
@@ -2410,40 +2839,40 @@
                           "path_id": {
                             "type": "string",
                             "description": "Process path id.",
-                            "x-parser-schema-id": "<anonymous-schema-214>"
+                            "x-parser-schema-id": "<anonymous-schema-248>"
                           },
                           "match_prefix": {
                             "type": "string",
                             "description": "Case-insensitive path_id prefix this path matches.",
-                            "x-parser-schema-id": "<anonymous-schema-215>"
+                            "x-parser-schema-id": "<anonymous-schema-249>"
                           },
                           "direct": {
                             "type": "boolean",
                             "description": "Direct (non-sortable) path.",
-                            "x-parser-schema-id": "<anonymous-schema-216>"
+                            "x-parser-schema-id": "<anonymous-schema-250>"
                           },
                           "required_capabilities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-218>"
+                              "x-parser-schema-id": "<anonymous-schema-252>"
                             },
                             "description": "Station capabilities required.",
-                            "x-parser-schema-id": "<anonymous-schema-217>"
+                            "x-parser-schema-id": "<anonymous-schema-251>"
                           },
                           "destination_location_role": {
                             "type": "string",
                             "description": "Optional destination location role.",
-                            "x-parser-schema-id": "<anonymous-schema-219>"
+                            "x-parser-schema-id": "<anonymous-schema-253>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-213>"
+                        "x-parser-schema-id": "<anonymous-schema-247>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-209>"
+                    "x-parser-schema-id": "<anonymous-schema-243>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-208>"
+                "x-parser-schema-id": "<anonymous-schema-242>"
               },
               "examples": [
                 {
@@ -2510,17 +2939,17 @@
                   "type": {
                     "type": "string",
                     "const": "com.warehouse.wms.product-master.product.ProductClassified",
-                    "x-parser-schema-id": "<anonymous-schema-222>"
+                    "x-parser-schema-id": "<anonymous-schema-256>"
                   },
                   "source": {
                     "type": "string",
                     "const": "/warehouse/product-master",
-                    "x-parser-schema-id": "<anonymous-schema-223>"
+                    "x-parser-schema-id": "<anonymous-schema-257>"
                   },
                   "dataschema": {
                     "type": "string",
                     "const": "urn:warehouse:product-master:events:ProductClassified:v1",
-                    "x-parser-schema-id": "<anonymous-schema-224>"
+                    "x-parser-schema-id": "<anonymous-schema-258>"
                   },
                   "data": {
                     "type": "object",
@@ -2534,7 +2963,7 @@
                       "sku": {
                         "type": "string",
                         "description": "The SKU (also the Kafka key and the CloudEvents `subject`).",
-                        "x-parser-schema-id": "<anonymous-schema-226>"
+                        "x-parser-schema-id": "<anonymous-schema-260>"
                       },
                       "handling_tags": {
                         "type": "array",
@@ -2548,10 +2977,10 @@
                             "Oversized",
                             "HighValue"
                           ],
-                          "x-parser-schema-id": "<anonymous-schema-228>"
+                          "x-parser-schema-id": "<anonymous-schema-262>"
                         },
                         "description": "Handling tags in stable order. Hazmat and Fragile feed ClassificationInfo; the others are stored but unused here.",
-                        "x-parser-schema-id": "<anonymous-schema-227>"
+                        "x-parser-schema-id": "<anonymous-schema-261>"
                       },
                       "temperature_class": {
                         "type": "string",
@@ -2561,14 +2990,14 @@
                           "Frozen"
                         ],
                         "description": "Omitted when unset.",
-                        "x-parser-schema-id": "<anonymous-schema-229>"
+                        "x-parser-schema-id": "<anonymous-schema-263>"
                       },
                       "dot_hazard_class": {
                         "type": "integer",
                         "minimum": 1,
                         "maximum": 9,
                         "description": "DOT hazard class; omitted when unset. Drives SealPackage's same-package segregation (ADR-0010).",
-                        "x-parser-schema-id": "<anonymous-schema-230>"
+                        "x-parser-schema-id": "<anonymous-schema-264>"
                       },
                       "classification_source": {
                         "type": "string",
@@ -2577,23 +3006,23 @@
                           "legacy-import"
                         ],
                         "description": "Migration artefact of product-master (its ADR 0003); not used here.",
-                        "x-parser-schema-id": "<anonymous-schema-231>"
+                        "x-parser-schema-id": "<anonymous-schema-265>"
                       },
                       "version": {
                         "type": "integer",
                         "minimum": 1,
                         "format": "int64",
                         "description": "Product aggregate version after the change; the local copy's guard.",
-                        "x-parser-schema-id": "<anonymous-schema-232>"
+                        "x-parser-schema-id": "<anonymous-schema-266>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-225>"
+                    "x-parser-schema-id": "<anonymous-schema-259>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-221>"
+                "x-parser-schema-id": "<anonymous-schema-255>"
               }
             ],
-            "x-parser-schema-id": "<anonymous-schema-220>"
+            "x-parser-schema-id": "<anonymous-schema-254>"
           },
           "examples": [
             {
@@ -2630,9 +3059,11 @@
   },
   "components": {
     "messages": {
-      "TaskCompleted": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0]",
-      "TaskCPTMissed": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[1]",
-      "PackageManifested": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[2]",
+      "TaskCompleted": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[2]",
+      "TaskCPTMissed": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[3]",
+      "TaskAvailable": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0]",
+      "TaskClaimed": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[1]",
+      "PackageManifested": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[4]",
       "AnalyticsTaskCreated": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[0]",
       "AnalyticsTaskClaimed": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[1]",
       "AnalyticsLeaseExpired": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[2]",
@@ -2644,16 +3075,16 @@
       "AnalyticsPackageDiverted": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[8]",
       "AnalyticsPackageManifested": "$ref:$.channels.warehouse.fulfillment.analytics.subscribe.message.oneOf[9]",
       "WorkReleased": "$ref:$.channels.warehouse.work-planning.events.publish.message",
-      "TransferPicked": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[3]",
-      "TransferDispatched": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[4]",
-      "TransferArrived": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[5]",
+      "TransferPicked": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[5]",
+      "TransferDispatched": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[6]",
+      "TransferArrived": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[7]",
       "ProcessPathCreated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0]",
       "ProcessPathUpdated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[1]",
       "ProcessPathDeactivated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[2]",
       "ProductClassified": "$ref:$.channels.warehouse.product-master.events.publish.message"
     },
     "schemas": {
-      "TransferFactData": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[3].payload.allOf[1].properties.data",
+      "TransferFactData": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data",
       "KafkaHeaders": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
       "CloudEvent": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]"
     }

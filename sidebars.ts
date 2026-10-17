@@ -21,6 +21,7 @@ import productMasterSidebar from './docs/api-reference/rest/product-master/sideb
 import inboundReceivingSidebar from './docs/api-reference/rest/inbound-receiving/sidebar';
 import slottingOptimizationSidebar from './docs/api-reference/rest/slotting-optimization/sidebar';
 import pickFaceReplenishmentSidebar from './docs/api-reference/rest/pick-face-replenishment/sidebar';
+import taskInterleavingSidebar from './docs/api-reference/rest/task-interleaving/sidebar';
 import networkInventoryPlanningSidebar from './docs/api-reference/rest/network-inventory-planning/sidebar';
 
 /**
@@ -46,6 +47,7 @@ const CONTEXTS = [
   'slotting-optimization',
   'network-inventory-planning',
   'pick-face-replenishment',
+  'task-interleaving',
 ];
 
 const CONTEXT_PAGES = [
@@ -91,6 +93,7 @@ const ASYNC_NARRATIVE = new Set([
   'slotting-optimization',
   'network-inventory-planning',
   'pick-face-replenishment',
+  'task-interleaving',
 ]);
 
 // Pages a context has beyond the shared page set, appended after it.
@@ -319,6 +322,11 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'pick-face-replenishment',
       items: [...pickFaceReplenishmentSidebar, 'api-reference/async/pick-face-replenishment'],
+    },
+    {
+      type: 'category',
+      label: 'task-interleaving',
+      items: [...taskInterleavingSidebar, 'api-reference/async/task-interleaving'],
     },
   ],
 };
