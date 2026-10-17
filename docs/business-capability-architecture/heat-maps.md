@@ -351,9 +351,9 @@ not.
 
 | Missing capability | Would extend | Description | Named by | What exists today |
 | --- | --- | --- | --- | --- |
-| Replenishment | L1 6 Inventory Management | The ability to refill forward pick slots from reserve stock before they run empty. | [12] | No replenishment task or trigger on develop. warehouse-planning knows REPLENISHMENT only as a capacity-constraint type. |
+| Replenishment | L1 6 Inventory Management | The ability to refill forward pick slots from reserve stock before they run empty. | [12] | Not in production. Owner registered: the pick-face-replenishment context (wms, Supporting), scaffolded 2026-10-17 and in progress; its producers in inventory-storage and fulfillment-execution are not built. Until then warehouse-planning knows REPLENISHMENT only as a capacity-constraint type. |
 | Returns Management | L1 5 Inbound Management | The ability to receive, inspect and dispose of returned products. | [10] | No returns flow in any context. |
-| Task Interleaving | L1 8 Warehouse Task Execution | The ability to combine tasks of different types into one trip. | [12] | Pull dispatch hands one task at a time; no interleaving policy exists. |
+| Task Interleaving | L1 8 Warehouse Task Execution | The ability to combine tasks of different types into one trip. | [12] | Not in production: pull dispatch hands one task at a time. Owner registered: the task-interleaving context (wes, Supporting), scaffolded 2026-10-17 and in progress. |
 | Equipment Control | L1 8 Warehouse Task Execution | The ability to drive conveyors, sorters, AS/RS and robot fleets deterministically. | [13] | fulfillment-execution reserves an EquipmentCommandPort with no methods; no WCS is integrated. |
 | Value-added Services and Kitting | L1 8 Warehouse Task Execution | The ability to perform kitting, light assembly and other value-added work. | [12] | facility-layout can model VAS work centres, but no VAS or kitting task type exists. |
 | Yard Management | L1 5 Inbound Management | The ability to manage trailers in the yard between gate and dock. | [12] | Yard locations exist in facility-layout and dock appointments in inbound-receiving, but trailers are not tracked. |

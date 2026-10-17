@@ -82,7 +82,10 @@ Dotted arrows are functions this fleet does not run as a WMS would. Wave
 planning is replaced by design: `wes-work-planning` releases work
 continuously, one unit at a time, which is the waveless model Interact
 Analysis describes as the reason the execution layer emerged.[6] Replenishment
-of forward pick slots and task interleaving have no code on `develop`.
+of forward pick slots and task interleaving are not in production. Each now
+has a registered owner, scaffolded on 2026-10-17 and still in progress:
+`pick-face-replenishment` (`wms`) and `task-interleaving` (`wes`), see the
+[context map](/strategic-design/context-map). Until they ship,
 `warehouse-planning` knows `REPLENISHMENT` only as a type of capacity
 constraint. `ship` stops at the SLAM weigh-check, label and manifest event in
 `fulfillment-execution`: there is no carrier or transport integration.
