@@ -22,7 +22,7 @@ Every repository was released to `main` and the kind cluster was
 deployed on 2026-10-13. A second round (2026-10-14 to 2026-10-17, see
 [Gaps closed after the first tracker](#gaps-closed-after-the-first-tracker-2026-10-14-to-2026-10-17))
 closed the rows that were still open, fixed the gaps the documentation still
-named, and was released on 2026-10-17; it is not yet applied to the cluster.
+named, and was released on 2026-10-17 and applied to the kind cluster the same day (only the order-management consumer of gap 23 is not deployed).
 
 This page is now a **tracker**. Every gap has one status:
 
@@ -177,7 +177,7 @@ rule: every escape = fix + sensor + rollout + INCIDENTS row).
 | 34 | new | Module Federation type generation (`dts`) was on where nothing uses federated types (TYPE-001). | seven backends, warehouse-console | **Fixed** (`dts: false`) in [facility-layout#192](https://github.com/IQVO/facility-layout/pull/192), [fulfillment-execution#210](https://github.com/IQVO/fulfillment-execution/pull/210), [inventory-storage#202](https://github.com/IQVO/inventory-storage/pull/202), [labor-performance#166](https://github.com/IQVO/labor-performance/pull/166), [process-path-management#161](https://github.com/IQVO/process-path-management/pull/161), [wes-work-planning#193](https://github.com/IQVO/wes-work-planning/pull/193), [workforce-management#183](https://github.com/IQVO/workforce-management/pull/183), [warehouse-console#88](https://github.com/IQVO/warehouse-console/pull/88). |
 | 35 | new | A string contract and the code disagreed about "blank": inventory-storage rejected a site id that the contract (`\S`) accepts (Schemathesis got `400` for `siteCode` `\^E`); fulfillment-execution's complete-task `fromBin` and `toBin` needed ECMA-262 whitespace semantics; workforce-management's `siteCode` path parameters needed the same pattern. | inventory-storage, fulfillment-execution, workforce-management | **Fixed** in [inventory-storage#205](https://github.com/IQVO/inventory-storage/pull/205), [fulfillment-execution#214](https://github.com/IQVO/fulfillment-execution/pull/214) and [workforce-management#182](https://github.com/IQVO/workforce-management/pull/182). |
 | 36 | new | The kind cluster could not schedule a fleet-wide rollout: 99% of CPU was requested and 9% used. | warehouse-infra | **Fixed** in [warehouse-infra#81](https://github.com/IQVO/warehouse-infra/pull/81) and [warehouse-infra#82](https://github.com/IQVO/warehouse-infra/pull/82) (the first overlay used `helm.values`, which ArgoCD ignored; the second merges it into `valuesObject`). |
-| 37 | new | The ArgoCD repo-server was killed in a liveness-probe loop, which left every application `Unknown`. | warehouse-infra | **Fixed** (merged) in [warehouse-infra#83](https://github.com/IQVO/warehouse-infra/pull/83): probe budgets and a render parallelism limit of 4; documented in [warehouse-infra#84](https://github.com/IQVO/warehouse-infra/pull/84). **Not applied yet**, see [Deployed to the kind cluster](#deployed-to-the-kind-cluster). |
+| 37 | new | The ArgoCD repo-server was killed in a liveness-probe loop, which left every application `Unknown`. | warehouse-infra | **Fixed** (merged) in [warehouse-infra#83](https://github.com/IQVO/warehouse-infra/pull/83): probe budgets and a render parallelism limit of 4; documented in [warehouse-infra#84](https://github.com/IQVO/warehouse-infra/pull/84). **Applied 2026-10-17** after recovering the stuck Helm release (see [Deployed to the kind cluster](#deployed-to-the-kind-cluster)): liveness `10 s / 6 failures / 15 s`, render parallelism 4, no repo-server restart since. |
 
 ## Gaps closed after the first tracker (2026-10-14 to 2026-10-17)
 
@@ -188,17 +188,18 @@ per gap). The result changed the picture: the three Open rows above and the
 still real.
 Each was fixed with a failing test first, one pull request per repository.
 "Fixed" still means merged into `develop`; the round was **released** to
-`main` on 2026-10-17 (gap 17k) and is **not yet applied** to the kind cluster
-(see [Deployed to the kind cluster](#deployed-to-the-kind-cluster)).
+`main` on 2026-10-17 (gap 17k) and **applied** to the kind cluster the same
+day, except where a row says otherwise (see
+[Deployed to the kind cluster](#deployed-to-the-kind-cluster)).
 
 | # | Was | Gap | Owner | Status |
 | --- | --- | --- | --- | --- |
-| 21 | K35 | The transfer dispatch leg dead-lettered: the catalogue had no `dispatch-*` path family. The documentation named a `TRANSFER_DISPATCH` path, which could not match: the task type is built from the path id, and a path matches an id only as `id == matchPrefix` or `matchPrefix-*`. | process-path-management, warehouse-infra | **Fixed** in [process-path-management#165](https://github.com/IQVO/process-path-management/pull/165) (path `DISPATCH`, ADR 0035, declared in the catalogue) and [warehouse-infra#85](https://github.com/IQVO/warehouse-infra/pull/85) (network-inventory-planning dispatches with path id `dispatch-transfer`; the README and the Terraform comment named the wrong path). A running cluster gets the path through `seed_catalogue.py`. |
-| 22 | OM-0020 | Orphaned holds kept their reservations forever (order-management ADR 0020 accepted this as a deferral). | network-fulfillment | **Fixed** in [network-fulfillment#101](https://github.com/IQVO/network-fulfillment/pull/101) (ADR 0024): the order-management hold id is now recorded when the hold is raised, and a sweep cancels holds past the acknowledgement window through order-management's existing cancel call; it is idempotent and `ORPHAN_HOLD_SWEEP_ENABLED` defaults on. Found on the way: the cancel branch of `RejectOverdueOrders` was dead code, because the hold id was stored too late and a database CHECK forbade storing it earlier (migration 0005). |
-| 23 | OM-0005 | Release was fire-and-forget: order-management never learned that wes-work-planning had enqueued the work (order-management ADR 0005, "real v1 gap"). | wes-work-planning, order-management | **Fixed, dark** in [wes-work-planning#197](https://github.com/IQVO/wes-work-planning/pull/197) (ADR 0041: `WorkUnitCreated` carries the optional `reference` and `line_no`, additive on the integration stream) and [order-management#204](https://github.com/IQVO/order-management/pull/204) (ADR 0043: a consumer confirms released lines; an overdue one raises the analytics fact `OrderReleaseUnconfirmed` and is **never** cancelled automatically). The consumer ships with `RELEASE_CONFIRMATION_MODE` off: switch it on only after a wes-work-planning release that carries ADR 0041 is deployed. |
-| 24 | K10, K13, R5 | The network-fulfillment capability offer was dark in the reference deployment: the infrastructure never set `CAPABILITY_OFFER_ENABLED`, and the chart had no value for the broker, the inventory URL or the site id. | warehouse-infra | **Fixed** in [warehouse-infra#87](https://github.com/IQVO/warehouse-infra/pull/87): four `extraEnv` entries on network-fulfillment (`CAPABILITY_OFFER_ENABLED`, `KAFKA_BROKERS`, `INVENTORY_STORAGE_URL`, `SITE_ID`). The retail-network gateway stays a stub and the publisher stays `log` in kind, so nothing leaves the cluster. |
-| 25 | SLO-1 | Alertmanager was off: the alert rules were never grouped, inhibited or routed anywhere. | warehouse-infra | **Fixed** in [warehouse-infra#88](https://github.com/IQVO/warehouse-infra/pull/88): Alertmanager is on in kind, one replica, with a `null` receiver. **Nothing is delivered anywhere** (a local cluster has no pager); what it adds is grouping by alertname, context and service, inhibition (a critical alert silences the warning alerts of the same context and service), silences and the `/api/v2/alerts` view, plus a Grafana datasource. |
-| 26 | SLO-2 | No burn-rate rules: SLOs 1 and 2 (API availability, API latency) were unprotected. | warehouse-infra | **Fixed** in [warehouse-infra#88](https://github.com/IQVO/warehouse-infra/pull/88): `scripts/gen-context-dashboards.py` generates four rules per context (availability and latency, each fast `critical` and slow `warning`), promtool-tested (95 rules). The SLO window is one day, because Prometheus keeps 24 hours; the alert windows are 1 h and 5 m (fast) and 6 h and 30 m (slow). The latency indicator counts Kong's 400 ms bucket, because Kong exports no 500 ms boundary. The error-budget policy on [Fleet SLOs](../fleet-operations/slos.md) is a proposal, not in force. |
+| 21 | K35 | The transfer dispatch leg dead-lettered: the catalogue had no `dispatch-*` path family. The documentation named a `TRANSFER_DISPATCH` path, which could not match: the task type is built from the path id, and a path matches an id only as `id == matchPrefix` or `matchPrefix-*`. | process-path-management, warehouse-infra | **Fixed** in [process-path-management#165](https://github.com/IQVO/process-path-management/pull/165) (path `DISPATCH`, ADR 0035, declared in the catalogue) and [warehouse-infra#85](https://github.com/IQVO/warehouse-infra/pull/85) (network-inventory-planning dispatches with path id `dispatch-transfer`; the README and the Terraform comment named the wrong path). **Deployed 2026-10-17**: the infrastructure was applied from warehouse-infra `61f9e7a` (network-inventory-planning now sends `dispatch-transfer`) and `seed_catalogue.py` created `DISPATCH` and `RELOCATE` and revised `PICK`'s intake to `CUSTOMER_ORDER`; the topic offsets grew on both the events and the analytics stream. |
+| 22 | OM-0020 | Orphaned holds kept their reservations forever (order-management ADR 0020 accepted this as a deferral). | network-fulfillment | **Fixed** in [network-fulfillment#101](https://github.com/IQVO/network-fulfillment/pull/101) (ADR 0024): the order-management hold id is now recorded when the hold is raised, and a sweep cancels holds past the acknowledgement window through order-management's existing cancel call; it is idempotent and `ORPHAN_HOLD_SWEEP_ENABLED` defaults on. Found on the way: the cancel branch of `RejectOverdueOrders` was dead code, because the hold id was stored too late and a database CHECK forbade storing it earlier (migration 0005). **Deployed 2026-10-17**: image `local-ffd057e7fd72`, built from checkout `52f2a1c`, which contains the merge commit (checked with `git merge-base --is-ancestor`); the sweep is enabled. |
+| 23 | OM-0005 | Release was fire-and-forget: order-management never learned that wes-work-planning had enqueued the work (order-management ADR 0005, "real v1 gap"). | wes-work-planning, order-management | **Fixed, dark** in [wes-work-planning#197](https://github.com/IQVO/wes-work-planning/pull/197) (ADR 0041: `WorkUnitCreated` carries the optional `reference` and `line_no`, additive on the integration stream) and [order-management#204](https://github.com/IQVO/order-management/pull/204) (ADR 0043: a consumer confirms released lines; an overdue one raises the analytics fact `OrderReleaseUnconfirmed` and is **never** cancelled automatically). The consumer ships with `RELEASE_CONFIRMATION_MODE` off: switch it on only after a wes-work-planning release that carries ADR 0041 is deployed. **Not deployed**: the order-management and wes-work-planning images were not rebuilt in the 2026-10-17 apply, so the consumer and the new payload fields are released but not running. |
+| 24 | K10, K13, R5 | The network-fulfillment capability offer was dark in the reference deployment: the infrastructure never set `CAPABILITY_OFFER_ENABLED`, and the chart had no value for the broker, the inventory URL or the site id. | warehouse-infra | **Fixed** in [warehouse-infra#87](https://github.com/IQVO/warehouse-infra/pull/87): four `extraEnv` entries on network-fulfillment (`CAPABILITY_OFFER_ENABLED`, `KAFKA_BROKERS`, `INVENTORY_STORAGE_URL`, `SITE_ID`). The retail-network gateway stays a stub and the publisher stays `log` in kind, so nothing leaves the cluster. **Deployed 2026-10-17**: the four variables are on the pod and the first capability-offer recompute ran (two sites examined). |
+| 25 | SLO-1 | Alertmanager was off: the alert rules were never grouped, inhibited or routed anywhere. | warehouse-infra | **Fixed** in [warehouse-infra#88](https://github.com/IQVO/warehouse-infra/pull/88): Alertmanager is on in kind, one replica, with a `null` receiver. **Nothing is delivered anywhere** (a local cluster has no pager); what it adds is grouping by alertname, context and service, inhibition (a critical alert silences the warning alerts of the same context and service), silences and the `/api/v2/alerts` view, plus a Grafana datasource. **Deployed 2026-10-17** from warehouse-infra `61f9e7a`: the Alertmanager pod runs, Prometheus lists it as an active Alertmanager, and a synthetic test alert posted to Alertmanager was accepted and routed to the `null` receiver. |
+| 26 | SLO-2 | No burn-rate rules: SLOs 1 and 2 (API availability, API latency) were unprotected. | warehouse-infra | **Fixed** in [warehouse-infra#88](https://github.com/IQVO/warehouse-infra/pull/88): `scripts/gen-context-dashboards.py` generates four rules per context (availability and latency, each fast `critical` and slow `warning`), promtool-tested (95 rules). The SLO window is one day, because Prometheus keeps 24 hours; the alert windows are 1 h and 5 m (fast) and 6 h and 30 m (slow). The latency indicator counts Kong's 400 ms bucket, because Kong exports no 500 ms boundary. The error-budget policy on [Fleet SLOs](../fleet-operations/slos.md) is a proposal, not in force. **Deployed 2026-10-17**: Prometheus loads 95 rules in 30 groups (15 `-slo` groups), every rule healthy. |
 | 27 | UX-1 | `verify:routes` ran in no workflow, and failed on a healthy stack (a `pushState` counted as a reload, aborted requests counted, the remote's fallback card passed every check). | warehouse-console | **Fixed** in [warehouse-console#91](https://github.com/IQVO/warehouse-console/pull/91) (an advisory workflow, not a required check; the script now passes, and `VERIFY_STUB_API=1` answers the API origin `503` in the browser) and [warehouse-console#92](https://github.com/IQVO/warehouse-console/pull/92) (the guides). |
 | 28 | A8, A9 | The ops agent's order-management and process-path-management MCP clients are wired and no use case reads them (`cmd/agent/main.go` says so). | warehouse-ops-agent | **Open**: build one real read-only use case per client, or delete the wiring. The zero-write rule stays. |
 | 29 | A14 | The slotting-optimization MCP server is built (ADR 0005) but dark in kind, and the agent has no client for it. | warehouse-ops-agent, warehouse-infra | **Open**: the client and the infra switch (`mcp.enabled`) land together with the use case of gap 28. |
@@ -242,18 +243,36 @@ network-fulfillment `f13b403` includes #91 (writer acks) and #90 (claim and
 apply in one transaction), and fulfillment-execution `723304b` includes
 #201 (fetch-then-commit, ADR 0046).
 
-### Second round: merged and released, not applied
+### Second round: applied on 2026-10-17
 
-On 2026-10-17 none of gaps 21 to 37 had been applied to the cluster. The
-images and charts exist (gap 17k) and the targeted Terraform plans are
-written, but no apply ran. Until it does:
+Everything below was applied by the owner's go-ahead on 2026-10-17, one
+reviewed plan at a time, from warehouse-infra `61f9e7a` (the sibling
+checkouts were fast-forwarded to `develop` first; each deployed fix was
+checked with `git merge-base --is-ancestor <merge commit> <checkout>`).
 
-- Alertmanager is off and the burn-rate rules are not loaded (gaps 25 and 26).
-- network-fulfillment runs an image from before the orphaned-hold sweep
-  (gap 22), and its capability offer flag is not set (gap 24).
-- The dispatch path is not in a running catalogue until `seed_catalogue.py`
-  runs, and network-inventory-planning still sends the old path id (gap 21).
-- The ArgoCD probe fix (gap 37): its apply was interrupted on 2026-10-14 and
-  the `argocd` Helm release has been in `pending-upgrade` since; the live
-  repo-server still has the default probe and keeps restarting. Recover the
-  release before the next apply.
+1. **ArgoCD (gap 37).** The 2026-10-14 apply had been interrupted and left
+   the `argocd` Helm release in `pending-upgrade` (revision 2), which blocks
+   every later upgrade. The pending revision's record was deleted (a backup
+   was kept), revision 1 stayed `deployed`, and a plan that changed only
+   `helm_release.argocd` was applied: revision 2 is now `deployed`, the
+   repo-server probe is `10 s / 6 / 15 s`, parallelism is 4, 16 of 16
+   applications stay Synced and Healthy.
+2. **network-fulfillment and network-inventory-planning (gaps 21, 22, 24).**
+   A targeted apply rebuilt network-fulfillment (`local-ffd057e7fd72`, with
+   the orphaned-hold sweep and the four capability-offer variables) and set
+   `transferDispatchPathId: dispatch-transfer` on network-inventory-planning.
+   Both answer their health routes through Kong.
+3. **Prometheus, Alertmanager and Grafana (gaps 25, 26).** A targeted apply
+   of the two Helm releases. The Prometheus pod was not restarted (it
+   reloaded its rule files), Grafana was; Alertmanager runs with the `null`
+   receiver, so nothing is delivered anywhere.
+4. **Catalogue (gap 21).** `seed_catalogue.py` converged
+   process-path-management: `DISPATCH` and `RELOCATE` created, `PICK`'s
+   intake revised.
+
+**Not deployed:** gap 23's order-management consumer and wes-work-planning's
+new payload fields (released, images not rebuilt; the consumer ships off),
+and everything the 2026-10-17 release round changed only in documentation.
+Not verified end to end: that a real inter-warehouse transfer now dispatches
+without a dead letter, and that an unacknowledged held order is cancelled by
+the sweep; both need a scenario run against the cluster.
