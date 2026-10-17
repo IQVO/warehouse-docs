@@ -214,6 +214,18 @@ const config: Config = {
         },
         {
           type: 'docSidebar',
+          sidebarId: 'wmsWesSidebar',
+          position: 'left',
+          label: 'WMS & WES',
+        },
+        {
+          type: 'docSidebar',
+          sidebarId: 'capabilitySidebar',
+          position: 'left',
+          label: 'Business Capabilities',
+        },
+        {
+          type: 'docSidebar',
           sidebarId: 'architectureSidebar',
           position: 'left',
           label: 'Architecture',
@@ -250,6 +262,8 @@ const config: Config = {
           items: [
             {label: 'Overview', to: '/overview'},
             {label: 'Strategic Design', to: '/strategic-design/domain-vision'},
+            {label: 'WMS and WES', to: '/wms-wes'},
+            {label: 'Business Capability Architecture', to: '/business-capability-architecture'},
             {label: 'Bounded Contexts', to: '/contexts'},
           ],
         },

@@ -153,6 +153,8 @@ artifacts here.
 | Section | What it covers |
 | --- | --- |
 | [Strategic Design](/strategic-design) | Fleet-wide: the DDD Starter Modelling Process, domain vision, core domain chart, subdomain classification, [Big Picture EventStorming](/strategic-design/eventstorming-big-picture), context map, domain message flows, the CloudEvents event standard, ubiquitous language |
+| [WMS and WES](/wms-wes) | The industry definitions of WMS, WES and WCS (Gartner, MHI, Interact Analysis, KNAPP, APQC, O'Reilly) and the qualification of every bounded context against them, with the tier each context belongs to |
+| [Business Capability Architecture](/business-capability-architecture) | The fleet's business capability map (L1, L2, L3) built with the TOGAF and BIZBOK rules, every L3 traced to code, with heat maps, gaps and value streams |
 | [Architecture](/architecture) | Structural views: C4 levels 1–3, the domain model, the persistence model, and runtime sequence flows |
 | [Bounded Contexts](/contexts) | Per context: business context, then the synced ddd-crew artifact pack (ubiquitous language, core domain chart, Bounded Context Canvas, context map, Aggregate Design Canvas, domain events, domain message flow, EventStorming, class diagram, entity-relationship, sequence diagrams), then the Async API narrative where the context has one |
 | [API Reference](/api-reference) | Per context: generated REST (OpenAPI) and async (AsyncAPI) documentation |
