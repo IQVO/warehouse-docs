@@ -48,6 +48,19 @@ classification. For example, `facility-layout` is `wms` and Generic, while
 
 Count: five Core, seven Supporting, two Generic, and one Generic/Supporting.
 
+### Scaffolded, not yet built (2026-10-17)
+
+Two further contexts are classified but do not run yet: scaffolded
+2026-10-17, contracts and domain in progress; consumers and the producer-side
+changes of other contexts are planned, not built. They are not in the count
+above and have no synced canvas or Core Domain Chart yet, so the links come
+with the contexts.
+
+| Bounded context | Classification | CloudEvents subdomain | Business model | Evolution | Why |
+| --- | --- | --- | --- | --- | --- |
+| `pick-face-replenishment` | <span class="badge-supporting">Supporting</span> | `wms` | Cost reduction (no empty forward pick face, fewer short picks) | Custom-built (genesis) | Not generic, because min/max and source-bin rules differ per retailer. Not Core, because min/max is a replaceable policy object (v1 `MIN_MAX` per site and SKU behind a port) and the competitive core stays the WES conductor (`wes-work-planning`) and the task lifecycle (`fulfillment-execution`). It generates replenishment requests only: it never creates floor work and never writes the stock ledger. |
+| `task-interleaving` | <span class="badge-supporting">Supporting</span> | `wes` | Cost reduction (less travel between tasks) | Custom-built (genesis) | Not generic, because detour limits and eligible task types differ per site. Not Core, because the detour rule is a replaceable policy object (`rectilinear-v1` travel model behind a port) and its output is advisory: `fulfillment-execution` keeps pull-based `claimNext` and uses a hint only as a tie-break inside one priority band, fail-open. |
+
 ## The "extract once, don't duplicate" pattern
 
 `facility-layout` and `process-path-management` are Generic contexts that
