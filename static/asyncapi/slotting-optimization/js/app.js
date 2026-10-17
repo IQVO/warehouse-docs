@@ -1255,8 +1255,10 @@
                             "enum": [
                               "SLOTTING",
                               "CONSOLIDATION",
-                              "MANUAL"
+                              "MANUAL",
+                              "REPLENISHMENT"
                             ],
+                            "description": "Only SLOTTING can execute a slot-plan move; every other reason (including REPLENISHMENT, added by pick-face-replenishment's REPLENISH tasks) is recorded as unmatched with reason=reason-not-slotting.",
                             "x-parser-schema-id": "<anonymous-schema-100>"
                           },
                           "source_ref": {

@@ -10,7 +10,7 @@ slug: /contexts/slotting-optimization
 
 <span className="badge-supporting">Supporting Subdomain</span>
 
-**Slotting Optimization** is one of the fleet's fifteen domain bounded
+**Slotting Optimization** is one of the fleet's sixteen domain bounded
 contexts. It sits in the `wms` tier of the CloudEvents subdomain taxonomy, the
 fifth `wms` context after `facility-layout`, `inventory-storage`,
 `product-master` and `inbound-receiving`. It decides **which SKUs deserve a
@@ -51,10 +51,12 @@ calls the MCP server yet.
 `pick-face-replenishment` (`wms`, Supporting), [built on `develop`](/contexts/pick-face-replenishment)
 (2026-10-17). It consumes this context's `SlotPlanApproved` as the forward map, but it is
 not deployed: `warehouse-infra` `develop` has no values file, route or ArgoCD application for it, so the edge is
-wired-but-unused (K39 in the fleet [Context Map](/strategic-design/context-map)). The producers that
-would close its loop are not built: `inventory-storage` does not publish
-`BinStockLevelChanged` or the `REPLENISHMENT` relocation reason, and
-`wes-work-planning` has no `REPLENISH` work.
+wired-but-unused (K39 in the fleet [Context Map](/strategic-design/context-map)). Most of the
+loop it needs is built: `inventory-storage` publishes `BinStockLevelChanged` and the
+`REPLENISHMENT` relocation reason (its ADR 0040 and ADR 0041) and `fulfillment-execution` runs
+`REPLENISH` tasks (its ADR 0050). `wes-work-planning` has no `REPLENISH` work, so nothing plans them yet.
+This context's own `RecordRelocation` ignores a `REPLENISHMENT` relocation: since its PR #35 only reason
+`SLOTTING` executes a slot-plan move.
 
 **Planned, not built** (checked on `develop`): an analytics read side
 (`warehouse.slotting-optimization.analytics` is reserved by ADR 0004 and

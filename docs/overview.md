@@ -9,19 +9,20 @@ slug: /overview
 # warehouse-systems documentation
 
 This site is the fleet-wide reference for the **warehouse-systems**
-ecosystem. The ecosystem is sixteen independently deployable Go services
+ecosystem. The ecosystem is seventeen independently deployable Go services
 with hexagonal architecture that together implement a warehouse fulfillment
-platform: fifteen domain bounded contexts plus `warehouse-ops-agent`. Each
-service has its own REST surface and, except `slotting-optimization` and
-`pick-face-replenishment`, an MCP
-surface. The fifteen domain contexts own a Postgres database and publish
+platform: sixteen domain bounded contexts plus `warehouse-ops-agent`. Each
+service has its own REST surface and, except `slotting-optimization`,
+`pick-face-replenishment` and `task-interleaving`, an MCP
+surface. The sixteen domain contexts own a Postgres database and publish
 Kafka events. `warehouse-ops-agent` is the exception: a thin read-side agent
-with no database and no Kafka. This site documents all fifteen domain
+with no database and no Kafka. This site documents all sixteen domain
 contexts and the agent, each with its synced artifact pack and, where it has
 specs, generated API references. `slotting-optimization` is registered in
 `warehouse-infra` `develop` (it runs once that is applied);
-`pick-face-replenishment`, the newest, is built on its `develop` but has no
-`warehouse-infra` entry, so it is not deployed in the reference cluster.
+`pick-face-replenishment` and `task-interleaving`, the newest two, are built
+on their `develop` but have no `warehouse-infra` entry, so neither is deployed
+in the reference cluster.
 
 No single repository's docs site can show the **strategic** picture: the
 context map, the core-domain classification, the shared ubiquitous language,
@@ -33,7 +34,7 @@ artifacts, links them together, and adds the fleet-level strategic layer.
 All source repositories live in the [IQVO](https://github.com/IQVO) GitHub
 organization.
 
-## The sixteen contexts on this site
+## The seventeen contexts on this site
 
 | Context | Classification | CloudEvents subdomain |
 | --- | --- | --- |
@@ -53,12 +54,15 @@ organization.
 | [`slotting-optimization`](/contexts/slotting-optimization) | Supporting | `wms` |
 | [`network-inventory-planning`](/contexts/network-inventory-planning) | Core | `wes` |
 | [`pick-face-replenishment`](/contexts/pick-face-replenishment) | Supporting | `wms` |
+| [`task-interleaving`](/contexts/task-interleaving) | Supporting | `wes` |
 
 The newest contexts on this site, `inbound-receiving` and
 `slotting-optimization` (decided 2026-10-08, both built since), cover what
 happens before the first stow (ASN, dock appointment, receipt, discrepancies)
 and which SKUs deserve a forward pick slot. `pick-face-replenishment`
-(2026-10-17) keeps those forward pick faces stocked from reserve bins. `network-inventory-planning` recommends and
+(2026-10-17) keeps those forward pick faces stocked from reserve bins, and
+`task-interleaving` (2026-10-17) recommends, after each completed task, the
+nearby open tasks a station could chain next. `network-inventory-planning` recommends and
 orchestrates inter-warehouse stock transfers as an operator-approved saga
 without ever moving stock itself. `product-master`, before them, is the single source of
 truth for what a SKU is: its handling classification (taken over from
@@ -144,7 +148,7 @@ published site as an error box.
 
 ## Scope
 
-This site documents the **sixteen backend contexts** listed above (fifteen
+This site documents the **seventeen backend contexts** listed above (sixteen
 domain bounded contexts and `warehouse-ops-agent`), which is every backend
 service in the fleet.
 The two frontend repositories (`warehouse-console`, `warehouse-ui-kit`) and

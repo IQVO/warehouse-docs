@@ -2,7 +2,7 @@
 id: ubiquitous-language
 title: Ubiquitous Language (Fleet Overview)
 sidebar_label: Ubiquitous Language
-description: How the vocabulary is organised across the sixteen backend contexts, which terms are genuinely shared, and which words mean different things in different contexts.
+description: How the vocabulary is organised across the seventeen backend contexts, which terms are genuinely shared, and which words mean different things in different contexts.
 ---
 
 # Ubiquitous Language: Fleet Overview
@@ -45,7 +45,7 @@ wins. For one alphabetical index across every context, see
 | `inbound-receiving` | ASN, Dock appointment, Receipt, Receipt line, Condition (Good or Damaged), Discrepancy (Short, Over, Damaged), Dock door | [Ubiquitous Language](/contexts/inbound-receiving/ubiquitous-language) |
 | `slotting-optimization` | Slot plan (Draft, Approved, Rejected, Superseded), Forward slot, Velocity, ABC class, Stickiness, Policy (`abc-velocity-v1`), Assignment, Move (Assign, Relocate, Vacate), Unassigned | [Ubiquitous Language](/contexts/slotting-optimization/ubiquitous-language) |
 | `pick-face-replenishment` | Pick face, Reserve bin, Min/max (policy), Replenishment request (Requested, Completed, Cancelled), Projected level, Priority (NORMAL, URGENT), Source bin policy | [Ubiquitous Language](/contexts/pick-face-replenishment/ubiquitous-language) |
-| `task-interleaving` (planned) | Station trip, Interleaving hint, Detour | none yet (see [Planned terms](#planned-terms-task-interleaving)) |
+| `task-interleaving` | Station, Station trip, Position, Hint (Active, Consumed, Expired, Superseded), Candidate, Detour, Origin, Open-task pool, Priority band, Tie-break, Interleaving policy, Inert site, Travel model (`rectilinear-v1`), Unknown distance | [Ubiquitous Language](/contexts/task-interleaving/ubiquitous-language) |
 
 ## Shared terms
 
@@ -78,8 +78,6 @@ no Shared Kernel".
 
 `pick-face-replenishment` is merged on `develop` but not deployed and ships a synced glossary
 ([Ubiquitous Language](/contexts/pick-face-replenishment/ubiquitous-language)), which is the source for its terms.
-`task-interleaving` has only domain and contracts, and the producer-side changes of other contexts it needs
-are not built: its definitions are the pinned design, not a synced glossary, so the owner column names the context.
 
 | Term | Meaning | Owner |
 | --- | --- | --- |
@@ -88,14 +86,13 @@ are not built: its definitions are the pinned design, not a synced glossary, so 
 | **Reserve bin** | A bin in a reserve zone (`RESERVE_ZONE_CODES`, default `RSV`) of the same site that holds the SKU. The source of a replenishment. v1 picks the one with the largest `on_hand - reserved` (`fullest-reserve-bin-v1`). | `pick-face-replenishment` |
 | **Min/max** | The v1 replenishment policy per site and SKU (`MIN_MAX`): below `min_qty` a request is raised to refill toward `max_qty`, rounded down to a `multiple`. Demand-cover is a documented planned policy version. | `pick-face-replenishment` |
 | **Projected level** | `on_hand - reserved` of a pick face plus the quantity of its open request, at detection. A request quantity never takes it above `max_qty`. | `pick-face-replenishment` |
-| **Replenishment request** | The aggregate `ReplenishmentRequest`: `Requested`, then `Completed` or `Cancelled`. At most one open per site, forward bin and SKU. It is closed only by a `StockRelocated` with reason `REPLENISHMENT` (which `inventory-storage` does not publish yet). | `pick-face-replenishment` |
+| **Replenishment request** | The aggregate `ReplenishmentRequest`: `Requested`, then `Completed` or `Cancelled`. At most one open per site, forward bin and SKU. It is closed only by a `StockRelocated` with reason `REPLENISHMENT` (which `inventory-storage` records for a completed `REPLENISH` task, its ADR 0041). | `pick-face-replenishment` |
 
-## Planned terms: task-interleaving
+## Terms of task-interleaving
 
-Scaffolded 2026-10-17, contracts and domain in progress; consumers and the
-producer-side changes of other contexts are planned, not built. These
-definitions are the pinned design, not a synced glossary (the context has no
-glossary page yet, so the owner column names the context).
+`task-interleaving` is merged on `develop` but not deployed and ships a synced glossary
+([Ubiquitous Language](/contexts/task-interleaving/ubiquitous-language)), which is the source for its terms.
+`fulfillment-execution` does not consume the hint yet, so the tie-break is a documented design, not behaviour.
 
 | Term | Meaning | Owner |
 | --- | --- | --- |

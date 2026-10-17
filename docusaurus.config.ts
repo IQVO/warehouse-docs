@@ -194,6 +194,12 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          taskInterleaving: {
+            specPath: 'apis/task-interleaving/openapi.yaml',
+            outputDir: 'docs/api-reference/rest/task-interleaving',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],

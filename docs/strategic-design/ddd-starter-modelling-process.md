@@ -15,7 +15,7 @@ jump between them, repeat them, and revisit earlier steps as they learn.
 
 This page uses the eight steps to index the site. For each step it gives
 a short description and names the artifact on this site that is the
-step's output for the sixteen `warehouse-systems` contexts documented
+step's output for the seventeen `warehouse-systems` contexts documented
 here.
 
 ```mermaid
@@ -51,7 +51,7 @@ Story Mapping.
 - [Domain Vision](/strategic-design/domain-vision): what the platform
   does, the end-to-end fulfillment flow it serves, and where it wins.
 - One **Business Context** page per bounded context, which describes the
-  problem the context solves in business language. All sixteen are listed
+  problem the context solves in business language. All seventeen are listed
   in the [per-context table](#per-context-artifacts-by-step) below.
 
 ## 2. Discover
@@ -80,7 +80,7 @@ coupled parts that can be reasoned about and changed independently.
 - [Subdomain Classification](/strategic-design/subdomain-classification):
   each bounded context, the part of the domain it owns, and why the line
   is drawn there.
-- [Bounded Contexts](/contexts): the sixteen resulting contexts, with their
+- [Bounded Contexts](/contexts): the seventeen resulting contexts, with their
   tier and CloudEvents subdomain (`wms` or `wes`).
 
 ## 4. Strategize
@@ -102,7 +102,7 @@ The resulting classification:
 | Classification | Bounded contexts |
 | --- | --- |
 | Core | `inventory-storage`, `wes-work-planning`, `fulfillment-execution`, `warehouse-planning` |
-| Supporting | `workforce-management`, `labor-performance`, `warehouse-ops-agent`, `network-fulfillment`, `product-master`, `inbound-receiving`, `slotting-optimization`, `pick-face-replenishment` |
+| Supporting | `workforce-management`, `labor-performance`, `warehouse-ops-agent`, `network-fulfillment`, `product-master`, `inbound-receiving`, `slotting-optimization`, `pick-face-replenishment`, `task-interleaving` |
 | Generic | `facility-layout`, `process-path-management` |
 | Generic/Supporting | `order-management` |
 
@@ -196,6 +196,7 @@ them. ddd-crew's tool for the aggregate is the
 | `inbound-receiving` | [Business Context](/contexts/inbound-receiving/business-context) | [EventStorming](/contexts/inbound-receiving/eventstorming) | [Core Domain Chart](/contexts/inbound-receiving/core-domain-chart) | [Message Flow](/contexts/inbound-receiving/domain-message-flow), [Context Map](/contexts/inbound-receiving/context-map) | [Canvas](/contexts/inbound-receiving/bounded-context-canvas) | [Aggregate Canvas](/contexts/inbound-receiving/aggregate-design-canvas) |
 | `slotting-optimization` | [Business Context](/contexts/slotting-optimization/business-context) | [EventStorming](/contexts/slotting-optimization/eventstorming) | [Core Domain Chart](/contexts/slotting-optimization/core-domain-chart) | [Message Flow](/contexts/slotting-optimization/domain-message-flow), [Context Map](/contexts/slotting-optimization/context-map) | [Canvas](/contexts/slotting-optimization/bounded-context-canvas) | [Aggregate Canvas](/contexts/slotting-optimization/aggregate-design-canvas) |
 | `pick-face-replenishment` | [Business Context](/contexts/pick-face-replenishment/business-context) | [EventStorming](/contexts/pick-face-replenishment/eventstorming) | [Core Domain Chart](/contexts/pick-face-replenishment/core-domain-chart) | [Message Flow](/contexts/pick-face-replenishment/domain-message-flow), [Context Map](/contexts/pick-face-replenishment/context-map) | [Canvas](/contexts/pick-face-replenishment/bounded-context-canvas) | [Aggregate Canvas](/contexts/pick-face-replenishment/aggregate-design-canvas) |
+| `task-interleaving` | [Business Context](/contexts/task-interleaving/business-context) | [EventStorming](/contexts/task-interleaving/eventstorming) | [Core Domain Chart](/contexts/task-interleaving/core-domain-chart) | [Message Flow](/contexts/task-interleaving/domain-message-flow), [Context Map](/contexts/task-interleaving/context-map) | [Canvas](/contexts/task-interleaving/bounded-context-canvas) | [Aggregate Canvas](/contexts/task-interleaving/aggregate-design-canvas) |
 
 The Decompose step's output is fleet-level only, in
 [Subdomain Classification](/strategic-design/subdomain-classification).

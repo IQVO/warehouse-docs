@@ -9,7 +9,7 @@ slug: /glossary
 # Glossary
 
 This is an alphabetical index of the key terms from the ubiquitous languages
-of the sixteen contexts documented on this site. Each term belongs to one context, which holds
+of the seventeen contexts documented on this site. Each term belongs to one context, which holds
 its authoritative definition. The short definitions below are condensed from
 each context's **Ubiquitous Language** page. That page is synced from the
 context's own repository, maps every term to its code identifier, and wins if
@@ -29,6 +29,7 @@ Ubiquitous Language pages like every other context.
 | Bin | [`inventory-storage`](/contexts/inventory-storage/ubiquitous-language) | A coded slot with a capacity. Under chaotic storage any SKU may occupy any free bin; it knows nothing of aisles or zones (that is facility-layout's). |
 | Blast radius | [`warehouse-ops-agent`](/contexts/warehouse-ops-agent/ubiquitous-language) | The mandatory "what would this write touch" readout (SKU, bin, reservation, quantity freed) that must accompany a `revoke_reservation` recommendation. |
 | Bottleneck | [`warehouse-planning`](/contexts/warehouse-planning/ubiquitous-language) | The process-path step limiting end-to-end flow, and the constraint type binding it. |
+| Candidate | [`task-interleaving`](/contexts/task-interleaving/ubiquitous-language) | One ranked entry of a hint: `Rank` from 1, `TaskID`, `TaskType`, `Location` and `DetourM`. |
 | Capability | [`process-path-management`](/contexts/process-path-management/ubiquitous-language) | A named qualification (`pick`, `pack`, `hazmat`) a station or associate must hold to work a path. Same vocabulary as workforce-management's Certification and fulfillment-execution's station capabilities. |
 | CapabilityOffer | [`network-fulfillment`](/contexts/network-fulfillment/ubiquitous-language) | What the fleet would tell the network it can ship for one `(sku, siteId)`: `min(physical available, throughput feasible)`. |
 | Capacity outlook | [`warehouse-ops-agent`](/contexts/warehouse-ops-agent/ubiquitous-language) | warehouse-planning's path capacity, bottleneck step and binding constraint shown next to a path in the daily brief. Informational and fail-open. |
@@ -41,6 +42,7 @@ Ubiquitous Language pages like every other context.
 | Classification source | [`product-master`](/contexts/product-master/ubiquitous-language) | `native` when a classification was authored in product-master, `legacy-import` when its legacy importer took it from inventory-storage during the migration (ADR 0003). A legacy import never overwrites a native one. |
 | CPT (Critical Pull Time) | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | The last moment a parcel can be manifested and still make its truck. Priority derives from it. |
 | DailyBrief | [`warehouse-ops-agent`](/contexts/warehouse-ops-agent/ubiquitous-language) | The synthesized cross-path, cross-site operational summary: each monitored path's facts plus the open exceptions derived from them. |
+| Detour (interleaving) | [`task-interleaving`](/contexts/task-interleaving/ubiquitous-language) | Distance in metres from the station's origin to a candidate task's first location (`FromLocation`), rounded to 0.1 m. `ToLocation` never enters the ranking. |
 | Direct | [`process-path-management`](/contexts/process-path-management/ubiquitous-language) | A structural, immutable fact about a path's routing shape. It is set at definition and cannot be revised. |
 | Discrepancy | [`product-master`](/contexts/product-master/ubiquitous-language) | True when a product's measured unit volume or weight differs from the declared value by more than 10 %. Information for stewards; it never rejects a measurement. |
 | Discrepancy (receipt) | [`inbound-receiving`](/contexts/inbound-receiving/ubiquitous-language) | A line of a closed receipt whose count differs from the ASN: `Short`, `Over` or `Damaged`. A different concept from product-master's Discrepancy. |
@@ -55,6 +57,9 @@ Ubiquitous Language pages like every other context.
 | Gift wrap | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | A Task-level packing hint from a caller-stated request, independent of product classification. |
 | Handling tag | [`product-master`](/contexts/product-master/ubiquitous-language) | One of the closed set `Hazmat`, `Fragile`, `TemperatureSensitive`, `Oversized`, `HighValue` on a SKU's classification, always in that order on the wire. Moved from inventory-storage. |
 | Held order | [`order-management`](/contexts/order-management/ubiquitous-language) | An order received with `releaseOnAllocation=false`. It allocates, then waits for an explicit release or a cancel. Must be ship-complete. `network-fulfillment` raises these. |
+| Hint | [`task-interleaving`](/contexts/task-interleaving/ubiquitous-language) | The short ranked list of candidate tasks issued to a station after a completion. Advisory, expiring, never an assignment. States `Active`, `Consumed`, `Expired`, `Superseded`. |
+| Inert site | [`task-interleaving`](/contexts/task-interleaving/ubiquitous-language) | A site that never declared an interleaving policy: no hint is issued for it (`404 policy-not-found` on read). |
+| InterleavingPolicy | [`task-interleaving`](/contexts/task-interleaving/ubiquitous-language) | The per-site, versioned settings of the hint: max detour, max candidates (1 to 5), hint TTL, eligible task types and vertical weight. |
 | InterWarehouseTransfer | [`network-inventory-planning`](/contexts/network-inventory-planning/ubiquitous-language) | The saga aggregate: an operator-approved plan to move a quantity of one SKU between two sites. Eleven states from `DRAFT` to `RECEIVED`; it references the reservation and the physical facts and owns neither. |
 | LaborAssignment | [`workforce-management`](/contexts/workforce-management/ubiquitous-language) | One associate on one path for an interval. Exactly one ACTIVE assignment per associate, gated by certification. |
 | LaborStandard | [`labor-performance`](/contexts/labor-performance/ubiquitous-language) | The engineered expected duration for one task type, with an effective range. It is frozen onto each scored task at completion time. |
@@ -67,6 +72,7 @@ Ubiquitous Language pages like every other context.
 | NetworkOrder | [`network-fulfillment`](/contexts/network-fulfillment/ubiquitous-language) | Demand from the external network with a deadline the fleet did not choose. It is answered exactly once, in full or not at all. |
 | NetworkRef | [`network-fulfillment`](/contexts/network-fulfillment/ubiquitous-language) | The network's opaque identity for one unit of demand. It is never parsed. It is the aggregate key, the CloudEvents `subject` and the Kafka key. |
 | Open request | [`pick-face-replenishment`](/contexts/pick-face-replenishment/ubiquitous-language) | The one `Requested` replenishment request of a pick face; its quantity counts as inbound stock when the projected level is computed. |
+| Open-task pool | [`task-interleaving`](/contexts/task-interleaving/ubiquitous-language) | The event-fed local copy of the tasks still open, with where each starts and ends. An input of the recommender, not aggregate state. |
 | OpenException | [`warehouse-ops-agent`](/contexts/warehouse-ops-agent/ubiquitous-language) | One path's flagged, human-gated exception: which correlation rule fired, its severity, and its evidence. Raised only when two or more independent signals fire. |
 | Order | [`order-management`](/contexts/order-management/ubiquitous-language) | The aggregate root: one customer's demand, its lines, its delivery promise and its hold/deadline intent. Its status is derived from line statuses, never stored. |
 | OrderLine | [`order-management`](/contexts/order-management/ubiquitous-language) | One requested SKU and quantity within an Order, with its resolved process path, gift-wrap flag, line status and reservation id. |
@@ -87,6 +93,7 @@ Ubiquitous Language pages like every other context.
 | Promise | [`order-management`](/contexts/order-management/ubiquitous-language) | The CPT window (or lead-time date) an order or shipment group is promised to leave by. It is recomputed (re-promised) on `TaskCPTMissed`/`PackageManifested`. |
 | RebalanceRun | [`network-inventory-planning`](/contexts/network-inventory-planning/ubiquitous-language) | One scheduled, observe-only planning pass with its snapshot watermark, counts and outcome. It never approves anything. |
 | Receipt | [`inbound-receiving`](/contexts/inbound-receiving/ubiquitous-language) | The record of one delivery being counted against an ASN, line by line, with a condition (`Good` or `Damaged`) per line. Opened, received into, then closed with its discrepancies. |
+| rectilinear-v1 | [`task-interleaving`](/contexts/task-interleaving/ubiquitous-language) | The v1 travel model: `\|dx\| + \|dy\| + verticalWeight * \|dz\|` in metres, rounded to 0.1 m. A place without geometry has an unknown distance, never 0. |
 | Release | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | Continuous, priority-ordered (waveless) admission of work into a work pool. |
 | Remaining capacity | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | `max(0, wipLimit − WIP)` for a release-fed pool, reported per CPT cutoff on `PathCapacityChanged`. Unknown for a flow-fed pool. |
 | Replenishment policy | [`pick-face-replenishment`](/contexts/pick-face-replenishment/ubiquitous-language) | The explicit `MIN_MAX` rule of one (site, SKU): `minQty`, `maxQty`, `multiple` and a `version`, with `0 <= min < max`. Listed as "Policy" on the context's own page. |
@@ -103,6 +110,7 @@ Ubiquitous Language pages like every other context.
 | Stale map | [`pick-face-replenishment`](/contexts/pick-face-replenishment/ubiquitous-language) | A `SlotPlanApproved` whose `approved_at` is not after the one recorded for the site; it is ignored. |
 | Station | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | A work position with a capability set. One occupant at a time. |
 | StationStandard | [`warehouse-planning`](/contexts/warehouse-planning/ubiquitous-language) | The operator-declared throughput of one station of a process at a site. It is multiplied by the tallied station count at read time. |
+| StationTrip | [`task-interleaving`](/contexts/task-interleaving/ubiquitous-language) | The aggregate, one per station: where the operator stands and the hint issued there. |
 | Stickiness | [`slotting-optimization`](/contexts/slotting-optimization/ubiquitous-language) | The churn limit: a SKU keeps its previous slot if that slot is still eligible and free (a better-ranked SKU may still take it first). |
 | StockUnit | [`inventory-storage`](/contexts/inventory-storage/ubiquitous-language) | A quantity of a SKU at a specific bin; the aggregate root of inventory truth. |
 | Stow | [`inventory-storage`](/contexts/inventory-storage/ubiquitous-language) | Placing inbound stock into a bin. Invalid without both an item scan and a location scan; the only operation that creates a StockUnit. |
@@ -110,6 +118,7 @@ Ubiquitous Language pages like every other context.
 | StuckTransfer | [`network-inventory-planning`](/contexts/network-inventory-planning/ubiquitous-language) | A non-terminal transfer whose last transition is older than its per-state threshold (defaults `ALLOCATING` 1h, `PICKED` 24h, `IN_TRANSIT` 72h). A reading, not a state. |
 | Task | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | A unit of physical work with a type, a CPT, an order reference, required capabilities and two packing hints. At most one active claim. |
 | TaskPerformance | [`labor-performance`](/contexts/labor-performance/ubiquitous-language) | One completed task, scored against the standard active at completion and frozen. |
+| Tie-break | [`task-interleaving`](/contexts/task-interleaving/ubiquitous-language) | How `fulfillment-execution` may use a hint: only inside one priority band, fail-open. `fulfillment-execution` does not consume the hint yet. |
 | Usable inventory | [`inventory-storage`](/contexts/inventory-storage/ubiquitous-language) | Stock immediately available to fulfil: on-hand minus active reservations minus held, damaged or unlocated stock. |
 | Utilization | [`labor-performance`](/contexts/labor-performance/ubiquitous-language) | Task time ÷ (task time + idle time) over a trailing window, as a percent. Null when nothing was observed. |
 | Verdict | [`pick-face-replenishment`](/contexts/pick-face-replenishment/ubiquitous-language) | The detector's result for one pick face: `Raise`, `Healthy`, `AlreadyOpen`, `NoPolicy` or `NoSource`. |

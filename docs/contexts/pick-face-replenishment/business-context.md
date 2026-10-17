@@ -136,15 +136,17 @@ It has no edge to `inbound-receiving`, `order-management` or `product-master`
   (its Runbook says so). It runs only from a locally built binary or image.
   Its declared Kong URL, `http://localhost:8000/api/pick-face-replenishment`,
   therefore routes nowhere yet.
-- **The execution chain is not live.** The inputs from `slotting-optimization`
-  and `facility-layout` are published by live producers. `inventory-storage`
-  does not publish `BinStockLevelChanged` (producer change P1) and its
-  `StockRelocated` has no `REPLENISHMENT` reason (P4); `wes-work-planning` has
-  no `REPLENISH` work path (P3b) and `fulfillment-execution` no `REPLENISH`
-  task (P3). Both consumed contracts were pinned consumer-first (ADR 0003), so
-  if the producers ship something different the fix is a follow-up PR in this
-  context. Until then a request can be raised and cancelled but not completed,
-  and with the bin-level copy empty the pick-face view reports `NO_SOURCE`.
+- **The execution chain is not complete.** The inputs from
+  `slotting-optimization`, `facility-layout` and `inventory-storage` are
+  published by producers on `develop` (`inventory-storage` publishes
+  `BinStockLevelChanged` and records a completed `REPLENISH` task as a
+  `StockRelocated` with reason `REPLENISHMENT`, its ADR 0040 and ADR 0041), and
+  `fulfillment-execution` runs `REPLENISH` tasks (its ADR 0050). `wes-work-planning`
+  has no `REPLENISH` work path (P3b) and `process-path-management` no
+  `REPLENISH` path, so nothing turns a `ReplenishmentRequested` into floor
+  work. Both consumed contracts were pinned consumer-first (ADR 0003) and the
+  producers now match them (field names equal, key `<bin>:<sku>`). Until the
+  planner exists a request can be raised and cancelled but not completed.
 - An analytics read side (`warehouse.pick-face-replenishment.analytics` is
   written, but nothing reads it), a `warehouse-ops-agent` client and a console
   remote are later phases. None of them exists yet.

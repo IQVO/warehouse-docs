@@ -10,7 +10,7 @@ slug: /contexts/pick-face-replenishment
 
 <span className="badge-supporting">Supporting Subdomain</span>
 
-**Pick-Face Replenishment** is one of the fleet's fifteen domain bounded
+**Pick-Face Replenishment** is one of the fleet's sixteen domain bounded
 contexts. It sits in the `wms` tier of the CloudEvents subdomain taxonomy, the
 sixth `wms` context after `facility-layout`, `inventory-storage`,
 `product-master`, `inbound-receiving` and `slotting-optimization`, which it
@@ -39,25 +39,32 @@ The repository itself has no Dockerfile and no Helm chart on `develop` (its
 Runbook lists both as absent). So every edge to and from this context is built
 on one side at most and **not wired in the reference cluster**.
 
-**What works end to end today:** the two inputs from
-`slotting-optimization` (`SlotPlanApproved`) and `facility-layout` (zones and
-location slots) are published by live producers and consumed here, as soon as
-this service runs. Nothing else of the chain exists yet:
+**What is built around it, checked on each sibling's `develop`:** the inputs
+from `slotting-optimization` (`SlotPlanApproved`) and `facility-layout` (zones
+and location slots) are published by live producers, and since the latest
+sibling changes so are the two `inventory-storage` inputs:
+`inventory-storage` publishes `BinStockLevelChanged` (its ADR 0040) and records
+a completed `REPLENISH` task as a `StockRelocated` with the reason
+`REPLENISHMENT` and `source_ref` equal to the request id (its ADR 0041).
+`fulfillment-execution` creates a `REPLENISH` task from
+`WorkReleased.data.replenishment`, announces it and reports `TaskCompleted`
+with `request_ref` (its ADR 0050), and `slotting-optimization` no longer
+mistakes a `REPLENISHMENT` move for a slot-plan move (its PR #35). Two ends of
+the chain exist, but the middle does not:
 
-- `inventory-storage` does **not** publish `BinStockLevelChanged`. With no
-  bin levels, detection finds no reserve stock and reports `NO_SOURCE`
-  (producer change P1).
-- `inventory-storage` publishes `StockRelocated` with the reasons `SLOTTING`,
-  `CONSOLIDATION` and `MANUAL` only. `REPLENISHMENT`, the one reason that
-  completes a request, is not produced yet (P4).
 - Nothing consumes `ReplenishmentRequested`: `wes-work-planning` has no
-  `REPLENISH` work (P3b) and `fulfillment-execution` no `REPLENISH` task (P3).
+  consumer of the topic, no `REPLENISH` work unit and no `replenishment`
+  object on `WorkReleased` (P3b), and `process-path-management` has no
+  `REPLENISH` path.
 
-So today a request can be raised and cancelled, but not completed.
+So today a request can be raised and cancelled, but no floor work is created
+for it and it cannot be completed. Everything is moot until this service is
+deployed.
 
-**Planned, not built:** the `REPLENISH` execution chain above, an analytics
-read side, a `warehouse-ops-agent` client and a console remote, and a
-demand-cover policy behind the same port as `MIN_MAX`.
+**Planned, not built:** the `wes-work-planning` planner (a `REPLENISH` work
+unit, a `REPLENISH` path), an analytics read side, a `warehouse-ops-agent`
+client and a console remote, and a demand-cover policy behind the same port as
+`MIN_MAX`.
 :::
 
 It owns two aggregates and one pure function:

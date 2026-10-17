@@ -2,8 +2,8 @@
 
 Fleet-wide documentation for the **warehouse-systems** ecosystem. It holds
 the strategic and tactical Domain-Driven Design artifacts, the generated REST
-and AsyncAPI references, and the business context for sixteen backend
-contexts: fifteen domain bounded contexts plus `warehouse-ops-agent`. Built with [Docusaurus](https://docusaurus.io/) and
+and AsyncAPI references, and the business context for seventeen backend
+contexts: sixteen domain bounded contexts plus `warehouse-ops-agent`. Built with [Docusaurus](https://docusaurus.io/) and
 published to **GitHub Pages** through GitHub Actions.
 
 Live site: https://iqvo.github.io/warehouse-docs/
@@ -31,23 +31,20 @@ Live site: https://iqvo.github.io/warehouse-docs/
     `develop` (`core-domain-chart`, `bounded-context-canvas`, `context-map`,
     `aggregate-design-canvas`, `domain-message-flow`, `eventstorming`,
     `ubiquitous-language`, `class-diagram`, `entity-relationship`,
-    `sequence-diagrams`, `domain-events`; `product-master`,
-    `inbound-receiving`, `slotting-optimization` and
-    `pick-face-replenishment` also have `use-cases`, and
-    `pick-face-replenishment` also has the five operations pages
-    `configuration`, `runbook`, `observability`, `troubleshooting` and
-    `testing`). Each synced page has a "Synced from" note. Edit those pages
-    upstream, never here. The exception is `network-inventory-planning`, whose
-    repository has no `docs/docs/ddd/` pack yet: its pages were written here from
-    its code and ADRs and say so in a note at the top; replace them with synced
-    copies once the pack exists.
+    `sequence-diagrams`, `domain-events`, plus `use-cases` and the five
+    operations pages `configuration`, `runbook`, `observability`,
+    `troubleshooting` and `testing`). Each synced page has a "Synced from"
+    note. Edit those pages
+    upstream, never here. Every context ships the pack, so
+    `CONTEXT_PAGE_OVERRIDES` stays empty.
   - `async-api.md`, a Kafka narrative written here, for the contexts that
     have one.
 
-  The Bounded Contexts sidebar is generated from the `CONTEXTS` and
-  `CONTEXT_PAGES` arrays in `sidebars.ts`, plus `CONTEXT_EXTRA_PAGES`
-  (`use-cases`) and `ASYNC_NARRATIVE` (`async-api`). `inbound-receiving`,
-  `slotting-optimization` and `pick-face-replenishment` have the full pack, plus `use-cases` and
+  The Bounded Contexts sidebar is generated from the `CONTEXTS`,
+  `CONTEXT_PAGES` and `CONTEXT_OPS_PAGES` arrays in `sidebars.ts`, plus
+  `CONTEXT_EXTRA_PAGES` and `ASYNC_NARRATIVE` (`async-api`).
+  `inbound-receiving`, `slotting-optimization`, `pick-face-replenishment` and
+  `task-interleaving` have the full pack, the operations pages and
   `async-api`. `CONTEXT_PAGE_OVERRIDES` is empty: it is only for a context
   whose repository does not ship its pack yet.
 - **API Reference** (`docs/api-reference/`): generated REST docs
@@ -75,7 +72,7 @@ for repo in order-management inventory-storage wes-work-planning \
             process-path-management labor-performance network-fulfillment \
             warehouse-planning product-master inbound-receiving \
             slotting-optimization network-inventory-planning \
-            pick-face-replenishment; do
+            pick-face-replenishment task-interleaving; do
   git -C "$repo" show origin/develop:apis/openapi.yaml \
     > "warehouse-docs/apis/$repo/openapi.yaml" 2>/dev/null
   git -C "$repo" show origin/develop:apis/asyncapi.yaml \
@@ -95,9 +92,10 @@ Seven contexts also ship an `apis/openapi-reports.yaml` for their separate
 `sidebars.ts`. The fleet-ops skill's `sync_docs_pack_to_aggregator.py` copies
 all three specs plus the synced context pages in one run.
 
-`warehouse-ops-agent` has no `apis/` directory. Fifteen contexts ship both an
+`warehouse-ops-agent` has no `apis/` directory. Sixteen contexts ship both an
 `openapi.yaml` and an `asyncapi.yaml` (`inbound-receiving`,
-`slotting-optimization` and `pick-face-replenishment` were added to the sync
+`slotting-optimization`, `pick-face-replenishment` and `task-interleaving`
+were added to the sync
 loop above, `docusaurus.config.ts`, `sidebars.ts` and
 `scripts/gen-async-docs.mjs` when their contracts merged).
 
@@ -141,15 +139,16 @@ Pages must be set to **Source: GitHub Actions** for this repository
 
 ## Scope
 
-This site documents sixteen backend contexts: the fifteen domain bounded
+This site documents seventeen backend contexts: the sixteen domain bounded
 contexts `order-management`, `inventory-storage`, `wes-work-planning`,
 `fulfillment-execution`, `workforce-management`, `facility-layout`,
 `process-path-management`, `labor-performance`, `network-fulfillment`,
 `warehouse-planning`, `product-master`, `network-inventory-planning`,
-`inbound-receiving`, `slotting-optimization` and `pick-face-replenishment`,
+`inbound-receiving`, `slotting-optimization`, `pick-face-replenishment` and
+`task-interleaving`,
 plus `warehouse-ops-agent`.
-`inbound-receiving`, `slotting-optimization` and `pick-face-replenishment`
-ship their artifact pack and specs.
+`inbound-receiving`, `slotting-optimization`, `pick-face-replenishment` and
+`task-interleaving` ship their artifact pack and specs.
 The frontend repositories (`warehouse-console`, `warehouse-ui-kit`) and the
 deployment repository (`warehouse-infra`) are referenced where relevant.
 They are not bounded contexts in the Evans/Vernon sense, so they have no DDD
