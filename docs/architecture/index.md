@@ -57,14 +57,14 @@ Reading them in that order is the fastest way to understand any one context.
 
 ## Three things worth knowing up front
 
-**The fleet is bigger than "sixteen services".** Thirteen of the sixteen
+**The fleet is bigger than "seventeen services".** Thirteen of the seventeen
 contexts on this site ship four binaries and two databases each, because the analytical
 read side is a separate process family from the operational one.
 `warehouse-ops-agent` is one binary with no database, `slotting-optimization`
 is two binaries (api and MCP) and one database, deployed in the reference
-cluster with no analytical read side, and the newest,
-`pick-face-replenishment`, is one binary (`cmd/api`) with one database schema
-and is not deployed in the reference cluster. That is
+cluster with no analytical read side, and the two newest,
+`pick-face-replenishment` and `task-interleaving`, are each one binary (`cmd/api`) with one database schema
+and are not deployed in the reference cluster. That is
 [Containers](/architecture/containers).
 
 **The domain layer depends on nothing, and CI proves it.** Every context has an

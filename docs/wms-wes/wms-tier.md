@@ -7,10 +7,13 @@ description: Qualification cards for the five contexts the fleet publishes under
 
 # The WMS tier — five contexts, qualified
 
-The five contexts whose events carry the `wms` segment
-(`com.warehouse.wms.<context>.…`). All five pass the industry WMS tests on the
+Six contexts publish events with the `wms` segment
+(`com.warehouse.wms.<context>.…`). This page has a card for each of the five
+that are qualified. All five pass the industry WMS tests on the
 [industry reference](/wms-wes/industry-reference#the-tests-this-site-applies).
-Four are WMS core and one is WMS extended.
+Four are WMS core and one is WMS extended. The sixth,
+`pick-face-replenishment` (built, not deployed), is **not yet qualified** and
+has no card here yet; see the [qualification](/wms-wes/qualification).
 
 ## Coverage of the WMS functions
 
@@ -84,11 +87,15 @@ continuously, one unit at a time, which is the waveless model Interact
 Analysis describes as the reason the execution layer emerged.[6] Replenishment
 of forward pick slots and task interleaving are not in production. Replenishment
 now has an owner that is built but not deployed, `pick-face-replenishment`
-(`wms`), which raises replenishment requests but whose execution chain
-(`REPLENISH` work, the `BinStockLevelChanged` producer, the `REPLENISHMENT`
-relocation reason) is not built. Task interleaving has a registered owner,
-`task-interleaving` (`wes`), scaffolded on 2026-10-17 (only its domain and contracts are on `develop`, no service yet); see the
-[context map](/strategic-design/context-map). Until they ship,
+(`wms`), which raises replenishment requests. The stock-ledger end
+(`inventory-storage`: the `BinStockLevelChanged` producer and the
+`REPLENISHMENT` relocation) and the task end (`fulfillment-execution`: the
+`REPLENISH` task) of its execution chain are built; the planner is not,
+because `wes-work-planning` has no `REPLENISH` work. Task interleaving has an
+owner that is built but not deployed, `task-interleaving` (`wes`), which
+issues an advisory hint after each completed task; `fulfillment-execution`
+does not consume the hint yet. See the
+[context map](/strategic-design/context-map). Until they run,
 `warehouse-planning` knows `REPLENISHMENT` only as a type of capacity
 constraint. `ship` stops at the SLAM weigh-check, label and manifest event in
 `fulfillment-execution`: there is no carrier or transport integration.

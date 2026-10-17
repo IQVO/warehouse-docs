@@ -16,11 +16,12 @@ the producing use cases, see
 
 :::caution[Nothing of this runs in the reference cluster yet]
 `warehouse-infra` `develop` has no entry for this context, so no instance
-publishes or consumes any topic below in the reference deployment. Two of the
-consumed types are also not produced yet: `inventory-storage` publishes no
-`BinStockLevelChanged`, and its `StockRelocated` never carries the reason
-`REPLENISHMENT`. Nothing consumes `ReplenishmentRequested`. The tables state
-what the code does and what each producer or consumer publishes today.
+publishes or consumes any topic below in the reference deployment. Every
+consumed type now has a producer on `develop` (`inventory-storage` publishes
+`BinStockLevelChanged` and records a completed `REPLENISH` task as a
+`StockRelocated` with the reason `REPLENISHMENT`), but nothing consumes
+`ReplenishmentRequested`. The tables state what the code does and what each
+producer or consumer publishes today.
 :::
 
 ## Topics
@@ -115,14 +116,18 @@ consumers dedupe on it. The relay runs only when `DATABASE_URL` and
 
 **Nobody does today.** The intended consumer of `ReplenishmentRequested` is
 `wes-work-planning`, which would plan one `REPLENISH` work unit per request
-(producer-side change P3b of the context's ADR 0001), then
-`fulfillment-execution` (a `REPLENISH` task, P3) and `inventory-storage`
-(`RelocateStock` with reason `REPLENISHMENT` and `source_ref` = the request id,
-P4), closing the loop with a `StockRelocated`. None of these exists on
-`develop`: `wes-work-planning` has only `RELOCATE` work (for slot plans).
-`ReplenishmentCompleted`, `ReplenishmentCancelled` and the analytics topic
+(producer-side change P3b of the context's ADR 0001) and release it with the
+additive `replenishment` object on `WorkReleased`. The rest of the chain is
+built on `develop`: `fulfillment-execution` creates a `REPLENISH` task from that
+object (its ADR 0050) and reports `TaskCompleted` with `request_ref`, and
+`inventory-storage` applies it as `RelocateStock` with reason `REPLENISHMENT`
+and `source_ref` = the request id (its ADR 0041), closing the loop with a
+`StockRelocated`. What does not exist on `develop` is the planning hop:
+`wes-work-planning` has no consumer of this topic, no `REPLENISH` work unit and
+no `replenishment` object, and `process-path-management` has no `REPLENISH`
+path. `ReplenishmentCompleted`, `ReplenishmentCancelled` and the analytics topic
 have no consumer in any repository checked. This is the fleet's edge K44
-(planned); see the [context map](/contexts/pick-face-replenishment/context-map).
+(absent-planned); see the [context map](/contexts/pick-face-replenishment/context-map).
 
 ## Consuming: local copies and closing requests
 
@@ -134,8 +139,8 @@ consumer started; the copy is whatever the database already holds).
 
 | Type | Effect | Producer today |
 | --- | --- | --- |
-| `BinStockLevelChanged` | upsert `bin_stock_levels` only when `version` is greater than the stored one (the levels are absolute), then evaluate the SKU's pick face | **absent**: `inventory-storage` does not publish it (producer change P1); the contract is pinned consumer-first |
-| `StockRelocated` | complete the open request named by `source_ref`, only when `reason` is `REPLENISHMENT` and site, SKU and both bins match; every other reason is ignored | published by `inventory-storage`, but `REPLENISHMENT` is not among its reasons yet (`SLOTTING`, `CONSOLIDATION`, `MANUAL`; change P4) |
+| `BinStockLevelChanged` | upsert `bin_stock_levels` only when `version` is greater than the stored one (the levels are absolute), then evaluate the SKU's pick face | published by `inventory-storage` since its ADR 0040 (key `<bin>:<sku>`, field names equal to this consumer's); the contract was pinned consumer-first |
+| `StockRelocated` | complete the open request named by `source_ref`, only when `reason` is `REPLENISHMENT` and site, SKU and both bins match; every other reason is ignored | published by `inventory-storage`; `REPLENISHMENT` is among its reasons since its ADR 0041, raised for a completed `REPLENISH` task with `source_ref` = the task's `request_ref` (the other reasons are `SLOTTING`, `CONSOLIDATION`, `MANUAL`) |
 | `SlotPlanApproved` | replace the site's forward map wholesale, cancel requests whose bin no longer holds their SKU (`ASSIGNMENT_CHANGED`), evaluate new or moved faces; an older or equal `approved_at` is `stale` and ignored | published by `slotting-optimization` (live) |
 | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | upsert `zones` and `locations`, to tell reserve bins from forward bins; a decommissioned location stays decommissioned | published by `facility-layout` (live) |
 

@@ -72,24 +72,29 @@ Docusaurus site, mirroring `inbound-receiving`'s tooling, in their campaign PR.
 
 ## State on 2026-10-17
 
-The same audit, run on `origin/develop` of all 19 repositories, gives 18 at
-**100** and one at **86**: a fleet mean of 99.3 (computed as
-(18 × 100 + 86) / 19). Two contexts were added to the audit's backend list on
-2026-10-17, and four content fixes closed the last undocumented fact the audit
-listed in four older repositories.
+The same audit, run on `origin/develop` of all 19 repositories at the end of
+the day (after the `task-interleaving` service and its operations pages
+merged), gives all 19 at **100**: a fleet mean of 100.0 (computed as
+(19 × 100) / 19). Earlier the same day it gave 18 at 100 and one at 86, a mean
+of 99.3, because `task-interleaving` had only its domain and contracts on
+`develop`. Two contexts were added to the audit's backend list on 2026-10-17,
+and four content fixes closed the last undocumented fact the audit listed in
+four older repositories.
 
 | Repository | Before | Now | Pages | Pending | PR |
 |---|---:|---:|---|---|---|
 | `pick-face-replenishment` | 26 | 100 | 2 → 25 | — | [#7](https://github.com/IQVO/pick-face-replenishment/pull/7) |
-| `task-interleaving` | 56 | 86 | 2 → 21 | configuration, operations, observability, troubleshooting (pending its service merge) | [#6](https://github.com/IQVO/task-interleaving/pull/6) |
+| `task-interleaving` | 56 | 100 | 2 → 25 | — | [#6](https://github.com/IQVO/task-interleaving/pull/6), [#7](https://github.com/IQVO/task-interleaving/pull/7), [#9](https://github.com/IQVO/task-interleaving/pull/9) |
 
-Both PRs scaffolded the Docusaurus site, the API reference pages, the DDD pack
-and the structure pages, and merged on 2026-10-17. **Before** is the audit at
-the first parent of each merge. `task-interleaving` has only its domain and
-contracts on `develop` (no `cmd/`), so it has no binary to configure, operate,
-observe or troubleshoot. Its content score is already 100 and its structure
-score stays at 73 until the service merges; that PR must add the four pages in
-the same change. No placeholder pages were written to move the number.
+The first PR of each scaffolded the Docusaurus site, the API reference pages,
+the DDD pack and the structure pages, and merged on 2026-10-17. **Before** is
+the audit at the first parent of each merge. `task-interleaving`'s service
+(`cmd/api`, PR #7) merged later the same day and its docs PR #9 added the
+configuration, runbook, observability and troubleshooting pages, which took
+its structure score from 73 to 100 (the page count is the audit's, 25 for both
+contexts). No placeholder pages were written to move the number. Of the 19
+repositories, 17 are backend contexts (16 domain contexts and
+`warehouse-ops-agent`), plus the console shell and the UI kit.
 
 | Repository | Content fix | PR |
 |---|---|---|
@@ -98,7 +103,7 @@ the same change. No placeholder pages were written to move the number.
 | `slotting-optimization` | the `slotting_optimization.slot_plans.decided` instrument | [#32](https://github.com/IQVO/slotting-optimization/pull/32) |
 | `network-inventory-planning` | `OTEL_SERVICE_NAME` for `mcp`, `nip-projector` and `nip-reports` | [#56](https://github.com/IQVO/network-inventory-planning/pull/56) |
 
-All six PRs are merged. Frontends are scored with the library rule described
+All the PRs above are merged. Frontends are scored with the library rule described
 below: a `release` page counts as the operations page of a repository with no
 deployment, which is how the UI kit reaches 100.
 
