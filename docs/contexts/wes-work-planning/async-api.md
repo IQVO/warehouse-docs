@@ -56,6 +56,7 @@ spec document.
 | `type` (suffix after `com.warehouse.wes.work-planning.`) | `data` | Published when | Consumed by |
 |---|---|---|---|
 | `workunit.WorkReleased` | `{"path_id","work_unit_id","cpt","ref"}` (+ optional `required_capabilities`, `fragile`, `gift_wrap`, and on the `RELOCATE` path a `relocation` object, ADR-0040) | `ReleaseNextWork` releases a unit | **`fulfillment-execution`** → creates a `Task` (a `RELOCATE` task when `relocation` is present) |
+| `workunit.WorkUnitCreated` | `{"path_id","work_unit_id"}` (+ optional `reference` and `line_no`, strictly additive, ADR-0041) | a work unit is admitted: `EnqueueWorkUnit`, or the slot-plan intake that plans `RELOCATE` units | **`order-management`** — its release-confirmation consumer (ADR 0043) reads only `reference` (the order id for order work) and `line_no` to confirm a released order line. Opt-in and off by default (`RELEASE_CONFIRMATION_MODE=kafka`), which the reference deployment does not set. `reference` is also published for transfer work (the demand id) and `RELOCATE` work (the plan id), and `line_no` only for order lines; each is omitted when unknown, and the analytics stream carries neither |
 | `workpool.PathCapacityChanged` | `{"path_id","cutoff_at","remaining_units","known"}` | `SampleBacklog` is called with `cutoffAt` set (`GET /paths/{pathId}/telemetry?cutoffAt=…`, ADR-0018) | **`order-management`** — its `kafkapathcapacity` adapter (own per-process consumer group, filters for this one event type) caches remaining capacity keyed by path and cutoff instant. Also **`network-fulfillment`** (`pathcapacitycache`), wired but unused: it starts only with `CAPABILITY_OFFER_ENABLED=true`, which the reference deployment does not set |
 
 ```json
@@ -84,7 +85,7 @@ cutoff **timestamp** rather than process-path-management's `cptId`.
 provisioned. See
 [ADR-0018](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md).
 
-The other nine domain events are also written to this topic by the
+The other eight domain events are also written to this topic by the
 outbound adapter, with small payloads (most carry only `path_id`), but
 nothing consumes them today — see [Domain Events](./domain-events). (Separately,
 with `EVENT_PUBLISHER=kafka` a second publisher writes every domain event,

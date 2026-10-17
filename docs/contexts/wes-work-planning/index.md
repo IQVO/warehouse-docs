@@ -68,8 +68,9 @@ justification.
   the `WorkPool` aggregate, with its state, invariants, corrective
   policies, commands, events, throughput and size.
 - [Domain Events](/contexts/wes-work-planning/domain-events): the eleven
-  past-tense domain events, including the two that siblings consume today
-  (`WorkReleased` and `PathCapacityChanged`), and the events this context
+  past-tense domain events, including the three that siblings consume today
+  (`WorkReleased`, `PathCapacityChanged` and, opt-in and off by default in
+  `order-management`, `WorkUnitCreated`), and the events this context
   consumes.
 - [Domain Message Flow](/contexts/wes-work-planning/domain-message-flow)
   ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):

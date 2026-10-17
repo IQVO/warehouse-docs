@@ -210,6 +210,8 @@ classDiagram
         <<DomainEvent>>
         +WorkUnitId string
         +PathId PathId
+        +Reference string
+        +LineNo int
     }
     class WorkReleased {
         <<DomainEvent>>
