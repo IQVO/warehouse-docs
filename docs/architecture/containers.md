@@ -12,15 +12,23 @@ A **container** here is C4's meaning of the word: a separately deployable or
 runnable unit, whether that is a Go process, a Postgres database or the
 broker. It is unrelated to Docker specifically.
 
-This site covers fifteen backend contexts. Thirteen of them, `inbound-receiving`
+This site covers sixteen backend contexts: fifteen domain contexts and
+`warehouse-ops-agent`. Thirteen of them, `inbound-receiving`
 included, ship **four Go binaries and two databases** each, plus a Module
 Federation frontend remote, because the analytical read side is a separate
 process family from the operational one. `warehouse-ops-agent` is one binary
-with no database. The newest, `slotting-optimization`, ships two binaries in
+with no database. `slotting-optimization` ships two binaries in
 one image, `cmd/api` (REST, four Kafka consumers and the outbox relay) and a
 read-only `cmd/mcp`, and one database, with no read side or remote yet. It is
 registered in the reference cluster's `warehouse-infra` `develop` (database,
-Kong route, ArgoCD application, `helm-values/slotting-optimization.yaml`). Binaries are listed from each repository's `cmd/` on
+Kong route, ArgoCD application, `helm-values/slotting-optimization.yaml`).
+The newest, `pick-face-replenishment`, is one binary, `cmd/api` (REST, three
+opt-in Kafka consumers and the outbox relay), with one Postgres schema (ten
+OLTP tables) and no MCP server, read side or remote. It is **built but not
+deployed**: `warehouse-infra` `develop` has no database, Kong route or ArgoCD
+application for it, and its repository has no Dockerfile or Helm chart. So it
+appears in the fleet table and the Kafka diagram below, and not in the
+deployed-workload diagrams or the database count. Binaries are listed from each repository's `cmd/` on
 `origin/develop`, and workloads from its Helm chart's `templates/`.
 
 ## The edge: two independent gateways
@@ -164,6 +172,7 @@ is a freshness lag, not real time, which is why every report has a
 | `network-inventory-planning` | `cmd/network-inventory-planning` | `cmd/mcp` | `cmd/nip-projector` | `cmd/nip-reports` | `nip_mfe` | 2 |
 | `inbound-receiving` | `cmd/api` | `cmd/mcp` | `cmd/inbound-projector` | `cmd/inbound-reports` | `inbound_mfe` | 2 |
 | `slotting-optimization` | `cmd/api` | `cmd/mcp` | none | none | none | 1 |
+| `pick-face-replenishment` | `cmd/api` | none | none | none | none | 1 (schema only: not deployed) |
 | `warehouse-ops-agent` | `cmd/agent` | in-process at `/mcp` | none | none | none | **0** |
 
 Per-context table counts are in [Data Models](/architecture/data-models),
@@ -209,8 +218,8 @@ promotion path in `warehouse-infra`.
 
 ## MCP servers
 
-Every persisting context runs a `cmd/mcp` binary that serves MCP over
-Streamable HTTP on `:8090`, and `warehouse-ops-agent` serves its own read-only
+Every deployed persisting context runs a `cmd/mcp` binary that serves MCP over
+Streamable HTTP on `:8090` (`pick-face-replenishment` has no MCP server), and `warehouse-ops-agent` serves its own read-only
 tools in-process at `/mcp`. Like REST, **MCP is unauthenticated
 fleet-wide**.
 
@@ -273,6 +282,7 @@ flowchart LR
     NIP[network-inventory-planning]
     IR[inbound-receiving]
     SO[slotting-optimization]
+    PFR[pick-face-replenishment]
 
     tOM(["warehouse.order-management.events"])
     tINV(["warehouse.inventory.events"])
@@ -288,6 +298,7 @@ flowchart LR
     tNIP(["warehouse.network-inventory-planning.events"])
     tIR(["warehouse.inbound-receiving.events"])
     tSO(["warehouse.slotting-optimization.events"])
+    tPFR(["warehouse.pick-face-replenishment.events"])
 
     OM --> tOM
     INV --> tINV
@@ -303,6 +314,7 @@ flowchart LR
     NIP --> tNIP
     IR --> tIR
     SO --> tSO
+    PFR --> tPFR
 
     tOM --> WWP
     tOM -.->|opt-in| WPL
@@ -345,16 +357,19 @@ flowchart LR
     tSO -->|"SlotPlanApproved"| WWP
     tFE -->|"TaskCompleted, opt-in"| INV
     tINV -->|"StockRelocated, opt-in"| SO
+    tINV -.->|"opt-in, BinStockLevelChanged not yet produced"| PFR
+    tSO -.->|"opt-in"| PFR
+    tFL -.->|"opt-in"| PFR
 ```
 
 | Topic | Producer | Integration types | Consumers |
 | --- | --- | ---: | --- |
 | `warehouse.order-management.events` | order-management | 4 | wes-work-planning (`OrderAllocated`, `OrderPartiallyAllocated`); warehouse-planning, opt-in; network-inventory-planning (`SiteSkuDemandChanged`), opt-in; slotting-optimization (`SiteSkuDemandChanged`, opt-in) |
-| `warehouse.inventory.events` | inventory-storage | 8 | wes-work-planning (`StockReserved`, `ReservationRevoked`); slotting-optimization (`StockRelocated`, opt-in: the plan execution progress); product-master's legacy importer (`ProductClassified`, emitted only by the one-shot backfill, migration only); `network-inventory-planning` (the two allocation replies and the two destination facts, opt-in) |
+| `warehouse.inventory.events` | inventory-storage | 8 | wes-work-planning (`StockReserved`, `ReservationRevoked`); slotting-optimization (`StockRelocated`, opt-in: the plan execution progress); pick-face-replenishment (`StockRelocated`, opt-in; its `REPLENISHMENT` reason is not produced yet, and `BinStockLevelChanged` is not published); product-master's legacy importer (`ProductClassified`, emitted only by the one-shot backfill, migration only); `network-inventory-planning` (the two allocation replies and the two destination facts, opt-in) |
 | `warehouse.work-planning.events` | wes-work-planning | 11 | fulfillment-execution (`WorkReleased`, including `RELOCATE` work); order-management and network-fulfillment (`PathCapacityChanged`) |
 | `warehouse.fulfillment.events` | fulfillment-execution | 6 | wes-work-planning and labor-performance (`TaskCompleted`); inventory-storage (`TaskCompleted`, opt-in: confirms picks and applies `RELOCATE` moves); order-management (`TaskCPTMissed`, `PackageManifested`); network-inventory-planning (the three transfer facts, opt-in) |
 | `warehouse.workforce.events` | workforce-management | 1 | wes-work-planning, warehouse-planning (`ShiftPlanCommitted`) |
-| `warehouse.facility.events` | facility-layout | 13 | inventory-storage, warehouse-planning, network-inventory-planning (`SiteCapabilityChanged`, opt-in), inbound-receiving (the two slot events, opt-in); slotting-optimization (zone and slot events, opt-in) |
+| `warehouse.facility.events` | facility-layout | 13 | inventory-storage, warehouse-planning, network-inventory-planning (`SiteCapabilityChanged`, opt-in), inbound-receiving (the two slot events, opt-in); slotting-optimization (zone and slot events, opt-in); pick-face-replenishment (`ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned`, opt-in) |
 | `warehouse.process-path-management.events` | process-path-management | 4 | fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment |
 | `warehouse.labor-performance.events` | labor-performance | 1 | workforce-management (`TaskPerformanceRecorded`) |
 | `warehouse.warehouse-planning.events` | warehouse-planning | 4 | order-management, opt-in; network-inventory-planning (`CapacityPlanPublished`), opt-in |
@@ -362,7 +377,8 @@ flowchart LR
 | `warehouse.network-inventory-planning.events` | network-inventory-planning | 3 | inventory-storage (`TransferAllocationRequested`, opt-in); wes-work-planning (`WorkDemandReleased`); `TransferPlanApproved` has no consumer |
 | `warehouse.product-master.events` | product-master | 5 | inventory-storage, order-management, wes-work-planning, fulfillment-execution (`ProductClassified`, into local copies); inbound-receiving (`ProductRegistered`, opt-in); slotting-optimization (`ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured`, opt-in) |
 | `warehouse.inbound-receiving.events` | inbound-receiving | 9 | inventory-storage (`ReceiptLineReceived`, opt-in, its ADR 0037) |
-| `warehouse.slotting-optimization.events` | slotting-optimization | 3 | wes-work-planning (`SlotPlanApproved`, plans one `RELOCATE` work unit per move, its ADR-0040); `SlotPlanGenerated` and `SlotPlanRejected` have no consumer |
+| `warehouse.slotting-optimization.events` | slotting-optimization | 3 | wes-work-planning (`SlotPlanApproved`, plans one `RELOCATE` work unit per move, its ADR-0040); pick-face-replenishment (`SlotPlanApproved`, opt-in); `SlotPlanGenerated` and `SlotPlanRejected` have no consumer |
+| `warehouse.pick-face-replenishment.events` | pick-face-replenishment | 3 | none yet: `ReplenishmentRequested` is intended for wes-work-planning (planned, not built); `ReplenishmentCompleted` and `ReplenishmentCancelled` have no consumer |
 
 The type counts are the messages each producer's `asyncapi.yaml` declares on
 its integration channel. Several consumers are themselves behind a mode
@@ -384,7 +400,10 @@ One per persisting context, consumed only by that context's own projector:
 `warehouse.network-inventory-planning.analytics` and
 `warehouse.inbound-receiving.analytics`. `slotting-optimization` has no
 analytics topic yet (`warehouse.slotting-optimization.analytics` is reserved
-by its ADR 0004).
+by its ADR 0004). `pick-face-replenishment` publishes
+`warehouse.pick-face-replenishment.analytics` (its three request events plus
+the analytics-only `ReplenishmentPolicyDeclared`), but has no projector, so
+nothing reads it yet.
 
 ## What this diagram does not show
 
