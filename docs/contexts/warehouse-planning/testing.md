@@ -90,6 +90,8 @@ test on every push and PR.
 | `TestNoEventEnvelopeToggleOrFlatEnvelope`, `TestCloudEventsOnly` | CloudEvents 1.0 is the only envelope; no envelope toggle; kafka-go users must build envelopes with the CloudEvents SDK |
 | `TestReplayConsumersSetCommitInterval` | a full-replay cache consumer (unique group) must set its commit interval |
 | `TestKafkaWritersSetRequiredAcks`, `TestKafkaWriterAcksSensorBites` | every kafka-go `Writer{...}` literal in a non-test file under `internal/` or `cmd/` sets `RequiredAcks` (kafka-go defaults to `RequireNone`, acks=0, which silently drops messages on a broker blip); the sensor is proven to fail |
+| `TestDeadLetterCallsGuardCancellation` (+ `TestDeadLetterShutdownSensorBites`, `kafka_dlq_shutdown_fitness_test.go`) | Every function in a non-test file under `internal/adapters/inbound/kafka` that sends to the dead-letter topic must reference `ctx.Err()` (any context-named value) or `context.Canceled` in its own body, or carry a `//dlq:deterministic <reason>` comment on the call line or the line above it. A handler that fails because the process is stopping must not dead-letter a good message and commit past it (network-fulfillment #89); a guard in the caller does not count. The sensor test proves the detector flags the pre-fix shape. |
+| `TestKafkaWriterTopicNotSetTwice` (+ `TestKafkaWriterTopicSensorBites`, `kafka_writer_topic_fitness_test.go`) | kafka-go rejects every write whose `Message.Topic` is set when the `Writer` also has a `Topic`. Per Go package under `internal/` and `cmd/`: once any kafka-go `Message` literal sets `Topic`, every `Writer` literal in that package must leave `Topic` empty, unless it carries `//kafka:fixed-topic-writer <reason>` and no Topic-setting Message is provably written through it. Writers configured after construction and `WriterConfig` are not covered. (Escape: warehouse-planning's domain DLQ writer, where no dead letter ever landed.) |
 | `TestEventCatalogueMatchesContract`, `TestEventCatalogueDetector` | every type this service declares in `apis/asyncapi.yaml` appears in the CloudEvents catalogue ADR (`docs/adr/0006-...`); the detector is itself tested |
 | `TestOutboxRelaysPassAttemptCap`, `TestOutboxRelayCapSensorFailsOnBadFixtures` | every non-test file under `cmd/` that builds an outbox relay passes `WithMaxAttempts` ([ADR 0013](https://iqvo.github.io/warehouse-planning/docs/adr/0013-outbox-relay-attempt-cap)); the sensor is proven to fail |
 | `TestMCPOptionalToolInputsCarryOmitempty`, `TestMCPOptionalToolInputsSensorFailsOnBadFixtures` | an MCP tool input whose `jsonschema` description says optional/omitted carries `omitempty` (else the SDK marks it required); the sensor is proven to fail |
@@ -99,7 +101,7 @@ budget (`maxTools` = 11).
 
 ### Coverage and mutation gates
 
-- **Coverage**: `make coverage` and the CI `test` job run `go test ./... -race -coverprofile=coverage.out -coverpkg=./internal/domain/...,./internal/application/...,./internal/analytics/...` and fail below **90 %**.
+- **Coverage**: `make coverage` (which the CI `test` job runs; the Makefile is the single source of the scope and threshold, gap 16d, and harness `repo_lint` rule R11 forbids a workflow passing `-coverpkg` itself) runs `go test ./... -race -coverprofile=coverage.out -coverpkg=./internal/domain/...,./internal/application/...,./internal/analytics/...` and fails below **90 %**.
 - **Mutation** (`.gremlins.yaml`, gremlins v0.6.0): `workers: 1`, `timeout-coefficient: 30`, thresholds **efficacy 99** and **mutant-coverage 99** (gremlins fails when the value is ≤ the threshold, so any surviving mutant fails). `make mutation-fast` and the `mutation-fast` job run one `gremlins unleash` per package: `./internal/domain/processcapacity`, `./internal/domain/capacityplan`, `./internal/domain/processpath`, `./internal/domain/demand`, `./internal/analytics/report`. `make mutation-full` and the scheduled `mutation` job run `./internal/domain` as a whole. The last recorded measurement (comments in `.gremlins.yaml`) is 100 % efficacy and coverage in every package.
 
 ## Make targets
@@ -133,7 +135,7 @@ Triggers: push and pull request on `main` and `develop`, a weekly schedule
 | `lint` | golangci-lint v2.14.0 | every push/PR |
 | `guide-lint` | `guide_lint.py`, `repo_lint.py`, `test_hook.py`, `test_repo_lint.py` | every push/PR |
 | `complexity` | golangci-lint with only `gocyclo`, `gocognit`, `cyclop`, `funlen`, `nestif` (cyclomatic 15, cognitive 20, nesting 5, 80 lines / 50 statements) plus an informational gocyclo > 10 report | every push/PR |
-| `test` | build, vet, race tests with coverage, the 90 % gate | every push/PR |
+| `test` | build, vet, then `make coverage` (race tests with the Makefile's coverage scope and 90 % gate) | every push/PR |
 | `bdd` | `go test ./... -run TestFeatures -v` | every push/PR |
 | `integration` | `go test -tags=integration ./... -race -count=1` on the runner's Docker | every push/PR |
 | `mutation-fast` | gremlins on the five packages | every push/PR |

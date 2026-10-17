@@ -40,11 +40,15 @@ package run through `main_integration_test.go`:
 - `internal/adapters/outbound/postgres`: repositories, the claim
   compare-and-set race, the consolidation race, the outbox and relay, pool
   limits and `statement_timeout`, rehydration validation, source order and
-  line number, transfer details.
+  line number, transfer details, the RELOCATE move and its executed result
+  (`task_relocation_integration_test.go`, migration 0019).
 - `internal/adapters/inbound/http`: the `Idempotency-Key` middleware against
   a real transaction.
 - `internal/adapters/inbound/kafka`: the DLQ, the `ProductClassified`
-  consumer, `line_no` bounds, transfer facts end to end (Kafka + Postgres).
+  consumer, `line_no` bounds, transfer facts end to end (Kafka + Postgres),
+  and a RELOCATE release completed into a `TaskCompleted` with the
+  relocation fields end to end (`relocation_integration_test.go`,
+  ADR-0047).
 - `internal/adapters/outbound/kafka`: hash partitioning by aggregate key and
   CloudEvents on the wire.
 - `internal/adapters/outbound/kafkacatalog`: catalogue replay against a real
@@ -139,6 +143,8 @@ The thresholds live in `.gremlins.yaml` (`threshold.efficacy: 90.0`,
 | `TestMCPOptionalToolInputsCarryOmitempty`, `TestMCPOptionalToolInputsSensorFailsOnBadFixtures` | an MCP tool input field whose `jsonschema` description says "optional" carries `omitempty`, or the SDK marks it required (gap fix D16; the twin proves the sensor fails on a bad fixture) |
 | `TestOutboxRelaysPassAttemptCap`, `TestOutboxRelayCapSensorFailsOnBadFixtures` | every `NewOutboxRelay` call under `cmd/` or `internal/composition/` passes `WithMaxAttempts` ([ADR-0042](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0042-outbox-relay-attempt-cap.md), gap fix D12) |
 | `TestKafkaWritersSetRequiredAcks`, `TestKafkaWriterAcksSensorBites` | Every kafka-go `Writer` composite literal in a non-test file under `internal/` or `cmd/` sets `RequiredAcks` (the import alias is resolved per file). kafka-go defaults it to `RequireNone` (acks=0): the broker never confirms the write, so a broker blip silently drops the message while `WriteMessages` returns nil. The twin proves the sensor flags a bad fixture under any alias. |
+| `TestDeadLetterCallsGuardCancellation` (+ `TestDeadLetterShutdownSensorBites`, `kafka_dlq_shutdown_fitness_test.go`) | Every function in a non-test file under `internal/adapters/inbound/kafka` that sends to the dead-letter topic must reference `ctx.Err()` (any context-named value) or `context.Canceled` in its own body, or carry a `//dlq:deterministic <reason>` comment on the call line or the line above it. A handler that fails because the process is stopping must not dead-letter a good message and commit past it (network-fulfillment #89); a guard in the caller does not count. The sensor test proves the detector flags the pre-fix shape. |
+| `TestKafkaWriterTopicNotSetTwice` (+ `TestKafkaWriterTopicSensorBites`, `kafka_writer_topic_fitness_test.go`) | kafka-go rejects every write whose `Message.Topic` is set when the `Writer` also has a `Topic`. Per Go package under `internal/` and `cmd/`: once any kafka-go `Message` literal sets `Topic`, every `Writer` literal in that package must leave `Topic` empty, unless it carries `//kafka:fixed-topic-writer <reason>` and no Topic-setting Message is provably written through it. Writers configured after construction and `WriterConfig` are not covered. (Escape: warehouse-planning's domain DLQ writer, where no dead letter ever landed.) |
 
 Gap-fix wave (2026-10-12) tests outside `internal/architecture`:
 
@@ -176,7 +182,7 @@ Triggers: push and pull request to `main` and `develop`, a weekly schedule
 | `lint` | golangci-lint v2.13.1 | every push/PR |
 | `guide-lint` | `scripts/harness/guide_lint.py`, `repo_lint.py`, `test_hook.py`, `test_repo_lint.py` | every push/PR |
 | `complexity` | golangci-lint with only `gocyclo,gocognit,cyclop,funlen,nestif`, plus an informational gocyclo report | every push/PR |
-| `test` | build, vet, `go test ./... -race` with coverage, the 90% gate | every push/PR |
+| `test` | build, vet, then `make coverage` (`go test ./... -race` with the Makefile's coverage scope and 90% gate) | every push/PR |
 | `bdd` | `go test ./... -run TestFeatures -v` | every push/PR |
 | `contract` | `scripts/contract-test.sh` with Schemathesis 4.28.0 | every push/PR |
 | `evals-tests` | MCP evals (`^TestEval` and `^TestMCPEvalSuite`) | every push/PR |

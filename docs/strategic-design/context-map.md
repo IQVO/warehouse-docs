@@ -16,10 +16,17 @@ consumers are merged and run in the reference deployment (K20, deployed
 2026-10-08, are the fourth and fifth `wms` contexts, and both are built.
 `inbound-receiving` runs in the reference deployment: its local copies, the
 `ReceiptLineReceived` handover to `inventory-storage` and the agent's MCP
-client are live (K22 to K24, A13). `slotting-optimization` is built on its
-`develop` but not deployed, so its three local-copy edges are
-**wired-but-unused** (K25 to K27). The two edges that need a consumer-side
-ADR first (K28, K29) stay **absent-planned**.
+client are live (K22 to K24, A13). `slotting-optimization` is registered in
+`warehouse-infra` `develop` (values file, Kong route, ArgoCD application), so
+its three local-copy edges are **live** (K25 to K27). Its slot-plan execution
+chain is built in the five contexts it touches (`slotting-optimization`,
+`process-path-management`, `wes-work-planning`, `fulfillment-execution`,
+`inventory-storage`) and wired in `warehouse-infra`, so it is **live** too:
+`SlotPlanApproved` to `wes-work-planning` (K29), the RELOCATE `TaskCompleted`
+from `fulfillment-execution` to `inventory-storage` (K37) and `StockRelocated`
+back to `slotting-optimization` (K38). Of the two edges that needed a
+consumer-side ADR first, K28 (`inbound-receiving` to `warehouse-planning`)
+stays **absent-planned**.
 `network-inventory-planning` (NIP), the newest context with code behind it,
 plans and orchestrates inter-warehouse transfers; its edges are K30 to K36 and
 A15 below. Each context's repository has its own context map, synced to this
@@ -123,7 +130,7 @@ flowchart LR
     PPM ==>|"Kafka ProcessPath events"| WP
     PPM ==>|"Kafka ProcessPath events"| WFM
     PPM ==>|"Kafka ProcessPath events,<br/>CPTScheduleChanged"| OM
-    WP ==>|"Kafka WorkReleased"| FE
+    WP ==>|"Kafka WorkReleased,<br/>incl. RELOCATE work"| FE
     WP ==>|"Kafka PathCapacityChanged"| OM
     FE ==>|"Kafka TaskCompleted"| WP
     FE ==>|"Kafka TaskCompleted"| LP
@@ -174,21 +181,24 @@ flowchart LR
     %% inbound-receiving and slotting-optimization (decided 2026-10-08, both
     %% built). inbound-receiving runs in the reference deployment in kafka mode
     %% (helm-values/inbound-receiving.yaml), and inventory-storage sets its
-    %% inbound-receipt consumer group, so K22 to K24 are thick. The SLOT local
-    %% copies (K25 to K27) stay dotted until warehouse-infra deploys
-    %% slotting-optimization in kafka mode. The two "not built" edges stay dotted
-    %% until a later ADR in the consumer builds them: INB -> WPL needs an inbound
-    %% process path in warehouse-planning, SLOT -> WP needs a MOVE/REPLENISH task
-    %% type (process-path-management, wes-work-planning, fulfillment-execution).
+    %% inbound-receipt consumer group, so K22 to K24 are thick. slotting-
+    %% optimization is registered in warehouse-infra develop with all four
+    %% consumer modes on (helm-values/slotting-optimization.yaml), so K25 to K27
+    %% and the execution chain are thick: SLOT -> WP (SlotPlanApproved, K29),
+    %% FE -> INV (TaskCompleted RELOCATE, K37) and INV -> SLOT (StockRelocated,
+    %% K38, the WP -> FE hop is the WorkReleased edge above). Only INB -> WPL
+    %% stays dotted: it needs an inbound process path in warehouse-planning.
     PM ==>|"Kafka ProductRegistered,<br/>local copy"| INB
     FL ==>|"Kafka LocationSlot events,<br/>local copy"| INB
     INB ==>|"Kafka ReceiptLineReceived,<br/>handover"| INV
     INB -->|"MCP list_asns, list_appointments,<br/>list_receipts"| OA
-    PM -.->|"Kafka ProductClassified, ProductDimensionsDeclared,<br/>ProductMeasured, built, not deployed"| SLOT
-    FL -.->|"Kafka ZoneRegistered,<br/>LocationSlot events, built, not deployed"| SLOT
-    OM -.->|"Kafka SiteSkuDemandChanged,<br/>built, not deployed"| SLOT
+    PM ==>|"Kafka ProductClassified, ProductDimensionsDeclared,<br/>ProductMeasured"| SLOT
+    FL ==>|"Kafka ZoneRegistered,<br/>LocationSlot events"| SLOT
+    OM ==>|"Kafka SiteSkuDemandChanged"| SLOT
     INB -.->|"Kafka DockAppointmentBooked,<br/>planned, not built"| WPL
-    SLOT -.->|"Kafka SlotPlanApproved,<br/>MOVE work, planned, not built"| WP
+    SLOT ==>|"Kafka SlotPlanApproved,<br/>one RELOCATE work unit per move"| WP
+    FE ==>|"Kafka TaskCompleted,<br/>PICK confirm-pick and RELOCATE"| INV
+    INV ==>|"Kafka StockRelocated,<br/>execution progress"| SLOT
 
     %% network-inventory-planning (ADRs 0002, 0003, 0005, 0008, 0010). Edges are
     %% configured in warehouse-infra develop (terraform/network-inventory-planning.tf,
@@ -222,9 +232,10 @@ The four thick `product-master` edges are K20; the dotted
 import (K21). The thin `product-master` → `warehouse-ops-agent` edge is A12.
 The seven thick `network-inventory-planning` edges are K30 to K36; the thin
 one to the agent is A15. The three thick `inbound-receiving` edges are K22
-to K24 and its thin one to the agent is A13. The three dotted edges into
-`slotting-optimization` (K25 to K27) are wired-but-unused (built, not
-deployed), and K28 and K29 are planned with no build behind them.
+to K24 and its thin one to the agent is A13. The three thick edges into
+`slotting-optimization` are K25 to K27 and its execution chain is the thick
+K29, K37 and K38 (the `wes-work-planning` → `fulfillment-execution` hop is
+K11). Only K28 is planned with no build behind it.
 The crossed edge is deliberately absent. `order-management` is coloured with
 the Supporting contexts because it is classified Generic/Supporting (see
 [Subdomain Classification](/strategic-design/subdomain-classification)).
@@ -257,7 +268,7 @@ Omitted from the diagram:
 | K8 | `process-path-management` → `fulfillment-execution`, `wes-work-planning`, `workforce-management` | OHS + PL / CF | `warehouse.process-path-management.events`: `ProcessPathCreated`, `ProcessPathUpdated`, `ProcessPathDeactivated` | **live**. Each consumer's binary default is a YAML file (`PATH_CATALOGUE_SOURCE=file`), and the reference deployment injects `PATH_CATALOGUE_SOURCE=kafka` (`deploy_process_path_kafka_source`, default `true`) | [PPM](/contexts/process-path-management/context-map), [FE](/contexts/fulfillment-execution/context-map), [WP](/contexts/wes-work-planning/context-map), [WFM](/contexts/workforce-management/context-map) |
 | K9 | `process-path-management` → `order-management` | OHS + PL / ACL (local read model) | same topic: the three `processpath.*` types plus `CPTScheduleChanged` | **live** with `PATH_CATALOGUE_SOURCE=kafka` (`deploy_order_management_path_catalogue_kafka`, default `true`) | [PPM](/contexts/process-path-management/context-map), [OM](/contexts/order-management/context-map) |
 | K10 | `process-path-management` → `network-fulfillment` | OHS + PL / CF | same topic: `processpath.*` plus `CPTScheduleChanged`, read into the `processpathcache` | **wired-but-unused**. Started only when `CAPABILITY_OFFER_ENABLED=true`, which the reference deployment does not set | [PPM](/contexts/process-path-management/context-map), [NF](/contexts/network-fulfillment/context-map) |
-| K11 | `wes-work-planning` → `fulfillment-execution` | C/S; OHS + PL / ACL | `warehouse.work-planning.events`: `WorkReleased` | **live** | [WP](/contexts/wes-work-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
+| K11 | `wes-work-planning` → `fulfillment-execution` | C/S; OHS + PL / ACL | `warehouse.work-planning.events`: `WorkReleased`, and for slot-plan moves (K29) the same type with the additive `relocation` object on the `RELOCATE` path (fulfillment-execution ADR 0047) | **live** | [WP](/contexts/wes-work-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
 | K12 | `wes-work-planning` → `order-management` | C/S; OHS + PL / ACL | `warehouse.work-planning.events`: `PathCapacityChanged` | **live** | [WP](/contexts/wes-work-planning/context-map), [OM](/contexts/order-management/context-map) |
 | K13 | `wes-work-planning` → `network-fulfillment` | OHS + PL / CF | `warehouse.work-planning.events`: `PathCapacityChanged` | **wired-but-unused**, behind the same `CAPABILITY_OFFER_ENABLED` gate as K10 | [WP](/contexts/wes-work-planning/context-map), [NF](/contexts/network-fulfillment/context-map) |
 | K14 | `fulfillment-execution` → `wes-work-planning` | C/S feedback edge; OHS + PL / CF per FE, ACL per WP | `warehouse.fulfillment.events`: `TaskCompleted` | **live**. This edge closes the release/complete control loop | [FE](/contexts/fulfillment-execution/context-map), [WP](/contexts/wes-work-planning/context-map) |
@@ -271,18 +282,20 @@ Omitted from the diagram:
 | K22 | `product-master` → `inbound-receiving` | PL / local copy (one row per SKU: existence check for ASN lines) | `warehouse.product-master.events`: `ProductRegistered` | **live**. Consumer mode defaults to `permissive`; the reference deployment sets `PRODUCT_MODE=kafka` (group `inbound-receiving-product`, `helm-values/inbound-receiving.yaml`) | [inbound-receiving](/contexts/inbound-receiving/context-map) |
 | K23 | `facility-layout` → `inbound-receiving` | OHS + PL / ACL (local copy of dock doors) | `warehouse.facility.events`: `LocationSlotRegistered`, `LocationSlotDecommissioned` | **live**. `DOCK_DOOR_MODE=kafka` (group `inbound-receiving-dock-doors`) in the reference deployment; only `role=Dock` slots with an inbound `dockFlow` are kept | [inbound-receiving](/contexts/inbound-receiving/context-map) |
 | K24 | `inbound-receiving` → `inventory-storage` | PL; the receiving handover. inventory-storage is the Conformist and runs its existing `ReceiveStock` use case for condition `Good` | `warehouse.inbound-receiving.events`: `receipt.ReceiptLineReceived` | **live**. inventory-storage ADR 0037; the reference deployment sets `INBOUND_RECEIPT_CONSUMER_GROUP` (`inventory-storage-inbound-receipts`, `helm-values/inventory-storage.yaml`). No synchronous call in either direction. Damaged units are not booked as stock in v1 | [inbound-receiving](/contexts/inbound-receiving/context-map), [INV](/contexts/inventory-storage/context-map) |
-| K25 | `product-master` → `slotting-optimization` | PL / local copy (classification and effective physical profile per SKU) | `warehouse.product-master.events`: `ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured` | **wired-but-unused**. Built (`PRODUCT_MODE=kafka`, group `PRODUCT_CONSUMER_GROUP`, applied only when `version` is newer), but `warehouse-infra` does not deploy `slotting-optimization` yet | [slotting-optimization](/contexts/slotting-optimization/context-map) |
-| K26 | `facility-layout` → `slotting-optimization` | OHS + PL / ACL (local copy of zones and slots) | `warehouse.facility.events`: `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | **wired-but-unused**. Built (`LAYOUT_MODE=kafka`, group `LAYOUT_CONSUMER_GROUP`), not deployed. slotting-optimization's own map names this edge Conformist | [slotting-optimization](/contexts/slotting-optimization/context-map) |
-| K27 | `order-management` → `slotting-optimization` | PL / ACL (pick velocity from the demand feed) | `warehouse.order-management.events`: `siteskudemand.SiteSkuDemandChanged` | **wired-but-unused**. Built (`DEMAND_MODE=kafka`, group `DEMAND_CONSUMER_GROUP`, last writer wins per order line), not deployed. slotting-optimization's own map names this edge Conformist | [slotting-optimization](/contexts/slotting-optimization/context-map) |
+| K25 | `product-master` → `slotting-optimization` | PL / local copy (classification and effective physical profile per SKU) | `warehouse.product-master.events`: `ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured` | **live**. `PRODUCT_MODE=kafka`, group `slotting-optimization-product` (`helm-values/slotting-optimization.yaml`), applied only when `version` is newer. This also makes the physical-profile types consumed (hotspot H34) | [slotting-optimization](/contexts/slotting-optimization/context-map) |
+| K26 | `facility-layout` → `slotting-optimization` | OHS + PL / ACL (local copy of zones and slots) | `warehouse.facility.events`: `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | **live**. `LAYOUT_MODE=kafka`, group `slotting-optimization-layout`. slotting-optimization's own map names this edge Conformist | [slotting-optimization](/contexts/slotting-optimization/context-map) |
+| K27 | `order-management` → `slotting-optimization` | PL / ACL (pick velocity from the demand feed) | `warehouse.order-management.events`: `siteskudemand.SiteSkuDemandChanged` | **live**. `DEMAND_MODE=kafka`, group `slotting-optimization-demand`, last writer wins per order line. slotting-optimization's own map names this edge Conformist | [slotting-optimization](/contexts/slotting-optimization/context-map) |
 | K28 | `inbound-receiving` → `warehouse-planning` | PL, inbound-labor demand | `warehouse.inbound-receiving.events`: `dockappointment.DockAppointmentBooked` | **absent-planned, not built**. `warehouse-planning`'s `CapacityPlan` has no inbound process path; adding one is a separate ADR there. Nothing consumes the event today | [inbound-receiving](/contexts/inbound-receiving/context-map) |
-| K29 | `slotting-optimization` → `wes-work-planning` | PL, MOVE work execution | `warehouse.slotting-optimization.events`: `slotplan.SlotPlanApproved` (carries the full forward-pick map and the moves, so a consumer needs no lookup) | **absent-planned, not built**. MOVE and REPLENISH work through the `process-path-management` catalogue, `wes-work-planning` and `fulfillment-execution` is its own ADR-gated phase. Nothing consumes the event today | [slotting-optimization](/contexts/slotting-optimization/context-map) |
+| K29 | `slotting-optimization` → `wes-work-planning` | PL / ACL (unexported structs in the consumer hold the foreign shape), RELOCATE work execution | `warehouse.slotting-optimization.events`: `slotplan.SlotPlanApproved` (carries the full forward-pick map and the moves, so a consumer needs no lookup) | **live**. wes-work-planning ADR 0040: its inbound consumer reads the topic whenever `KAFKA_BROKERS` is set (`kafka.enabled` in `helm-values/wes-work-planning.yaml`), under its existing group, and plans one `RELOCATE` work unit per move (sequenced, superseded by a newer plan, CPT = approval time + `RELOCATION_CPT_HORIZON`, default 24 h). slotting-optimization publishes with `EVENT_PUBLISHER=kafka`. The `RELOCATE` process path (process-path-management ADR 0033, intake `SLOT_RELOCATION`, ADR 0034) must be seeded first (`warehouse-infra` post-deploy step 1), or the plan is retried and dead-lettered to `warehouse.slotting-optimization.events.dlq`. Slotting ADR 0010 decides it and supersedes ADR 0007 | [slotting-optimization](/contexts/slotting-optimization/context-map), [WP](/contexts/wes-work-planning/context-map) |
 | K30 | `facility-layout` → `network-inventory-planning` | OHS + PL / ACL (a last-writer-wins `site_capability` row) | `warehouse.facility.events`: `SiteCapabilityChanged` | **live**. Opt-in (`SITE_CAPABILITY_CONSUMER_GROUP`, NIP ADR 0002), and the reference deployment sets it (`terraform/network-inventory-planning.tf`). `facility-layout`'s own code names no consumer | [NIP](/contexts/network-inventory-planning/context-map) |
 | K31 | `order-management` → `network-inventory-planning` | OHS + PL / ACL (a `site_sku_demand` row per order line, `REMOVED` tombstones it) | `warehouse.order-management.events`: `SiteSkuDemandChanged` | **live**. Opt-in (`SITE_SKU_DEMAND_CONSUMER_GROUP`), set in the reference deployment. `order-management`'s own code names no consumer | [NIP](/contexts/network-inventory-planning/context-map) |
 | K32 | `warehouse-planning` → `network-inventory-planning` | OHS + PL / ACL (a `published_capacity_plan` row per plan, legacy events without the additive `site_id` excluded) | `warehouse.warehouse-planning.events`: `CapacityPlanPublished` | **live**. Opt-in (`CAPACITY_PLAN_CONSUMER_GROUP`), set in the reference deployment | [NIP](/contexts/network-inventory-planning/context-map), [WPL](/contexts/warehouse-planning/context-map) |
 | K33 | `network-inventory-planning` → `inventory-storage` | C/S: the command carries exactly the five fields inventory-storage's consumer defines | `warehouse.network-inventory-planning.events`: `TransferAllocationRequested`, key `transfer_line_id` | **live**. Consumer opt-in (`TRANSFER_ALLOCATION_CONSUMER_MODE=kafka`, default `off`), set in `helm-values/inventory-storage.yaml`; INV ADR 0030 | [NIP](/contexts/network-inventory-planning/context-map), [INV](/contexts/inventory-storage/context-map) |
 | K34 | `inventory-storage` → `network-inventory-planning` | OHS + PL / ACL (closed rejection vocabulary, hand-mirrored payloads) | `warehouse.inventory.events`: `TransferStockAllocated`, `TransferStockAllocationRejected`, `TransferReceiptStaged`, `TransferStockStowed` | **live**. Opt-in (`TRANSFER_REPLY_CONSUMER_GROUP`), set in the reference deployment. Drives `ALLOCATING` to `ALLOCATED` or `UNFULFILLABLE`, then `ARRIVED` and `RECEIVED` | [NIP](/contexts/network-inventory-planning/context-map), [INV](/contexts/inventory-storage/context-map) |
-| K35 | `network-inventory-planning` → `wes-work-planning` | C/S: the payload mirrors WES's consumed contract | `warehouse.network-inventory-planning.events`: `WorkDemandReleased` (pick and dispatch legs) | **live** on the consumer side: the fifth topic of `wes-work-planning`'s always-on consumer, with a `.dlq` per topic (WP ADR 0033). The pick path is `pick`; the dispatch path `transfer-dispatch` is **not seeded** and must be created in `process-path-management` first (comment in `terraform/network-inventory-planning.tf`), so until then a dispatch demand is dead-lettered | [NIP](/contexts/network-inventory-planning/context-map), [WP](/contexts/wes-work-planning/context-map) |
+| K35 | `network-inventory-planning` → `wes-work-planning` | C/S: the payload mirrors WES's consumed contract | `warehouse.network-inventory-planning.events`: `WorkDemandReleased` (pick and dispatch legs) | **live** on the consumer side: the fifth topic of `wes-work-planning`'s always-on consumer (K29 is the sixth), with a `.dlq` per topic (WP ADR 0033). The pick path is `pick`; the dispatch path `transfer-dispatch` is **not seeded** and must be created in `process-path-management` first (comment in `terraform/network-inventory-planning.tf`), so until then a dispatch demand is dead-lettered | [NIP](/contexts/network-inventory-planning/context-map), [WP](/contexts/wes-work-planning/context-map) |
 | K36 | `fulfillment-execution` → `network-inventory-planning` | OHS + PL / ACL (hand-mirrored `TransferFactData`) | `warehouse.fulfillment.events`: `TransferPicked`, `TransferDispatched`, `TransferArrived` (reserved, scan-driven receiving can bypass it) | **live**. Opt-in (`TRANSFER_FACT_CONSUMER_GROUP`), set in the reference deployment | [NIP](/contexts/network-inventory-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
+| K37 | `fulfillment-execution` → `inventory-storage` | OHS + PL / CF | `warehouse.fulfillment.events`: `TaskCompleted`. A `PICK` completion confirms the picked line's reservation (INV ADR 0035 and 0036). A `RELOCATE` completion carries the additive `sku`, `from_bin`, `to_bin`, `quantity` and `relocation_ref` (`<plan_id>:<move_seq>`, FE ADR 0047) and runs `RelocateStock`, the same use case as `POST /relocations` (INV ADR 0039) | **live**. Opt-in (`TASK_COMPLETED_CONSUMER_MODE`, default `off`), set to `kafka` in `helm-values/inventory-storage.yaml` (`taskCompletedConsumerMode`, group `inventory-storage-confirm-pick`). Poison messages go to `warehouse.fulfillment.events.dlq`. Without the mode, completed slot-plan moves never reach the stock ledger | [FE](/contexts/fulfillment-execution/context-map), [INV](/contexts/inventory-storage/context-map) |
+| K38 | `inventory-storage` → `slotting-optimization` | OHS + PL / CF (execution-progress read model) | `warehouse.inventory.events`: `stock.StockRelocated` (raised by `POST /relocations` and by K37) | **live**. `RELOCATION_MODE=kafka`, group `slotting-optimization-relocation` (`helm-values/slotting-optimization.yaml`). A relocation is matched to a plan's move by `source_ref` = `<plan_id>:<move_seq>` (else by site, SKU and bins on the current Approved plan) and recorded once per `relocation_id`; unmatched ones are counted, never dead-lettered. Shown as `execution` on `GET /slot-plans/{planId}` (slotting ADR 0010, INV ADR 0039) | [INV](/contexts/inventory-storage/context-map), [slotting-optimization](/contexts/slotting-optimization/context-map) |
 
 Published types with no consumer, as stated by their owners:
 
@@ -295,20 +308,21 @@ Published types with no consumer, as stated by their owners:
 - `ProductRegistered`, `ProductDescriptionChanged`,
   `ProductDimensionsDeclared` and `ProductMeasured` on
   `warehouse.product-master.events` have no live consumer except
-  `ProductRegistered` (K22, live). The two physical-profile types have a built
-  but undeployed consumer (K25), and `ProductDescriptionChanged` has none;
+  `ProductRegistered` (K22, live). The two physical-profile types are
+  consumed by `slotting-optimization` (K25, live), and
+  `ProductDescriptionChanged` has none;
 - every `warehouse.inbound-receiving.events` type except
   `ReceiptLineReceived` (K24, live) and `DockAppointmentBooked` (K28,
   planned, not built): `ASNRegistered`, `ASNCancelled`,
   `DockAppointmentCheckedIn`, `DockAppointmentCancelled`,
   `DockAppointmentCompleted`, `ReceiptOpened` and `ReceiptClosed`;
-- all three `warehouse.slotting-optimization.events` types:
-  `SlotPlanGenerated`, `SlotPlanRejected`, and `SlotPlanApproved`, whose
-  planned consumer (K29) is not built.
+- two of the three `warehouse.slotting-optimization.events` types:
+  `SlotPlanGenerated` and `SlotPlanRejected`. `SlotPlanApproved` is consumed
+  by `wes-work-planning` (K29, live).
 
-No other context consumes `inbound-receiving` or `slotting-optimization`
-events (**not consumed yet**), apart from K24. K28 and K29 are planned and not
-built. `inbound-receiving`'s analytics stream
+No other context consumes `inbound-receiving` events (**not consumed yet**),
+apart from K24, and none other consumes `slotting-optimization` events, apart
+from K29. K28 is planned and not built. `inbound-receiving`'s analytics stream
 (`warehouse.inbound-receiving.analytics`) is read only by its own projector.
 
 `product-master` also serves REST, a read-only MCP server (its ADR 0005)
@@ -356,7 +370,7 @@ methods its use cases call on `develop`.
 | A11 | `warehouse-ops-agent` → `warehouse-console` | C/S: the agent is the BFF Supplier | — | `/console/orders/{id}/lifecycle`, `/console/reports/wms`, `/console/reports/wes`, `/daily-brief` | **live** |
 | A12 | `product-master` | `list_products` (the `find_master_data_gaps` tool and `GET /master-data-gaps`, OA ADR 0020) | `get_product`, `get_product_classification`, `get_physical_profile` | — | **live** (`PRODUCT_MASTER_MCP_ENDPOINT`, set in the reference deployment by `terraform/ops-agent.tf`) |
 | A13 | `inbound-receiving` | `list_asns`, `list_appointments`, `list_receipts` (the inbound-outlook use case, OA ADR 0021) | `get_asn`, `get_appointment`, `get_receipt`, `list_docks` | — | **live** (`INBOUND_RECEIVING_MCP_ENDPOINT`, set in the reference deployment by `terraform/ops-agent.tf` when MCP servers are deployed; the context's `cmd/mcp`, its ADR 0005) |
-| A14 | `slotting-optimization` | — | — | — | **absent-planned, not built**. The context has no MCP server (no `cmd/mcp`; MCP read tools are a later phase in its ADR 0001) and the agent has no client |
+| A14 | `slotting-optimization` | — | — | — | **absent-planned**. The context ships a read-only `cmd/mcp` (its ADR 0005: `get_slot_plan` with `execution`, `list_slot_plans`, `get_forward_slots`, `get_sku_velocity`) and `terraform/mcp.tf` lists it in `mcp_services`, but `warehouse-ops-agent` has no client for it |
 | A15 | `network-inventory-planning` | `get_transfer`, `find_stuck_transfers`, `simulate_transfer_options` (the transfer-watch use case, OA ADR 0019; the client port also exposes `list_transfers`) | — | — | **live** (`NETWORK_INVENTORY_PLANNING_MCP_ENDPOINT`, set in the reference deployment by `terraform/ops-agent.tf` when MCP servers are deployed) |
 
 The Order Lifecycle screen fans out to four contexts' OLTP APIs: OM, INV, WP
@@ -379,8 +393,11 @@ The context maps declare these pairs as having no relationship, by decision:
 - **`inventory-storage` ↔ `workforce-management`.** Worker identity must
   never leak into the stock system of record. `inventory-storage` also has no
   relationship with `process-path-management`, `labor-performance` or
-  `warehouse-planning`, and it does not consume `warehouse.fulfillment.events`.
-  Its `POST /reservations/{id}/confirm-pick` has no sibling caller.
+  `warehouse-planning`. It consumes `warehouse.fulfillment.events` for
+  `TaskCompleted` only (K37, where an inventory-storage consumer confirms
+  picks and applies RELOCATE moves), and still has no other edge to
+  `fulfillment-execution`. Its `POST /reservations/{id}/confirm-pick` keeps
+  no sibling caller: confirmation arrives on K37 instead.
 - **`workforce-management` ↔ `fulfillment-execution` at the task level**
   (WFM ADR 0002, "stop at the path boundary"). The one live edge between them
   is R9, which carries capacity, not tasks. WFM also has no edge to
@@ -412,7 +429,7 @@ The context maps declare these pairs as having no relationship, by decision:
   `process-path-management` feeds (see K35).
 
 - **`inbound-receiving` and `slotting-optimization` ↔ every other context
-  not named in K22 to K29.** Neither makes a synchronous call to any
+  not named in K22 to K29, K37 and K38.** Neither makes a synchronous call to any
   sibling (only `warehouse-ops-agent` reads `inbound-receiving`, over MCP,
   A13), and they have no relationship with each other: slotting does not
   read receipts, and receiving does not read slot plans. Their local copies
@@ -436,6 +453,7 @@ places where two synced pages describe the same edge differently.
 | K8 for FE | FE: **Opt-in** | PPM: live | **live** in the reference deployment. FE's page describes the binary default |
 | A3–A6 per-tool status | FE, WFM, FL, LP each list all their tools as consumed by the agent | OA: some tools are wired only | OA is correct. On `develop`, its use cases call only the tools listed as live in A1–A9 |
 | K2 `order-management` → `warehouse-planning` | WPL: wired, opt-in | OM's map does not list WPL as a consumer of its topic | WPL's consumer exists and the reference deployment enables it, so **live** |
+| K25 to K27, K38 and the deployment of `slotting-optimization` | slotting-optimization's synced runbook and EventStorming pages: edge route "planned, not wired", "no consumer, no Kong route, no chart" | `warehouse-infra` `develop`: a `local.services` entry (Kong route, ArgoCD application, database), `helm-values/slotting-optimization.yaml` with `DEMAND_MODE`, `PRODUCT_MODE`, `LAYOUT_MODE` and `RELOCATION_MODE` all `kafka`, and `terraform/mcp.tf` | `warehouse-infra` is correct for edge status, so the rows are **live**. The repository's pages describe the service repo, not the cluster. One more gap: `helm-values/slotting-optimization.yaml` and the `locals.tf` comment say the MCP server stays off, while `mcp.tf` lists the context in `mcp_services` (`mcp.enabled = var.deploy_mcp_servers`); nothing in `warehouse-ops-agent` calls it, so A14 stays **absent-planned** |
 | K30 to K32 `facility-layout`, `order-management`, `warehouse-planning` → `network-inventory-planning` | `warehouse-planning`'s own synced context map lists `network-inventory-planning` as "No relationship ... Absent"; the other two producers' maps do not mention it | NIP's code and AsyncAPI consume all three topics | NIP is correct. `network-inventory-planning` reads `CapacityPlanPublished` and relies on `warehouse-planning`'s additive `site_id` (which `warehouse-planning` publishes on `develop`). The producers are unaware of the consumer, which is normal for a Published Language edge; the upstream map rows are an upstream follow-up |
 
 **Pattern disagreements** (judgement, not code). The two pages name a
@@ -455,8 +473,12 @@ different pattern for the downstream side. The edge table shows both:
 - `inbound-receiving` and `slotting-optimization` (decided 2026-10-08) were
   added with edges K22 to K29 and A13 and A14, all absent-planned. Since then
   `inbound-receiving` is deployed and K22 to K24 and A13 are **live**;
-  `slotting-optimization` is built but not deployed, so K25 to K27 are
-  **wired-but-unused**. Both now have synced per-context maps.
+  `slotting-optimization` is registered in `warehouse-infra` `develop` with
+  all four consumers on, so K25 to K27 are **live**, and its execution chain
+  (K29, plus the new K37 and K38) is built in every context it touches and
+  **live**. K29 was absent-planned "MOVE and REPLENISH work"; the decision
+  (slotting ADR 0010, which supersedes ADR 0007) chose RELOCATE work. Both now
+  have synced per-context maps.
 - K20 was marked live "in code" only, with the reference deployment
   behind. Since 2026-10-07 `warehouse-infra` deploys `product-master` and
   runs all four consumers in `kafka` mode, so K20 is live by the same rule

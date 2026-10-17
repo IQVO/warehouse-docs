@@ -230,7 +230,7 @@ PublishedCapacityPlan, WorkDemand, StuckTransfer, RebalanceRun.
   emitted for `PICKED → IN_TRANSIT`, `→ ARRIVED`, `→ RECEIVED` or
   `→ UNFULFILLABLE` because those use cases are wired without a publisher.
 - **Mismatched allocation replies** are retried forever instead of being
-  skipped (see [Troubleshooting](https://github.com/IQVO/network-inventory-planning/blob/develop/docs/docs/operations/troubleshooting.md)).
+  skipped (see [Troubleshooting](/contexts/network-inventory-planning/troubleshooting)).
 - **Per-state dwell.** `age_seconds` is age since creation, so
   `/reports/state-dwell` approximates time in state.
 - Auto-approval, route optimisation and forecasting are not built.

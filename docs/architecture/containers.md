@@ -16,10 +16,11 @@ This site covers fifteen backend contexts. Thirteen of them, `inbound-receiving`
 included, ship **four Go binaries and two databases** each, plus a Module
 Federation frontend remote, because the analytical read side is a separate
 process family from the operational one. `warehouse-ops-agent` is one binary
-with no database. The newest, `slotting-optimization`, is one binary
-(`cmd/api`: REST, three Kafka consumers and the outbox relay) and one
-database, with no MCP server, read side or remote yet, and it is not deployed
-in the reference cluster (no Dockerfile, chart or `warehouse-infra` wiring). Binaries are listed from each repository's `cmd/` on
+with no database. The newest, `slotting-optimization`, ships two binaries in
+one image, `cmd/api` (REST, four Kafka consumers and the outbox relay) and a
+read-only `cmd/mcp`, and one database, with no read side or remote yet. It is
+registered in the reference cluster's `warehouse-infra` `develop` (database,
+Kong route, ArgoCD application, `helm-values/slotting-optimization.yaml`). Binaries are listed from each repository's `cmd/` on
 `origin/develop`, and workloads from its Helm chart's `templates/`.
 
 ## The edge: two independent gateways
@@ -162,7 +163,7 @@ is a freshness lag, not real time, which is why every report has a
 | `product-master` | `cmd/api` | `cmd/mcp` | `cmd/product-projector` | `cmd/product-reports` | `productmaster_mfe` | 2 |
 | `network-inventory-planning` | `cmd/network-inventory-planning` | `cmd/mcp` | `cmd/nip-projector` | `cmd/nip-reports` | `nip_mfe` | 2 |
 | `inbound-receiving` | `cmd/api` | `cmd/mcp` | `cmd/inbound-projector` | `cmd/inbound-reports` | `inbound_mfe` | 2 |
-| `slotting-optimization` | `cmd/api` | none | none | none | none | 1 (not deployed) |
+| `slotting-optimization` | `cmd/api` | `cmd/mcp` | none | none | none | 1 |
 | `warehouse-ops-agent` | `cmd/agent` | in-process at `/mcp` | none | none | none | **0** |
 
 Per-context table counts are in [Data Models](/architecture/data-models),
@@ -194,10 +195,10 @@ release are addressed separately.
 
 The logical separation is real, but the physical deployment has less
 isolation than the diagram might suggest. **One Postgres release**
-(`postgres`, in the data namespace) hosts twenty-six databases: an OLTP
+(`postgres`, in the data namespace) hosts twenty-seven databases: an OLTP
 database and a `<service>_analytics` database for each of the thirteen
-deployed persisting contexts on this site (`slotting-optimization` is not
-deployed), each with its own generated role. OLTP connections go through PgBouncer. Analytics connections go to
+persisting contexts that have an analytical read side, plus the OLTP-only
+database of `slotting-optimization` (no analytics database), each with its own generated role. OLTP connections go through PgBouncer. Analytics connections go to
 Postgres directly.
 
 In the local cluster a single generated analytics role serves both the
@@ -208,7 +209,7 @@ promotion path in `warehouse-infra`.
 
 ## MCP servers
 
-Every persisting context except `slotting-optimization` runs a `cmd/mcp` binary that serves MCP over
+Every persisting context runs a `cmd/mcp` binary that serves MCP over
 Streamable HTTP on `:8090`, and `warehouse-ops-agent` serves its own read-only
 tools in-process at `/mcp`. Like REST, **MCP is unauthenticated
 fleet-wide**.
@@ -338,27 +339,30 @@ flowchart LR
     tPM -->|opt-in| IR
     tFL -->|opt-in| IR
     tIR -->|opt-in| INV
-    tPM -.->|"built, not deployed"| SO
-    tFL -.->|"built, not deployed"| SO
-    tOM -.->|"built, not deployed"| SO
+    tPM -->|opt-in| SO
+    tFL -->|opt-in| SO
+    tOM -->|opt-in| SO
+    tSO -->|"SlotPlanApproved"| WWP
+    tFE -->|"TaskCompleted, opt-in"| INV
+    tINV -->|"StockRelocated, opt-in"| SO
 ```
 
 | Topic | Producer | Integration types | Consumers |
 | --- | --- | ---: | --- |
-| `warehouse.order-management.events` | order-management | 4 | wes-work-planning (`OrderAllocated`, `OrderPartiallyAllocated`); warehouse-planning, opt-in; network-inventory-planning (`SiteSkuDemandChanged`), opt-in; slotting-optimization (`SiteSkuDemandChanged`, built, not deployed) |
-| `warehouse.inventory.events` | inventory-storage | 7 | wes-work-planning (`StockReserved`, `ReservationRevoked`); product-master's legacy importer (`ProductClassified`, emitted only by the one-shot backfill, migration only); `network-inventory-planning` (the two allocation replies and the two destination facts, opt-in) |
-| `warehouse.work-planning.events` | wes-work-planning | 11 | fulfillment-execution (`WorkReleased`); order-management and network-fulfillment (`PathCapacityChanged`) |
-| `warehouse.fulfillment.events` | fulfillment-execution | 3 | wes-work-planning and labor-performance (`TaskCompleted`); order-management (`TaskCPTMissed`, `PackageManifested`); network-inventory-planning (the three transfer facts, opt-in) |
+| `warehouse.order-management.events` | order-management | 4 | wes-work-planning (`OrderAllocated`, `OrderPartiallyAllocated`); warehouse-planning, opt-in; network-inventory-planning (`SiteSkuDemandChanged`), opt-in; slotting-optimization (`SiteSkuDemandChanged`, opt-in) |
+| `warehouse.inventory.events` | inventory-storage | 8 | wes-work-planning (`StockReserved`, `ReservationRevoked`); slotting-optimization (`StockRelocated`, opt-in: the plan execution progress); product-master's legacy importer (`ProductClassified`, emitted only by the one-shot backfill, migration only); `network-inventory-planning` (the two allocation replies and the two destination facts, opt-in) |
+| `warehouse.work-planning.events` | wes-work-planning | 11 | fulfillment-execution (`WorkReleased`, including `RELOCATE` work); order-management and network-fulfillment (`PathCapacityChanged`) |
+| `warehouse.fulfillment.events` | fulfillment-execution | 6 | wes-work-planning and labor-performance (`TaskCompleted`); inventory-storage (`TaskCompleted`, opt-in: confirms picks and applies `RELOCATE` moves); order-management (`TaskCPTMissed`, `PackageManifested`); network-inventory-planning (the three transfer facts, opt-in) |
 | `warehouse.workforce.events` | workforce-management | 1 | wes-work-planning, warehouse-planning (`ShiftPlanCommitted`) |
-| `warehouse.facility.events` | facility-layout | 13 | inventory-storage, warehouse-planning, network-inventory-planning (`SiteCapabilityChanged`, opt-in), inbound-receiving (the two slot events, opt-in); slotting-optimization (zone and slot events, built, not deployed) |
+| `warehouse.facility.events` | facility-layout | 13 | inventory-storage, warehouse-planning, network-inventory-planning (`SiteCapabilityChanged`, opt-in), inbound-receiving (the two slot events, opt-in); slotting-optimization (zone and slot events, opt-in) |
 | `warehouse.process-path-management.events` | process-path-management | 4 | fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment |
 | `warehouse.labor-performance.events` | labor-performance | 1 | workforce-management (`TaskPerformanceRecorded`) |
 | `warehouse.warehouse-planning.events` | warehouse-planning | 4 | order-management, opt-in; network-inventory-planning (`CapacityPlanPublished`), opt-in |
 | `warehouse.network-fulfillment.events` | network-fulfillment | 5 | none yet |
 | `warehouse.network-inventory-planning.events` | network-inventory-planning | 3 | inventory-storage (`TransferAllocationRequested`, opt-in); wes-work-planning (`WorkDemandReleased`); `TransferPlanApproved` has no consumer |
-| `warehouse.product-master.events` | product-master | 5 | inventory-storage, order-management, wes-work-planning, fulfillment-execution (`ProductClassified`, into local copies); inbound-receiving (`ProductRegistered`, opt-in); slotting-optimization (`ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured`, built, not deployed) |
+| `warehouse.product-master.events` | product-master | 5 | inventory-storage, order-management, wes-work-planning, fulfillment-execution (`ProductClassified`, into local copies); inbound-receiving (`ProductRegistered`, opt-in); slotting-optimization (`ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured`, opt-in) |
 | `warehouse.inbound-receiving.events` | inbound-receiving | 9 | inventory-storage (`ReceiptLineReceived`, opt-in, its ADR 0037) |
-| `warehouse.slotting-optimization.events` | slotting-optimization | 3 | none yet |
+| `warehouse.slotting-optimization.events` | slotting-optimization | 3 | wes-work-planning (`SlotPlanApproved`, plans one `RELOCATE` work unit per move, its ADR-0040); `SlotPlanGenerated` and `SlotPlanRejected` have no consumer |
 
 The type counts are the messages each producer's `asyncapi.yaml` declares on
 its integration channel. Several consumers are themselves behind a mode

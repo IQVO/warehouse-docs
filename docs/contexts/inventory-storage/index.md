@@ -47,8 +47,8 @@ the `Unlocated` state are all consequences of taking that sentence literally.
 
 `inventory-storage` is an **Open Host Service** for bin-accurate location and
 usable inventory. `wes-work-planning` is a Customer/Supplier downstream,
-conforming to its Published Language (REST + the two published Kafka
-events) with no write access to any of its aggregates. `order-management`
+conforming to its Published Language (REST + the reservation events) with no
+write access to any of its aggregates. `order-management`
 reserves and revokes stock over REST. `order-management`,
 `wes-work-planning` and `fulfillment-execution` no longer call its
 `GET /products/{sku}/classification`: each keeps its own local copy of
@@ -59,16 +59,43 @@ location-classification cache
 ([ADR-0013](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0013-location-classification-via-facility-events.md)),
 `product-master`'s `warehouse.product-master.events` into its
 `product_classifications` copy (`PRODUCT_MASTER_CONSUMER_GROUP`, ADR-0034,
-set in the reference deployment), [`network-inventory-planning`](/contexts/network-inventory-planning)'s transfer
-allocation commands (ADR-0030) and, off by default,
-`fulfillment-execution`'s `TaskCompleted` to confirm picks (ADR-0035). Its
-legacy `ProductClassified` is emitted only by the one-shot
+set in the reference deployment), `inbound-receiving`'s `ReceiptLineReceived`
+(ADR-0037), [`network-inventory-planning`](/contexts/network-inventory-planning)'s transfer
+allocation commands (ADR-0030) and `fulfillment-execution`'s `TaskCompleted`
+from `warehouse.fulfillment.events` (`TASK_COMPLETED_CONSUMER_MODE=kafka`, set
+in the reference deployment): a `PICK` completion confirms the picked line's
+reservation (ADR-0035 and ADR-0036), and a `RELOCATE` completion moves stock
+between two bins through `RelocateStock` (ADR 0039).
+Its legacy `ProductClassified` is emitted only by the one-shot
 `republish-product-classifications` backfill, for `product-master`'s
 migration importer.
 Every REST and MCP endpoint is unauthenticated by deliberate decision
 ([ADR-0015](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0015-remove-rest-identity-layer.md)). See the
 [Bounded Context Canvas](/contexts/inventory-storage/bounded-context-canvas) for the full picture of
 who calls in and who is called out to.
+
+### Moving stock between bins: relocation
+
+Chaotic storage never had a way to move stock once stowed; slotting needs one.
+`RelocateStock` (ADR 0039) moves a quantity of one SKU between two bins of
+**one site**, atomically on the ledger: both bins' occupancy, the touched
+stock units, one new stock unit at the destination, an immutable `relocations`
+record and the outbox row commit in one transaction. Only the **usable**
+(unreserved) quantity moves, so a reservation's pick location never goes
+stale. It is reached two ways, and both raise
+`com.warehouse.wms.inventory-storage.stock.StockRelocated` on
+`warehouse.inventory.events`:
+
+- `POST /relocations` (operation `relocateStock`, behind the `Idempotency-Key`
+  middleware) and `GET /relocations/{id}` (`getRelocation`);
+- a completed `RELOCATE` task from `fulfillment-execution`, applied by the
+  `TaskCompleted` consumer from the additive `sku`, `from_bin`, `to_bin`,
+  `quantity` and `relocation_ref` fields (reason `SLOTTING`, `source_ref` =
+  `relocation_ref`, the move reference `<plan_id>:<move_seq>`).
+
+`slotting-optimization` consumes `StockRelocated` to show how far an approved
+slot plan has been executed. See [Business Context](/contexts/inventory-storage/business-context#relocation-slot-plans-reach-the-ledger)
+and [Async API](/contexts/inventory-storage/async-api).
 
 ## This context's pages
 
@@ -91,9 +118,11 @@ who calls in and who is called out to.
 - [Aggregate Design Canvas](/contexts/inventory-storage/aggregate-design-canvas)
   ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
   `StockUnit` and `Reservation`, both aggregate roots.
-- [Domain Events](/contexts/inventory-storage/domain-events): all eleven
-  past-tense events this context raises. Two of them (`StockReserved` and
-  `ReservationRevoked`) cross the service boundary on the integration topic.
+- [Domain Events](/contexts/inventory-storage/domain-events): all twelve
+  past-tense events this context raises (the catalog on that page). Of
+  these, `StockReserved`, `ReservationRevoked`, `StockRelocated` and the legacy
+  `ProductClassified` cross the service boundary on the integration topic,
+  beside the four transfer replies and destination facts.
 - [Domain Message Flow](/contexts/inventory-storage/domain-message-flow)
   ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):
   key scenarios as commands, events and queries.

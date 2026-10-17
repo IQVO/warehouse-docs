@@ -61,8 +61,8 @@ Reading them in that order is the fastest way to understand any one context.
 contexts on this site ship four binaries and two databases each, because the analytical
 read side is a separate process family from the operational one.
 `warehouse-ops-agent` is one binary with no database, and the newest,
-`slotting-optimization`, is one binary and one database, built but not
-deployed yet. That is
+`slotting-optimization`, is two binaries (api and MCP) and one database,
+deployed in the reference cluster with no analytical read side. That is
 [Containers](/architecture/containers).
 
 **The domain layer depends on nothing, and CI proves it.** Every context has an

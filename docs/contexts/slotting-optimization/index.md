@@ -19,24 +19,36 @@ proposal (a *slot plan*), a human approves or rejects it, and an approved plan
 is published as a CloudEvent carrying the full forward assignment map and the
 physical moves it implies.
 
-:::info[What is built, what is not deployed, and what is planned]
+:::info[What is built, what is deployed, and what is planned]
 Per this context's own [Context Map](/contexts/slotting-optimization/context-map)
 and [integration page](https://iqvo.github.io/slotting-optimization/docs/ecosystem/integration),
-checked against `develop`:
+checked against `develop` (and, for deployment, `warehouse-infra` `develop`):
 
-**Built on `develop`:** one binary, `cmd/api`: the REST API (seven
-operations), the transactional outbox and relay, and three opt-in local-copy
-consumers (demand from `order-management`, product facts from
-`product-master`, zones and slots from `facility-layout`).
+**Built on `develop`:** the REST API (seven operations), the transactional
+outbox and relay, **four** opt-in Kafka consumers (demand from
+`order-management`, product facts from `product-master`, zones and slots from
+`facility-layout`, and executed relocations from `inventory-storage`) and a
+read-only MCP server (`cmd/mcp`, ADR 0005).
 
-**Not deployed:** there is no `Dockerfile`, no `charts/` directory and no
-`warehouse-infra` wiring (values file, Kong route, ArgoCD application) yet.
-The service runs from source or a locally built binary.
+**Slot-plan execution is built, end to end** (ADR 0010, which supersedes
+ADR 0007). Approving a plan publishes `SlotPlanApproved`;
+`wes-work-planning` plans one `RELOCATE` work unit per move (its ADR 0040);
+`fulfillment-execution` runs the task and its `TaskCompleted` carries the
+moved SKU, bins and counted quantity (its ADR 0047); `inventory-storage`
+applies it as `RelocateStock` and raises `StockRelocated` (its ADR 0039);
+this context consumes that into per-plan `execution` progress on
+`GET /slot-plans/{planId}`. It never creates floor work and never writes the
+stock ledger itself.
 
-**Planned, not built:** executing the moves of an approved plan (MOVE and
-REPLENISH work through `process-path-management`, `wes-work-planning` and
-`fulfillment-execution`), a read-only MCP server (no `cmd/mcp`), an
-analytics read side and a console remote. Nothing consumes its events today.
+**Deployed:** `warehouse-infra` `develop` registers it (database, Kong route
+`/api/slotting-optimization`, ArgoCD application) and
+`helm-values/slotting-optimization.yaml` turns on the Kafka publisher and all
+four consumers, so the edges are **live**. The `RELOCATE` process path must be
+seeded in `process-path-management` first. Nothing in `warehouse-ops-agent`
+calls the MCP server yet.
+
+**Planned, not built:** `REPLENISH` (min/max) work, an analytics read side and
+a console remote.
 :::
 
 It owns one aggregate, **`SlotPlan`** (package `internal/domain/slotplan`),
@@ -64,7 +76,7 @@ transaction (`Superseded` is the fourth state).
 - [Aggregate Design Canvas](/contexts/slotting-optimization/aggregate-design-canvas):
   `SlotPlan`.
 - [Domain Events](/contexts/slotting-optimization/domain-events): the three
-  published events and the seven consumed ones.
+  published events and the eight consumed ones.
 - [Domain Message Flow](/contexts/slotting-optimization/domain-message-flow),
   [EventStorming](/contexts/slotting-optimization/eventstorming),
   [Class Diagram](/contexts/slotting-optimization/class-diagram),
@@ -80,12 +92,17 @@ transaction (`Superseded` is the fourth state).
 - **Repository**: [github.com/IQVO/slotting-optimization](https://github.com/IQVO/slotting-optimization),
   with its own docs site at
   [iqvo.github.io/slotting-optimization](https://iqvo.github.io/slotting-optimization/).
-  Its ADRs live under `docs/adr/`, all Accepted (2026-10-08): 0001 (bounded
-  context), 0002 (the `SlotPlan` aggregate, its invariants and the
-  `abc-velocity-v1` policy), 0003 (event-fed local copies and the consumed
-  contracts), 0004 (CloudEvents envelope and type catalogue).
-- **Fleet-level**: [Context Map](/strategic-design/context-map) (K25 to K27
-  and K29), the [Event Standard](/strategic-design/event-standard-cloudevents)
+  Its ADRs live under `docs/adr/`: 0001 (bounded context), 0002 (the
+  `SlotPlan` aggregate, its invariants and the `abc-velocity-v1` policy), 0003
+  (event-fed local copies and the consumed contracts), 0004 (CloudEvents
+  envelope and type catalogue) and 0005 (MCP server) are Accepted
+  (2026-10-08). 0007 (executing an approved plan) is **Superseded** by 0010
+  (Accepted, 2026-10-14: approved plans are executed as WES relocation work,
+  plus the `StockRelocated` consumer and the plan's `execution` progress).
+  0008 and 0009 cover the outbox attempt cap and trace context.
+- **Fleet-level**: [Context Map](/strategic-design/context-map) (K25 to K27,
+  K29 and K38; K37 is the `inventory-storage` hop in between), the
+  [Event Standard](/strategic-design/event-standard-cloudevents)
   (subdomain table and type catalogue),
   [Subdomain Classification](/strategic-design/subdomain-classification) and
   the [Ubiquitous Language](/strategic-design/ubiquitous-language).

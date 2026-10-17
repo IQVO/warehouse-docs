@@ -45,13 +45,13 @@ Returns 200 while the process is accepting traffic, 503 once graceful shutdown (
 </ParamsDetails>
 
 <RequestSchema
-  title={"Body"}
+  {...require("./get-readyz.RequestSchema.json")}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  responses={{"200":{"description":"Service is ready to accept traffic.","content":{"application/json":{"schema":{"type":"object","properties":{"status":{"type":"string","example":"ready"}}},"example":{"status":"ready"}}}},"503":{"description":"Service is draining (shutdown in progress).","content":{"application/json":{"schema":{"type":"object","properties":{"status":{"type":"string","example":"draining"}}},"example":{"status":"draining"}}}}}}
+  {...require("./get-readyz.StatusCodes.json")}
 >
   
 </StatusCodes>

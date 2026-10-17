@@ -232,7 +232,7 @@ Top terms: **Product**, **SKU**, **Classification**, **Handling tag**,
   `TestPublisher_RealKafka_CloudEventsEnvelopeAndPayload`,
   `TestLegacyImporter_EndToEnd`); the REST and MCP wire contracts run against
   real Postgres too (`TestREST_*`, `TestStreamableHTTP_*`). See
-  [Testing](https://iqvo.github.io/product-master/docs/development/testing).
+  [Testing](/contexts/product-master/testing).
 - Migration: ADR 0003's runbook compares the count of classified products
   (`GET /products?classified=true`) with inventory-storage's
   `product_classifications` row count.

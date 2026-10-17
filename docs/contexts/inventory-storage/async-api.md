@@ -24,8 +24,8 @@ reference (every message schema, in full), see
 | **Balancer** | `Hash` on the Kafka key (the reservation id), `AllowAutoTopicCreation: true` — one reservation's events land on one partition, so they stay ordered per reservation (inventory-storage ADR-0021); there is no per-SKU ordering |
 | **Broker** | `KAFKA_BROKERS`, default `localhost:9092` (shared broker at `~/warehouse-systems/docker-compose.kafka.yml`) |
 | **Selected by** | `EVENT_PUBLISHER=kafka` (default is `log`, so tests and local runs never need a broker). With Postgres, events go through a transactional outbox (`outbox_events`, ADR-0017) drained by a relay in `cmd/inventory` |
-| **Direction** | Publish on this topic. (Separately, this service consumes `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned` from `warehouse.facility.events` into its location-classification cache when `LOCATION_LOOKUP_MODE=kafka`, which the reference deployment sets — invalid messages go to `warehouse.facility.events.dlq`, ADR-0013 — and `product-master`'s `ProductClassified` from `warehouse.product-master.events` into its `product_classifications` copy under `PRODUCT_MASTER_CONSUMER_GROUP`, also set in the reference deployment, ADR-0034. See [Domain Events](/contexts/inventory-storage/domain-events).) |
-| **Consumers** | `wes-work-planning`, projecting `StockReserved` and `ReservationRevoked` into its own `UsableInventoryObserved` read model, keyed by SKU (per `wes-work-planning`, the projection feeds no decision yet); `product-master`'s legacy importer, reading the legacy `ProductClassified` during the migration only; [`network-inventory-planning`](/contexts/network-inventory-planning), reading the transfer replies and destination facts (its `TRANSFER_REPLY_CONSUMER_GROUP`); it is also the producer of the `TransferAllocationRequested` command this service consumes |
+| **Direction** | Publish on this topic. (Separately, this service consumes `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned` from `warehouse.facility.events` into its location-classification cache when `LOCATION_LOOKUP_MODE=kafka`, which the reference deployment sets — invalid messages go to `warehouse.facility.events.dlq`, ADR-0013 —, `product-master`'s `ProductClassified` from `warehouse.product-master.events` into its `product_classifications` copy under `PRODUCT_MASTER_CONSUMER_GROUP`, also set in the reference deployment, ADR-0034, `ReceiptLineReceived` from `warehouse.inbound-receiving.events` under `INBOUND_RECEIPT_CONSUMER_GROUP`, ADR-0037, and `fulfillment-execution`'s `TaskCompleted` from `warehouse.fulfillment.events` when `TASK_COMPLETED_CONSUMER_MODE=kafka`, which the reference deployment sets: `PICK` confirms reservations, ADR-0035 and ADR-0036, and `RELOCATE` moves stock, ADR-0039, see below. See [Domain Events](/contexts/inventory-storage/domain-events).) |
+| **Consumers** | `wes-work-planning`, projecting `StockReserved` and `ReservationRevoked` into its own `UsableInventoryObserved` read model, keyed by SKU (per `wes-work-planning`, the projection feeds no decision yet); `slotting-optimization`, consuming `StockRelocated` into its plans' execution progress (`RELOCATION_MODE=kafka`, group `RELOCATION_CONSUMER_GROUP`, ADR-0039 and slotting ADR 0010); `product-master`'s legacy importer, reading the legacy `ProductClassified` during the migration only; [`network-inventory-planning`](/contexts/network-inventory-planning), reading the transfer replies and destination facts (its `TRANSFER_REPLY_CONSUMER_GROUP`); it is also the producer of the `TransferAllocationRequested` command this service consumes |
 | **Default content type** | `application/cloudevents+json` |
 
 There is a second, separate topic, `warehouse.inventory.analytics`, carrying
@@ -36,7 +36,7 @@ the cross-context integration contract described on this page.
 
 ## What events are on the topic
 
-The synced `apis/asyncapi.yaml` declares seven types on the integration
+The synced `apis/asyncapi.yaml` declares eight types on the integration
 topic:
 
 - `StockReserved` and `ReservationRevoked`, the reservation contract that
@@ -45,6 +45,11 @@ topic:
   `TransferStockAllocationRejected`, `TransferReceiptStaged`,
   `TransferStockStowed`) for `network-inventory-planning` (ADR-0030,
   ADR-0033);
+- `StockRelocated`
+  (`com.warehouse.wms.inventory-storage.stock.StockRelocated`), raised by
+  `RelocateStock` for `POST /relocations` and for a completed `RELOCATE` task
+  (ADR-0039), consumed by `slotting-optimization`. Integration topic only: it
+  has no analytics variant. Key and `subject` are the relocation id;
 - the legacy `com.warehouse.wms.inventory-storage.product.ProductClassified`.
   Since [ADR-0034](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0034-product-master-owns-classification.md)
   `product-master` owns classification, `PUT /products/{sku}/classification`
@@ -137,7 +142,7 @@ expected path.
 
 ## Who consumes it
 
-**`wes-work-planning`** is the one live consumer. It projects both events
+**`wes-work-planning`** is the consumer of the two reservation events. It projects both events
 into `UsableInventoryObserved`, a read model keyed by SKU: `StockReserved`
 decrements the observed usable count, `ReservationRevoked` increments it
 back. Because the two events are exact inverses, the downstream projection
@@ -164,6 +169,57 @@ sequenceDiagram
     I->>K: ReservationRevoked {sku, quantity, demand_ref}
     K->>W: consume
     W->>W: UsableInventoryObserved[sku] += quantity
+```
+
+## Relocation: `TaskCompleted` in, `StockRelocated` out
+
+This is the stock-ledger end of the slot-plan chain (inventory-storage
+ADR-0039, slotting-optimization ADR 0010): `SlotPlanApproved` →
+`wes-work-planning` plans one `RELOCATE` work unit per move →
+`fulfillment-execution` runs the task → this service moves the stock →
+`slotting-optimization` records the progress.
+
+**In: `TaskCompleted` on `warehouse.fulfillment.events`.** The same consumer
+that confirms picks (fixed group `TASK_COMPLETED_CONSUMER_GROUP`, default
+`inventory-storage-confirm-pick`, running only with
+`TASK_COMPLETED_CONSUMER_MODE=kafka`; the chart default is `off` and the
+reference deployment sets `kafka`) has a second branch. When `task_type` is
+`RELOCATE`, the additive fields `sku`, `from_bin`, `to_bin`, `quantity` (the
+operator-confirmed count) and `relocation_ref` (`<plan_id>:<move_seq>`) are
+applied through `RelocateStock`, the use case behind `POST /relocations`, with
+reason `SLOTTING`, the site taken from the source bin, and `source_ref` =
+`relocation_ref` (the task id when the producer sent none). The CloudEvents
+`id` is claimed in `processed_events` (consumer `task-completed-relocate`) in
+the same transaction as the move, so a redelivery is a no-op. A completion
+that can never apply (missing or invalid field, unknown bin, bins of different
+sites, the same bin, too little usable stock, a full destination) is
+dead-lettered at once to `warehouse.fulfillment.events.dlq`; a transient
+failure retries 5 times and then dead-letters; a shutdown mid-move commits and
+dead-letters nothing.
+
+**Out: `StockRelocated`.** One event per relocation, from either door, on
+`warehouse.inventory.events` through the outbox: `relocation_id`, `site_code`,
+`sku`, `from_bin`, `to_bin`, `quantity` (at least 1), `reason`
+(`SLOTTING`, `CONSOLIDATION` or `MANUAL`), `source_ref` (`""` when none) and
+`occurred_at`. Because it is raised for every relocation, most
+`StockRelocated` events (manual, consolidation) belong to no slot plan, and
+`slotting-optimization` counts those as unmatched without storing them.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant F as fulfillment-execution
+    participant K1 as Kafka<br/>warehouse.fulfillment.events
+    participant I as inventory-storage
+    participant K2 as Kafka<br/>warehouse.inventory.events
+    participant S as slotting-optimization
+
+    F->>K1: TaskCompleted {task_type RELOCATE, sku, from_bin, to_bin, quantity, relocation_ref}
+    K1->>I: consume
+    I->>I: claim id, RelocateStock (bins, units, relocation row, outbox) in one transaction
+    I->>K2: StockRelocated {source_ref = relocation_ref}
+    K2->>S: consume
+    S->>S: match plan_id:move_seq, record once per relocation_id
 ```
 
 ## Idempotency and consumer-group notes

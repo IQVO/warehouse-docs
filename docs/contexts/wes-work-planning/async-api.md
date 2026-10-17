@@ -55,7 +55,7 @@ spec document.
 
 | `type` (suffix after `com.warehouse.wes.work-planning.`) | `data` | Published when | Consumed by |
 |---|---|---|---|
-| `workunit.WorkReleased` | `{"path_id","work_unit_id","cpt","ref"}` (+ optional `required_capabilities`, `fragile`, `gift_wrap`) | `ReleaseNextWork` releases a unit | **`fulfillment-execution`** → creates a `Task` |
+| `workunit.WorkReleased` | `{"path_id","work_unit_id","cpt","ref"}` (+ optional `required_capabilities`, `fragile`, `gift_wrap`, and on the `RELOCATE` path a `relocation` object, ADR-0040) | `ReleaseNextWork` releases a unit | **`fulfillment-execution`** → creates a `Task` (a `RELOCATE` task when `relocation` is present) |
 | `workpool.PathCapacityChanged` | `{"path_id","cutoff_at","remaining_units","known"}` | `SampleBacklog` is called with `cutoffAt` set (`GET /paths/{pathId}/telemetry?cutoffAt=…`, ADR-0018) | **`order-management`** — its `kafkapathcapacity` adapter (own per-process consumer group, filters for this one event type) caches remaining capacity keyed by path and cutoff instant. Also **`network-fulfillment`** (`pathcapacitycache`), wired but unused: it starts only with `CAPABILITY_OFFER_ENABLED=true`, which the reference deployment does not set |
 
 ```json
@@ -105,15 +105,17 @@ Without `DATABASE_URL` events are published directly.
 ## Consumed
 
 Setting `KAFKA_BROKERS` starts the inbound consumer automatically,
-**independent of `EVENT_PUBLISHER`**. It reads four topics concurrently,
-one goroutine each, under the consumer group `KAFKA_CONSUMER_GROUP`
+**independent of `EVENT_PUBLISHER`**. It reads six topics concurrently,
+one goroutine each (workforce, inventory, fulfillment, order-management,
+network-inventory-planning and slotting-optimization), under the consumer
+group `KAFKA_CONSUMER_GROUP`
 (default `wes-work-planning`, shared by every deployed replica). A second
 process against the shared broker — a developer's `go run`, the e2e
 harness — must set a unique value, or the rebalance hands the single
 partition to one member and the other consumes nothing while reporting
-healthy.
+healthy. Each topic has its own `<topic>.dlq`.
 
-With `PATH_CATALOGUE_SOURCE=kafka` a fifth, separate consumer replays
+With `PATH_CATALOGUE_SOURCE=kafka` a separate consumer replays
 process-path-management's topic, and with `PRODUCT_CLASSIFICATION_MODE=kafka`
 another one keeps the product classification copy — see the last two
 sections below.
@@ -186,7 +188,16 @@ SKU-scoped and a SKU-to-path mapping does not exist in the domain. Read at
 `data.work_unit_id` maps to `RecordCompletionRequest.WorkUnitId` and calls
 the **existing** `RecordCompletion` use case — the exact code path
 `POST /work-units/{id}/complete` uses. This closes the control loop's
-feedback edge: WIP drops, and the next release call can proceed.
+feedback edge: WIP drops, and the next release call can proceed. For a
+`RELOCATE` work unit (below) the completion also admits the moves of the same
+slot plan that were waiting on it into the pool, in the same transaction.
+`task_type` is optional on the wire and only logged, to explain a completion
+for a work unit this context never planned (for example a PACK task
+`fulfillment-execution` created itself, which names the order id); that
+completion is skipped at INFO, not retried or dead-lettered. A `RELOCATE`
+completion carries the additive `sku`, `from_bin`, `to_bin`, `quantity` and
+`relocation_ref` fields (fulfillment-execution ADR-0047) for
+`inventory-storage`, which this context ignores.
 
 ### `warehouse.order-management.events` — `OrderAllocated`, `OrderPartiallyAllocated`, from `order-management`
 
@@ -216,6 +227,67 @@ same work unit, a second line of defense against duplicate enqueues on top
 of the `processed_events` idempotency guard. This integration is
 deliberately **fire-and-forget**: there is no reply event back to
 order-management.
+
+### `warehouse.network-inventory-planning.events` — `WorkDemandReleased`, from `network-inventory-planning`
+
+`ApplyWorkDemandReleased` (ADR-0033) enqueues one transfer work unit per
+released demand leg through the existing `EnqueueWorkUnit`, under the
+deterministic work unit id `demand_id`. The payload carries `demand_id`,
+`work_kind`, `transfer_ref`, `path_id`, `site_id`, `cpt`, `sku` and
+`quantity`. An unknown `path_id` or an undeclared `work_kind` is
+deterministic poison and ends in the topic's `.dlq`.
+
+### `warehouse.slotting-optimization.events` — `SlotPlanApproved`, from `slotting-optimization`
+
+```json
+{
+  "specversion": "1.0",
+  "id": "...",
+  "source": "/warehouse/slotting-optimization",
+  "type": "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved",
+  "subject": "plan-3b0e8d2a",
+  "time": "...",
+  "datacontenttype": "application/json",
+  "dataschema": "urn:warehouse:slotting-optimization:events:SlotPlanApproved:v1",
+  "data": {
+    "plan_id": "plan-3b0e8d2a", "site_id": "WH1", "approved_at": "2026-10-14T12:00:00Z",
+    "supersedes_plan_id": "plan-1f27c9d0",
+    "assignments": [{"sku": "SKU-2", "slot": "WH1-FWD-A01-01-02-A"}],
+    "moves": [{"sku": "SKU-2", "from_slot": "WH1-FWD-A02-03-01-A", "to_slot": "WH1-FWD-A01-01-02-A", "kind": "Relocate"}]
+  }
+}
+```
+
+Illustrative values in the contract's shape. The sixth stream is wired
+unconditionally in `cmd/wes` (no mode flag), so it runs whenever the consumer
+does, under the
+same consumer group, with its own `warehouse.slotting-optimization.events.dlq`
+(ADR-0040). Only `SlotPlanApproved` is handled; `SlotPlanGenerated`,
+`SlotPlanRejected` and unknown types are ignored. The `assignments` map is
+decoded away: the moves are what changes on the floor. `ApplySlotPlanApproved`
+marks the CloudEvents `id` and writes everything in one transaction:
+
+- one `RELOCATE` work unit per entry of `moves`, id `<plan_id>-move-<move_seq>`
+  (`move_seq` = the 0-based index in `moves`), reference = the plan id, path
+  `RELOCATE`, `work_kind = RELOCATE`, `cpt` = `approved_at` +
+  `RELOCATION_CPT_HORIZON`. When the catalogue entry declares an `intake`
+  (process-path-management ADR 0034) it must contain `SLOT_RELOCATION`;
+- a move into a slot that another move vacates is created `Pending` with
+  `blocked_by` set and stays out of the pool until that move's `TaskCompleted`;
+- a plan older than the site's latest recorded plan (by `approved_at`, ties to
+  the greater plan id) is recorded and plans nothing; otherwise the site's
+  not-yet-released `RELOCATE` units of other plans are cancelled (state
+  `Cancelled`, no event);
+- a broken plan (missing ids, unknown `kind`, a slot the kind requires
+  missing), an unknown `RELOCATE` path or an intake without
+  `SLOT_RELOCATION` is retried 3 times and then dead-lettered. The
+  `RELOCATE` path must therefore be in the process-path catalogue
+  (process-path-management's seed) before plans arrive.
+
+The released unit goes out as an ordinary `WorkReleased` v1 whose `data` gains
+one optional `relocation` object (`plan_id`, `move_seq`, `kind`, `sku`,
+`from_bin`, `to_bin`); `fulfillment-execution` turns it into a `RELOCATE`
+task (its ADR-0047).
 
 ### `warehouse.process-path-management.events` — the process-path catalogue, from `process-path-management`
 
@@ -286,6 +358,8 @@ at) (alreadyProcessed bool, err error)`.
 | `ShiftPlanCommitted` | the labour projection is **not** re-written |
 | `TaskCompleted` | `RecordCompletion` is **not** called a second time |
 | `OrderAllocated` / `OrderPartiallyAllocated` | `EnqueueWorkUnit` is **not** called a second time per line |
+| `WorkDemandReleased` | the demand leg is **not** enqueued twice (work unit id = `demand_id`) |
+| `SlotPlanApproved` | the plan's `RELOCATE` units are **not** planned twice (ids are `<plan_id>-move-<move_seq>`; the same plan under a new event id is a no-op) |
 | `ProductClassified` | the copy is **not** rewritten; an older `version` is a no-op even with a new `id` |
 
 The `TaskCompleted` case matters operationally beyond the dedup table
@@ -307,6 +381,7 @@ nobody reads.
 | `PRODUCT_CLASSIFICATION_MODE` | `permissive` | `kafka` keeps the local copy of product-master's classification; `http` is rejected at boot (ADR-0035). |
 | `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` | *(none)* | Required with `kafka`: the stable consumer group of the classification copy. |
 | `PATH_CATALOGUE_SOURCE` | `file` | `kafka` replays `warehouse.process-path-management.events` into the catalogue; requires `KAFKA_BROKERS`. |
+| `RELOCATION_CPT_HORIZON` | `24h` | Go duration added to a slot plan's `approved_at` to give its `RELOCATE` work units a CPT (ADR-0040). |
 
 ## Generated reference
 
