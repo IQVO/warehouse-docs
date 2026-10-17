@@ -370,6 +370,10 @@ the aggregate rejects a second completion — defence in depth.
 
 - An unknown `work_unit_id` on `TaskCompleted` (for example a PACK task keyed
   by order id) is an INFO-logged, processed skip (`TaskCompletedUnknownWorkUnit`).
+- A `TaskCompleted` with a **new** event id for a work unit that is already
+  completed is an INFO-logged, processed skip
+  (`TaskCompletedAlreadyCompleted`, [ADR-0043](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0043-taskcompleted-already-completed-skip.md)) —
+  never retried, never dead-lettered.
 - A line of `OrderAllocated` that is already enqueued (`ErrDuplicateEntry`)
   is skipped as a benign no-op ([ADR-0031](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0031-order-allocated-choreography.md)).
 
