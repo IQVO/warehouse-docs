@@ -2,7 +2,7 @@
 id: core-domain-chart
 title: Core Domain Chart
 sidebar_label: Core Domain Chart
-description: The seventeen contexts documented on this site on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart.
+description: The nineteen contexts documented on this site on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart (returns-processing and exception-management are documented but not yet plotted: their repositories ship no chart).
 ---
 
 # Core Domain Chart
@@ -126,7 +126,8 @@ This page keeps each context's own placement and the fleet classification.
     optimisation are not built yet.
 - **Supporting: `workforce-management`, `labor-performance`,
   `network-fulfillment`, `warehouse-ops-agent`, `product-master`,
-  `inbound-receiving`, `slotting-optimization`, `pick-face-replenishment`, `task-interleaving`, and `order-management` on the
+  `inbound-receiving`, `slotting-optimization`, `pick-face-replenishment`, `task-interleaving`,
+  `returns-processing`, `exception-management`, and `order-management` on the
   border.** Each one is necessary, but the differentiating knowledge it uses
   belongs to another context:
   - `workforce-management` records human rebalancing decisions.
@@ -149,6 +150,18 @@ This page keeps each context's own placement and the fleet classification.
   - `task-interleaving` ranks nearby open tasks with a replaceable
     `rectilinear-v1` travel model and issues an advisory hint; it never
     assigns work or writes task state (its ADR 0001).
+  - `returns-processing` recovers value from returned goods, but restock
+    reuses `inventory-storage`'s staged-receipt seam unchanged and the
+    disposition decision is a replaceable versioned policy table; four of its
+    five outcomes never touch stock (its ADR 0001). Not yet plotted: its
+    repository ships no chart of its own, so it has no point in the diagram
+    above.
+  - `exception-management` gives anomalies an owner and an outcome, but the
+    producers own the detection logic and its state machine is fixed and
+    small; its own ADR 0001 calls it a candidate Core once auto-resolution
+    policies and agent recommendations run against it. Not yet plotted: its
+    repository ships no chart of its own, so it has no point in the diagram
+    above.
   - `order-management`'s promise rules lift it above a commodity order
     front end, but they are not the platform's differentiator.
 - **Generic: `facility-layout`, `process-path-management`.** Both are well

@@ -2,13 +2,13 @@
 id: context-map
 title: Context Map
 sidebar_label: Context Map
-description: Fleet-wide ddd-crew context map of the seventeen contexts documented on this site — every edge with upstream/downstream, context-mapping pattern, technology and wiring status (live, wired-but-unused, absent-planned), reconciled against each context's own context map and code.
+description: Fleet-wide ddd-crew context map of the nineteen contexts documented on this site — every edge with upstream/downstream, context-mapping pattern, technology and wiring status (live, wired-but-unused, absent-planned), reconciled against each context's own context map and code.
 ---
 
 # Context Map
 
 This is the fleet-wide [ddd-crew Context Map](https://github.com/ddd-crew/context-mapping)
-of the seventeen contexts documented on this site: sixteen domain bounded
+of the nineteen contexts documented on this site: eighteen domain bounded
 contexts plus `warehouse-ops-agent`, which is every backend service in the
 fleet. `product-master`, decided on 2026-10-06, and its four `ProductClassified`
 consumers are merged and run in the reference deployment (K20, deployed
@@ -50,7 +50,24 @@ analytics and web remote). Its three inbound edges (K41, K45 and K46) are **live
 `TASK_INTERLEAVING_MODE=kafka` is set in `warehouse-infra`.
 `network-inventory-planning` (NIP)
 plans and orchestrates inter-warehouse transfers; its edges are K30 to K36 and
-A15 below. Each context's repository has its own context map, synced to this
+A15 below.
+
+`returns-processing` (`wms`, Supporting) and `exception-management` (`wes`,
+Supporting), decided 2026-10-20 and merged on `develop` 2026-10-20/21 (each
+with a service PR #2 and a packaging + read-only-MCP PR #3), are the newest
+contexts. Neither is registered in `warehouse-infra`, so none of their edges
+runs. All the code on both ends IS built: their three and six inbound
+consumers, `inventory-storage` ADR 0044 (the `ReturnLineStaged` handover into
+the staged-receipt seam), and — promoted onto their producers' integration
+topics on 2026-10-21 — `PackageDiverted` and `WeightDiscrepancyDetected`
+(fulfillment-execution) and `DiscrepancyDetected` and `ItemUnlocated`
+(inventory-storage). Their edges are K50 to K59, all
+**wired-but-unused**, plus the two dashed planned edges K60 and K61. Their
+repositories ship no ddd-crew pack yet, so there is no per-context map page
+to link; the source for their rows is each ADR 0001's context map plus the
+code on `develop`.
+
+Each context's repository has its own context map, synced to this
 site and grounded in that repo's code. This page
 puts those maps together. Where two contexts' maps describe the same edge
 differently, this page checked the code and the reference deployment
@@ -126,6 +143,7 @@ flowchart LR
         INB["inbound-receiving<br/>Supporting"]
         SLOT["slotting-optimization<br/>Supporting"]
         PFR["pick-face-replenishment<br/>Supporting"]
+        RP["returns-processing<br/>Supporting"]
     end
 
     subgraph WES["wes subdomain"]
@@ -140,6 +158,7 @@ flowchart LR
         NF["network-fulfillment<br/>Supporting"]
         OA["warehouse-ops-agent<br/>Supporting"]
         TI["task-interleaving<br/>Supporting"]
+        EM["exception-management<br/>Supporting"]
     end
 
     CON["warehouse-console<br/>frontend shell, not a context"]
@@ -258,12 +277,31 @@ flowchart LR
     FE ==>|"Kafka TaskAvailable (RELOCATE, REPLENISH), TaskClaimed,<br/>TaskCompleted"| TI
     TI ==>|"Kafka InterleavingHintIssued,<br/>advisory tie-break"| FE
 
+    %% returns-processing (wms) and exception-management (wes), both built on
+    %% develop 2026-10-20/21, neither registered in warehouse-infra. Every leg
+    %% is dotted wired-but-unused (code on both ends, nothing runs) except the
+    %% workforce-management and network-inventory-planning fact sources, which
+    %% are analytics-only on their producers today (K60, K61: planned, not
+    %% built, no consumer exists).
+    PM -.->|"Kafka ProductClassified,<br/>local copy"| RP
+    OM -.->|"Kafka OrderAllocated,<br/>OrderPartiallyAllocated"| RP
+    FE -.->|"Kafka PackageManifested"| RP
+    RP -.->|"Kafka ReturnLineStaged,<br/>staged receipt"| INV
+    RP -.->|"Kafka UnexpectedReturnReceived"| EM
+    FE -.->|"Kafka TaskCPTMissed, PackageDiverted,<br/>WeightDiscrepancyDetected"| EM
+    WP -.->|"Kafka BacklogThresholdBreached"| EM
+    NF -.->|"Kafka AcknowledgementDeadlineAtRisk,<br/>OrphanedHoldCancelled"| EM
+    OM -.->|"Kafka OrderRepromised,<br/>auto-resolve correlation"| EM
+    INV -.->|"Kafka DiscrepancyDetected,<br/>ItemUnlocated"| EM
+    WFM -.->|"PathUnderstaffed (planned,<br/>analytics-only today)"| EM
+    NIP -.->|"TransferStuckDetected (planned,<br/>analytics-only today)"| EM
+
     classDef core fill:#1e3a8a,stroke:#1e293b,color:#fff;
     classDef supp fill:#6d28d9,stroke:#4c1d95,color:#fff;
     classDef gen fill:#475569,stroke:#94a3b8,color:#fff;
     classDef ext fill:#f1f5f9,stroke:#64748b,color:#334155,stroke-dasharray: 5 5;
     class INV,WP,FE,WPL,NIP core;
-    class OM,WFM,LP,NF,OA,PM,INB,SLOT,PFR,TI supp;
+    class OM,WFM,LP,NF,OA,PM,INB,SLOT,PFR,TI,RP,EM supp;
     class FL,PPM gen;
     class RN,WCS,CON,NOSUB ext;
 ```
@@ -287,7 +325,13 @@ hint consumer). K28 and K49 are the two thick edges into `warehouse-planning`
 from `inbound-receiving` and `fulfillment-execution`.
 The dashed K48 is the
 opt-in `WorkUnitCreated` release confirmation into `order-management`
-(wired-but-unused).
+(wired-but-unused). The twelve dashed edges K50 to K61 belong to
+`returns-processing` and `exception-management` (merged on `develop`
+2026-10-20/21, not deployed): K50 to K59 are wired-but-unused — the code on
+both ends is built, including `inventory-storage` ADR 0044 and the four
+2026-10-21 producer promotions — and K60 and K61 (`PathUnderstaffed`,
+`TransferStuckDetected`) are absent-planned: their producers publish them on
+analytics topics only, so no consumer can exist yet.
 The crossed edge is deliberately absent. `order-management` is coloured with
 the Supporting contexts because it is classified Generic/Supporting (see
 [Subdomain Classification](/strategic-design/subdomain-classification)).
@@ -359,6 +403,18 @@ Omitted from the diagram:
 | K47 | `task-interleaving` → `fulfillment-execution` | C/S, advisory; PL / ACL on the FE side | `warehouse.task-interleaving.events`: `stationtrip.InterleavingHintIssued`. `fulfillment-execution` would store it locally and use it only as a tie-break inside one priority band, never across a CPT or priority boundary, fail-open when absent or expired. `claimNext` stays the only claim path and there is no `assign` | **live** (code merged 2026-10-18; deployed 2026-10-20/21). `fulfillment-execution` ADR 0051 (`fulfillment-execution#224`, `cmd/execution/interleaving.go`): a local one-active-hint-per-station table (migration 0021) and a tie-break inside one `claimNext` priority band, never across a CPT or priority boundary, fail-open when absent or expired; the consumer runs when `TASK_INTERLEAVING_MODE=kafka` (set on the pod, group `fulfillment-execution-interleaving`; the default `permissive` wires nothing). Whether the running consumer has processed a hint was not checked | [TI](/contexts/task-interleaving/context-map) |
 | K48 | `wes-work-planning` → `order-management` | PL (optional additive `reference` and `line_no`) / ACL (the consumer reads only those two fields); C/S | `warehouse.work-planning.events`: `workunit.WorkUnitCreated`. OM matches the order line a released unit belongs to and marks it confirmed; a line never confirmed within `RELEASE_CONFIRMATION_TIMEOUT` raises the analytics-only `OrderReleaseUnconfirmed`, never a cancel or a retry (OM ADR 0043; WP ADR 0041 adds the two fields) | **wired-but-unused**. Both ends are built on `develop`: `wes-work-planning` publishes `reference` and `line_no`, and the `order-management` consumer ships dark (`RELEASE_CONFIRMATION_MODE=kafka` with a database and `EVENT_PUBLISHER=kafka`; the chart default is empty). `warehouse-infra` `develop` does not set `RELEASE_CONFIRMATION_MODE`. Flip to **live** when it does. The chart warns against enabling it before the deployed `wes-work-planning` carries ADR 0041, or every event is ignored and every line is flagged | [OM](/contexts/order-management/context-map), [WP](/contexts/wes-work-planning/context-map) |
 | K49 | `fulfillment-execution` → `warehouse-planning` | C/S; PL / ACL (task completions into a local read model, advisory) | `warehouse.fulfillment.events`: `task.TaskCompleted` (attributed by `task_type` to the one configured `DEMAND_SITE_ID`) | **live** (code merged 2026-10-20, `warehouse-planning#79`, ADR 0017; deployed 2026-10-20/21: group `warehouse-planning-observed-capacity` is running). `GET /capacity-plans/{id}/variance` returns planned versus observed tasks; it is advisory and never changes or republishes a plan | [WPL](/contexts/warehouse-planning/context-map) |
+| K50 | `product-master` → `returns-processing` | OHS + PL / CF (version-guarded local copy of the classification) | `warehouse.product-master.events`: `ProductClassified` | **wired-but-unused**. The consumer is built and always on (group from the required `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`; its integration test applies, dedupes and version-gates on real Kafka), the producer is live (K20), and `returns-processing` is not deployed | [returns-processing](/contexts/returns-processing/async-api) |
+| K51 | `order-management` → `returns-processing` | OHS + PL / CF (local copy of the allocated lines; the lines carry no quantity) | `warehouse.order-management.events`: `OrderAllocated`, `OrderPartiallyAllocated` | **wired-but-unused**. Consumer built (group `ORDER_LINES_CONSUMER_GROUP`, one claim per event covering every line), producer live (K1), service not deployed | [returns-processing](/contexts/returns-processing/async-api) |
+| K52 | `fulfillment-execution` → `returns-processing` | OHS + PL / CF (local copy of the manifested work units) | `warehouse.fulfillment.events`: `PackageManifested` (`order_ref` = the work unit id, reversed into the (order, line) key) | **wired-but-unused**. Consumer built (group `MANIFEST_CONSUMER_GROUP`), producer live (K16), service not deployed | [returns-processing](/contexts/returns-processing/async-api) |
+| K53 | `returns-processing` → `inventory-storage` | PL, the returns handover; inventory-storage is the Conformist and runs its existing staged-receipt use case (`BookReturnLine` in front of `ReceiveStock`) | `warehouse.returns-processing.events`: `disposition.ReturnLineStaged` (raised once per RESTOCK disposition; `condition` is the constant `Good`) | **wired-but-unused**, both ends built on `develop`: the producer (service PR #2) and the consumer (inventory-storage ADR 0044, `return_line_consumer.go`, group from the required `RETURN_LINE_CONSUMER_GROUP`, claim name `return-line-staged`; every other type on the topic is ignored). No synchronous call in either direction and no acknowledgement event | [INV](/contexts/inventory-storage/context-map), [returns-processing](/contexts/returns-processing/domain-events) |
+| K54 | `returns-processing` → `exception-management` | PL / CF (frozen copy of the source payload on the case) | `warehouse.returns-processing.events`: `returnreceipt.UnexpectedReturnReceived` | **wired-but-unused**. Both services merged 2026-10-20/21; the consumer (group `RETURNS_EXCEPTIONS_CONSUMER_GROUP`) opens one case per receipt line; neither is deployed | [exception-management](/contexts/exception-management/domain-events) |
+| K55 | `fulfillment-execution` → `exception-management` | OHS + PL / CF (frozen copies; repeats touch the open case) | `warehouse.fulfillment.events`: `TaskCPTMissed` (re-fired every sweep tick by design), `PackageDiverted`, `WeightDiscrepancyDetected` (both promoted onto the integration topic 2026-10-21) | **wired-but-unused**. Consumer built (group `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`); `TaskCPTMissed` is live on the topic (K16) and the two package types are published since their promotion; service not deployed | [exception-management](/contexts/exception-management/domain-events) |
+| K56 | `wes-work-planning` → `exception-management` | OHS + PL / CF (one case per path while the alarm re-fires) | `warehouse.work-planning.events`: `BacklogThresholdBreached` | **wired-but-unused**. Consumer built (group `WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP`); the producer publishes the type on its live topic; service not deployed | [exception-management](/contexts/exception-management/domain-events) |
+| K57 | `network-fulfillment` → `exception-management` | OHS + PL / CF (re-fires on every sweep pass touch the open case) | `warehouse.network-fulfillment.events`: `AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled` | **wired-but-unused**. Consumer built (group `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`). The producer side is itself wired-but-unused today (K19: `EVENT_PUBLISHER=kafka` is set in `warehouse-infra` `develop` with an apply pending), so this edge needs that apply plus a deployment of `exception-management` | [exception-management](/contexts/exception-management/domain-events) |
+| K58 | `order-management` → `exception-management` | PL, correlation only (never a case source); CF on the consumer | `warehouse.order-management.events`: `OrderRepromised` | **wired-but-unused**. Consumer built (group `ORDER_CORRELATION_CONSUMER_GROUP`): the auto-resolve rule matches the repromised `order_id` against the order behind a `TaskCPTMissed` case's frozen `order_ref` (`{order_id}-line-{line_no}`, order-level, inclusive window), `rule_id` = `<sourceType>-><onType>`; no match fails soft. The type previously had no consumer (see below) | [exception-management](/contexts/exception-management/domain-events) |
+| K59 | `inventory-storage` → `exception-management` | OHS + PL / CF (frozen copies; a short count and unlocated stock each open or touch their own case) | `warehouse.inventory.events`: `bin.DiscrepancyDetected`, `stock.ItemUnlocated` (both promoted onto the integration topic 2026-10-21, inventory-storage ADR 0043) | **wired-but-unused**. Consumer built (group `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`); the producer publishes both types on its live topic since the promotion; service not deployed | [exception-management](/contexts/exception-management/domain-events) |
+| K60 | `workforce-management` → `exception-management` | PL, planned; CF on the consumer | `warehouse.workforce.analytics`: `shiftplan.PathUnderstaffed` (analytics-only on the producer today) | **absent-planned**. Named by exception-management's ADR 0001 and ADR 0003; the producer must promote the type onto its integration topic first (its own PR), and no consumer for it exists | [exception-management](/contexts/exception-management/bounded-context-canvas) |
+| K61 | `network-inventory-planning` → `exception-management` | PL, planned; CF on the consumer | `warehouse.network-inventory-planning.analytics`: `saga.TransferStuckDetected` (analytics-only on the producer today, its ADR 0007 health ticker) | **absent-planned**. Named by exception-management's ADR 0001 and ADR 0003; the producer must promote the type onto its integration topic first (its own PR), and no consumer for it exists | [exception-management](/contexts/exception-management/bounded-context-canvas) |
 
 `pick-face-replenishment` and `task-interleaving`: both merged on `develop`
 2026-10-17 and registered in `warehouse-infra` (`#116`, `#121`); both run on the
@@ -367,6 +423,13 @@ are live wires. No flow through them has been traced end to end on the cluster.
 Both are Supporting, neither makes a synchronous call to a sibling, and no
 sibling calls them (the ops agent has no client for either).
 
+`returns-processing` and `exception-management`: both merged on `develop`
+2026-10-20/21 and NOT registered in `warehouse-infra`, so K50 to K59 are
+wired-but-unused wires and K60/K61 stay dashed planned. Both are Supporting,
+neither makes a synchronous call to a sibling, and no sibling calls them (the
+ops agent has no client for either; each ships a read-only MCP server that is
+default-off in its chart and has no caller).
+
 Published types with no consumer, as stated by their owners:
 
 - eight of the eleven types on `warehouse.work-planning.events` (all except
@@ -374,7 +437,10 @@ Published types with no consumer, as stated by their owners:
   by `order-management` only when `RELEASE_CONFIRMATION_MODE=kafka`, K48,
   wired-but-unused);
 - nine of the twelve types on `warehouse.facility.events`;
-- `OrderRepromised` on `warehouse.order-management.events`;
+- `OrderRepromised` on `warehouse.order-management.events` had no consumer
+  until `exception-management` built its correlation consumer (K58,
+  wired-but-unused: it exists on `develop` but neither service is deployed,
+  so nothing reads the type today);
 - `BottleneckDetected` on `warehouse.warehouse-planning.events`;
 - `TransferPlanApproved` on `warehouse.network-inventory-planning.events`;
 - `ProductRegistered`, `ProductDescriptionChanged`,
@@ -402,7 +468,16 @@ Published types with no consumer, as stated by their owners:
   again, `InterleavingHintConsumed`, `InterleavingHintExpired` and
   `InterleavingPolicyDeclared`; read only by its own analytics projector).
   `InterleavingHintIssued` on `warehouse.task-interleaving.events` is consumed
-  by `fulfillment-execution` (K47, live).
+  by `fulfillment-execution` (K47, live);
+- six of the seven types on `warehouse.returns-processing.events`: only
+  `ReturnLineStaged` (inventory-storage ADR 0044, K53) and
+  `UnexpectedReturnReceived` (`exception-management`, K54) have consumers, and
+  both are built-but-not-deployed, so nothing reads the topic today. The
+  analytics mirror is planned, not built;
+- all seven types on `warehouse.exception-management.events` plus the whole
+  `warehouse.exception-management.analytics` stream: no consumer exists in any
+  repository (`labor-performance` may read `ExceptionResolved` later, named by
+  its ADR 0001, not built).
 
 No other context consumes `inbound-receiving` events (**not consumed yet**),
 apart from K24, and none other consumes `slotting-optimization` events, apart
@@ -532,6 +607,17 @@ The context maps declare these pairs as having no relationship, by decision:
   `claimNext` stays the only claim path. `warehouse-ops-agent` has no client
   for either.
 
+- **`returns-processing` and `exception-management` ↔ every context not
+  named in K50 to K61.** Neither makes a synchronous call to a sibling, in
+  either direction. They have no relationship with each other beyond K54: the
+  returns context does not read cases, and the exceptions context consumes
+  exactly one returns type (`UnexpectedReturnReceived`) and ignores the rest.
+  `returns-processing` never writes the stock ledger (that is
+  `inventory-storage`, K53) and `exception-management` never writes to any
+  producer: a resolution is a fact other contexts may read. Both consume
+  `warehouse.fulfillment.events` but disjoint type sets (K52 vs K55).
+  `warehouse-ops-agent` has no client for either.
+
 ## Where the per-context maps disagree
 
 The rows above follow the code and the reference deployment. These are the
@@ -571,6 +657,18 @@ different pattern for the downstream side. The edge table shows both:
 - A7 WPL → OA: WPL says "Customer with an ACL". OA says Conformist.
 
 **Corrections to this page's previous version:**
+
+- `returns-processing` and `exception-management` (decided 2026-10-20, merged
+  2026-10-20/21) are added with edges K50 to K61 and two nodes in the diagram.
+  K50 to K59 are wired-but-unused: every consumer and both handovers are built
+  (`inventory-storage` ADR 0044 for K53; the `exception-management` consumers
+  for K54 to K59), and the four types that were analytics-only on
+  2026-10-20 — `PackageDiverted` and `WeightDiscrepancyDetected`
+  (fulfillment-execution), `DiscrepancyDetected` and `ItemUnlocated`
+  (inventory-storage, its ADR 0043) — were promoted onto their producers'
+  integration topics on 2026-10-21. K60 and K61 (`PathUnderstaffed`,
+  `TransferStuckDetected`) are absent-planned: both are analytics-topic-only
+  on their producers today and stay dashed planned, never faked as live.
 
 - `inbound-receiving` and `slotting-optimization` (decided 2026-10-08) were
   added with edges K22 to K29 and A13 and A14, all absent-planned. Since then

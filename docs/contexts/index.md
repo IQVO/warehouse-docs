@@ -2,7 +2,7 @@
 id: index
 title: Bounded Contexts
 sidebar_label: Bounded Contexts
-description: The sixteen domain bounded contexts and the operator agent, each with its ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
+description: The eighteen domain bounded contexts and the operator agent, each with its ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
 slug: /contexts
 ---
 
@@ -53,8 +53,8 @@ applies, is given in brackets:
     `workforce-management`, `process-path-management`,
     `labor-performance`, `network-fulfillment`, `warehouse-planning`,
     `product-master`, `inbound-receiving`, `slotting-optimization`,
-    `network-inventory-planning`, `pick-face-replenishment` and
-    `task-interleaving`.
+    `network-inventory-planning`, `pick-face-replenishment`,
+    `task-interleaving`, `returns-processing` and `exception-management`.
     (Hand-written for this site.)
 
 :::info[Synced pages]
@@ -94,8 +94,16 @@ pyramid, `make` targets and CI jobs).
 | [network-inventory-planning](/contexts/network-inventory-planning) | Core | `wes` | WES — inter-warehouse transfer planning (advisory proposals, operator-approved transfer saga) |
 | [pick-face-replenishment](/contexts/pick-face-replenishment) | Supporting | `wms` | WMS — keeps forward pick faces stocked from reserve bins (min/max policy, fullest reserve bin). Built and deployed in the reference cluster since 2026-10-20/21 (API, MCP, analytics and web remote). The whole `REPLENISH` chain is built (`inventory-storage`, `fulfillment-execution`, `wes-work-planning` ADR 0042, `process-path-management` ADR 0036); the path is seeded by an operator step, and no request has been traced through it yet |
 | [task-interleaving](/contexts/task-interleaving) | Supporting | `wes` | WES — after each completed task, an advisory, expiring hint of nearby open tasks. Built and deployed in the reference cluster since 2026-10-20/21 (API, MCP, analytics and web remote); `fulfillment-execution` consumes the hint as a tie-break (its ADR 0051) |
+| [returns-processing](/contexts/returns-processing) | Supporting | `wms` | WMS — the reverse flow of goods: RMA authorization against a shipped line, return receipt and grading, the disposition decision, and the staged handover of restockable units to `inventory-storage`. Built on `develop` 2026-10-20/21 (service PR #2, packaging and read-only MCP PR #3), not deployed; both output edges are built (`inventory-storage` ADR 0044, `exception-management`) |
+| [exception-management](/contexts/exception-management) | Supporting | `wes` | WES — the Problem Solve lifecycle: every case opened by a fact another context published (six producers live or promoted), with dedup, triage, assignment, an SLA clock and declarative auto-resolve. Built on `develop` 2026-10-20/21 (service PR #2, packaging and read-only MCP PR #3), not deployed; workforce-management and network-inventory-planning fact sources are planned, not built |
 
-See [Strategic Design](/strategic-design) for how these seventeen contexts relate to
+These two newest contexts do not yet ship their repositories' ddd-crew
+artifact pack, so their directories hold the seven pages written for this
+site (business context, ubiquitous language, bounded-context and
+aggregate-design canvases, domain events, the async narrative and this
+index) instead of the synced set, and no Operations group.
+
+See [Strategic Design](/strategic-design) for how these nineteen contexts relate to
 each other at the fleet level, and the
 [DDD Starter Modelling Process](/strategic-design/ddd-starter-modelling-process)
 for which modelling step each page belongs to.
