@@ -131,6 +131,7 @@ Subdomain and bounded-context segments (authoritative):
 | inbound-receiving        | wms       | inbound-receiving        | /warehouse/inbound-receiving |
 | slotting-optimization    | wms       | slotting-optimization    | /warehouse/slotting-optimization |
 | pick-face-replenishment  | wms       | pick-face-replenishment  | /warehouse/pick-face-replenishment |
+| returns-processing       | wms       | returns-processing       | /warehouse/returns-processing |
 | order-management         | wes       | order-management         | /warehouse/order-management |
 | process-path-management  | wes       | process-path-management  | /warehouse/process-path-management |
 | warehouse-planning       | wes       | warehouse-planning       | /warehouse/warehouse-planning |
@@ -141,6 +142,7 @@ Subdomain and bounded-context segments (authoritative):
 | wes-work-planning        | wes       | work-planning            | /warehouse/wes-work-planning |
 | network-inventory-planning | wes     | network-inventory-planning | /warehouse/network-inventory-planning |
 | task-interleaving        | wes       | task-interleaving        | /warehouse/task-interleaving |
+| exception-management     | wes       | exception-management     | /warehouse/exception-management |
 
 `pick-face-replenishment` and `task-interleaving`: both merged on `develop`
 2026-10-17 (each publishes through a transactional outbox) and both run in the
@@ -150,13 +152,21 @@ reference cluster since 2026-10-20/21 (`warehouse-infra#116`, `#121`). Topics:
 `warehouse.task-interleaving.events` / `.analytics` (type prefix
 `com.warehouse.wes.task-interleaving.`).
 
+`returns-processing` (wms) and `exception-management` (wes): scaffolded on
+`develop` 2026-10-20 (ADR 0001 in each repo); contracts, domain and consumers
+are in progress — their type prefixes
+`com.warehouse.wms.returns-processing.` and
+`com.warehouse.wes.exception-management.` are PINNED here so consumers and
+producers build against identical strings before the first event ships.
+
 ### What the subdomain segment means
 
 The `<subdomain>` segment is a fixed label of the published contract, not an
 industry software category (decided 2026-10-17):
 
 - **`wms`** marks the WMS tier: the item, location and inventory masters and
-  the contexts that keep stock in place (receiving, slotting, replenishment).
+  the contexts that keep stock in place (receiving, slotting, replenishment,
+  returns).
 - **`wes`** marks every other context, whether it executes work, manages
   labor, takes orders, plans capacity or balances the network.
 
