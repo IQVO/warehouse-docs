@@ -12,8 +12,9 @@ Six contexts publish events with the `wms` segment
 that are qualified. All five pass the industry WMS tests on the
 [industry reference](/wms-wes/industry-reference#the-tests-this-site-applies).
 Four are WMS core and one is WMS extended. The sixth,
-`pick-face-replenishment` (built, not deployed), is **not yet qualified** and
-has no card here yet; see the [qualification](/wms-wes/qualification).
+`pick-face-replenishment` (built and deployed in the reference cluster), is
+**not yet qualified** (the industry tests have not been run on it) and has no
+card here yet; see the [qualification](/wms-wes/qualification).
 
 ## Coverage of the WMS functions
 
@@ -53,7 +54,8 @@ flowchart LR
         MD["facility-layout and product-master"]
         SO["slotting-optimization"]
         LAB["workforce-management and<br/>labor-performance - wes"]
-        NONE["not built"]
+        PFR["pick-face-replenishment"]
+        TIN["task-interleaving - wes"]
         WAVELESS["deliberately waveless:<br/>wes-work-planning"]
     end
     F1 --> INB
@@ -69,37 +71,43 @@ flowchart LR
     F9 --> MD
     F10 --> SO
     F11 --> LAB
-    F12 -.-> NONE
+    F12 --> PFR
     F13 -.-> WAVELESS
-    F14 -.-> NONE
+    F14 --> TIN
 
     classDef wms fill:#ccfbf1,stroke:#0f766e,color:#042f2e
     classDef wes fill:#dbeafe,stroke:#1e3a8a,color:#172554
     classDef gap fill:#fae8ff,stroke:#86198f,color:#4a044e,stroke-dasharray: 4 3
-    class INB,INV,MD,SO wms
-    class OM,FE,LAB,WAVELESS wes
-    class NONE gap
+    class INB,INV,MD,SO,PFR wms
+    class OM,FE,LAB,TIN,WAVELESS wes
 ```
 
-Dotted arrows are functions this fleet does not run as a WMS would. Wave
-planning is replaced by design: `wes-work-planning` releases work
+The dotted arrow is the one function this fleet does not run as a WMS would.
+Wave planning is replaced by design: `wes-work-planning` releases work
 continuously, one unit at a time, which is the waveless model Interact
 Analysis describes as the reason the execution layer emerged.[6] Replenishment
-of forward pick slots and task interleaving are not in production. Replenishment
-now has an owner that is built but not deployed, `pick-face-replenishment`
-(`wms`), which raises replenishment requests. The stock-ledger end
-(`inventory-storage`: the `BinStockLevelChanged` producer and the
-`REPLENISHMENT` relocation) and the task end (`fulfillment-execution`: the
-`REPLENISH` task) of its execution chain are built, and so is the planner
-(`wes-work-planning` ADR 0042 plans one `REPLENISH` work unit per request on the
-`REPLENISH` path of `process-path-management`'s ADR 0036). Its consumer is
-opt-in and off in the reference deployment. Task interleaving has an
-owner that is built but not deployed, `task-interleaving` (`wes`), which
-issues an advisory hint after each completed task; `fulfillment-execution`
-does not consume the hint yet. See the
-[context map](/strategic-design/context-map). Until they run,
-`warehouse-planning` knows `REPLENISHMENT` only as a type of capacity
-constraint. `ship` stops at the SLAM weigh-check, label and manifest event in
+of forward pick slots and task interleaving have owners, both built and
+deployed in the reference cluster:
+
+- **Replenishment: `pick-face-replenishment` (`wms`).** It detects pick faces
+  under their `MIN_MAX` policy and raises replenishment requests. The stock-ledger end
+  (`inventory-storage`: the `BinStockLevelChanged` producer and the
+  `REPLENISHMENT` relocation) and the task end (`fulfillment-execution`: the
+  `REPLENISH` task) of its execution chain are built, and so is the planner
+  (`wes-work-planning` ADR 0042 plans one `REPLENISH` work unit per request on
+  the `REPLENISH` path of `process-path-management`'s ADR 0036). The planner's
+  consumer runs in the reference cluster (`REPLENISHMENT_MODE=kafka`, group
+  `wes-work-planning-replenishment`). The `REPLENISH` path is still seeded by an
+  operator step, and the demand-cover policy is not built.
+- **Task interleaving: `task-interleaving` (`wes`).** It issues an advisory
+  hint after each completed task, and `fulfillment-execution` consumes the
+  hint as an advisory tie-break (`TASK_INTERLEAVING_MODE=kafka`, its ADR 0051).
+  The hint never decides when or where floor work runs.
+
+Neither chain has been exercised end to end on the cluster. See the
+[context map](/strategic-design/context-map) and the
+[gaps tracker](/fleet-health/ecosystem-gaps). `warehouse-planning` still knows
+`REPLENISHMENT` only as a type of capacity constraint. `ship` stops at the SLAM weigh-check, label and manifest event in
 `fulfillment-execution`: there is no carrier or transport integration.
 
 ## facility-layout

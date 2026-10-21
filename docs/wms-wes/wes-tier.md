@@ -12,7 +12,7 @@ The ten contexts whose events carry the `wes` segment
 but is filed here). The industry tests on the
 [industry reference](/wms-wes/industry-reference#the-tests-this-site-applies)
 split them into four groups, and this page follows that split. An
-eleventh `wes` context, `task-interleaving` (built, not deployed), is **not yet
+eleventh `wes` context, `task-interleaving` (built and deployed in the reference cluster), is **not yet
 qualified** and has no card here yet; see the
 [qualification](/wms-wes/qualification):
 
