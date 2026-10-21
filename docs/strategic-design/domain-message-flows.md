@@ -46,22 +46,22 @@ context's own projector and are never read by a sibling.
 | `warehouse.order-management.events` | order-management | `OrderAllocated`, `OrderPartiallyAllocated` | wes-work-planning, warehouse-planning |
 | | | `SiteSkuDemandChanged` | network-inventory-planning, slotting-optimization |
 | `warehouse.inventory.events` | inventory-storage | `StockReserved`, `ReservationRevoked` | wes-work-planning |
-| | | `StockRelocated` (from `POST /relocations` and from a completed `RELOCATE` task) | slotting-optimization (plan execution progress; only reason `SLOTTING` executes a plan move); pick-face-replenishment (acts only on reason `REPLENISHMENT`, which inventory-storage records for a completed `REPLENISH` task; service built, not deployed) |
-| | | `BinStockLevelChanged` (absolute per-bin level, key `<bin>:<sku>`) | pick-face-replenishment (service built, not deployed) |
+| | | `StockRelocated` (from `POST /relocations` and from a completed `RELOCATE` task) | slotting-optimization (plan execution progress; only reason `SLOTTING` executes a plan move); pick-face-replenishment (acts only on reason `REPLENISHMENT`, which inventory-storage records for a completed `REPLENISH` task) |
+| | | `BinStockLevelChanged` (absolute per-bin level, key `<bin>:<sku>`) | pick-face-replenishment (deployed) |
 | | | `TransferStockAllocated`, `TransferStockAllocationRejected`, `TransferReceiptStaged`, `TransferStockStowed` | network-inventory-planning |
 | | | legacy `ProductClassified` (emitted only by the one-shot backfill) | product-master's legacy importer (migration only, removed at stage E) |
 | `warehouse.work-planning.events` | wes-work-planning | `WorkReleased` (including `RELOCATE` work for slot-plan moves and, since wes-work-planning's ADR 0042, `REPLENISH` work with its additive `replenishment` object; the `REPLENISH` work exists only when the opt-in `REPLENISHMENT_MODE=kafka` consumer runs, which the reference deployment does not enable) | fulfillment-execution |
 | | | `PathCapacityChanged` | order-management, network-fulfillment |
-| `warehouse.fulfillment.events` | fulfillment-execution | `TaskCompleted` (RELOCATE tasks add `sku`, `from_bin`, `to_bin`, `quantity`, `relocation_ref`; REPLENISH tasks add the same plus `request_ref`) | wes-work-planning, labor-performance, inventory-storage (picks, RELOCATE and REPLENISH moves); task-interleaving (service built, not deployed) |
-| | | `TaskAvailable` (RELOCATE and REPLENISH tasks only), `TaskClaimed` | task-interleaving (service built, not deployed) |
+| `warehouse.fulfillment.events` | fulfillment-execution | `TaskCompleted` (RELOCATE tasks add `sku`, `from_bin`, `to_bin`, `quantity`, `relocation_ref`; REPLENISH tasks add the same plus `request_ref`) | wes-work-planning, labor-performance, inventory-storage (picks, RELOCATE and REPLENISH moves); task-interleaving; warehouse-planning (observed capacity, its ADR 0017, K49) |
+| | | `TaskAvailable` (RELOCATE and REPLENISH tasks only), `TaskClaimed` | task-interleaving (deployed) |
 | | | `TransferPicked`, `TransferDispatched`, `TransferArrived` | network-inventory-planning |
 | | | `TaskCPTMissed`, `PackageManifested` | order-management |
 | `warehouse.workforce.events` | workforce-management | `ShiftPlanCommitted` | wes-work-planning, warehouse-planning |
 | `warehouse.labor-performance.events` | labor-performance | `TaskPerformanceRecorded` | workforce-management |
 | `warehouse.process-path-management.events` | process-path-management | `ProcessPathCreated`, `ProcessPathUpdated`, `ProcessPathDeactivated` | fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment |
 | | | `CPTScheduleChanged` | order-management, network-fulfillment |
-| `warehouse.facility.events` | facility-layout | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | inventory-storage (all three), warehouse-planning and inbound-receiving (the two slot events); slotting-optimization (all three); pick-face-replenishment (all three; service built, not deployed) |
-| | | `LocationGeometryUpdated` | task-interleaving (with the three above; service built, not deployed) |
+| `warehouse.facility.events` | facility-layout | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | inventory-storage (all three), warehouse-planning and inbound-receiving (the two slot events); slotting-optimization (all three); pick-face-replenishment (all three) |
+| | | `LocationGeometryUpdated` | task-interleaving (with the three above) |
 | | | `SiteCapabilityChanged` | network-inventory-planning |
 | `warehouse.warehouse-planning.events` | warehouse-planning | `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected` | order-management (`BottleneckDetected` is ignored); `CapacityPlanPublished` also network-inventory-planning |
 | `warehouse.network-fulfillment.events` | network-fulfillment | none | no consumer (wired but unused) |
@@ -71,12 +71,12 @@ context's own projector and are never read by a sibling.
 | | | `ProductRegistered` | inbound-receiving (local copy of known SKUs) |
 | | | `ProductDimensionsDeclared`, `ProductMeasured` | slotting-optimization |
 | `warehouse.inbound-receiving.events` | inbound-receiving | `ReceiptLineReceived` | inventory-storage (its ADR 0037) |
-| | | `DockAppointmentBooked` | none; warehouse-planning inbound-labor demand is planned, not built |
-| `warehouse.slotting-optimization.events` | slotting-optimization | `SlotPlanApproved` | wes-work-planning (one `RELOCATE` work unit per move, its ADR-0040); pick-face-replenishment (forward map; service built, not deployed) |
-| `warehouse.pick-face-replenishment.events` | pick-face-replenishment (built, not deployed) | `ReplenishmentRequested` | wes-work-planning (one `REPLENISH` work unit per request, its ADR 0042; opt-in and off in the reference deployment, so wired-but-unused, K44) |
+| | | `DockAppointmentBooked`, `DockAppointmentCancelled` | warehouse-planning (inbound labour demand per site, declared labour standards, its ADR 0017, K28) |
+| `warehouse.slotting-optimization.events` | slotting-optimization | `SlotPlanApproved` | wes-work-planning (one `RELOCATE` work unit per move, its ADR-0040); pick-face-replenishment (forward map) |
+| `warehouse.pick-face-replenishment.events` | pick-face-replenishment | `ReplenishmentRequested` | wes-work-planning (one `REPLENISH` work unit per request, its ADR 0042; opt-in, and `REPLENISHMENT_MODE=kafka` is set in the reference deployment, K44) |
 | | | `ReplenishmentCancelled` | wes-work-planning (cancels the unit only while it is still Pending, same opt-in) |
 | | | `ReplenishmentCompleted` | none (wes-work-planning reads the topic and ignores it) |
-| `warehouse.task-interleaving.events` | task-interleaving (built, not deployed) | `InterleavingHintIssued` | none; fulfillment-execution does not consume it yet |
+| `warehouse.task-interleaving.events` | task-interleaving | `InterleavingHintIssued` | fulfillment-execution (advisory tie-break inside one `claimNext` priority band, its ADR 0051, K47) |
 
 Several published types have no sibling consumer today. These are
 `OrderRepromised`, eight of the eleven `warehouse.work-planning.events`
@@ -86,10 +86,10 @@ example `PathPlanDriftDetected` and `WorkUnitCompleted`),
 `BottleneckDetected`, `TransferPlanApproved`, every `warehouse.network-fulfillment.events` type,
 `ProductDescriptionChanged`, every
 `warehouse.inbound-receiving.events` type except `ReceiptLineReceived`,
+`DockAppointmentBooked` and `DockAppointmentCancelled`,
 `SlotPlanGenerated` and `SlotPlanRejected` on
-`warehouse.slotting-optimization.events`, and every
-`warehouse.pick-face-replenishment.events` and
-`warehouse.task-interleaving.events` type. No scenario below
+`warehouse.slotting-optimization.events`, and
+`ReplenishmentCompleted` on `warehouse.pick-face-replenishment.events`. No scenario below
 traverses the `inbound-receiving`, `slotting-optimization`,
 `pick-face-replenishment` or `task-interleaving` rows yet (the
 slot-plan execution chain is the sequence on the

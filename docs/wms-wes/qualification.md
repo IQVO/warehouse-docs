@@ -22,8 +22,8 @@ Two labels appear side by side throughout this section. Do not confuse them:
   context publishes, `com.warehouse.<subdomain>.<context>.<entity>.<Event>`.
   `wms` is facility-layout, inventory-storage, product-master,
   inbound-receiving, slotting-optimization and
-  pick-face-replenishment (built, not deployed); `wes` is every other context,
-  `task-interleaving` (built, not deployed) among them. The
+  pick-face-replenishment (built and deployed); `wes` is every other context,
+  `task-interleaving` (built and deployed) among them. The
   [Event Standard](/strategic-design/event-standard-cloudevents#what-the-subdomain-segment-means)
   defines it as a fixed contract label, not an industry category: `wms` is the
   item, location and inventory masters plus the contexts that keep stock in

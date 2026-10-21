@@ -174,9 +174,9 @@ is a freshness lag, not real time, which is why every report has a
 | `product-master` | `cmd/api` | `cmd/mcp` | `cmd/product-projector` | `cmd/product-reports` | `productmaster_mfe` | 2 |
 | `network-inventory-planning` | `cmd/network-inventory-planning` | `cmd/mcp` | `cmd/nip-projector` | `cmd/nip-reports` | `nip_mfe` | 2 |
 | `inbound-receiving` | `cmd/api` | `cmd/mcp` | `cmd/inbound-projector` | `cmd/inbound-reports` | `inbound_mfe` | 2 |
-| `slotting-optimization` | `cmd/api` | `cmd/mcp` | none | none | none | 1 |
-| `pick-face-replenishment` | `cmd/api` | none | none | none | none | 1 (schema only: not deployed) |
-| `task-interleaving` | `cmd/api` | none | none | none | none | 1 (schema only: not deployed) |
+| `slotting-optimization` | `cmd/api` | `cmd/mcp` | `cmd/slotting-projector` | `cmd/slotting-reports` | `slotting_mfe` | 2 |
+| `pick-face-replenishment` | `cmd/api` | `cmd/mcp` | `cmd/pfr-projector` | `cmd/pfr-reports` | `replenishment_mfe` | 2 |
+| `task-interleaving` | `cmd/api` | `cmd/mcp` | `cmd/ti-projector` | `cmd/ti-reports` | `task_interleaving_mfe` | 2 |
 | `warehouse-ops-agent` | `cmd/agent` | in-process at `/mcp` | none | none | none | **0** |
 
 Per-context table counts are in [Data Models](/architecture/data-models),
@@ -387,8 +387,8 @@ flowchart LR
 | `warehouse.product-master.events` | product-master | 5 | inventory-storage, order-management, wes-work-planning, fulfillment-execution (`ProductClassified`, into local copies); inbound-receiving (`ProductRegistered`, opt-in); slotting-optimization (`ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured`, opt-in) |
 | `warehouse.inbound-receiving.events` | inbound-receiving | 9 | inventory-storage (`ReceiptLineReceived`, opt-in, its ADR 0037) |
 | `warehouse.slotting-optimization.events` | slotting-optimization | 3 | wes-work-planning (`SlotPlanApproved`, plans one `RELOCATE` work unit per move, its ADR-0040); pick-face-replenishment (`SlotPlanApproved`, opt-in); `SlotPlanGenerated` and `SlotPlanRejected` have no consumer |
-| `warehouse.pick-face-replenishment.events` | pick-face-replenishment | 3 | wes-work-planning (`ReplenishmentRequested` and `ReplenishmentCancelled`, plans one `REPLENISH` work unit per request, its ADR-0042; opt-in `REPLENISHMENT_MODE=kafka`, off in the reference deployment); `ReplenishmentCompleted` has no consumer (wes-work-planning ignores it) |
-| `warehouse.task-interleaving.events` | task-interleaving | 1 | none yet: `InterleavingHintIssued` is intended for fulfillment-execution (planned, not built: it does not read it) |
+| `warehouse.pick-face-replenishment.events` | pick-face-replenishment | 3 | wes-work-planning (`ReplenishmentRequested` and `ReplenishmentCancelled`, plans one `REPLENISH` work unit per request, its ADR-0042; opt-in `REPLENISHMENT_MODE=kafka`, set in the reference deployment); `ReplenishmentCompleted` has no consumer (wes-work-planning ignores it) |
+| `warehouse.task-interleaving.events` | task-interleaving | 1 | fulfillment-execution (`InterleavingHintIssued`, an advisory tie-break inside one `claimNext` priority band, its ADR 0051; `TASK_INTERLEAVING_MODE=kafka`) |
 
 The type counts are the messages each producer's `asyncapi.yaml` declares on
 its integration channel. Several consumers are themselves behind a mode

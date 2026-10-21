@@ -13,7 +13,8 @@ execution system (WES)** decides when and where work runs, and a **warehouse
 control system (WCS)** drives the equipment. This section explains those
 categories from industry sources, then qualifies each of the seventeen bounded
 contexts on this site against them. Two of them, `pick-face-replenishment` and
-`task-interleaving`, are listed but not yet qualified.
+`task-interleaving`, are listed but not yet qualified: both are built and
+deployed, but nobody has run the industry tests on them.
 
 ## The fleet in the stack
 
@@ -67,25 +68,28 @@ flowchart TB
 ```
 
 `warehouse-ops-agent` is not drawn: it is a read-only decision-support layer
-over all of these tiers. `pick-face-replenishment` (`wms`, built but not
-deployed) and `task-interleaving` (`wes`, built but not deployed) are not drawn
-either, because their industry category is not yet qualified (see
+over all of these tiers. `pick-face-replenishment` (`wms`, built and deployed in
+the reference cluster) and `task-interleaving` (`wes`, built and deployed) are
+not drawn either, because their industry category is not yet qualified (see
 [the qualification](/wms-wes/qualification)). Thick arrows are Kafka events (CloudEvents 1.0); the
 order-management to inventory-storage reservation is a REST call. Each arrow
 stands for the event families listed on the tier pages.
 
 ## What the qualification found
 
-- **WMS: the core is complete, two classic functions are missing.** Receive, put away, store,
-  count, allocate, pick, pack and ship-verify all exist, plus the item and
-  location masters, slotting and labor management. Replenishment of forward
-  pick slots is built as a request generator (`pick-face-replenishment`, not
-  deployed; the `fulfillment-execution` and `inventory-storage` ends of its
-  execution chain are built, the `wes-work-planning` planner is not) and task
-  interleaving is not in production yet: its owner `task-interleaving` is built
-  as an advisory hint (not deployed, and `fulfillment-execution` does not read
-  the hint). Wave planning is replaced on
-  purpose by waveless release.
+- **WMS: the core is complete, and the two classic functions that were missing now have owners.**
+  Receive, put away, store, count, allocate, pick, pack and ship-verify all
+  exist, plus the item and location masters, slotting and labor management.
+  Replenishment of forward pick slots is owned by `pick-face-replenishment`, a
+  request generator that is built and deployed in the reference cluster; its
+  whole execution chain is built (`wes-work-planning` plans one `REPLENISH`
+  work unit per request and its consumer runs with `REPLENISHMENT_MODE=kafka`,
+  `fulfillment-execution` runs the task, `inventory-storage` moves the stock).
+  Task interleaving is owned by `task-interleaving`, an advisory hint that is
+  built and deployed, and `fulfillment-execution` now reads the hint as a
+  tie-break (its ADR 0051). Neither chain has been exercised end to end on the
+  cluster, and the `REPLENISH` path is still an operator seed step. Wave
+  planning is replaced on purpose by waveless release.
 - **WES, real and equipment-free.** `wes-work-planning` and
   `fulfillment-execution` release, balance and dispatch work the way the
   industry describes a WES, an *embedded* WES in Interact Analysis's terms.
