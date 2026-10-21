@@ -23,6 +23,11 @@ deployed on 2026-10-13. A second round (2026-10-14 to 2026-10-17, see
 [Gaps closed after the first tracker](#gaps-closed-after-the-first-tracker-2026-10-14-to-2026-10-17))
 closed the rows that were still open, fixed the gaps the documentation still
 named, and was released on 2026-10-17 and applied to the kind cluster the same day (only the order-management consumer of gap 23 is not deployed).
+A third round (2026-10-20 and 2026-10-21, see
+[Gaps closed on 2026-10-20 and 2026-10-21](#gaps-closed-on-2026-10-20-and-2026-10-21))
+closed rows 28 to 31, fixed the seven gaps found while the WMS documentation
+was refreshed to 2.0.0, and was applied to the kind cluster; it also lists the
+gaps that are still open.
 
 This page is now a **tracker**. Every gap has one status:
 
@@ -33,10 +38,14 @@ This page is now a **tracker**. Every gap has one status:
 - **Open**: not fixed yet, with what is missing.
 
 :::info[How this was verified]
-Every row was re-checked on 2026-10-13 (the rows added by the second round on 2026-10-17) against `origin/develop` of each
+Every row was re-checked on 2026-10-13 (the rows added by the second round on 2026-10-17, the rows of the third round on 2026-10-21) against `origin/develop` of each
 repository with the wave's read-only scripts (`verify-ecogaps.sh` 1 to 4:
 `git grep` / `git show` per claim) plus targeted checks, and every pull
-request this page cites was confirmed `MERGED` with `gh pr view`. "Fixed"
+request this page cites was confirmed `MERGED` with `gh pr view`. The third
+round was also checked read-only against the kind cluster on 2026-10-21
+(`kubectl get` of the ArgoCD applications, pods, Deployments and the web
+gateway ConfigMap, `kubectl logs`, and `kubectl get --raw` GETs through the
+API server's service proxy; nothing was written to the cluster). "Fixed"
 means merged to `develop`. **Released** (merged to `main`, live on the
 repository's own docs site) and **deployed** (applied to the kind cluster)
 are separate: see gap 17a for the release round and
@@ -56,16 +65,24 @@ version of this page used.
 
 | Status | Rows |
 | --- | --- |
-| Fixed | 66 |
+| Fixed | 77 |
 | Kept by decision | 6 |
-| Open | 4 |
-| **Total** | **76** |
+| Open | 7 |
+| **Total** | **90** |
 
 A row with a mixed outcome counts under its worst status.
 E1, E2 and E5 only point at another row and are not counted twice.
 
-Open rows (all in [Gaps closed after the first tracker](#gaps-closed-after-the-first-tracker-2026-10-14-to-2026-10-17)): 28 (A8/A9) and 29 (A14) the ops agent's unused MCP clients and the slotting MCP server, 30 (K28) and 31 (X4) the warehouse-planning inbound and
-observed-capacity feedback. Each waits for a decision recorded in an ADR first.
+Open rows (all in [Gaps closed on 2026-10-20 and 2026-10-21](#gaps-closed-on-2026-10-20-and-2026-10-21)): 45 the
+`kafka-go` consumer that starts before its topic exists, 46 the missing
+pick-face-replenishment demand-cover policy, 47 pick-face-replenishment and
+task-interleaving `cmd/api` emitting no metrics or traces, 48 the ops agent's
+missing pick-face-replenishment and task-interleaving clients, 49 the
+`REPLENISH` path seed that is an operator step, 50 stale
+development-mode text in the slotting-optimization REST spec, and 51 the
+industry qualification of the two newest contexts. Rows 28 to 31,
+which were open in the first version of this section, are fixed (see their
+rows for what is and is not deployed).
 
 ## S1: capabilities that did not work end to end
 
@@ -201,11 +218,43 @@ day, except where a row says otherwise (see
 | 25 | SLO-1 | Alertmanager was off: the alert rules were never grouped, inhibited or routed anywhere. | warehouse-infra | **Fixed** in [warehouse-infra#88](https://github.com/IQVO/warehouse-infra/pull/88): Alertmanager is on in kind, one replica, with a `null` receiver. **Nothing is delivered anywhere** (a local cluster has no pager); what it adds is grouping by alertname, context and service, inhibition (a critical alert silences the warning alerts of the same context and service), silences and the `/api/v2/alerts` view, plus a Grafana datasource. **Deployed 2026-10-17** from warehouse-infra `61f9e7a`: the Alertmanager pod runs, Prometheus lists it as an active Alertmanager, and a synthetic test alert posted to Alertmanager was accepted and routed to the `null` receiver. |
 | 26 | SLO-2 | No burn-rate rules: SLOs 1 and 2 (API availability, API latency) were unprotected. | warehouse-infra | **Fixed** in [warehouse-infra#88](https://github.com/IQVO/warehouse-infra/pull/88): `scripts/gen-context-dashboards.py` generates four rules per context (availability and latency, each fast `critical` and slow `warning`), promtool-tested (95 rules). The SLO window is one day, because Prometheus keeps 24 hours; the alert windows are 1 h and 5 m (fast) and 6 h and 30 m (slow). The latency indicator counts Kong's 400 ms bucket, because Kong exports no 500 ms boundary. The error-budget policy on [Fleet SLOs](../fleet-operations/slos.md) is a proposal, not in force. **Deployed 2026-10-17**: Prometheus loads 95 rules in 30 groups (15 `-slo` groups), every rule healthy. |
 | 27 | UX-1 | `verify:routes` ran in no workflow, and failed on a healthy stack (a `pushState` counted as a reload, aborted requests counted, the remote's fallback card passed every check). | warehouse-console | **Fixed** in [warehouse-console#91](https://github.com/IQVO/warehouse-console/pull/91) (an advisory workflow, not a required check; the script now passes, and `VERIFY_STUB_API=1` answers the API origin `503` in the browser) and [warehouse-console#92](https://github.com/IQVO/warehouse-console/pull/92) (the guides). |
-| 28 | A8, A9 | The ops agent's order-management and process-path-management MCP clients are wired and no use case reads them (`cmd/agent/main.go` says so). | warehouse-ops-agent | **Open**: build one real read-only use case per client, or delete the wiring. The zero-write rule stays. |
-| 29 | A14 | The slotting-optimization MCP server is built (ADR 0005) but dark in kind, and the agent has no client for it. | warehouse-ops-agent, warehouse-infra | **Open**: the client and the infra switch (`mcp.enabled`) land together with the use case of gap 28. |
-| 30 | K28 | warehouse-planning does not consume `DockAppointmentBooked`, so a capacity plan has no inbound path. | warehouse-planning | **Open**: needs an ADR first; the inbound labour minutes per appointment are a business rule nobody has specified. |
-| 31 | X4 | Observed capacity does not feed back into warehouse-planning (warehouse-planning ADR 0001, "later phase"). | warehouse-planning | **Open**: design only, together with gap 30. |
+| 28 | A8, A9 | The ops agent's order-management and process-path-management MCP clients are wired and no use case reads them (`cmd/agent/main.go` says so). | warehouse-ops-agent | **Fixed** in [warehouse-ops-agent#151](https://github.com/IQVO/warehouse-ops-agent/pull/151) (the daily brief's promise health reads order-management through its MCP client, `internal/application/usecases/promise_health.go:43`; the unused process-path-management client is removed) and [warehouse-ops-agent#153](https://github.com/IQVO/warehouse-ops-agent/pull/153) (18 client methods no use case calls are removed). Both are merged to `develop` and `main`. **Not deployed**: the running image is `local-75b7ee6` (the 2026-10-12 commit of `#131`), and neither merge commit is an ancestor of it (`git merge-base --is-ancestor`). |
+| 29 | A14 | The slotting-optimization MCP server is built (ADR 0005) but dark in kind, and the agent has no client for it. | warehouse-ops-agent, warehouse-infra | **Fixed**: the MCP server is on in kind (`mcp.enabled: true` and the Kong route in `helm-values/slotting-optimization.yaml`, [warehouse-infra#77](https://github.com/IQVO/warehouse-infra/pull/77); the `slotting-optimization-mcp` pod runs); the agent has the client and a slot-plan watch in the daily brief (`cmd/agent/main.go:193`, ADR 0024, [warehouse-ops-agent#151](https://github.com/IQVO/warehouse-ops-agent/pull/151)); the agent's endpoint is set by [warehouse-infra#102](https://github.com/IQVO/warehouse-infra/pull/102) (`SLOTTING_OPTIMIZATION_MCP_ENDPOINT` is on the pod). **Not deployed on the client side**: the agent image predates `#151` (gap 28). |
+| 30 | K28 | warehouse-planning does not consume `DockAppointmentBooked`, so a capacity plan has no inbound path. | warehouse-planning | **Fixed** in [warehouse-planning#79](https://github.com/IQVO/warehouse-planning/pull/79) (ADR 0017): a consumer of `DockAppointmentBooked` and `DockAppointmentCancelled` (group `INBOUND_DEMAND_CONSUMER_GROUP`), operator-declared inbound labour standards (labour minutes per appointment plus minutes per ASN, attributed to the one configured `DEMAND_SITE_ID`; the business rule the first version said nobody had specified), and REST `/inbound-labour-standards`, `/inbound-labour-standards/{location}/{path_id}` and `/inbound-demand` (`apis/openapi.yaml:659-742`). The consumer group is wired by [warehouse-infra#122](https://github.com/IQVO/warehouse-infra/pull/122) and runs on the cluster (`consumer running`, group `warehouse-planning-inbound-demand`, topic `warehouse.inbound-receiving.events`); `GET /inbound-labour-standards` answers `{"standards":[]}` because no operator has defined a standard yet. |
+| 31 | X4 | Observed capacity does not feed back into warehouse-planning (warehouse-planning ADR 0001, "later phase"). | warehouse-planning | **Fixed** in [warehouse-planning#79](https://github.com/IQVO/warehouse-planning/pull/79) (ADR 0017): a consumer of fulfillment-execution's task completions (group `OBSERVED_CAPACITY_CONSUMER_GROUP`, topic `warehouse.fulfillment.events`) feeds a local read model, and `GET /capacity-plans/{id}/variance` returns the advisory planned-versus-observed variance; it never changes a published plan. The consumer group runs on the cluster (`warehouse-planning-observed-capacity`). The first version of this row also named wes-work-planning and network-fulfillment as sources; ADR 0017 reads only fulfillment-execution. |
 | 32 | R12 | There is no live retail-network adapter: `NETWORK_MODE=live` refuses to boot. | network-fulfillment | **Kept by decision**: network-fulfillment ADR 0009 defers it; a live adapter needs credentials this fleet does not hold. |
+
+## Gaps closed on 2026-10-20 and 2026-10-21
+
+While the WMS documentation was refreshed to 2.0.0, the parent session
+re-verified every WMS gap against `develop` and found seven more (W1 to W7,
+rows 38 to 44). They and rows 28 to 31 were closed in pull requests merged on
+2026-10-20 and 2026-10-21 and applied to the kind cluster (see
+[Deployed to the kind cluster](#third-round-applied-on-2026-10-20-and-2026-10-21)).
+"Fixed" still means merged into `develop`. Release state, checked on
+2026-10-21 with `git merge-base --is-ancestor <merge commit> origin/main`:
+inventory-storage#231, fulfillment-execution#224, warehouse-ops-agent#151 and
+#153 are on `main`; warehouse-planning#79, slotting-optimization#46,
+pick-face-replenishment#20, warehouse-infra#121 and warehouse-infra#123 are
+not. The kind cluster runs images built from `develop` (gap 17k explains why
+that is independent of a release).
+
+| # | Was | Gap | Owner | Status |
+| --- | --- | --- | --- | --- |
+| 38 | W1 | inventory-storage still shipped the in-memory runtime path next to Postgres and Kafka; the other five `wms` repositories had already moved to a real-only runtime. | inventory-storage | **Fixed** in [inventory-storage#231](https://github.com/IQVO/inventory-storage/pull/231): Postgres and Kafka are the only runtime (ADR 0042). On the cluster the API, MCP, projector and reports pods run and `/readyz` answers `{"status":"ready"}`. |
+| 39 | W2 | pick-face-replenishment's MCP server, `pfr-projector` / `pfr-reports` and web remote were built but not deployed, and the web remote had no Dockerfile or nginx config. | pick-face-replenishment, warehouse-infra | **Fixed** in [pick-face-replenishment#20](https://github.com/IQVO/pick-face-replenishment/pull/20) (packages the `replenishment_mfe` remote: Dockerfile, `nginx.conf`, CI image build) and [warehouse-infra#121](https://github.com/IQVO/warehouse-infra/pull/121) (MCP, analytics, `frontend_remote`). The ArgoCD application `pick-face-replenishment` (registered by [warehouse-infra#116](https://github.com/IQVO/warehouse-infra/pull/116)) is Synced and Healthy with five pods: API, MCP, projector, reports and frontend. |
+| 40 | W3 | task-interleaving's MCP server, projector, reports and web remote were built but not deployed (the values said "no analytics projector/reports pair, no MCP server and no frontend"). | warehouse-infra | **Fixed** in [warehouse-infra#121](https://github.com/IQVO/warehouse-infra/pull/121). The ArgoCD application `task-interleaving` is Synced and Healthy with five pods: API, MCP, analytics projector, analytics reports and frontend. The consumer of its hint is in fulfillment-execution ([fulfillment-execution#224](https://github.com/IQVO/fulfillment-execution/pull/224), ADR 0051, `cmd/execution/interleaving.go`; `TASK_INTERLEAVING_MODE=kafka` is on the pod). |
+| 41 | W4 | warehouse-console registers `slotting_mfe` and the replenishment and interleaving remotes, but infra had no `frontend_remote` for slotting-optimization, pick-face-replenishment or task-interleaving, so there was no image and no web-gateway route. The slotting web had no Dockerfile either. | slotting-optimization, warehouse-infra | **Fixed** in [slotting-optimization#46](https://github.com/IQVO/slotting-optimization/pull/46) (packaging) and [warehouse-infra#121](https://github.com/IQVO/warehouse-infra/pull/121). The web-gateway ConfigMap routes `/mfes/slotting-optimization/`, `/mfes/pick-face-replenishment/` and `/mfes/task-interleaving/`, and each `remoteEntry.js` is served through the gateway (read through the API server's service proxy on 2026-10-21). |
+| 42 | W5 | The infra values forced the readiness probe to `/healthz` for facility-layout and inventory-storage, which hid the real `/readyz` (Postgres and Kafka). | warehouse-infra | **Fixed** in [warehouse-infra#123](https://github.com/IQVO/warehouse-infra/pull/123): both use the chart default `/readyz`. Both Deployments on the cluster have `readinessProbe` `/readyz` and liveness `/healthz`. |
+| 43 | W6 | Documentation drift: the WMS functions page said replenishment and task interleaving were "not built" and that fulfillment-execution did not read the interleaving hint. | warehouse-docs | **Fixed** in this pull request: [WMS tier](/wms-wes/wms-tier), [WMS and WES overview](/wms-wes), [industry reference](/wms-wes/industry-reference), [context map](/strategic-design/context-map). Both contexts are built and deployed. task-interleaving is released (`main` equals `develop`, tag `v0.1.3`); pick-face-replenishment has tag `v0.1.2` and eight newer commits on `develop`, `#20` among them, that are not on `main`. |
+| 44 | W7 | Documentation drift: the tier pages called pick-face-replenishment and task-interleaving "built, not deployed". | warehouse-docs | **Fixed** in this pull request (deployed state only). Their industry qualification stays **not yet qualified**: deploying a context does not derive a verdict, and nobody has run the five tests on them (gap 51). |
+| 45 | other | A `kafka-go` group consumer that starts before its topic exists never picks the topic up later (inbound-receiving ADR 0011, "Known limits"). | inbound-receiving (and every consumer on the same library) | **Open**, known limit: restart the pod after the topic exists, or create the topics before the first start. Not re-tested after this deploy. |
+| 46 | other | pick-face-replenishment ships only the explicit `MIN_MAX` policy. The demand-cover policy is planned in its ADR 0001 and ADR 0002 and not built. | pick-face-replenishment | **Open**: needs its own ADR. |
+| 47 | other | The `cmd/api` binaries of pick-face-replenishment and task-interleaving emit no metrics, no traces and no OpenTelemetry instruments; the services have logs and two health endpoints only (their `operations/observability` pages). | pick-face-replenishment, task-interleaving | **Open**: so neither has a dashboard panel or alert beyond Kong's route-level ones. |
+| 48 | other | The ops agent has no MCP client for pick-face-replenishment or task-interleaving (`internal/ports` and `internal/config` name neither), although both servers now run on the cluster. | warehouse-ops-agent | **Open**: needs a use case first (the gap 28 rule: no client without a reader). |
+| 49 | other | The `REPLENISH` process path is created by an operator step (`scripts/seed_catalogue.py` of process-path-management), not by the deployment; until it exists, wes-work-planning dead-letters replenishment requests. | process-path-management, warehouse-infra | **Open**: on the current cluster the path exists (`GET /process-paths` lists `DISPATCH`, `PACK`, `PICK`, `REBIN`, `RELOCATE`, `REPLENISH`, `SLAM`), so the step was run here; a rebuilt cluster needs it again. |
+| 50 | other | The generated slotting-optimization REST reference still says "The in-memory development …" about idempotency (`apis/slotting-optimization/openapi.yaml:409`, from `apis/openapi.yaml:538` in the service). The service has no in-memory mode. | slotting-optimization | **Open**: fix the spec text in slotting-optimization, then re-sync here; this site does not hand-edit the generated reference. |
+| 51 | other | [Qualification](/wms-wes/qualification) lists `pick-face-replenishment` and `task-interleaving` as **not yet qualified**. The fleet tier (`wms`, `wes`) is settled by the [Event Standard](/strategic-design/event-standard-cloudevents#what-the-subdomain-segment-means); the industry category, ISA-95 level and decision horizon need the five tests of the [industry reference](/wms-wes/industry-reference#the-tests-this-site-applies) run against their code. | warehouse-docs | **Open**: nobody has run the tests on these two contexts yet, so no verdict is written here. |
 
 ## Deployed to the kind cluster
 
@@ -276,3 +325,51 @@ and everything the 2026-10-17 release round changed only in documentation.
 Not verified end to end: that a real inter-warehouse transfer now dispatches
 without a dead letter, and that an unacknowledged held order is cancelled by
 the sweep; both need a scenario run against the cluster.
+
+### Third round: applied on 2026-10-20 and 2026-10-21
+
+The owner's apply of 2026-10-20/21 (the Terraform plan itself is not
+reproduced here) is checked below against the live cluster on 2026-10-21
+around 00:15 UTC (21:15 on 2026-10-20 in UTC-3), read-only:
+
+- **ArgoCD:** 19 of 19 applications are Synced and Healthy. Two are new,
+  `pick-face-replenishment` and `task-interleaving` (their provisioning Jobs,
+  including the analytics ones, are `Completed`); each runs five pods (API,
+  MCP, projector or analytics projector, reports or analytics reports,
+  frontend).
+- **Rolled pods:** at the time of the check, the pods of facility-layout,
+  inventory-storage, slotting-optimization and warehouse-planning (API, MCP,
+  projector, reports), the web gateway and Grafana were between 3 and 20
+  minutes old. The older frontends of facility-layout, inventory-storage and
+  warehouse-planning were not restarted.
+- **Readiness (gap 42):** the Deployments of inventory-storage and
+  facility-layout use `/readyz` for readiness and `/healthz` for liveness;
+  `/readyz` answers `{"status":"ready"}` on inventory-storage,
+  facility-layout, slotting-optimization, pick-face-replenishment and
+  task-interleaving.
+- **warehouse-planning (gaps 30, 31):** the API logs one running consumer per
+  group: `warehouse-planning-inbound-demand` on
+  `warehouse.inbound-receiving.events` and
+  `warehouse-planning-observed-capacity` on `warehouse.fulfillment.events`,
+  next to the three older groups. `GET /inbound-labour-standards` answers
+  `{"standards":[]}`.
+- **Web remotes (gap 41):** the web-gateway ConfigMap carries a
+  `/mfes/<context>/` location for slotting-optimization,
+  pick-face-replenishment and task-interleaving, and a `GET` of each
+  `remoteEntry.js` through the gateway returns the bundle.
+- **Wiring in the other direction:** wes-work-planning runs with
+  `REPLENISHMENT_MODE=kafka` (group `wes-work-planning-replenishment`) and
+  fulfillment-execution with `TASK_INTERLEAVING_MODE=kafka` (group
+  `fulfillment-execution-interleaving`); the process-path catalogue contains
+  `REPLENISH` (gap 49).
+
+**Not deployed or not verified:** the ops agent still runs
+`warehouse/warehouse-ops-agent:local-75b7ee6`, which predates gaps 28 and 29, so
+its slot-plan watch and trimmed clients are not running. Not verified end to end:
+that a replenishment request reaches a completed `REPLENISH` task, that
+fulfillment-execution's interleaving consumer processed a hint (its log is
+dominated by probe lines and was not searched), and that an inbound
+appointment changes a capacity plan's labour; each needs a scenario run against
+the cluster. The image tags of the rolled services are content hashes, not
+commit SHAs, so for those services "deployed" rests on the pods and probes
+above, not on `git merge-base --is-ancestor`.
