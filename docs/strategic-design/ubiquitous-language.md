@@ -76,7 +76,7 @@ no Shared Kernel".
 
 ## Terms of pick-face-replenishment
 
-`pick-face-replenishment` is merged on `develop` but not deployed and ships a synced glossary
+`pick-face-replenishment` is merged on `develop`, deployed in the reference cluster and ships a synced glossary
 ([Ubiquitous Language](/contexts/pick-face-replenishment/ubiquitous-language)), which is the source for its terms.
 
 | Term | Meaning | Owner |
@@ -90,9 +90,9 @@ no Shared Kernel".
 
 ## Terms of task-interleaving
 
-`task-interleaving` is merged on `develop` but not deployed and ships a synced glossary
+`task-interleaving` is merged on `develop`, deployed in the reference cluster and ships a synced glossary
 ([Ubiquitous Language](/contexts/task-interleaving/ubiquitous-language)), which is the source for its terms.
-`fulfillment-execution` does not consume the hint yet, so the tie-break is a documented design, not behaviour.
+`fulfillment-execution` consumes the hint as a tie-break inside one `claimNext` priority band (its ADR 0051), so the tie-break is behaviour, not only design.
 
 | Term | Meaning | Owner |
 | --- | --- | --- |

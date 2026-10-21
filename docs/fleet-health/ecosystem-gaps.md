@@ -67,8 +67,8 @@ version of this page used.
 | --- | --- |
 | Fixed | 77 |
 | Kept by decision | 6 |
-| Open | 7 |
-| **Total** | **90** |
+| Open | 8 |
+| **Total** | **91** |
 
 A row with a mixed outcome counts under its worst status.
 E1, E2 and E5 only point at another row and are not counted twice.
@@ -79,8 +79,9 @@ pick-face-replenishment demand-cover policy, 47 pick-face-replenishment and
 task-interleaving `cmd/api` emitting no metrics or traces, 48 the ops agent's
 missing pick-face-replenishment and task-interleaving clients, 49 the
 `REPLENISH` path seed that is an operator step, 50 stale
-development-mode text in the slotting-optimization REST spec, and 51 the
-industry qualification of the two newest contexts. Rows 28 to 31,
+development-mode text in the slotting-optimization REST spec, 51 the
+industry qualification of the two newest contexts, and 52 order-management's
+in-memory runtime path. Rows 28 to 31,
 which were open in the first version of this section, are fixed (see their
 rows for what is and is not deployed).
 
@@ -255,6 +256,7 @@ that is independent of a release).
 | 49 | other | The `REPLENISH` process path is created by an operator step (`scripts/seed_catalogue.py` of process-path-management), not by the deployment; until it exists, wes-work-planning dead-letters replenishment requests. | process-path-management, warehouse-infra | **Open**: on the current cluster the path exists (`GET /process-paths` lists `DISPATCH`, `PACK`, `PICK`, `REBIN`, `RELOCATE`, `REPLENISH`, `SLAM`), so the step was run here; a rebuilt cluster needs it again. |
 | 50 | other | The generated slotting-optimization REST reference still says "The in-memory development …" about idempotency (`apis/slotting-optimization/openapi.yaml:409`, from `apis/openapi.yaml:538` in the service). The service has no in-memory mode. | slotting-optimization | **Open**: fix the spec text in slotting-optimization, then re-sync here; this site does not hand-edit the generated reference. |
 | 51 | other | [Qualification](/wms-wes/qualification) lists `pick-face-replenishment` and `task-interleaving` as **not yet qualified**. The fleet tier (`wms`, `wes`) is settled by the [Event Standard](/strategic-design/event-standard-cloudevents#what-the-subdomain-segment-means); the industry category, ISA-95 level and decision horizon need the five tests of the [industry reference](/wms-wes/industry-reference#the-tests-this-site-applies) run against their code. | warehouse-docs | **Open**: nobody has run the tests on these two contexts yet, so no verdict is written here. |
+| 52 | other | order-management still starts over in-memory adapters when `DATABASE_URL` is unset (`cmd/order/adapters.go:71` and `:142`, seven non-test `cmd/` files import `adapters/outbound/memory`). The real-only runtime of gap 38 and the five other `wms` repositories (Postgres and Kafka only) was never applied to it. Found on 2026-10-21 by running `git grep adapters/outbound/memory origin/develop -- cmd` in every local context checkout: in every other context only `_test.go` files match. | order-management | **Open**: needs its own ADR and a runtime test like inventory-storage's (ADR 0042). The cluster is not affected: the pod has a database. |
 
 ## Deployed to the kind cluster
 

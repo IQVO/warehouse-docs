@@ -107,11 +107,15 @@ type Clock         interface { /* Now() time.Time */ }
 ```
 
 Because `Clock` is a port, a test can assert a lease expiry without sleeping.
-Because `EventPublisher` is a port, the same use case publishes to a log
-adapter locally and through the transactional outbox in the cluster. Because
-the repositories are ports, **a service with no `DATABASE_URL` still runs
-fully over REST on in-memory adapters** — which is how every context's local
-development mode works.
+Because `EventPublisher` is a port, a unit test substitutes a fake and the
+running service publishes through the transactional outbox. Because the
+repositories are ports, a unit test runs a use case over in-memory adapters.
+The running services need Postgres and Kafka: on `develop`, on 2026-10-21, no
+non-test `cmd/` file of any context except `order-management` imports an
+`adapters/outbound/memory` package, and `order-management` still falls back
+to in-memory adapters when `DATABASE_URL` is unset
+(`cmd/order/adapters.go:71`; gap 52 on the
+[gaps tracker](/fleet-health/ecosystem-gaps)).
 
 ## The transactional outbox, in component terms
 
