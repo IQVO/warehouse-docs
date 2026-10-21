@@ -390,8 +390,6 @@ flowchart LR
     C6 --> E11
     E10 --> P2 --> E12 --> E13 --> P3 --> E14 --> R3
 
-    H36["H36 Dock Appointment Booked has no consumer, inbound-labor demand planned"]:::hotspot
-    E2 -.- H36
 
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
     classDef command fill:#4aa3df,stroke:#1f6f9f,color:#0b1e2d
@@ -428,10 +426,10 @@ a request by hand, and a request is cancelled by a planner, by a newer
 approved slot plan that drops the assignment, or by removing the policy. It
 is completed only by `inventory-storage`'s `Stock Relocated` with reason
 `REPLENISHMENT`. `wes-work-planning` turns each request into one `REPLENISH`
-work unit (its ADR 0042, opt-in and off in the reference deployment), so the
-loop is complete on `develop` (H40, resolved). Dashed arrows below are built
-on both ends but not running: the context is not deployed (H39) and the
-planner's consumer is switched off.
+work unit (its ADR 0042, opt-in; `REPLENISHMENT_MODE=kafka` is set in the reference
+deployment), so the loop is complete on `develop` (H40, resolved) and the
+context runs in the reference cluster (H39, resolved). No request has been traced
+through the whole loop on the cluster yet.
 
 ```mermaid
 flowchart LR
@@ -455,7 +453,7 @@ flowchart LR
         E18["Replenishment Completed"]:::event
     end
 
-    INVX -.->|"Bin Stock Level Changed, built, not deployed"| R4
+    INVX ==>|"Bin Stock Level Changed"| R4
     SLOX -->|"Slot Plan Approved"| R4
     LAYX -->|"Zone and Location Slot events"| R4
     RPL --> C7 --> E15
@@ -463,12 +461,10 @@ flowchart LR
     RPL --> C8 --> E16
     RPL --> C9 --> E17
     R4 --> P5 --> E17
-    INVX -.->|"Stock Relocated, reason REPLENISHMENT, built, not deployed"| P6
+    INVX ==>|"Stock Relocated, reason REPLENISHMENT"| P6
     P6 --> E18
-    E16 -.->|"Replenishment Requested, one REPLENISH work unit per request, WP consumer off, built, not deployed"| WPX
+    E16 ==>|"Replenishment Requested, one REPLENISH work unit per request"| WPX
 
-    H39["H39 the context is not deployed in the reference cluster"]:::hotspot
-    S_PFR -.- H39
 
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
     classDef command fill:#4aa3df,stroke:#1f6f9f,color:#0b1e2d
@@ -483,11 +479,11 @@ flowchart LR
 Sources: [pick-face-replenishment domain message flow](/contexts/pick-face-replenishment/domain-message-flow),
 [pick-face-replenishment EventStorming](/contexts/pick-face-replenishment/eventstorming),
 its `apis/pick-face-replenishment/asyncapi.yaml` and the fleet
-[context map](/strategic-design/context-map) (K39, K40 and K42 to K44, K44 now wired-but-unused).
+[context map](/strategic-design/context-map) (K39, K40 and K42 to K44, all live since the 2026-10-20/21 deploy).
 
 ### Task interleaving at the station
 
-`task-interleaving` (a `wes` context, built on `develop`, not deployed) listens
+`task-interleaving` (a `wes` context, deployed in the reference cluster since 2026-10-20/21) listens
 to the task lifecycle of `fulfillment-execution` and the geometry of
 `facility-layout`. `Task Available` and `Task Claimed` keep a copy of the
 open-task pool (announced for `RELOCATE` and `REPLENISH` tasks only), and a
@@ -495,9 +491,10 @@ open-task pool (announced for `RELOCATE` and `REPLENISH` tasks only), and a
 declared an interleaving policy, a rule then ranks the open tasks by detour and
 issues an `Interleaving Hint Issued` with up to five candidates. The hint is
 `Consumed` when the station claims a candidate before it expires, `Expired`
-otherwise, and is only advice: `claimNext` stays the one claim path. Dashed
-arrows are built on both ends but not running (the context is not deployed,
-H41) or have one end missing (H42).
+otherwise, and is only advice: `claimNext` stays the one claim path. Thick
+arrows are consumed by running instances in the reference cluster (H41 and
+H42, resolved); the dashed arrow is the claim of a candidate, drawn as a
+reading of `Task Claimed`.
 
 ```mermaid
 flowchart LR
@@ -517,20 +514,16 @@ flowchart LR
         E22["Interleaving Hint Expired, analytics only"]:::event
     end
 
-    FEX -.->|"Task Available, Task Claimed, Task Completed, built, not deployed"| R5
-    FLX -.->|"Location Slot events and Location Geometry Updated, built, not deployed"| R5
+    FEX ==>|"Task Available, Task Claimed, Task Completed"| R5
+    FLX ==>|"Location Slot events and Location Geometry Updated"| R5
     PLN --> C10 --> E19
     R5 --> P7 --> E20
     E20 --> P8
     FEX -.->|"Task Claimed of a candidate"| P8
     P8 --> E21
     E20 --> P9 --> E22
-    E20 -.->|"no consumer, hint not read by FE"| FEX
+    E20 ==>|"hint read by FE as a tie-break, ADR 0051"| FEX
 
-    H41["H41 the context is not deployed in the reference cluster"]:::hotspot
-    H42["H42 nothing reads the hint: fulfillment-execution has no tie-break"]:::hotspot
-    S_TI -.- H41
-    E20 -.- H42
 
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
     classDef command fill:#4aa3df,stroke:#1f6f9f,color:#0b1e2d
@@ -933,13 +926,13 @@ this site, and the corroborating context page is linked instead.
 | ~~H32~~ | fulfillment-execution | ~~`apis/openapi.yaml` expands CPT as "Committed Processing Time"~~ **Resolved 2026-10-06.** Now reads "Critical Pull Time". | [fulfillment-execution Ubiquitous Language](/contexts/fulfillment-execution/ubiquitous-language) |
 | H33 | product-master | A SKU classified moments before its first stow may reach a consumer's local copy late | [product-master EventStorming](/contexts/product-master/eventstorming) (product-master ADR 0001, Consequences) |
 | ~~H34~~ | product-master | ~~No live event consumer of the physical profile (`ProductDimensionsDeclared`, `ProductMeasured`)~~ **Resolved 2026-10-16.** `slotting-optimization` consumes both into its product copy (`PRODUCT_MODE=kafka`) and `warehouse-infra` `develop` deploys it (K25, H38) | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0002, "later phases"), [slotting-optimization context map](/contexts/slotting-optimization/context-map) |
-| H36 | inbound-receiving | `DockAppointmentBooked` has no consumer: inbound-labor demand in `warehouse-planning` is planned, not built (K28) | [inbound-receiving context map](/contexts/inbound-receiving/context-map), row 4 |
+| ~~H36~~ | inbound-receiving | ~~`DockAppointmentBooked` has no consumer: inbound-labor demand in `warehouse-planning` is planned, not built (K28)~~ **Resolved 2026-10-20 on `develop`, deployed 2026-10-20/21.** `warehouse-planning` ADR 0017 (`warehouse-planning#79`) consumes `DockAppointmentBooked` and `DockAppointmentCancelled` into a local read model and prices them with a declared labour standard. | [inbound-receiving context map](/contexts/inbound-receiving/context-map), row 4 |
 | ~~H37~~ | slotting-optimization | ~~`SlotPlanApproved` has no consumer: executing the moves as MOVE and REPLENISH work is planned, not built (K29)~~ **Resolved 2026-10-14.** Decided by slotting-optimization ADR 0010 (supersedes ADR 0007) and built as RELOCATE work: `wes-work-planning` ADR 0040 plans one work unit per move, `fulfillment-execution` ADR 0047 runs the task, `inventory-storage` ADR 0039 moves the stock and raises `StockRelocated`, which slotting-optimization records as the plan's `execution` progress (K29, K37, K38). | [slotting-optimization context map](/contexts/slotting-optimization/context-map), [domain events](/contexts/slotting-optimization/domain-events) |
 | ~~H38~~ | slotting-optimization | ~~Not deployed: no `warehouse-infra` wiring, so its three local copies are not fed in the reference cluster~~ **Resolved 2026-10-16 on `develop`.** warehouse-infra#75 registers it (database, Kong route, ArgoCD application) and `helm-values/slotting-optimization.yaml` turns on `EVENT_PUBLISHER=kafka` and the four consumers (the three local copies and `RELOCATION_MODE`). It runs once warehouse-infra is applied, and the `RELOCATE` process path must be seeded first. | [slotting-optimization Business Context](/contexts/slotting-optimization/business-context), [ecosystem gaps tracker](/fleet-health/ecosystem-gaps) 6 |
-| H39 | pick-face-replenishment | Not deployed: `warehouse-infra` `develop` has no database, Kong route, ArgoCD application, values file or dashboard for it, and its repository has no Dockerfile or Helm chart. Its two live inputs (K39, K40) feed no running instance. | [pick-face-replenishment Business Context](/contexts/pick-face-replenishment/business-context), [Runbook](/contexts/pick-face-replenishment/runbook) (deployment status) |
-| ~~H40~~ | pick-face-replenishment | ~~A request cannot yet reach the floor: nothing consumes `ReplenishmentRequested`~~ **Resolved 2026-10-17 on `develop`.** `wes-work-planning` ADR 0042 plans one `REPLENISH` work unit per request (consumer `internal/adapters/inbound/kafka/replenishment_consumer.go`, opt-in `REPLENISHMENT_MODE=kafka`) and `process-path-management` ADR 0036 declares the `REPLENISH` path; `fulfillment-execution` ADR 0050 and `inventory-storage` ADR 0040 and 0041 were already built. K44 is **wired-but-unused**: the consumer is off by default and `pick-face-replenishment` is not deployed (H39). | [pick-face-replenishment context map](/contexts/pick-face-replenishment/context-map), [Async API](/contexts/pick-face-replenishment/async-api) |
-| H41 | task-interleaving | Not deployed: `warehouse-infra` `develop` has no database, Kong route, ArgoCD application, values file or dashboard for it, and its repository has no Dockerfile or Helm chart. Its three inputs (K41, K45, K46) feed no running instance. | [task-interleaving Business Context](/contexts/task-interleaving/business-context), [Runbook](/contexts/task-interleaving/runbook) (deployment status) |
-| H42 | task-interleaving | The hint has no reader: `fulfillment-execution` has no consumer of `InterleavingHintIssued`, no hint table and no `claimNext` tie-break (its ADR 0049 and ADR 0050 list it as out of scope) (K47) | [task-interleaving context map](/contexts/task-interleaving/context-map), [Async API](/contexts/task-interleaving/async-api) |
+| ~~H39~~ | pick-face-replenishment | ~~Not deployed: `warehouse-infra` `develop` has no database, Kong route, ArgoCD application, values file or dashboard for it.~~ **Resolved 2026-10-20/21.** `warehouse-infra#116` registered it and `#121` added its MCP server, analytics and web remote; the ArgoCD application is Synced and Healthy with five pods, and its inputs K39, K40, K42 and K43 are consumed by a running instance. Still open: its `cmd/api` emits no metrics or traces. | [pick-face-replenishment Business Context](/contexts/pick-face-replenishment/business-context), [Runbook](/contexts/pick-face-replenishment/runbook) (deployment status) |
+| ~~H40~~ | pick-face-replenishment | ~~A request cannot yet reach the floor: nothing consumes `ReplenishmentRequested`~~ **Resolved 2026-10-17 on `develop`.** `wes-work-planning` ADR 0042 plans one `REPLENISH` work unit per request (consumer `internal/adapters/inbound/kafka/replenishment_consumer.go`, opt-in `REPLENISHMENT_MODE=kafka`) and `process-path-management` ADR 0036 declares the `REPLENISH` path; `fulfillment-execution` ADR 0050 and `inventory-storage` ADR 0040 and 0041 were already built. K44 is **live** since the 2026-10-20/21 deploy (`REPLENISHMENT_MODE=kafka` is set and `pick-face-replenishment` runs, H39). | [pick-face-replenishment context map](/contexts/pick-face-replenishment/context-map), [Async API](/contexts/pick-face-replenishment/async-api) |
+| ~~H41~~ | task-interleaving | ~~Not deployed: `warehouse-infra` `develop` has no database, Kong route, ArgoCD application, values file or dashboard for it.~~ **Resolved 2026-10-20/21.** The ArgoCD application is Synced and Healthy with five pods (API, MCP, analytics projector and reports, frontend); its inputs K41, K45 and K46 are consumed by a running instance. Still open: its `cmd/api` emits no metrics or traces. | [task-interleaving Business Context](/contexts/task-interleaving/business-context), [Runbook](/contexts/task-interleaving/runbook) (deployment status) |
+| ~~H42~~ | task-interleaving | ~~The hint has no reader: `fulfillment-execution` has no consumer of `InterleavingHintIssued`, no hint table and no `claimNext` tie-break (K47)~~ **Resolved 2026-10-18 on `develop`, deployed 2026-10-20/21.** `fulfillment-execution` ADR 0051 (`fulfillment-execution#224`) stores one active hint per station and uses it as a tie-break inside one `claimNext` priority band. | [task-interleaving context map](/contexts/task-interleaving/context-map), [Async API](/contexts/task-interleaving/async-api) |
 | H35 | product-master | Stage E (remove the legacy importer, the inventory-storage backfill and the deprecated classification endpoint) has no date | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0003, stage E) |
 
 Other wired-but-unused edges are not drawn, because they sit outside
