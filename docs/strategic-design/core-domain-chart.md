@@ -2,7 +2,7 @@
 id: core-domain-chart
 title: Core Domain Chart
 sidebar_label: Core Domain Chart
-description: The nineteen contexts documented on this site on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart (returns-processing and exception-management are documented but not yet plotted: their repositories ship no chart).
+description: The nineteen contexts documented on this site on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart (returns-processing and exception-management are documented but not yet plotted, their repositories ship no chart).
 ---
 
 # Core Domain Chart
