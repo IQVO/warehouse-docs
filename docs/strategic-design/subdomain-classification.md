@@ -2,7 +2,7 @@
 id: subdomain-classification
 title: Subdomain Classification
 sidebar_label: Subdomain Classification
-description: Core, Supporting, or Generic — the seventeen contexts documented on this site, with the CloudEvents subdomain segment each one publishes under and the justification each context's own Bounded Context Canvas and Core Domain Chart give.
+description: Core, Supporting, or Generic — the nineteen contexts documented on this site, with the CloudEvents subdomain segment each one publishes under and the justification each context's own Bounded Context Canvas and Core Domain Chart give.
 ---
 
 # Subdomain Classification
@@ -10,15 +10,19 @@ description: Core, Supporting, or Generic — the seventeen contexts documented 
 Domain-Driven Design splits a domain into **Core**, **Supporting** and
 **Generic** subdomains by how much competitive advantage each one gives. Size,
 difficulty and how interesting the code is do not decide it. The table below
-gives the fleet verdict for the seventeen contexts documented on this site
+gives the fleet verdict for the nineteen contexts documented on this site
 (every backend service in the fleet). Each verdict matches
 the **Strategic Classification** section of that context's own
 [Bounded Context Canvas](/contexts) and its point on its own Core Domain
 Chart. The fleet-wide plot is on [Core Domain Chart](/strategic-design/core-domain-chart).
-The four newest rows, `inbound-receiving` and `slotting-optimization`
+The four newest synced rows, `inbound-receiving` and `slotting-optimization`
 (decided 2026-10-08), `pick-face-replenishment` and `task-interleaving`
 (decided and merged 2026-10-17), are built and ship their own synced canvas and Core
-Domain Chart, all in the Supporting quadrant.
+Domain Chart, all in the Supporting quadrant. The two newest rows,
+`returns-processing` and `exception-management` (decided and merged
+2026-10-20/21), are built on `develop` and their canvases are written for
+this site from their ADR 0001s (their repositories ship no ddd-crew pack
+yet, so there is no chart page to link).
 
 The **CloudEvents subdomain** column is the `<subdomain>` segment of every
 event `type` the context publishes:
@@ -46,14 +50,19 @@ classification. For example, `facility-layout` is `wms` and Generic, while
 | `slotting-optimization` | <span class="badge-supporting">Supporting</span> | `wms` | Cost reduction (pick travel and labor) | Custom-built (genesis) | Not generic, because slotting policy differs per retailer. Not Core, because the competitive core stays the WES conductor, and the v1 policy `abc-velocity-v1` is a deterministic, replaceable policy behind a port (its ADR 0001 and ADR 0002, decisions 3 and 7 of the 2026-10-08 plan). [Canvas](/contexts/slotting-optimization/bounded-context-canvas), [chart](/contexts/slotting-optimization/core-domain-chart) |
 | `pick-face-replenishment` | <span class="badge-supporting">Supporting</span> | `wms` | Cost reduction (no empty forward pick face, fewer short picks) | Custom-built (genesis) | Not generic, because min/max and source-bin rules differ per retailer. Not Core, because min/max is a replaceable policy object (v1 `MIN_MAX` per site and SKU behind a port) and the competitive core stays the WES conductor (`wes-work-planning`) and the task lifecycle (`fulfillment-execution`). It generates replenishment requests only: it never creates floor work and never writes the stock ledger (its ADR 0001 and ADR 0002). [Canvas](/contexts/pick-face-replenishment/bounded-context-canvas), [chart](/contexts/pick-face-replenishment/core-domain-chart) |
 | `task-interleaving` | <span class="badge-supporting">Supporting</span> | `wes` | Cost reduction (less travel between tasks) | Custom-built (genesis) | Not generic, because detour limits and eligible task types differ per site. Not Core, because the detour rule is a replaceable policy object (`rectilinear-v1` travel model behind a port) and its output is advisory: `fulfillment-execution` keeps pull-based `claimNext` and would use a hint only as a tie-break inside one priority band, fail-open. [Canvas](/contexts/task-interleaving/bounded-context-canvas), [chart](/contexts/task-interleaving/core-domain-chart) |
+| `returns-processing` | <span class="badge-supporting">Supporting</span> | `wms` | Value recovery / compliance (accurate return record and disposition audit) | Custom-built (genesis) | Value recovery is material (returns run 20-30 % of e-commerce volume) but the differentiator is the ledger it feeds: restock reuses inventory-storage's staged-receipt -> stow seam unchanged, and the disposition policy (grade x product class -> outcome) is a replaceable policy object behind a versioned table (its ADR 0001). Four of the five outcomes never touch stock. [Canvas](/contexts/returns-processing/bounded-context-canvas) |
+| `exception-management` | <span class="badge-supporting">Supporting</span> | `wes` | Cost reduction / operational accuracy (anomalies get an owner and an outcome) | Custom-built (genesis) | Supporting today, candidate Core once auto-resolution policies and agent recommendations run against it (its ADR 0001). Not generic, because queues, severities and auto-resolve rules are this fleet's own policy vocabulary; not yet Core, because the lifecycle is a fixed, small state machine and the producers own the detection logic. [Canvas](/contexts/exception-management/bounded-context-canvas) |
 | `facility-layout` | <span class="badge-generic">Generic</span> | `wms` | Compliance / enabler | Product, heading toward commodity | The location hierarchy is the industry's WMS convention, adopted rather than invented, and location roles mirror commercial WMS location masters. It has to be correct, not clever. Its complexity is real (eight aggregate roots and a travel graph), but that complexity serves correctness, not differentiation. [Canvas](/contexts/facility-layout/bounded-context-canvas), [chart](/contexts/facility-layout/core-domain-chart) |
 | `process-path-management` | <span class="badge-generic">Generic</span> | `wes` | Compliance / enabler | Custom-built, heading towards product/commodity | A process-path catalogue is well understood and does not differentiate. It declares what a path is and decides nothing about dispatch, routing or assignment. It is extracted because several contexts need the same definition and none of them is its natural owner (its ADR 0001). [Canvas](/contexts/process-path-management/bounded-context-canvas), [chart](/contexts/process-path-management/core-domain-chart) |
 
-Count: five Core, nine Supporting, two Generic, and one Generic/Supporting.
+Count: five Core, eleven Supporting, two Generic, and one Generic/Supporting.
 
 `pick-face-replenishment` and `task-interleaving` are merged on `develop` (each with a REST API, outbox publisher
-and Kafka consumers) but not registered in `warehouse-infra`; both are in the count above and have their synced
-pages.
+and Kafka consumers) and deployed in the reference cluster. `returns-processing` and
+`exception-management` are merged on `develop` (each with a REST API, a read-only MCP
+server, an outbox publisher and Kafka consumers; service PR #2 plus packaging PR #3)
+but not registered in `warehouse-infra`; all four are in the count above, the last
+two with pages written for this site until their repositories ship a ddd-crew pack.
 
 ## The "extract once, don't duplicate" pattern
 

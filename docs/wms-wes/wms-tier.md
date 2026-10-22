@@ -14,7 +14,11 @@ that are qualified. All five pass the industry WMS tests on the
 Four are WMS core and one is WMS extended. The sixth,
 `pick-face-replenishment` (built and deployed in the reference cluster), is
 **not yet qualified** (the industry tests have not been run on it) and has no
-card here yet; see the [qualification](/wms-wes/qualification).
+card here yet; see the [qualification](/wms-wes/qualification). Neither has
+the seventh, `returns-processing` (built on `develop` 2026-10-20/21, not
+deployed — the reverse flow of goods: RMA, return receipt, grading and
+disposition, handing restockable units to `inventory-storage` as staged
+lines).
 
 ## Coverage of the WMS functions
 

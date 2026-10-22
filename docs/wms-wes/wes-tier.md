@@ -14,7 +14,10 @@ but is filed here). The industry tests on the
 split them into four groups, and this page follows that split. An
 eleventh `wes` context, `task-interleaving` (built and deployed in the reference cluster), is **not yet
 qualified** and has no card here yet; see the
-[qualification](/wms-wes/qualification):
+[qualification](/wms-wes/qualification). A twelfth, `exception-management`
+(built on `develop` 2026-10-20/21, not deployed — the Problem Solve case
+lifecycle over the anomaly facts six producers publish), is likewise
+**not yet qualified** and has no card here yet:
 
 | Group | Contexts |
 | --- | --- |
