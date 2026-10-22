@@ -128,7 +128,7 @@ resolution touches the case and never reopens it.
 per-line work unit id `{order_id}-line-{line_no}` (order-management ADR 0018):
 the CPT `<->` `OrderRepromised` correlation reverses that frozen formula,
 matches at ORDER level (line number ignored — `OrderRepromised` carries no
-line), applies the inclusive window edge `now `<=` lastSeenAt +
+line), applies the inclusive window edge `now <= lastSeenAt +
 within_minutes`, and fails soft (case stays open) on no match. The SLA
 sweeper is a bounded ticker that reports facts and sets the flag; it never
 blocks work.
