@@ -2,10 +2,11 @@
 
 Fleet-wide documentation for the **warehouse-systems** ecosystem: strategic
 and tactical Domain-Driven Design artifacts, generated REST and AsyncAPI
-references, and business context for seventeen backend contexts: sixteen domain
-bounded contexts plus `warehouse-ops-agent` (`pick-face-replenishment` and
-`task-interleaving` are built on `develop` and onboarded here, but neither is
-deployed in `warehouse-infra`).
+references, and business context for nineteen backend contexts: eighteen domain
+bounded contexts plus `warehouse-ops-agent` (`pick-face-replenishment`,
+`task-interleaving`, `returns-processing` and `exception-management` are built
+on `develop` and onboarded here, but none of the four is deployed in
+`warehouse-infra`).
 Built with [Docusaurus](https://docusaurus.io/), published to GitHub Pages.
 
 Live site: https://iqvo.github.io/warehouse-docs/
@@ -29,7 +30,7 @@ never copies).
 - Single Docusaurus site, no develop/main split — this repo builds and
   deploys straight off `main` on every push (unlike the fleet's GitFlow
   service repos).
-- **Scope**: seventeen backend contexts —
+- **Scope**: nineteen backend contexts —
   `order-management`, `inventory-storage`, `wes-work-planning`,
   `fulfillment-execution`, `workforce-management`, `facility-layout`,
   `process-path-management`, `labor-performance`, `warehouse-ops-agent`,
@@ -39,6 +40,13 @@ never copies).
   `.analytics`; its ADRs live under `docs/adr/`, not `docs/docs/adr/`),
   `warehouse-planning` (whether the warehouse can process the demand
   assigned to it; ADRs also under `docs/adr/`),
+  `returns-processing` (`wms`, Supporting: RMA, return receipt, grading and
+  disposition; hands restockable goods to inventory-storage via
+  `ReturnLineStaged`; topics `warehouse.returns-processing.events` +
+  `.analytics`),
+  `exception-management` (`wes`, Supporting: the problem-solve lifecycle for
+  the anomalies other contexts detect; topics
+  `warehouse.exception-management.events` + `.analytics`),
   `product-master` (the `wms`-tier source of truth for SKU master data:
   handling classification taken over from inventory-storage, and the
   declared vs measured physical profile; topics
