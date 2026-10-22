@@ -20,7 +20,7 @@ its own pack yet).
 | State transitions | `REQUESTED -> AUTHORIZED \| REJECTED -> RECEIVED -> CLOSED`; no transition out of a terminal state |
 | Commands | `AuthorizeReturn` / `RejectReturn` (against the local copies of allocated lines + manifested work units) |
 | Events | `ReturnAuthorized`, `ReturnAuthorizationRejected` |
-| Invariants | authorizable only for a manifested work unit `{order_id}-line-{line_no}` inside the window; quantity <= policy max; one open RMA per order line |
+| Invariants | authorizable only for a manifested work unit `{order_id}-line-{line_no}` inside the window; quantity `<=` policy max; one open RMA per order line |
 
 ## ReturnReceipt (`internal/domain/returnreceipt`)
 
@@ -29,7 +29,7 @@ its own pack yet).
 | Description | The physical arrival of returned goods |
 | Commands | `OpenReturnReceipt` (against an RMA; unmatched lines are `UNEXPECTED`), `InspectReturnLine` |
 | Events | `ReturnReceiptOpened`, `ReturnLineInspected`, `UnexpectedReturnReceived` |
-| Invariants | every line references an RMA line or is `UNEXPECTED` (no silent third state); inspected quantity <= received quantity; a line is inspected exactly once |
+| Invariants | every line references an RMA line or is `UNEXPECTED` (no silent third state); inspected quantity `<=` received quantity; a line is inspected exactly once |
 
 ## Disposition (`internal/domain/disposition`, the richest aggregate and the mutation-gate package)
 

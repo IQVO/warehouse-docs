@@ -86,7 +86,7 @@ site) with the payload frozen on the case. The correlation consumer applies
 the auto-resolve rule: `OrderRepromised.order_id` is matched against the
 order behind the open case's frozen `order_ref` work unit
 (`{order_id}-line-{line_no}`, order-level, line ignored), the window edge is
-inclusive (`now <= lastSeenAt + within_minutes`), and no match fails soft
+inclusive (`now `<=` lastSeenAt + within_minutes`), and no match fails soft
 (the case stays open). `rule_id` is the derived deterministic form
 `<sourceType>-><onType>`.
 
