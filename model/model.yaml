@@ -247,7 +247,7 @@ contexts:
       - {from: vendor-connectivity, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile (in-org)", message: DeclareOperationalProfile, relationship: Customer/Supplier}
       - {from: network-ops planner, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile", message: "DeclareOperationalProfile (declaredBy NETWORK_OPS)", relationship: UI}
       - {from: network-ops planner, type: cmd, channel: "REST /nodes, /lanes, /service-areas, /regions", message: "RegisterNode (network node), ActivateNode, SuspendNode, RetireNode, OpenLane, CloseLane, AssignServiceArea, DefineRegion", relationship: UI}
-      - {from: any context, type: qry, channel: "REST GET /nodes/{nodeId}, /nodes, /lanes, /service-areas/{postalPrefix}", message: "GetNode, ListNodes, ListLanes, ResolveServiceArea", relationship: OHS}
+      - {from: any context, type: qry, channel: "REST GET /nodes/{nodeId}, /nodes, /lanes, /service-areas/{postalPrefix}, /regions, /regions/{regionId}", message: "GetNode, ListNodes, ListLanes, ResolveServiceArea, ListRegions, GetRegion", relationship: OHS}
     rest:
       - "POST /nodes"
       - "GET /nodes/{nodeId}"
@@ -262,6 +262,8 @@ contexts:
       - "PUT /service-areas/{postalPrefix}"
       - "GET /service-areas/{postalPrefix}"
       - "POST /regions"
+      - "GET /regions"
+      - "GET /regions/{regionId}"
     publishes:
       - {event: NodeRegistered, entity: node, data: [nodeId, nodeType, subtype, operator, vendorId, vendorNodeCode, regionId, timezone, postalCode, countryCode], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, last-mile-delivery, node-performance, vendor-connectivity]}
       - {event: NodeOperationalProfileDeclared, entity: node, data: [nodeId, profileRevision, timezone, operatingHoursByDay, holidays, handlingTimeMinutes, cutoffs, throughputCap, sortDwellMinutes, declaredBy], consumers: [delivery-promise, order-sourcing, linehaul-transportation, node-performance]}
