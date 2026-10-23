@@ -55,7 +55,7 @@ a local read model fed by events.
   [ADR 0003: declared and measured capability](/adr/0003-declared-and-measured-capability),
   [ADR 0008: capacity held at promise time](/adr/0008-capacity-held-at-promise-time),
   [ADR 0007: CloudEvents namespace](/adr/0007-cloudevents-namespace).
-- The REST contract (proposed): `apis/delivery-promise/openapi.yaml`, rendered
+- The REST contract (as built, from the service repository): `apis/delivery-promise/openapi.yaml`, rendered
   under the [API reference](/api-reference).
 - Where this context sits among the ten:
   [the domain context map](/strategic-design/context-map) and

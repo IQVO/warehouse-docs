@@ -36,6 +36,8 @@ jobs:
       - name: Generated strategic pages match the model
         run: python3 scripts/gen_pages.py --check
       - run: npm ci
+      - name: REST contracts lint clean at warning level (the gate every service repo applies)
+        run: npx --yes @stoplight/spectral-cli@6 lint 'apis/*/openapi.yaml' --ruleset .spectral.yaml --fail-severity=warn
       - run: npx playwright-core install --with-deps chromium
       - name: Mermaid parse, render and width (<= 1020 px)
         run: npm run validate:mermaid

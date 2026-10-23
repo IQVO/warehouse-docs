@@ -48,7 +48,7 @@ label.
 
 ## Elsewhere
 
-- REST contract (proposed): `apis/customer-ordering/openapi.yaml`, rendered
+- REST contract (as built, from the service repository): `apis/customer-ordering/openapi.yaml`, rendered
   under the [API reference](/api-reference).
 - [ADR 0006: PII confinement](/adr/0006-pii-confinement) explains why the
   ship-to address lives here and is read by `shipping-and-tracking` only.

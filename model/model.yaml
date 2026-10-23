@@ -520,6 +520,7 @@ contexts:
       - "POST /promises/{promiseId}:confirm"
       - "POST /promise-policies"
       - "GET /promise-policies/current"
+      - "POST /promises/{promiseId}:cancel"
     publishes:
       - {event: PromiseMade, entity: promise, data: [promiseId, offerId, tier, nodeId, pickupDepartureId, shipBy, deliverByEarliest, deliverByLatest, basis, policyVersion, holdExpiresAt, lines], consumers: [analytics only]}
       - {event: PromiseConfirmed, entity: promise, data: [promiseId, orderId, groupNo], consumers: [analytics only]}
@@ -677,6 +678,8 @@ contexts:
       - {event: FulfillmentCancelRefused, from: order-sourcing}
       - {event: FulfillmentCancelled, from: order-sourcing}
       - {event: LabelVoided, from: shipping-and-tracking}
+      - {event: PackageLost, from: shipping-and-tracking}
+      - {event: PackageReturned, from: shipping-and-tracking}
     sync_calls:
       - {to: delivery-promise, type: qry, message: QuoteDeliveryOffers, channel: "REST POST /delivery-offers:quote"}
       - {to: delivery-promise, type: cmd, message: MakePromise, channel: "REST POST /promises"}
@@ -1276,8 +1279,8 @@ contexts:
       - {event: PackageHandedOver, entity: journey, data: [trackingNumber, poNumber, nodeId, handedOverAt], consumers: [node-performance]}
       - {event: PackageDelivered, entity: journey, data: [trackingNumber, assignmentId, orderId, deliveredAt], consumers: [delivery-promise, order-sourcing, customer-ordering]}
       - {event: PackageExceptionRaised, entity: journey, data: [trackingNumber, assignmentId, orderId, reason, at], consumers: [delivery-promise, customer-ordering]}
-      - {event: PackageReturned, entity: journey, data: [trackingNumber, orderId, returnedAt], consumers: [delivery-promise]}
-      - {event: PackageLost, entity: journey, data: [trackingNumber, orderId, declaredAt], consumers: [delivery-promise]}
+      - {event: PackageReturned, entity: journey, data: [trackingNumber, orderId, returnedAt], consumers: [delivery-promise, customer-ordering]}
+      - {event: PackageLost, entity: journey, data: [trackingNumber, orderId, declaredAt], consumers: [delivery-promise, customer-ordering]}
     consumes:
       - {event: VendorShipmentConfirmed, from: vendor-connectivity}
       - {event: LoadDeparted, from: linehaul-transportation}

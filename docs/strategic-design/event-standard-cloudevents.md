@@ -212,8 +212,8 @@ Topic `retailnetwork.shipping-and-tracking.events`.
 | `PackageHandedOver` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageHandedOver` | `node-performance` |
 | `PackageDelivered` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDelivered` | `delivery-promise`, `order-sourcing`, `customer-ordering` |
 | `PackageExceptionRaised` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageExceptionRaised` | `delivery-promise`, `customer-ordering` |
-| `PackageReturned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` | `delivery-promise` |
-| `PackageLost` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | `delivery-promise` |
+| `PackageReturned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` | `delivery-promise`, `customer-ordering` |
+| `PackageLost` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | `delivery-promise`, `customer-ordering` |
 
 ### `node-performance`
 

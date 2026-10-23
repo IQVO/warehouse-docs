@@ -61,7 +61,7 @@ as an exception (`ExceptionOnSilence`).
 
 ## Elsewhere
 
-- REST contract (proposed): `apis/shipping-and-tracking/openapi.yaml`,
+- REST contract (as built, from the service repository): `apis/shipping-and-tracking/openapi.yaml`,
   rendered under the [API reference](/api-reference).
 - [ADR 0006: PII confinement](/adr/0006-pii-confinement): why the ship-to
   address lives only in `customer-ordering` and here.

@@ -1,32 +1,41 @@
 openapi: 3.0.3
 info:
-  title: Node Performance API (proposed)
+  title: Node Performance API
   version: 0.1.0
+  contact:
+    name: node-performance maintainers
+    url: https://github.com/IQVO/node-performance
   description: >-
-    Proposed contract derived from model/model.yaml
-    (contexts[node-performance].rest). Nothing is built yet. Node Performance
+    REST contract of the node-performance bounded context of the retail
+    network, derived from retail-network-docs model/model.yaml
+    (contexts[node-performance].rest, .aggregates, conventions.errors) and
+    adjusted by the cross-context decisions (G20, G33, E18). Node Performance
     grades every node from observed facts only (purchase orders issued,
-    accepted, rejected and expired, shipments confirmed, packages handed over
-    against requiredShipBy, promises kept or broken, inventory feeds applied)
-    over a 7-day and a 30-day window. A scorecard below the observation
-    minimum is PROVISIONAL. Both routes are read-only. vendor-connectivity
-    calls GET /scorecards/{nodeId} to serve a vendor's
-    GET /vendor/nodes/{nodeId}/scorecard on the Vendor API. No authentication,
-    consistent with the rest of the retail network (conventions.no_auth).
+    accepted, rejected and expired, packages handed over against requiredShipBy,
+    promises kept or broken, inventory feeds applied) over a 7-day and a
+    30-day window. A scorecard below the observation minimum (50) is
+    PROVISIONAL. Both routes are read-only, so none takes an Idempotency-Key.
+    vendor-connectivity calls GET /scorecards/{nodeId} in-organization to serve
+    a vendor's scorecard read; delivery-promise and order-sourcing do not call
+    this API, they consume NodeScorecardUpdated. No authentication, consistent
+    with the rest of the retail network. Errors are RFC 9457 problem details
+    (application/problem+json); the problem types are not-found (404) and
+    validation-failed (422).
 servers:
-  - url: http://localhost:8000/api/retail-network/node-performance
+  - url: http://localhost:8080
 tags:
   - name: Scorecards
-    description: A node's measured performance over a rolling window, with a grade.
+    description: A node's measured performance over a rolling window, with a grade (aggregate NodeScorecard).
 paths:
   /scorecards/{nodeId}:
     get:
       tags: [Scorecards]
       operationId: getScorecard
-      summary: Get both scorecards (7-day and 30-day) of one node
+      summary: Get both scorecards (7-day and 30-day) of one node (GetScorecard)
       description: >-
-        GetScorecard in the model. Returns the 7d and 30d scorecards of the
-        node. Called in-organization by vendor-connectivity.
+        Returns the 7d and the 30d scorecard of the node, in that order. A
+        scorecard exists from the first observation recorded for the node, so a
+        node nothing was observed about answers not-found.
       parameters:
         - $ref: '#/components/parameters/NodeId'
       responses:
@@ -37,25 +46,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/NodeScorecards'
         '404':
-          description: The node has no scorecard yet (no observation has been recorded for it).
+          description: "not-found (ErrNotFound): no observation has been recorded for this node yet."
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
               example:
-                type: https://retailnetwork.example/problems/scorecard-not-found
-                title: Scorecard not found
+                type: not-found
+                title: Not found
                 status: 404
                 detail: No scorecard exists for node N-0042.
   /scorecards:
     get:
       tags: [Scorecards]
       operationId: listScorecardsByGrade
-      summary: List scorecards whose current grade matches
+      summary: List the scorecards whose current grade matches (ListScorecardsByGrade)
       description: >-
-        Lists every scorecard (any node, any window) whose current grade is
-        the one given. The model names no window filter and no caller for this
-        route.
+        Lists every scorecard whose current grade is the one given, ordered by
+        scorecardId ascending, one page at a time. The model names no window
+        filter and no caller; the optional window filter and the keyset
+        pagination (limit, after) are additive (ADR 0002, A18).
       parameters:
         - name: grade
           in: query
@@ -63,6 +73,28 @@ paths:
           description: A, B, C, D, or PROVISIONAL below the observation minimum.
           schema:
             $ref: '#/components/schemas/GradeValue'
+        - name: window
+          in: query
+          required: false
+          description: Restrict the list to one window.
+          schema:
+            $ref: '#/components/schemas/Window'
+        - name: limit
+          in: query
+          required: false
+          description: Page size, 1 to 500; 100 when absent.
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+            default: 100
+        - name: after
+          in: query
+          required: false
+          description: The nextCursor of the previous page (the last scorecardId returned).
+          schema:
+            type: string
+            maxLength: 80
       responses:
         '200':
           description: The matching scorecards.
@@ -71,14 +103,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/ScorecardList'
         '422':
-          description: The grade is not one of A, B, C, D or PROVISIONAL.
+          description: "validation-failed (ErrValidation): grade, window or limit is not an accepted value."
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
               example:
-                type: https://retailnetwork.example/problems/invalid-grade
-                title: Invalid grade
+                type: validation-failed
+                title: Validation failed
                 status: 422
                 detail: grade must be one of A, B, C, D, PROVISIONAL.
 components:
@@ -90,6 +122,7 @@ components:
       description: The node id minted by node-topology.
       schema:
         type: string
+        maxLength: 64
         example: N-0042
   schemas:
     GradeValue:
@@ -98,13 +131,16 @@ components:
       enum: [A, B, C, D, PROVISIONAL]
     Window:
       type: string
-      description: The rolling window. The model says 7-day and 30-day; the literals are proposed.
+      description: The rolling window, 7 or 30 days.
       enum: [7d, 30d]
     ScorecardState:
       type: string
       enum: [PROVISIONAL, GRADED]
     Metrics:
       type: object
+      description: >-
+        The metrics of the window (ADR 0002, A5-A10). A metric whose
+        denominator is empty reports its best value.
       required:
         - onTimeHandoverRate
         - lateAckRate
@@ -118,30 +154,35 @@ components:
           type: number
           minimum: 0
           maximum: 1
-          description: Share of packages handed over before requiredShipBy.
+          description: Packages handed over on or before requiredShipBy, over packages handed over. Higher is better.
         lateAckRate:
           type: number
           minimum: 0
           maximum: 1
-          description: Share of purchase orders acknowledged in the last 10% of the window or expired.
+          description: Purchase orders acknowledged in the last 10% of their ack window or expired, over purchase orders acknowledged or expired. Lower is better.
         rejectRate:
           type: number
           minimum: 0
           maximum: 1
+          description: Purchase orders rejected over purchase orders acknowledged or expired. Lower is better.
         expiryRate:
           type: number
           minimum: 0
           maximum: 1
+          description: Purchase orders expired over purchase orders acknowledged or expired. Lower is better.
         promiseKeptRate:
           type: number
           minimum: 0
           maximum: 1
+          description: Promises kept over promises kept plus promises broken by a node-attributable cause. Higher is better.
         feedFreshnessP95Minutes:
-          type: number
+          type: integer
           minimum: 0
+          description: 95th percentile (nearest rank) of the whole minutes between consecutive applied inventory feeds of the node. Lower is better.
         observations:
           type: integer
           minimum: 0
+          description: Observations counted in the window.
     Scorecard:
       type: object
       required: [scorecardId, nodeId, window, state, grade, metrics]
@@ -164,8 +205,7 @@ components:
         computedAt:
           type: string
           format: date-time
-          nullable: true
-          description: When the last recompute ran; null before the first one.
+          description: When the last recompute ran; omitted before the first one.
     NodeScorecards:
       type: object
       required: [nodeId, scorecards]
@@ -175,6 +215,7 @@ components:
           example: N-0042
         scorecards:
           type: array
+          minItems: 1
           maxItems: 2
           items:
             $ref: '#/components/schemas/Scorecard'
@@ -217,6 +258,9 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Scorecard'
+        nextCursor:
+          type: string
+          description: The `after` value of the next page; omitted on the last page.
     Problem:
       type: object
       description: RFC 9457 problem details.
@@ -224,10 +268,14 @@ components:
       properties:
         type:
           type: string
-          format: uri-reference
+          description: Problem type slug, not-found or validation-failed.
+          example: not-found
         title:
           type: string
         status:
           type: integer
+          example: 404
         detail:
+          type: string
+        instance:
           type: string

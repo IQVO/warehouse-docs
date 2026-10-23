@@ -47,7 +47,7 @@ models from them.
 
 ## Elsewhere
 
-- REST contract (proposed): `apis/offer-availability/openapi.yaml`, rendered
+- REST contract (as built, from the service repository): `apis/offer-availability/openapi.yaml`, rendered
   under the [API reference](/api-reference).
 - The domain-wide [Context Map](/strategic-design/context-map) and
   [Subdomain Classification](/strategic-design/subdomain-classification).
