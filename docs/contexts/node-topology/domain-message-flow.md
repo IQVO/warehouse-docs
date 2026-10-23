@@ -94,9 +94,12 @@ Derived from: model.yaml → `contexts[node-topology].aggregates[Node].invariant
 (`ErrOperatorNotAllowedForNodeType`, `ErrStaleProfileRevision`,
 `ErrIncompleteOperationalProfile`); `contexts[vendor-connectivity].aggregates[Submission]`.
 
-Omitted: `ErrCutoffOutsideOperatingHours` (422, same shape as the stale
-revision branch) and `ErrVendorNodeCodeTaken` (409, same shape as the first
-branch). Nothing reaches Kafka from this context on any refusal. The problem
+Omitted: `ErrCutoffOutsideOperatingHours`, `ErrUnknownRegion`,
+`ErrSubtypeNotAllowed` and `ErrSortDwellNotAllowed` (all 422, same shape as
+the first branch), and `ErrVendorNodeCodeTaken` (409, same shape as the stale
+revision branch). The same incomplete-profile refusal (`ErrIncompleteOperationalProfile`) also
+stops a later revision of an `ACTIVE` fulfillment centre that drops every
+cutoff or sets `handlingTime` to zero. Nothing reaches Kafka from this context on any refusal. The problem
 `type` slugs are listed on [Use Cases](/contexts/node-topology/use-cases).
 
 ## 3. The planner adds a delivery station and its service area
@@ -171,4 +174,6 @@ Omitted: `vendor-connectivity` also consumes `NodeSuspended` (its
 `VendorNodeView`); the listing events `offer-availability` then publishes
 (`ListingSuppressed`); the reactivation path (`ActivateNode` from
 `SUSPENDED`, `NodeActivated`, listings restored). The node's lanes stay
-`OPEN`: the model has no policy that closes them.
+`OPEN` and its assigned service areas stay `ASSIGNED`: policy
+`SuspendedEndpointsUnusable` closes nothing, and consumers treat them as
+unusable while the node is not `ACTIVE`.

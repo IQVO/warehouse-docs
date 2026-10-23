@@ -49,9 +49,9 @@ erDiagram
         INTEGER profile_revision PK "increasing"
         TEXT timezone
         INTEGER handling_time_minutes "CHECK >= 0"
-        INTEGER sort_dwell_minutes "nullable"
+        INTEGER sort_dwell_minutes "nullable, SC and AIR_HUB only"
         INTEGER throughput_cap_value "CHECK > 0"
-        TEXT throughput_cap_time_unit
+        TEXT throughput_cap_time_unit "CHECK HOUR, DAY"
         TEXT throughput_cap_unit "CHECK ORDER"
         TEXT declared_by "CHECK declarers"
         TIMESTAMPTZ declared_at
@@ -71,14 +71,15 @@ erDiagram
     node_profile_operating_hours {
         TEXT node_id PK,FK
         INTEGER profile_revision PK,FK
-        TEXT day_of_week PK "day of week"
-        TIME open_time PK
-        TIME close_time
+        TEXT day_of_week PK "monday to sunday"
+        TIME start_time
+        TIME end_time
     }
     node_profile_cutoffs {
         TEXT node_id PK,FK
         INTEGER profile_revision PK,FK
         TIME local_time PK
+        TEXT days "weekdays, null = every operating day"
         INTEGER max_orders "nullable"
     }
     node_profile_holidays {
@@ -96,7 +97,11 @@ Omitted: indexes other than the keys. The second diagram repeats only the
 key of `node_operational_profiles`. `OCC` marks the optimistic-concurrency
 counter. The `CHECK`s are: `status` in `PROPOSED`, `ACTIVE`, `SUSPENDED`,
 `RETIRED`; `declared_by` in `VENDOR`, `NETWORK_OPS`; `node_type` in the six
-node types; `subtype` set only for `FULFILLMENT_CENTER`. The unique key on
+node types; `subtype` set only for `FULFILLMENT_CENTER` (`ErrSubtypeNotAllowed`
+also checks it is one of the seven subtypes); `throughput_cap_time_unit` in
+`HOUR`, `DAY`. `sort_dwell_minutes` is set only when the node is a
+`SORTATION_CENTER` or `AIR_HUB` (`ErrSortDwellNotAllowed`); that rule needs the
+node type, so the domain checks it, not a table constraint. The unique key on
 `(vendor_id, vendor_node_code)` is one compound `UNIQUE` constraint, drawn as
 `UK` on both columns; it backs `ErrVendorNodeCodeTaken`. Capabilities are not stored: they are derived from
 `node_type` on load (`DefaultCapabilitiesByType`). Profile rows are only
@@ -180,12 +185,13 @@ erDiagram
         TIMESTAMPTZ processed_at
     }
     idempotency_keys {
+        TEXT route PK
         TEXT idempotency_key PK
-        TEXT route
         TEXT request_hash
         INTEGER response_status
         JSONB response_body
         TIMESTAMPTZ created_at
+        TIMESTAMPTZ expires_at "created_at + 24 h"
     }
     schema_migrations {
         BIGINT version PK
@@ -201,8 +207,10 @@ outbox, idempotent consumers with an inbox table), `conventions.cloudevents`.
 drained by the relay. `processed_events` is the standard inbox; it stays
 **empty** here because the context consumes no topic, and is kept only so the
 service has the same shape as its siblings when a consumer is added.
-`idempotency_keys` stores the first answer per `Idempotency-Key` header and
-is written in the same transaction as the command. `schema_migrations` is
+`idempotency_keys` is keyed by `(route, key)`, stores the first answer per
+`Idempotency-Key` header, keeps it for 24 hours (`expires_at`) and is written
+in the same transaction as the command. It is an infrastructure table, not an
+aggregate. `schema_migrations` is
 the migration tool's bookkeeping.
 
 ## Read-model tables
@@ -217,7 +225,7 @@ there is no `rm_...` table. The four query routes read the aggregate tables.
   `nodes.region_id` and `service_areas.region_id` hold ids by value. Each
   aggregate is a consistency boundary loaded and saved on its own. The rules
   that need another aggregate's state (both lane ends `ACTIVE`, the station
-  `ACTIVE`) are checked by the use case when it reads that aggregate, and are
+  `ACTIVE`, the region defined: `ErrUnknownRegion`) are checked by the use case when it reads that aggregate, and are
   facts about the moment of the command: a node retired later must not make
   the lane row invalid or block the retirement.
 - **To other contexts.** `nodes.vendor_id` names a `vendor-connectivity`
@@ -233,7 +241,7 @@ there is no `rm_...` table. The four query routes read the aggregate tables.
 | --- | --- | --- |
 | `nodes` | **Node** (root) | One row per node, saved with a `version` check. |
 | `node_operational_profiles` | **Node** (its `OperationalProfile` revisions) | Insert-only; `nodes.current_profile_revision` points at the latest. |
-| `node_profile_operating_hours` | **Node** (`operatingHoursByDay` of one revision) | Insert-only. |
+| `node_profile_operating_hours` | **Node** (`operatingHoursByDay` of one revision; a missing day has no row, so it is closed) | Insert-only. |
 | `node_profile_cutoffs` | **Node** (`cutoffs[CutoffSlot]` of one revision) | Insert-only. |
 | `node_profile_holidays` | **Node** (`holidays[]` of one revision) | Insert-only. |
 | `lanes` | **Lane** | One row per lane; a closed lane is never reopened. |
@@ -242,5 +250,5 @@ there is no `rm_...` table. The four query routes read the aggregate tables.
 | `regions` | **Region** | One row per region. |
 | `outbox_events` | none (infrastructure) | Transactional outbox. |
 | `processed_events` | none (infrastructure) | Inbox; empty, no consumer. |
-| `idempotency_keys` | none (infrastructure) | `Idempotency-Key` replay store. |
+| `idempotency_keys` | none (infrastructure) | `Idempotency-Key` replay store, keyed by `(route, key)`, 24-hour TTL. |
 | `schema_migrations` | none (infrastructure) | Migration bookkeeping. |

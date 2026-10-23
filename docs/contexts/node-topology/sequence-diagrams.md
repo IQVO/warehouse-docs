@@ -50,10 +50,17 @@ sequenceDiagram
         H-->>H: replay it, nothing runs
     else new key
         H->>UC: Execute
-        UC->>A: Register type, operator, vendorRef, region
+        UC->>R: FindByID regionId
+        alt region not defined
+            UC-->>H: 422 unknown-region
+        end
+        UC->>A: Register type, subtype, operator, vendorRef, region
         alt operator not allowed for the type
             A-->>UC: ErrOperatorNotAllowedForNodeType
             UC-->>H: 422 operator-not-allowed-for-node-type
+        else subtype not of the node type
+            A-->>UC: ErrSubtypeNotAllowed
+            UC-->>H: 422 subtype-not-allowed
         else vendor node
             UC->>R: FindByVendorNodeCode
             alt code already used by this vendor
@@ -80,7 +87,7 @@ sequenceDiagram
 
 Derived from: model.yaml → `contexts[node-topology].aggregates[Node]` (`commands`, `invariants`), `.rest`, `.publishes[NodeRegistered]`; `conventions.integration_rules`.
 
-Omitted: a new node has no version to check, so the unique constraint on `(vendor_id, vendor_node_code)` takes that role and catches two concurrent registrations. A network node has no vendor reference and skips the lookup.
+Omitted: a new node has no version to check, so the unique constraint on `(vendor_id, vendor_node_code)` takes that role and catches two concurrent registrations. A network node has no vendor reference and skips the lookup. The `Region` is read, never saved.
 
 ## 2. DeclareOperationalProfile
 
@@ -104,7 +111,7 @@ sequenceDiagram
         H->>UC: Execute
         UC->>R: FindByID nodeId
         alt unknown node
-            UC-->>H: 404 node-not-found
+            UC-->>H: 404 not-found
         end
         UC->>A: DeclareOperationalProfile p
         alt node RETIRED
@@ -113,9 +120,15 @@ sequenceDiagram
         else revision not above current
             A-->>UC: ErrStaleProfileRevision
             UC-->>H: 409 stale-profile-revision
-        else a cutoff outside its day's hours
+        else a cutoff on a day outside that day's hours
             A-->>UC: ErrCutoffOutsideOperatingHours
             UC-->>H: 422 cutoff-outside-operating-hours
+        else sort dwell on a node that is not a sort centre or air hub
+            A-->>UC: ErrSortDwellNotAllowed
+            UC-->>H: 422 sort-dwell-not-allowed
+        else ACTIVE FC revision without cutoff or handling time
+            A-->>UC: ErrIncompleteOperationalProfile
+            UC-->>H: 409 incomplete-operational-profile
         end
         Note over A: new revision appended, old ones untouched
         UC->>R: Save with version check
@@ -136,7 +149,7 @@ sequenceDiagram
 
 Derived from: model.yaml → `contexts[node-topology].aggregates[Node]` (`commands`, `invariants`), `.rest`, `.publishes[NodeOperationalProfileDeclared]`; `conventions.integration_rules`.
 
-Omitted: a node with no profile yet takes any first revision above zero.
+Omitted: a node with no profile yet takes any first revision above zero. Both `vendor-connectivity` (`declaredBy` `VENDOR`) and the network-ops planner (`declaredBy` `NETWORK_OPS`) call this route.
 
 ## 3. ActivateNode
 
@@ -167,8 +180,8 @@ sequenceDiagram
             A-->>UC: ErrIncompleteOperationalProfile
             UC-->>H: 409 incomplete-operational-profile
         else already ACTIVE
-            A-->>UC: transition not in the table
-            UC-->>H: 409, slug not named in the model
+            A-->>UC: ErrIllegalTransition
+            UC-->>H: 409 illegal-transition
         end
         Note over A: PROPOSED or SUSPENDED to ACTIVE
         UC->>R: Save with version check
@@ -217,8 +230,8 @@ sequenceDiagram
             A-->>UC: ErrNodeRetired
             UC-->>H: 409 node-retired
         else not ACTIVE
-            A-->>UC: transition not in the table
-            UC-->>H: 409, slug not named in the model
+            A-->>UC: ErrIllegalTransition
+            UC-->>H: 409 illegal-transition
         end
         Note over A: ACTIVE to SUSPENDED
         UC->>R: Save with version check
@@ -267,8 +280,8 @@ sequenceDiagram
             A-->>UC: ErrNodeRetired
             UC-->>H: 409 node-retired
         else still PROPOSED
-            A-->>UC: transition not in the table
-            UC-->>H: 409, slug not named in the model
+            A-->>UC: ErrIllegalTransition
+            UC-->>H: 409 illegal-transition
         end
         Note over A: ACTIVE or SUSPENDED to RETIRED, terminal
         UC->>R: Save with version check
@@ -289,7 +302,7 @@ sequenceDiagram
 
 Derived from: model.yaml → `contexts[node-topology].aggregates[Node]` (`commands`, `invariants`), `.rest`, `.publishes[NodeRetired]`; `conventions.integration_rules`.
 
-Omitted: the 404 for an unknown `nodeId`. The node's lanes and service areas are not touched.
+Omitted: the 404 for an unknown `nodeId`. The node's lanes and service areas are not touched (policy `SuspendedEndpointsUnusable`).
 
 ## 6. OpenLane
 
@@ -364,12 +377,12 @@ sequenceDiagram
         H->>UC: Execute
         UC->>R: FindByID laneId
         alt unknown lane
-            UC-->>H: 404 lane-not-found
+            UC-->>H: 404 not-found
         end
         UC->>A: Close now
         alt already CLOSED
-            A-->>UC: transition not in the table
-            UC-->>H: 409, slug not named in the model
+            A-->>UC: ErrIllegalTransition
+            UC-->>H: 409 illegal-transition
         end
         Note over A: OPEN to CLOSED
         UC->>R: Save with version check
@@ -413,16 +426,18 @@ sequenceDiagram
     else new key
         H->>UC: Execute
         UC->>R: FindByPrefix, or start new
-        UC->>R: FindByID station node
+        UC->>R: FindByID station node and its region
         alt not an ACTIVE DELIVERY_STATION
             UC-->>H: 409 not-a-delivery-station
+        else station's region not defined
+            UC-->>H: 422 unknown-region
         end
         UC->>A: Assign station, version
         alt version not above current
             A-->>UC: ErrStaleAssignmentVersion
             UC-->>H: 409 stale-assignment-version
         end
-        Note over A: regionId taken from the station, history row added
+        Note over A: ASSIGNED to ASSIGNED, regionId from the station, history row added
         UC->>R: Save with version check
         alt version changed since load
             R-->>UC: conflict
@@ -441,7 +456,7 @@ sequenceDiagram
 
 Derived from: model.yaml → `contexts[node-topology].aggregates[ServiceArea]` (`commands`, `invariants`), `.rest`, `.publishes[ServiceAreaAssigned]`; `conventions.integration_rules`.
 
-Omitted: the 404 for an unknown station `nodeId`. The station `Node` is read, never saved.
+Omitted: the 404 for an unknown station `nodeId`. The station `Node` and its `Region` are read, never saved.
 
 ## 9. DefineRegion
 

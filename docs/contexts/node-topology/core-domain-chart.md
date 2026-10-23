@@ -57,12 +57,14 @@ lets the network promise from a vendor's building it does not run
 
 **Model complexity is moderate (x ≈ 0.44).** There are four aggregates
 (`Node`, `Lane`, `ServiceArea`, `Region`), one lifecycle with four states,
-one with two, and two with a single state. There are thirteen invariants,
-each with its own `Err...` identifier. The rules are crisp (allowed operator
+one with two, and two with a single state (`ServiceArea` has one
+`ASSIGNED` to `ASSIGNED` transition). There are seventeen invariants,
+guarded by sixteen `Err...` identifiers (`ErrUnknownRegion` guards both a node
+and a service area). The rules are crisp (allowed operator
 per node type, allowed lane type pairs, strictly increasing revisions,
-cutoffs inside operating hours). What lifts complexity is the cross-aggregate
+cutoffs inside operating hours, known regions and subtypes). What lifts complexity is the cross-aggregate
 checks: opening a lane reads both end nodes, assigning a service area reads
-the station, and three uniqueness rules span many aggregates
+the station and the region, registering a node reads the region, and three uniqueness rules span many aggregates
 (`ErrVendorNodeCodeTaken`, `ErrDuplicateLane`, `ErrRegionCodeTaken`). The
 slice **node lifecycle and operator rule** is the simplest part.
 
@@ -78,7 +80,7 @@ from one source, through events, instead of keeping their own registries.
 | Part | Evolution stage | Why |
 | --- | --- | --- |
 | Node, lane, region and service-area registry | **Custom-built** (model `evolution: Custom-built`) | The node types, the operator rule and the lane type pairs are this network's own design ([ADR 0004](/adr/0004-parcel-nodes-are-network-operated)). |
-| Operational profile | **Custom-built**, shaped after a **Product** | Modelled after the Supply Sources `operationalConfiguration` (see [SP-API surface map](/research/sp-api-surface-map)), extended with cutoffs and sort dwell. |
+| Operational profile | **Custom-built**, shaped after a **Product** | Modelled after the Supply Sources `operationalConfiguration` (see [SP-API surface map](/research/sp-api-surface-map)), extended with cutoffs (per day) and sort dwell (sort centres and air hubs only). |
 | Master-data plumbing (outbox, CloudEvents, REST) | **Commodity** | The same building blocks every context uses ([event standard](/strategic-design/event-standard-cloudevents)). |
 
 **Movement to watch.** If the network ever optimises its own topology

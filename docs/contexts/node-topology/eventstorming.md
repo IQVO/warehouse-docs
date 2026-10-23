@@ -2,7 +2,7 @@
 id: eventstorming
 title: EventStorming
 sidebar_label: EventStorming
-description: Process-level EventStorming boards for Node Topology, covering node registration and activation, suspension and retirement, and lanes, regions and service areas, with hotspots from open questions in the model.
+description: Process-level EventStorming boards for Node Topology, covering node registration and activation, suspension and retirement, and lanes, regions and service areas. The model leaves no hotspot open.
 ---
 
 # EventStorming
@@ -13,9 +13,9 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 Process-level boards in the ddd-crew
 [EventStorming glossary & cheat sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet)
-notation. Every sticky comes from the model. Every hotspot is an open
-question or a risk the model leaves open, and the table at the end names the
-model entry it comes from. The domain-wide board is
+notation. Every sticky comes from the model. A hotspot would be an open
+question or a risk the model leaves open; the model leaves none for this
+context today (see the end of the page). The domain-wide board is
 [EventStorming big picture](/strategic-design/eventstorming-big-picture).
 
 ## Legend
@@ -53,10 +53,6 @@ flowchart LR
     E2["NodeOperational<br/>ProfileDeclared"]:::event
     C3["ActivateNode"]:::command
     E3["NodeActivated"]:::event
-    H1["Hotspot H5: regionId<br/>not checked"]:::hotspot
-    H2["Hotspot H3: cutoffs<br/>have no day"]:::hotspot
-    H3["Hotspot H2: who declares<br/>a network node profile"]:::hotspot
-    H7["Hotspot H4: may an ACTIVE<br/>FC drop all cutoffs"]:::hotspot
 
     VC --> C1
     PL --> C1
@@ -64,15 +60,12 @@ flowchart LR
     P1 --> G1
     G1 --> E1
     VC --> C2
+    PL --> C2
     C2 --> G1
     G1 --> E2
     PL --> C3
     C3 --> G1
     G1 --> E3
-    C1 --- H1
-    C2 --- H2
-    C2 --- H3
-    C2 --- H7
 ```
 
 Derived from: model.yaml → `contexts[node-topology].aggregates[Node]`,
@@ -80,7 +73,8 @@ Derived from: model.yaml → `contexts[node-topology].aggregates[Node]`,
 
 Omitted: the refusals (`ErrOperatorNotAllowedForNodeType`,
 `ErrVendorNodeCodeTaken`, `ErrStaleProfileRevision`,
-`ErrCutoffOutsideOperatingHours`, `ErrIncompleteOperationalProfile`), which
+`ErrCutoffOutsideOperatingHours`, `ErrIncompleteOperationalProfile`,
+`ErrUnknownRegion`, `ErrSubtypeNotAllowed`, `ErrSortDwellNotAllowed`), which
 raise no event; the downstream reactions, on board 2.
 
 ## 2. What the network does with node facts
@@ -154,9 +148,7 @@ flowchart LR
     E4["NodeSuspended"]:::event
     E5["NodeRetired"]:::event
     E3["NodeActivated"]:::event
-    H4["Hotspot H1: lanes of the<br/>node stay OPEN"]:::hotspot
-    H5["Hotspot H1: prefixes of a<br/>retired station stay ASSIGNED"]:::hotspot
-    H6["Hotspot H6: illegal transition<br/>has no Err name"]:::hotspot
+    P4["SuspendedEndpoints<br/>Unusable<br/>closes nothing"]:::policy
 
     PL --> C4
     PL --> C5
@@ -167,15 +159,19 @@ flowchart LR
     G1 --> E4
     G1 --> E5
     G1 --> E3
-    E4 --- H4
-    E5 --- H5
-    C4 --- H6
+    E4 --> P4
+    E5 --> P4
 ```
 
 Derived from: model.yaml → `contexts[node-topology].aggregates[Node].transitions`,
 `.invariants`; `.aggregates[Lane]`, `.aggregates[ServiceArea]`, `.policies`.
 
-Omitted: `ErrNodeRetired` (any command on a `RETIRED` node); the reasons a
+The policy `SuspendedEndpointsUnusable` is this context's: the node's `OPEN`
+lanes and `ASSIGNED` service areas stay as they are, and consumers treat them
+as unusable while the node is not `ACTIVE`.
+
+Omitted: `ErrNodeRetired` (any command on a `RETIRED` node) and
+`ErrIllegalTransition` (any other command outside the transition table); the reasons a
 planner suspends (the model leaves them free text; `node-performance` never
 suspends a node).
 
@@ -232,17 +228,22 @@ Derived from: model.yaml → `contexts[node-topology].aggregates[Lane|ServiceAre
 
 Omitted: the refusals (`ErrLaneLoop`, `ErrLaneTypePairNotAllowed`,
 `ErrLaneEndpointNotActive`, `ErrDuplicateLane`, `ErrNotADeliveryStation`,
-`ErrStaleAssignmentVersion`, `ErrRegionCodeTaken`). The `Node` sticky here
+`ErrStaleAssignmentVersion`, `ErrUnknownRegion`, `ErrRegionCodeTaken`). The `Node` sticky here
 is read, not changed: the lane and service-area use cases load it to check
 their invariants.
 
 ## Hotspots
 
-| Id | Hotspot | Where it comes from in the model |
-| --- | --- | --- |
-| H1 | Lanes of a suspended or retired node stay `OPEN`, and the prefixes of a retired delivery station stay `ASSIGNED`. No policy closes or reassigns them. | `contexts[node-topology].policies` holds only `DefaultCapabilitiesByType`; `Lane` closes only by `CloseLane`; `ErrLaneEndpointNotActive` and `ErrNotADeliveryStation` are checked only when opening or assigning. |
-| H2 | Who declares a network node's profile? `declaredBy` allows `NETWORK_OPS`, but no inbound row gives the planner `DeclareOperationalProfile`. | `aggregates[Node].value_objects` (`declaredBy(VENDOR or NETWORK_OPS)`) against `inbound`. |
-| H3 | A cutoff has no day of week, yet it must fall "inside the operating hours of its day". | `CutoffSlot{localTime, maxOrders?}` against `ErrCutoffOutsideOperatingHours`. |
-| H4 | May a later profile revision of an `ACTIVE` fulfillment centre drop every cutoff? The completeness rule says "before activation". | `ErrIncompleteOperationalProfile`. |
-| H5 | No invariant makes a node's or a service area's `regionId` name a defined region. | `aggregates[Region].description` ("nodes and service areas belong to exactly one region") with no matching invariant. |
-| H6 | Illegal transitions (for example `SuspendNode` on `PROPOSED`) and unknown ids have no named error. | `aggregates[Node].transitions` and `invariants` (only `ErrNodeRetired` covers a refused transition). |
+None. The six hotspots of the earlier draft are answered in the model and
+stated in the pages of this pack:
+
+- lanes and service areas of a node that leaves service: policy
+  `SuspendedEndpointsUnusable`;
+- who declares a network node's profile: the network-ops planner, with
+  `declaredBy` `NETWORK_OPS`;
+- cutoff days: `CutoffSlot.days`, default every operating day;
+- a later revision of an `ACTIVE` fulfillment centre: it keeps at least one
+  cutoff and a `handlingTime` above zero (`ErrIncompleteOperationalProfile`);
+- region membership: `ErrUnknownRegion`;
+- illegal transitions and unknown ids: the shared `ErrIllegalTransition` and
+  `ErrNotFound`.

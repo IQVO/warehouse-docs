@@ -5,13 +5,16 @@ info:
   description: >-
     Proposed REST contract of the node-topology bounded context of the retail
     network, derived from model/model.yaml (contexts[node-topology].rest,
-    .aggregates, .publishes). Nothing is built yet. Node Topology is the
+    .aggregates, .publishes, conventions.errors). Nothing is built yet. Node Topology is the
     authoritative registry of nodes, their declared operational profiles,
     lanes, regions and service areas. vendor-connectivity calls POST /nodes and
     PUT /nodes/{nodeId}/operational-profile in-organization while it processes
-    vendor submissions; the network-ops planner calls the other write routes;
+    vendor submissions; the network-ops planner calls the other write routes
+    and may also declare a network node's profile (declaredBy NETWORK_OPS);
     any context may call the read routes. No authentication, consistent with
-    the fleet. Errors are RFC 9457 problem details.
+    the fleet. Errors are RFC 9457 problem details. The shared problem types
+    are not-found (404), illegal-transition (409), concurrent-update (409) and
+    validation-failed (422).
 servers:
   - url: http://localhost:8000/api/retail-network/node-topology
 tags:
@@ -50,13 +53,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Node'
         '409':
-          description: "vendor-node-code-taken (ErrVendorNodeCodeTaken)."
+          description: "vendor-node-code-taken (ErrVendorNodeCodeTaken), or concurrent-update (ErrConcurrentUpdate)."
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '422':
-          description: "operator-not-allowed-for-node-type (ErrOperatorNotAllowedForNodeType), or validation-failed."
+          description: "operator-not-allowed-for-node-type (ErrOperatorNotAllowedForNodeType), unknown-region (ErrUnknownRegion), subtype-not-allowed (ErrSubtypeNotAllowed), or validation-failed."
           content:
             application/problem+json:
               schema:
@@ -64,7 +67,7 @@ paths:
     get:
       tags: [Nodes]
       operationId: listNodes
-      summary: List nodes by type, region and status
+      summary: List nodes by type, region and status (ListNodes)
       parameters:
         - name: type
           in: query
@@ -118,7 +121,12 @@ paths:
       summary: Declare a new operational profile revision (DeclareOperationalProfile)
       description: >-
         Appends a profile revision; earlier revisions are never edited.
-        Publishes NodeOperationalProfileDeclared.
+        Called by vendor-connectivity (declaredBy VENDOR) and by the
+        network-ops planner (declaredBy NETWORK_OPS). Every day of a cutoff
+        must fall inside the operating hours of that day, and a revision of an
+        ACTIVE FULFILLMENT_CENTER keeps at least one cutoff and a handlingTime
+        above zero. sortDwellMinutes is accepted only for SORTATION_CENTER and
+        AIR_HUB nodes. Publishes NodeOperationalProfileDeclared.
       parameters:
         - $ref: '#/components/parameters/NodeId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -138,13 +146,13 @@ paths:
         '404':
           $ref: '#/components/responses/NodeNotFound'
         '409':
-          description: "stale-profile-revision (ErrStaleProfileRevision) or node-retired (ErrNodeRetired)."
+          description: "stale-profile-revision (ErrStaleProfileRevision), incomplete-operational-profile (ErrIncompleteOperationalProfile), node-retired (ErrNodeRetired), or concurrent-update (ErrConcurrentUpdate)."
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '422':
-          description: "cutoff-outside-operating-hours (ErrCutoffOutsideOperatingHours), or validation-failed."
+          description: "cutoff-outside-operating-hours (ErrCutoffOutsideOperatingHours), sort-dwell-not-allowed (ErrSortDwellNotAllowed), or validation-failed."
           content:
             application/problem+json:
               schema:
@@ -168,7 +176,7 @@ paths:
         '404':
           $ref: '#/components/responses/NodeNotFound'
         '409':
-          description: "incomplete-operational-profile (ErrIncompleteOperationalProfile), node-retired (ErrNodeRetired), or a transition outside the model's table."
+          description: "incomplete-operational-profile (ErrIncompleteOperationalProfile), node-retired (ErrNodeRetired), illegal-transition (ErrIllegalTransition), or concurrent-update (ErrConcurrentUpdate)."
           content:
             application/problem+json:
               schema:
@@ -198,7 +206,7 @@ paths:
         '404':
           $ref: '#/components/responses/NodeNotFound'
         '409':
-          description: "node-retired (ErrNodeRetired), or a transition outside the model's table."
+          description: "node-retired (ErrNodeRetired), illegal-transition (ErrIllegalTransition), or concurrent-update (ErrConcurrentUpdate)."
           content:
             application/problem+json:
               schema:
@@ -222,7 +230,7 @@ paths:
         '404':
           $ref: '#/components/responses/NodeNotFound'
         '409':
-          description: "node-retired (ErrNodeRetired), or a transition outside the model's table."
+          description: "node-retired (ErrNodeRetired), illegal-transition (ErrIllegalTransition), or concurrent-update (ErrConcurrentUpdate)."
           content:
             application/problem+json:
               schema:
@@ -251,7 +259,7 @@ paths:
         '404':
           $ref: '#/components/responses/NodeNotFound'
         '409':
-          description: "lane-endpoint-not-active (ErrLaneEndpointNotActive) or duplicate-lane (ErrDuplicateLane)."
+          description: "lane-endpoint-not-active (ErrLaneEndpointNotActive), duplicate-lane (ErrDuplicateLane), or concurrent-update (ErrConcurrentUpdate)."
           content:
             application/problem+json:
               schema:
@@ -313,13 +321,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/Lane'
         '404':
-          description: lane-not-found.
+          description: not-found (ErrNotFound).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '409':
-          description: "The lane is already CLOSED (a transition outside the model's table)."
+          description: "illegal-transition (ErrIllegalTransition): the lane is already CLOSED; or concurrent-update (ErrConcurrentUpdate)."
           content:
             application/problem+json:
               schema:
@@ -333,8 +341,8 @@ paths:
       summary: Assign a postal prefix to a delivery station (AssignServiceArea)
       description: >-
         Creates or reassigns the prefix under a strictly higher
-        assignmentVersion. The region is taken from the station. Publishes
-        ServiceAreaAssigned.
+        assignmentVersion (ASSIGNED to ASSIGNED). The region is taken from the
+        station and must be a defined Region. Publishes ServiceAreaAssigned.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -353,13 +361,13 @@ paths:
         '404':
           $ref: '#/components/responses/NodeNotFound'
         '409':
-          description: "not-a-delivery-station (ErrNotADeliveryStation) or stale-assignment-version (ErrStaleAssignmentVersion)."
+          description: "not-a-delivery-station (ErrNotADeliveryStation), stale-assignment-version (ErrStaleAssignmentVersion), or concurrent-update (ErrConcurrentUpdate)."
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '422':
-          description: validation-failed.
+          description: "unknown-region (ErrUnknownRegion), or validation-failed."
           content:
             application/problem+json:
               schema:
@@ -376,7 +384,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ServiceArea'
         '404':
-          description: service-area-not-found.
+          description: not-found (ErrNotFound).
           content:
             application/problem+json:
               schema:
@@ -421,8 +429,9 @@ components:
       in: header
       required: true
       description: >-
-        Client-chosen key. A repeat with the same key and request replays the
-        first response. vendor-connectivity sends its transactionId.
+        Client-chosen key. A repeat on the same route with the same key and
+        request replays the first response. Keys are kept for 24 hours.
+        vendor-connectivity sends its transactionId.
       schema:
         type: string
         maxLength: 200
@@ -440,7 +449,7 @@ components:
         type: string
   responses:
     NodeNotFound:
-      description: node-not-found (an unknown nodeId in the path or body).
+      description: "not-found (ErrNotFound): an unknown nodeId in the path or body."
       content:
         application/problem+json:
           schema:
@@ -453,7 +462,10 @@ components:
       properties:
         type:
           type: string
-          description: Problem type slug, e.g. stale-profile-revision.
+          description: >-
+            Problem type slug: the shared not-found, illegal-transition,
+            concurrent-update and validation-failed, or one of this context's,
+            e.g. stale-profile-revision.
           example: stale-profile-revision
         title:
           type: string
@@ -536,58 +548,54 @@ components:
           example: America/Sao_Paulo
         location:
           $ref: '#/components/schemas/GeoLocation'
-    TimeWindow:
+    DayHours:
       type: object
-      required: [open, close]
+      required: [start, end]
       properties:
-        open:
+        start:
           type: string
-          description: Local time, HH:mm.
+          description: Local opening time, HH:mm.
           example: '06:00'
-        close:
+        end:
           type: string
-          description: Local time, HH:mm.
+          description: Local closing time, HH:mm.
           example: '22:00'
+    Weekday:
+      type: string
+      enum: [monday, tuesday, wednesday, thursday, friday, saturday, sunday]
     OperatingHoursByDay:
       type: object
-      description: Per day of week, the local opening windows. A day with no window is closed.
+      description: Per day of week, the local opening hours. A missing day is closed.
       properties:
-        MONDAY:
-          type: array
-          items:
-            $ref: '#/components/schemas/TimeWindow'
-        TUESDAY:
-          type: array
-          items:
-            $ref: '#/components/schemas/TimeWindow'
-        WEDNESDAY:
-          type: array
-          items:
-            $ref: '#/components/schemas/TimeWindow'
-        THURSDAY:
-          type: array
-          items:
-            $ref: '#/components/schemas/TimeWindow'
-        FRIDAY:
-          type: array
-          items:
-            $ref: '#/components/schemas/TimeWindow'
-        SATURDAY:
-          type: array
-          items:
-            $ref: '#/components/schemas/TimeWindow'
-        SUNDAY:
-          type: array
-          items:
-            $ref: '#/components/schemas/TimeWindow'
+        monday:
+          $ref: '#/components/schemas/DayHours'
+        tuesday:
+          $ref: '#/components/schemas/DayHours'
+        wednesday:
+          $ref: '#/components/schemas/DayHours'
+        thursday:
+          $ref: '#/components/schemas/DayHours'
+        friday:
+          $ref: '#/components/schemas/DayHours'
+        saturday:
+          $ref: '#/components/schemas/DayHours'
+        sunday:
+          $ref: '#/components/schemas/DayHours'
     CutoffSlot:
       type: object
       required: [localTime]
       properties:
         localTime:
           type: string
-          description: Local time, HH:mm, inside the operating hours of each operating day.
+          description: Local time, HH:mm, inside the operating hours of every day of the cutoff.
           example: '18:00'
+        days:
+          type: array
+          description: The weekdays the cutoff applies to. Default, when absent, is every operating day.
+          items:
+            $ref: '#/components/schemas/Weekday'
+          minItems: 1
+          uniqueItems: true
         maxOrders:
           type: integer
           minimum: 1
@@ -600,7 +608,8 @@ components:
           minimum: 1
         timeUnit:
           type: string
-          description: The time unit of the cap. The model does not enumerate its vocabulary.
+          description: The time unit of the cap.
+          enum: [HOUR, DAY]
           example: HOUR
         unit:
           type: string
@@ -620,6 +629,7 @@ components:
           $ref: '#/components/schemas/OperatingHoursByDay'
         holidays:
           type: array
+          description: ISO dates on which the node is closed all day.
           items:
             type: string
             format: date
@@ -635,6 +645,7 @@ components:
         sortDwellMinutes:
           type: integer
           minimum: 0
+          description: Declared only by SORTATION_CENTER and AIR_HUB nodes.
         declaredBy:
           type: string
           enum: [VENDOR, NETWORK_OPS]
