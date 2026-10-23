@@ -41,7 +41,7 @@ conventions:
   cloudevents:
     spec: CloudEvents 1.0, structured JSON, mandatory on every Kafka message (fleet rule carried over)
     type: "com.retailnetwork.<tier>.<context>.<entity>.<EventName>"
-    entity_rule: "<entity> is the lower-case name of the aggregate or read-side model that raises the event, exactly the entity field of the published event below. Consumers dispatch on the full type string."
+    entity_rule: "`<entity>` is the lower-case name of the aggregate or read-side model that raises the event, exactly the entity field of the published event below. Consumers dispatch on the full type string."
     source: "/retailnetwork/<context>"
     dataschema: "urn:retailnetwork:<context>:events:<EventName>:v1"
     subject: aggregate root id (also the Kafka partition key)

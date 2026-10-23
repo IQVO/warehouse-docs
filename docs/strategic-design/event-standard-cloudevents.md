@@ -21,7 +21,7 @@ topic, so no consumer can mistake one organization's event for the other's.
 | Attribute | Rule |
 | --- | --- |
 | `specversion` | `1.0` |
-| `type` | `com.retailnetwork.<tier>.<context>.<entity>.<EventName>` (<entity> is the lower-case name of the aggregate or read-side model that raises the event, exactly the entity field of the published event below. Consumers dispatch on the full type string.) |
+| `type` | `com.retailnetwork.<tier>.<context>.<entity>.<EventName>` (`<entity>` is the lower-case name of the aggregate or read-side model that raises the event, exactly the entity field of the published event below. Consumers dispatch on the full type string.) |
 | `source` | `/retailnetwork/<context>` |
 | `subject` | aggregate root id (also the Kafka partition key) |
 | `dataschema` | `urn:retailnetwork:<context>:events:<EventName>:v1` |
