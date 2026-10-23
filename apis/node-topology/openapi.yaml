@@ -449,7 +449,7 @@ components:
         type: string
   responses:
     NodeNotFound:
-      description: not-found (ErrNotFound): an unknown nodeId in the path or body.
+      description: "not-found (ErrNotFound): an unknown nodeId in the path or body."
       content:
         application/problem+json:
           schema:
