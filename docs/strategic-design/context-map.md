@@ -74,13 +74,13 @@ flowchart TB
     OA ==>|"CF 6e"| DP
     OA ==>|"CF 5e"| OS
     OA ==>|"C/S + CF 1e +REST"| VC
-    DP ==>|"C/S 4e +REST"| CO
+    DP ==>|"? + C/S 5e +REST"| CO
     DP ==>|"C/S 2e"| OS
     CO ==>|"C/S 2e"| OS
     CO ==>|"C/S 2e"| DP
     OS ==>|"C/S 2e"| VC
-    OS ==>|"C/S 2e"| DP
-    OS ==>|"CF 3e"| CO
+    OS ==>|"? + C/S 3e"| DP
+    OS ==>|"? + CF 5e"| CO
     VC ==>|"C/S 4e"| OS
 ```
 
@@ -102,12 +102,13 @@ flowchart TB
     VC["vendor-connectivity"]:::sup
     NT ==>|"CF 7e"| LH
     NT ==>|"CF 2e"| LM
-    NT ==>|"C/S + CF 4e +REST"| VC
+    NT ==>|"? + C/S + CF 5e +REST"| VC
     VC ==>|"C/S 1e"| ST
     LH ==>|"CF 2e"| ST
     LH ==>|"C/S 1e"| LM
-    LM ==>|"CF 2e"| ST
-    ST ==>|"CF 1e"| LH
+    LM ==>|"? + CF 3e"| ST
+    ST ==>|"? + CF 2e"| LH
+    ST ==>|"? 1e"| LM
     ST -->|"C/S +REST"| VC
 ```
 
@@ -141,12 +142,12 @@ flowchart TB
     DP ==>|"C/S 2e"| OS
     DP ==>|"CF 2e"| NP
     OS ==>|"C/S 4e"| LH
-    OS ==>|"C/S 2e"| DP
-    LH ==>|"CF 3e"| DP
-    LH ==>|"CF 3e"| OS
+    OS ==>|"? + C/S 3e"| DP
+    LH ==>|"? + CF 5e"| DP
+    LH ==>|"? + CF 5e"| OS
     LH ==>|"C/S 1e"| LM
-    LM ==>|"CF 2e"| DP
-    LM ==>|"CF 2e"| OS
+    LM ==>|"? + CF 4e"| DP
+    LM ==>|"? + CF 3e"| OS
     NP ==>|"CF 1e"| DP
     NP ==>|"CF 1e"| OS
 ```
@@ -160,15 +161,15 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `customer-ordering` | `delivery-promise` | C/S | `CustomerOrderPlaced`, `CustomerOrderCancelled` | - |
 | `customer-ordering` | `order-sourcing` | C/S | `CustomerOrderPlaced`, `CustomerOrderCancelled` | - |
 | `customer-ordering` | `shipping-and-tracking` | C/S | - | qry GetShipTo (`REST GET /orders/{orderId}/ship-to`) |
-| `delivery-promise` | `customer-ordering` | C/S | `PromiseAtRisk`, `PromiseRevised`, `PromiseKept`, `PromiseBroken` | qry QuoteDeliveryOffers (`REST POST /delivery-offers:quote`); cmd MakePromise (`REST POST /promises`) |
+| `delivery-promise` | `customer-ordering` | ? + C/S | `PromiseAtRisk`, `PromiseRevised`, `PromiseKept`, `PromiseBroken`, `PromiseUnkeepable` | qry QuoteDeliveryOffers (`REST POST /delivery-offers:quote`); cmd MakePromise (`REST POST /promises`) |
 | `delivery-promise` | `node-performance` | CF | `PromiseKept`, `PromiseBroken` | - |
 | `delivery-promise` | `order-sourcing` | C/S | `PromiseRevised`, `PromiseBookExhausted` | - |
-| `last-mile-delivery` | `delivery-promise` | CF | `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged` | - |
-| `last-mile-delivery` | `order-sourcing` | CF | `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged` | - |
-| `last-mile-delivery` | `shipping-and-tracking` | CF | `PackageOutForDelivery`, `DeliveryAttempted` | - |
-| `linehaul-transportation` | `delivery-promise` | CF | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled` | - |
+| `last-mile-delivery` | `delivery-promise` | ? + CF | `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged`, `DeliveryWaveCancelled`, `PackageInductionDeferred` | - |
+| `last-mile-delivery` | `order-sourcing` | ? + CF | `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged`, `DeliveryWaveCancelled` | - |
+| `last-mile-delivery` | `shipping-and-tracking` | ? + CF | `PackageOutForDelivery`, `DeliveryAttempted`, `PackageReturnInitiated` | - |
+| `linehaul-transportation` | `delivery-promise` | ? + CF | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`, `BookingMoved`, `BookingFailed` | - |
 | `linehaul-transportation` | `last-mile-delivery` | C/S | `LoadArrived` | - |
-| `linehaul-transportation` | `order-sourcing` | CF | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled` | - |
+| `linehaul-transportation` | `order-sourcing` | ? + CF | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`, `BookingMoved`, `BookingFailed` | - |
 | `linehaul-transportation` | `shipping-and-tracking` | CF | `LoadDeparted`, `LoadArrived` | - |
 | `node-performance` | `delivery-promise` | CF | `NodeScorecardUpdated` | - |
 | `node-performance` | `order-sourcing` | CF | `NodeScorecardUpdated` | - |
@@ -179,19 +180,20 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `node-topology` | `node-performance` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared` | - |
 | `node-topology` | `offer-availability` | CF | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | - |
 | `node-topology` | `order-sourcing` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneClosed`, `ServiceAreaAssigned`, `RegionDefined` | - |
-| `node-topology` | `vendor-connectivity` | C/S + CF | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | cmd RegisterNode, DeclareOperationalProfile (`REST POST /nodes, PUT /nodes/{nodeId}/operational-profile`) |
+| `node-topology` | `vendor-connectivity` | ? + C/S + CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | cmd RegisterNode, DeclareOperationalProfile (`REST POST /nodes, PUT /nodes/{nodeId}/operational-profile`) |
 | `offer-availability` | `delivery-promise` | CF | `CatalogItemCreated`, `CatalogItemDiscontinued`, `ListingCreated`, `ListingAvailabilityChanged`, `ListingSuppressed`, `ListingRestored` | - |
 | `offer-availability` | `node-performance` | CF | `InventoryFeedApplied` | - |
 | `offer-availability` | `order-sourcing` | CF | `CatalogItemDiscontinued`, `ListingCreated`, `ListingAvailabilityChanged`, `ListingSuppressed`, `ListingRestored` | - |
 | `offer-availability` | `shipping-and-tracking` | CF | `CatalogItemCreated` | - |
 | `offer-availability` | `vendor-connectivity` | C/S + CF | `ListingCreated` | cmd ApplyInventoryFeed (`REST POST /inventory-feeds`) |
-| `order-sourcing` | `customer-ordering` | CF | `FulfillmentLocked`, `FulfillmentShipped`, `FulfillmentUnsourceable` | - |
-| `order-sourcing` | `delivery-promise` | C/S | `FulfillmentLocked`, `FulfillmentUnsourceable` | - |
+| `order-sourcing` | `customer-ordering` | ? + CF | `FulfillmentLocked`, `FulfillmentShipped`, `FulfillmentUnsourceable`, `FulfillmentCancelled`, `FulfillmentCancelRefused` | - |
+| `order-sourcing` | `delivery-promise` | ? + C/S | `FulfillmentLocked`, `FulfillmentShipped`, `FulfillmentUnsourceable` | - |
 | `order-sourcing` | `linehaul-transportation` | C/S | `FulfillmentReleasedToNode`, `FulfillmentReassigned`, `FulfillmentLocked`, `FulfillmentCancelled` | - |
 | `order-sourcing` | `vendor-connectivity` | C/S | `FulfillmentReleasedToNode`, `FulfillmentCancelled` | - |
-| `shipping-and-tracking` | `customer-ordering` | CF | `LabelIssued`, `PackageScanned`, `PackageDelivered`, `PackageExceptionRaised` | - |
-| `shipping-and-tracking` | `delivery-promise` | CF | `PackageDelivered`, `PackageExceptionRaised` | - |
-| `shipping-and-tracking` | `linehaul-transportation` | CF | `LabelIssued` | - |
+| `shipping-and-tracking` | `customer-ordering` | ? + CF | `LabelIssued`, `LabelVoided`, `PackageScanned`, `PackageDelivered`, `PackageExceptionRaised` | - |
+| `shipping-and-tracking` | `delivery-promise` | ? + CF | `PackageDelivered`, `PackageExceptionRaised`, `PackageReturned`, `PackageLost` | - |
+| `shipping-and-tracking` | `last-mile-delivery` | ? | `LabelIssued` | - |
+| `shipping-and-tracking` | `linehaul-transportation` | ? + CF | `LabelIssued`, `LabelVoided` | - |
 | `shipping-and-tracking` | `node-performance` | CF | `PackageHandedOver` | - |
 | `shipping-and-tracking` | `order-sourcing` | CF | `PackageDelivered` | - |
 | `shipping-and-tracking` | `vendor-connectivity` | C/S | - | cmd IssueLabel (`REST POST /labels`) |

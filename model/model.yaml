@@ -266,7 +266,7 @@ contexts:
       - "GET /regions/{regionId}"
     publishes:
       - {event: NodeRegistered, entity: node, data: [nodeId, nodeType, subtype, operator, vendorId, vendorNodeCode, regionId, timezone, postalCode, countryCode], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, last-mile-delivery, node-performance, vendor-connectivity]}
-      - {event: NodeOperationalProfileDeclared, entity: node, data: [nodeId, profileRevision, timezone, operatingHoursByDay, holidays, handlingTimeMinutes, cutoffs, throughputCap, sortDwellMinutes, declaredBy], consumers: [delivery-promise, order-sourcing, linehaul-transportation, node-performance]}
+      - {event: NodeOperationalProfileDeclared, entity: node, data: [nodeId, profileRevision, timezone, operatingHoursByDay, holidays, handlingTimeMinutes, cutoffs, throughputCap, sortDwellMinutes, declaredBy], consumers: [delivery-promise, order-sourcing, linehaul-transportation, node-performance, vendor-connectivity]}
       - {event: NodeActivated, entity: node, data: [nodeId, activatedAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity]}
       - {event: NodeSuspended, entity: node, data: [nodeId, reason, suspendedAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity]}
       - {event: NodeRetired, entity: node, data: [nodeId, retiredAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity]}
@@ -516,6 +516,9 @@ contexts:
       - "GET /promises/{promiseId}"
       - "GET /promises?orderId="
       - "GET /promise-books?nodeId=&date="
+      - "POST /promises/{promiseId}:confirm"
+      - "POST /promise-policies"
+      - "GET /promise-policies/current"
     publishes:
       - {event: PromiseMade, entity: promise, data: [promiseId, offerId, tier, nodeId, pickupDepartureId, shipBy, deliverByEarliest, deliverByLatest, basis, policyVersion, holdExpiresAt, lines], consumers: [analytics only]}
       - {event: PromiseConfirmed, entity: promise, data: [promiseId, orderId, groupNo], consumers: [analytics only]}
@@ -526,6 +529,9 @@ contexts:
       - {event: PromiseReleased, entity: promise, data: [promiseId, reason], consumers: [analytics only]}
       - {event: PromiseCancelled, entity: promise, data: [promiseId, orderId, reason], consumers: [analytics only]}
       - {event: PromiseBookExhausted, entity: promisebook, data: [bookId, nodeId, pickupDepartureId, share], consumers: [order-sourcing]}
+      - {event: PromiseUnkeepable, entity: promise, data: [promiseId, orderId, groupNo, reason], consumers: [customer-ordering]}
+      - {event: DeliveryOfferQuoted, entity: deliveryoffer, data: [offerId, tier, destinationPostalPrefix, nodeId, deliverByEarliest, deliverByLatest, basis, policyVersion, expiresAt], consumers: [analytics only]}
+      - {event: PromisePolicyPublished, entity: promisepolicy, data: [policyVersion, version, offerTtlMinutes, holdTtlMinutes, packagesPerOrder, capacitySharePercent, orderDeadlines, publishedAt], consumers: [analytics only]}
     consumes:
       - {event: CustomerOrderPlaced, from: customer-ordering}
       - {event: CustomerOrderCancelled, from: customer-ordering}
@@ -554,6 +560,13 @@ contexts:
       - {event: ListingSuppressed, from: offer-availability}
       - {event: ListingRestored, from: offer-availability}
       - {event: NodeScorecardUpdated, from: node-performance}
+      - {event: DeliveryWaveCancelled, from: last-mile-delivery}
+      - {event: PackageInductionDeferred, from: last-mile-delivery}
+      - {event: BookingFailed, from: linehaul-transportation}
+      - {event: BookingMoved, from: linehaul-transportation}
+      - {event: FulfillmentShipped, from: order-sourcing}
+      - {event: PackageLost, from: shipping-and-tracking}
+      - {event: PackageReturned, from: shipping-and-tracking}
     sync_calls: []
     ul:
       - {term: Delivery Offer, definition: "A quoted delivery window for an item, quantity, destination and tier, valid until it expires.", code: "offer.DeliveryOffer"}
@@ -659,6 +672,10 @@ contexts:
       - {event: PackageScanned, from: shipping-and-tracking}
       - {event: PackageDelivered, from: shipping-and-tracking}
       - {event: PackageExceptionRaised, from: shipping-and-tracking}
+      - {event: PromiseUnkeepable, from: delivery-promise}
+      - {event: FulfillmentCancelRefused, from: order-sourcing}
+      - {event: FulfillmentCancelled, from: order-sourcing}
+      - {event: LabelVoided, from: shipping-and-tracking}
     sync_calls:
       - {to: delivery-promise, type: qry, message: QuoteDeliveryOffers, channel: "REST POST /delivery-offers:quote"}
       - {to: delivery-promise, type: cmd, message: MakePromise, channel: "REST POST /promises"}
@@ -752,11 +769,13 @@ contexts:
       - {event: FulfillmentQueued, entity: assignment, data: [assignmentId, orderId, groupNo, promiseId, deliverByLatest, lines], consumers: [analytics only]}
       - {event: FulfillmentReleasedToNode, entity: assignment, data: [assignmentId, releaseNo, orderId, groupNo, nodeId, pickupDepartureId, requiredShipBy, promisedDeliverByLatest, tier, lines(catalogItemId, listingId, quantity)], consumers: [vendor-connectivity, linehaul-transportation]}
       - {event: FulfillmentReassigned, entity: assignment, data: [assignmentId, fromNodeId, toNodeId, reason, assignmentVersion], consumers: [linehaul-transportation]}
-      - {event: FulfillmentLocked, entity: assignment, data: [assignmentId, orderId, groupNo, nodeId, pickupDepartureId, lockedAt, lockReason], consumers: [delivery-promise, customer-ordering, linehaul-transportation]}
-      - {event: FulfillmentShipped, entity: assignment, data: [assignmentId, orderId, groupNo, nodeId, trackingNumbers, shippedAt], consumers: [customer-ordering]}
+      - {event: FulfillmentLocked, entity: assignment, data: [assignmentId, orderId, groupNo, nodeId, pickupDepartureId, lockedAt, lockReason, promiseId], consumers: [delivery-promise, customer-ordering, linehaul-transportation]}
+      - {event: FulfillmentShipped, entity: assignment, data: [assignmentId, orderId, groupNo, nodeId, trackingNumbers, shippedAt], consumers: [customer-ordering, delivery-promise]}
       - {event: FulfillmentDelivered, entity: assignment, data: [assignmentId, orderId, groupNo, deliveredAt], consumers: [analytics only]}
       - {event: FulfillmentUnsourceable, entity: assignment, data: [assignmentId, orderId, groupNo, promiseId, excludedNodes, reason], consumers: [delivery-promise, customer-ordering]}
-      - {event: FulfillmentCancelled, entity: assignment, data: [assignmentId, orderId, groupNo, reason], consumers: [vendor-connectivity, linehaul-transportation]}
+      - {event: FulfillmentCancelled, entity: assignment, data: [assignmentId, orderId, groupNo, reason], consumers: [vendor-connectivity, linehaul-transportation, customer-ordering]}
+      - {event: FulfillmentCancelRefused, entity: assignment, data: [assignmentId, orderId, groupNo, reason], consumers: [customer-ordering]}
+      - {event: FulfillmentConstraintRevised, entity: assignment, data: [assignmentId, revisionNo, deliverByLatest], consumers: [analytics only]}
     consumes:
       - {event: CustomerOrderPlaced, from: customer-ordering}
       - {event: CustomerOrderCancelled, from: customer-ordering}
@@ -787,6 +806,9 @@ contexts:
       - {event: DeliveryWaveScheduled, from: last-mile-delivery}
       - {event: DeliveryWaveCapacityChanged, from: last-mile-delivery}
       - {event: NodeScorecardUpdated, from: node-performance}
+      - {event: DeliveryWaveCancelled, from: last-mile-delivery}
+      - {event: BookingFailed, from: linehaul-transportation}
+      - {event: BookingMoved, from: linehaul-transportation}
     sync_calls: []
     ul:
       - {term: Fulfillment Assignment, definition: "The decision of which node and path fulfil one shipment group.", code: "assignment.FulfillmentAssignment"}
@@ -903,6 +925,10 @@ contexts:
       - "POST /vendor/shipment-confirmations"
       - "GET /vendor/transactions/{transactionId}"
       - "POST /vendors"
+      - "GET /vendor/nodes"
+      - "GET /vendors/{vendorId}"
+      - "POST /vendors/{vendorId}:suspend"
+      - "POST /vendors/{vendorId}:reinstate"
     publishes:
       - {event: VendorOnboarded, entity: vendoraccount, data: [vendorId, name, ackWindowMinutes], consumers: [node-performance]}
       - {event: PurchaseOrderIssued, entity: purchaseorder, data: [poNumber, vendorId, nodeId, assignmentId, releaseNo, requiredShipBy, ackBy, lines], consumers: [node-performance]}
@@ -912,6 +938,8 @@ contexts:
       - {event: PurchaseOrderCancelled, entity: purchaseorder, data: [poNumber, assignmentId, reason], consumers: [analytics only]}
       - {event: VendorShipmentConfirmed, entity: purchaseorder, data: [poNumber, assignmentId, nodeId, trackingNumbers, shippedAt, requiredShipBy], consumers: [order-sourcing, shipping-and-tracking, node-performance]}
       - {event: SubmissionProcessed, entity: submission, data: [transactionId, vendorId, kind, status, errorCount], consumers: [node-performance]}
+      - {event: VendorSuspended, entity: vendoraccount, data: [vendorId, suspendedAt, reason], consumers: [analytics only]}
+      - {event: VendorReinstated, entity: vendoraccount, data: [vendorId, reinstatedAt], consumers: [analytics only]}
     consumes:
       - {event: FulfillmentReleasedToNode, from: order-sourcing}
       - {event: FulfillmentCancelled, from: order-sourcing}
@@ -920,6 +948,7 @@ contexts:
       - {event: NodeSuspended, from: node-topology}
       - {event: NodeRetired, from: node-topology}
       - {event: ListingCreated, from: offer-availability}
+      - {event: NodeOperationalProfileDeclared, from: node-topology}
     sync_calls:
       - {to: node-topology, type: cmd, message: "RegisterNode, DeclareOperationalProfile", channel: "REST POST /nodes, PUT /nodes/{nodeId}/operational-profile"}
       - {to: offer-availability, type: cmd, message: ApplyInventoryFeed, channel: "REST POST /inventory-feeds"}
@@ -1026,6 +1055,7 @@ contexts:
       - "POST /loads/{loadId}:close"
       - "POST /loads/{loadId}:dispatch"
       - "POST /loads/{loadId}:receive"
+      - "POST /departures/{departureId}:change-capacity"
     publishes:
       - {event: DepartureScheduled, entity: departure, data: [departureId, laneId, kind, originNodeId, destinationNodeId, cutoffAt, departsAt, arrivesAt, capacityPackages], consumers: [delivery-promise, order-sourcing]}
       - {event: DepartureCapacityChanged, entity: departure, data: [departureId, capacityPackages, bookedPackages, remainingPackages], consumers: [delivery-promise, order-sourcing]}
@@ -1033,8 +1063,10 @@ contexts:
       - {event: DepartureDeparted, entity: departure, data: [departureId, departedAt], consumers: [analytics only]}
       - {event: DepartureArrived, entity: departure, data: [departureId, arrivedAt], consumers: [analytics only]}
       - {event: LoadClosed, entity: load, data: [loadId, departureId, packageCount], consumers: [analytics only]}
-      - {event: LoadDeparted, entity: load, data: [loadId, departureId, originNodeId, trackingNumbers, departedAt], consumers: [shipping-and-tracking]}
-      - {event: LoadArrived, entity: load, data: [loadId, departureId, destinationNodeId, trackingNumbers, arrivedAt], consumers: [shipping-and-tracking, last-mile-delivery]}
+      - {event: LoadDeparted, entity: load, data: [loadId, departureId, originNodeId, trackingNumbers, departedAt, departureKind, nodeType], consumers: [shipping-and-tracking]}
+      - {event: LoadArrived, entity: load, data: [loadId, departureId, destinationNodeId, trackingNumbers, arrivedAt, departureKind, nodeType], consumers: [shipping-and-tracking, last-mile-delivery]}
+      - {event: BookingMoved, entity: departure, data: [assignmentId, fromDepartureId, toDepartureId], consumers: [delivery-promise, order-sourcing]}
+      - {event: BookingFailed, entity: departure, data: [assignmentId, departureId, reason], consumers: [delivery-promise, order-sourcing]}
     consumes:
       - {event: NodeRegistered, from: node-topology}
       - {event: NodeOperationalProfileDeclared, from: node-topology}
@@ -1048,6 +1080,7 @@ contexts:
       - {event: FulfillmentLocked, from: order-sourcing}
       - {event: FulfillmentCancelled, from: order-sourcing}
       - {event: LabelIssued, from: shipping-and-tracking}
+      - {event: LabelVoided, from: shipping-and-tracking}
     sync_calls: []
     ul:
       - {term: Middle Mile, definition: "Transport between nodes: vendor node to sortation centre, sortation centre to delivery station, air.", code: "(context)"}
@@ -1136,17 +1169,24 @@ contexts:
       - "POST /routes/{routeId}:start"
       - "POST /routes/{routeId}/attempts"
       - "POST /partners"
+      - "GET /waves/{waveId}/stops"
+      - "POST /waves/{waveId}:cancel"
+      - "GET /routes/{routeId}"
+      - "POST /partners/{dspId}:deactivate"
     publishes:
       - {event: DeliveryWaveScheduled, entity: wave, data: [waveId, stationNodeId, serviceDate, inductCutoffAt, windowStart, windowEnd, stopCapacity], consumers: [delivery-promise, order-sourcing]}
       - {event: DeliveryWaveCapacityChanged, entity: wave, data: [waveId, stopCapacity, assignedStops, remainingStops], consumers: [delivery-promise, order-sourcing]}
-      - {event: DeliveryWaveCancelled, entity: wave, data: [waveId, reason], consumers: [analytics only]}
+      - {event: DeliveryWaveCancelled, entity: wave, data: [waveId, reason], consumers: [delivery-promise, order-sourcing]}
       - {event: RoutePlanned, entity: route, data: [routeId, waveId, dspId, stopCount], consumers: [analytics only]}
       - {event: PackageOutForDelivery, entity: route, data: [routeId, trackingNumber, stationNodeId, at], consumers: [shipping-and-tracking]}
       - {event: DeliveryAttempted, entity: route, data: [routeId, trackingNumber, outcome, failureReason, at], consumers: [shipping-and-tracking]}
+      - {event: PackageInductionDeferred, entity: packageattempthistory, data: [trackingNumber, assignmentId], consumers: [delivery-promise]}
+      - {event: PackageReturnInitiated, entity: packageattempthistory, data: [trackingNumber], consumers: [shipping-and-tracking]}
     consumes:
       - {event: LoadArrived, from: linehaul-transportation}
       - {event: NodeRegistered, from: node-topology}
       - {event: ServiceAreaAssigned, from: node-topology}
+      - {event: LabelIssued, from: shipping-and-tracking}
     sync_calls: []
     ul:
       - {term: Last Mile, definition: "From the delivery station to the customer's door.", code: "(context)"}
@@ -1229,14 +1269,14 @@ contexts:
       - "GET /journeys/{trackingNumber}"
       - "POST /journeys/{trackingNumber}/scans"
     publishes:
-      - {event: LabelIssued, entity: label, data: [labelRef, trackingNumber, poNumber, assignmentId, packageNo, tier, carrier], consumers: [linehaul-transportation, customer-ordering]}
-      - {event: LabelVoided, entity: label, data: [labelRef, trackingNumber, reason], consumers: [analytics only]}
+      - {event: LabelIssued, entity: label, data: [labelRef, trackingNumber, poNumber, assignmentId, packageNo, tier, carrier, orderId, stopKey, destinationPostalPrefix], consumers: [linehaul-transportation, customer-ordering, last-mile-delivery]}
+      - {event: LabelVoided, entity: label, data: [labelRef, trackingNumber, reason], consumers: [customer-ordering, linehaul-transportation]}
       - {event: PackageScanned, entity: journey, data: [trackingNumber, scanId, nodeId, scanType, at, state], consumers: [customer-ordering]}
       - {event: PackageHandedOver, entity: journey, data: [trackingNumber, poNumber, nodeId, handedOverAt], consumers: [node-performance]}
       - {event: PackageDelivered, entity: journey, data: [trackingNumber, assignmentId, orderId, deliveredAt], consumers: [delivery-promise, order-sourcing, customer-ordering]}
       - {event: PackageExceptionRaised, entity: journey, data: [trackingNumber, assignmentId, orderId, reason, at], consumers: [delivery-promise, customer-ordering]}
-      - {event: PackageReturned, entity: journey, data: [trackingNumber, orderId, returnedAt], consumers: [analytics only]}
-      - {event: PackageLost, entity: journey, data: [trackingNumber, orderId, declaredAt], consumers: [analytics only]}
+      - {event: PackageReturned, entity: journey, data: [trackingNumber, orderId, returnedAt], consumers: [delivery-promise]}
+      - {event: PackageLost, entity: journey, data: [trackingNumber, orderId, declaredAt], consumers: [delivery-promise]}
     consumes:
       - {event: VendorShipmentConfirmed, from: vendor-connectivity}
       - {event: LoadDeparted, from: linehaul-transportation}
@@ -1244,6 +1284,7 @@ contexts:
       - {event: PackageOutForDelivery, from: last-mile-delivery}
       - {event: DeliveryAttempted, from: last-mile-delivery}
       - {event: CatalogItemCreated, from: offer-availability}
+      - {event: PackageReturnInitiated, from: last-mile-delivery}
     sync_calls:
       - {to: customer-ordering, type: qry, message: GetShipTo, channel: "REST GET /orders/{orderId}/ship-to"}
     ul:

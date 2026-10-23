@@ -83,7 +83,7 @@ Topic `retailnetwork.node-topology.events`.
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
 | `NodeRegistered` | `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `last-mile-delivery`, `node-performance`, `vendor-connectivity` |
-| `NodeOperationalProfileDeclared` | `com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared` | `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `node-performance` |
+| `NodeOperationalProfileDeclared` | `com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared` | `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `node-performance`, `vendor-connectivity` |
 | `NodeActivated` | `com.retailnetwork.logistics.node-topology.node.NodeActivated` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity` |
 | `NodeSuspended` | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity` |
 | `NodeRetired` | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity` |
@@ -121,6 +121,9 @@ Topic `retailnetwork.delivery-promise.events`.
 | `PromiseReleased` | `com.retailnetwork.commerce.delivery-promise.promise.PromiseReleased` | analytics only |
 | `PromiseCancelled` | `com.retailnetwork.commerce.delivery-promise.promise.PromiseCancelled` | analytics only |
 | `PromiseBookExhausted` | `com.retailnetwork.commerce.delivery-promise.promisebook.PromiseBookExhausted` | `order-sourcing` |
+| `PromiseUnkeepable` | `com.retailnetwork.commerce.delivery-promise.promise.PromiseUnkeepable` | `customer-ordering` |
+| `DeliveryOfferQuoted` | `com.retailnetwork.commerce.delivery-promise.deliveryoffer.DeliveryOfferQuoted` | analytics only |
+| `PromisePolicyPublished` | `com.retailnetwork.commerce.delivery-promise.promisepolicy.PromisePolicyPublished` | analytics only |
 
 ### `customer-ordering`
 
@@ -141,10 +144,12 @@ Topic `retailnetwork.order-sourcing.events`.
 | `FulfillmentReleasedToNode` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | `vendor-connectivity`, `linehaul-transportation` |
 | `FulfillmentReassigned` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReassigned` | `linehaul-transportation` |
 | `FulfillmentLocked` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | `delivery-promise`, `customer-ordering`, `linehaul-transportation` |
-| `FulfillmentShipped` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | `customer-ordering` |
+| `FulfillmentShipped` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | `customer-ordering`, `delivery-promise` |
 | `FulfillmentDelivered` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentDelivered` | analytics only |
 | `FulfillmentUnsourceable` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentUnsourceable` | `delivery-promise`, `customer-ordering` |
-| `FulfillmentCancelled` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | `vendor-connectivity`, `linehaul-transportation` |
+| `FulfillmentCancelled` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | `vendor-connectivity`, `linehaul-transportation`, `customer-ordering` |
+| `FulfillmentCancelRefused` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelRefused` | `customer-ordering` |
+| `FulfillmentConstraintRevised` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentConstraintRevised` | analytics only |
 
 ### `vendor-connectivity`
 
@@ -160,6 +165,8 @@ Topic `retailnetwork.vendor-connectivity.events`.
 | `PurchaseOrderCancelled` | `com.retailnetwork.partner.vendor-connectivity.purchaseorder.PurchaseOrderCancelled` | analytics only |
 | `VendorShipmentConfirmed` | `com.retailnetwork.partner.vendor-connectivity.purchaseorder.VendorShipmentConfirmed` | `order-sourcing`, `shipping-and-tracking`, `node-performance` |
 | `SubmissionProcessed` | `com.retailnetwork.partner.vendor-connectivity.submission.SubmissionProcessed` | `node-performance` |
+| `VendorSuspended` | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorSuspended` | analytics only |
+| `VendorReinstated` | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorReinstated` | analytics only |
 
 ### `linehaul-transportation`
 
@@ -175,6 +182,8 @@ Topic `retailnetwork.linehaul-transportation.events`.
 | `LoadClosed` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadClosed` | analytics only |
 | `LoadDeparted` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted` | `shipping-and-tracking` |
 | `LoadArrived` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived` | `shipping-and-tracking`, `last-mile-delivery` |
+| `BookingMoved` | `com.retailnetwork.logistics.linehaul-transportation.departure.BookingMoved` | `delivery-promise`, `order-sourcing` |
+| `BookingFailed` | `com.retailnetwork.logistics.linehaul-transportation.departure.BookingFailed` | `delivery-promise`, `order-sourcing` |
 
 ### `last-mile-delivery`
 
@@ -184,10 +193,12 @@ Topic `retailnetwork.last-mile-delivery.events`.
 | --- | --- | --- |
 | `DeliveryWaveScheduled` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveScheduled` | `delivery-promise`, `order-sourcing` |
 | `DeliveryWaveCapacityChanged` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCapacityChanged` | `delivery-promise`, `order-sourcing` |
-| `DeliveryWaveCancelled` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCancelled` | analytics only |
+| `DeliveryWaveCancelled` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCancelled` | `delivery-promise`, `order-sourcing` |
 | `RoutePlanned` | `com.retailnetwork.logistics.last-mile-delivery.route.RoutePlanned` | analytics only |
 | `PackageOutForDelivery` | `com.retailnetwork.logistics.last-mile-delivery.route.PackageOutForDelivery` | `shipping-and-tracking` |
 | `DeliveryAttempted` | `com.retailnetwork.logistics.last-mile-delivery.route.DeliveryAttempted` | `shipping-and-tracking` |
+| `PackageInductionDeferred` | `com.retailnetwork.logistics.last-mile-delivery.packageattempthistory.PackageInductionDeferred` | `delivery-promise` |
+| `PackageReturnInitiated` | `com.retailnetwork.logistics.last-mile-delivery.packageattempthistory.PackageReturnInitiated` | `shipping-and-tracking` |
 
 ### `shipping-and-tracking`
 
@@ -195,14 +206,14 @@ Topic `retailnetwork.shipping-and-tracking.events`.
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
-| `LabelIssued` | `com.retailnetwork.logistics.shipping-and-tracking.label.LabelIssued` | `linehaul-transportation`, `customer-ordering` |
-| `LabelVoided` | `com.retailnetwork.logistics.shipping-and-tracking.label.LabelVoided` | analytics only |
+| `LabelIssued` | `com.retailnetwork.logistics.shipping-and-tracking.label.LabelIssued` | `linehaul-transportation`, `customer-ordering`, `last-mile-delivery` |
+| `LabelVoided` | `com.retailnetwork.logistics.shipping-and-tracking.label.LabelVoided` | `customer-ordering`, `linehaul-transportation` |
 | `PackageScanned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageScanned` | `customer-ordering` |
 | `PackageHandedOver` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageHandedOver` | `node-performance` |
 | `PackageDelivered` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDelivered` | `delivery-promise`, `order-sourcing`, `customer-ordering` |
 | `PackageExceptionRaised` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageExceptionRaised` | `delivery-promise`, `customer-ordering` |
-| `PackageReturned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` | analytics only |
-| `PackageLost` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | analytics only |
+| `PackageReturned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` | `delivery-promise` |
+| `PackageLost` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | `delivery-promise` |
 
 ### `node-performance`
 
