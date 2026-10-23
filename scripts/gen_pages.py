@@ -274,7 +274,7 @@ topic, so no consumer can mistake one organization's event for the other's.
 | Attribute | Rule |
 | --- | --- |
 | `specversion` | `1.0` |
-| `type` | `{cv['type']}` |
+| `type` | `{cv['type']}` ({cv['entity_rule']}) |
 | `source` | `{cv['source']}` |
 | `subject` | {cv['subject']} |
 | `dataschema` | `{cv['dataschema']}` |

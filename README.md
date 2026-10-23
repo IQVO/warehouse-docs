@@ -12,7 +12,7 @@ This project is a domain-driven design study. It is not associated with, endorse
 
 Published at https://iqvo.github.io/retail-network-docs/.
 
-**Status: proposed design, docs only.** Nothing described here is built.
+**Status: design plus ten reference services.** The model in `model/model.yaml` is the source of truth. Each bounded context has a Go service built on the same harness template in its own repository under https://github.com/IQVO (named after the context). Nothing is deployed anywhere: the services have charts and CI, no cluster.
 Facts about a large e-commerce operator, its seller APIs and other benchmarks are on the
 Research pages with numbered citations; everything else is the model derived
 from them.

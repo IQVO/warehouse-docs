@@ -25,14 +25,14 @@ returns centres register as vendor nodes, and its `network-fulfillment`
 context is the only fleet service that talks to the network, through the
 network's Vendor API.
 
-:::info[Proposed design, docs only]
-Nothing on this site is built. Facts about a large e-commerce operator, its seller APIs and
+:::info[Design and ten reference services]
+This site is the design of the network; each of the ten bounded contexts also has a Go service in its own repository under [github.com/IQVO](https://github.com/IQVO), built on the same harness template and checked against this model. Nothing is deployed. Facts about a large e-commerce operator, its seller APIs and
 other networks are on the [Research](/research) pages with numbered
-citations. Everything else is the model this site proposes, derived from that
+citations. Everything else is the model, derived from that
 evidence and from the fleet's repositories. The canonical model is
 [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml);
 every page is derived from it, and a CI gate fails the build when a page names
-a message the model does not have.
+a message the model does not have. Where a service had to decide something the model left open, the decision is an assumption in that service's ADR 0002 and appears in the [gap register](/strategic-design/model-gap-register).
 :::
 
 ## The ten bounded contexts
