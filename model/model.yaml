@@ -1,0 +1,1340 @@
+# retail-network canonical domain model
+#
+# This file is the SINGLE SOURCE OF TRUTH for every page under docs/.
+# Every aggregate, invariant, command, event, consumer, relationship and
+# ubiquitous-language term printed on the site must exist here first.
+# Pages derive from it; they never introduce a new message or edge.
+#
+# Status: PROPOSED DESIGN. Nothing in this file is built. Identifiers
+# (Go-style Err... names, REST paths, CloudEvents types) are the names a
+# future implementation must use, so that the docs and the code agree from
+# day one.
+#
+# Facts about Amazon, SP-API and the other benchmarks live in
+# docs/research/* with numbered citations. This file is the MODEL derived
+# from those facts plus the warehouse-systems estate; it makes no claim
+# about any real company's internal service names.
+
+meta:
+  domain: Retail Network
+  slug: retail-network
+  organization: >-
+    A separate organization from the warehouse-systems fleet. It owns the
+    customer, the catalogue, the delivery promise, order sourcing and the
+    parcel network (sortation centres, delivery stations, air hubs).
+    Fulfillment nodes are operated by vendors; the warehouse-systems fleet
+    is vendor V-WS (one vendor among potentially many).
+  supersedes: >-
+    The single-context decision D1 of the drafted retail-network ADR 0001
+    (network-fulfillment/docs/planning/retail-network-adr-0001-DRAFT-for-new-repo.md).
+    D2 (Direct-Fulfillment-like protocol in our own vocabulary), D3
+    (declared + measured capability), D4 (proportional capacity share), D5
+    (release on reconciled acceptance) and D6 (no auth) are kept.
+  hard_boundary: >-
+    No retail-network context consumes a warehouse.* Kafka topic, calls a
+    warehouse-systems service, or reads warehouse-systems data. The fleet
+    never consumes a retailnetwork.* topic. The only channel between the two
+    organizations is the Vendor API (Open Host Service + Published Language)
+    of vendor-connectivity, called by the fleet's network-fulfillment.
+
+conventions:
+  cloudevents:
+    spec: CloudEvents 1.0, structured JSON, mandatory on every Kafka message (fleet rule carried over)
+    type: "com.retailnetwork.<tier>.<context>.<entity>.<EventName>"
+    source: "/retailnetwork/<context>"
+    dataschema: "urn:retailnetwork:<context>:events:<EventName>:v1"
+    subject: aggregate root id (also the Kafka partition key)
+    topic: "retailnetwork.<context>.events"
+    analytics_topic: "retailnetwork.<context>.analytics"
+    tiers:
+      commerce: [offer-availability, delivery-promise, customer-ordering, order-sourcing]
+      logistics: [node-topology, linehaul-transportation, last-mile-delivery, shipping-and-tracking]
+      partner: [vendor-connectivity, node-performance]
+  integration_rules:
+    - Every context owns its database; no shared tables.
+    - Every published event leaves through a transactional outbox.
+    - Every consumer is idempotent on the CloudEvents id (inbox table).
+    - Consumers dispatch on the full type string, never on a suffix.
+    - Sibling data used in a decision is a local, event-fed read model; the promise hot path makes no synchronous call.
+    - Synchronous in-organization calls exist only where a caller needs an answer inside a user or vendor request (listed under sync_calls).
+  no_auth: Consistent with the fleet (no auth on REST or MCP). PII is synthetic and confined to customer-ordering and shipping-and-tracking.
+
+# ---------------------------------------------------------------------------
+# Node types (owned by node-topology). Mapping from the fleet's facility-layout
+# siteRole (ADR 0037) is in fleet_site_role_mapping below.
+# ---------------------------------------------------------------------------
+node_types:
+  FULFILLMENT_CENTER:
+    operator_allowed: [VENDOR]
+    capabilities: [OUTBOUND]
+    subtypes: [SORTABLE, NON_SORTABLE, XL, SOFT_LINES, SUB_SAME_DAY, FRESH, MICRO]
+    description: Stores sellable inventory, picks, packs and hands packages to the network at a pickup departure.
+  INBOUND_CROSS_DOCK:
+    operator_allowed: [VENDOR]
+    capabilities: [INBOUND]
+    description: Receives bulk inbound and pushes it into fulfillment centres. Never a ship-from node for customer orders.
+  RETURNS_CENTER:
+    operator_allowed: [VENDOR]
+    capabilities: [RETURNS]
+    description: The return location a customer return is routed to.
+  SORTATION_CENTER:
+    operator_allowed: [NETWORK]
+    capabilities: [SORT]
+    description: Sorts packages by final destination and consolidates them onto outbound loads.
+  DELIVERY_STATION:
+    operator_allowed: [NETWORK]
+    capabilities: [LAST_MILE]
+    description: Receives sorted packages and dispatches them on delivery routes inside its service area.
+  AIR_HUB:
+    operator_allowed: [NETWORK]
+    capabilities: [SORT, AIR]
+    description: Gateway between the ground network and air lanes.
+
+lane_rules:
+  # allowed (origin type -> destination type) pairs for a Lane
+  allowed:
+    - [FULFILLMENT_CENTER, SORTATION_CENTER]
+    - [FULFILLMENT_CENTER, DELIVERY_STATION]   # direct injection (same-day, regional)
+    - [FULFILLMENT_CENTER, AIR_HUB]
+    - [SORTATION_CENTER, SORTATION_CENTER]
+    - [SORTATION_CENTER, DELIVERY_STATION]
+    - [SORTATION_CENTER, AIR_HUB]
+    - [AIR_HUB, AIR_HUB]
+    - [AIR_HUB, SORTATION_CENTER]
+    - [AIR_HUB, DELIVERY_STATION]
+    - [INBOUND_CROSS_DOCK, FULFILLMENT_CENTER]  # inbound lane, never on a customer path
+  modes: [GROUND, AIR]
+
+fleet_site_role_mapping:
+  # warehouse-systems facility-layout siteRole -> network registration
+  ROBOTICS_SORTABLE_FC:        {registers_as: FULFILLMENT_CENTER, subtype: SORTABLE, via: vendor-connectivity}
+  TRADITIONAL_SORTABLE_FC:     {registers_as: FULFILLMENT_CENTER, subtype: SORTABLE, via: vendor-connectivity}
+  SOFT_LINES_SORTABLE_FC:      {registers_as: FULFILLMENT_CENTER, subtype: SOFT_LINES, via: vendor-connectivity}
+  NON_SORTABLE_FC:             {registers_as: FULFILLMENT_CENTER, subtype: NON_SORTABLE, via: vendor-connectivity}
+  XL_FC:                       {registers_as: FULFILLMENT_CENTER, subtype: XL, via: vendor-connectivity}
+  SUB_SAME_DAY_FC:             {registers_as: FULFILLMENT_CENTER, subtype: SUB_SAME_DAY, via: vendor-connectivity}
+  FRESH_GROCERY_FC:            {registers_as: FULFILLMENT_CENTER, subtype: FRESH, via: vendor-connectivity}
+  MICRO_FC:                    {registers_as: FULFILLMENT_CENTER, subtype: MICRO, via: vendor-connectivity}
+  SIMULATED_FC:                {registers_as: FULFILLMENT_CENTER, subtype: SORTABLE, via: vendor-connectivity}
+  INBOUND_CROSS_DOCK:          {registers_as: INBOUND_CROSS_DOCK, via: vendor-connectivity}
+  NATIONAL_INBOUND_CROSS_DOCK: {registers_as: INBOUND_CROSS_DOCK, via: vendor-connectivity}
+  RETURNS_CENTER:              {registers_as: RETURNS_CENTER, via: vendor-connectivity}
+  SORTATION_CENTER:            {registers_as: none, note: "network-operated node; the fleet's facility-layout row is a reference mirror only"}
+  DELIVERY_STATION:            {registers_as: none, note: "network-operated node; the fleet's facility-layout row is a reference mirror only"}
+  AIR_HUB_GATEWAY:             {registers_as: none, note: "network-operated node (AIR_HUB); the fleet's facility-layout row is a reference mirror only"}
+
+service_tiers:
+  SAME_DAY:  {max_calendar_days: 0, nominal_fallback: false, path: "FULFILLMENT_CENTER(SUB_SAME_DAY|MICRO) -> DELIVERY_STATION of the destination service area"}
+  NEXT_DAY:  {max_calendar_days: 1, nominal_fallback: false}
+  TWO_DAY:   {max_calendar_days: 2, nominal_fallback: false}
+  STANDARD:  {max_calendar_days: 7, nominal_fallback: true}
+
+# ---------------------------------------------------------------------------
+# Bounded contexts
+# chart: x = complexity, y = differentiation, on the fleet's pinned quadrant
+# labels (quadrant-1 Core top-right, quadrant-2 Decisive top-left,
+# quadrant-3 Supporting bottom-left, quadrant-4 Generic bottom-right).
+# ---------------------------------------------------------------------------
+contexts:
+
+  # =========================================================================
+  - id: node-topology
+    name: Node Topology
+    code: NT
+    tier: logistics
+    classification: Supporting
+    chart: {differentiation: 0.42, complexity: 0.44, evolution: Custom-built}
+    business_model: Enabler (every promise, assignment and route rests on it)
+    purpose: >-
+      The authoritative registry of the network's physical shape: every node
+      (vendor fulfillment centres, cross-docks, returns centres, and the
+      network's own sortation centres, delivery stations and air hubs), its
+      declared operational profile, the directed lanes between nodes, the
+      regions, and which delivery station serves which postal area.
+    roles: [Specification, Gateway for declared capability (owner), Master data]
+    business_decisions:
+      - A parcel node (SORTATION_CENTER, DELIVERY_STATION, AIR_HUB) is always network-operated; a vendor may register only FULFILLMENT_CENTER, INBOUND_CROSS_DOCK or RETURNS_CENTER nodes.
+      - A node takes customer demand only while ACTIVE and only if it has the OUTBOUND capability.
+      - An operational profile is versioned; a new declaration never edits an old revision.
+      - A lane joins two different nodes along an allowed type pair; both ends must be ACTIVE to open it.
+      - Every postal prefix maps to exactly one delivery station per assignment version.
+    aggregates:
+      - name: Node
+        root_id: nodeId
+        description: One physical building in the network, its type, operator, region, time zone and declared operational profile.
+        states: [PROPOSED, ACTIVE, SUSPENDED, RETIRED]
+        transitions:
+          - [PROPOSED, ACTIVE, ActivateNode]
+          - [ACTIVE, SUSPENDED, SuspendNode]
+          - [SUSPENDED, ACTIVE, ActivateNode]
+          - [ACTIVE, RETIRED, RetireNode]
+          - [SUSPENDED, RETIRED, RetireNode]
+        entities: []
+        value_objects:
+          - OperationalProfile{profileRevision, timezone, operatingHoursByDay, holidays[], handlingTime, cutoffs[CutoffSlot{localTime, maxOrders?}], throughputCap{value, timeUnit, unit=ORDER}, sortDwell, declaredBy(VENDOR|NETWORK_OPS), declaredAt}
+          - NodeCapabilities{outbound, inbound, returns, sort, lastMile, air}
+          - GeoLocation{postalCode, countryCode, lat, lon}
+          - VendorRef{vendorId, vendorNodeCode}
+        invariants:
+          - {rule: "operator must be allowed for the node type (parcel nodes are NETWORK-operated)", error: ErrOperatorNotAllowedForNodeType}
+          - {rule: "vendorNodeCode is unique per vendor", error: ErrVendorNodeCodeTaken}
+          - {rule: "profile revision strictly increases", error: ErrStaleProfileRevision}
+          - {rule: "a FULFILLMENT_CENTER profile declares at least one cutoff and a handlingTime > 0 before activation", error: ErrIncompleteOperationalProfile}
+          - {rule: "cutoffs fall inside the operating hours of their day", error: ErrCutoffOutsideOperatingHours}
+          - {rule: "RETIRED is terminal", error: ErrNodeRetired}
+        commands: [RegisterNode, DeclareOperationalProfile, ActivateNode, SuspendNode, RetireNode]
+        events: [NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired]
+        throughput_estimate: "low: tens of writes per day"
+        size_estimate: "one row + one profile row per revision; ~10^3 nodes"
+      - name: Lane
+        root_id: laneId
+        description: A directed, mode-specific connection between two nodes with a nominal transit time. Its scheduled departures belong to linehaul-transportation.
+        states: [OPEN, CLOSED]
+        transitions:
+          - [OPEN, CLOSED, CloseLane]
+        value_objects: ["NominalTransit{minutes}", "LaneMode(GROUND|AIR)"]
+        invariants:
+          - {rule: "origin and destination differ", error: ErrLaneLoop}
+          - {rule: "(origin type, destination type) is an allowed pair", error: ErrLaneTypePairNotAllowed}
+          - {rule: "both ends ACTIVE when opening", error: ErrLaneEndpointNotActive}
+          - {rule: "at most one OPEN lane per (origin, destination, mode)", error: ErrDuplicateLane}
+        commands: [OpenLane, CloseLane]
+        events: [LaneOpened, LaneClosed]
+        throughput_estimate: "low"
+        size_estimate: "~10^4 lanes"
+      - name: ServiceArea
+        root_id: postalPrefix
+        description: Which delivery station (and therefore which region) serves a postal prefix, versioned.
+        states: [ASSIGNED]
+        invariants:
+          - {rule: "the assigned node is an ACTIVE DELIVERY_STATION", error: ErrNotADeliveryStation}
+          - {rule: "assignment version strictly increases", error: ErrStaleAssignmentVersion}
+        commands: [AssignServiceArea]
+        events: [ServiceAreaAssigned]
+        throughput_estimate: "low; bulk at network redesign"
+        size_estimate: "~10^4 prefixes"
+      - name: Region
+        root_id: regionId
+        description: A largely self-sufficient partition of the network; nodes and service areas belong to exactly one region.
+        states: [DEFINED]
+        invariants:
+          - {rule: "region code unique", error: ErrRegionCodeTaken}
+        commands: [DefineRegion]
+        events: [RegionDefined]
+        throughput_estimate: "rare"
+        size_estimate: "single digits (eight in the reference network)"
+    read_models: []
+    policies:
+      - {name: DefaultCapabilitiesByType, rule: "node capabilities are derived from node_types, never typed by hand"}
+    inbound:
+      - {from: vendor-connectivity, type: cmd, channel: "REST POST /nodes (in-org)", message: RegisterNode (vendor node), relationship: Customer/Supplier}
+      - {from: vendor-connectivity, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile (in-org)", message: DeclareOperationalProfile, relationship: Customer/Supplier}
+      - {from: network-ops planner, type: cmd, channel: "REST /nodes, /lanes, /service-areas, /regions", message: "RegisterNode (network node), ActivateNode, SuspendNode, RetireNode, OpenLane, CloseLane, AssignServiceArea, DefineRegion", relationship: UI}
+      - {from: any context, type: qry, channel: "REST GET /nodes/{nodeId}, /lanes, /service-areas/{postalPrefix}", message: "GetNode, ListLanes, ResolveServiceArea", relationship: OHS}
+    rest:
+      - "POST /nodes"
+      - "GET /nodes/{nodeId}"
+      - "GET /nodes?type=&region=&status="
+      - "PUT /nodes/{nodeId}/operational-profile"
+      - "POST /nodes/{nodeId}:activate"
+      - "POST /nodes/{nodeId}:suspend"
+      - "POST /nodes/{nodeId}:retire"
+      - "POST /lanes"
+      - "POST /lanes/{laneId}:close"
+      - "GET /lanes?origin=&destination="
+      - "PUT /service-areas/{postalPrefix}"
+      - "GET /service-areas/{postalPrefix}"
+      - "POST /regions"
+    publishes:
+      - {event: NodeRegistered, entity: node, data: [nodeId, nodeType, subtype, operator, vendorId, vendorNodeCode, regionId, timezone, postalCode, countryCode], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, last-mile-delivery, node-performance, vendor-connectivity]}
+      - {event: NodeOperationalProfileDeclared, entity: node, data: [nodeId, profileRevision, timezone, operatingHoursByDay, holidays, handlingTimeMinutes, cutoffs, throughputCap, sortDwellMinutes, declaredBy], consumers: [delivery-promise, order-sourcing, linehaul-transportation, node-performance]}
+      - {event: NodeActivated, entity: node, data: [nodeId, activatedAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity]}
+      - {event: NodeSuspended, entity: node, data: [nodeId, reason, suspendedAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity]}
+      - {event: NodeRetired, entity: node, data: [nodeId, retiredAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity]}
+      - {event: LaneOpened, entity: lane, data: [laneId, originNodeId, destinationNodeId, mode, nominalTransitMinutes], consumers: [linehaul-transportation, delivery-promise, order-sourcing]}
+      - {event: LaneClosed, entity: lane, data: [laneId, closedAt], consumers: [linehaul-transportation, delivery-promise, order-sourcing]}
+      - {event: ServiceAreaAssigned, entity: servicearea, data: [postalPrefix, deliveryStationNodeId, regionId, assignmentVersion], consumers: [delivery-promise, order-sourcing, last-mile-delivery]}
+      - {event: RegionDefined, entity: region, data: [regionId, code, name], consumers: [delivery-promise, order-sourcing]}
+    consumes: []
+    sync_calls: []
+    ul:
+      - {term: Node, definition: "One physical building of the network, of exactly one node type.", code: "node.Node"}
+      - {term: Node Type, definition: "FULFILLMENT_CENTER, INBOUND_CROSS_DOCK, RETURNS_CENTER, SORTATION_CENTER, DELIVERY_STATION or AIR_HUB.", code: "node.Type"}
+      - {term: Node Operator, definition: "Who runs the building: NETWORK or a VENDOR.", code: "node.Operator"}
+      - {term: Operational Profile, definition: "The node's declared operating hours, cutoffs, handling time, throughput cap and time zone, versioned by profileRevision.", code: "node.OperationalProfile"}
+      - {term: Cutoff, definition: "A local time by which a node declares packages are ready to be handed over; the network schedules one pickup departure per cutoff.", code: "node.CutoffSlot"}
+      - {term: Handling Time, definition: "Declared time from order release to a package ready for handover.", code: "node.OperationalProfile.HandlingTime"}
+      - {term: Throughput Cap, definition: "Declared maximum orders per time unit a node accepts.", code: "node.ThroughputCap"}
+      - {term: Lane, definition: "A directed, mode-specific connection between two nodes.", code: "lane.Lane"}
+      - {term: Region, definition: "A largely self-sufficient partition of the network.", code: "region.Region"}
+      - {term: Service Area, definition: "The postal prefixes one delivery station serves.", code: "servicearea.ServiceArea"}
+
+  # =========================================================================
+  - id: offer-availability
+    name: Offer & Availability
+    code: OA
+    tier: commerce
+    classification: Supporting
+    chart: {differentiation: 0.38, complexity: 0.30, evolution: Product}
+    business_model: Revenue enabler (what can be sold, from where)
+    purpose: >-
+      Knows what the network can sell and from which node: the catalogue
+      item, one listing per (catalogue item, node), and the quantity each
+      node currently claims it can ship, with the basis the vendor gave for
+      that number (physical stock or throughput-constrained).
+    roles: [Specification, Analysis (availability)]
+    business_decisions:
+      - A listing is sellable only while its node is ACTIVE.
+      - A feed older than the last applied feed for that node is ignored.
+      - A full feed zeroes every listing of that node it omits.
+      - The basis the vendor declares (PHYSICAL or THROUGHPUT_CONSTRAINED) is kept with the number, never re-derived.
+    aggregates:
+      - name: CatalogItem
+        root_id: catalogItemId
+        description: The network's own item master entry (title, dimensions, weight, handling flags). Vendors refer to it by listingId.
+        states: [ACTIVE, DISCONTINUED]
+        transitions: [[ACTIVE, DISCONTINUED, DiscontinueItem]]
+        invariants:
+          - {rule: "dimensions and weight are positive", error: ErrInvalidItemDimensions}
+        commands: [CreateCatalogItem, DiscontinueItem]
+        events: [CatalogItemCreated, CatalogItemDiscontinued]
+        throughput_estimate: "low"
+        size_estimate: "~10^6 items"
+      - name: Listing
+        root_id: listingId
+        description: "One catalogue item offered from one node, with the node's claimed available quantity, its basis and the feed it came from."
+        states: [LIVE, SUPPRESSED]
+        transitions:
+          - [LIVE, SUPPRESSED, SuppressListing]
+          - [SUPPRESSED, LIVE, RestoreListing]
+        value_objects: ["Availability{availableQty, basis(PHYSICAL|THROUGHPUT_CONSTRAINED|UNKNOWN), asOf, feedId}"]
+        invariants:
+          - {rule: "availableQty >= 0", error: ErrNegativeAvailability}
+          - {rule: "an update with asOf <= current asOf is ignored (monotonic per listing)", error: ErrStaleAvailability}
+          - {rule: "a listing on a non-ACTIVE node is SUPPRESSED", error: ErrNodeNotSellable}
+          - {rule: "one listing per (catalogItemId, nodeId)", error: ErrDuplicateListing}
+        commands: [CreateListing, ApplyAvailability, SuppressListing, RestoreListing]
+        events: [ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored]
+        throughput_estimate: "high: one update per feed line; bursty"
+        size_estimate: "items x nodes, sparse"
+      - name: InventoryFeed
+        root_id: feedId
+        description: "One vendor inventory submission for one node, full or partial, applied atomically."
+        states: [RECEIVED, APPLIED, FAILED]
+        transitions:
+          - [RECEIVED, APPLIED, ApplyInventoryFeed]
+          - [RECEIVED, FAILED, ApplyInventoryFeed]
+        invariants:
+          - {rule: "every line names a listing of the feed's node", error: ErrListingNotOnNode}
+          - {rule: "a feed is applied at most once", error: ErrFeedAlreadyApplied}
+        commands: [ApplyInventoryFeed]
+        events: [InventoryFeedApplied]
+        throughput_estimate: "medium: per vendor node every few minutes"
+        size_estimate: "retained 30 days"
+    read_models:
+      - {name: NodeStatusView, source: "node-topology NodeRegistered/NodeActivated/NodeSuspended/NodeRetired"}
+    policies:
+      - {name: SuppressOnNodeUnavailable, rule: "on NodeSuspended or NodeRetired suppress every listing of the node; on NodeActivated restore those suppressed for that reason"}
+      - {name: FullFeedZeroing, rule: "a full feed sets availableQty=0 on every listing of the node it omits"}
+    inbound:
+      - {from: vendor-connectivity, type: cmd, channel: "REST POST /inventory-feeds (in-org)", message: ApplyInventoryFeed, relationship: Customer/Supplier}
+      - {from: network merchandising (human), type: cmd, channel: "REST /catalog-items, /listings", message: "CreateCatalogItem, DiscontinueItem, CreateListing", relationship: UI}
+      - {from: shopper / storefront, type: qry, channel: "REST GET /catalog, GET /catalog/{catalogItemId}", message: BrowseCatalog, relationship: OHS}
+      - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeActivated, NodeSuspended, NodeRetired", relationship: Conformist}
+    rest:
+      - "POST /catalog-items"
+      - "POST /catalog-items/{catalogItemId}:discontinue"
+      - "GET /catalog"
+      - "GET /catalog/{catalogItemId}"
+      - "POST /listings"
+      - "GET /listings?nodeId=&catalogItemId="
+      - "POST /inventory-feeds"
+      - "GET /inventory-feeds/{feedId}"
+    publishes:
+      - {event: CatalogItemCreated, entity: catalogitem, data: [catalogItemId, title, lengthMm, widthMm, heightMm, weightG, hazmat, fragile], consumers: [delivery-promise, shipping-and-tracking]}
+      - {event: CatalogItemDiscontinued, entity: catalogitem, data: [catalogItemId], consumers: [delivery-promise, order-sourcing]}
+      - {event: ListingCreated, entity: listing, data: [listingId, catalogItemId, nodeId], consumers: [delivery-promise, order-sourcing, vendor-connectivity]}
+      - {event: ListingAvailabilityChanged, entity: listing, data: [listingId, catalogItemId, nodeId, availableQty, basis, asOf, feedId], consumers: [delivery-promise, order-sourcing]}
+      - {event: ListingSuppressed, entity: listing, data: [listingId, nodeId, reason], consumers: [delivery-promise, order-sourcing]}
+      - {event: ListingRestored, entity: listing, data: [listingId, nodeId], consumers: [delivery-promise, order-sourcing]}
+      - {event: InventoryFeedApplied, entity: inventoryfeed, data: [feedId, nodeId, fullUpdate, lineCount, appliedAt], consumers: [node-performance]}
+    consumes:
+      - {event: NodeRegistered, from: node-topology}
+      - {event: NodeActivated, from: node-topology}
+      - {event: NodeSuspended, from: node-topology}
+      - {event: NodeRetired, from: node-topology}
+    sync_calls: []
+    ul:
+      - {term: Catalog Item, definition: "The network's own entry for a product, independent of who ships it.", code: "catalog.Item"}
+      - {term: Listing, definition: "A catalogue item offered from one node.", code: "listing.Listing"}
+      - {term: Available Quantity, definition: "What a node claims it can ship now for one listing.", code: "listing.Availability.AvailableQty"}
+      - {term: Availability Basis, definition: "Why the node gave that number: PHYSICAL stock, THROUGHPUT_CONSTRAINED by its capacity before the next cutoff, or UNKNOWN.", code: "listing.Basis"}
+      - {term: Inventory Feed, definition: "One vendor submission of availability for one node, full or partial.", code: "feed.InventoryFeed"}
+      - {term: Full Feed, definition: "A feed that is the complete truth for its node; omitted listings become zero.", code: "feed.InventoryFeed.FullUpdate"}
+
+  # =========================================================================
+  - id: delivery-promise
+    name: Delivery Promise
+    code: DP
+    tier: commerce
+    classification: Core
+    chart: {differentiation: 0.92, complexity: 0.85, evolution: Custom-built}
+    business_model: Revenue generator (conversion) and cost reducer (no promise the network cannot keep)
+    purpose: >-
+      Tells a shopper, before and at purchase, the date a package will arrive,
+      and makes that date true by construction: a delivery offer is quoted
+      only from a feasible witness path (node cutoff, scheduled departures,
+      delivery wave) that has remaining capacity, and a promise holds that
+      capacity until the order is placed or the hold expires. Judges every
+      promise kept or broken.
+    roles: [Execution (promising), Analysis (feasibility search), Enforcer (capacity holds)]
+    business_decisions:
+      - A delivery offer exists only if at least one feasible path exists now; no path means no offer at that tier, with the constraint that blocked it.
+      - Fast tiers (SAME_DAY, NEXT_DAY, TWO_DAY) are never quoted from nominal lane times; only STANDARD may fall back to nominal transit, and the promise records basis NOMINAL.
+      - A promise reserves capacity on the node's pickup cutoff (PromiseBook); provisional holds expire if the order is not placed.
+      - A promise is per shipment group; a multi-node order gets one promise per group.
+      - A poorly performing node is handicapped (later shipBy) by its scorecard grade, never silently excluded.
+      - Kept means delivered on or before deliverByLatest.
+    aggregates:
+      - name: DeliveryOffer
+        root_id: offerId
+        description: "A short-lived quote for (catalogue item, quantity, destination postal prefix, tier) with a delivery window, the witness path that proves it, and an expiry."
+        states: [QUOTED, EXPIRED, CONSUMED]
+        transitions:
+          - [QUOTED, CONSUMED, MakePromise]
+          - [QUOTED, EXPIRED, ExpireOffers]
+        value_objects:
+          - "DeliveryWindow{earliest, latest}"
+          - "WitnessPath{nodeId, pickupDepartureId, legs[departureId], deliveryWaveId}"
+          - "OfferConstraint(DESTINATION_NOT_SERVED|ITEM_QUANTITY_NOT_AVAILABLE|DELIVERY_SLA_UNAVAILABLE|NODE_CAPACITY_EXHAUSTED)"
+        invariants:
+          - {rule: "expiresAt <= min(quotedAt + offerTtl, the latest instant the witness pickup cutoff can still be met)", error: ErrOfferExpiryTooLate}
+          - {rule: "an expired or consumed offer cannot back a promise", error: ErrOfferNotQuotable}
+        commands: [QuoteDeliveryOffers, ExpireOffers]
+        events: []
+        notes: "Quotes are high-volume query results; they are persisted with a TTL so checkout can honour them, but publish no integration event (analytics only: DeliveryOfferQuoted on the analytics topic)."
+        throughput_estimate: "very high: every product page and cart view"
+        size_estimate: "TTL minutes; partitioned by day"
+      - name: Promise
+        root_id: promiseId
+        description: "The network's commitment for one shipment group of one customer order: tier, shipBy at the witness node, deliverBy window, witness path, basis and policy version."
+        states: [PROVISIONAL, CONFIRMED, AT_RISK, KEPT, BROKEN, RELEASED, CANCELLED]
+        transitions:
+          - [PROVISIONAL, CONFIRMED, ConfirmPromise]
+          - [PROVISIONAL, RELEASED, ReleaseExpiredHolds]
+          - [CONFIRMED, AT_RISK, FlagPromiseAtRisk]
+          - [AT_RISK, CONFIRMED, RevisePromise]
+          - [CONFIRMED, CONFIRMED, RevisePromise]
+          - [CONFIRMED, KEPT, JudgePromise]
+          - [AT_RISK, KEPT, JudgePromise]
+          - [CONFIRMED, BROKEN, JudgePromise]
+          - [AT_RISK, BROKEN, JudgePromise]
+          - [CONFIRMED, CANCELLED, CancelPromise]
+          - [AT_RISK, CANCELLED, CancelPromise]
+        value_objects:
+          - "ShipmentGroup{lines[{catalogItemId, quantity}]}"
+          - "PromiseTerms{tier, shipBy, deliverByEarliest, deliverByLatest, basis(SCHEDULED|NOMINAL), policyVersion}"
+          - "WitnessPath{nodeId, pickupDepartureId, legs[departureId], deliveryWaveId}"
+          - "Revision{revisionNo, previousTerms, reason, revisedAt}"
+        invariants:
+          - {rule: "deliverByEarliest <= deliverByLatest and shipBy < deliverByEarliest", error: ErrInvalidPromiseTerms}
+          - {rule: "a fast-tier promise has basis SCHEDULED", error: ErrNominalBasisNotAllowedForTier}
+          - {rule: "a provisional promise is confirmed only before holdExpiresAt", error: ErrPromiseHoldExpired}
+          - {rule: "a revision never moves deliverByLatest earlier", error: ErrRevisionMovesEarlier}
+          - {rule: "KEPT, BROKEN, RELEASED and CANCELLED are terminal", error: ErrPromiseClosed}
+          - {rule: "a promise covers lines shippable from one node (ship-complete group)", error: ErrGroupSpansNodes}
+        commands: [MakePromise, ConfirmPromise, FlagPromiseAtRisk, RevisePromise, JudgePromise, CancelPromise, ReleaseExpiredHolds]
+        events: [PromiseMade, PromiseConfirmed, PromiseAtRisk, PromiseRevised, PromiseKept, PromiseBroken, PromiseReleased, PromiseCancelled]
+        throughput_estimate: "medium-high: one per shipment group at checkout"
+        size_estimate: "one row per group + revisions"
+      - name: PromiseBook
+        root_id: "bookId = nodeId + ':' + pickupDepartureId"
+        description: "The promise-side capacity ledger of one node pickup cutoff: how many orders the network has promised onto it against the node's declared share."
+        states: [OPEN, CLOSED]
+        transitions:
+          - [OPEN, CLOSED, CloseBook]
+        value_objects: ["Capacity{share, provisional, confirmed}"]
+        invariants:
+          - {rule: "provisional + confirmed <= share", error: ErrPromiseCapacityExhausted}
+          - {rule: "no hold after the pickup cutoff minus handling time", error: ErrBookClosed}
+          - {rule: "release never makes provisional or confirmed negative", error: ErrCapacityUnderflow}
+        commands: [HoldCapacity, ConfirmCapacity, ReleaseCapacity, CloseBook]
+        events: [PromiseBookExhausted]
+        throughput_estimate: "high and contended: one hold per promise; one row per (node, cutoff)"
+        size_estimate: "nodes x cutoffs x horizon days"
+    read_models:
+      - {name: NodeProfileView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
+      - {name: RegionAndServiceAreaView, source: "node-topology ServiceAreaAssigned, RegionDefined"}
+      - {name: LaneView, source: "node-topology LaneOpened, LaneClosed"}
+      - {name: AvailabilityView, source: "offer-availability ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored, CatalogItemCreated, CatalogItemDiscontinued"}
+      - {name: DepartureView, source: "linehaul-transportation DepartureScheduled, DepartureCapacityChanged, DepartureCancelled"}
+      - {name: DeliveryWaveView, source: "last-mile-delivery DeliveryWaveScheduled, DeliveryWaveCapacityChanged"}
+      - {name: ScorecardView, source: "node-performance NodeScorecardUpdated"}
+    policies:
+      - {name: PromisePolicy, rule: "earliest feasible witness path; see network-model/promise-model"}
+      - {name: ScorecardHandicap, rule: "grade A: +0; B: +handling x 0.25; C: next cutoff; D: two cutoffs later; no scorecard yet: +0"}
+      - {name: TierOrderDeadline, rule: "per tier and region a policy-versioned local order deadline (peak control of new workable demand)"}
+      - {name: ShipmentGrouping, rule: "prefer one node for the whole cart; split only when no single node covers every line, minimising the number of groups"}
+      - {name: RepromiseOnRisk, rule: "on FulfillmentUnsourceable, PackageExceptionRaised or a cancelled departure on the witness path, recompute and RevisePromise; if nothing is feasible even at STANDARD, report PromiseBroken at judgement time"}
+      - {name: JudgeOnDelivery, rule: "on PackageDelivered judge every promise of the package's group"}
+    inbound:
+      - {from: customer-ordering, type: qry, channel: "REST POST /delivery-offers:quote (in-org)", message: QuoteDeliveryOffers, relationship: Customer/Supplier}
+      - {from: customer-ordering, type: cmd, channel: "REST POST /promises (in-org)", message: MakePromise, relationship: Customer/Supplier}
+      - {from: shopper / storefront, type: qry, channel: "REST POST /delivery-offers:quote", message: QuoteDeliveryOffers, relationship: OHS}
+      - {from: customer-ordering, type: evt, channel: "Kafka retailnetwork.customer-ordering.events", message: "CustomerOrderPlaced, CustomerOrderCancelled", relationship: Customer/Supplier}
+      - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentUnsourceable, FulfillmentLocked", relationship: Customer/Supplier}
+      - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "PackageDelivered, PackageExceptionRaised", relationship: Conformist}
+      - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "DepartureScheduled, DepartureCapacityChanged, DepartureCancelled", relationship: Conformist}
+      - {from: last-mile-delivery, type: evt, channel: "Kafka retailnetwork.last-mile-delivery.events", message: "DeliveryWaveScheduled, DeliveryWaveCapacityChanged", relationship: Conformist}
+      - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired, LaneOpened, LaneClosed, ServiceAreaAssigned, RegionDefined", relationship: Conformist}
+      - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated, CatalogItemDiscontinued, ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored", relationship: Conformist}
+      - {from: node-performance, type: evt, channel: "Kafka retailnetwork.node-performance.events", message: "NodeScorecardUpdated", relationship: Conformist}
+    rest:
+      - "POST /delivery-offers:quote"
+      - "GET /delivery-offers/{offerId}"
+      - "POST /promises"
+      - "GET /promises/{promiseId}"
+      - "GET /promises?orderId="
+      - "GET /promise-books?nodeId=&date="
+    publishes:
+      - {event: PromiseMade, entity: promise, data: [promiseId, offerId, tier, nodeId, pickupDepartureId, shipBy, deliverByEarliest, deliverByLatest, basis, policyVersion, holdExpiresAt, lines], consumers: [analytics only]}
+      - {event: PromiseConfirmed, entity: promise, data: [promiseId, orderId, groupNo], consumers: [analytics only]}
+      - {event: PromiseAtRisk, entity: promise, data: [promiseId, orderId, reason, detectedAt], consumers: [customer-ordering]}
+      - {event: PromiseRevised, entity: promise, data: [promiseId, orderId, revisionNo, previousDeliverByLatest, deliverByEarliest, deliverByLatest, shipBy, nodeId, reason], consumers: [customer-ordering, order-sourcing]}
+      - {event: PromiseKept, entity: promise, data: [promiseId, orderId, nodeId, deliveredAt, deliverByLatest], consumers: [node-performance, customer-ordering]}
+      - {event: PromiseBroken, entity: promise, data: [promiseId, orderId, nodeId, deliveredAt, deliverByLatest, lateByMinutes, cause], consumers: [node-performance, customer-ordering]}
+      - {event: PromiseReleased, entity: promise, data: [promiseId, reason], consumers: [analytics only]}
+      - {event: PromiseCancelled, entity: promise, data: [promiseId, orderId, reason], consumers: [analytics only]}
+      - {event: PromiseBookExhausted, entity: promisebook, data: [bookId, nodeId, pickupDepartureId, share], consumers: [order-sourcing]}
+    consumes:
+      - {event: CustomerOrderPlaced, from: customer-ordering}
+      - {event: CustomerOrderCancelled, from: customer-ordering}
+      - {event: FulfillmentUnsourceable, from: order-sourcing}
+      - {event: FulfillmentLocked, from: order-sourcing}
+      - {event: PackageDelivered, from: shipping-and-tracking}
+      - {event: PackageExceptionRaised, from: shipping-and-tracking}
+      - {event: DepartureScheduled, from: linehaul-transportation}
+      - {event: DepartureCapacityChanged, from: linehaul-transportation}
+      - {event: DepartureCancelled, from: linehaul-transportation}
+      - {event: DeliveryWaveScheduled, from: last-mile-delivery}
+      - {event: DeliveryWaveCapacityChanged, from: last-mile-delivery}
+      - {event: NodeRegistered, from: node-topology}
+      - {event: NodeOperationalProfileDeclared, from: node-topology}
+      - {event: NodeActivated, from: node-topology}
+      - {event: NodeSuspended, from: node-topology}
+      - {event: NodeRetired, from: node-topology}
+      - {event: LaneOpened, from: node-topology}
+      - {event: LaneClosed, from: node-topology}
+      - {event: ServiceAreaAssigned, from: node-topology}
+      - {event: RegionDefined, from: node-topology}
+      - {event: CatalogItemCreated, from: offer-availability}
+      - {event: CatalogItemDiscontinued, from: offer-availability}
+      - {event: ListingCreated, from: offer-availability}
+      - {event: ListingAvailabilityChanged, from: offer-availability}
+      - {event: ListingSuppressed, from: offer-availability}
+      - {event: ListingRestored, from: offer-availability}
+      - {event: NodeScorecardUpdated, from: node-performance}
+    sync_calls: []
+    ul:
+      - {term: Delivery Offer, definition: "A quoted delivery window for an item, quantity, destination and tier, valid until it expires.", code: "offer.DeliveryOffer"}
+      - {term: Service Tier, definition: "SAME_DAY, NEXT_DAY, TWO_DAY or STANDARD.", code: "promise.Tier"}
+      - {term: Promise, definition: "The network's commitment of a delivery window for one shipment group.", code: "promise.Promise"}
+      - {term: Ship-By, definition: "The pickup cutoff at the witness node the package must be ready for.", code: "promise.PromiseTerms.ShipBy"}
+      - {term: Deliver-By Window, definition: "deliverByEarliest..deliverByLatest shown to the customer.", code: "promise.PromiseTerms"}
+      - {term: Witness Path, definition: "The concrete node, pickup, departures and delivery wave that prove a promise is feasible; order-sourcing may choose a different path later.", code: "promise.WitnessPath"}
+      - {term: Promise Basis, definition: "SCHEDULED (from real departures and waves) or NOMINAL (STANDARD tier from nominal lane times).", code: "promise.Basis"}
+      - {term: Promise Book, definition: "Capacity ledger of one node pickup cutoff on the promise side.", code: "book.PromiseBook"}
+      - {term: Capacity Hold, definition: "A provisional reservation on a promise book released if the order is not placed in time.", code: "book.Capacity.Provisional"}
+      - {term: Handicap, definition: "The scorecard-driven delay applied to a node's shipBy.", code: "promise.ScorecardHandicap"}
+      - {term: Re-promise, definition: "Revising a confirmed promise to a later window when its path is no longer feasible.", code: "promise.Promise.Revise"}
+      - {term: Promise Kept / Broken, definition: "The judgement at delivery against deliverByLatest.", code: "promise.Judgement"}
+      - {term: Shipment Group, definition: "The lines of an order promised and shipped together from one node.", code: "promise.ShipmentGroup"}
+
+  # =========================================================================
+  - id: customer-ordering
+    name: Customer Ordering
+    code: CO
+    tier: commerce
+    classification: Generic
+    chart: {differentiation: 0.15, complexity: 0.58, evolution: Commodity}
+    business_model: Engagement (the storefront transaction)
+    purpose: >-
+      Turns a shopper's cart into a customer order: obtains a promise for
+      every shipment group at checkout, records the order with the shopper and
+      ship-to address (synthetic PII, held only here), shows status and
+      tracking, and handles customer cancellation.
+    roles: [Execution (checkout), Gateway (storefront)]
+    business_decisions:
+      - No order is placed unless every line belongs to exactly one confirmed-able promise.
+      - The ship-to address never leaves this context except to shipping-and-tracking for a label.
+      - A customer may cancel until every shipment group is locked; after that, cancellation is a return.
+    aggregates:
+      - name: CustomerOrder
+        root_id: orderId
+        description: "A shopper's order: lines, ship-to (PII), the promise per shipment group and the customer-facing status."
+        states: [PLACED, IN_FULFILLMENT, PARTIALLY_SHIPPED, SHIPPED, DELIVERED, CANCELLED]
+        transitions:
+          - [PLACED, IN_FULFILLMENT, MarkInFulfillment]
+          - [IN_FULFILLMENT, PARTIALLY_SHIPPED, MarkGroupShipped]
+          - [IN_FULFILLMENT, SHIPPED, MarkGroupShipped]
+          - [PARTIALLY_SHIPPED, SHIPPED, MarkGroupShipped]
+          - [SHIPPED, DELIVERED, MarkGroupDelivered]
+          - [PLACED, CANCELLED, CancelOrder]
+          - [IN_FULFILLMENT, CANCELLED, CancelOrder]
+        value_objects:
+          - "ShipTo{name, line1, line2, city, region, postalCode, countryCode, phone} (PII, synthetic)"
+          - "OrderLine{lineNo, catalogItemId, quantity}"
+          - "GroupPromise{groupNo, promiseId, deliverByEarliest, deliverByLatest, lineNos[]}"
+        invariants:
+          - {rule: "every line is in exactly one group, and every group has a promise", error: ErrLineWithoutPromise}
+          - {rule: "the promise's destination postal prefix matches the ship-to", error: ErrPromiseDestinationMismatch}
+          - {rule: "cancel only while no group is locked", error: ErrCancelAfterLock}
+          - {rule: "status moves forward only", error: ErrStatusRegression}
+        commands: [PlaceOrder, MarkInFulfillment, MarkGroupShipped, MarkGroupDelivered, CancelOrder, UpdateGroupPromise]
+        events: [CustomerOrderPlaced, CustomerOrderCancelled]
+        throughput_estimate: "medium"
+        size_estimate: "one row per order + lines"
+      - name: Shopper
+        root_id: shopperId
+        description: A synthetic customer account with saved addresses.
+        states: [ACTIVE]
+        invariants:
+          - {rule: "email unique", error: ErrShopperExists}
+        commands: [RegisterShopper]
+        events: []
+        throughput_estimate: "low"
+        size_estimate: "small"
+    read_models:
+      - {name: OrderTrackingView, source: "shipping-and-tracking LabelIssued, PackageScanned, PackageDelivered, PackageExceptionRaised; order-sourcing FulfillmentLocked, FulfillmentShipped; delivery-promise PromiseAtRisk, PromiseRevised, PromiseKept, PromiseBroken"}
+    policies:
+      - {name: CheckoutPromising, rule: "for each shipment group call MakePromise with the offer the shopper saw; if the offer expired, re-quote and show the new window before placing"}
+      - {name: CancelOnUnfulfillable, rule: "when a group is unsourceable and no revised promise is feasible, cancel the group and the order if nothing remains"}
+    inbound:
+      - {from: shopper / storefront, type: cmd, channel: "REST POST /checkout", message: PlaceOrder, relationship: OHS}
+      - {from: shopper / storefront, type: cmd, channel: "REST POST /orders/{orderId}:cancel", message: CancelOrder, relationship: OHS}
+      - {from: shopper / storefront, type: qry, channel: "REST GET /orders/{orderId}, GET /orders/{orderId}/tracking", message: "GetOrder, GetTracking", relationship: OHS}
+      - {from: shipping-and-tracking, type: qry, channel: "REST GET /orders/{orderId}/ship-to (in-org, restricted)", message: GetShipTo, relationship: Customer/Supplier}
+      - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentLocked, FulfillmentShipped, FulfillmentUnsourceable", relationship: Conformist}
+      - {from: delivery-promise, type: evt, channel: "Kafka retailnetwork.delivery-promise.events", message: "PromiseAtRisk, PromiseRevised, PromiseKept, PromiseBroken", relationship: Customer/Supplier}
+      - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "LabelIssued, PackageScanned, PackageDelivered, PackageExceptionRaised", relationship: Conformist}
+    rest:
+      - "POST /checkout"
+      - "GET /orders/{orderId}"
+      - "GET /orders/{orderId}/tracking"
+      - "POST /orders/{orderId}:cancel"
+      - "GET /orders/{orderId}/ship-to"
+      - "POST /shoppers"
+    publishes:
+      - {event: CustomerOrderPlaced, entity: customerorder, data: [orderId, shopperId, destinationPostalPrefix, placedAt, groups(groupNo, promiseId, tier, witnessNodeId, shipBy, deliverByEarliest, deliverByLatest, lines(lineNo, catalogItemId, quantity))], consumers: [order-sourcing, delivery-promise]}
+      - {event: CustomerOrderCancelled, entity: customerorder, data: [orderId, reason, cancelledAt, groupNos], consumers: [order-sourcing, delivery-promise]}
+    consumes:
+      - {event: FulfillmentLocked, from: order-sourcing}
+      - {event: FulfillmentShipped, from: order-sourcing}
+      - {event: FulfillmentUnsourceable, from: order-sourcing}
+      - {event: PromiseAtRisk, from: delivery-promise}
+      - {event: PromiseRevised, from: delivery-promise}
+      - {event: PromiseKept, from: delivery-promise}
+      - {event: PromiseBroken, from: delivery-promise}
+      - {event: LabelIssued, from: shipping-and-tracking}
+      - {event: PackageScanned, from: shipping-and-tracking}
+      - {event: PackageDelivered, from: shipping-and-tracking}
+      - {event: PackageExceptionRaised, from: shipping-and-tracking}
+    sync_calls:
+      - {to: delivery-promise, type: qry, message: QuoteDeliveryOffers, channel: "REST POST /delivery-offers:quote"}
+      - {to: delivery-promise, type: cmd, message: MakePromise, channel: "REST POST /promises"}
+    ul:
+      - {term: Shopper, definition: "The (synthetic) customer placing orders.", code: "shopper.Shopper"}
+      - {term: Customer Order, definition: "What the shopper bought, with a promise per shipment group.", code: "order.CustomerOrder"}
+      - {term: Ship-To, definition: "The delivery address; synthetic PII held only here.", code: "order.ShipTo"}
+      - {term: Checkout, definition: "The act of turning a cart into a customer order, promising every group.", code: "order.PlaceOrder"}
+
+  # =========================================================================
+  - id: order-sourcing
+    name: Order Sourcing
+    code: OS
+    tier: commerce
+    classification: Core
+    chart: {differentiation: 0.85, complexity: 0.8, evolution: Custom-built}
+    business_model: Cost reducer (cost-to-serve) and speed protector
+    purpose: >-
+      Decides, as late as the promise allows, which node and path will
+      actually fulfil each shipment group. Keeps assignments in a virtual
+      queue, re-optimises them against current capacity and cost until the
+      release point, sends the group to the node, reassigns on rejection or
+      expiry, and locks the assignment once the node commits.
+    roles: [Execution (assignment), Analysis (optimisation), Enforcer (path lock)]
+    business_decisions:
+      - The assigned node may differ from the promise's witness node; the only hard constraint is that the assigned path still meets deliverByLatest.
+      - An assignment is free to move while QUEUED; after release it moves only on rejection or expiry; after the node commits it is LOCKED for good.
+      - A group goes to one node in full (fill-or-kill); a partial answer is not a thing.
+      - If no node can still meet deliverByLatest, the group is UNSOURCEABLE and delivery-promise re-promises; sourcing never breaks a promise silently.
+      - In-region nodes are preferred; cross-region is allowed only when it is the only way to keep the promise.
+    aggregates:
+      - name: FulfillmentAssignment
+        root_id: assignmentId
+        description: "One shipment group of one customer order, its promise constraints, the current candidate node and path, and the history of releases."
+        states: [QUEUED, RELEASED, LOCKED, SHIPPED, DELIVERED, UNSOURCEABLE, CANCELLED]
+        transitions:
+          - [QUEUED, QUEUED, ReoptimiseAssignment]
+          - [QUEUED, RELEASED, ReleaseToNode]
+          - [RELEASED, QUEUED, HandleNodeRefusal]
+          - [RELEASED, LOCKED, LockAssignment]
+          - [LOCKED, SHIPPED, MarkShipped]
+          - [SHIPPED, DELIVERED, MarkDelivered]
+          - [QUEUED, UNSOURCEABLE, ReleaseToNode]
+          - [RELEASED, UNSOURCEABLE, HandleNodeRefusal]
+          - [QUEUED, CANCELLED, CancelAssignment]
+          - [RELEASED, CANCELLED, CancelAssignment]
+          - [UNSOURCEABLE, QUEUED, ApplyRevisedPromise]
+        value_objects:
+          - "PromiseConstraint{promiseId, tier, deliverByLatest, witnessNodeId}"
+          - "Candidate{nodeId, pickupDepartureId, legs[], deliveryWaveId, eta, cost}"
+          - "Release{releaseNo, nodeId, releasedAt, requiredShipBy, outcome(ACCEPTED|REJECTED|EXPIRED|PENDING), reasonCode}"
+          - "ExcludedNode{nodeId, reason}"
+        invariants:
+          - {rule: "a released candidate's eta <= deliverByLatest", error: ErrCandidateBreaksPromise}
+          - {rule: "no change of node after LOCKED", error: ErrAssignmentLocked}
+          - {rule: "a node that refused this group is never released to again for the same promise revision", error: ErrNodeExcluded}
+          - {rule: "at most one release PENDING at a time", error: ErrReleaseInFlight}
+          - {rule: "assignmentVersion strictly increases", error: ErrStaleAssignmentVersion}
+          - {rule: "cancel only before LOCKED", error: ErrCancelAfterLock}
+        commands: [QueueAssignment, ReoptimiseAssignment, ReleaseToNode, HandleNodeRefusal, LockAssignment, MarkShipped, MarkDelivered, CancelAssignment, ApplyRevisedPromise]
+        events: [FulfillmentQueued, FulfillmentReleasedToNode, FulfillmentReassigned, FulfillmentLocked, FulfillmentShipped, FulfillmentDelivered, FulfillmentUnsourceable, FulfillmentCancelled]
+        throughput_estimate: "medium-high; re-optimisation sweeps touch QUEUED rows only"
+        size_estimate: "one row per shipment group + releases"
+    read_models:
+      - {name: NodeProfileView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
+      - {name: NetworkGraphView, source: "node-topology LaneOpened, LaneClosed, ServiceAreaAssigned, RegionDefined; linehaul-transportation DepartureScheduled, DepartureCapacityChanged, DepartureCancelled; last-mile-delivery DeliveryWaveScheduled, DeliveryWaveCapacityChanged"}
+      - {name: AvailabilityView, source: "offer-availability ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored, CatalogItemDiscontinued"}
+      - {name: ScorecardView, source: "node-performance NodeScorecardUpdated"}
+      - {name: PromiseBookPressureView, source: "delivery-promise PromiseBookExhausted"}
+    policies:
+      - {name: VirtualQueue, rule: "releaseAt = pickup cutoff of the best candidate - node handling time - vendor ack budget; release immediately for SAME_DAY"}
+      - {name: AssignmentCost, rule: "cost = legs + crossRegionPenalty + scorecardPenalty + bookPressurePenalty; ties go to the witness node"}
+      - {name: ReassignOnRefusal, rule: "on PurchaseOrderRejected or PurchaseOrderExpired, exclude the node and re-queue; if no candidate meets deliverByLatest, UNSOURCEABLE"}
+      - {name: LockOnCommit, rule: "on PurchaseOrderAccepted the assignment is LOCKED (the vendor-node equivalent of the item being picked)"}
+    inbound:
+      - {from: customer-ordering, type: evt, channel: "Kafka retailnetwork.customer-ordering.events", message: "CustomerOrderPlaced, CustomerOrderCancelled", relationship: Customer/Supplier}
+      - {from: delivery-promise, type: evt, channel: "Kafka retailnetwork.delivery-promise.events", message: "PromiseRevised, PromiseBookExhausted", relationship: Customer/Supplier}
+      - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: "PurchaseOrderAccepted, PurchaseOrderRejected, PurchaseOrderExpired, VendorShipmentConfirmed", relationship: Customer/Supplier}
+      - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "PackageDelivered", relationship: Conformist}
+      - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired, LaneOpened, LaneClosed, ServiceAreaAssigned, RegionDefined", relationship: Conformist}
+      - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored, CatalogItemDiscontinued", relationship: Conformist}
+      - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "DepartureScheduled, DepartureCapacityChanged, DepartureCancelled", relationship: Conformist}
+      - {from: last-mile-delivery, type: evt, channel: "Kafka retailnetwork.last-mile-delivery.events", message: "DeliveryWaveScheduled, DeliveryWaveCapacityChanged", relationship: Conformist}
+      - {from: node-performance, type: evt, channel: "Kafka retailnetwork.node-performance.events", message: "NodeScorecardUpdated", relationship: Conformist}
+      - {from: network-ops planner, type: qry, channel: "REST GET /assignments, /assignments/{assignmentId}", message: "ListAssignments, GetAssignment", relationship: UI}
+    rest:
+      - "GET /assignments?state=&nodeId=&orderId="
+      - "GET /assignments/{assignmentId}"
+      - "POST /assignments/{assignmentId}:reoptimise"
+    publishes:
+      - {event: FulfillmentQueued, entity: assignment, data: [assignmentId, orderId, groupNo, promiseId, deliverByLatest, lines], consumers: [analytics only]}
+      - {event: FulfillmentReleasedToNode, entity: assignment, data: [assignmentId, releaseNo, orderId, groupNo, nodeId, pickupDepartureId, requiredShipBy, promisedDeliverByLatest, tier, lines(catalogItemId, listingId, quantity)], consumers: [vendor-connectivity, linehaul-transportation]}
+      - {event: FulfillmentReassigned, entity: assignment, data: [assignmentId, fromNodeId, toNodeId, reason, assignmentVersion], consumers: [linehaul-transportation]}
+      - {event: FulfillmentLocked, entity: assignment, data: [assignmentId, orderId, groupNo, nodeId, pickupDepartureId, lockedAt, lockReason], consumers: [delivery-promise, customer-ordering, linehaul-transportation]}
+      - {event: FulfillmentShipped, entity: assignment, data: [assignmentId, orderId, groupNo, nodeId, trackingNumbers, shippedAt], consumers: [customer-ordering]}
+      - {event: FulfillmentDelivered, entity: assignment, data: [assignmentId, orderId, groupNo, deliveredAt], consumers: [analytics only]}
+      - {event: FulfillmentUnsourceable, entity: assignment, data: [assignmentId, orderId, groupNo, promiseId, excludedNodes, reason], consumers: [delivery-promise, customer-ordering]}
+      - {event: FulfillmentCancelled, entity: assignment, data: [assignmentId, orderId, groupNo, reason], consumers: [vendor-connectivity, linehaul-transportation]}
+    consumes:
+      - {event: CustomerOrderPlaced, from: customer-ordering}
+      - {event: CustomerOrderCancelled, from: customer-ordering}
+      - {event: PromiseRevised, from: delivery-promise}
+      - {event: PromiseBookExhausted, from: delivery-promise}
+      - {event: PurchaseOrderAccepted, from: vendor-connectivity}
+      - {event: PurchaseOrderRejected, from: vendor-connectivity}
+      - {event: PurchaseOrderExpired, from: vendor-connectivity}
+      - {event: VendorShipmentConfirmed, from: vendor-connectivity}
+      - {event: PackageDelivered, from: shipping-and-tracking}
+      - {event: NodeRegistered, from: node-topology}
+      - {event: NodeOperationalProfileDeclared, from: node-topology}
+      - {event: NodeActivated, from: node-topology}
+      - {event: NodeSuspended, from: node-topology}
+      - {event: NodeRetired, from: node-topology}
+      - {event: LaneOpened, from: node-topology}
+      - {event: LaneClosed, from: node-topology}
+      - {event: ServiceAreaAssigned, from: node-topology}
+      - {event: RegionDefined, from: node-topology}
+      - {event: ListingCreated, from: offer-availability}
+      - {event: ListingAvailabilityChanged, from: offer-availability}
+      - {event: ListingSuppressed, from: offer-availability}
+      - {event: ListingRestored, from: offer-availability}
+      - {event: CatalogItemDiscontinued, from: offer-availability}
+      - {event: DepartureScheduled, from: linehaul-transportation}
+      - {event: DepartureCapacityChanged, from: linehaul-transportation}
+      - {event: DepartureCancelled, from: linehaul-transportation}
+      - {event: DeliveryWaveScheduled, from: last-mile-delivery}
+      - {event: DeliveryWaveCapacityChanged, from: last-mile-delivery}
+      - {event: NodeScorecardUpdated, from: node-performance}
+    sync_calls: []
+    ul:
+      - {term: Fulfillment Assignment, definition: "The decision of which node and path fulfil one shipment group.", code: "assignment.FulfillmentAssignment"}
+      - {term: Virtual Queue, definition: "Where assignments wait, re-optimisable, until their release point.", code: "assignment.VirtualQueue"}
+      - {term: Release (to node), definition: "Sending a group to one node; for a vendor node this issues a purchase order.", code: "assignment.Release"}
+      - {term: Path Lock, definition: "The point after which an assignment never changes node: the vendor's acceptance.", code: "assignment.Lock"}
+      - {term: Reassignment, definition: "Moving a group to another node after a refusal, or while still queued.", code: "assignment.Reassign"}
+      - {term: Unsourceable, definition: "No node can still meet the promise; the group goes back to delivery-promise.", code: "assignment.StateUnsourceable"}
+
+  # =========================================================================
+  - id: vendor-connectivity
+    name: Vendor Connectivity
+    code: VC
+    tier: partner
+    classification: Supporting
+    chart: {differentiation: 0.36, complexity: 0.46, evolution: Product}
+    business_model: Revenue-channel enabler (third-party capacity without integration cost)
+    purpose: >-
+      The network's Open Host Service for vendors that operate fulfillment
+      nodes. Publishes the Vendor API and its Published Language: vendors
+      register nodes, declare their operational profile, send inventory
+      feeds, poll purchase orders, acknowledge them in full inside the
+      acknowledgement window, request labels and confirm shipment. Every
+      write is an asynchronous transaction a vendor reconciles.
+    roles: [Gateway / Open Host Service, Execution (purchase-order protocol and its clock)]
+    business_decisions:
+      - "Acknowledge once, in full, before ackBy: fill-or-kill; partial acknowledgements are refused."
+      - "ackBy = min(issuedAt + vendor ackWindow, requiredShipBy - node handlingTime)."
+      - A label is issued only for an ACCEPTED purchase order; a shipment is confirmed only after a label.
+      - "Every vendor write returns 202 with a transactionId; the write takes effect when its transaction succeeds."
+      - The Vendor API never carries ship-to PII.
+      - Rate limits are part of the contract (429 with Retry-After).
+    aggregates:
+      - name: VendorAccount
+        root_id: vendorId
+        description: "A vendor organisation, its ack window, rate limits and the nodes it may operate."
+        states: [ACTIVE, SUSPENDED]
+        transitions: [[ACTIVE, SUSPENDED, SuspendVendor], [SUSPENDED, ACTIVE, ReinstateVendor]]
+        invariants:
+          - {rule: "ackWindow between 1h and 24h", error: ErrAckWindowOutOfRange}
+          - {rule: "a vendor acts only on its own nodes", error: ErrNodeNotOwnedByVendor}
+        commands: [OnboardVendor, SuspendVendor, ReinstateVendor]
+        events: [VendorOnboarded]
+        throughput_estimate: "rare"
+        size_estimate: "tens"
+      - name: PurchaseOrder
+        root_id: poNumber
+        description: "The network's instruction to one vendor node to ship one shipment group in full by requiredShipBy."
+        states: [ISSUED, ACK_PROCESSING, ACCEPTED, REJECTED, EXPIRED, SHIPMENT_PROCESSING, SHIPPED, CANCELLED]
+        transitions:
+          - [ISSUED, ACK_PROCESSING, SubmitAcknowledgement]
+          - [ACK_PROCESSING, ACCEPTED, ProcessSubmission]
+          - [ACK_PROCESSING, REJECTED, ProcessSubmission]
+          - [ACK_PROCESSING, ISSUED, ProcessSubmission]
+          - [ISSUED, EXPIRED, ExpireUnacknowledgedOrders]
+          - [ACCEPTED, SHIPMENT_PROCESSING, SubmitShipmentConfirmation]
+          - [SHIPMENT_PROCESSING, SHIPPED, ProcessSubmission]
+          - [SHIPMENT_PROCESSING, ACCEPTED, ProcessSubmission]
+          - [ISSUED, CANCELLED, CancelPurchaseOrder]
+        value_objects:
+          - "PoLine{lineNo, listingId, quantity}"
+          - "AckDecision(ACCEPT|REJECT){reasonCode}"
+          - "Label{labelRef, trackingNumber, carrier}"
+          - "RejectReason(OUT_OF_STOCK|UNKNOWN_LISTING|CANNOT_MEET_SHIP_BY|DISCONTINUED)"
+        invariants:
+          - {rule: "an acknowledgement covers every line with one decision (fill-or-kill)", error: ErrPartialAcknowledgement}
+          - {rule: "acknowledged at most once", error: ErrAlreadyAcknowledged}
+          - {rule: "no acknowledgement after ackBy", error: ErrAckWindowClosed}
+          - {rule: "no label before ACCEPTED", error: ErrLabelBeforeAcceptance}
+          - {rule: "no shipment confirmation without a label for every package", error: ErrConfirmWithoutLabel}
+          - {rule: "cancel only while ISSUED", error: ErrCancelAfterAcknowledgement}
+        commands: [IssuePurchaseOrder, SubmitAcknowledgement, RequestLabel, SubmitShipmentConfirmation, ExpireUnacknowledgedOrders, CancelPurchaseOrder]
+        events: [PurchaseOrderIssued, PurchaseOrderAccepted, PurchaseOrderRejected, PurchaseOrderExpired, PurchaseOrderCancelled, VendorShipmentConfirmed]
+        throughput_estimate: "medium; polling reads dominate"
+        size_estimate: "one row per release to a vendor node"
+      - name: Submission
+        root_id: transactionId
+        description: "One asynchronous vendor write (acknowledgement, inventory feed, node registration, profile declaration, shipment confirmation) and its processing outcome."
+        states: [PROCESSING, SUCCESS, FAILURE]
+        transitions: [[PROCESSING, SUCCESS, ProcessSubmission], [PROCESSING, FAILURE, ProcessSubmission]]
+        value_objects: ["SubmissionKind(ACKNOWLEDGEMENT|INVENTORY|NODE_REGISTRATION|NODE_PROFILE|SHIPMENT_CONFIRMATION)", "SubmissionError{code, message, path}"]
+        invariants:
+          - {rule: "outcome set once", error: ErrSubmissionAlreadyProcessed}
+          - {rule: "processing never starts before notBefore = receivedAt + simulated processing delay", error: ErrSubmissionNotDue}
+        commands: [ReceiveSubmission, ProcessSubmission]
+        events: [SubmissionProcessed]
+        throughput_estimate: "medium-high"
+        size_estimate: "retained 30 days"
+    read_models:
+      - {name: VendorNodeView, source: "node-topology NodeRegistered, NodeActivated, NodeSuspended, NodeRetired"}
+      - {name: ListingView, source: "offer-availability ListingCreated"}
+    policies:
+      - {name: IssueOnRelease, rule: "on FulfillmentReleasedToNode for a VENDOR node, issue a purchase order (poNumber is idempotent on assignmentId + releaseNo)"}
+      - {name: CancelOnSourcingCancel, rule: "on FulfillmentCancelled cancel the ISSUED purchase order of that release"}
+      - {name: ExpireUnacknowledged, rule: "sweep: ISSUED past ackBy -> EXPIRED"}
+      - {name: SimulationKnobs, rule: "TX_PROCESSING_DELAY, TX_FAILURE_RATE, RATE_LIMIT_RPS, PO_REDELIVERY_RATE; all default to well-behaved"}
+    inbound:
+      - {from: network-fulfillment (warehouse-systems, vendor V-WS), type: cmd, channel: "Vendor API POST /vendor/nodes, PUT /vendor/nodes/{nodeId}/profile, POST /vendor/inventory, POST /vendor/acknowledgements, POST /vendor/shipping-labels, POST /vendor/shipment-confirmations", message: "RegisterVendorNode, DeclareNodeProfile, SubmitInventory, SubmitAcknowledgement, RequestLabel, SubmitShipmentConfirmation", relationship: "OHS + PL (downstream is Conformist + ACL)"}
+      - {from: network-fulfillment (warehouse-systems, vendor V-WS), type: qry, channel: "Vendor API GET /vendor/purchase-orders, GET /vendor/purchase-orders/{poNumber}, GET /vendor/transactions/{transactionId}, GET /vendor/nodes/{nodeId}, GET /vendor/nodes/{nodeId}/scorecard", message: "PollPurchaseOrders, GetPurchaseOrder, GetTransaction, GetNode, GetScorecard", relationship: "OHS + PL"}
+      - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentReleasedToNode, FulfillmentCancelled", relationship: Customer/Supplier}
+      - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeActivated, NodeSuspended, NodeRetired", relationship: Conformist}
+      - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "ListingCreated", relationship: Conformist}
+      - {from: network partner managers (human), type: cmd, channel: "REST POST /vendors", message: OnboardVendor, relationship: UI}
+    rest:
+      - "GET /vendor/purchase-orders?createdAfter=&nodeId=&nextToken="
+      - "GET /vendor/purchase-orders/{poNumber}"
+      - "POST /vendor/acknowledgements"
+      - "POST /vendor/inventory"
+      - "POST /vendor/nodes"
+      - "GET /vendor/nodes/{nodeId}"
+      - "PUT /vendor/nodes/{nodeId}/profile"
+      - "GET /vendor/nodes/{nodeId}/scorecard"
+      - "POST /vendor/shipping-labels"
+      - "POST /vendor/shipment-confirmations"
+      - "GET /vendor/transactions/{transactionId}"
+      - "POST /vendors"
+    publishes:
+      - {event: VendorOnboarded, entity: vendoraccount, data: [vendorId, name, ackWindowMinutes], consumers: [node-performance]}
+      - {event: PurchaseOrderIssued, entity: purchaseorder, data: [poNumber, vendorId, nodeId, assignmentId, releaseNo, requiredShipBy, ackBy, lines], consumers: [node-performance]}
+      - {event: PurchaseOrderAccepted, entity: purchaseorder, data: [poNumber, assignmentId, releaseNo, nodeId, acceptedAt, transactionId], consumers: [order-sourcing, node-performance]}
+      - {event: PurchaseOrderRejected, entity: purchaseorder, data: [poNumber, assignmentId, releaseNo, nodeId, reasonCode, rejectedAt], consumers: [order-sourcing, node-performance]}
+      - {event: PurchaseOrderExpired, entity: purchaseorder, data: [poNumber, assignmentId, releaseNo, nodeId, ackBy], consumers: [order-sourcing, node-performance]}
+      - {event: PurchaseOrderCancelled, entity: purchaseorder, data: [poNumber, assignmentId, reason], consumers: [analytics only]}
+      - {event: VendorShipmentConfirmed, entity: purchaseorder, data: [poNumber, assignmentId, nodeId, trackingNumbers, shippedAt, requiredShipBy], consumers: [order-sourcing, shipping-and-tracking, node-performance]}
+      - {event: SubmissionProcessed, entity: submission, data: [transactionId, vendorId, kind, status, errorCount], consumers: [node-performance]}
+    consumes:
+      - {event: FulfillmentReleasedToNode, from: order-sourcing}
+      - {event: FulfillmentCancelled, from: order-sourcing}
+      - {event: NodeRegistered, from: node-topology}
+      - {event: NodeActivated, from: node-topology}
+      - {event: NodeSuspended, from: node-topology}
+      - {event: NodeRetired, from: node-topology}
+      - {event: ListingCreated, from: offer-availability}
+    sync_calls:
+      - {to: node-topology, type: cmd, message: "RegisterNode, DeclareOperationalProfile", channel: "REST POST /nodes, PUT /nodes/{nodeId}/operational-profile"}
+      - {to: offer-availability, type: cmd, message: ApplyInventoryFeed, channel: "REST POST /inventory-feeds"}
+      - {to: shipping-and-tracking, type: cmd, message: IssueLabel, channel: "REST POST /labels"}
+      - {to: node-performance, type: qry, message: GetScorecard, channel: "REST GET /scorecards/{nodeId}"}
+    ul:
+      - {term: Vendor, definition: "An organisation operating fulfillment nodes for the network (the warehouse-systems fleet is vendor V-WS).", code: "vendor.VendorAccount"}
+      - {term: Purchase Order (PO), definition: "The instruction to one vendor node to ship one shipment group in full by requiredShipBy.", code: "po.PurchaseOrder"}
+      - {term: Acknowledgement, definition: "The vendor's single, whole-order accept or reject.", code: "po.AckDecision"}
+      - {term: Ack Window / ackBy, definition: "The deadline for the acknowledgement.", code: "po.PurchaseOrder.AckBy"}
+      - {term: Required Ship-By, definition: "The pickup cutoff the PO must be ready for; the fleet calls it the CPT.", code: "po.PurchaseOrder.RequiredShipBy"}
+      - {term: Submission / Transaction, definition: "An asynchronous vendor write and its outcome, reconciled by transactionId.", code: "submission.Submission"}
+      - {term: Label, definition: "labelRef + trackingNumber + carrier; never the address.", code: "po.Label"}
+      - {term: Vendor API, definition: "The Open Host Service of this context; its JSON schemas are the Published Language.", code: "apis/vendor-connectivity/openapi.yaml"}
+
+  # =========================================================================
+  - id: linehaul-transportation
+    name: Linehaul Transportation
+    code: LH
+    tier: logistics
+    classification: Supporting
+    chart: {differentiation: 0.47, complexity: 0.48, evolution: Custom-built}
+    business_model: Cost reducer (cost-to-serve) and speed enabler
+    purpose: >-
+      Runs the middle mile: turns lanes into scheduled departures (including
+      a pickup departure at every vendor node cutoff), keeps each departure's
+      remaining capacity, builds loads of packages onto departures, and
+      reports when loads depart and arrive.
+    roles: [Execution (schedules and loads), Specification (capacity)]
+    business_decisions:
+      - Every declared cutoff of an ACTIVE vendor fulfillment node gets one pickup departure per operating day.
+      - A departure's booked packages never exceed its capacity.
+      - A package is on at most one open load at a time.
+      - A cancelled departure is announced before its cutoff wherever possible, so promises can be revised.
+    aggregates:
+      - name: Departure
+        root_id: departureId
+        description: "One scheduled trip on one lane: cutoff, departure, arrival and package capacity. A PICKUP departure starts at a vendor node."
+        states: [SCHEDULED, CLOSED, DEPARTED, ARRIVED, CANCELLED]
+        transitions:
+          - [SCHEDULED, CLOSED, CloseDeparture]
+          - [CLOSED, DEPARTED, RecordDeparture]
+          - [DEPARTED, ARRIVED, RecordArrival]
+          - [SCHEDULED, CANCELLED, CancelDeparture]
+        value_objects: ["DepartureKind(PICKUP|LINEHAUL|AIR)", "Capacity{packages, booked}", "Times{cutoffAt, departsAt, arrivesAt}"]
+        invariants:
+          - {rule: "cutoffAt <= departsAt < arrivesAt", error: ErrInvalidDepartureTimes}
+          - {rule: "booked <= capacity", error: ErrDepartureFull}
+          - {rule: "the lane is OPEN when scheduling", error: ErrLaneClosed}
+          - {rule: "no booking after cutoffAt", error: ErrDepartureClosed}
+        commands: [ScheduleDeparture, BookCapacity, ReleaseCapacity, CloseDeparture, RecordDeparture, RecordArrival, CancelDeparture]
+        events: [DepartureScheduled, DepartureCapacityChanged, DepartureCancelled, DepartureDeparted, DepartureArrived]
+        throughput_estimate: "high on capacity changes"
+        size_estimate: "lanes x trips/day x horizon (14 days)"
+      - name: LaneSchedule
+        root_id: laneId
+        description: "The weekly template that generates departures for one lane (or the node cutoffs for a pickup lane)."
+        states: [ACTIVE, RETIRED]
+        transitions: [[ACTIVE, RETIRED, RetireLaneSchedule]]
+        invariants:
+          - {rule: "template slots do not overlap on the same lane", error: ErrOverlappingSlots}
+        commands: [DefineLaneSchedule, RetireLaneSchedule, GenerateDepartures]
+        events: []
+        throughput_estimate: "low"
+        size_estimate: "one per lane"
+      - name: Load
+        root_id: loadId
+        description: "The packages physically consolidated onto one departure at its origin node."
+        states: [OPEN, CLOSED, DEPARTED, ARRIVED]
+        transitions:
+          - [OPEN, CLOSED, CloseLoad]
+          - [CLOSED, DEPARTED, DispatchLoad]
+          - [DEPARTED, ARRIVED, ReceiveLoad]
+        invariants:
+          - {rule: "a package is on at most one OPEN or CLOSED load", error: ErrPackageAlreadyLoaded}
+          - {rule: "package count <= departure capacity", error: ErrLoadOverCapacity}
+        commands: [OpenLoad, AddPackage, CloseLoad, DispatchLoad, ReceiveLoad]
+        events: [LoadClosed, LoadDeparted, LoadArrived]
+        throughput_estimate: "high (per package add)"
+        size_estimate: "one per departure"
+    read_models:
+      - {name: NodeProfileView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
+      - {name: LaneView, source: "node-topology LaneOpened, LaneClosed"}
+      - {name: ExpectedVolumeView, source: "order-sourcing FulfillmentReleasedToNode, FulfillmentReassigned, FulfillmentLocked, FulfillmentCancelled; shipping-and-tracking LabelIssued"}
+    policies:
+      - {name: PickupFromCutoffs, rule: "on NodeOperationalProfileDeclared (re)generate PICKUP departures for every cutoff of the horizon; on NodeSuspended/NodeRetired cancel future pickups"}
+      - {name: BookOnLock, rule: "on FulfillmentLocked book one package on the pickup departure; on FulfillmentCancelled or reassignment release it"}
+      - {name: HorizonRoll, rule: "nightly GenerateDepartures keeps a 14-day horizon"}
+    inbound:
+      - {from: network-ops planner, type: cmd, channel: "REST /lane-schedules, /departures/{id}:cancel", message: "DefineLaneSchedule, CancelDeparture", relationship: UI}
+      - {from: sort-centre and station operators (human/scanner), type: cmd, channel: "REST /loads", message: "OpenLoad, AddPackage, CloseLoad, DispatchLoad, ReceiveLoad", relationship: UI}
+      - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired, LaneOpened, LaneClosed", relationship: Conformist}
+      - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentReleasedToNode, FulfillmentReassigned, FulfillmentLocked, FulfillmentCancelled", relationship: Customer/Supplier}
+      - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "LabelIssued", relationship: Conformist}
+      - {from: any context, type: qry, channel: "REST GET /departures?origin=&from=&to=", message: ListDepartures, relationship: OHS}
+    rest:
+      - "POST /lane-schedules"
+      - "POST /lane-schedules/{laneId}:retire"
+      - "GET /departures?origin=&destination=&from=&to="
+      - "GET /departures/{departureId}"
+      - "POST /departures/{departureId}:cancel"
+      - "POST /loads"
+      - "POST /loads/{loadId}/packages"
+      - "POST /loads/{loadId}:close"
+      - "POST /loads/{loadId}:dispatch"
+      - "POST /loads/{loadId}:receive"
+    publishes:
+      - {event: DepartureScheduled, entity: departure, data: [departureId, laneId, kind, originNodeId, destinationNodeId, cutoffAt, departsAt, arrivesAt, capacityPackages], consumers: [delivery-promise, order-sourcing]}
+      - {event: DepartureCapacityChanged, entity: departure, data: [departureId, capacityPackages, bookedPackages, remainingPackages], consumers: [delivery-promise, order-sourcing]}
+      - {event: DepartureCancelled, entity: departure, data: [departureId, reason, cancelledAt], consumers: [delivery-promise, order-sourcing]}
+      - {event: DepartureDeparted, entity: departure, data: [departureId, departedAt], consumers: [analytics only]}
+      - {event: DepartureArrived, entity: departure, data: [departureId, arrivedAt], consumers: [analytics only]}
+      - {event: LoadClosed, entity: load, data: [loadId, departureId, packageCount], consumers: [analytics only]}
+      - {event: LoadDeparted, entity: load, data: [loadId, departureId, originNodeId, trackingNumbers, departedAt], consumers: [shipping-and-tracking]}
+      - {event: LoadArrived, entity: load, data: [loadId, departureId, destinationNodeId, trackingNumbers, arrivedAt], consumers: [shipping-and-tracking, last-mile-delivery]}
+    consumes:
+      - {event: NodeRegistered, from: node-topology}
+      - {event: NodeOperationalProfileDeclared, from: node-topology}
+      - {event: NodeActivated, from: node-topology}
+      - {event: NodeSuspended, from: node-topology}
+      - {event: NodeRetired, from: node-topology}
+      - {event: LaneOpened, from: node-topology}
+      - {event: LaneClosed, from: node-topology}
+      - {event: FulfillmentReleasedToNode, from: order-sourcing}
+      - {event: FulfillmentReassigned, from: order-sourcing}
+      - {event: FulfillmentLocked, from: order-sourcing}
+      - {event: FulfillmentCancelled, from: order-sourcing}
+      - {event: LabelIssued, from: shipping-and-tracking}
+    sync_calls: []
+    ul:
+      - {term: Middle Mile, definition: "Transport between nodes: vendor node to sortation centre, sortation centre to delivery station, air.", code: "(context)"}
+      - {term: Departure, definition: "One scheduled trip on a lane with a cutoff and a capacity.", code: "departure.Departure"}
+      - {term: Pickup Departure, definition: "The departure that collects packages at a vendor node at one of its declared cutoffs.", code: "departure.KindPickup"}
+      - {term: Load, definition: "The packages consolidated onto one departure.", code: "load.Load"}
+      - {term: Lane Schedule, definition: "The weekly template that generates a lane's departures.", code: "schedule.LaneSchedule"}
+
+  # =========================================================================
+  - id: last-mile-delivery
+    name: Last-Mile Delivery
+    code: LM
+    tier: logistics
+    classification: Supporting
+    chart: {differentiation: 0.40, complexity: 0.40, evolution: Custom-built}
+    business_model: Cost reducer and experience creator (the doorstep)
+    purpose: >-
+      Runs each delivery station: publishes delivery waves (induct cutoff,
+      delivery window, stop capacity) that the promise relies on, plans routes
+      for delivery service partners, and records every delivery attempt.
+    roles: [Execution (routes and attempts), Specification (wave capacity)]
+    business_decisions:
+      - A package joins the earliest wave whose induct cutoff it arrived before and that has stop capacity left.
+      - A route never exceeds its van's stop capacity.
+      - A package is delivered at most once; a failed attempt returns it to the station for the next wave.
+    aggregates:
+      - name: DeliveryWave
+        root_id: waveId
+        description: "One dispatch wave of one delivery station on one service date."
+        states: [OPEN, INDUCTION_CLOSED, DISPATCHED, COMPLETED, CANCELLED]
+        transitions:
+          - [OPEN, INDUCTION_CLOSED, CloseInduction]
+          - [INDUCTION_CLOSED, DISPATCHED, DispatchWave]
+          - [DISPATCHED, COMPLETED, CompleteWave]
+          - [OPEN, CANCELLED, CancelWave]
+        value_objects: ["Window{start, end}", "StopCapacity{stops, assigned}"]
+        invariants:
+          - {rule: "inductCutoffAt < windowStart < windowEnd", error: ErrInvalidWaveTimes}
+          - {rule: "assigned stops <= stops", error: ErrWaveFull}
+          - {rule: "no package joins after induction closes", error: ErrInductionClosed}
+        commands: [ScheduleWave, InductPackage, CloseInduction, DispatchWave, CompleteWave, CancelWave]
+        events: [DeliveryWaveScheduled, DeliveryWaveCapacityChanged, DeliveryWaveCancelled]
+        throughput_estimate: "medium"
+        size_estimate: "stations x waves/day x horizon"
+      - name: Route
+        root_id: routeId
+        description: "One delivery service partner's van route within one wave: ordered stops."
+        states: [PLANNED, OUT_FOR_DELIVERY, COMPLETED]
+        transitions: [[PLANNED, OUT_FOR_DELIVERY, StartRoute], [OUT_FOR_DELIVERY, COMPLETED, CompleteRoute]]
+        entities: ["Stop{stopNo, trackingNumbers[], outcome}"]
+        invariants:
+          - {rule: "stops <= van capacity of the partner", error: ErrRouteOverCapacity}
+          - {rule: "an attempt is recorded only on an OUT_FOR_DELIVERY route", error: ErrRouteNotStarted}
+          - {rule: "a package is delivered at most once", error: ErrAlreadyDelivered}
+        commands: [PlanRoute, StartRoute, RecordAttempt, CompleteRoute]
+        events: [RoutePlanned, PackageOutForDelivery, DeliveryAttempted]
+        throughput_estimate: "high (per stop)"
+        size_estimate: "routes per wave"
+      - name: DeliveryServicePartner
+        root_id: dspId
+        description: An independent delivery business contracted to a station, with its vans.
+        states: [ACTIVE, INACTIVE]
+        invariants:
+          - {rule: "van capacity > 0", error: ErrInvalidVanCapacity}
+        commands: [ContractPartner]
+        events: []
+        throughput_estimate: "rare"
+        size_estimate: "small"
+    read_models:
+      - {name: StationView, source: "node-topology NodeRegistered, ServiceAreaAssigned"}
+      - {name: InboundPackagesView, source: "linehaul-transportation LoadArrived"}
+    policies:
+      - {name: InductOnArrival, rule: "on LoadArrived at a delivery station induct every package into the earliest eligible wave"}
+      - {name: RetryNextWave, rule: "a FAILED attempt re-inducts the package into the next wave; three failures return it to sender"}
+    inbound:
+      - {from: station planner (human), type: cmd, channel: "REST /waves, /routes", message: "ScheduleWave, PlanRoute, DispatchWave", relationship: UI}
+      - {from: delivery service partner driver app, type: cmd, channel: "REST /routes/{routeId}:start, /routes/{routeId}/attempts", message: "StartRoute, RecordAttempt", relationship: UI}
+      - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "LoadArrived", relationship: Customer/Supplier}
+      - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, ServiceAreaAssigned", relationship: Conformist}
+    rest:
+      - "POST /waves"
+      - "GET /waves?stationNodeId=&serviceDate="
+      - "POST /waves/{waveId}:close-induction"
+      - "POST /waves/{waveId}:dispatch"
+      - "POST /routes"
+      - "POST /routes/{routeId}:start"
+      - "POST /routes/{routeId}/attempts"
+      - "POST /partners"
+    publishes:
+      - {event: DeliveryWaveScheduled, entity: wave, data: [waveId, stationNodeId, serviceDate, inductCutoffAt, windowStart, windowEnd, stopCapacity], consumers: [delivery-promise, order-sourcing]}
+      - {event: DeliveryWaveCapacityChanged, entity: wave, data: [waveId, stopCapacity, assignedStops, remainingStops], consumers: [delivery-promise, order-sourcing]}
+      - {event: DeliveryWaveCancelled, entity: wave, data: [waveId, reason], consumers: [analytics only]}
+      - {event: RoutePlanned, entity: route, data: [routeId, waveId, dspId, stopCount], consumers: [analytics only]}
+      - {event: PackageOutForDelivery, entity: route, data: [routeId, trackingNumber, stationNodeId, at], consumers: [shipping-and-tracking]}
+      - {event: DeliveryAttempted, entity: route, data: [routeId, trackingNumber, outcome, failureReason, at], consumers: [shipping-and-tracking]}
+    consumes:
+      - {event: LoadArrived, from: linehaul-transportation}
+      - {event: NodeRegistered, from: node-topology}
+      - {event: ServiceAreaAssigned, from: node-topology}
+    sync_calls: []
+    ul:
+      - {term: Last Mile, definition: "From the delivery station to the customer's door.", code: "(context)"}
+      - {term: Delivery Wave, definition: "A station's dispatch slot: induct cutoff, delivery window and stop capacity.", code: "wave.DeliveryWave"}
+      - {term: Induction, definition: "Placing an arrived package into a wave.", code: "wave.InductPackage"}
+      - {term: Route, definition: "One van's ordered stops in one wave.", code: "route.Route"}
+      - {term: Delivery Service Partner (DSP), definition: "An independent delivery business working for a station.", code: "partner.DeliveryServicePartner"}
+      - {term: Delivery Attempt, definition: "One try to hand a package over: DELIVERED or FAILED with a reason.", code: "route.Attempt"}
+
+  # =========================================================================
+  - id: shipping-and-tracking
+    name: Shipping & Tracking
+    code: ST
+    tier: logistics
+    classification: Generic
+    chart: {differentiation: 0.22, complexity: 0.62, evolution: Commodity}
+    business_model: Compliance / experience (labels and the tracking timeline)
+    purpose: >-
+      Issues shipping labels (the only place outside customer-ordering that
+      ever sees a ship-to address) and owns each package's journey: one
+      customer-visible timeline consolidated from vendor handover, load and
+      delivery facts, ending in delivered, returned or lost.
+    roles: [Execution (labels), Analysis (timeline)]
+    business_decisions:
+      - A tracking number is unique network-wide and is issued once per package.
+      - The address printed on the label is fetched from customer-ordering at issue time and never published.
+      - The journey only moves forward; a duplicate or out-of-order scan is recorded, not applied.
+      - A package not scanned within its expected window is raised as an exception.
+    aggregates:
+      - name: ShippingLabel
+        root_id: labelRef
+        description: "The label for one package: tracking number, service tier, and the encrypted ship-to snapshot needed to print it."
+        states: [ISSUED, VOIDED]
+        transitions: [[ISSUED, VOIDED, VoidLabel]]
+        invariants:
+          - {rule: "one label per (poNumber, packageNo)", error: ErrLabelAlreadyIssued}
+          - {rule: "trackingNumber unique", error: ErrTrackingNumberTaken}
+        commands: [IssueLabel, VoidLabel]
+        events: [LabelIssued, LabelVoided]
+        throughput_estimate: "medium"
+        size_estimate: "one per package"
+      - name: PackageJourney
+        root_id: trackingNumber
+        description: "The customer-visible timeline of one package."
+        states: [LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, DELIVERED, RETURNED, LOST]
+        transitions:
+          - [LABELLED, HANDED_OVER, RecordScan]
+          - [HANDED_OVER, IN_TRANSIT, RecordScan]
+          - [IN_TRANSIT, IN_TRANSIT, RecordScan]
+          - [IN_TRANSIT, AT_STATION, RecordScan]
+          - [AT_STATION, OUT_FOR_DELIVERY, RecordScan]
+          - [OUT_FOR_DELIVERY, AT_STATION, RecordScan]
+          - [OUT_FOR_DELIVERY, DELIVERED, RecordScan]
+          - [AT_STATION, RETURNED, ReturnToSender]
+          - [IN_TRANSIT, LOST, DeclareLost]
+        entities: ["Scan{scanId, nodeId, scanType, at}"]
+        invariants:
+          - {rule: "scans apply in time order; an older scan is stored but does not move the state", error: ErrScanOutOfOrder}
+          - {rule: "a scanId is applied once", error: ErrDuplicateScan}
+          - {rule: "DELIVERED, RETURNED and LOST are terminal", error: ErrJourneyClosed}
+        commands: [StartJourney, RecordScan, RaiseException, ReturnToSender, DeclareLost]
+        events: [PackageScanned, PackageHandedOver, PackageDelivered, PackageExceptionRaised, PackageReturned, PackageLost]
+        throughput_estimate: "very high (every scan)"
+        size_estimate: "one per package + scans"
+    read_models:
+      - {name: CatalogDimensionsView, source: "offer-availability CatalogItemCreated"}
+    policies:
+      - {name: HandoverOnFirstScan, rule: "the first PICKUP-load departure scan at the vendor node is the handover instant used by node-performance"}
+      - {name: ExceptionOnSilence, rule: "no scan within expected leg time + tolerance raises PackageExceptionRaised(NO_SCAN)"}
+    inbound:
+      - {from: vendor-connectivity, type: cmd, channel: "REST POST /labels (in-org)", message: IssueLabel, relationship: Customer/Supplier}
+      - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: "VendorShipmentConfirmed", relationship: Customer/Supplier}
+      - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "LoadDeparted, LoadArrived", relationship: Conformist}
+      - {from: last-mile-delivery, type: evt, channel: "Kafka retailnetwork.last-mile-delivery.events", message: "PackageOutForDelivery, DeliveryAttempted", relationship: Conformist}
+      - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated", relationship: Conformist}
+      - {from: shopper / customer-ordering, type: qry, channel: "REST GET /journeys/{trackingNumber}", message: GetJourney, relationship: OHS}
+    rest:
+      - "POST /labels"
+      - "POST /labels/{labelRef}:void"
+      - "GET /journeys/{trackingNumber}"
+      - "POST /journeys/{trackingNumber}/scans"
+    publishes:
+      - {event: LabelIssued, entity: label, data: [labelRef, trackingNumber, poNumber, assignmentId, packageNo, tier, carrier], consumers: [linehaul-transportation, customer-ordering]}
+      - {event: LabelVoided, entity: label, data: [labelRef, trackingNumber, reason], consumers: [analytics only]}
+      - {event: PackageScanned, entity: journey, data: [trackingNumber, scanId, nodeId, scanType, at, state], consumers: [customer-ordering]}
+      - {event: PackageHandedOver, entity: journey, data: [trackingNumber, poNumber, nodeId, handedOverAt], consumers: [node-performance]}
+      - {event: PackageDelivered, entity: journey, data: [trackingNumber, assignmentId, orderId, deliveredAt], consumers: [delivery-promise, order-sourcing, customer-ordering]}
+      - {event: PackageExceptionRaised, entity: journey, data: [trackingNumber, assignmentId, orderId, reason, at], consumers: [delivery-promise, customer-ordering]}
+      - {event: PackageReturned, entity: journey, data: [trackingNumber, orderId, returnedAt], consumers: [analytics only]}
+      - {event: PackageLost, entity: journey, data: [trackingNumber, orderId, declaredAt], consumers: [analytics only]}
+    consumes:
+      - {event: VendorShipmentConfirmed, from: vendor-connectivity}
+      - {event: LoadDeparted, from: linehaul-transportation}
+      - {event: LoadArrived, from: linehaul-transportation}
+      - {event: PackageOutForDelivery, from: last-mile-delivery}
+      - {event: DeliveryAttempted, from: last-mile-delivery}
+      - {event: CatalogItemCreated, from: offer-availability}
+    sync_calls:
+      - {to: customer-ordering, type: qry, message: GetShipTo, channel: "REST GET /orders/{orderId}/ship-to"}
+    ul:
+      - {term: Tracking Number, definition: "The network-wide unique id of one package.", code: "journey.TrackingNumber"}
+      - {term: Shipping Label, definition: "What is printed on the package; the only artefact outside customer-ordering that carries the address.", code: "label.ShippingLabel"}
+      - {term: Package Journey, definition: "The customer-visible timeline of one package.", code: "journey.PackageJourney"}
+      - {term: Scan, definition: "One observation of a package at a node.", code: "journey.Scan"}
+      - {term: Handover, definition: "The instant a vendor node's package enters the network.", code: "journey.HandedOver"}
+
+  # =========================================================================
+  - id: node-performance
+    name: Node Performance
+    code: NP
+    tier: partner
+    classification: Supporting
+    chart: {differentiation: 0.45, complexity: 0.34, evolution: Custom-built}
+    business_model: Risk reducer (promises rest on measured, not just declared, capability)
+    purpose: >-
+      Measures every node against what it declared and what was asked of it:
+      acknowledgement latency, rejections, on-time handover against
+      requiredShipBy, promise-kept rate and inventory feed freshness, over
+      rolling windows, and grades the node.
+    roles: [Analysis (scorecard), Audit]
+    business_decisions:
+      - A scorecard is computed only from observed facts, never from the vendor's declaration.
+      - A node with fewer than the minimum observations in the window is graded PROVISIONAL, not A.
+      - Grades drive the promise handicap (owned by delivery-promise); this context never suspends a node.
+    aggregates:
+      - name: NodeScorecard
+        root_id: "scorecardId = nodeId + ':' + window"
+        description: "Rolling-window performance of one node (7-day and 30-day)."
+        states: [PROVISIONAL, GRADED]
+        transitions: [[PROVISIONAL, GRADED, Recompute], [GRADED, GRADED, Recompute], [GRADED, PROVISIONAL, Recompute]]
+        value_objects:
+          - "Metrics{onTimeHandoverRate, lateAckRate, rejectRate, expiryRate, promiseKeptRate, feedFreshnessP95Minutes, observations}"
+          - "Grade(A|B|C|D)"
+        invariants:
+          - {rule: "rates are in [0,1]", error: ErrRateOutOfRange}
+          - {rule: "grade requires observations >= minObservations", error: ErrInsufficientObservations}
+          - {rule: "an observation is counted once (idempotent on source event id)", error: ErrDuplicateObservation}
+        commands: [RecordObservation, Recompute]
+        events: [NodeScorecardUpdated, NodeThresholdBreached]
+        throughput_estimate: "medium; recompute batched per minute"
+        size_estimate: "nodes x 2 windows + observations (30 days)"
+    read_models: []
+    policies:
+      - {name: Grading, rule: "A: onTimeHandover>=0.98 and promiseKept>=0.97 and lateAck<=0.01; B: >=0.95/0.94/0.03; C: >=0.90/0.90/0.05; else D"}
+      - {name: ThresholdAlert, rule: "publish NodeThresholdBreached when a metric crosses its threshold downward"}
+    inbound:
+      - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: "VendorOnboarded, PurchaseOrderIssued, PurchaseOrderAccepted, PurchaseOrderRejected, PurchaseOrderExpired, VendorShipmentConfirmed, SubmissionProcessed", relationship: Conformist}
+      - {from: vendor-connectivity, type: qry, channel: "REST GET /scorecards/{nodeId} (in-org)", message: GetScorecard, relationship: Customer/Supplier}
+      - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "PackageHandedOver", relationship: Conformist}
+      - {from: delivery-promise, type: evt, channel: "Kafka retailnetwork.delivery-promise.events", message: "PromiseKept, PromiseBroken", relationship: Conformist}
+      - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "InventoryFeedApplied", relationship: Conformist}
+      - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared", relationship: Conformist}
+    rest:
+      - "GET /scorecards/{nodeId}"
+      - "GET /scorecards?grade="
+    publishes:
+      - {event: NodeScorecardUpdated, entity: scorecard, data: [nodeId, window, grade, onTimeHandoverRate, lateAckRate, rejectRate, expiryRate, promiseKeptRate, feedFreshnessP95Minutes, observations, computedAt], consumers: [delivery-promise, order-sourcing]}
+      - {event: NodeThresholdBreached, entity: scorecard, data: [nodeId, metric, value, threshold, window], consumers: [analytics only]}
+    consumes:
+      - {event: VendorOnboarded, from: vendor-connectivity}
+      - {event: PurchaseOrderIssued, from: vendor-connectivity}
+      - {event: PurchaseOrderAccepted, from: vendor-connectivity}
+      - {event: PurchaseOrderRejected, from: vendor-connectivity}
+      - {event: PurchaseOrderExpired, from: vendor-connectivity}
+      - {event: VendorShipmentConfirmed, from: vendor-connectivity}
+      - {event: SubmissionProcessed, from: vendor-connectivity}
+      - {event: PackageHandedOver, from: shipping-and-tracking}
+      - {event: PromiseKept, from: delivery-promise}
+      - {event: PromiseBroken, from: delivery-promise}
+      - {event: InventoryFeedApplied, from: offer-availability}
+      - {event: NodeRegistered, from: node-topology}
+      - {event: NodeOperationalProfileDeclared, from: node-topology}
+    sync_calls: []
+    ul:
+      - {term: Scorecard, definition: "A node's measured performance over a rolling window, with a grade.", code: "scorecard.NodeScorecard"}
+      - {term: On-Time Handover Rate, definition: "Share of packages handed over before requiredShipBy.", code: "scorecard.Metrics.OnTimeHandoverRate"}
+      - {term: Late Ack Rate, definition: "Share of purchase orders acknowledged in the last 10% of the window or expired.", code: "scorecard.Metrics.LateAckRate"}
+      - {term: Grade, definition: "A, B, C or D; PROVISIONAL below the observation minimum.", code: "scorecard.Grade"}
+      - {term: Declared vs Measured, definition: "What a vendor says (profile) against what the network observes (scorecard).", code: "(principle)"}
+
+# ---------------------------------------------------------------------------
+# Out-of-scope / future contexts (named so the map is complete)
+# ---------------------------------------------------------------------------
+future_contexts:
+  - {id: inventory-placement, classification: Core (candidate), note: "Which node should hold which item before demand arrives (regional selection). Out of scope: fulfillment nodes are vendor-operated and vendors place their own stock (the fleet's network-inventory-planning)."}
+  - {id: customer-returns, classification: Supporting, note: "Return authorisation and routing to a RETURNS_CENTER node; on the fleet side returns-processing receives it."}
+  - {id: customer-notification, classification: Generic, note: "Emails/push on PromiseRevised and delivery; buy, do not build."}
+  - {id: payments-and-invoicing, classification: Generic, note: "Vendor invoices and settlement; out of scope as in the original plan."}
+
+# ---------------------------------------------------------------------------
+# External actors
+# ---------------------------------------------------------------------------
+external:
+  - {id: network-fulfillment, org: warehouse-systems, kind: downstream vendor system, note: "Conformist + ACL to the Vendor API. The ONLY fleet context that talks to the network."}
+  - {id: shopper, kind: person (synthetic) via storefront / e2e-tests}
+  - {id: network-ops planner, kind: person}
+  - {id: delivery service partner, kind: external organisation (driver app)}
+  - {id: sort-centre and station operators, kind: person / scanner}
+
+# ---------------------------------------------------------------------------
+# Decisions (proposed ADRs, docs/adr/)
+# ---------------------------------------------------------------------------
+decisions:
+  - {id: RN-0001, title: "The retail network is its own domain of ten bounded contexts (supersedes the one-context D1)"}
+  - {id: RN-0002, title: "Promise and order assignment are separate contexts; the promise carries a witness path, assignment re-optimises until lock"}
+  - {id: RN-0003, title: "Capability is declared (operational profile) and measured (scorecard); both feed the promise"}
+  - {id: RN-0004, title: "Parcel nodes are network-operated; vendors register fulfillment, cross-dock and returns nodes only"}
+  - {id: RN-0005, title: "The vendor node's acceptance is the path lock"}
+  - {id: RN-0006, title: "PII is confined to customer-ordering and shipping-and-tracking; the Vendor API never carries it"}
+  - {id: RN-0007, title: "CloudEvents namespace com.retailnetwork.<tier>.<context>; no topic is shared with the fleet"}
+  - {id: RN-0008, title: "Fast tiers are never promised from nominal times; capacity is held at promise time in a PromiseBook"}

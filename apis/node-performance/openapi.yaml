@@ -1,0 +1,233 @@
+openapi: 3.0.3
+info:
+  title: Node Performance API (proposed)
+  version: 0.1.0
+  description: >-
+    Proposed contract derived from model/model.yaml
+    (contexts[node-performance].rest). Nothing is built yet. Node Performance
+    grades every node from observed facts only (purchase orders issued,
+    accepted, rejected and expired, shipments confirmed, packages handed over
+    against requiredShipBy, promises kept or broken, inventory feeds applied)
+    over a 7-day and a 30-day window. A scorecard below the observation
+    minimum is PROVISIONAL. Both routes are read-only. vendor-connectivity
+    calls GET /scorecards/{nodeId} to serve a vendor's
+    GET /vendor/nodes/{nodeId}/scorecard on the Vendor API. No authentication,
+    consistent with the rest of the retail network (conventions.no_auth).
+servers:
+  - url: http://localhost:8000/api/retail-network/node-performance
+tags:
+  - name: Scorecards
+    description: A node's measured performance over a rolling window, with a grade.
+paths:
+  /scorecards/{nodeId}:
+    get:
+      tags: [Scorecards]
+      operationId: getScorecard
+      summary: Get both scorecards (7-day and 30-day) of one node
+      description: >-
+        GetScorecard in the model. Returns the 7d and 30d scorecards of the
+        node. Called in-organization by vendor-connectivity.
+      parameters:
+        - $ref: '#/components/parameters/NodeId'
+      responses:
+        '200':
+          description: The node's scorecards.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeScorecards'
+        '404':
+          description: The node has no scorecard yet (no observation has been recorded for it).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://retailnetwork.example/problems/scorecard-not-found
+                title: Scorecard not found
+                status: 404
+                detail: No scorecard exists for node N-0042.
+  /scorecards:
+    get:
+      tags: [Scorecards]
+      operationId: listScorecardsByGrade
+      summary: List scorecards whose current grade matches
+      description: >-
+        Lists every scorecard (any node, any window) whose current grade is
+        the one given. The model names no window filter and no caller for this
+        route.
+      parameters:
+        - name: grade
+          in: query
+          required: true
+          description: A, B, C, D, or PROVISIONAL below the observation minimum.
+          schema:
+            $ref: '#/components/schemas/GradeValue'
+      responses:
+        '200':
+          description: The matching scorecards.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScorecardList'
+        '422':
+          description: The grade is not one of A, B, C, D or PROVISIONAL.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+              example:
+                type: https://retailnetwork.example/problems/invalid-grade
+                title: Invalid grade
+                status: 422
+                detail: grade must be one of A, B, C, D, PROVISIONAL.
+components:
+  parameters:
+    NodeId:
+      name: nodeId
+      in: path
+      required: true
+      description: The node id minted by node-topology.
+      schema:
+        type: string
+        example: N-0042
+  schemas:
+    GradeValue:
+      type: string
+      description: A, B, C or D; PROVISIONAL below the observation minimum.
+      enum: [A, B, C, D, PROVISIONAL]
+    Window:
+      type: string
+      description: The rolling window. The model says 7-day and 30-day; the literals are proposed.
+      enum: [7d, 30d]
+    ScorecardState:
+      type: string
+      enum: [PROVISIONAL, GRADED]
+    Metrics:
+      type: object
+      required:
+        - onTimeHandoverRate
+        - lateAckRate
+        - rejectRate
+        - expiryRate
+        - promiseKeptRate
+        - feedFreshnessP95Minutes
+        - observations
+      properties:
+        onTimeHandoverRate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Share of packages handed over before requiredShipBy.
+        lateAckRate:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Share of purchase orders acknowledged in the last 10% of the window or expired.
+        rejectRate:
+          type: number
+          minimum: 0
+          maximum: 1
+        expiryRate:
+          type: number
+          minimum: 0
+          maximum: 1
+        promiseKeptRate:
+          type: number
+          minimum: 0
+          maximum: 1
+        feedFreshnessP95Minutes:
+          type: number
+          minimum: 0
+        observations:
+          type: integer
+          minimum: 0
+    Scorecard:
+      type: object
+      required: [scorecardId, nodeId, window, state, grade, metrics]
+      properties:
+        scorecardId:
+          type: string
+          description: nodeId + ':' + window.
+          example: N-0042:30d
+        nodeId:
+          type: string
+          example: N-0042
+        window:
+          $ref: '#/components/schemas/Window'
+        state:
+          $ref: '#/components/schemas/ScorecardState'
+        grade:
+          $ref: '#/components/schemas/GradeValue'
+        metrics:
+          $ref: '#/components/schemas/Metrics'
+        computedAt:
+          type: string
+          format: date-time
+          nullable: true
+          description: When the last recompute ran; null before the first one.
+    NodeScorecards:
+      type: object
+      required: [nodeId, scorecards]
+      properties:
+        nodeId:
+          type: string
+          example: N-0042
+        scorecards:
+          type: array
+          maxItems: 2
+          items:
+            $ref: '#/components/schemas/Scorecard'
+      example:
+        nodeId: N-0042
+        scorecards:
+          - scorecardId: N-0042:7d
+            nodeId: N-0042
+            window: 7d
+            state: GRADED
+            grade: C
+            metrics:
+              onTimeHandoverRate: 0.93
+              lateAckRate: 0.04
+              rejectRate: 0.02
+              expiryRate: 0.01
+              promiseKeptRate: 0.92
+              feedFreshnessP95Minutes: 55
+              observations: 412
+            computedAt: '2026-10-22T14:03:00Z'
+          - scorecardId: N-0042:30d
+            nodeId: N-0042
+            window: 30d
+            state: GRADED
+            grade: B
+            metrics:
+              onTimeHandoverRate: 0.962
+              lateAckRate: 0.021
+              rejectRate: 0.012
+              expiryRate: 0.004
+              promiseKeptRate: 0.951
+              feedFreshnessP95Minutes: 38
+              observations: 1874
+            computedAt: '2026-10-22T14:03:00Z'
+    ScorecardList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Scorecard'
+    Problem:
+      type: object
+      description: RFC 9457 problem details.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
