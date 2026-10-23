@@ -58,6 +58,13 @@ conventions:
     - Sibling data used in a decision is a local, event-fed read model; the promise hot path makes no synchronous call.
     - Synchronous in-organization calls exist only where a caller needs an answer inside a user or vendor request (listed under sync_calls).
   no_auth: Consistent with the fleet (no auth on REST or MCP). PII is synthetic and confined to customer-ordering and shipping-and-tracking.
+  errors:
+    - {error: ErrNotFound, status: 404, problem: not-found, rule: "an addressed aggregate does not exist"}
+    - {error: ErrIllegalTransition, status: 409, problem: illegal-transition, rule: "the command is not allowed from the aggregate's current state"}
+    - {error: ErrConcurrentUpdate, status: 409, problem: concurrent-update, rule: "optimistic-concurrency version mismatch; the caller re-reads and retries"}
+    - {error: ErrValidation, status: 422, problem: validation-failed, rule: "the request is well-formed JSON but violates a value-object rule"}
+  idempotency: "Every state-changing POST and PUT takes an Idempotency-Key header; each context keeps an idempotency_keys table keyed by (route, key) with a 24-hour TTL. An infrastructure table, not an aggregate."
+  analytics_rule: "Events marked analytics-only are published ONLY to retailnetwork.<context>.analytics; integration events go ONLY to retailnetwork.<context>.events."
 
 # ---------------------------------------------------------------------------
 # Node types (owned by node-topology). Mapping from the fleet's facility-layout
@@ -171,7 +178,7 @@ contexts:
           - [SUSPENDED, RETIRED, RetireNode]
         entities: []
         value_objects:
-          - OperationalProfile{profileRevision, timezone, operatingHoursByDay, holidays[], handlingTime, cutoffs[CutoffSlot{localTime, maxOrders?}], throughputCap{value, timeUnit, unit=ORDER}, sortDwell, declaredBy(VENDOR|NETWORK_OPS), declaredAt}
+          - "OperationalProfile{profileRevision, timezone, operatingHoursByDay, holidays[], handlingTime, cutoffs[CutoffSlot{localTime HH:mm, days[] (default every operating day), maxOrders?}], throughputCap{value int>0, timeUnit HOUR|DAY, unit=ORDER}, sortDwellMinutes (sort centres and air hubs only), declaredBy(VENDOR|NETWORK_OPS), declaredAt}; operatingHoursByDay{monday..sunday: {start HH:mm, end HH:mm}} (a missing day is closed); holidays[] are ISO dates (closed all day)"
           - NodeCapabilities{outbound, inbound, returns, sort, lastMile, air}
           - GeoLocation{postalCode, countryCode, lat, lon}
           - VendorRef{vendorId, vendorNodeCode}
@@ -179,8 +186,11 @@ contexts:
           - {rule: "operator must be allowed for the node type (parcel nodes are NETWORK-operated)", error: ErrOperatorNotAllowedForNodeType}
           - {rule: "vendorNodeCode is unique per vendor", error: ErrVendorNodeCodeTaken}
           - {rule: "profile revision strictly increases", error: ErrStaleProfileRevision}
-          - {rule: "a FULFILLMENT_CENTER profile declares at least one cutoff and a handlingTime > 0 before activation", error: ErrIncompleteOperationalProfile}
-          - {rule: "cutoffs fall inside the operating hours of their day", error: ErrCutoffOutsideOperatingHours}
+          - {rule: "a FULFILLMENT_CENTER profile declares at least one cutoff and a handlingTime > 0 before activation, and every later revision of an ACTIVE FULFILLMENT_CENTER keeps both", error: ErrIncompleteOperationalProfile}
+          - {rule: "every day of a cutoff falls inside the operating hours of that day", error: ErrCutoffOutsideOperatingHours}
+          - {rule: "the node's regionId names a defined Region", error: ErrUnknownRegion}
+          - {rule: "subtype, when given, is one of the node type's subtypes in node_types", error: ErrSubtypeNotAllowed}
+          - {rule: "sortDwellMinutes is declared only by SORTATION_CENTER and AIR_HUB nodes", error: ErrSortDwellNotAllowed}
           - {rule: "RETIRED is terminal", error: ErrNodeRetired}
         commands: [RegisterNode, DeclareOperationalProfile, ActivateNode, SuspendNode, RetireNode]
         events: [NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired]
@@ -209,6 +219,10 @@ contexts:
         invariants:
           - {rule: "the assigned node is an ACTIVE DELIVERY_STATION", error: ErrNotADeliveryStation}
           - {rule: "assignment version strictly increases", error: ErrStaleAssignmentVersion}
+          - {rule: "the assigned region is a defined Region and matches the station's region", error: ErrUnknownRegion}
+        transitions:
+          - [ASSIGNED, ASSIGNED, AssignServiceArea]
+        initial_state: ASSIGNED
         commands: [AssignServiceArea]
         events: [ServiceAreaAssigned]
         throughput_estimate: "low; bulk at network redesign"
@@ -217,6 +231,7 @@ contexts:
         root_id: regionId
         description: A largely self-sufficient partition of the network; nodes and service areas belong to exactly one region.
         states: [DEFINED]
+        initial_state: DEFINED
         invariants:
           - {rule: "region code unique", error: ErrRegionCodeTaken}
         commands: [DefineRegion]
@@ -226,11 +241,13 @@ contexts:
     read_models: []
     policies:
       - {name: DefaultCapabilitiesByType, rule: "node capabilities are derived from node_types, never typed by hand"}
+      - {name: SuspendedEndpointsUnusable, rule: "suspending or retiring a node closes nothing: its OPEN lanes and ASSIGNED service areas stay as they are, and consumers treat them as unusable while the node is not ACTIVE (they react to NodeSuspended and NodeRetired)"}
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /nodes (in-org)", message: RegisterNode (vendor node), relationship: Customer/Supplier}
       - {from: vendor-connectivity, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile (in-org)", message: DeclareOperationalProfile, relationship: Customer/Supplier}
+      - {from: network-ops planner, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile", message: "DeclareOperationalProfile (declaredBy NETWORK_OPS)", relationship: UI}
       - {from: network-ops planner, type: cmd, channel: "REST /nodes, /lanes, /service-areas, /regions", message: "RegisterNode (network node), ActivateNode, SuspendNode, RetireNode, OpenLane, CloseLane, AssignServiceArea, DefineRegion", relationship: UI}
-      - {from: any context, type: qry, channel: "REST GET /nodes/{nodeId}, /lanes, /service-areas/{postalPrefix}", message: "GetNode, ListLanes, ResolveServiceArea", relationship: OHS}
+      - {from: any context, type: qry, channel: "REST GET /nodes/{nodeId}, /nodes, /lanes, /service-areas/{postalPrefix}", message: "GetNode, ListNodes, ListLanes, ResolveServiceArea", relationship: OHS}
     rest:
       - "POST /nodes"
       - "GET /nodes/{nodeId}"
@@ -264,6 +281,7 @@ contexts:
       - {term: Operational Profile, definition: "The node's declared operating hours, cutoffs, handling time, throughput cap and time zone, versioned by profileRevision.", code: "node.OperationalProfile"}
       - {term: Cutoff, definition: "A local time by which a node declares packages are ready to be handed over; the network schedules one pickup departure per cutoff.", code: "node.CutoffSlot"}
       - {term: Handling Time, definition: "Declared time from order release to a package ready for handover.", code: "node.OperationalProfile.HandlingTime"}
+      - {term: Sort Dwell, definition: "Declared minutes a package normally spends inside a sortation centre or air hub between arrival and departure; declared only by those node types.", code: "node.OperationalProfile.SortDwellMinutes"}
       - {term: Throughput Cap, definition: "Declared maximum orders per time unit a node accepts.", code: "node.ThroughputCap"}
       - {term: Lane, definition: "A directed, mode-specific connection between two nodes.", code: "lane.Lane"}
       - {term: Region, definition: "A largely self-sufficient partition of the network.", code: "region.Region"}

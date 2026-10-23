@@ -42,8 +42,8 @@ Derived from: model.yaml → `contexts[node-topology].purpose`, `.aggregates`,
 | Actor | What they do here | Channel |
 | --- | --- | --- |
 | **Vendor** (through `vendor-connectivity`) | Registers its own `FULFILLMENT_CENTER`, `INBOUND_CROSS_DOCK` or `RETURNS_CENTER` nodes and declares their operational profile. A vendor never calls this context directly: its write lands in the Vendor API, and `vendor-connectivity` calls `POST /nodes` and `PUT /nodes/{nodeId}/operational-profile` in-organization when it processes the submission. | REST (in-org), Customer/Supplier |
-| **Network-ops planner** (person) | Registers the network's own parcel nodes, activates, suspends and retires nodes, opens and closes lanes, assigns service areas and defines regions. | REST, UI |
-| **Any context** | Reads a node, lists lanes, resolves a postal prefix. | REST queries, Open Host Service |
+| **Network-ops planner** (person) | Registers the network's own parcel nodes, declares their operational profile (`declaredBy` `NETWORK_OPS`), activates, suspends and retires nodes, opens and closes lanes, assigns service areas and defines regions. | REST, UI |
+| **Any context** | Reads a node, lists nodes, lists lanes, resolves a postal prefix. | REST queries, Open Host Service |
 | **Seven consuming contexts** | Build local read models from the nine published events. | Kafka, Open Host Service + Published Language |
 
 ## Decisions this context makes
@@ -97,12 +97,12 @@ this page does not repeat them.
 
 The **operational profile** is modelled after the `operationalConfiguration`
 of the Selling Partner API's Supply Sources: a handling time, operating hours
-by day, a throughput configuration expressed as a cap in orders per time unit,
+by day, a throughput configuration expressed as a cap in orders per hour or per day,
 and a time zone. The mapping of that API surface to this model is on the
 [SP-API surface map](/research/sp-api-surface-map). Two fields are this
 model's own additions, whatever that surface offers: the **cutoffs** a node
 declares (one pickup departure per cutoff, scheduled by
-`linehaul-transportation`), and the **sort dwell**.
+`linehaul-transportation`), and the **sort dwell**, declared only by sortation centres and air hubs.
 
 What a node *declares* is only half of its capability. What it actually does
 is measured by `node-performance`, and both feed the promise

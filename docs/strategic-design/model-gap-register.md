@@ -12,7 +12,7 @@ The ten context packs were written strictly from
 Where the model was silent or contradicted itself, the pack did not invent an
 answer: it marked the choice "proposed" or "this pack's reading" on the page and
 reported a gap. 2026-10-22 produced about 140 reports. This page holds them
-deduplicated into 40 items.
+deduplicated into 36 items.
 
 **Nothing on this page is in the model yet.** Each "Proposed resolution" is a
 recommendation. A gap is closed only when `model.yaml` changes, the affected
@@ -67,7 +67,6 @@ Severity:
 | G24 | No initial listing state on a non-sellable node. No rule for what discontinuing an item does to its listings. No basis for a zeroed availability. | offer-availability | Create the listing as `SUPPRESSED` (reason `NODE_NOT_SELLABLE`). Discontinuing suppresses all listings (reason `DISCONTINUED`). Zeroing keeps the basis and stamps `asOf` = the feed's time. |
 | G25 | `customer-ordering` never maps consumed events to commands. Its cancel wording contradicts itself, `IN_FULFILLMENT → CANCELLED` is unreachable, and there is no partially delivered state. | customer-ordering | Model the mappings the pack already used. "Cancel while any group is unlocked" applies to those groups only. Add `PARTIALLY_DELIVERED`. `GroupPromise` gains `tier`, `shipBy` and a per-group status. |
 | G26 | `VirtualQueue` does not say when an assignment with no candidates becomes `UNSOURCEABLE`. "Cross-region only when it is the only way" (a filter) conflicts with `crossRegionPenalty` (a cost). The destination is not on `PromiseConstraint`. | order-sourcing | Declare it unsourceable immediately when the candidate set empties. Cross-region is a penalty, and the business decision text is corrected. Add `destinationPostalPrefix` to `PromiseConstraint`. |
-| G27 | Node rules are incomplete. A cutoff has no day of week. The model does not say whether a profile revision on an active FC may remove all cutoffs. Nothing checks `regionId`. Nothing restricts `subtype`. Nothing covers lanes and service areas of a suspended node. `sortDwell` is undefined. | node-topology | `CutoffSlot` gains `days[]` (default: every operating day). `ErrIncompleteOperationalProfile` applies to every revision of an `ACTIVE` node. Add `ErrUnknownRegion`. `subtype` is allowed only from `node_types`. Suspending a node publishes `NodeSuspended`, and consumers treat its lanes and areas as unusable without closing them. `sortDwellMinutes` is declared by sort centres and air hubs. |
 | G28 | `PickupFromCutoffs` fires on profile declaration, but pickups exist only for `ACTIVE` nodes. `NodeActivated` has no reaction. No command changes departure capacity. `CloseDeparture`, `RecordDeparture` and `RecordArrival` have no actor. | linehaul-transportation | Generate pickups on `NodeActivated` and on profile revisions of active nodes. Add `ChangeDepartureCapacity` for the planner. Departure and arrival are recorded by `DispatchLoad` and `ReceiveLoad`. |
 | G29 | Lane schedules have no field model. | linehaul-transportation | Adopt the pack's slot shape (`dayOfWeek`, local cutoff, departs and arrives, `capacityPackages`). A redefinition replaces slots from the next horizon roll. |
 | G30 | Vendor suspension has no route, event or rule. A vendor never learns the `nodeId` its registration created, and there is no route to list its nodes. | vendor-connectivity | Add `VendorSuspended` and `VendorReinstated`; a suspended vendor's writes are refused. Return `nodeId` on the processed `NODE_REGISTRATION` transaction. Add `GET /vendor/nodes`. |
@@ -80,11 +79,8 @@ Severity:
 
 | # | Gap | Proposed resolution |
 | --- | --- | --- |
-| G35 | No `Err…` identifiers for not found, an illegal transition, or an optimistic-concurrency conflict. The packs used ad hoc slugs. | Add to `conventions`: `ErrNotFound` (404 `not-found`), `ErrIllegalTransition` (409 `illegal-transition`), `ErrConcurrentUpdate` (409 `concurrent-update`), `ErrValidation` (422 `validation-failed`). |
 | G36 | REST routes with no inbound row, and inbound rows with no caller's `sync_calls`. | `check_model.py` gains a rule: every `rest` route maps to one inbound row and vice versa. |
 | G37 | Reason vocabularies are not enumerated (cancel, reject, lock, exception, broken cause and others). | One `reasons:` table per context in the model. |
-| G38 | Analytics-only events have no topic rule. | Analytics-only events go to `retailnetwork.<context>.analytics` only. |
-| G39 | No idempotency storage is modelled, yet every pack added an `idempotency_keys` table. | Make it a convention: an infrastructure table per context, keyed by (route, key), with a 24-hour TTL. |
 | G40 | No retention rule for the ship-to snapshot. | Purge it 30 days after `PackageDelivered`, `PackageReturned` or `PackageLost`. |
 
 ## How a gap gets closed

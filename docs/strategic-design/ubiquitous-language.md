@@ -79,6 +79,7 @@ are the proposed Go package and type names. Each context's own
 | **Shipment Group** | `delivery-promise` | The lines of an order promised and shipped together from one node. | `promise.ShipmentGroup` |
 | **Shipping Label** | `shipping-and-tracking` | What is printed on the package; the only artefact outside customer-ordering that carries the address. | `label.ShippingLabel` |
 | **Shopper** | `customer-ordering` | The (synthetic) customer placing orders. | `shopper.Shopper` |
+| **Sort Dwell** | `node-topology` | Declared minutes a package normally spends inside a sortation centre or air hub between arrival and departure; declared only by those node types. | `node.OperationalProfile.SortDwellMinutes` |
 | **Submission / Transaction** | `vendor-connectivity` | An asynchronous vendor write and its outcome, reconciled by transactionId. | `submission.Submission` |
 | **Throughput Cap** | `node-topology` | Declared maximum orders per time unit a node accepts. | `node.ThroughputCap` |
 | **Tracking Number** | `shipping-and-tracking` | The network-wide unique id of one package. | `journey.TrackingNumber` |
