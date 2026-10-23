@@ -6,6 +6,10 @@ connectivity, middle mile, last mile, tracking, node performance) modelled
 with Domain-Driven Design, and the one seam through which it connects to the
 [warehouse-systems](https://iqvo.github.io/warehouse-docs/) WMS/WES fleet.
 
+## Disclaimer
+
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
+
 Published at https://iqvo.github.io/retail-network-docs/.
 
 **Status: proposed design, docs only.** Nothing described here is built.

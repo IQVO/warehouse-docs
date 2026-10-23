@@ -7,6 +7,8 @@ description: "Every source cited on the Research pages, with the sentences that 
 
 # Sources and evidence
 
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
+
 Generated from a citations ledger held privately, built with the
 grounded-citations method: each quote was checked to appear verbatim in the
 fetched page (or in the published JSON model for the seller-API schemas) before

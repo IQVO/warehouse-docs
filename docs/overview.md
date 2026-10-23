@@ -6,6 +6,10 @@ description: "A marketplace-scale retail and logistics network, modelled with Do
 slug: /
 ---
 
+:::note[Study disclaimer]
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
+:::
+
 # retail-network
 
 **retail-network** is a model of a marketplace-scale retail and logistics network:

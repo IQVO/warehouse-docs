@@ -147,7 +147,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `retail-network domain documentation. A proposed design: nothing on this site is built yet.`,
+      copyright: `retail-network domain documentation. This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.`,
     },
     prism: {theme: prismThemes.github, darkTheme: prismThemes.dracula, additionalLanguages: ['yaml', 'json', 'bash']},
   } satisfies Preset.ThemeConfig,
