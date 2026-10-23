@@ -2,7 +2,7 @@
   "name": "retail-network-docs",
   "version": "0.0.0",
   "private": true,
-  "description": "Domain documentation for the retail-network ecosystem (an Amazon-like retail and logistics network) and how it connects to the warehouse-systems WMS/WES fleet: research, strategic and tactical DDD artifacts (ddd-crew), node and promise models, Vendor API.",
+  "description": "Domain documentation for the retail-network ecosystem (a marketplace-scale retail and logistics network) and how it connects to the warehouse-systems WMS/WES fleet: research, strategic and tactical DDD artifacts (ddd-crew), node and promise models, Vendor API.",
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "npm run gen-api-docs:all && docusaurus start",

@@ -1,23 +1,23 @@
 ---
-id: sp-api-surface-map
-title: SP-API surface map
-sidebar_label: SP-API surface map
-description: "Which Selling Partner API (and Amazon Shipping API) surfaces describe nodes, capability and promises, what their published schemas actually contain, and which retail-network context models the same idea."
+id: marketplace-api-surface-map
+title: Marketplace API surface map
+sidebar_label: Marketplace API surface map
+description: "Which surfaces of a large operator's seller APIs (and its shipping API) describe nodes, capability and promises, what their published schemas actually contain, and which retail-network context models the same idea."
 ---
 
-# SP-API surface map
+# Marketplace API surface map
 
-The Selling Partner API (SP-API) is the public face of the Amazon network
+The operator's seller APIs are the public face of its network
 towards sellers and vendors. It cannot show the network's internals, but its
 schemas show which concepts the network exposes, what it asks partners to
 declare, and how it phrases a promise. Facts below cite the API documentation
-or the published JSON models in `amzn/selling-partner-api-models`; the
+or the operator's published JSON models of those APIs; the
 right-hand column is this site's model and carries no citation.
 
 ## Nodes and declared capability
 
-The Supply Sources API exists to manage the configurations and capabilities of
-seller supply sources.[8] In its published model, a supply source's
+The supply-source (multi-location inventory) API exists to manage the configurations and capabilities of
+seller supply-source locations.[8] In its published model, a supply source's
 operational configuration holds contact details, a throughput configuration,
 operating hours by day and a handling time.[9] Opening and closing times are
 `HH:mm` strings without a date.[9] The throughput cap is a value per time unit,
@@ -26,7 +26,7 @@ time zone and a status of `Active`, `Inactive` or `Archived`.[9] Its outbound
 capability carries an `isSupported` flag, an operational configuration, a
 return location, and delivery and pickup channels.[9]
 
-| SP-API concept | Published shape | retail-network model |
+| Seller-API concept | Published shape | retail-network model |
 | --- | --- | --- |
 | Supply source | id, seller code, alias, address, status, configuration, capabilities[9] | `Node` with `VendorRef{vendorId, vendorNodeCode}` in `node-topology` |
 | `OperationalConfiguration` | `handlingTime`, `operatingHoursByDay`, `throughputConfig{throughputCap, throughputUnit}`[9] | `OperationalProfile` (adds `cutoffs[]`, `holidays[]`, `profileRevision`) |
@@ -38,11 +38,11 @@ seller takes to pick, pack and ship a merchant-fulfilled order, and is set
 through the listing attribute `lead_time_to_ship_max_days`.[20]
 
 :::warning[Correction to an earlier fleet finding]
-The warehouse-systems fleet recorded that "no SP-API operation accepts a
+The warehouse-systems fleet recorded that "no operation of the operator's vendor API accepts a
 declaration of capability", and `network-fulfillment`'s
 `NetworkGateway.DeclareCapability` is a documented no-op for that reason. That
-holds for Vendor Direct Fulfillment, which the fleet studied. It does not hold
-for sellers on Multi-Location Inventory: the Supply Sources API accepts a
+holds for the direct-fulfillment vendor API, which the fleet studied. It does not hold
+for sellers using multi-location inventory: the supply-source API accepts a
 declared handling time, operating hours and an order throughput cap per supply
 source.[8][9] This site's model keeps "declared + measured" (ADR 0003) and now
 has a real-world precedent for the declared half. See
@@ -51,7 +51,7 @@ has a real-world precedent for the declared half. See
 
 ## Demand to a vendor node
 
-In Vendor Direct Fulfillment the vendor pulls orders with the Orders API, sends
+In the direct-fulfillment vendor workflow the vendor pulls orders with the Orders API, sends
 an acknowledgement, prints a label with `createShippingLabels`, ships, then
 sends a shipment confirmation.[13] An order must be acknowledged before a label
 can be requested.[13] Getting the orders list is a restricted operation that
@@ -61,17 +61,17 @@ vendor must ship, and `promisedDeliveryDate`, the date promised to the
 customer.[12] Its status values are `NEW`, `SHIPPED`, `ACCEPTED` and
 `CANCELLED`.[12]
 
-| SP-API concept | Published shape | retail-network model |
+| Seller-API concept | Published shape | retail-network model |
 | --- | --- | --- |
 | DF purchase order | `purchaseOrderNumber`, `orderDetails.shipmentDates{requiredShipDate, promisedDeliveryDate}`[12] | `PurchaseOrder{poNumber, requiredShipBy, ackBy}` in `vendor-connectivity` (deliverBy stays in the network) |
 | Poll then acknowledge | pull orders, then acknowledge[13] | `GET /vendor/purchase-orders` with `nextToken`, then `POST /vendor/acknowledgements` |
 | Label only after acknowledgement | acknowledge before a label request[13] | invariant `ErrLabelBeforeAcceptance` |
 | PII behind a Restricted Data Token | customer PII in DF orders[13] | **no** ship-to in the Vendor API at all ([ADR 0006](/adr/0006-pii-confinement)) |
 
-External Fulfillment APIs (inventory, returns, shipping) handle several
-seller-operated fulfillment channels, including Seller Flex, Easy Ship, Self
-Ship and MFN Self Delivery.[17] Easy Ship exposes handover slots: time windows
-to hand a package over to Amazon Logistics.[18]
+The operator's external-fulfillment APIs (inventory, returns, shipping) handle several
+seller-operated fulfillment channels, four of them named programmes.[17] One of
+those programmes exposes handover slots: time windows
+to hand a package over to the operator's logistics arm.[18]
 
 **Model reading.** A handover slot is a pickup departure at a vendor node's
 cutoff (`linehaul-transportation`, policy `PickupFromCutoffs`).
@@ -80,7 +80,7 @@ cutoff (`linehaul-transportation`, policy `PickupFromCutoffs`).
 
 | Surface | What its schema says | retail-network model |
 | --- | --- | --- |
-| Amazon Shipping API v2 `Rate.promise` | "The time windows promised for pickup and delivery events": a `pickupWindow` and a `deliveryWindow`, each `{start, end}`.[10] The requested pickup defaults to now.[10] | `Promise` = ship-by at the node + deliver-by window |
+| Shipping API v2 `Rate.promise` | "The time windows promised for pickup and delivery events": a `pickupWindow` and a `deliveryWindow`, each `{start, end}`.[10] The requested pickup defaults to now.[10] | `Promise` = ship-by at the node + deliver-by window |
 | Fulfillment Outbound `getFulfillmentPreview` | per shipment, `earliestShipDate`, `latestShipDate`, `earliestArrivalDate`, `latestArrivalDate`;[11] speeds `Standard`, `Expedited`, `Priority`, `ScheduledDelivery`[11] | `DeliveryOffer` per `Tier` (`SAME_DAY`, `NEXT_DAY`, `TWO_DAY`, `STANDARD`) |
 | Fulfillment Outbound `getDeliveryOffers` | offers with an expiry, an earliest/latest date range and a policy message;[15] a delivery offer has `expiresAt`[11] | `DeliveryOffer.expiresAt` (invariant `ErrOfferExpiryTooLate`) |
 | Dynamic delivery offers (`getOffers`) | an item that cannot be delivered at a tier returns no offer and a `constraints` array explaining why, for example `DeliverySLAUnavailable` or `ItemQuantityNotAvailable`[14] | `OfferConstraint`: `DELIVERY_SLA_UNAVAILABLE`, `ITEM_QUANTITY_NOT_AVAILABLE`, ... |
@@ -88,7 +88,7 @@ cutoff (`linehaul-transportation`, policy `PickupFromCutoffs`).
 
 ## Placing inventory
 
-Fulfillment Inbound v2024-03-20 returns placement options for an inbound plan,
+The inbound shipment API (v2024-03-20) returns placement options for an inbound plan,
 each with its placement costs.[19]
 
 **Model reading.** Placement is the future `inventory-placement` context. It is
@@ -99,15 +99,15 @@ place their own stock (the fleet's `network-inventory-planning`).
 
 Every number above maps to one source. The verbatim sentences that support each claim are on [Sources and evidence](/research/sources).
 
-- **[8]** [SP-API — Supply Sources API](https://developer-docs.amazon/sp-api/docs/supply-sources-api)
-- **[9]** [SP-API model — supplySources_2020-07-01.json](https://github.com/amzn/selling-partner-api-models/blob/main/models/supply-sources-api-model/supplySources_2020-07-01.json)
-- **[10]** [SP-API model — Amazon Shipping API v2 (shippingV2.json)](https://github.com/amzn/selling-partner-api-models/blob/main/models/shipping-api-model/shippingV2.json)
-- **[11]** [SP-API model — Fulfillment Outbound 2020-07-01](https://github.com/amzn/selling-partner-api-models/blob/main/models/fulfillment-outbound-api-model/fulfillmentOutbound_2020-07-01.json)
-- **[12]** [SP-API model — Vendor Direct Fulfillment Orders v1](https://github.com/amzn/selling-partner-api-models/blob/main/models/vendor-direct-fulfillment-orders-api-model/vendorDirectFulfillmentOrdersV1.json)
-- **[13]** [SP-API — Vendor Direct Fulfillment Workflow Guide](https://developer-docs.amazon/sp-api/docs/vendor-df-workflow-guide)
-- **[14]** [SP-API — Get dynamic delivery offers](https://developer-docs.amazon/sp-api/docs/get-dynamic-delivery-offers)
-- **[15]** [SP-API — getDeliveryOffers](https://developer-docs.amazon/sp-api/reference/deliveryoffers)
-- **[17]** [SP-API — External Fulfillment APIs v2024-09-11](https://developer-docs.amazon.com/sp-api/changelog/new-introducing-the-external-fulfillment-apis-v2024-09-11)
-- **[18]** [SP-API — Easy Ship listHandoverSlots](https://developer-docs.amazon.com/sp-api/reference/listhandoverslots)
-- **[19]** [SP-API — Fulfillment Inbound listPlacementOptions](https://developer-docs.amazon/sp-api/lang-ja_JP/reference/listplacementoptions)
-- **[20]** [SP-API samples — Managing Handling Time on Amazon](https://github.com/amzn/selling-partner-api-samples/discussions/124)
+- **[8]** Operator's published API documentation: supply-source (multi-location inventory) API (no link)
+- **[9]** Operator's published API specification: supply-source (multi-location inventory) API model (no link)
+- **[10]** Operator's published API specification: shipping API v2 model (no link)
+- **[11]** Operator's published API specification: outbound fulfillment API model (2020-07-01) (no link)
+- **[12]** Operator's published API specification: direct-fulfillment vendor orders API model (v1) (no link)
+- **[13]** Operator's published API documentation: direct-fulfillment vendor workflow guide (no link)
+- **[14]** Operator's published API documentation: dynamic delivery offers guide (no link)
+- **[15]** Operator's published API reference: delivery offers operation (no link)
+- **[17]** Operator's published API changelog: external fulfillment APIs (v2024-09-11) (no link)
+- **[18]** Operator's published API reference: handover slots operation of a seller shipping programme (no link)
+- **[19]** Operator's published API reference: inbound placement options operation (no link)
+- **[20]** Operator's published API samples discussion: managing handling time (no link)

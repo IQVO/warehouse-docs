@@ -76,7 +76,7 @@ Two derived instants are this context's to define:
 - **Delivered** is the successful delivery attempt. `delivery-promise`
   judges every promise kept or broken from it.
 
-## How it relates to the Amazon-like reality
+## How it relates to the operator-scale reality
 
 The domain is modelled on a large retail and logistics network in which
 vendor-operated fulfillment centres hand packages to network-operated
@@ -84,10 +84,10 @@ sortation centres, delivery stations and delivery service partners. The
 research pages hold the facts and their citations; this page restates none
 of them:
 
-- [Amazon logistics network](/research/amazon-logistics-network): the node
+- [Large-operator logistics network](/research/large-operator-logistics-network): the node
   types a package crosses after it leaves a fulfillment centre.
-- [SP-API surface map](/research/sp-api-surface-map): where the vendor's
-  shipping-label request sits in the vendor direct-fulfillment workflow,
+- [Marketplace API surface map](/research/marketplace-api-surface-map): where the vendor's
+  shipping-label request sits in the direct-fulfillment vendor workflow,
   relative to acknowledgement and shipment confirmation.
 
 The model keeps the order the research shows: a label is issued only for an

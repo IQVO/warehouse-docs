@@ -72,9 +72,9 @@ interface, in the network's own vocabulary: polled orders, whole-order
 acknowledgement inside a window, asynchronous submissions reconciled by a
 transaction id, label then shipment confirmation. The public facts and
 their citations are on
-[SP-API surface map](/research/sp-api-surface-map); how vendor nodes fit a
+[Marketplace API surface map](/research/marketplace-api-surface-map); how vendor nodes fit a
 large logistics network is on
-[Amazon logistics network](/research/amazon-logistics-network). This page
+[Large-operator logistics network](/research/large-operator-logistics-network). This page
 restates no numbers from either. Where the model deliberately departs from
 the reference (for example, operational profile declared through the API
 rather than out-of-band configuration), the reason is

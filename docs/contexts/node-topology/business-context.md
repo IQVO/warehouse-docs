@@ -87,19 +87,19 @@ INBOUND_CROSS_DOCK to FC (an inbound lane, never on a customer path).
 
 Derived from: model.yaml → `node_types`, `lane_rules`.
 
-## How it relates to the Amazon-like reality
+## How it relates to the operator-scale reality
 
 The node types follow the public description of a large retailer's network:
 fulfillment centres, sortation centres, delivery stations and air hubs, a
 regionalized network, and middle-mile lanes between buildings. The facts and
-their sources are on [Amazon logistics network](/research/amazon-logistics-network);
+their sources are on [Large-operator logistics network](/research/large-operator-logistics-network);
 this page does not repeat them.
 
 The **operational profile** is modelled after the `operationalConfiguration`
-of the Selling Partner API's Supply Sources: a handling time, operating hours
+of the operator's supply-source (multi-location inventory) API: a handling time, operating hours
 by day, a throughput configuration expressed as a cap in orders per hour or per day,
 and a time zone. The mapping of that API surface to this model is on the
-[SP-API surface map](/research/sp-api-surface-map). Two fields are this
+[Marketplace API surface map](/research/marketplace-api-surface-map). Two fields are this
 model's own additions, whatever that surface offers: the **cutoffs** a node
 declares (one pickup departure per cutoff, scheduled by
 `linehaul-transportation`), and the **sort dwell**, declared only by sortation centres and air hubs.

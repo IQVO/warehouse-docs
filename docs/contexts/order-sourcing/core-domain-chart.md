@@ -57,7 +57,7 @@ speed protector* and evolution *Custom-built*.
   silently (business decision 4).
 - The published account of the reference retailer's network redesign treats
   late, re-optimisable order assignment as one of the software changes behind
-  its regional network (see [Amazon logistics network](/research/amazon-logistics-network)).
+  its regional network (see [Large-operator logistics network](/research/large-operator-logistics-network)).
   Commercial order-routing features are compared on
   [benchmarks](/research/benchmarks); the rules here (promise books,
   departures, the vendor ack budget) are this network's own.

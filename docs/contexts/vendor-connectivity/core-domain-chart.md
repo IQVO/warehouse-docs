@@ -56,7 +56,7 @@ and the network pays no per-vendor integration.
 **Evolution: Product.** The shape of the protocol (polled orders, a
 whole-order acknowledgement inside a window, asynchronous writes reconciled
 by a transaction id, labels before shipment) is well known from public
-vendor interfaces (see [SP-API surface map](/research/sp-api-surface-map)).
+vendor interfaces (see [Marketplace API surface map](/research/marketplace-api-surface-map)).
 The network adopts that shape in its own vocabulary rather than inventing
 one. What stays custom is the `ackBy` rule and the link to the path lock
 ([ADR 0005](/adr/0005-vendor-acceptance-is-the-path-lock)).

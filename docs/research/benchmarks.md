@@ -7,7 +7,7 @@ description: "How Google Merchant Center, Walmart Marketplace, Shopify and the o
 
 # Other benchmarks
 
-Amazon is not the only network that has to say "arrives by". The products below
+The large operator is not the only network that has to say "arrives by". The products below
 publish their model of the same problem. Facts are cited; the last table is
 this site's reading.
 

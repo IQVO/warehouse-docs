@@ -78,14 +78,14 @@ attempt is recorded only on a route that is out for delivery
   can publish them as a Published Language, and it can change how it plans
   routes without touching the promise.
 
-## Relation to the Amazon-like reality
+## Relation to the operator-scale reality
 
-The network is modelled on an Amazon-like logistics network with
+The network is modelled on a marketplace-scale logistics network with
 network-operated delivery stations and independent delivery partners. The
 facts behind that, with citations, are on
-[Amazon logistics network](/research/amazon-logistics-network). The SP-API
+[Large-operator logistics network](/research/large-operator-logistics-network). The seller-API
 surface that a vendor sees, and which never exposes the last mile, is mapped on
-[SP-API surface map](/research/sp-api-surface-map). This page does not restate
+[Marketplace API surface map](/research/marketplace-api-surface-map). This page does not restate
 either. The model makes no claim about any real company's internal service
 names.
 

@@ -15,11 +15,11 @@ description: "delivery-promise proves a date with a witness path and holds capac
 
 ## Context
 
-The published account of Amazon's regionalization says the promise is based
+The published account of a large operator's regionalization says the promise is based
 on network state and a check that at least one feasible delivery path exists;
 items are then queued and assigned to centres and paths later, possibly
 differently, and the path can change until the item is picked
-([research](/research/amazon-logistics-network)). Promising needs a fast
+([research](/research/large-operator-logistics-network)). Promising needs a fast
 answer from local data; assignment benefits from waiting.
 
 ## Decision

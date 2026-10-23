@@ -32,7 +32,7 @@ label.
 
 | Page | What it holds | ddd-crew tool it follows |
 | --- | --- | --- |
-| [Business Context](/contexts/customer-ordering/business-context) | The problem, actors, decisions, relation to the Amazon-like reality, out of scope | (narrative) |
+| [Business Context](/contexts/customer-ordering/business-context) | The problem, actors, decisions, relation to the operator-scale reality, out of scope | (narrative) |
 | [Ubiquitous Language](/contexts/customer-ordering/ubiquitous-language) | Terms, code identifiers, terms not to confuse | [Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas) (UL section) |
 | [Core Domain Chart](/contexts/customer-ordering/core-domain-chart) | Why this context is Generic | [Core Domain Charts](https://github.com/ddd-crew/core-domain-charts) |
 | [Bounded Context Canvas](/contexts/customer-ordering/bounded-context-canvas) | Purpose, classification, roles, inbound and outbound messages, decisions, metrics | [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas) |

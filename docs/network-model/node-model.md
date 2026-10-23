@@ -11,9 +11,9 @@ description: "The six node types, who operates them, the declared operational pr
 Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml)
 → `node_types`, `lane_rules`, `fleet_site_role_mapping` and
 `contexts[node-topology]`. The building types are grounded on
-[The Amazon logistics network](/research/amazon-logistics-network); the
-declared profile on the Supply Sources schema in
-[SP-API surface map](/research/sp-api-surface-map). Owner:
+[The large-operator logistics network](/research/large-operator-logistics-network); the
+declared profile on the supply-source schema in
+[Marketplace API surface map](/research/marketplace-api-surface-map). Owner:
 [`node-topology`](/contexts/node-topology).
 :::
 
@@ -74,7 +74,7 @@ Derived from: `model.yaml` → `contexts[node-topology].aggregates[Node]`.
 A vendor node declares how it works. The shape follows the published Supply
 Sources operational configuration (handling time, operating hours by day,
 throughput cap in orders per time unit, time zone) and adds what a promise
-needs that the Supply Sources schema does not carry: the cutoffs, a holiday
+needs that the supply-source schema does not carry: the cutoffs, a holiday
 calendar, and a revision number.
 
 ```yaml

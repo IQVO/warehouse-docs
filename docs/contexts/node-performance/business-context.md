@@ -72,14 +72,14 @@ observes. Both feed the promise, and neither overwrites the other
    context never suspends a node; suspension is a `node-topology` command
    issued by people.
 
-## How it relates to the Amazon-like reality
+## How it relates to the operator-scale reality
 
 The facts this context observes are the signals a vendor already exchanges
 with the network in a direct-fulfillment protocol: inventory submissions,
 a whole-order acknowledgement inside a window, and a shipment confirmation
-against a ship-by. The [SP-API surface map](/research/sp-api-surface-map)
+against a ship-by. The [Marketplace API surface map](/research/marketplace-api-surface-map)
 shows where each of those signals sits in the public vendor interfaces, and
-[Amazon logistics network](/research/amazon-logistics-network) describes
+[Large-operator logistics network](/research/large-operator-logistics-network) describes
 the operating model in which the node chosen at assignment may differ from
 the one that backed the promise. The research does not cite how the
 reference network grades its vendors internally, so nothing on this page

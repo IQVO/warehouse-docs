@@ -79,15 +79,15 @@ It does **not** decide which node or path fulfils a shipment group (that is
 `order-sourcing`), what date the customer is told (`delivery-promise`), or
 which delivery wave a package joins (`last-mile-delivery`).
 
-## How it relates to the Amazon-like reality
+## How it relates to the operator-scale reality
 
 The model is shaped after the public picture of a large retail network's
 middle mile: vendor and fulfillment-centre pickups feeding sortation
 centres, a sort-and-consolidate step, and delivery stations that run the
 last mile. The facts, with citations, are on
-[Amazon logistics network](/research/amazon-logistics-network). How a vendor
+[Large-operator logistics network](/research/large-operator-logistics-network). How a vendor
 learns its ship-by and hands packages over through a Direct-Fulfillment-like
-API is mapped on [SP-API surface map](/research/sp-api-surface-map). This
+API is mapped on [Marketplace API surface map](/research/marketplace-api-surface-map). This
 page restates none of those facts. The names here (departure, load, lane
 schedule) are this model's own and make no claim about any real company's
 internal systems.

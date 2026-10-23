@@ -34,8 +34,8 @@ flowchart TB
   and spends on transport and delivery.
 - **The need.** A date the shopper believes, kept at the lowest cost to
   serve.
-- **Evidence.** [The Amazon logistics network](/research/amazon-logistics-network),
-  [SP-API surface map](/research/sp-api-surface-map),
+- **Evidence.** [The large-operator logistics network](/research/large-operator-logistics-network),
+  [Marketplace API surface map](/research/marketplace-api-surface-map),
   [Other benchmarks](/research/benchmarks).
 
 Output: [Domain Vision](/strategic-design/domain-vision).

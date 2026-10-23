@@ -16,8 +16,8 @@ ship-to PII reaches this context at all").
 
 ## Context
 
-Real Vendor Direct Fulfillment orders carry customer PII and need a
-Restricted Data Token ([SP-API surface map](/research/sp-api-surface-map)).
+Real direct-fulfillment vendor orders carry customer PII and need a
+Restricted Data Token ([Marketplace API surface map](/research/marketplace-api-surface-map)).
 This network can do better because it owns the label.
 
 ## Decision

@@ -11,7 +11,7 @@ description: "The Open Host Service the warehouse-systems fleet conforms to: eve
 Contract: [`apis/vendor-connectivity/openapi.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/apis/vendor-connectivity/openapi.yaml),
 rendered under [API Reference](/api-reference). Owner:
 [`vendor-connectivity`](/contexts/vendor-connectivity). The protocol keeps the
-shape of Vendor Direct Fulfillment (poll, acknowledge in full, label after
+shape of the operator's direct-fulfillment vendor workflow (poll, acknowledge in full, label after
 acceptance, confirm shipment) in this network's own vocabulary, as the fleet's
 `network-fulfillment` ADR 0009 expects.
 :::

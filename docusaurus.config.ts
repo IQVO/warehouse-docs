@@ -6,7 +6,7 @@ import type * as OpenApiPlugin from 'docusaurus-plugin-openapi-docs';
 const config: Config = {
   title: 'retail-network Documentation',
   tagline:
-    'An Amazon-like retail and logistics network, modelled with Domain-Driven Design, and how it connects to the warehouse-systems WMS/WES fleet.',
+    'A marketplace-scale retail and logistics network, modelled with Domain-Driven Design, and how it connects to the warehouse-systems WMS/WES fleet.',
   favicon: 'img/favicon.svg',
   future: {v4: true, faster: true},
   url: 'https://iqvo.github.io',
