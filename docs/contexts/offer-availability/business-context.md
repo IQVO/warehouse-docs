@@ -70,7 +70,7 @@ context never talks to the fleet. See
 - **The vendor's basis is kept, never re-derived.**
 - **One listing per (catalogue item, node).**
 
-## How it relates to the Amazon-like reality
+## How it relates to the operator-scale reality
 
 This model keeps three things apart: the item (what is sold), the listing
 (from which node it is offered) and the inventory signal a vendor sends
@@ -78,8 +78,8 @@ for a node. That split, the full-or-partial feed and the basis are the
 proposed model; this page makes no claim about how any real company does
 it. What the public record says about real networks and their partner
 interfaces, with citations, is on the research pages:
-[Amazon logistics network](/research/amazon-logistics-network) and the
-[SP-API surface map](/research/sp-api-surface-map).
+[Large-operator logistics network](/research/large-operator-logistics-network) and the
+[Marketplace API surface map](/research/marketplace-api-surface-map).
 
 ## Out of scope (deliberately)
 

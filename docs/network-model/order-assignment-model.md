@@ -11,10 +11,10 @@ description: "How order-sourcing keeps each shipment group in a virtual queue, r
 Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml)
 → `contexts[order-sourcing]`, `contexts[vendor-connectivity]`. Owner:
 [`order-sourcing`](/contexts/order-sourcing) (Core). The published fact
-behind it: Amazon assigns items to fulfillment centres and paths after
+behind it: a large operator assigns items to fulfillment centres and paths after
 purchase, possibly differently from the path behind the promise, and the path
 can change until the item is picked, then stays locked
-([research](/research/amazon-logistics-network)).
+([research](/research/large-operator-logistics-network)).
 :::
 
 ## Why assignment is not the promise
@@ -123,7 +123,7 @@ sequenceDiagram
 Derived from: `model.yaml` → `contexts[order-sourcing].policies`,
 `contexts[vendor-connectivity].policies`, `contexts[delivery-promise].policies[RepromiseOnRisk]`.
 
-**Why acceptance is the lock.** In Amazon's own buildings the published lock
+**Why acceptance is the lock.** In a large operator's own buildings the published lock
 point is "picked". The network cannot see inside a vendor's building, and a
 vendor that accepted fill-or-kill has committed stock and floor work (the
 fleet's `network-fulfillment` releases the held `order-management` order only

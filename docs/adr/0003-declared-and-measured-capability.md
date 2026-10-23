@@ -15,12 +15,12 @@ description: "A vendor node declares an operational profile; node-performance me
 
 ## Context
 
-The fleet recorded that "no SP-API operation accepts a declaration of
+The fleet recorded that "no operation of the operator's vendor API accepts a declaration of
 capability", which made `network-fulfillment`'s `DeclareCapability` a no-op.
-That is true of Vendor Direct Fulfillment, but the SP-API Supply Sources API
+That is true of the direct-fulfillment vendor API, but the operator's supply-source (multi-location inventory) API
 does accept a declared handling time, operating hours and an order
 throughput cap per supply source for sellers
-([SP-API surface map](/research/sp-api-surface-map)). Declared capability is
+([Marketplace API surface map](/research/marketplace-api-surface-map)). Declared capability is
 therefore a real-world pattern, not an artefact of owning both sides.
 
 ## Decision

@@ -6,9 +6,9 @@
 2. Never invent a message on a page. Every CloudEvents type printed in
    `docs/` must be `com.retailnetwork.<tier>.<context>.<entity>.<Event>` with
    the tier and producer the model gives.
-3. Keep facts and model apart. A claim about Amazon, SP-API, Google,
+3. Keep facts and model apart. A claim about the operator, its seller APIs, Google,
    Walmart, Shopify or an OMS vendor needs a numbered citation from
-   `research/citations-ledger.json`; a claim about warehouse-systems needs a
+   the citations ledger (held privately, outside the repo); a claim about warehouse-systems needs a
    repository path. Everything else is labelled as the proposed model.
 4. The hard boundary: no retail-network context consumes a `warehouse.*`
    topic or calls a warehouse-systems service; the only seam is the Vendor

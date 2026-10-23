@@ -94,14 +94,14 @@ so it is the vendor-node equivalent of "the item is picked"
 | When to give up | When no candidate meets `deliverByLatest`: `UNSOURCEABLE`, and `delivery-promise` re-promises. |
 | Where to look first | In-region nodes. Cross-region only when it is the only way to keep the promise. |
 
-## How this relates to the Amazon-like reality
+## How this relates to the operator-scale reality
 
 The model follows the published description of how a large online retailer
 separates generating a customer promise from assigning the order to a
 fulfillment centre, where the assigned centre and path may differ from the
 path that justified the promise and may change until the item is picked. The
 sources and quotations are on
-[Amazon logistics network](/research/amazon-logistics-network); this page
+[Large-operator logistics network](/research/large-operator-logistics-network); this page
 does not restate them.
 
 Two differences are deliberate and come from the model, not from the source:
@@ -110,7 +110,7 @@ Two differences are deliberate and come from the model, not from the source:
   ([ADR 0004](/adr/0004-parcel-nodes-are-network-operated)), so a release is a
   purchase order with an acknowledgement window, close to the vendor
   direct-fulfillment shape mapped on
-  [SP-API surface map](/research/sp-api-surface-map). The lock is the
+  [Marketplace API surface map](/research/marketplace-api-surface-map). The lock is the
   acceptance, not the pick.
 - Promise and assignment are **two bounded contexts**
   ([ADR 0002](/adr/0002-promise-and-assignment-are-separate)), joined by the

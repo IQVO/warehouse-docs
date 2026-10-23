@@ -2,13 +2,17 @@
 id: overview
 title: retail-network
 sidebar_label: Overview
-description: "An Amazon-like retail and logistics network, modelled with Domain-Driven Design as ten bounded contexts, and the one seam through which it connects to the warehouse-systems WMS/WES fleet."
+description: "A marketplace-scale retail and logistics network, modelled with Domain-Driven Design as ten bounded contexts, and the one seam through which it connects to the warehouse-systems WMS/WES fleet."
 slug: /
 ---
 
+:::note[Study disclaimer]
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
+:::
+
 # retail-network
 
-**retail-network** is a model of an Amazon-like retail and logistics network:
+**retail-network** is a model of a marketplace-scale retail and logistics network:
 a storefront that promises an arrival date, a network of nodes (vendor
 fulfillment centres, sortation centres, delivery stations, air hubs) joined by
 lanes, the decision of which node fulfils each order, the middle and last mile,
@@ -22,7 +26,7 @@ context is the only fleet service that talks to the network, through the
 network's Vendor API.
 
 :::info[Proposed design, docs only]
-Nothing on this site is built. Facts about Amazon, the Selling Partner API and
+Nothing on this site is built. Facts about a large e-commerce operator, its seller APIs and
 other networks are on the [Research](/research) pages with numbered
 citations. Everything else is the model this site proposes, derived from that
 evidence and from the fleet's repositories. The canonical model is

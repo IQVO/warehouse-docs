@@ -53,7 +53,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Research',
       link: {type: 'doc', id: 'research/index'},
-      items: ['research/amazon-logistics-network', 'research/sp-api-surface-map', 'research/benchmarks', 'research/sources'],
+      items: ['research/large-operator-logistics-network', 'research/marketplace-api-surface-map', 'research/benchmarks', 'research/sources'],
     },
   ],
   strategicSidebar: [

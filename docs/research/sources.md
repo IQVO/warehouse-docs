@@ -2,34 +2,42 @@
 id: sources
 title: Sources and evidence
 sidebar_label: Sources and evidence
-description: "Every source cited on the Research pages, with the verbatim sentences that support the claims."
+description: "Every source cited on the Research pages, with the sentences that support the claims."
 ---
 
 # Sources and evidence
 
-Generated from `research/citations-ledger.json` with the grounded-citations
-ledger: each quote was checked to appear verbatim in the fetched page (or in
-the published JSON model for the SP-API schemas) before it was accepted.
-Retrieved 2026-10-22.
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
 
-### [1] Amazon — Our Facilities
+Generated from a citations ledger held privately, built with the
+grounded-citations method: each quote was checked to appear verbatim in the
+fetched page (or in the published JSON model for the seller-API schemas) before
+it was accepted. Retrieved 2026-10-22.
 
-[https://www.aboutamazon.com/workplace/facilities](https://www.aboutamazon.com/workplace/facilities)
+Wording on this page is neutralised editorially: the operator's name is
+replaced by `[the operator]` and its product and programme names by
+`[the seller API]` or a bracketed description, and verbatim evidence is held
+privately. Sources on the operator's own domains are listed by number, title,
+type and retrieval date, without a link. Citation numbers are unchanged.
+
+### [1] Operator's public facilities page
+
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
 > At sortation centers, associates sort customer orders by final destination and consolidate them onto trucks for faster delivery.
 
-> Amazon’s receive centers support customer fulfillment by taking in large orders of the types of inventory that we expect to quickly sell and allocating it to fulfillment centers within the network.
+> [the operator]’s receive centers support customer fulfillment [by means of] taking in large orders of the types of inventory that we expect to quickly sell and allocating it to fulfillment centers within the network.
 
 > In these buildings, customer orders are prepared for last-mile delivery to customers.
 
 
-### [2] Regionalize and Scale: Amazon’s Fulfillment Network Design (INFORMS Journal on Applied Analytics, 2026)
+### [2] Regionalize and Scale: a large operator's fulfillment network design (INFORMS Journal on Applied Analytics, 2026)
 
 [https://pubsonline.informs.org/doi/full/10.1287/inte.2025.0295](https://pubsonline.informs.org/doi/full/10.1287/inte.2025.0295)
 
 > Internally, the promise is given based on an analysis of the network state, and verification that at least one feasible delivery path exists.
 
-> The assigned FC and path at order assignment time may be different from the feasible path that was used to generate the customer promise, because the final FC assignment is an opportunity for Amazon to optimize the network performance.
+> The assigned FC and path at order assignment time may be different from the feasible path that was used to generate the customer promise, because the final FC assignment is an opportunity for [the operator] to optimize the network performance.
 
 > The assigned path may change more than once until the item is picked in the FC, after which the path stays locked until delivery
 
@@ -42,87 +50,87 @@ Retrieved 2026-10-22.
 > Following successful pilot and full network deployment by March 2023
 
 
-### [3] Amazon Science — How Amazon reworked its fulfillment network
+### [3] Operator's research blog article on reworking its fulfillment network
 
-[https://www.amazon.science/news-and-features/how-amazon-reworked-its-fulfillment-network-to-meet-customer-demand](https://www.amazon.science/news-and-features/how-amazon-reworked-its-fulfillment-network-to-meet-customer-demand)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
-> As soon as a customer clicks the "buy now" button, Amazon's Adaptive TRansportation OPtimization Service (ATROPS) assigns the optimal route for the purchased item.
+> As soon as a customer clicks the "buy now" button, [the operator]'s [transportation optimization service] assigns the optimal route for the purchased item.
 
 > each region must carry the breadth of selection that customers expect
 
 > eight largely self-sufficient regional networks, while retaining national coverage.
 
 
-### [4] ORMS Today — IFORS Lecture: The Amazon Fulfillment Network: Topology and Capacity Planning
+### [4] ORMS Today — IFORS Lecture: A Large Operator's Fulfillment Network: Topology and Capacity Planning
 
 [https://pubsonline.informs.org/do/10.1287/orms.2022.05.24n/full](https://pubsonline.informs.org/do/10.1287/orms.2022.05.24n/full)
 
-> The Amazon fulfillment network is comprised of Amazon buildings and transportation lanes among them.
+> The [the operator] fulfillment network is comprised of [the operator] buildings and transportation lanes among them.
 
 > The lanes of this network are highly dynamic: their capacity can be changed a few days in advance
 
 > the fulfillment and sortation centers are planned years in advance whereas delivery stations are only planned months in advance.
 
-> In addition, Amazon Air Gateway is also available
+> In addition, [the operator] Air Gateway is also available
 
-> The Amazon operations supply chain network includes the inbound network – global vendors (FBA and retail), inbound cross dock and domestic vendors (FBA and retail) – and outbound network including middle mile (transport) to the fulfillment and sortation centers, to delivery stations and finally the last-mile destination.
+> The [the operator] operations supply chain network includes the inbound network – global vendors ([fulfillment programme] and retail), inbound cross dock and domestic vendors ([fulfillment programme] and retail) – and outbound network including middle mile (transport) to the fulfillment and sortation centers, to delivery stations and finally the last-mile destination.
 
 > long-term planning is about 6+ months,  medium-term planning is three months and short-term planning is less than one month
 
 
-### [5] Amazon Science — How Amazon's Middle Mile team helps packages
+### [5] Operator's research blog article on its middle-mile team
 
-[https://amazon.science/latest-news/how-amazons-middle-mile-team-helps-packages-make-the-journey-to-your-doorstep](https://amazon.science/latest-news/how-amazons-middle-mile-team-helps-packages-make-the-journey-to-your-doorstep)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
-> Amazon Transportation Services’ Middle Mile team develops routing solutions to move customer orders from its vendors and fulfillment centers to its network of sortation centers, air facilities, and delivery stations in the most efficient way possible.
-
-
-### [6] About Amazon — Delivery Service Partner program
-
-[https://www.aboutamazon.com/news/policy-news-views/amazon-dsp-program-update](https://www.aboutamazon.com/news/policy-news-views/amazon-dsp-program-update)
-
-> While DSPs as independent businesses hire and manage their own employees, they receive support from Amazon to help them be successful.
+> [the operator]’s Middle Mile team develops routing solutions to move customer orders from its vendors and fulfillment centers to its network of sortation centers, air facilities, and delivery stations in the most efficient way possible.
 
 
-### [7] About Amazon — Doug Herrington on delivery speed
+### [6] Operator's public update on its delivery service partner programme
 
-[https://www.aboutamazon.com/news/operations/doug-herrington-amazon-prime-delivery-speed](https://www.aboutamazon.com/news/operations/doug-herrington-amazon-prime-delivery-speed)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
-> Across the top 60 largest U.S. metro areas, more than half of Prime member orders arrived the same or next day.
+> While DSPs as independent businesses hire and manage their own employees, they receive support from [the operator] to help them be successful.
+
+
+### [7] Operator's public article by its operations leadership on delivery speed
+
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
+
+> Across the top 60 largest U.S. metro areas, more than half of [paid delivery programme] member orders arrived the same or next day.
 
 > Items shipped from nearby fulfillment centers or delivery stations helps packages get to customers not only faster, but also with fewer emissions.
 
 
-### [8] SP-API — Supply Sources API
+### [8] Operator's published API documentation: supply-source (multi-location inventory) API
 
-[https://developer-docs.amazon/sp-api/docs/supply-sources-api](https://developer-docs.amazon/sp-api/docs/supply-sources-api)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
-> to manage the configurations and capabilities of seller supply sources.
+> to manage the configurations and capabilities of seller [supply-source locations].
 
 
-### [9] SP-API model — supplySources_2020-07-01.json
+### [9] Operator's published API specification: supply-source (multi-location inventory) API model
 
-[https://github.com/amzn/selling-partner-api-models/blob/main/models/supply-sources-api-model/supplySources_2020-07-01.json](https://github.com/amzn/selling-partner-api-models/blob/main/models/supply-sources-api-model/supplySources_2020-07-01.json)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
 > The opening time, ISO 8601 formatted timestamp without date, HH:mm.
 
-> The operational configuration of `supplySources`.
+> The operational configuration of `[the seller API]`.
 
 > The outbound capability of a supply source.
 
 
-### [10] SP-API model — Amazon Shipping API v2 (shippingV2.json)
+### [10] Operator's published API specification: shipping API v2 model
 
-[https://github.com/amzn/selling-partner-api-models/blob/main/models/shipping-api-model/shippingV2.json](https://github.com/amzn/selling-partner-api-models/blob/main/models/shipping-api-model/shippingV2.json)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
 > The time windows promised for pickup and delivery events.
 
 > The ship date and time (the requested pickup). This defaults to the current date and time.
 
 
-### [11] SP-API model — Fulfillment Outbound 2020-07-01
+### [11] Operator's published API specification: outbound fulfillment API model (2020-07-01)
 
-[https://github.com/amzn/selling-partner-api-models/blob/main/models/fulfillment-outbound-api-model/fulfillmentOutbound_2020-07-01.json](https://github.com/amzn/selling-partner-api-models/blob/main/models/fulfillment-outbound-api-model/fulfillmentOutbound_2020-07-01.json)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
 > The earliest date that the shipment is expected to be sent from the fulfillment center, in ISO 8601 date time format.
 
@@ -131,20 +139,20 @@ Retrieved 2026-10-22.
 > If an item in a fulfillment order is determined to be unfulfillable before any shipment in the order has acquired the status of Pending
 
 
-### [12] SP-API model — Vendor Direct Fulfillment Orders v1
+### [12] Operator's published API specification: direct-fulfillment vendor orders API model (v1)
 
-[https://github.com/amzn/selling-partner-api-models/blob/main/models/vendor-direct-fulfillment-orders-api-model/vendorDirectFulfillmentOrdersV1.json](https://github.com/amzn/selling-partner-api-models/blob/main/models/vendor-direct-fulfillment-orders-api-model/vendorDirectFulfillmentOrdersV1.json)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
 > Time by which the vendor is required to ship the order.
 
-> Delivery date promised to the Amazon customer.
+> Delivery date promised to the [the operator] customer.
 
 > Status for orders accepted by vendors.
 
 
-### [13] SP-API — Vendor Direct Fulfillment Workflow Guide
+### [13] Operator's published API documentation: direct-fulfillment vendor workflow guide
 
-[https://developer-docs.amazon/sp-api/docs/vendor-df-workflow-guide](https://developer-docs.amazon/sp-api/docs/vendor-df-workflow-guide)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
 > Integrating with the Direct Fulfillment APIs starts with the vendor pulling the orders for fulfillment using the
 
@@ -153,53 +161,53 @@ Retrieved 2026-10-22.
 > This is a restricted operation and requires a Restricted Data Token (RDT) for authorization.
 
 
-### [14] SP-API — Get dynamic delivery offers
+### [14] Operator's published API documentation: dynamic delivery offers guide
 
-[https://developer-docs.amazon/sp-api/docs/get-dynamic-delivery-offers](https://developer-docs.amazon/sp-api/docs/get-dynamic-delivery-offers)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
 > Items that cannot be delivered at a requested tier return an empty `offers` array and a `constraints` array explaining why
 
 
-### [15] SP-API — getDeliveryOffers
+### [15] Operator's published API reference: delivery offers operation
 
-[https://developer-docs.amazon/sp-api/reference/deliveryoffers](https://developer-docs.amazon/sp-api/reference/deliveryoffers)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
 > A list of delivery offers, including offer expiration, earliest and latest date and time range, and the delivery offer policy.
 
 
-### [16] SP-API — getFulfillmentPreview
+### [16] Operator's published API reference: fulfillment preview operation
 
-[https://developer-docs.amazon.com/sp-api/reference/getfulfillmentpreview](https://developer-docs.amazon.com/sp-api/reference/getfulfillmentpreview)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
 > A list of fulfillment order previews, including estimated shipping weights, estima
 
 
-### [17] SP-API — External Fulfillment APIs v2024-09-11
+### [17] Operator's published API changelog: external fulfillment APIs (v2024-09-11)
 
-[https://developer-docs.amazon.com/sp-api/changelog/new-introducing-the-external-fulfillment-apis-v2024-09-11](https://developer-docs.amazon.com/sp-api/changelog/new-introducing-the-external-fulfillment-apis-v2024-09-11)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
-> These APIs allow programmatic handling of inventory, returns, and shipping across multiple external fulfillment channels, including Seller Flex, Easy Ship, Self Ship, and MFN Self Delivery.
-
-
-### [18] SP-API — Easy Ship listHandoverSlots
-
-[https://developer-docs.amazon.com/sp-api/reference/listhandoverslots](https://developer-docs.amazon.com/sp-api/reference/listhandoverslots)
-
-> A time window to hand over an Easy Ship package to Amazon Logistics.
+> These APIs allow programmatic handling of inventory, returns, and shipping across multiple external fulfillment channels, including [four named seller fulfilment programmes].
 
 
-### [19] SP-API — Fulfillment Inbound listPlacementOptions
+### [18] Operator's published API reference: handover slots operation of a seller shipping programme
 
-[https://developer-docs.amazon/sp-api/lang-ja_JP/reference/listplacementoptions](https://developer-docs.amazon/sp-api/lang-ja_JP/reference/listplacementoptions)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
+
+> A time window to hand over an [seller programme] package to [the operator] Logistics.
+
+
+### [19] Operator's published API reference: inbound placement options operation
+
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
 > Contains information pertaining to the placement of the contents of an inbound plan and the related costs.
 
 
-### [20] SP-API samples — Managing Handling Time on Amazon
+### [20] Operator's published API samples discussion: managing handling time
 
-[https://github.com/amzn/selling-partner-api-samples/discussions/124](https://github.com/amzn/selling-partner-api-samples/discussions/124)
+Retrieved 2026-10-22. No link: the source is on a domain of the operator.
 
-> it’s the number of business days a seller takes to pick, pack and ship a **Merchant Fulfilled Network (MFN)** order after receiving it.
+> it’s the number of business days a seller takes to pick, pack and ship a **[merchant-fulfilled programme]** order after receiving it.
 
 
 ### [21] Google Merchant Center — Set up estimated delivery time
@@ -291,7 +299,7 @@ Retrieved 2026-10-22.
 
 > Use an available-to-promise (ATP) rule and a sourcing rule to promise your sales o
 
-> You create a sourcing rule that specifies the supply sources to consider when promising
+> You create a sourcing rule that specifies the [sources of supply] to consider when promising
 
 
 ### [31] MIT thesis — Optimization of delivery promise policy to control peak demand on a fulfillment network

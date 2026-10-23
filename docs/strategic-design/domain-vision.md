@@ -17,8 +17,8 @@ description: "What the retail network does, where it wins, and the one loop that
 
 :::info[Proposed design]
 This is the model's vision statement. The public evidence it rests on is on
-[The Amazon logistics network](/research/amazon-logistics-network) and
-[SP-API surface map](/research/sp-api-surface-map).
+[The large-operator logistics network](/research/large-operator-logistics-network) and
+[Marketplace API surface map](/research/marketplace-api-surface-map).
 :::
 
 ## Where this network wins

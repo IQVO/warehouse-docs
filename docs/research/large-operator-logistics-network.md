@@ -1,13 +1,13 @@
 ---
-id: amazon-logistics-network
-title: The Amazon logistics network
-sidebar_label: Amazon logistics network
-description: "What is publicly documented about how Amazon's fulfillment and transportation network is shaped and how it promises a delivery date, with a citation on every claim."
+id: large-operator-logistics-network
+title: The large-operator logistics network
+sidebar_label: Large-operator logistics network
+description: "What is publicly documented about how a large e-commerce operator's fulfillment and transportation network is shaped and how it promises a delivery date, with a citation on every claim."
 ---
 
-# The Amazon logistics network
+# The large-operator logistics network
 
-This page holds **facts only**: what Amazon and peer-reviewed or trade sources
+This page holds **facts only**: what a large e-commerce operator and peer-reviewed or trade sources
 have published. Every sentence that states a fact carries a numbered citation;
 the list at the bottom maps each number to its source and the verbatim
 sentence that supports it. The model this site proposes starts at
@@ -17,16 +17,16 @@ no citation.
 
 ## A network of buildings and lanes
 
-Amazon describes its fulfillment network as buildings plus the transportation
-lanes among them.[4] A public lecture by an Amazon principal research
-scientist modelled it as nodes for fulfillment centres, sortation centres and
-delivery stations, linked by truck and air lanes, and noted that an Amazon Air
-Gateway is part of it.[4] The same lecture split the network into an inbound
+The operator describes its fulfillment and delivery network as buildings plus the transportation
+lanes among them.[4] A public lecture by one of the operator's principal research
+scientists modelled it as nodes for fulfillment centres, sortation centres and
+delivery stations, linked by truck and air lanes, and noted that an air
+gateway is part of it.[4] The same lecture split the network into an inbound
 side (global and domestic vendors and inbound cross docks) and an outbound side
 (middle mile to fulfillment and sortation centres, to delivery stations, to the
 last-mile destination).[4]
 
-| Building | What Amazon says it does |
+| Building | What the operator says it does |
 | --- | --- |
 | Sortable fulfillment centre | Employees pick, pack and ship customer orders such as books, toys and housewares, often alongside robots.[1] |
 | Non-sortable fulfillment centre | Picks, packs and ships bulky or large items.[1] |
@@ -39,7 +39,7 @@ last-mile destination).[4]
 The Middle Mile team routes customer orders from vendors and fulfillment
 centres to sortation centres, air facilities and delivery stations.[5] The
 last mile is largely run by Delivery Service Partners: independent businesses
-that hire and manage their own employees with support from Amazon.[6]
+that hire and manage their own employees with support from the operator.[6]
 
 **Model reading.** The network has two very different kinds of node:
 inventory-holding nodes that pick and pack, and parcel nodes that only sort and
@@ -60,15 +60,15 @@ change at different cadences, so they belong to different models:
 
 ## Regionalization
 
-Amazon partitioned its US network into eight interconnected but largely
-self-sufficient regions, fully deployed by March 2023.[2] Amazon Science describes the result as
+The operator partitioned its US network into eight interconnected but largely
+self-sufficient regions, fully deployed by March 2023.[2] The operator's research blog describes the result as
 eight largely self-sufficient regional networks that keep national
 coverage.[3] In-region fulfillment rose from 62% to 76%.[2] A design
 constraint was that each region must carry the breadth of selection customers
-expect.[3] Amazon Science also states that when a customer clicks "buy now",
-its Adaptive TRansportation OPtimization Service (ATROPS) assigns the route for
-the purchased item.[3] Amazon's operations leadership reports that more than
-half of Prime member orders in the 60 largest US metro areas arrived the same
+expect.[3] The same blog also states that when a customer clicks "buy now",
+its transportation optimization service assigns the route for
+the purchased item.[3] The operator's operations leadership reports that more than
+half of orders from members of its paid delivery programme in the 60 largest US metro areas arrived the same
 or next day, and attributes part of that to shipping from nearby fulfillment
 centres or delivery stations.[7]
 
@@ -79,7 +79,7 @@ promise and sourcing policies prefer in-region nodes.
 
 This is the published fact the whole model rests on. The INFORMS paper on
 regionalization explains that at the moment a customer is deciding whether to
-buy, Amazon shows a promise: the deadline by which the item will be delivered
+buy, the operator shows a promise: the deadline by which the item will be delivered
 if bought now.[2] Internally, that promise is based on an analysis of the
 network state and a check that at least one feasible delivery path
 exists.[2] After purchase, items wait in a virtual queue and are later
@@ -109,8 +109,8 @@ per tier and region (`TierOrderDeadline`), not just a calculator.
 
 ## What is not public
 
-No source found describes Amazon's promise algorithm in detail, the internal
-names of its promise or sourcing services beyond ATROPS, how delivery-station
+No source found describes the operator's promise algorithm in detail, the internal
+names of its promise or sourcing services, how delivery-station
 wave capacity is published internally, or how vendor scorecards feed promise
 dates. Those parts of the model are this site's proposal, labelled as such on
 every page that uses them.
@@ -119,11 +119,11 @@ every page that uses them.
 
 Every number above maps to one source. The verbatim sentences that support each claim are on [Sources and evidence](/research/sources).
 
-- **[1]** [Amazon — Our Facilities](https://www.aboutamazon.com/workplace/facilities)
-- **[2]** [Regionalize and Scale: Amazon’s Fulfillment Network Design (INFORMS Journal on Applied Analytics, 2026)](https://pubsonline.informs.org/doi/full/10.1287/inte.2025.0295)
-- **[3]** [Amazon Science — How Amazon reworked its fulfillment network](https://www.amazon.science/news-and-features/how-amazon-reworked-its-fulfillment-network-to-meet-customer-demand)
-- **[4]** [ORMS Today — IFORS Lecture: The Amazon Fulfillment Network: Topology and Capacity Planning](https://pubsonline.informs.org/do/10.1287/orms.2022.05.24n/full)
-- **[5]** [Amazon Science — How Amazon's Middle Mile team helps packages](https://amazon.science/latest-news/how-amazons-middle-mile-team-helps-packages-make-the-journey-to-your-doorstep)
-- **[6]** [About Amazon — Delivery Service Partner program](https://www.aboutamazon.com/news/policy-news-views/amazon-dsp-program-update)
-- **[7]** [About Amazon — Doug Herrington on delivery speed](https://www.aboutamazon.com/news/operations/doug-herrington-amazon-prime-delivery-speed)
+- **[1]** Operator's public facilities page (retrieved from the operator's corporate site; no link)
+- **[2]** [Regionalize and Scale: a large operator's fulfillment network design (INFORMS Journal on Applied Analytics, 2026)](https://pubsonline.informs.org/doi/full/10.1287/inte.2025.0295)
+- **[3]** Operator's research blog article on reworking its fulfillment network (no link)
+- **[4]** [ORMS Today — IFORS Lecture: A Large Operator's Fulfillment Network: Topology and Capacity Planning](https://pubsonline.informs.org/do/10.1287/orms.2022.05.24n/full)
+- **[5]** Operator's research blog article on its middle-mile team (no link)
+- **[6]** Operator's public update on its delivery service partner programme (no link)
+- **[7]** Operator's public article by its operations leadership on delivery speed (no link)
 - **[31]** [MIT thesis — Optimization of delivery promise policy to control peak demand on a fulfillment network](https://dspace.mit.edu/handle/1721.1/122587)

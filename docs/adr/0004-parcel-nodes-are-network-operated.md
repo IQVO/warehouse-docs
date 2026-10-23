@@ -18,7 +18,7 @@ description: "Sortation centres, delivery stations and air hubs belong to the ne
 The fleet's `facility-layout` already knows sites with roles
 `SORTATION_CENTER`, `DELIVERY_STATION` and `AIR_HUB_GATEWAY` (ADR 0037) and
 gives them no transfer capability: no stock is stored there. In a network
-like Amazon's those buildings run the middle and last mile for everyone.
+like a large operator's those buildings run the middle and last mile for everyone.
 
 ## Decision
 

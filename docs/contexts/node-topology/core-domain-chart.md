@@ -80,7 +80,7 @@ from one source, through events, instead of keeping their own registries.
 | Part | Evolution stage | Why |
 | --- | --- | --- |
 | Node, lane, region and service-area registry | **Custom-built** (model `evolution: Custom-built`) | The node types, the operator rule and the lane type pairs are this network's own design ([ADR 0004](/adr/0004-parcel-nodes-are-network-operated)). |
-| Operational profile | **Custom-built**, shaped after a **Product** | Modelled after the Supply Sources `operationalConfiguration` (see [SP-API surface map](/research/sp-api-surface-map)), extended with cutoffs (per day) and sort dwell (sort centres and air hubs only). |
+| Operational profile | **Custom-built**, shaped after a **Product** | Modelled after the supply-source API's `operationalConfiguration` (see [Marketplace API surface map](/research/marketplace-api-surface-map)), extended with cutoffs (per day) and sort dwell (sort centres and air hubs only). |
 | Master-data plumbing (outbox, CloudEvents, REST) | **Commodity** | The same building blocks every context uses ([event standard](/strategic-design/event-standard-cloudevents)). |
 
 **Movement to watch.** If the network ever optimises its own topology

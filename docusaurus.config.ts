@@ -6,7 +6,7 @@ import type * as OpenApiPlugin from 'docusaurus-plugin-openapi-docs';
 const config: Config = {
   title: 'retail-network Documentation',
   tagline:
-    'An Amazon-like retail and logistics network, modelled with Domain-Driven Design, and how it connects to the warehouse-systems WMS/WES fleet.',
+    'A marketplace-scale retail and logistics network, modelled with Domain-Driven Design, and how it connects to the warehouse-systems WMS/WES fleet.',
   favicon: 'img/favicon.svg',
   future: {v4: true, faster: true},
   url: 'https://iqvo.github.io',
@@ -147,7 +147,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `retail-network domain documentation. A proposed design: nothing on this site is built yet.`,
+      copyright: `retail-network domain documentation. This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.`,
     },
     prism: {theme: prismThemes.github, darkTheme: prismThemes.dracula, additionalLanguages: ['yaml', 'json', 'bash']},
   } satisfies Preset.ThemeConfig,

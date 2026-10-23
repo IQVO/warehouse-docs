@@ -134,7 +134,7 @@ It holds declared facts. It does not schedule, promise, assign or measure.
 | --- | --- |
 | **Domain** | **Supporting**. See [Core Domain Chart](/contexts/node-topology/core-domain-chart). |
 | **Business Model** | Enabler: every promise, assignment and route rests on it. |
-| **Evolution** | Custom-built. The operational profile is shaped after a Product surface (Supply Sources, see [SP-API surface map](/research/sp-api-surface-map)). |
+| **Evolution** | Custom-built. The operational profile is shaped after a Product surface (supply-source API, see [Marketplace API surface map](/research/marketplace-api-surface-map)). |
 
 ## Domain Roles
 
