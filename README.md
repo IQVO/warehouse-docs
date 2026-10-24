@@ -4,7 +4,11 @@ Fleet-wide documentation for the **warehouse-systems** ecosystem. It holds
 the strategic and tactical Domain-Driven Design artifacts, the generated REST
 and AsyncAPI references, and the business context for seventeen backend
 contexts: sixteen domain bounded contexts plus `warehouse-ops-agent`. Built with [Docusaurus](https://docusaurus.io/) and
-published to **GitHub Pages** through GitHub Actions.
+published to **GitHub Pages** through GitHub Actions. It also hosts the
+**retail-network** domain documentation — the Amazon-like retail and logistics
+network, ten bounded contexts — as a second docs section served at `/network/`
+(merged from the former `IQVO/retail-network-docs` repository, history
+preserved under `network/`).
 
 Live site: https://iqvo.github.io/warehouse-docs/
 
@@ -54,6 +58,14 @@ Live site: https://iqvo.github.io/warehouse-docs/
   `warehouse-ops-agent` has no spec, so its surface is documented in prose.
 - **ADRs** (`docs/adr/`): an index that links to each context's own ADR
   trail. ADRs are never copied, so the index never drifts.
+- **Retail Network** (`network/`): the retail-network domain — research,
+  strategic design, node & promise models, WMS/WES integration, ten bounded
+  contexts and their REST reference. The source of truth is
+  `network/model/model.yaml`; `network/docs/strategic-design/` pages generated
+  from it must be regenerated via `network/scripts/gen_pages.py`, never edited.
+  The network REST reference is generated at build time (gitignored), unlike
+  the committed fleet reference. Gates: `npm run check:model:network` and
+  `npm run check:pages:network`.
 
 Every Kafka message in the fleet is a CloudEvents 1.0 event in structured
 content mode. REST and MCP surfaces are unauthenticated fleet-wide. All
