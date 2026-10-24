@@ -10,6 +10,7 @@ Pages written (fully generated; edit this script or the model, not the page):
   python3 scripts/gen_pages.py --check   # fail if a page differs from what the model gives
 """
 import os
+import re
 import sys
 from collections import OrderedDict, defaultdict
 
@@ -344,11 +345,21 @@ PAGES = {
 }
 
 
+BASE = "/network"  # routeBasePath of this section's docs instance
+
+
+def prefix_base(text):
+    """Absolute markdown links must carry the section prefix: the pages are
+    served under /network, a bare /contexts link would resolve into the
+    warehouse section of the merged site."""
+    return re.sub(r"\]\(/(?!network/)", "](" + BASE + "/", text)
+
+
 def main(argv):
     bad = 0
     for path, fn in PAGES.items():
         full = os.path.join(ROOT, path)
-        text = fn()
+        text = prefix_base(fn())
         if "--check" in argv:
             cur = open(full).read() if os.path.exists(full) else ""
             if cur != text:
