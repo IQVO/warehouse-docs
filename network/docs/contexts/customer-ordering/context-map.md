@@ -7,8 +7,8 @@ description: Customer Ordering's slice of the retail-network context map, with e
 
 # Context Map
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).
@@ -19,7 +19,7 @@ side, the pattern and the channel.
 
 ```mermaid
 flowchart LR
-    SH(["Shopper via storefront<br/>e2e-tests, future UI"])
+    SH(["Shopper via storefront<br/>e2e-tests, console remote"])
     CO["customer-ordering<br/>Generic"]
     DP["delivery-promise<br/>Core"]
     OS["order-sourcing<br/>Core"]
@@ -63,7 +63,7 @@ include it, so the tracking view is event-fed only (see Notes).
 
 | Neighbour | Direction | Pattern | Channel | Messages | Why this pattern |
 | --- | --- | --- | --- | --- | --- |
-| Shopper / storefront (e2e-tests, future storefront UI) | CO upstream, storefront downstream | **Open Host Service** | REST `POST /checkout`, `GET /orders/{orderId}`, `GET /orders/{orderId}/tracking`, `POST /orders/{orderId}:cancel`, `POST /shoppers` | `PlaceOrder`, `GetOrder`, `GetTracking`, `CancelOrder`, `RegisterShopper` | Many clients (tests, a future UI) use one published, versioned API; none negotiates it. |
+| Shopper / storefront (e2e-tests, console remote) | CO upstream, storefront downstream | **Open Host Service** | REST `POST /checkout`, `GET /orders/{orderId}`, `GET /orders/{orderId}/tracking`, `POST /orders/{orderId}:cancel`, `POST /shoppers` | `PlaceOrder`, `GetOrder`, `GetTracking`, `CancelOrder`, `RegisterShopper` | Many clients (tests, the console remote) use one published, versioned API; none negotiates it. |
 | `delivery-promise` (Core) | DP upstream, CO downstream | **Customer/Supplier** (CO is the Customer) | REST `POST /delivery-offers:quote`, `POST /promises` (in-org, synchronous) | `QuoteDeliveryOffers`, `MakePromise` | Checkout needs an answer inside the shopper's request. DP serves this caller deliberately: its `inbound` names `customer-ordering` on both routes. |
 | `delivery-promise` (Core) | CO upstream, DP downstream | **Customer/Supplier** | Kafka `retailnetwork.customer-ordering.events` | `CustomerOrderPlaced`, `CustomerOrderCancelled` | DP needs the placement to confirm the hold (`ConfirmPromise`) and the cancellation to release it (`CancelPromise`). |
 | `delivery-promise` (Core) | DP upstream, CO downstream | **Customer/Supplier** | Kafka `retailnetwork.delivery-promise.events` | `PromiseAtRisk`, `PromiseRevised`, `PromiseKept`, `PromiseBroken` | DP lists CO as a named consumer; CO keeps each group's window current (`UpdateGroupPromise`) and shows the verdict. |

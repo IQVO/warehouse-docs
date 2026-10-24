@@ -7,8 +7,8 @@ description: Process-level EventStorming boards for Customer Ordering, covering 
 
 # EventStorming
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 Process-level boards in the ddd-crew
@@ -25,7 +25,7 @@ left to right they would not fit the page width.
 
 | Colour | Sticky | Meaning here |
 | --- | --- | --- |
-| Pale yellow `#fff59d` | Actor | The shopper (via the storefront, e2e-tests or a future UI) |
+| Pale yellow `#fff59d` | Actor | The shopper (via the storefront, the e2e-tests or the console remote) |
 | Blue `#a5d8ff` | Command | A command from `aggregates[*].commands` or a sync call from `sync_calls` |
 | Yellow `#ffec99` | Aggregate | `CustomerOrder` or `Shopper` |
 | Orange `#ffc078` | Domain Event | Ours (`publishes`) or a neighbour's (`consumes`, prefixed with the producer) |

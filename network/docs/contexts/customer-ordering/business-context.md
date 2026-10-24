@@ -7,8 +7,8 @@ description: Why turning a cart into a customer order is a commodity problem wit
 
 # Business Context
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 ## The problem in plain language
@@ -41,7 +41,7 @@ What this context does own is the transaction record:
 | Actor | What they do here | Channel |
 | --- | --- | --- |
 | Shopper (synthetic), through the storefront | Registers, checks out, reads the order and its tracking, cancels | REST `POST /shoppers`, `POST /checkout`, `GET /orders/{orderId}`, `GET /orders/{orderId}/tracking`, `POST /orders/{orderId}:cancel` |
-| e2e-tests and a future storefront UI | Drive the same storefront API as the shopper | the same REST routes |
+| e2e-tests and the console remote | Drive the same storefront API as the shopper | the same REST routes |
 | `delivery-promise` | Quotes offers and makes promises for checkout; later reports a promise at risk, revised, kept or broken | sync REST (called by us); Kafka (consumed by us) |
 | `order-sourcing` | Reports when a group is locked to a node, shipped, or unsourceable | Kafka |
 | `shipping-and-tracking` | Reads the ship-to address to print a label; reports labels, scans, delivery and exceptions | sync REST (calls us); Kafka |

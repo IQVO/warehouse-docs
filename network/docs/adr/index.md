@@ -9,9 +9,11 @@ description: "The proposed decisions behind the retail-network model."
 
 # Architecture Decision Records
 
-All nine are **Proposed**: they become Accepted when the network's
-repositories are created and the user accepts them. Each context repository
-will then carry its own ADR sequence; these are domain-level decisions.
+All nine are **Proposed**. The ten context repositories exist and are
+built — 0001 to 0008 are realized by them; 0009 (`seller-inbound`) has no
+repository yet — and each repository carries its own ADR sequence on top of
+these domain-level decisions. An ADR becomes Accepted when the user accepts
+it.
 
 | ADR | Decision | Status |
 | --- | --- | --- |

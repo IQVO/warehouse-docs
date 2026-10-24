@@ -7,8 +7,8 @@ description: "Customer Ordering, a Generic subdomain of the retail network: stor
 
 # Customer Ordering
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-generic">Generic</span>
@@ -23,7 +23,7 @@ address is synthetic PII and is held only here. The context publishes
 the promise stream. Afterwards it follows fulfilment, promise and package
 events into a customer-facing status and tracking view. It handles customer
 cancellation only while no shipment group is locked. The same storefront API
-is what the e2e-tests and a future storefront UI drive. `shipping-and-tracking`
+is what the e2e-tests and the console remote (`/mfes/customer-ordering/`) drive. `shipping-and-tracking`
 is the only other context that ever reads the ship-to address: it calls the
 restricted, in-organization route `GET /orders/{orderId}/ship-to` to print a
 label.
@@ -48,6 +48,14 @@ label.
 
 ## Elsewhere
 
+- Read-only MCP server (service ADR 0005): `cmd/mcp`, a second binary serving Streamable HTTP
+  on `:8090` with no auth; it sources this context's own reads and nothing that writes. Three
+  tools: `get_order`, `get_order_tracking`, `get_ship_to`. The gateway (Kong) exposes it at
+  `/api/mcp/customer-ordering`, rewritten to the server's `/mcp` mount.
+- Console remote (service ADR 0006): `web/`, a Vite + React Module Federation remote —
+  federation container `customer_ordering_mfe`, gateway mount `/mfes/customer-ordering/`,
+  dev/preview port `4012` — read-only screens over the existing REST reads, calling only this
+  context's API.
 - REST contract (as built, from the service repository): `apis/customer-ordering/openapi.yaml`, rendered
   under the [API reference](/network/api-reference).
 - [ADR 0006: PII confinement](/network/adr/0006-pii-confinement) explains why the

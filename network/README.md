@@ -10,9 +10,13 @@ Merged into [warehouse-docs](https://github.com/IQVO/warehouse-docs) as the
 `network/` section (served at `/network/`); this directory is no longer a
 standalone site. Full history preserved via the subtree merge.
 
-**Status: proposed design, docs only.** Nothing described here is built.
-The model is derived from public fulfillment-network benchmarks;
-everything else is the design this site proposes.
+**Status: as built.** Ten of the eleven contexts (all but `seller-inbound`,
+which is proposed design) are built as services, and the model carries
+their as-built contracts. Each service also ships a read-only MCP server
+(`cmd/mcp`, Streamable HTTP on `:8090`, exposed by the gateway at
+`/api/mcp/<context>`) and a console Module Federation remote at
+`/mfes/<context>/`. The model is derived from public fulfillment-network
+benchmarks.
 
 ## Layout
 
