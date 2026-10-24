@@ -13,8 +13,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 One section per command of `contexts[customer-ordering].aggregates[*].commands`.
 They are proposed application services in `internal/application/usecases`. The
-step-by-step diagrams are on [Sequence Diagrams](/contexts/customer-ordering/sequence-diagrams);
-the payloads are on [Domain Events](/contexts/customer-ordering/domain-events);
+step-by-step diagrams are on [Sequence Diagrams](/network/contexts/customer-ordering/sequence-diagrams);
+the payloads are on [Domain Events](/network/contexts/customer-ordering/domain-events);
 the REST contract is `apis/customer-ordering/openapi.yaml`.
 
 Reads are not use cases here: `GET /orders/{orderId}` (`GetOrder`),
@@ -36,7 +36,7 @@ Reads are not use cases here: `GET /orders/{orderId}` (`GetOrder`),
 
 The pairing of consumed events with commands is this pack's reading. The
 model lists both sides but does not pair them (see the
-[canvas](/contexts/customer-ordering/bounded-context-canvas) open questions).
+[canvas](/network/contexts/customer-ordering/bounded-context-canvas) open questions).
 
 ## How save and publish commit
 

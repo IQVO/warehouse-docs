@@ -14,8 +14,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 Every event this context publishes and consumes, from
 `contexts[linehaul-transportation].publishes` and `.consumes`. The
 envelope follows the network's
-[CloudEvents standard](/strategic-design/event-standard-cloudevents) and
-[ADR 0007](/adr/0007-cloudevents-namespace).
+[CloudEvents standard](/network/strategic-design/event-standard-cloudevents) and
+[ADR 0007](/network/adr/0007-cloudevents-namespace).
 
 ## Envelope
 

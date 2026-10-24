@@ -91,7 +91,7 @@ Derived from: model.yaml → `contexts[node-topology].aggregates[Node]`
 (`value_objects`, `states`, `commands`), `.ul`.
 
 Omitted: the read accessors and the `Err...` variables (on
-[Aggregate Design Canvas](/contexts/node-topology/aggregate-design-canvas)).
+[Aggregate Design Canvas](/network/contexts/node-topology/aggregate-design-canvas)).
 The model shows one `OperationalProfile` per `Node`; the repository keeps
 every past revision, which the aggregate never edits. `OperatingHours` and
 `TimeUnit` are named here but their inner structure is not given by the
@@ -161,7 +161,7 @@ Derived from: model.yaml → `contexts[node-topology].aggregates[Node].value_obj
 
 Omitted: the fields already shown in diagram 1; the enumerations `Type`
 (six node types) and `Subtype` (seven fulfillment-centre subtypes), listed on
-[Ubiquitous Language](/contexts/node-topology/ubiquitous-language).
+[Ubiquitous Language](/network/contexts/node-topology/ubiquitous-language).
 `VendorRef` is absent on a `NETWORK` node.
 
 ## 3. Lane aggregate
@@ -322,7 +322,7 @@ classDiagram
 
 Derived from: model.yaml → `contexts[node-topology].publishes[*].data`.
 
-Omitted: field types (on [Domain Events](/contexts/node-topology/domain-events)).
+Omitted: field types (on [Domain Events](/network/contexts/node-topology/domain-events)).
 `AggregateID()` is the CloudEvents `subject` and the Kafka key.
 
 ## 6. Hexagonal ports and adapters

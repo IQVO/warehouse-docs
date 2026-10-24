@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 Following the ddd-crew [Core Domain Charts](https://github.com/ddd-crew/core-domain-charts):
 business differentiation (y) against model complexity (x). The
-network-wide chart is [Core Domain Chart](/strategic-design/core-domain-chart).
+network-wide chart is [Core Domain Chart](/network/strategic-design/core-domain-chart).
 
 ```mermaid
 quadrantChart
@@ -79,16 +79,16 @@ decision of its own, so it stays Generic.
 itself. It is the moment the shopper commits. Its value is measured by
 conversion it does not lose: checkouts that fail because an offer expired,
 or orders placed against a promise that was never confirmed (see
-[Verification Metrics](/contexts/customer-ordering/bounded-context-canvas)).
+[Verification Metrics](/network/contexts/customer-ordering/bounded-context-canvas)).
 
 ## Evolution
 
 | Part | Evolution stage | Why |
 | --- | --- | --- |
 | Order record, status, cancellation | **Commodity** | `chart.evolution: Commodity`. Standard e-commerce order management; a bought order-management product would fit. |
-| Checkout promising (per-group `MakePromise`) | **Product** | The shape is common (an order service calling a promise service), but the per-group promise snapshot in `CustomerOrderPlaced` is specific to this network's split between promise and assignment ([ADR 0002](/adr/0002-promise-and-assignment-are-separate)). |
-| Ship-to confinement and the restricted ship-to route | **Commodity** practice, local rule | PII minimisation is standard; the one-reader rule is this network's ([ADR 0006](/adr/0006-pii-confinement)). |
-| Plumbing (outbox, inbox, CloudEvents) | **Commodity** | Network-wide building blocks ([CloudEvents standard](/strategic-design/event-standard-cloudevents)). |
+| Checkout promising (per-group `MakePromise`) | **Product** | The shape is common (an order service calling a promise service), but the per-group promise snapshot in `CustomerOrderPlaced` is specific to this network's split between promise and assignment ([ADR 0002](/network/adr/0002-promise-and-assignment-are-separate)). |
+| Ship-to confinement and the restricted ship-to route | **Commodity** practice, local rule | PII minimisation is standard; the one-reader rule is this network's ([ADR 0006](/network/adr/0006-pii-confinement)). |
+| Plumbing (outbox, inbox, CloudEvents) | **Commodity** | Network-wide building blocks ([CloudEvents standard](/network/strategic-design/event-standard-cloudevents)). |
 
 **Movement to watch.** Nothing in the model moves this context up. If the
 network later bought a commercial order-management product, this context

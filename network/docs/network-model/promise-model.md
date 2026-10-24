@@ -10,10 +10,10 @@ description: "How the network quotes a delivery offer and makes a promise: the i
 :::info[Proposed design]
 Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml)
 → `contexts[delivery-promise]`, `service_tiers`. Owner:
-[`delivery-promise`](/contexts/delivery-promise) (Core). The public facts it
+[`delivery-promise`](/network/contexts/delivery-promise) (Core). The public facts it
 rests on (a promise from network state and a feasible path; assignment later
 and possibly elsewhere; a policy that shapes peak demand) are on
-[The Amazon logistics network](/research/amazon-logistics-network). The
+[The Amazon logistics network](/network/research/amazon-logistics-network). The
 algorithm below is this site's proposal.
 :::
 
@@ -49,7 +49,7 @@ events.
 | `PromiseBook` (own aggregate) | own commands | how many orders are already promised onto each node cutoff |
 
 A cold or stale read model is not a reason to guess. Fast tiers require every
-input (see [ADR 0008](/adr/0008-capacity-held-at-promise-time)); only
+input (see [ADR 0008](/network/adr/0008-capacity-held-at-promise-time)); only
 `STANDARD` may fall back to nominal lane times, and the promise then records
 `basis = NOMINAL`.
 
@@ -216,7 +216,7 @@ at 14:10; `CustomerOrderPlaced` confirms it (confirmed 2,051). The promise says
 `shipBy` 18:00 CDT at `N-VWS-AUS3`, `deliverBy` Fri 09:00-21:00.
 
 What happens next (which node really fulfils, and when it locks) is
-[Order assignment model](/network-model/order-assignment-model).
+[Order assignment model](/network/network-model/order-assignment-model).
 
 ## What can go wrong, and what the model does
 

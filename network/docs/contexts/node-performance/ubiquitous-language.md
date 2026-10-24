@@ -60,7 +60,7 @@ gaps are listed at the end. Code identifiers are proposed Go names
 None. This context has no edge to the warehouse-systems fleet. A vendor
 (the fleet included) sees its scorecard only through `vendor-connectivity`'s
 Vendor API; the canonical network ↔ fleet term table is on
-[WMS/WES integration](/integration/wms-wes-integration).
+[WMS/WES integration](/network/integration/wms-wes-integration).
 
 ## Terms the model leaves open
 

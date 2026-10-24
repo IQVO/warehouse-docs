@@ -33,29 +33,29 @@ sortation centres into **loads**, and reports when loads depart and arrive:
 
 | Page | What it holds | ddd-crew tool it follows |
 | --- | --- | --- |
-| [Business Context](/contexts/linehaul-transportation/business-context) | The problem, the actors, the decisions, what is out of scope | — (narrative) |
-| [Ubiquitous Language](/contexts/linehaul-transportation/ubiquitous-language) | Departure, Pickup Departure, Load, Lane Schedule, Middle Mile and the neighbour terms used here | — (glossary) |
-| [Core Domain Chart](/contexts/linehaul-transportation/core-domain-chart) | Why this context is Supporting | [core-domain-charts](https://github.com/ddd-crew/core-domain-charts) |
-| [Bounded Context Canvas](/contexts/linehaul-transportation/bounded-context-canvas) | Purpose, classification, roles, every inbound and outbound message | [bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas) v5 |
-| [Context Map](/contexts/linehaul-transportation/context-map) | Every upstream and downstream neighbour with its pattern and channel | [context-mapping](https://github.com/ddd-crew/context-mapping) |
-| [Aggregate Design Canvas](/contexts/linehaul-transportation/aggregate-design-canvas) | `Departure`, `LaneSchedule` and `Load`: states, invariants, commands, events | [aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas) v1.1 |
-| [Domain Events](/contexts/linehaul-transportation/domain-events) | The eight published and twelve consumed events, with full CloudEvents types | — (event catalogue) |
-| [Domain Message Flow](/contexts/linehaul-transportation/domain-message-flow) | Cutoff to pickup, booking on lock, load to station, cancellation | [domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
-| [EventStorming](/contexts/linehaul-transportation/eventstorming) | Process-level boards with hotspots | [eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
-| [Use Cases](/contexts/linehaul-transportation/use-cases) | One section per command: trigger, adapter, flow, errors, events | — (application layer) |
-| [Class Diagram](/contexts/linehaul-transportation/class-diagram) | Proposed domain types and the hexagonal ports and adapters | — (UML) |
-| [Entity Relationship](/contexts/linehaul-transportation/entity-relationship) | Proposed Postgres schema | — (ER) |
-| [Sequence Diagrams](/contexts/linehaul-transportation/sequence-diagrams) | One runtime sequence per command use case | — (UML) |
+| [Business Context](/network/contexts/linehaul-transportation/business-context) | The problem, the actors, the decisions, what is out of scope | — (narrative) |
+| [Ubiquitous Language](/network/contexts/linehaul-transportation/ubiquitous-language) | Departure, Pickup Departure, Load, Lane Schedule, Middle Mile and the neighbour terms used here | — (glossary) |
+| [Core Domain Chart](/network/contexts/linehaul-transportation/core-domain-chart) | Why this context is Supporting | [core-domain-charts](https://github.com/ddd-crew/core-domain-charts) |
+| [Bounded Context Canvas](/network/contexts/linehaul-transportation/bounded-context-canvas) | Purpose, classification, roles, every inbound and outbound message | [bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas) v5 |
+| [Context Map](/network/contexts/linehaul-transportation/context-map) | Every upstream and downstream neighbour with its pattern and channel | [context-mapping](https://github.com/ddd-crew/context-mapping) |
+| [Aggregate Design Canvas](/network/contexts/linehaul-transportation/aggregate-design-canvas) | `Departure`, `LaneSchedule` and `Load`: states, invariants, commands, events | [aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas) v1.1 |
+| [Domain Events](/network/contexts/linehaul-transportation/domain-events) | The eight published and twelve consumed events, with full CloudEvents types | — (event catalogue) |
+| [Domain Message Flow](/network/contexts/linehaul-transportation/domain-message-flow) | Cutoff to pickup, booking on lock, load to station, cancellation | [domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
+| [EventStorming](/network/contexts/linehaul-transportation/eventstorming) | Process-level boards with hotspots | [eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
+| [Use Cases](/network/contexts/linehaul-transportation/use-cases) | One section per command: trigger, adapter, flow, errors, events | — (application layer) |
+| [Class Diagram](/network/contexts/linehaul-transportation/class-diagram) | Proposed domain types and the hexagonal ports and adapters | — (UML) |
+| [Entity Relationship](/network/contexts/linehaul-transportation/entity-relationship) | Proposed Postgres schema | — (ER) |
+| [Sequence Diagrams](/network/contexts/linehaul-transportation/sequence-diagrams) | One runtime sequence per command use case | — (UML) |
 
 The REST contract is `apis/linehaul-transportation/openapi.yaml`, rendered
-under [API reference](/api-reference).
+under [API reference](/network/api-reference).
 
 ## Elsewhere
 
-- [Strategic context map](/strategic-design/context-map) and
-  [subdomain classification](/strategic-design/subdomain-classification).
-- [Node model](/network-model/node-model) (lanes and node types) and
-  [promise model](/network-model/promise-model) (how departures become a
+- [Strategic context map](/network/strategic-design/context-map) and
+  [subdomain classification](/network/strategic-design/subdomain-classification).
+- [Node model](/network/network-model/node-model) (lanes and node types) and
+  [promise model](/network/network-model/promise-model) (how departures become a
   witness path).
-- [ADR 0008: capacity held at promise time](/adr/0008-capacity-held-at-promise-time)
-  and [ADR 0004: parcel nodes are network-operated](/adr/0004-parcel-nodes-are-network-operated).
+- [ADR 0008: capacity held at promise time](/network/adr/0008-capacity-held-at-promise-time)
+  and [ADR 0004: parcel nodes are network-operated](/network/adr/0004-parcel-nodes-are-network-operated).

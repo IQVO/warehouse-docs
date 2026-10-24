@@ -17,7 +17,7 @@ notation. Every sticky is a command, aggregate, event, policy or read model of
 the model. Events of other contexts appear as orange stickies next to the
 pink system that publishes them. Hotspots are real open questions or risks of
 the model; each says where it comes from. The domain-wide board is
-[the big-picture EventStorming](/strategic-design/eventstorming-big-picture).
+[the big-picture EventStorming](/network/strategic-design/eventstorming-big-picture).
 
 ## Legend
 
@@ -160,8 +160,8 @@ against `.aggregates[Promise].value_objects[ShipmentGroup]` and
 `conventions.integration_rules` (the promise hot path makes no synchronous call).
 
 Omitted: the four `OfferConstraint` values returned for a tier with no offer,
-and the search steps (on [the use cases page](/contexts/delivery-promise/use-cases)
-and in [the promise model](/network-model/promise-model)).
+and the search steps (on [the use cases page](/network/contexts/delivery-promise/use-cases)
+and in [the promise model](/network/network-model/promise-model)).
 
 ## 3. Making a promise and holding capacity
 
@@ -205,7 +205,7 @@ with no formula).
 
 Omitted: the refusals (`ErrOfferNotQuotable`, `ErrPromiseCapacityExhausted`,
 `ErrBookClosed`, `ErrGroupSpansNodes`), listed on
-[the use cases page](/contexts/delivery-promise/use-cases).
+[the use cases page](/network/contexts/delivery-promise/use-cases).
 
 ## 4. Confirming, releasing and closing
 

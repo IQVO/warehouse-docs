@@ -131,7 +131,7 @@ loads depart and arrive. Promises (`delivery-promise`) and assignments
 
 | Axis | Verdict |
 | --- | --- |
-| **Domain** | **Supporting** (see [Core Domain Chart](/contexts/linehaul-transportation/core-domain-chart)). |
+| **Domain** | **Supporting** (see [Core Domain Chart](/network/contexts/linehaul-transportation/core-domain-chart)). |
 | **Business Model** | Cost reducer (cost-to-serve) and speed enabler. |
 | **Evolution** | Custom-built. |
 
@@ -184,12 +184,12 @@ loads depart and arrive. Promises (`delivery-promise`) and assignments
 | `shipping-and-tracking`, `last-mile-delivery` | `LoadArrived` | Event | Kafka `retailnetwork.linehaul-transportation.events`, `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived` | `shipping-and-tracking` Conformist; `last-mile-delivery` Customer/Supplier |
 | — | (no synchronous calls) | — | `sync_calls: []` | — |
 
-Full message details: [Domain Events](/contexts/linehaul-transportation/domain-events).
-Relationship evidence: [Context Map](/contexts/linehaul-transportation/context-map).
+Full message details: [Domain Events](/network/contexts/linehaul-transportation/domain-events).
+Relationship evidence: [Context Map](/network/contexts/linehaul-transportation/context-map).
 
 ## Ubiquitous Language
 
-Full glossary: [Ubiquitous Language](/contexts/linehaul-transportation/ubiquitous-language).
+Full glossary: [Ubiquitous Language](/network/contexts/linehaul-transportation/ubiquitous-language).
 Top terms: **Middle Mile**, **Departure** (kinds `PICKUP`, `LINEHAUL`,
 `AIR`), **Pickup Departure**, **Capacity** (`packages`, `booked`),
 **Load**, **Lane Schedule**.

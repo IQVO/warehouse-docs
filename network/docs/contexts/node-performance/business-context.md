@@ -34,7 +34,7 @@ observed facts only, never from what the vendor said about itself. The
 model calls this principle **Declared vs Measured**: the operational
 profile is what the vendor says; the scorecard is what the network
 observes. Both feed the promise, and neither overwrites the other
-([ADR 0003](/adr/0003-declared-and-measured-capability)).
+([ADR 0003](/network/adr/0003-declared-and-measured-capability)).
 
 ## What it observes
 
@@ -45,7 +45,7 @@ observes. Both feed the promise, and neither overwrites the other
 | A package was handed over to the network | `shipping-and-tracking` | On-Time Handover Rate |
 | A promise was kept or broken | `delivery-promise` | promise-kept rate |
 | An inventory feed was applied | `offer-availability` | feed freshness (p95, minutes) |
-| A node was registered, a profile declared, a vendor onboarded, a submission processed | `node-topology`, `vendor-connectivity` | no metric (see [open questions](/contexts/node-performance/bounded-context-canvas)) |
+| A node was registered, a profile declared, a vendor onboarded, a submission processed | `node-topology`, `vendor-connectivity` | no metric (see [open questions](/network/contexts/node-performance/bounded-context-canvas)) |
 
 ## Actors
 
@@ -77,15 +77,15 @@ observes. Both feed the promise, and neither overwrites the other
 The facts this context observes are the signals a vendor already exchanges
 with the network in a direct-fulfillment protocol: inventory submissions,
 a whole-order acknowledgement inside a window, and a shipment confirmation
-against a ship-by. The [SP-API surface map](/research/sp-api-surface-map)
+against a ship-by. The [SP-API surface map](/network/research/sp-api-surface-map)
 shows where each of those signals sits in the public vendor interfaces, and
-[Amazon logistics network](/research/amazon-logistics-network) describes
+[Amazon logistics network](/network/research/amazon-logistics-network) describes
 the operating model in which the node chosen at assignment may differ from
 the one that backed the promise. The research does not cite how the
 reference network grades its vendors internally, so nothing on this page
 claims it. The windows (7 and 30 days), the grades and the thresholds of
 the `Grading` policy are this model's own proposal, in this model's own
-vocabulary. See [Sources](/research/sources) for what is cited.
+vocabulary. See [Sources](/network/research/sources) for what is cited.
 
 ## Deliberately out of scope
 
@@ -103,6 +103,6 @@ vocabulary. See [Sources](/research/sources) for what is cited.
   centres, delivery stations and air hubs receive no purchase orders and
   send no feeds, so most metrics are empty for them.
 
-See the [Bounded Context Canvas](/contexts/node-performance/bounded-context-canvas)
-for every message and the [Context Map](/contexts/node-performance/context-map)
+See the [Bounded Context Canvas](/network/contexts/node-performance/bounded-context-canvas)
+for every message and the [Context Map](/network/contexts/node-performance/context-map)
 for every relationship.

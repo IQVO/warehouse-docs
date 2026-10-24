@@ -14,8 +14,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 One application service per command of `model.yaml →
 contexts[shipping-and-tracking].aggregates[*].commands`, in the proposed
 package `internal/application/usecases`. Step-by-step diagrams are on
-[Sequence Diagrams](/contexts/shipping-and-tracking/sequence-diagrams); event
-payloads are on [Domain Events](/contexts/shipping-and-tracking/domain-events).
+[Sequence Diagrams](/network/contexts/shipping-and-tracking/sequence-diagrams); event
+payloads are on [Domain Events](/network/contexts/shipping-and-tracking/domain-events).
 
 `GET /journeys/{trackingNumber}` (`GetJourney`) is a read, not a use case: the
 HTTP adapter loads the journey through the repository and returns it.
@@ -148,7 +148,7 @@ not found 404, stale 409. Problems are `application/problem+json`
   3. `RecordScan`: refuse a known `scanId`; refuse on a closed journey; if
      the scan is older than the last applied scan, store it as not applied;
      otherwise apply the transition from the fact (mapping on the
-     [Aggregate Design Canvas](/contexts/shipping-and-tracking/aggregate-design-canvas)).
+     [Aggregate Design Canvas](/network/contexts/shipping-and-tracking/aggregate-design-canvas)).
   4. On `LABELLED -> HANDED_OVER` raise `PackageHandedOver`
      (`HandoverOnFirstScan`); on `-> DELIVERED` raise `PackageDelivered`;
      on every applied scan raise `PackageScanned`.
@@ -175,7 +175,7 @@ not found 404, stale 409. Problems are `application/problem+json`
 - **Preconditions:** the journey is open and no scan arrived within the
   expected leg time plus tolerance. The model does not give this context the
   expected leg time (no departure, lane or wave event is consumed); see the
-  [canvas open questions](/contexts/shipping-and-tracking/bounded-context-canvas).
+  [canvas open questions](/network/contexts/shipping-and-tracking/bounded-context-canvas).
 - **Main flow:**
   1. Select open journeys whose next scan is overdue.
   2. For each, `RaiseException` with reason `NO_SCAN`; the state does not

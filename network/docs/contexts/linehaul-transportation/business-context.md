@@ -24,7 +24,7 @@ the **middle mile**.
 does not say *when* a truck leaves, *how many* packages it can carry, or
 whether tomorrow's 18:00 trip is still running. A promise for a fast tier
 cannot rest on a nominal number (`delivery-promise` forbids it, see
-[ADR 0008](/adr/0008-capacity-held-at-promise-time)). It needs concrete trips
+[ADR 0008](/network/adr/0008-capacity-held-at-promise-time)). It needs concrete trips
 with a cutoff, a departure, an arrival and remaining room.
 
 This context supplies those trips. It turns lanes into **scheduled
@@ -85,9 +85,9 @@ The model is shaped after the public picture of a large retail network's
 middle mile: vendor and fulfillment-centre pickups feeding sortation
 centres, a sort-and-consolidate step, and delivery stations that run the
 last mile. The facts, with citations, are on
-[Amazon logistics network](/research/amazon-logistics-network). How a vendor
+[Amazon logistics network](/network/research/amazon-logistics-network). How a vendor
 learns its ship-by and hands packages over through a Direct-Fulfillment-like
-API is mapped on [SP-API surface map](/research/sp-api-surface-map). This
+API is mapped on [SP-API surface map](/network/research/sp-api-surface-map). This
 page restates none of those facts. The names here (departure, load, lane
 schedule) are this model's own and make no claim about any real company's
 internal systems.
@@ -109,6 +109,6 @@ internal systems.
   own carrier cutoffs belong to the vendor. The warehouse-systems fleet is
   vendor V-WS and never talks to this context: the only channel between the
   two organizations is the Vendor API (see
-  [WMS/WES integration](/integration/wms-wes-integration)).
+  [WMS/WES integration](/network/integration/wms-wes-integration)).
 - **Inventory placement** (which node should hold which item). Named as a
   future context (`inventory-placement`) and out of scope.

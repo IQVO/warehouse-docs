@@ -15,7 +15,7 @@ The code identifiers are the proposed Go names (`package.Type`) from the
 model's `ul` entries. Where the model gives no `ul` code, the identifier is the
 model's value-object, policy or field name and is marked *(model field)*. The
 network-wide glossary is on
-[Ubiquitous Language](/strategic-design/ubiquitous-language).
+[Ubiquitous Language](/network/strategic-design/ubiquitous-language).
 
 ## This context's terms
 
@@ -80,4 +80,4 @@ this context.
 No fleet translation table is needed here: this context never touches the
 warehouse-systems fleet. Only `vendor-connectivity` and `node-topology` do;
 the canonical mapping is on
-[WMS/WES integration](/integration/wms-wes-integration).
+[WMS/WES integration](/network/integration/wms-wes-integration).

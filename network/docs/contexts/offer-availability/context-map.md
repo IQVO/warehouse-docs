@@ -56,7 +56,7 @@ deliberately absent relationship. Labels are abbreviated ("node events"
 the edge table has every message. In the `vendor-connectivity` edge the
 command flows from `vendor-connectivity` into this context, but this
 context is the upstream Supplier of that call. Classifications follow the
-[Subdomain Classification](/strategic-design/subdomain-classification).
+[Subdomain Classification](/network/strategic-design/subdomain-classification).
 
 Omitted: Postgres and Kafka as infrastructure, and the contexts with no
 relationship to this one, which are Separate Ways:

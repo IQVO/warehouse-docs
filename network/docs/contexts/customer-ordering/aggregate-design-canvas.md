@@ -73,7 +73,7 @@ when the shipped group is the last one not yet shipped. `→ PARTIALLY_SHIPPED`
 applies otherwise.
 
 Two consequences of the model as written, both listed as open questions on
-the [canvas](/contexts/customer-ordering/bounded-context-canvas):
+the [canvas](/network/contexts/customer-ordering/bounded-context-canvas):
 
 - If `MarkInFulfillment` runs on the first `FulfillmentLocked`, every order in
   `IN_FULFILLMENT` has a locked group. `IN_FULFILLMENT → CANCELLED` then
@@ -96,7 +96,7 @@ Not invariants of this aggregate, but errors `PlaceOrder` can receive from
 `delivery-promise` during checkout (that context's identifiers):
 `ErrOfferNotQuotable` (offer expired or consumed), `ErrPromiseCapacityExhausted`,
 `ErrBookClosed`, `ErrGroupSpansNodes`. They stop the checkout before the
-aggregate exists; see [Use Cases](/contexts/customer-ordering/use-cases).
+aggregate exists; see [Use Cases](/network/contexts/customer-ordering/use-cases).
 
 ### 5. Corrective Policies
 

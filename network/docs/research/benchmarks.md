@@ -70,7 +70,7 @@ peak.[31]
 
 ## Sources
 
-Every number above maps to one source. The verbatim sentences that support each claim are on [Sources and evidence](/research/sources).
+Every number above maps to one source. The verbatim sentences that support each claim are on [Sources and evidence](/network/research/sources).
 
 - **[21]** [Google Merchant Center — Set up estimated delivery time](https://support.google.com/merchants/answer/14949917?hl=en)
 - **[22]** [Google Merchant API — Overview of shipping settings](https://developers.google.com/merchant/api/guides/shipping-settings/overview)

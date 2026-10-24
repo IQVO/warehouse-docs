@@ -35,7 +35,7 @@ Derived from: model.yaml → `contexts[node-topology].chart`
 values from the model.
 
 Omitted: the other nine contexts (each has its own chart; all ten are on the
-domain-wide [Core Domain Chart](/strategic-design/core-domain-chart)).
+domain-wide [Core Domain Chart](/network/strategic-design/core-domain-chart)).
 
 ## Classification: Supporting
 
@@ -53,7 +53,7 @@ why it sits close to the midline rather than near the Generic floor. The
 highest slice is the **operational profile declaration**, because a
 versioned, declared handling time, cutoff set and throughput cap is what
 lets the network promise from a vendor's building it does not run
-([ADR 0003](/adr/0003-declared-and-measured-capability)).
+([ADR 0003](/network/adr/0003-declared-and-measured-capability)).
 
 **Model complexity is moderate (x ≈ 0.44).** There are four aggregates
 (`Node`, `Lane`, `ServiceArea`, `Region`), one lifecycle with four states,
@@ -77,9 +77,9 @@ from one source, through events, instead of keeping their own registries.
 
 | Part | Evolution stage | Why |
 | --- | --- | --- |
-| Node, lane, region and service-area registry | **Custom-built** (model `evolution: Custom-built`) | The node types, the operator rule and the lane type pairs are this network's own design ([ADR 0004](/adr/0004-parcel-nodes-are-network-operated)). |
-| Operational profile | **Custom-built**, shaped after a **Product** | Modelled after the Supply Sources `operationalConfiguration` (see [SP-API surface map](/research/sp-api-surface-map)), extended with cutoffs and sort dwell. |
-| Master-data plumbing (outbox, CloudEvents, REST) | **Commodity** | The same building blocks every context uses ([event standard](/strategic-design/event-standard-cloudevents)). |
+| Node, lane, region and service-area registry | **Custom-built** (model `evolution: Custom-built`) | The node types, the operator rule and the lane type pairs are this network's own design ([ADR 0004](/network/adr/0004-parcel-nodes-are-network-operated)). |
+| Operational profile | **Custom-built**, shaped after a **Product** | Modelled after the Supply Sources `operationalConfiguration` (see [SP-API surface map](/network/research/sp-api-surface-map)), extended with cutoffs and sort dwell. |
+| Master-data plumbing (outbox, CloudEvents, REST) | **Commodity** | The same building blocks every context uses ([event standard](/network/strategic-design/event-standard-cloudevents)). |
 
 **Movement to watch.** If the network ever optimises its own topology
 (choosing where to open a station, which lanes to run), that capability would

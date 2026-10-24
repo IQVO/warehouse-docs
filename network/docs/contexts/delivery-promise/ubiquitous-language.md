@@ -15,7 +15,7 @@ The first table is this context's own language
 (`contexts[delivery-promise].ul`). The second lists the neighbour terms this
 context reads from its event-fed read models; they keep the neighbour's
 meaning and code identifier. The domain-wide glossary is on
-[the ubiquitous language page](/strategic-design/ubiquitous-language).
+[the ubiquitous language page](/network/strategic-design/ubiquitous-language).
 
 ## This context's terms
 
@@ -91,5 +91,5 @@ None. This context never touches the warehouse-systems fleet: it consumes no
 `warehouse.*` topic, calls no fleet service, and is not reached by the Vendor
 API. The fleet's own words (CPT, process path) meet the network only in
 `vendor-connectivity` and `node-topology`; see
-[the WMS/WES integration page](/integration/wms-wes-integration) for the
+[the WMS/WES integration page](/network/integration/wms-wes-integration) for the
 canonical translation table.

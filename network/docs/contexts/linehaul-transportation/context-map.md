@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).
 This is **linehaul-transportation's slice** of the
-[network context map](/strategic-design/context-map): every relationship it
+[network context map](/network/strategic-design/context-map): every relationship it
 has, with the upstream (U) and downstream (D) side, the pattern and the
 channel. Abbreviations: OHS = Open Host Service, PL = Published Language,
 CF = Conformist, C/S = Customer/Supplier.
@@ -86,7 +86,7 @@ organizations is the Vendor API of `vendor-connectivity`.
   `delivery-promise`, `order-sourcing` and `shipping-and-tracking` conform
   to.
 - **No Anti-Corruption Layer.** All neighbours are in the same organization
-  and share the [CloudEvents standard](/strategic-design/event-standard-cloudevents);
+  and share the [CloudEvents standard](/network/strategic-design/event-standard-cloudevents);
   translation is limited to projecting events into local read models.
 - **No Shared Kernel.** Identifiers such as `nodeId`, `laneId` and
   `trackingNumber` are values copied from events, not shared code or shared

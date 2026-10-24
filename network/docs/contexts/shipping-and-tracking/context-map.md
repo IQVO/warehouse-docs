@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).
 This is **shipping-and-tracking's slice** of the
-[domain-wide context map](/strategic-design/context-map): every relationship
+[domain-wide context map](/network/strategic-design/context-map): every relationship
 this context has, with the upstream (U) and downstream (D) side, the pattern
 and the channel. The map is split in two diagrams to stay readable.
 Three neighbours appear in both, because the relationship differs per
@@ -74,7 +74,7 @@ that is deliberately absent.
 
 Omitted: the callers of `POST /journeys/{trackingNumber}/scans` and
 `POST /labels/{labelRef}:void`, which the model does not name (see the
-[canvas open questions](/contexts/shipping-and-tracking/bounded-context-canvas));
+[canvas open questions](/network/contexts/shipping-and-tracking/bounded-context-canvas));
 analytics-only events (`LabelVoided`, `PackageReturned`, `PackageLost`);
 Postgres and Kafka as infrastructure. `node-topology` has no edge here: this
 context consumes no node event (a gap noted on the canvas).
@@ -85,7 +85,7 @@ context consumes no node event (a gap noted on the canvas).
 | --- | --- | --- | --- | --- | --- |
 | `vendor-connectivity` (Supporting) | ST upstream, VC downstream | **Customer/Supplier** (VC is the Customer) | REST `POST /labels` (in-org) | `IssueLabel` | `vendor-connectivity` needs a label inside a vendor request; this context shapes the route for that one caller. Model: ST `inbound` row and VC `sync_calls`. |
 | `vendor-connectivity` (Supporting) | VC upstream, ST downstream | **Customer/Supplier** (ST is the Customer) | Kafka `retailnetwork.vendor-connectivity.events` | `VendorShipmentConfirmed` | The vendor's shipment statement names the tracking numbers this context issued; the two sides agree the fields. Model: ST `inbound` row. |
-| `customer-ordering` (Generic) | CO upstream, ST downstream | **Customer/Supplier** (ST is the Customer) | REST `GET /orders/{orderId}/ship-to` (in-org, restricted) | `GetShipTo` | A restricted route that exists only for this context, under [ADR 0006](/adr/0006-pii-confinement). Model: CO `inbound` row. |
+| `customer-ordering` (Generic) | CO upstream, ST downstream | **Customer/Supplier** (ST is the Customer) | REST `GET /orders/{orderId}/ship-to` (in-org, restricted) | `GetShipTo` | A restricted route that exists only for this context, under [ADR 0006](/network/adr/0006-pii-confinement). Model: CO `inbound` row. |
 | `customer-ordering` (Generic) | ST upstream, CO downstream | **Open Host Service** (query) / **Conformist** (events) | REST `GET /journeys/{trackingNumber}`; Kafka `retailnetwork.shipping-and-tracking.events` | `GetJourney`; `LabelIssued`, `PackageScanned`, `PackageDelivered`, `PackageExceptionRaised` | The journey route is open to any reader; `customer-ordering` takes the events as published into its `OrderTrackingView`. Model: ST `inbound` (`GetJourney`, OHS); CO `inbound` (Conformist). |
 | `linehaul-transportation` (Supporting) | LH upstream, ST downstream | **Conformist** | Kafka `retailnetwork.linehaul-transportation.events` | `LoadDeparted`, `LoadArrived` | Linehaul publishes load facts for its own purposes; this context takes the shape as is. |
 | `linehaul-transportation` (Supporting) | ST upstream, LH downstream | **Conformist** | Kafka `retailnetwork.shipping-and-tracking.events` | `LabelIssued` | Linehaul counts expected volume (`ExpectedVolumeView`) from labels as published. |
@@ -95,7 +95,7 @@ context consumes no node event (a gap noted on the canvas).
 | `order-sourcing` (Core) | ST upstream, OS downstream | **Conformist** | Kafka `retailnetwork.shipping-and-tracking.events` | `PackageDelivered` | Closes the assignment (`MarkDelivered`). |
 | `node-performance` (Supporting) | ST upstream, NP downstream | **Conformist** | Kafka `retailnetwork.shipping-and-tracking.events` | `PackageHandedOver` | On-time handover is scored from this context's observed handover, never from the vendor's statement. |
 | Shopper / storefront | ST upstream | **Open Host Service** | REST `GET /journeys/{trackingNumber}` | `GetJourney` | Any client may read a journey by tracking number. |
-| `network-fulfillment` (Supporting in the fleet, other organization) | none | **Separate Ways** | none | none | The hard boundary: the fleet reaches the network only through the Vendor API of `vendor-connectivity` ([Vendor API](/integration/vendor-api)). |
+| `network-fulfillment` (Supporting in the fleet, other organization) | none | **Separate Ways** | none | none | The hard boundary: the fleet reaches the network only through the Vendor API of `vendor-connectivity` ([Vendor API](/network/integration/vendor-api)). |
 
 ## Notes on the patterns
 

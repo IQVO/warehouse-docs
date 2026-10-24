@@ -155,7 +155,7 @@ Derived from: `model.yaml → contexts[delivery-promise].aggregates[Promise]`
 (`promise.Judgement`, `promise.WitnessPath`, `promise.ShipmentGroup`).
 
 Omitted: the error variables (on
-[the aggregate design canvas](/contexts/delivery-promise/aggregate-design-canvas)).
+[the aggregate design canvas](/network/contexts/delivery-promise/aggregate-design-canvas)).
 The aggregate is split over three diagrams to stay within the page width.
 `orderId` and `groupNo` are empty until `Confirm`; `judgement` is empty until
 `Judge`. `Revision` is drawn as an entity because `revisionNo` identifies it
@@ -266,7 +266,7 @@ Omitted: `GroupLine`, `Tier` and `WitnessPath`, shared with diagram 1.
 `destinationPostalPrefix`, `quotedAt` and `expiresAt` on the offer come from its
 description and invariant. `lines` on the offer is this pack's reading for a
 multi-line group (open question 1 on
-[the canvas page](/contexts/delivery-promise/bounded-context-canvas)).
+[the canvas page](/network/contexts/delivery-promise/bounded-context-canvas)).
 `cutoffAt` and `closesAt` on the book are proposed: `ErrBookClosed` needs the
 instant "pickup cutoff minus handling time", which the book must know. `Open`
 is the proposed creating constructor the model does not name (open question 7).
@@ -422,7 +422,7 @@ classDiagram
 
 Derived from: `model.yaml → contexts[delivery-promise].publishes[*].data`.
 
-Omitted: Go field types (on [the domain events page](/contexts/delivery-promise/domain-events)).
+Omitted: Go field types (on [the domain events page](/network/contexts/delivery-promise/domain-events)).
 `DeliveryOffer` raises no integration event.
 
 ## 5. Hexagonal ports and adapters

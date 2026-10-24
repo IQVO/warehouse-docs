@@ -46,7 +46,7 @@ for sellers on Multi-Location Inventory: the Supply Sources API accepts a
 declared handling time, operating hours and an order throughput cap per supply
 source.[8][9] This site's model keeps "declared + measured" (ADR 0003) and now
 has a real-world precedent for the declared half. See
-[Fleet changes](/integration/fleet-changes).
+[Fleet changes](/network/integration/fleet-changes).
 :::
 
 ## Demand to a vendor node
@@ -66,7 +66,7 @@ customer.[12] Its status values are `NEW`, `SHIPPED`, `ACCEPTED` and
 | DF purchase order | `purchaseOrderNumber`, `orderDetails.shipmentDates{requiredShipDate, promisedDeliveryDate}`[12] | `PurchaseOrder{poNumber, requiredShipBy, ackBy}` in `vendor-connectivity` (deliverBy stays in the network) |
 | Poll then acknowledge | pull orders, then acknowledge[13] | `GET /vendor/purchase-orders` with `nextToken`, then `POST /vendor/acknowledgements` |
 | Label only after acknowledgement | acknowledge before a label request[13] | invariant `ErrLabelBeforeAcceptance` |
-| PII behind a Restricted Data Token | customer PII in DF orders[13] | **no** ship-to in the Vendor API at all ([ADR 0006](/adr/0006-pii-confinement)) |
+| PII behind a Restricted Data Token | customer PII in DF orders[13] | **no** ship-to in the Vendor API at all ([ADR 0006](/network/adr/0006-pii-confinement)) |
 
 External Fulfillment APIs (inventory, returns, shipping) handle several
 seller-operated fulfillment channels, including Seller Flex, Easy Ship, Self
@@ -97,7 +97,7 @@ place their own stock (the fleet's `network-inventory-planning`).
 
 ## Sources
 
-Every number above maps to one source. The verbatim sentences that support each claim are on [Sources and evidence](/research/sources).
+Every number above maps to one source. The verbatim sentences that support each claim are on [Sources and evidence](/network/research/sources).
 
 - **[8]** [SP-API — Supply Sources API](https://developer-docs.amazon/sp-api/docs/supply-sources-api)
 - **[9]** [SP-API model — supplySources_2020-07-01.json](https://github.com/amzn/selling-partner-api-models/blob/main/models/supply-sources-api-model/supplySources_2020-07-01.json)

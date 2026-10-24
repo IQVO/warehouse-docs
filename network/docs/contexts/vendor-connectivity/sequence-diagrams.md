@@ -12,7 +12,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 :::
 
 One UML sequence per command use case on
-[Use Cases](/contexts/vendor-connectivity/use-cases). Shared conventions:
+[Use Cases](/network/contexts/vendor-connectivity/use-cases). Shared conventions:
 
 - `Repo` saves with `WHERE version = :expected`; zero rows updated is a
   version conflict.
@@ -26,7 +26,7 @@ One UML sequence per command use case on
   `Retry-After`); it is drawn only in diagram 4.
 
 Event names are short; the full types are on
-[Domain Events](/contexts/vendor-connectivity/domain-events).
+[Domain Events](/network/contexts/vendor-connectivity/domain-events).
 
 ## 1. OnboardVendor
 
@@ -482,4 +482,4 @@ Derived from: `model.yaml → contexts[vendor-connectivity].aggregates[Submissio
 Omitted: the PO event is `PurchaseOrderAccepted`, `PurchaseOrderRejected`
 or `VendorShipmentConfirmed` on success, and none on failure. Changing two
 aggregates in one transaction is a proposed exception, listed as an open
-question on [Use Cases](/contexts/vendor-connectivity/use-cases).
+question on [Use Cases](/network/contexts/vendor-connectivity/use-cases).

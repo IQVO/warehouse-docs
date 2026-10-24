@@ -35,7 +35,7 @@ contexts[node-performance].aggregates[NodeScorecard],
 contexts[node-performance].policies.
 
 Omitted: the other nine contexts (their positions are on the
-[network-wide chart](/strategic-design/core-domain-chart)). The three
+[network-wide chart](/network/strategic-design/core-domain-chart)). The three
 internal slices are placed by this page, not by the model; the model gives
 only the context point.
 
@@ -47,7 +47,7 @@ same quadrant.
 
 **Differentiation is moderate (y = 0.45).** The grade matters to the
 business: it is one of the two inputs to the promise (declared and
-measured, [ADR 0003](/adr/0003-declared-and-measured-capability)), and a
+measured, [ADR 0003](/network/adr/0003-declared-and-measured-capability)), and a
 promise the network cannot keep is the costliest mistake it can make. But
 the differentiating decision is not made here. `delivery-promise` turns
 the grade into a later `shipBy` (`ScorecardHandicap`), and `order-sourcing`
@@ -78,7 +78,7 @@ lowest.
 | --- | --- | --- |
 | `Grading` and `ThresholdAlert` policies | Custom-built | Thresholds are a business choice of this network and will be tuned. |
 | `NodeScorecard` recompute over rolling windows | Custom-built, trending to Product | Windowed rates and percentiles are a well-known shape; a stream-processing product could compute them. |
-| Inbox, outbox, CloudEvents | Commodity | The same building blocks as every other context ([event standard](/strategic-design/event-standard-cloudevents)). |
+| Inbox, outbox, CloudEvents | Commodity | The same building blocks as every other context ([event standard](/network/strategic-design/event-standard-cloudevents)). |
 
 ## Why it is its own context
 

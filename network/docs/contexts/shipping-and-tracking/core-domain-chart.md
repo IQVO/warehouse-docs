@@ -34,7 +34,7 @@ Derived from: `model.yaml → contexts[shipping-and-tracking].chart`
 The three slices are this page's placement, not model values.
 
 Omitted: the other nine contexts (they are on the
-[domain-wide chart](/strategic-design/core-domain-chart)) and the future
+[domain-wide chart](/network/strategic-design/core-domain-chart)) and the future
 `customer-notification` context, also Generic.
 
 ## Classification: Generic
@@ -75,7 +75,7 @@ Both are real engineering. Neither is a differentiator.
 
 | Part | Evolution stage | Why |
 | --- | --- | --- |
-| `ShippingLabel` issue | Commodity | One label per package, a unique number, an address. The only network-specific rule is the PII confinement ([ADR 0006](/adr/0006-pii-confinement)). |
+| `ShippingLabel` issue | Commodity | One label per package, a unique number, an address. The only network-specific rule is the PII confinement ([ADR 0006](/network/adr/0006-pii-confinement)). |
 | `PackageJourney` timeline | Product, tending to Commodity | The consolidation rules are specific to this network's event names, but the shape (forward-only scans, terminal outcomes) is standard. |
 | Handover and silence policies | Custom-built, small | `HandoverOnFirstScan` and `ExceptionOnSilence` encode network choices on top of a generic timeline. |
 

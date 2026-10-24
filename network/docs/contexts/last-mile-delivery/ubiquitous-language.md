@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 The terms this context speaks, each mapped to the identifier an
 implementation must use. The network-wide glossary is
-[Ubiquitous Language](/strategic-design/ubiquitous-language).
+[Ubiquitous Language](/network/strategic-design/ubiquitous-language).
 
 ## This context's terms
 
@@ -56,4 +56,4 @@ rest are aggregate states, value objects and policies of the same context.
 
 This context does not touch the warehouse-systems fleet, so there is no
 fleet translation table. The canonical one is on
-[WMS/WES integration](/integration/wms-wes-integration).
+[WMS/WES integration](/network/integration/wms-wes-integration).

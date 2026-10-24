@@ -83,9 +83,9 @@ attempt is recorded only on a route that is out for delivery
 The network is modelled on an Amazon-like logistics network with
 network-operated delivery stations and independent delivery partners. The
 facts behind that, with citations, are on
-[Amazon logistics network](/research/amazon-logistics-network). The SP-API
+[Amazon logistics network](/network/research/amazon-logistics-network). The SP-API
 surface that a vendor sees, and which never exposes the last mile, is mapped on
-[SP-API surface map](/research/sp-api-surface-map). This page does not restate
+[SP-API surface map](/network/research/sp-api-surface-map). This page does not restate
 either. The model makes no claim about any real company's internal service
 names.
 
@@ -93,11 +93,11 @@ names.
 
 | Out of scope | Where it lives |
 | --- | --- |
-| Ship-to addresses and any other PII | `customer-ordering` and `shipping-and-tracking` only ([ADR 0006](/adr/0006-pii-confinement)) |
+| Ship-to addresses and any other PII | `customer-ordering` and `shipping-and-tracking` only ([ADR 0006](/network/adr/0006-pii-confinement)) |
 | The customer-visible timeline, `PackageDelivered`, returns to sender as a journey state | `shipping-and-tracking` (`PackageJourney`) |
 | Which delivery station serves a postal prefix | `node-topology` (`ServiceArea`) |
 | Middle-mile departures and loads | `linehaul-transportation` |
 | Quoting, holding and judging promises | `delivery-promise` |
 | Customer returns routing to a returns centre | future context `customer-returns` |
 | Customer notifications on delivery | future context `customer-notification` |
-| Anything in the warehouse-systems fleet | No edge. A delivery station is network-operated; the fleet's facility-layout `DELIVERY_STATION` row is a reference mirror only (model `fleet_site_role_mapping`). The only seam between the organisations is the [Vendor API](/integration/vendor-api), which this context does not touch |
+| Anything in the warehouse-systems fleet | No edge. A delivery station is network-operated; the fleet's facility-layout `DELIVERY_STATION` row is a reference mirror only (model `fleet_site_role_mapping`). The only seam between the organisations is the [Vendor API](/network/integration/vendor-api), which this context does not touch |

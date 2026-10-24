@@ -40,7 +40,7 @@ Derived from: `model.yaml` → `meta.hard_boundary`,
 `contexts[vendor-connectivity].inbound`, `sync_calls`; fleet side from
 `IQVO/network-fulfillment` `internal/application/ports/ports.go`. Lines inside
 each organization stand for that side's own integrations (detailed on the
-[Context Map](/strategic-design/context-map) and in
+[Context Map](/network/strategic-design/context-map) and in
 [warehouse-docs](https://iqvo.github.io/warehouse-docs/strategic-design/context-map)).
 
 | Side | Context | Role at the seam | Pattern |
@@ -61,7 +61,7 @@ Hard rules, both directions:
    ("No ship-to PII reaches this context at all", `network-fulfillment`
    `docs/adr/0009-retail-network-not-amazon-counterpart.md` §3); the network
    side keeps the address in `customer-ordering` and `shipping-and-tracking`
-   ([ADR 0006](/adr/0006-pii-confinement)).
+   ([ADR 0006](/network/adr/0006-pii-confinement)).
 4. Identifiers are mapped, never parsed: the fleet persists
    `siteCode ↔ nodeId` and `NetworkRef ↔ poNumber`; it never builds one from
    the other by string convention (`network-fulfillment`
@@ -130,12 +130,12 @@ sequenceDiagram
 Derived from: `model.yaml` → `contexts[vendor-connectivity]`,
 `contexts[order-sourcing]`; fleet steps from the `network-fulfillment` ports
 named above. Step 13 (how the fleet learns the package is ready) is the open
-gap on [Fleet changes](/integration/fleet-changes).
+gap on [Fleet changes](/network/integration/fleet-changes).
 
 ## Translation table
 
 The canonical term-by-term translation is on
-[Ubiquitous Language](/strategic-design/ubiquitous-language) under
+[Ubiquitous Language](/network/strategic-design/ubiquitous-language) under
 "Translation to the warehouse-systems fleet". Two rows decide most of the
 design:
 
@@ -153,4 +153,4 @@ The fleet's `facility-layout` also has sites with roles `SORTATION_CENTER`,
 network-operated. The fleet never registers them through the Vendor API, and
 the network never reads the fleet's rows; they are reference mirrors so fleet
 screens can name the building a package left for. See
-[Node model](/network-model/node-model).
+[Node model](/network/network-model/node-model).

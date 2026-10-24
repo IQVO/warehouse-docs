@@ -14,8 +14,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 Every event this context publishes and consumes, from
 `contexts[offer-availability].publishes` and `.consumes`, with the envelope
 rules of `conventions.cloudevents`. The event standard is
-[CloudEvents](/strategic-design/event-standard-cloudevents); the namespace
-decision is [ADR 0007](/adr/0007-cloudevents-namespace).
+[CloudEvents](/network/strategic-design/event-standard-cloudevents); the namespace
+decision is [ADR 0007](/network/adr/0007-cloudevents-namespace).
 
 ## Envelope
 

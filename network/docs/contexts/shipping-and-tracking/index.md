@@ -45,27 +45,27 @@ as an exception (`ExceptionOnSilence`).
 
 | Page | What it holds | ddd-crew tool it follows |
 | --- | --- | --- |
-| [Business Context](/contexts/shipping-and-tracking/business-context) | The business problem, actors, decisions, out of scope | [DDD Starter Modelling Process](https://github.com/ddd-crew/ddd-starter-modelling-process) (Understand, Discover) |
-| [Ubiquitous Language](/contexts/shipping-and-tracking/ubiquitous-language) | Every term, its code identifier and its false friends | [Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas) (Ubiquitous Language section) |
-| [Core Domain Chart](/contexts/shipping-and-tracking/core-domain-chart) | Why this context is Generic | [Core Domain Charts](https://github.com/ddd-crew/core-domain-charts) |
-| [Bounded Context Canvas](/contexts/shipping-and-tracking/bounded-context-canvas) | Purpose, roles, every inbound and outbound message | [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas) |
-| [Context Map](/contexts/shipping-and-tracking/context-map) | Every neighbour, direction and pattern | [Context Mapping](https://github.com/ddd-crew/context-mapping) |
-| [Aggregate Design Canvas](/contexts/shipping-and-tracking/aggregate-design-canvas) | `ShippingLabel` and `PackageJourney`: states, invariants, commands, events | [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas) |
-| [Domain Events](/contexts/shipping-and-tracking/domain-events) | Eight published and six consumed events, with full CloudEvents types | [EventStorming glossary](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) (domain event) |
-| [Domain Message Flow](/contexts/shipping-and-tracking/domain-message-flow) | Label issue, journey to delivery, failure paths | [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
-| [EventStorming](/contexts/shipping-and-tracking/eventstorming) | Process-level boards with hotspots | [EventStorming glossary & cheat sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
-| [Use Cases](/contexts/shipping-and-tracking/use-cases) | One section per command, errors mapped to HTTP | none (application layer) |
-| [Class Diagram](/contexts/shipping-and-tracking/class-diagram) | Proposed domain types and the hexagonal layout | none (UML) |
-| [Entity Relationship](/contexts/shipping-and-tracking/entity-relationship) | Proposed Postgres schema | none |
-| [Sequence Diagrams](/contexts/shipping-and-tracking/sequence-diagrams) | Adapter to Kafka for every command use case | none (UML) |
+| [Business Context](/network/contexts/shipping-and-tracking/business-context) | The business problem, actors, decisions, out of scope | [DDD Starter Modelling Process](https://github.com/ddd-crew/ddd-starter-modelling-process) (Understand, Discover) |
+| [Ubiquitous Language](/network/contexts/shipping-and-tracking/ubiquitous-language) | Every term, its code identifier and its false friends | [Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas) (Ubiquitous Language section) |
+| [Core Domain Chart](/network/contexts/shipping-and-tracking/core-domain-chart) | Why this context is Generic | [Core Domain Charts](https://github.com/ddd-crew/core-domain-charts) |
+| [Bounded Context Canvas](/network/contexts/shipping-and-tracking/bounded-context-canvas) | Purpose, roles, every inbound and outbound message | [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas) |
+| [Context Map](/network/contexts/shipping-and-tracking/context-map) | Every neighbour, direction and pattern | [Context Mapping](https://github.com/ddd-crew/context-mapping) |
+| [Aggregate Design Canvas](/network/contexts/shipping-and-tracking/aggregate-design-canvas) | `ShippingLabel` and `PackageJourney`: states, invariants, commands, events | [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas) |
+| [Domain Events](/network/contexts/shipping-and-tracking/domain-events) | Eight published and six consumed events, with full CloudEvents types | [EventStorming glossary](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) (domain event) |
+| [Domain Message Flow](/network/contexts/shipping-and-tracking/domain-message-flow) | Label issue, journey to delivery, failure paths | [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
+| [EventStorming](/network/contexts/shipping-and-tracking/eventstorming) | Process-level boards with hotspots | [EventStorming glossary & cheat sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
+| [Use Cases](/network/contexts/shipping-and-tracking/use-cases) | One section per command, errors mapped to HTTP | none (application layer) |
+| [Class Diagram](/network/contexts/shipping-and-tracking/class-diagram) | Proposed domain types and the hexagonal layout | none (UML) |
+| [Entity Relationship](/network/contexts/shipping-and-tracking/entity-relationship) | Proposed Postgres schema | none |
+| [Sequence Diagrams](/network/contexts/shipping-and-tracking/sequence-diagrams) | Adapter to Kafka for every command use case | none (UML) |
 
 ## Elsewhere
 
 - REST contract (proposed): `apis/shipping-and-tracking/openapi.yaml`,
-  rendered under the [API reference](/api-reference).
-- [ADR 0006: PII confinement](/adr/0006-pii-confinement): why the ship-to
+  rendered under the [API reference](/network/api-reference).
+- [ADR 0006: PII confinement](/network/adr/0006-pii-confinement): why the ship-to
   address lives only in `customer-ordering` and here.
-- [ADR 0007: CloudEvents namespace](/adr/0007-cloudevents-namespace) and the
-  [event standard](/strategic-design/event-standard-cloudevents).
-- The domain-wide [Context Map](/strategic-design/context-map) and
-  [Subdomain Classification](/strategic-design/subdomain-classification).
+- [ADR 0007: CloudEvents namespace](/network/adr/0007-cloudevents-namespace) and the
+  [event standard](/network/strategic-design/event-standard-cloudevents).
+- The domain-wide [Context Map](/network/strategic-design/context-map) and
+  [Subdomain Classification](/network/strategic-design/subdomain-classification).

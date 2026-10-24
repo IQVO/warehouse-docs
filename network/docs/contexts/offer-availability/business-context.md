@@ -46,8 +46,8 @@ the lesser of the physical usable quantity and what its paths can carry
 before the next cutoff, with basis `PHYSICAL` or `THROUGHPUT_CONSTRAINED`.
 That number reaches this context only through `vendor-connectivity`; this
 context never talks to the fleet. See
-[WMS/WES integration](/integration/wms-wes-integration) and the
-[Vendor API](/integration/vendor-api).
+[WMS/WES integration](/network/integration/wms-wes-integration) and the
+[Vendor API](/network/integration/vendor-api).
 
 ## Actors
 
@@ -78,8 +78,8 @@ for a node. That split, the full-or-partial feed and the basis are the
 proposed model; this page makes no claim about how any real company does
 it. What the public record says about real networks and their partner
 interfaces, with citations, is on the research pages:
-[Amazon logistics network](/research/amazon-logistics-network) and the
-[SP-API surface map](/research/sp-api-surface-map).
+[Amazon logistics network](/network/research/amazon-logistics-network) and the
+[SP-API surface map](/network/research/sp-api-surface-map).
 
 ## Out of scope (deliberately)
 

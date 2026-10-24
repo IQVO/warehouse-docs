@@ -14,7 +14,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 One section per command of `aggregates[NodeScorecard].commands`. The use
 cases live in the proposed package `internal/application/usecases`. The
 step-by-step runtime view is on
-[Sequence Diagrams](/contexts/node-performance/sequence-diagrams).
+[Sequence Diagrams](/network/contexts/node-performance/sequence-diagrams).
 
 Neither command has a REST route: `RecordObservation` is driven by Kafka
 and `Recompute` by a timer. The HTTP status and problem `type` in each

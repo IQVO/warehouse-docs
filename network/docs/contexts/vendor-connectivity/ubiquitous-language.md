@@ -67,10 +67,10 @@ fleet's code as of `IQVO/network-fulfillment` `develop`: the
 `NetworkGateway` port and the stub-only adapter at
 `internal/adapters/outbound/network/` (ADR 0009 renames it to
 `outbound/retailnetwork/`). The canonical, domain-wide table is on
-[Ubiquitous Language](/strategic-design/ubiquitous-language); this page
+[Ubiquitous Language](/network/strategic-design/ubiquitous-language); this page
 repeats its rows and adds the protocol detail this context owns. How the
-seam works end to end is on [WMS/WES integration](/integration/wms-wes-integration);
-the changes the fleet needs are on [Fleet changes](/integration/fleet-changes).
+seam works end to end is on [WMS/WES integration](/network/integration/wms-wes-integration);
+the changes the fleet needs are on [Fleet changes](/network/integration/fleet-changes).
 
 ### Concepts and operations
 
@@ -83,7 +83,7 @@ the changes the fleet needs are on [Fleet changes](/integration/fleet-changes).
 | `listingId` | `NetworkProductId`, translated to `SKU` by `ProductTranslation` | A listing is per node; the SKU is the fleet's |
 | Node (`nodeId`) | Site (`siteCode`) | Mapping persisted in `network-fulfillment`, never a string convention |
 | `vendorNodeCode` | `siteCode` | What the fleet sends when it registers a node |
-| Node type `FULFILLMENT_CENTER` + subtype | `siteRole` (facility-layout ADR 0037) | Per the model's `fleet_site_role_mapping`; see [Node model](/network-model/node-model) |
+| Node type `FULFILLMENT_CENTER` + subtype | `siteRole` (facility-layout ADR 0037) | Per the model's `fleet_site_role_mapping`; see [Node model](/network/network-model/node-model) |
 | Cutoff / pickup departure | CPT (`CPTSchedule`, process-path-management ADR 0010) | The fleet's CPT is the network's pickup cutoff at that node |
 | Handling Time | `cycleTimeP95` of the eligible path | Declared from the fleet's own number |
 | Throughput Cap / cutoff `maxOrders` | remaining path capacity (`PathCapacityChanged`) | — |
@@ -112,7 +112,7 @@ the changes the fleet needs are on [Fleet changes](/integration/fleet-changes).
 | PO `REJECTED` | `REJECTED` | — |
 | PO `EXPIRED` | `REJECTED` with `ACKNOWLEDGEMENT_DEADLINE_MISSED` | The fleet refuses locally and sends nothing |
 | PO `SHIPMENT_PROCESSING`, `SHIPPED` | `CONFIRMED` | The fleet has no in-flight shipment state |
-| PO `CANCELLED` | no fleet state | See the open questions on the [canvas](/contexts/vendor-connectivity/bounded-context-canvas) |
+| PO `CANCELLED` | no fleet state | See the open questions on the [canvas](/network/contexts/vendor-connectivity/bounded-context-canvas) |
 | Submission `PROCESSING` / `SUCCESS` / `FAILURE` | `SubmissionStatus` `PENDING` / `SUCCESS` / `FAILURE` | — |
 
 ### Reason codes

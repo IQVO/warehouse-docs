@@ -14,7 +14,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 One section per command in `contexts[linehaul-transportation].aggregates[*].commands`
 (15 commands). Proposed package: `internal/application/usecases`. The
 runtime sequence of each is on
-[Sequence Diagrams](/contexts/linehaul-transportation/sequence-diagrams).
+[Sequence Diagrams](/network/contexts/linehaul-transportation/sequence-diagrams).
 Reads (`ListDepartures` on `GET /departures`, and `GET /departures/{departureId}`)
 are not use cases: the HTTP adapter reads the departure repository directly.
 

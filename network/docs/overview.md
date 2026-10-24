@@ -23,7 +23,7 @@ network's Vendor API.
 
 :::info[Proposed design, docs only]
 Nothing on this site is built. Facts about Amazon, the Selling Partner API and
-other networks are on the [Research](/research) pages with numbered
+other networks are on the [Research](/network/research) pages with numbered
 citations. Everything else is the model this site proposes, derived from that
 evidence and from the fleet's repositories. The canonical model is
 [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml);
@@ -75,34 +75,34 @@ flowchart TB
 Derived from: `model.yaml` → `contexts[*].classification`, `contexts[*].tier`,
 the main event edges. Dark = Core, blue = Supporting, grey = Generic. The full
 map with every relationship pattern is on
-[Context Map](/strategic-design/context-map).
+[Context Map](/network/strategic-design/context-map).
 
 | Context | One sentence |
 | --- | --- |
-| [`delivery-promise`](/contexts/delivery-promise) | Quotes and makes the arrival-date promise from a feasible witness path with capacity held, and judges it kept or broken. **Core.** |
-| [`order-sourcing`](/contexts/order-sourcing) | Decides late which node really fulfils each shipment group, re-optimizes until release, locks at commitment. **Core.** |
-| [`node-topology`](/contexts/node-topology) | Nodes, their declared operational profile, lanes, regions and service areas. |
-| [`offer-availability`](/contexts/offer-availability) | Catalogue items, one listing per (item, node), and what each node claims it can ship. |
-| [`vendor-connectivity`](/contexts/vendor-connectivity) | The Vendor API: purchase orders, fill-or-kill acknowledgements, labels, shipment confirmations, async transactions. The fleet's seam. |
-| [`linehaul-transportation`](/contexts/linehaul-transportation) | The middle mile: pickup departures at vendor cutoffs, scheduled departures with capacity, loads. |
-| [`last-mile-delivery`](/contexts/last-mile-delivery) | Delivery stations: delivery waves with stop capacity, routes for delivery partners, attempts. |
-| [`node-performance`](/contexts/node-performance) | Scorecards measured from facts, never from declarations; grades feed the promise. |
-| [`customer-ordering`](/contexts/customer-ordering) | Checkout and the customer order; the only holder of the (synthetic) ship-to address. Generic. |
-| [`shipping-and-tracking`](/contexts/shipping-and-tracking) | Labels and the package journey timeline. Generic. |
+| [`delivery-promise`](/network/contexts/delivery-promise) | Quotes and makes the arrival-date promise from a feasible witness path with capacity held, and judges it kept or broken. **Core.** |
+| [`order-sourcing`](/network/contexts/order-sourcing) | Decides late which node really fulfils each shipment group, re-optimizes until release, locks at commitment. **Core.** |
+| [`node-topology`](/network/contexts/node-topology) | Nodes, their declared operational profile, lanes, regions and service areas. |
+| [`offer-availability`](/network/contexts/offer-availability) | Catalogue items, one listing per (item, node), and what each node claims it can ship. |
+| [`vendor-connectivity`](/network/contexts/vendor-connectivity) | The Vendor API: purchase orders, fill-or-kill acknowledgements, labels, shipment confirmations, async transactions. The fleet's seam. |
+| [`linehaul-transportation`](/network/contexts/linehaul-transportation) | The middle mile: pickup departures at vendor cutoffs, scheduled departures with capacity, loads. |
+| [`last-mile-delivery`](/network/contexts/last-mile-delivery) | Delivery stations: delivery waves with stop capacity, routes for delivery partners, attempts. |
+| [`node-performance`](/network/contexts/node-performance) | Scorecards measured from facts, never from declarations; grades feed the promise. |
+| [`customer-ordering`](/network/contexts/customer-ordering) | Checkout and the customer order; the only holder of the (synthetic) ship-to address. Generic. |
+| [`shipping-and-tracking`](/network/contexts/shipping-and-tracking) | Labels and the package journey timeline. Generic. |
 
 ## How to read this site
 
-1. [Research](/research): what is publicly known, with citations.
-2. [Strategic Design](/strategic-design): vision, subdomains, core domain
+1. [Research](/network/research): what is publicly known, with citations.
+2. [Strategic Design](/network/strategic-design): vision, subdomains, core domain
    chart, capability map, context map, EventStorming, message flows,
    ubiquitous language, event standard (the ddd-crew strategic set), and the
-   [Model Gap Register](/strategic-design/model-gap-register) of what the
+   [Model Gap Register](/network/strategic-design/model-gap-register) of what the
    model does not decide yet.
-3. [Nodes & Promise](/network-model): the node model, the promise algorithm
+3. [Nodes & Promise](/network/network-model): the node model, the promise algorithm
    with a worked example, and order assignment.
-4. [WMS/WES Integration](/integration): exactly how the warehouse-systems
+4. [WMS/WES Integration](/network/integration): exactly how the warehouse-systems
    fleet plugs in, what crosses the seam, and what the fleet must change.
-5. [Bounded Contexts](/contexts): the same 14-page ddd-crew pack for each of
-   the ten contexts, and [API Reference](/api-reference) for their REST
+5. [Bounded Contexts](/network/contexts): the same 14-page ddd-crew pack for each of
+   the ten contexts, and [API Reference](/network/api-reference) for their REST
    contracts.
-6. [ADRs](/adr): the eight proposed decisions.
+6. [ADRs](/network/adr): the eight proposed decisions.

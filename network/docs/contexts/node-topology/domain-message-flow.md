@@ -17,9 +17,9 @@ model, prefixed `cmd:` (command), `qry:` (query) or `evt:` (event). Events go
 through `retailnetwork.node-topology.events`; the diagrams draw them straight
 to the consumer. Full CloudEvents types are
 `com.retailnetwork.logistics.node-topology.<entity>.<EventName>` (see
-[Domain Events](/contexts/node-topology/domain-events)). Path parameters are
+[Domain Events](/network/contexts/node-topology/domain-events)). Path parameters are
 written without braces. The domain-wide flows are on
-[Domain Message Flows](/strategic-design/domain-message-flows).
+[Domain Message Flows](/network/strategic-design/domain-message-flows).
 
 ## 1. A vendor node joins the network (happy path)
 
@@ -97,7 +97,7 @@ Derived from: model.yaml → `contexts[node-topology].aggregates[Node].invariant
 Omitted: `ErrCutoffOutsideOperatingHours` (422, same shape as the stale
 revision branch) and `ErrVendorNodeCodeTaken` (409, same shape as the first
 branch). Nothing reaches Kafka from this context on any refusal. The problem
-`type` slugs are listed on [Use Cases](/contexts/node-topology/use-cases).
+`type` slugs are listed on [Use Cases](/network/contexts/node-topology/use-cases).
 
 ## 3. The planner adds a delivery station and its service area
 

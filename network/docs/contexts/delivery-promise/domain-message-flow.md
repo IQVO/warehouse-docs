@@ -16,10 +16,10 @@ Four business scenarios. Participants are bounded contexts and actors. Every
 arrow is a message from the model, prefixed `cmd:` (command), `qry:` (query) or
 `evt:` (event). Events travel over Kafka through each producer's outbox; the
 diagrams draw them straight from producer to consumer. Event names are short;
-full CloudEvents types are on [the domain events page](/contexts/delivery-promise/domain-events).
+full CloudEvents types are on [the domain events page](/network/contexts/delivery-promise/domain-events).
 A self-arrow on `delivery-promise` marks an event the model publishes with no
 consuming context (analytics only).
-The domain-wide flows are on [the domain message flows page](/strategic-design/domain-message-flows).
+The domain-wide flows are on [the domain message flows page](/network/strategic-design/domain-message-flows).
 
 ## 1. Quote, promise, confirm, keep (happy path)
 
@@ -69,12 +69,12 @@ Derived from: `model.yaml → contexts[delivery-promise].inbound`, `.publishes`,
 `.policies[CheckoutPromising]`, `.inbound[POST /checkout]`.
 
 Omitted: the read-model feeds that make the quote possible (board 1 of
-[the EventStorming page](/contexts/delivery-promise/eventstorming)); a checkout
+[the EventStorming page](/network/contexts/delivery-promise/eventstorming)); a checkout
 re-quote when the offer expired (`CheckoutPromising`); everything
 `order-sourcing`, `vendor-connectivity` and the logistics contexts do between
 the order and the delivery. What this context does with `FulfillmentLocked` is
 not stated by the model (open question on
-[the canvas page](/contexts/delivery-promise/bounded-context-canvas)). The
+[the canvas page](/network/contexts/delivery-promise/bounded-context-canvas)). The
 scenario is split in two to stay within the page width.
 
 ## 2. A cancelled departure breaks the witness path (main failure path)

@@ -15,7 +15,7 @@ This page is generated from [`model/model.yaml`](https://github.com/IQVO/retail-
 Every Kafka message in the network is a CloudEvents 1.0 structured JSON
 envelope, the same rule the warehouse-systems fleet applies to itself. The
 namespace is different on purpose (see
-[ADR 0007](/adr/0007-cloudevents-namespace)): the two organizations share no
+[ADR 0007](/network/adr/0007-cloudevents-namespace)): the two organizations share no
 topic, so no consumer can mistake one organization's event for the other's.
 
 | Attribute | Rule |

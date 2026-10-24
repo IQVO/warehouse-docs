@@ -13,8 +13,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 Every event this context publishes (`contexts[node-performance].publishes`)
 and consumes (`.consumes`), with the envelope rules of
-`conventions.cloudevents` ([event standard](/strategic-design/event-standard-cloudevents),
-[ADR 0007](/adr/0007-cloudevents-namespace)).
+`conventions.cloudevents` ([event standard](/network/strategic-design/event-standard-cloudevents),
+[ADR 0007](/network/adr/0007-cloudevents-namespace)).
 
 ## Envelope
 

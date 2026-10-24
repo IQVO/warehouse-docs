@@ -27,7 +27,7 @@ Every diagram shows the `Idempotency-Key` check, the optimistic-concurrency
 version check (or the unique index that replaces it on a create), the outbox
 write in the same transaction, and the relay. A domain error writes nothing
 and publishes nothing. The problem `type` slugs match
-[Use Cases](/contexts/node-topology/use-cases). Path parameters are written
+[Use Cases](/network/contexts/node-topology/use-cases). Path parameters are written
 without braces in the diagrams.
 
 ## 1. RegisterNode
@@ -239,7 +239,7 @@ sequenceDiagram
 
 Derived from: model.yaml → `contexts[node-topology].aggregates[Node]` (`commands`, `invariants`), `.rest`, `.publishes[NodeSuspended]`; `conventions.integration_rules`.
 
-Omitted: the 404 for an unknown `nodeId`; the downstream reactions (on [Domain Message Flow](/contexts/node-topology/domain-message-flow)).
+Omitted: the 404 for an unknown `nodeId`; the downstream reactions (on [Domain Message Flow](/network/contexts/node-topology/domain-message-flow)).
 
 ## 5. RetireNode
 

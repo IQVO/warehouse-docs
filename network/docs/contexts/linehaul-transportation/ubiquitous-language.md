@@ -12,7 +12,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 :::
 
 The network-wide glossary is on
-[Ubiquitous Language](/strategic-design/ubiquitous-language). Code
+[Ubiquitous Language](/network/strategic-design/ubiquitous-language). Code
 identifiers are the proposed Go names; `(context)` marks a term that names
 the context itself rather than a type.
 
@@ -58,4 +58,4 @@ states of its aggregates.
 No fleet translation table: this context does not touch the
 warehouse-systems fleet. The fleet calls the cutoff a vendor must meet the
 CPT; that translation lives with `vendor-connectivity` and
-[WMS/WES integration](/integration/wms-wes-integration).
+[WMS/WES integration](/network/integration/wms-wes-integration).

@@ -15,6 +15,6 @@ only thing that talks to the network.
 
 | Page | What it answers |
 | --- | --- |
-| [How the fleet connects](/integration/wms-wes-integration) | The seam, the hard rules, what the fleet declares and commits, an end-to-end sequence. |
-| [Vendor API](/integration/vendor-api) | The Open Host Service and its semantics. |
-| [Fleet changes](/integration/fleet-changes) | What the fleet must change, with evidence, and what needs no change. |
+| [How the fleet connects](/network/integration/wms-wes-integration) | The seam, the hard rules, what the fleet declares and commits, an end-to-end sequence. |
+| [Vendor API](/network/integration/vendor-api) | The Open Host Service and its semantics. |
+| [Fleet changes](/network/integration/fleet-changes) | What the fleet must change, with evidence, and what needs no change. |

@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 Following the ddd-crew [Core Domain Charts](https://github.com/ddd-crew/core-domain-charts):
 business differentiation (y) against model complexity (x). The network-wide
-chart is on [Core Domain Chart](/strategic-design/core-domain-chart).
+chart is on [Core Domain Chart](/network/strategic-design/core-domain-chart).
 
 ```mermaid
 quadrantChart
@@ -49,7 +49,7 @@ reducer (cost-to-serve) and speed enabler*.
 promise is made in `delivery-promise` and kept by the choices of
 `order-sourcing` (both Core). They cannot work without real departures: a
 fast tier is never promised from nominal lane times
-([ADR 0008](/adr/0008-capacity-held-at-promise-time)). So this context is
+([ADR 0008](/network/adr/0008-capacity-held-at-promise-time)). So this context is
 close to the Core line. It stays below it because it does not decide what
 the customer is promised or which node ships; it supplies the trips and
 keeps their capacity honest. The highest slice is `PickupFromCutoffs`,
@@ -71,7 +71,7 @@ consolidation and plotted lowest.
 | Pickup generation from vendor cutoffs | **Custom-built** | Specific to a network that lets vendors declare their own cutoffs and must schedule its own trucks against them. |
 | Departure capacity ledger | **Custom-built** | A simple counter, but its events feed the promise and sourcing read models; its semantics are the network's own. |
 | Lane schedules and loads | **Custom-built → Product** | Weekly templates and load building are well-known transport-management functions; a product could replace them if it published the same events. |
-| Plumbing (outbox, inbox, CloudEvents) | **Commodity** | The same building blocks as every context (see [CloudEvents standard](/strategic-design/event-standard-cloudevents)). |
+| Plumbing (outbox, inbox, CloudEvents) | **Commodity** | The same building blocks as every context (see [CloudEvents standard](/network/strategic-design/event-standard-cloudevents)). |
 
 **Movement to watch.** If the network began to compete on the middle mile
 itself (dynamic capacity bought per day, load-level re-routing to save a

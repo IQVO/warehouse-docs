@@ -16,7 +16,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 The retail network owns the customer, the catalogue, the promise, sourcing
 and the parcel network. It does **not** operate fulfillment centres. Every
 fulfillment, cross-dock and returns node belongs to a **vendor** (see
-[ADR 0004](/adr/0004-parcel-nodes-are-network-operated)). The
+[ADR 0004](/network/adr/0004-parcel-nodes-are-network-operated)). The
 warehouse-systems fleet is one such vendor, `V-WS`; there can be many.
 
 So the network has a buying problem. Once `order-sourcing` releases a
@@ -24,7 +24,7 @@ shipment group to a vendor node, the network needs a firm answer from a
 company it does not control: "yes, all of it, by the pickup cutoff" or
 "no". It needs that answer early enough to send the group elsewhere if the
 answer is no. Until the answer is yes, the network cannot lock the path
-([ADR 0005](/adr/0005-vendor-acceptance-is-the-path-lock)).
+([ADR 0005](/network/adr/0005-vendor-acceptance-is-the-path-lock)).
 
 Vendors, in turn, need one stable contract they can integrate once: how to
 register a building, how to tell the network what the building can do, how
@@ -62,7 +62,7 @@ These come straight from `business_decisions` in the model.
    takes effect when its transaction succeeds, not when the request returns.
 5. **The Vendor API never carries ship-to PII.** A label is `labelRef`,
    `trackingNumber` and `carrier`. The address stays in
-   `shipping-and-tracking` ([ADR 0006](/adr/0006-pii-confinement)).
+   `shipping-and-tracking` ([ADR 0006](/network/adr/0006-pii-confinement)).
 6. **Rate limits are part of the contract:** `429` with `Retry-After`.
 
 ## How this relates to the real-world reference
@@ -72,13 +72,13 @@ interface, in the network's own vocabulary: polled orders, whole-order
 acknowledgement inside a window, asynchronous submissions reconciled by a
 transaction id, label then shipment confirmation. The public facts and
 their citations are on
-[SP-API surface map](/research/sp-api-surface-map); how vendor nodes fit a
+[SP-API surface map](/network/research/sp-api-surface-map); how vendor nodes fit a
 large logistics network is on
-[Amazon logistics network](/research/amazon-logistics-network). This page
+[Amazon logistics network](/network/research/amazon-logistics-network). This page
 restates no numbers from either. Where the model deliberately departs from
 the reference (for example, operational profile declared through the API
 rather than out-of-band configuration), the reason is
-[ADR 0003](/adr/0003-declared-and-measured-capability).
+[ADR 0003](/network/adr/0003-declared-and-measured-capability).
 
 The **simulation knobs** make the network behave like a demanding real
 counterpart, so the fleet's Anti-Corruption Layer can be exercised. All

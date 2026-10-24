@@ -20,9 +20,9 @@ VC = `vendor-connectivity`, OA = `offer-availability`, NT =
 message from `model.yaml`, prefixed `cmd:` (command), `qry:` (query) or
 `evt:` (event). Event arrows are written `<entity>.<EventName>`; the full
 type is `com.retailnetwork.<tier>.<producer>.<entity>.<EventName>` (see
-[Domain Events](/contexts/offer-availability/domain-events)). Path
+[Domain Events](/network/contexts/offer-availability/domain-events)). Path
 parameters are written without braces. The domain-wide flows are on
-[Domain Message Flows](/strategic-design/domain-message-flows).
+[Domain Message Flows](/network/strategic-design/domain-message-flows).
 
 ## 1. A full inventory feed is applied (happy path)
 
@@ -122,7 +122,7 @@ Derived from: `model.yaml → contexts[offer-availability].aggregates[InventoryF
 Omitted: what `vendor-connectivity` does with a `409` on a feed it already
 applied (its `ErrSubmissionAlreadyProcessed` guards its own side). The
 problem `type` slugs and status codes are this context's proposed contract
-([Use Cases](/contexts/offer-availability/use-cases)). Whether a feed
+([Use Cases](/network/contexts/offer-availability/use-cases)). Whether a feed
 whose lines are all stale should end `APPLIED` is a model gap; this flow
 follows the invariant "is ignored".
 

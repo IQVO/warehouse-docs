@@ -12,7 +12,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 :::
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).
-This is **delivery-promise's slice** of [the domain context map](/strategic-design/context-map):
+This is **delivery-promise's slice** of [the domain context map](/network/strategic-design/context-map):
 every relationship this context has, with the upstream (U) and downstream (D)
 side, the pattern and the channel.
 
@@ -88,13 +88,13 @@ contexts with no relationship (below).
 | `shipping-and-tracking` (Generic) | U → D | OHS + PL / **Conformist** | Kafka `retailnetwork.shipping-and-tracking.events` | `PackageDelivered`, `PackageExceptionRaised` | Delivery and exception facts drive `JudgeOnDelivery` and `RepromiseOnRisk`. |
 | `customer-ordering` (Generic) | DP U → CO D | **Customer/Supplier** (CO is the Customer) | REST `POST /delivery-offers:quote`, `POST /promises` (in-org); Kafka `retailnetwork.delivery-promise.events` | `QuoteDeliveryOffers`, `MakePromise`; `PromiseAtRisk`, `PromiseRevised`, `PromiseKept`, `PromiseBroken` | Checkout needs an answer inside the shopper's request (the only synchronous calls into DP, listed in `customer-ordering.sync_calls`), and CO's order status depends on promise changes. The contract is negotiated for this one customer. |
 | `customer-ordering` (Generic) | CO U → DP D | **Customer/Supplier** | Kafka `retailnetwork.customer-ordering.events` | `CustomerOrderPlaced`, `CustomerOrderCancelled` | Placing the order confirms the provisional promises; cancelling releases them. |
-| `order-sourcing` (Core) | OS U → DP D | **Customer/Supplier** | Kafka `retailnetwork.order-sourcing.events` | `FulfillmentUnsourceable`, `FulfillmentLocked` | An unsourceable group comes back to DP to re-promise; sourcing never breaks a promise silently ([ADR 0002](/adr/0002-promise-and-assignment-are-separate)). |
+| `order-sourcing` (Core) | OS U → DP D | **Customer/Supplier** | Kafka `retailnetwork.order-sourcing.events` | `FulfillmentUnsourceable`, `FulfillmentLocked` | An unsourceable group comes back to DP to re-promise; sourcing never breaks a promise silently ([ADR 0002](/network/adr/0002-promise-and-assignment-are-separate)). |
 | `order-sourcing` (Core) | DP U → OS D | **Customer/Supplier** | Kafka `retailnetwork.delivery-promise.events` | `PromiseRevised`, `PromiseBookExhausted` | A revised `deliverByLatest` changes the sourcing constraint; an exhausted book raises the cost of that cutoff in sourcing's `AssignmentCost`. |
 | Shopper / storefront | DP U → storefront D | **Open Host** | REST `POST /delivery-offers:quote` | `QuoteDeliveryOffers` | Any client may ask for a quote; no contract is negotiated per client. |
 | `node-performance` (Supporting) | DP U → NP D | OHS + PL / **Conformist** | Kafka `retailnetwork.delivery-promise.events` | `PromiseKept`, `PromiseBroken` | NP counts kept and broken promises per node in `promiseKeptRate` and conforms to DP's events. |
 | analytics (no context) | DP U → none | **Published Language** | Kafka `retailnetwork.delivery-promise.events` | `PromiseMade`, `PromiseConfirmed`, `PromiseReleased`, `PromiseCancelled` | Published for the record; the model names no consuming context ("analytics only"). |
 | `vendor-connectivity` (Supporting) | none | **Separate Ways** | — | — | DP never sees a purchase order or a vendor; the vendor side starts after `order-sourcing` releases a group. |
-| `network-fulfillment` (warehouse-systems fleet, other organization; Supporting in the fleet) | none | **Separate Ways** (hard boundary) | — | — | No retail-network context reads a `warehouse.*` topic or calls a fleet service; the only seam is the [Vendor API](/integration/vendor-api), which DP does not use. |
+| `network-fulfillment` (warehouse-systems fleet, other organization; Supporting in the fleet) | none | **Separate Ways** (hard boundary) | — | — | No retail-network context reads a `warehouse.*` topic or calls a fleet service; the only seam is the [Vendor API](/network/integration/vendor-api), which DP does not use. |
 
 ## Notes on the patterns
 

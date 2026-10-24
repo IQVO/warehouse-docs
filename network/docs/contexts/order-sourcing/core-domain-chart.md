@@ -36,7 +36,7 @@ slice positions are this page's estimate; the model gives a position only for
 the context.
 
 Omitted: the other nine contexts; their positions are on the
-[network Core Domain Chart](/strategic-design/core-domain-chart).
+[network Core Domain Chart](/network/strategic-design/core-domain-chart).
 `delivery-promise`, the other Core context, sits higher and further right
 (`[0.85, 0.92]` in the model).
 
@@ -57,9 +57,9 @@ speed protector* and evolution *Custom-built*.
   silently (business decision 4).
 - The published account of the reference retailer's network redesign treats
   late, re-optimisable order assignment as one of the software changes behind
-  its regional network (see [Amazon logistics network](/research/amazon-logistics-network)).
+  its regional network (see [Amazon logistics network](/network/research/amazon-logistics-network)).
   Commercial order-routing features are compared on
-  [benchmarks](/research/benchmarks); the rules here (promise books,
+  [benchmarks](/network/research/benchmarks); the rules here (promise books,
   departures, the vendor ack budget) are this network's own.
 
 The highest slice, **VirtualQueue and AssignmentCost**, is where the
@@ -91,9 +91,9 @@ witness).
 | Part | Evolution stage | Why |
 | --- | --- | --- |
 | `VirtualQueue`, `AssignmentCost`, candidate search | **Custom-built** (Genesis at the edges) | Specific to this network's tiers, promise books and vendor ack budget. Penalty weights are not set by the model and will be tuned. |
-| `FulfillmentAssignment` lifecycle (queue, release, refusal, lock) | **Custom-built** | The shape is known from order-management products; the lock-on-acceptance rule is this network's ([ADR 0005](/adr/0005-vendor-acceptance-is-the-path-lock)). |
+| `FulfillmentAssignment` lifecycle (queue, release, refusal, lock) | **Custom-built** | The shape is known from order-management products; the lock-on-acceptance rule is this network's ([ADR 0005](/network/adr/0005-vendor-acceptance-is-the-path-lock)). |
 | Event-fed read models | **Product** pattern | Standard projections of sibling events; no domain rule of their own. |
-| Outbox, inbox, CloudEvents | **Commodity** | Network-wide conventions ([event standard](/strategic-design/event-standard-cloudevents)). |
+| Outbox, inbox, CloudEvents | **Commodity** | Network-wide conventions ([event standard](/network/strategic-design/event-standard-cloudevents)). |
 
 **Movement to watch.** Penalty weights and the vendor ack budget are tunable
 numbers. If they settle into fixed defaults that rarely change, parts of

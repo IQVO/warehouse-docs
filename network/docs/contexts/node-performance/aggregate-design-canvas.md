@@ -115,7 +115,7 @@ and the count falls below `minObservations`.
 The four other consumed events (`VendorOnboarded`, `SubmissionProcessed`,
 `NodeRegistered`, `NodeOperationalProfileDeclared`) issue no command: the
 model gives them no use here (see
-[Domain Events](/contexts/node-performance/domain-events)).
+[Domain Events](/network/contexts/node-performance/domain-events)).
 
 ### 7. Created Events
 

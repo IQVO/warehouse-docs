@@ -85,7 +85,7 @@ commands but not as a transition.
 None on the integration topic. Quotes are high-volume query results; the model
 names one analytics-only event, `DeliveryOfferQuoted`, on
 `retailnetwork.delivery-promise.analytics`. The model gives it no data fields;
-see [the domain events page](/contexts/delivery-promise/domain-events).
+see [the domain events page](/network/contexts/delivery-promise/domain-events).
 
 ### 8. Throughput
 
@@ -258,7 +258,7 @@ command that opens a book. `ConfirmCapacity` and `ReleaseCapacity` on a
 `CLOSED` book are needed because closing only stops new holds: an order placed
 after the close must still confirm a hold made before it, and a promise
 cancelled or released after the close must still return its count (see Open Questions on
-[the canvas page](/contexts/delivery-promise/bounded-context-canvas)).
+[the canvas page](/network/contexts/delivery-promise/bounded-context-canvas)).
 
 ### 4. Enforced Invariants
 

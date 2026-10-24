@@ -14,7 +14,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 One proposed application service per command in
 `contexts[vendor-connectivity].aggregates[*].commands`, under
 `internal/application/usecases`. The step-by-step runtime view is on
-[Sequence Diagrams](/contexts/vendor-connectivity/sequence-diagrams).
+[Sequence Diagrams](/network/contexts/vendor-connectivity/sequence-diagrams).
 
 Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 `GetTransaction` and `GetNode` read repositories or read models directly;

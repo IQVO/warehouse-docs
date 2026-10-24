@@ -55,7 +55,7 @@ deleted.
 
 None in the model. What a `SUSPENDED` vendor may still do is not stated
 (see the open questions on the
-[canvas](/contexts/vendor-connectivity/bounded-context-canvas)).
+[canvas](/network/contexts/vendor-connectivity/bounded-context-canvas)).
 
 ### 6. Handled Commands
 

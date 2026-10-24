@@ -18,7 +18,7 @@ of the model. Hotspots come only from gaps or open questions in the model;
 the source of each is in the inventory at the end. The boards read top to
 bottom (`flowchart TB`) so each stays inside the page width. The
 network-wide board
-is on [EventStorming big picture](/strategic-design/eventstorming-big-picture).
+is on [EventStorming big picture](/network/strategic-design/eventstorming-big-picture).
 
 ## Legend
 
@@ -95,7 +95,7 @@ Derived from: `model.yaml → contexts[vendor-connectivity].policies[IssueOnRele
 
 Omitted: the synchronous refusals at receipt (`ErrPartialAcknowledgement`,
 `ErrAlreadyAcknowledged`, `ErrAckWindowClosed`, `ErrNodeNotOwnedByVendor`),
-shown on [Use Cases](/contexts/vendor-connectivity/use-cases); the
+shown on [Use Cases](/network/contexts/vendor-connectivity/use-cases); the
 `PO_REDELIVERY_RATE` re-delivery on poll.
 
 ## 2. Transaction outcomes

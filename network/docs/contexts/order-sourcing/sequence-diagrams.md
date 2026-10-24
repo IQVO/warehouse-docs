@@ -11,7 +11,7 @@ description: "Proposed UML sequence diagrams for the nine Order Sourcing command
 Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
 :::
 
-One diagram per command use case on [Use Cases](/contexts/order-sourcing/use-cases).
+One diagram per command use case on [Use Cases](/network/contexts/order-sourcing/use-cases).
 The participants are the proposed hexagonal pieces:
 
 | Participant | Proposed component |

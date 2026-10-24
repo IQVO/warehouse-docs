@@ -34,11 +34,11 @@ flowchart TB
   and spends on transport and delivery.
 - **The need.** A date the shopper believes, kept at the lowest cost to
   serve.
-- **Evidence.** [The Amazon logistics network](/research/amazon-logistics-network),
-  [SP-API surface map](/research/sp-api-surface-map),
-  [Other benchmarks](/research/benchmarks).
+- **Evidence.** [The Amazon logistics network](/network/research/amazon-logistics-network),
+  [SP-API surface map](/network/research/sp-api-surface-map),
+  [Other benchmarks](/network/research/benchmarks).
 
-Output: [Domain Vision](/strategic-design/domain-vision).
+Output: [Domain Vision](/network/strategic-design/domain-vision).
 
 ## 2. Discover: big-picture EventStorming
 
@@ -50,7 +50,7 @@ as the seams between parts that change at different speeds:
 `CustomerOrderPlaced`, `FulfillmentReleasedToNode`, `PurchaseOrderAccepted`,
 `VendorShipmentConfirmed`, `PackageDelivered`.
 
-Output: [EventStorming Big Picture](/strategic-design/eventstorming-big-picture).
+Output: [EventStorming Big Picture](/network/strategic-design/eventstorming-big-picture).
 
 ## 3. Decompose: sub-domains
 
@@ -59,8 +59,8 @@ nodes, days for lanes, hours for waves, milliseconds for a quote). Fourteen
 sub-domains came out; ten were kept in scope.
 
 Output: the problem-space table on
-[Subdomain Classification](/strategic-design/subdomain-classification) and the
-[Business Capability Map](/strategic-design/business-capability-map).
+[Subdomain Classification](/network/strategic-design/subdomain-classification) and the
+[Business Capability Map](/network/strategic-design/business-capability-map).
 
 ## 4. Strategize: core domain
 
@@ -68,7 +68,7 @@ Two sub-domains decide what customers see and what the network spends:
 promising and late assignment. Both were classified Core; everything that
 feeds them facts, Supporting; checkout and labels, Generic.
 
-Output: [Core Domain Chart](/strategic-design/core-domain-chart).
+Output: [Core Domain Chart](/network/strategic-design/core-domain-chart).
 
 ## 5. Connect: domain message flows
 
@@ -78,12 +78,12 @@ loop-backs to step 3:
 - the first cut had one "fulfillment" context doing both promise and
   assignment; the published promise/assignment split and the different
   timing needs separated them
-  ([ADR 0002](/adr/0002-promise-and-assignment-are-separate));
+  ([ADR 0002](/network/adr/0002-promise-and-assignment-are-separate));
 - the first cut let `vendor-connectivity` own node profiles and availability;
   connecting it showed it is a gateway, and ownership moved to
   `node-topology` and `offer-availability`.
 
-Output: [Domain Message Flows](/strategic-design/domain-message-flows).
+Output: [Domain Message Flows](/network/strategic-design/domain-message-flows).
 
 ## 6. Organise: team topology
 
@@ -105,12 +105,12 @@ Every context got a Bounded Context Canvas, an Aggregate Design Canvas and the
 rest of the ddd-crew pack, all derived from one model file so they cannot
 drift.
 
-Output: [Bounded Contexts](/contexts) and
+Output: [Bounded Contexts](/network/contexts) and
 [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml).
 
 ## 8. Code
 
 Not started. The REST contracts are written
-([API Reference](/api-reference)) and the order of work is on
-[Fleet changes](/integration/fleet-changes). When it starts, each context is a
+([API Reference](/network/api-reference)) and the order of work is on
+[Fleet changes](/network/integration/fleet-changes). When it starts, each context is a
 Go hexagonal service scaffolded like the fleet's.

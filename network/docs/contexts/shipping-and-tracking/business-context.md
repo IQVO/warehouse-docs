@@ -84,9 +84,9 @@ sortation centres, delivery stations and delivery service partners. The
 research pages hold the facts and their citations; this page restates none
 of them:
 
-- [Amazon logistics network](/research/amazon-logistics-network): the node
+- [Amazon logistics network](/network/research/amazon-logistics-network): the node
   types a package crosses after it leaves a fulfillment centre.
-- [SP-API surface map](/research/sp-api-surface-map): where the vendor's
+- [SP-API surface map](/network/research/sp-api-surface-map): where the vendor's
   shipping-label request sits in the vendor direct-fulfillment workflow,
   relative to acknowledgement and shipment confirmation.
 
@@ -108,7 +108,7 @@ trusts its in-org caller.
   belong to the future `customer-returns` context. This context only ends a
   journey as `RETURNED` (`ReturnToSender` from `AT_STATION`; the model names
   no trigger for it yet, see the
-  [canvas open questions](/contexts/shipping-and-tracking/bounded-context-canvas)).
+  [canvas open questions](/network/contexts/shipping-and-tracking/bounded-context-canvas)).
 - **Routing and loading decisions.** Which load or route a package rides is
   decided by `linehaul-transportation` and `last-mile-delivery`. This context
   only records what they report.
@@ -116,6 +116,6 @@ trusts its in-org caller.
   `node-performance` own those. This context supplies the facts.
 - **Any fleet data.** No `warehouse.*` topic, no warehouse-systems call.
 
-See the [Bounded Context Canvas](/contexts/shipping-and-tracking/bounded-context-canvas)
-for every message, and [ADR 0006](/adr/0006-pii-confinement) for the PII
+See the [Bounded Context Canvas](/network/contexts/shipping-and-tracking/bounded-context-canvas)
+for every message, and [ADR 0006](/network/adr/0006-pii-confinement) for the PII
 rule.

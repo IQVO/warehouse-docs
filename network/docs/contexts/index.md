@@ -17,16 +17,16 @@ relationship and sequence diagrams. All are derived from
 
 | Context | Classification | Tier | Aggregates | Events published | Events consumed |
 | --- | --- | --- | --- | --- | --- |
-| [`node-topology`](/contexts/node-topology) | <span class="badge-supporting">Supporting</span> | `logistics` | 4 | 9 | 0 |
-| [`offer-availability`](/contexts/offer-availability) | <span class="badge-supporting">Supporting</span> | `commerce` | 3 | 7 | 4 |
-| [`delivery-promise`](/contexts/delivery-promise) | <span class="badge-core">Core</span> | `commerce` | 3 | 9 | 27 |
-| [`customer-ordering`](/contexts/customer-ordering) | <span class="badge-generic">Generic</span> | `commerce` | 2 | 2 | 11 |
-| [`order-sourcing`](/contexts/order-sourcing) | <span class="badge-core">Core</span> | `commerce` | 1 | 8 | 29 |
-| [`vendor-connectivity`](/contexts/vendor-connectivity) | <span class="badge-supporting">Supporting</span> | `partner` | 3 | 8 | 7 |
-| [`linehaul-transportation`](/contexts/linehaul-transportation) | <span class="badge-supporting">Supporting</span> | `logistics` | 3 | 8 | 12 |
-| [`last-mile-delivery`](/contexts/last-mile-delivery) | <span class="badge-supporting">Supporting</span> | `logistics` | 3 | 6 | 3 |
-| [`shipping-and-tracking`](/contexts/shipping-and-tracking) | <span class="badge-generic">Generic</span> | `logistics` | 2 | 8 | 6 |
-| [`node-performance`](/contexts/node-performance) | <span class="badge-supporting">Supporting</span> | `partner` | 1 | 2 | 13 |
+| [`node-topology`](/network/contexts/node-topology) | <span class="badge-supporting">Supporting</span> | `logistics` | 4 | 9 | 0 |
+| [`offer-availability`](/network/contexts/offer-availability) | <span class="badge-supporting">Supporting</span> | `commerce` | 3 | 7 | 4 |
+| [`delivery-promise`](/network/contexts/delivery-promise) | <span class="badge-core">Core</span> | `commerce` | 3 | 9 | 27 |
+| [`customer-ordering`](/network/contexts/customer-ordering) | <span class="badge-generic">Generic</span> | `commerce` | 2 | 2 | 11 |
+| [`order-sourcing`](/network/contexts/order-sourcing) | <span class="badge-core">Core</span> | `commerce` | 1 | 8 | 29 |
+| [`vendor-connectivity`](/network/contexts/vendor-connectivity) | <span class="badge-supporting">Supporting</span> | `partner` | 3 | 8 | 7 |
+| [`linehaul-transportation`](/network/contexts/linehaul-transportation) | <span class="badge-supporting">Supporting</span> | `logistics` | 3 | 8 | 12 |
+| [`last-mile-delivery`](/network/contexts/last-mile-delivery) | <span class="badge-supporting">Supporting</span> | `logistics` | 3 | 6 | 3 |
+| [`shipping-and-tracking`](/network/contexts/shipping-and-tracking) | <span class="badge-generic">Generic</span> | `logistics` | 2 | 8 | 6 |
+| [`node-performance`](/network/contexts/node-performance) | <span class="badge-supporting">Supporting</span> | `partner` | 1 | 2 | 13 |
 
 Future contexts named by the model but not documented: `inventory-placement`,
 `customer-returns`, `customer-notification`, `payments-and-invoicing`.

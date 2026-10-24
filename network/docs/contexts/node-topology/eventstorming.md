@@ -16,7 +16,7 @@ Process-level boards in the ddd-crew
 notation. Every sticky comes from the model. Every hotspot is an open
 question or a risk the model leaves open, and the table at the end names the
 model entry it comes from. The domain-wide board is
-[EventStorming big picture](/strategic-design/eventstorming-big-picture).
+[EventStorming big picture](/network/strategic-design/eventstorming-big-picture).
 
 ## Legend
 

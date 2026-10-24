@@ -15,9 +15,9 @@ Following ddd-crew [Domain Message Flow Modelling](https://github.com/ddd-crew/d
 Participants are contexts and actors. Every arrow is a message from the
 model, prefixed `cmd:` (command), `evt:` (event) or `qry:` (query). Event
 arrows go from the producer straight to the consumer; Kafka is implied.
-Full CloudEvents types are on [Domain Events](/contexts/node-performance/domain-events).
+Full CloudEvents types are on [Domain Events](/network/contexts/node-performance/domain-events).
 The network-wide flows are on
-[Domain message flows](/strategic-design/domain-message-flows).
+[Domain message flows](/network/strategic-design/domain-message-flows).
 
 ## 1. A good node is graded and the grade reaches the promise
 
@@ -174,7 +174,7 @@ GetScorecard), .sync_calls (GET /scorecards/nodeId),
 .rest; meta.hard_boundary.
 
 Omitted: the `404` branch for a node with no scorecard yet (see
-[Use Cases](/contexts/node-performance/use-cases)); the Vendor API's rate
+[Use Cases](/network/contexts/node-performance/use-cases)); the Vendor API's rate
 limit (`429`). Path parameters are written without braces.
 `network-fulfillment` belongs to the warehouse-systems fleet; this is the
 only path by which the fleet sees a grade.

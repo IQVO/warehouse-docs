@@ -12,7 +12,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 :::
 
 One UML sequence diagram per command use case of
-[the use cases page](/contexts/delivery-promise/use-cases): inbound adapter →
+[the use cases page](/network/contexts/delivery-promise/use-cases): inbound adapter →
 use case → aggregate → repository and outbox in the **same transaction** →
 relay → Kafka. `Postgres tx` stands for the repositories, the inbox
 (`processed_events`) and the outbox (`outbox_events`) inside one transaction.
@@ -99,7 +99,7 @@ Derived from: `model.yaml → contexts[delivery-promise].rest[POST /delivery-off
 `.aggregates[DeliveryOffer]`, `.policies`, `.read_models`.
 
 Omitted: the search steps (listed on the use cases page and worked through in
-[the promise model](/network-model/promise-model)); a malformed body returns
+[the promise model](/network/network-model/promise-model)); a malformed body returns
 `422 invalid-request` before the use case runs. No synchronous call leaves the
 context: `NetworkSnapshot` reads local `rm_` tables. The quote reads books but
 never writes them.
@@ -363,7 +363,7 @@ Derived from: `model.yaml → contexts[delivery-promise].policies[JudgeOnDeliver
 
 Omitted: the lookup by `assignmentId` relies on the correlation recorded from
 `FulfillmentLocked`, which the model does not name (open questions 3 and 4 on
-[the canvas page](/contexts/delivery-promise/bounded-context-canvas)).
+[the canvas page](/network/contexts/delivery-promise/bounded-context-canvas)).
 
 ## 8. ReleaseExpiredHolds (scheduler)
 

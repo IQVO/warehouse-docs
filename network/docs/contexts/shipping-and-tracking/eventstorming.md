@@ -16,7 +16,7 @@ Process-level boards in the ddd-crew
 notation. Every sticky comes from `model.yaml`. The hotspots are genuine
 gaps or risks in the model; the inventory at the end says where each one
 comes from. The domain-wide board is
-[EventStorming Big Picture](/strategic-design/eventstorming-big-picture).
+[EventStorming Big Picture](/network/strategic-design/eventstorming-big-picture).
 
 ## Legend
 
@@ -75,7 +75,7 @@ Derived from: `model.yaml → contexts[shipping-and-tracking].aggregates[Shippin
 `contexts[customer-ordering].read_models`.
 
 Omitted: the duplicate-label and ship-to-unavailable branches (see
-[Use Cases](/contexts/shipping-and-tracking/use-cases)); the outbox write.
+[Use Cases](/network/contexts/shipping-and-tracking/use-cases)); the outbox write.
 
 ### 1b. Label void
 

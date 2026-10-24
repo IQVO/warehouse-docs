@@ -31,30 +31,30 @@ between the two organizations.
 
 | Page | What it covers | ddd-crew tool |
 | --- | --- | --- |
-| [Business Context](/contexts/vendor-connectivity/business-context) | The problem, the actors, the decisions, what is out of scope | — |
-| [Ubiquitous Language](/contexts/vendor-connectivity/ubiquitous-language) | Terms, code identifiers, and the fleet translation table | — |
-| [Core Domain Chart](/contexts/vendor-connectivity/core-domain-chart) | Why this context is Supporting | [core-domain-charts](https://github.com/ddd-crew/core-domain-charts) |
-| [Bounded Context Canvas](/contexts/vendor-connectivity/bounded-context-canvas) | Purpose, roles, inbound and outbound messages, decisions | [bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas) |
-| [Context Map](/contexts/vendor-connectivity/context-map) | Every neighbour with direction and pattern | [context-mapping](https://github.com/ddd-crew/context-mapping) |
-| [Aggregate Design Canvas](/contexts/vendor-connectivity/aggregate-design-canvas) | `VendorAccount`, `PurchaseOrder`, `Submission` | [aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas) |
-| [Domain Events](/contexts/vendor-connectivity/domain-events) | Eight published events, seven consumed | — |
-| [Domain Message Flow](/contexts/vendor-connectivity/domain-message-flow) | Happy path, refusal, node onboarding, failed transaction | [domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
-| [EventStorming](/contexts/vendor-connectivity/eventstorming) | Process-level boards with hotspots | [eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
-| [Use Cases](/contexts/vendor-connectivity/use-cases) | One section per command, errors mapped to HTTP | — |
-| [Class Diagram](/contexts/vendor-connectivity/class-diagram) | Proposed domain types and the hexagonal layout | — |
-| [Entity Relationship](/contexts/vendor-connectivity/entity-relationship) | Proposed Postgres schema | — |
-| [Sequence Diagrams](/contexts/vendor-connectivity/sequence-diagrams) | One runtime sequence per command | — |
+| [Business Context](/network/contexts/vendor-connectivity/business-context) | The problem, the actors, the decisions, what is out of scope | — |
+| [Ubiquitous Language](/network/contexts/vendor-connectivity/ubiquitous-language) | Terms, code identifiers, and the fleet translation table | — |
+| [Core Domain Chart](/network/contexts/vendor-connectivity/core-domain-chart) | Why this context is Supporting | [core-domain-charts](https://github.com/ddd-crew/core-domain-charts) |
+| [Bounded Context Canvas](/network/contexts/vendor-connectivity/bounded-context-canvas) | Purpose, roles, inbound and outbound messages, decisions | [bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas) |
+| [Context Map](/network/contexts/vendor-connectivity/context-map) | Every neighbour with direction and pattern | [context-mapping](https://github.com/ddd-crew/context-mapping) |
+| [Aggregate Design Canvas](/network/contexts/vendor-connectivity/aggregate-design-canvas) | `VendorAccount`, `PurchaseOrder`, `Submission` | [aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas) |
+| [Domain Events](/network/contexts/vendor-connectivity/domain-events) | Eight published events, seven consumed | — |
+| [Domain Message Flow](/network/contexts/vendor-connectivity/domain-message-flow) | Happy path, refusal, node onboarding, failed transaction | [domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
+| [EventStorming](/network/contexts/vendor-connectivity/eventstorming) | Process-level boards with hotspots | [eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
+| [Use Cases](/network/contexts/vendor-connectivity/use-cases) | One section per command, errors mapped to HTTP | — |
+| [Class Diagram](/network/contexts/vendor-connectivity/class-diagram) | Proposed domain types and the hexagonal layout | — |
+| [Entity Relationship](/network/contexts/vendor-connectivity/entity-relationship) | Proposed Postgres schema | — |
+| [Sequence Diagrams](/network/contexts/vendor-connectivity/sequence-diagrams) | One runtime sequence per command | — |
 
 ## Elsewhere
 
 - The Vendor API contract: `apis/vendor-connectivity/openapi.yaml`,
-  rendered under [API reference](/api-reference). The protocol in prose is
-  on [Vendor API](/integration/vendor-api).
+  rendered under [API reference](/network/api-reference). The protocol in prose is
+  on [Vendor API](/network/integration/vendor-api).
 - How the fleet meets this API:
-  [WMS/WES integration](/integration/wms-wes-integration) and
-  [Fleet changes](/integration/fleet-changes).
-- Decisions: [ADR 0005, vendor acceptance is the path lock](/adr/0005-vendor-acceptance-is-the-path-lock),
-  [ADR 0006, PII confinement](/adr/0006-pii-confinement),
-  [ADR 0003, declared and measured capability](/adr/0003-declared-and-measured-capability),
-  [ADR 0004, parcel nodes are network-operated](/adr/0004-parcel-nodes-are-network-operated).
-- Where the context sits among the ten: [Context Map](/strategic-design/context-map).
+  [WMS/WES integration](/network/integration/wms-wes-integration) and
+  [Fleet changes](/network/integration/fleet-changes).
+- Decisions: [ADR 0005, vendor acceptance is the path lock](/network/adr/0005-vendor-acceptance-is-the-path-lock),
+  [ADR 0006, PII confinement](/network/adr/0006-pii-confinement),
+  [ADR 0003, declared and measured capability](/network/adr/0003-declared-and-measured-capability),
+  [ADR 0004, parcel nodes are network-operated](/network/adr/0004-parcel-nodes-are-network-operated).
+- Where the context sits among the ten: [Context Map](/network/strategic-design/context-map).

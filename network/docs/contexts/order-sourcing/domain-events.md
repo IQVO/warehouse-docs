@@ -12,8 +12,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 :::
 
 The network's envelope rules are on
-[Event standard (CloudEvents)](/strategic-design/event-standard-cloudevents)
-and [ADR 0007](/adr/0007-cloudevents-namespace).
+[Event standard (CloudEvents)](/network/strategic-design/event-standard-cloudevents)
+and [ADR 0007](/network/adr/0007-cloudevents-namespace).
 
 ## Envelope
 
@@ -81,7 +81,7 @@ are the proposed JSON types; the model gives names only.
 | `lines` | array of `{catalogItemId, listingId, quantity}` | The whole group (fill-or-kill); `listingId` is this node's listing |
 
 No ship-to data: the release carries no PII
-([ADR 0006](/adr/0006-pii-confinement)).
+([ADR 0006](/network/adr/0006-pii-confinement)).
 
 ### FulfillmentReassigned
 

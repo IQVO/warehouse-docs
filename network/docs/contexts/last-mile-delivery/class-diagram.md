@@ -68,7 +68,7 @@ Derived from: model.yaml → `contexts[last-mile-delivery].aggregates[DeliveryWa
 
 Omitted: the error variables `ErrInvalidWaveTimes`, `ErrWaveFull`,
 `ErrInductionClosed` (see the
-[Aggregate Design Canvas](/contexts/last-mile-delivery/aggregate-design-canvas))
+[Aggregate Design Canvas](/network/contexts/last-mile-delivery/aggregate-design-canvas))
 and read accessors. `version` is the proposed optimistic-concurrency
 counter, not a model field.
 
@@ -275,7 +275,7 @@ classDiagram
 
 Derived from: model.yaml → `contexts[last-mile-delivery].publishes[*].data`.
 
-Omitted: field types (on [Domain Events](/contexts/last-mile-delivery/domain-events))
+Omitted: field types (on [Domain Events](/network/contexts/last-mile-delivery/domain-events))
 and the CloudEvents envelope, which the outbound Kafka adapter adds.
 
 ## 6. Hexagonal ports and adapters

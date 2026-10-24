@@ -30,29 +30,29 @@ on `retailnetwork.node-topology.events`.
 
 | Page | ddd-crew tool or notation it follows |
 | --- | --- |
-| [Business Context](/contexts/node-topology/business-context) | The "why" behind the context (DDD Starter Modelling Process: Understand) |
-| [Ubiquitous Language](/contexts/node-topology/ubiquitous-language) | Glossary, plus the fleet translation table |
-| [Core Domain Chart](/contexts/node-topology/core-domain-chart) | [ddd-crew core-domain-charts](https://github.com/ddd-crew/core-domain-charts) |
-| [Bounded Context Canvas](/contexts/node-topology/bounded-context-canvas) | [ddd-crew bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas) v5 |
-| [Context Map](/contexts/node-topology/context-map) | [ddd-crew context-mapping](https://github.com/ddd-crew/context-mapping) |
-| [Aggregate Design Canvas](/contexts/node-topology/aggregate-design-canvas) | [ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas) v1.1 |
-| [Domain Events](/contexts/node-topology/domain-events) | CloudEvents 1.0 catalogue ([event standard](/strategic-design/event-standard-cloudevents)) |
-| [Domain Message Flow](/contexts/node-topology/domain-message-flow) | [ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
-| [EventStorming](/contexts/node-topology/eventstorming) | [ddd-crew eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet), process level |
-| [Use Cases](/contexts/node-topology/use-cases) | Application services, one per command |
-| [Class Diagram](/contexts/node-topology/class-diagram) | UML class diagram with DDD stereotypes, plus the hexagonal view |
-| [Entity Relationship](/contexts/node-topology/entity-relationship) | The proposed Postgres schema |
-| [Sequence Diagrams](/contexts/node-topology/sequence-diagrams) | UML sequence diagrams, one per command use case |
+| [Business Context](/network/contexts/node-topology/business-context) | The "why" behind the context (DDD Starter Modelling Process: Understand) |
+| [Ubiquitous Language](/network/contexts/node-topology/ubiquitous-language) | Glossary, plus the fleet translation table |
+| [Core Domain Chart](/network/contexts/node-topology/core-domain-chart) | [ddd-crew core-domain-charts](https://github.com/ddd-crew/core-domain-charts) |
+| [Bounded Context Canvas](/network/contexts/node-topology/bounded-context-canvas) | [ddd-crew bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas) v5 |
+| [Context Map](/network/contexts/node-topology/context-map) | [ddd-crew context-mapping](https://github.com/ddd-crew/context-mapping) |
+| [Aggregate Design Canvas](/network/contexts/node-topology/aggregate-design-canvas) | [ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas) v1.1 |
+| [Domain Events](/network/contexts/node-topology/domain-events) | CloudEvents 1.0 catalogue ([event standard](/network/strategic-design/event-standard-cloudevents)) |
+| [Domain Message Flow](/network/contexts/node-topology/domain-message-flow) | [ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
+| [EventStorming](/network/contexts/node-topology/eventstorming) | [ddd-crew eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet), process level |
+| [Use Cases](/network/contexts/node-topology/use-cases) | Application services, one per command |
+| [Class Diagram](/network/contexts/node-topology/class-diagram) | UML class diagram with DDD stereotypes, plus the hexagonal view |
+| [Entity Relationship](/network/contexts/node-topology/entity-relationship) | The proposed Postgres schema |
+| [Sequence Diagrams](/network/contexts/node-topology/sequence-diagrams) | UML sequence diagrams, one per command use case |
 
 The REST contract is `apis/node-topology/openapi.yaml`, rendered under the
-[API reference](/api-reference).
+[API reference](/network/api-reference).
 
 ## Elsewhere
 
-- [Node model](/network-model/node-model): the network-wide view of node types,
+- [Node model](/network/network-model/node-model): the network-wide view of node types,
   lane rules and service tiers.
-- [ADR 0003: declared and measured capability](/adr/0003-declared-and-measured-capability)
-  and [ADR 0004: parcel nodes are network-operated](/adr/0004-parcel-nodes-are-network-operated).
-- [WMS/WES integration](/integration/wms-wes-integration): how a
+- [ADR 0003: declared and measured capability](/network/adr/0003-declared-and-measured-capability)
+  and [ADR 0004: parcel nodes are network-operated](/network/adr/0004-parcel-nodes-are-network-operated).
+- [WMS/WES integration](/network/integration/wms-wes-integration): how a
   warehouse-systems site becomes a vendor node, through the Vendor API only.
-- The domain-wide [Context Map](/strategic-design/context-map).
+- The domain-wide [Context Map](/network/strategic-design/context-map).

@@ -17,7 +17,7 @@ implementation must use. The first table is the context's own `ul` list in
 model entry (aggregates, states, policies, event data). The third holds the
 neighbour terms these pages use, with the neighbour that owns them. The
 domain-wide glossary is at
-[Ubiquitous Language](/strategic-design/ubiquitous-language).
+[Ubiquitous Language](/network/strategic-design/ubiquitous-language).
 
 ## Terms of this context
 
@@ -79,5 +79,5 @@ Derived from: `model.yaml → contexts[*].ul` of the named owner.
 
 This context does not touch the warehouse-systems fleet, so there is no
 fleet translation table here. See
-[WMS/WES integration](/integration/wms-wes-integration) for the one owned by
+[WMS/WES integration](/network/integration/wms-wes-integration) for the one owned by
 `vendor-connectivity`.

@@ -14,8 +14,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 Every event this context publishes and consumes, from
 `contexts[customer-ordering].publishes` and `.consumes`, with the producer's
 entry for each consumed event. The network-wide rules are on
-[Event standard: CloudEvents](/strategic-design/event-standard-cloudevents)
-and [ADR 0007](/adr/0007-cloudevents-namespace).
+[Event standard: CloudEvents](/network/strategic-design/event-standard-cloudevents)
+and [ADR 0007](/network/adr/0007-cloudevents-namespace).
 
 ## Envelope
 
@@ -40,7 +40,7 @@ Every Kafka message is a **CloudEvents 1.0 event in structured JSON mode**
 Both events are written to `outbox_events` in the same transaction as the
 `CustomerOrder` save, and a relay publishes them. **No published event carries
 ship-to PII.** `CustomerOrderPlaced` carries `destinationPostalPrefix` only
-([ADR 0006](/adr/0006-pii-confinement)).
+([ADR 0006](/network/adr/0006-pii-confinement)).
 
 ### CustomerOrderPlaced
 

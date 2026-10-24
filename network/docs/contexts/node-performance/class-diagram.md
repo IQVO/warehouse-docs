@@ -183,7 +183,7 @@ Derived from: model.yaml → contexts[node-performance].policies,
 .publishes[].data, .rest.
 
 Omitted: the `Grading` thresholds (on the
-[Bounded Context Canvas](/contexts/node-performance/bounded-context-canvas));
+[Bounded Context Canvas](/network/contexts/node-performance/bounded-context-canvas));
 `ThresholdAlert` has no threshold table in the model.
 
 ## 3. Hexagonal ports and adapters

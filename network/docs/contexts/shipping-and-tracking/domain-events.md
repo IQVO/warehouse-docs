@@ -14,7 +14,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 Every event this context publishes and consumes, from
 `model.yaml → contexts[shipping-and-tracking].publishes` and `.consumes`, and
 the convention in `conventions.cloudevents`. The domain-wide rules are on
-[Event standard: CloudEvents](/strategic-design/event-standard-cloudevents).
+[Event standard: CloudEvents](/network/strategic-design/event-standard-cloudevents).
 
 ## Envelope
 

@@ -20,7 +20,7 @@ capability", which made `network-fulfillment`'s `DeclareCapability` a no-op.
 That is true of Vendor Direct Fulfillment, but the SP-API Supply Sources API
 does accept a declared handling time, operating hours and an order
 throughput cap per supply source for sellers
-([SP-API surface map](/research/sp-api-surface-map)). Declared capability is
+([SP-API surface map](/network/research/sp-api-surface-map)). Declared capability is
 therefore a real-world pattern, not an artefact of owning both sides.
 
 ## Decision
@@ -41,4 +41,4 @@ therefore a real-world pattern, not an artefact of owning both sides.
 - A vendor that over-declares is corrected by measurement, not trusted
   forever.
 - `network-fulfillment` needs an ADR to make `DeclareCapability` live
-  ([Fleet changes](/integration/fleet-changes)).
+  ([Fleet changes](/network/integration/fleet-changes)).

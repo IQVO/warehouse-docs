@@ -32,7 +32,7 @@ It carries:
 | Part | Shape (model `value_objects` and event data) |
 | --- | --- |
 | Identity and correlation | `assignmentId`; `orderId`, `groupNo` |
-| Destination | `destinationPostalPrefix`, from `CustomerOrderPlaced`; needed to find the delivery station of a candidate path. The model's value objects do not list it (open question on the [canvas](/contexts/order-sourcing/bounded-context-canvas)) |
+| Destination | `destinationPostalPrefix`, from `CustomerOrderPlaced`; needed to find the delivery station of a candidate path. The model's value objects do not list it (open question on the [canvas](/network/contexts/order-sourcing/bounded-context-canvas)) |
 | Promise constraint | `PromiseConstraint{promiseId, tier, deliverByLatest, witnessNodeId}` |
 | Lines | `lines(catalogItemId, listingId, quantity)`, as released; `listingId` is resolved per node from `AvailabilityView` |
 | Current candidate | `Candidate{nodeId, pickupDepartureId, legs[], deliveryWaveId, eta, cost}` |
@@ -154,7 +154,7 @@ Derived from: model.yaml → `aggregates[FulfillmentAssignment].events`,
 command raises which; the pairing above follows the transitions and each
 event's data (`FulfillmentReassigned` carries `fromNodeId`, `toNodeId`).
 `ApplyRevisedPromise` has **no** event in the model (open question on the
-[canvas](/contexts/order-sourcing/bounded-context-canvas)); a
+[canvas](/network/contexts/order-sourcing/bounded-context-canvas)); a
 `ReoptimiseAssignment` that keeps the same node raises nothing.
 
 ### 8. Throughput
@@ -201,4 +201,4 @@ Derived from: model.yaml → `contexts[order-sourcing].read_models`,
 
 The **virtual queue** is not a separate store: it is the set of
 `FulfillmentAssignment` rows in `QUEUED`, ordered by `releaseAt` (see
-[Entity Relationship](/contexts/order-sourcing/entity-relationship)).
+[Entity Relationship](/network/contexts/order-sourcing/entity-relationship)).

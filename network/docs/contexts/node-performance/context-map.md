@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).
 This is **node-performance's slice** of the
-[network-wide context map](/strategic-design/context-map): every
+[network-wide context map](/network/strategic-design/context-map): every
 relationship this context has, with the upstream (U) and downstream (D)
 side, the pattern and the channel. Arrows point from upstream to
 downstream. The map is split in two diagrams to stay readable;

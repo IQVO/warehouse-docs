@@ -17,7 +17,7 @@ contexts are orange stickies next to the pink system that publishes them. The
 aggregate sticky is repeated on each board so lines do not cross. Hotspots
 are gaps or risks found in the model; each one names where it comes from. The
 network-wide board is
-[EventStorming big picture](/strategic-design/eventstorming-big-picture).
+[EventStorming big picture](/network/strategic-design/eventstorming-big-picture).
 
 ## Legend
 
@@ -108,7 +108,7 @@ Derived from: model.yaml → `contexts[order-sourcing].read_models`,
 `contexts[delivery-promise].aggregates[PromiseBook]`.
 
 Omitted: the 29 events that feed the five read models (listed on
-[Domain Events](/contexts/order-sourcing/domain-events)); a re-optimisation
+[Domain Events](/network/contexts/order-sourcing/domain-events)); a re-optimisation
 that keeps the same node, which raises nothing.
 
 ## 2. Release
@@ -156,7 +156,7 @@ Derived from: model.yaml → `contexts[order-sourcing].policies[VirtualQueue]`,
 `contexts[delivery-promise].policies[RepromiseOnRisk]`.
 
 Omitted: `ErrReleaseInFlight` (a second release while one is pending), shown
-on [Sequence Diagrams](/contexts/order-sourcing/sequence-diagrams).
+on [Sequence Diagrams](/network/contexts/order-sourcing/sequence-diagrams).
 
 ## 3. The node's answer: lock or refusal
 

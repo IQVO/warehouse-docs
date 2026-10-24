@@ -75,7 +75,7 @@ Omitted: nothing in the model. The creation edge (`ScheduleWave`) and the
   offered as a witness or candidate wave.
 - **No reaction to `DeliveryWaveCancelled`**: it is analytics only in the
   model (see the open questions on the
-  [Bounded Context Canvas](/contexts/last-mile-delivery/bounded-context-canvas)).
+  [Bounded Context Canvas](/network/contexts/last-mile-delivery/bounded-context-canvas)).
 
 ### 6. Handled Commands
 
@@ -111,7 +111,7 @@ two waves, so the wave row is contended during a burst. Use an optimistic
 *Estimate (model: "stations x waves/day x horizon").* Small: a handful of
 scalar fields per wave and no child collection. The packages inducted are
 recorded per wave (see the
-[Entity Relationship](/contexts/last-mile-delivery/entity-relationship) page)
+[Entity Relationship](/network/contexts/last-mile-delivery/entity-relationship) page)
 so that induction is idempotent. A wave produces one `DeliveryWaveScheduled`,
 one `DeliveryWaveCapacityChanged` per induction, and at most one
 `DeliveryWaveCancelled`.

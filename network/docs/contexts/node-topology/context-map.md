@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).
 This is **node-topology's slice** of the
-[domain-wide context map](/strategic-design/context-map). Node Topology is
+[domain-wide context map](/network/strategic-design/context-map). Node Topology is
 upstream of every relationship it has: it consumes nothing and calls nobody.
 
 ## Event relationships
@@ -88,7 +88,7 @@ names no analytics event for this context); the future contexts
 | `vendor-connectivity` (Supporting) | NT upstream (Supplier), VC downstream (Customer) | Customer/Supplier | REST in-org `POST /nodes`, `PUT /nodes/{nodeId}/operational-profile` | `RegisterNode`, `DeclareOperationalProfile` | VC needs an answer inside the processing of a vendor submission. The routes exist for this customer; the Supplier keeps the invariants (`ErrOperatorNotAllowedForNodeType`, `ErrStaleProfileRevision`) and VC turns a refusal into a failed submission. |
 | network-ops planner (person) | NT upstream | UI | REST `/nodes`, `/lanes`, `/service-areas`, `/regions` | `RegisterNode` (network node), `ActivateNode`, `SuspendNode`, `RetireNode`, `OpenLane`, `CloseLane`, `AssignServiceArea`, `DefineRegion` | A person drives the network's shape; there is no upstream system for it. |
 | any context or client | NT upstream | Open Host Service | REST `GET /nodes/{nodeId}`, `GET /nodes?type=&region=&status=`, `GET /lanes?origin=&destination=`, `GET /service-areas/{postalPrefix}` | `GetNode`, list nodes, `ListLanes`, `ResolveServiceArea` | One public read protocol for everyone. No neighbour declares these as a `sync_call`; they serve tools, planners and diagnosis. |
-| `network-fulfillment` (warehouse-systems fleet, Supporting in the fleet, external) | none | Separate Ways | none | none | The hard boundary: the fleet reaches the network only through the Vendor API of `vendor-connectivity` (model `meta.hard_boundary`; [ADR 0007](/adr/0007-cloudevents-namespace), [WMS/WES integration](/integration/wms-wes-integration)). |
+| `network-fulfillment` (warehouse-systems fleet, Supporting in the fleet, external) | none | Separate Ways | none | none | The hard boundary: the fleet reaches the network only through the Vendor API of `vendor-connectivity` (model `meta.hard_boundary`; [ADR 0007](/network/adr/0007-cloudevents-namespace), [WMS/WES integration](/network/integration/wms-wes-integration)). |
 | `customer-ordering` (Generic) | none | Separate Ways | none | none | It works with promises and postal prefixes, never with nodes. |
 | `shipping-and-tracking` (Generic) | none | Separate Ways | none | none | Scans name a `nodeId` as a value; it keeps no node read model in the model. |
 

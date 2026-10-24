@@ -12,9 +12,9 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 :::
 
 One UML sequence diagram per command use case on
-[Use Cases](/contexts/customer-ordering/use-cases). Participant names are the
+[Use Cases](/network/contexts/customer-ordering/use-cases). Participant names are the
 proposed packages and ports from the
-[Class Diagram](/contexts/customer-ordering/class-diagram):
+[Class Diagram](/network/contexts/customer-ordering/class-diagram):
 
 - `http` and `kafka` are the inbound adapters.
 - The use case is in `internal/application/usecases`.
@@ -24,7 +24,7 @@ proposed packages and ports from the
   rows and publishes them to `retailnetwork.customer-ordering.events`.
 
 Every save is conditional on the loaded `version` (optimistic concurrency).
-Full CloudEvents types are on [Domain Events](/contexts/customer-ordering/domain-events).
+Full CloudEvents types are on [Domain Events](/network/contexts/customer-ordering/domain-events).
 
 ## 1. PlaceOrder (REST POST /checkout)
 
@@ -139,7 +139,7 @@ Derived from: `model.yaml → contexts[customer-ordering].aggregates[CustomerOrd
 
 Omitted: the relay marking the row published (as in diagram 1). A lock
 `order-sourcing` made but this context has not consumed yet is not visible
-here (race, see [Use Cases](/contexts/customer-ordering/use-cases)).
+here (race, see [Use Cases](/network/contexts/customer-ordering/use-cases)).
 
 ## 3. CancelOrder by policy CancelOnUnfulfillable (Kafka)
 
@@ -181,7 +181,7 @@ Derived from: `model.yaml → contexts[customer-ordering].policies[CancelOnUnful
 
 Omitted: the version-conflict retry (as in diagram 2). The trigger of the
 `opt` block is the model gap recorded as hotspot H6 on
-[EventStorming](/contexts/customer-ordering/eventstorming).
+[EventStorming](/network/contexts/customer-ordering/eventstorming).
 
 ## 4. RegisterShopper (REST POST /shoppers)
 

@@ -43,7 +43,7 @@ flowchart TB
 
 Derived from: `model.yaml` → `contexts[vendor-connectivity].sync_calls`,
 `contexts[node-topology]`, `contexts[linehaul-transportation].policies`.
-Hotspot: the reason `node-performance` exists ([ADR 0003](/adr/0003-declared-and-measured-capability)).
+Hotspot: the reason `node-performance` exists ([ADR 0003](/network/adr/0003-declared-and-measured-capability)).
 
 ## Phase 2: what can be sold
 
@@ -83,7 +83,7 @@ flowchart TB
 
 Derived from: `model.yaml` → `contexts[delivery-promise]`, `contexts[customer-ordering]`.
 Hotspot: `PromiseBook` throughput estimate "high and contended"
-([ADR 0008](/adr/0008-capacity-held-at-promise-time)).
+([ADR 0008](/network/adr/0008-capacity-held-at-promise-time)).
 
 ## Phase 4: assign and commit
 
@@ -123,7 +123,7 @@ flowchart TB
 
 Derived from: `model.yaml` → `contexts[shipping-and-tracking]`,
 `contexts[linehaul-transportation]`, `contexts[last-mile-delivery]`.
-Hotspot: [Fleet changes](/integration/fleet-changes) row 8.
+Hotspot: [Fleet changes](/network/integration/fleet-changes) row 8.
 
 ## Phase 6: judge and measure
 
@@ -149,5 +149,5 @@ Derived from: `model.yaml` → `contexts[delivery-promise].policies`,
 | --- | --- | --- |
 | Declared numbers may be optimistic | the declared half of ADR 0003 | `node-performance` + `ScorecardHandicap` |
 | Contended promise book row at peak | `PromiseBook` throughput estimate | `delivery-promise` implementation (optimistic concurrency, sharding per cutoff) |
-| The fleet has no automatic package-ready trigger | `network-fulfillment` ADR 0014; no `OrderManifested` on `origin/develop` | the fleet ([Fleet changes](/integration/fleet-changes)) |
+| The fleet has no automatic package-ready trigger | `network-fulfillment` ADR 0014; no `OrderManifested` on `origin/develop` | the fleet ([Fleet changes](/network/integration/fleet-changes)) |
 | A cancelled departure after lock | `DepartureCancelled` consumed by the promise | `delivery-promise` re-promise policy |

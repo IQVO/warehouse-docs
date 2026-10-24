@@ -27,7 +27,7 @@ because v1 had one node and splitting "adds a third repository for no new
 behavior". The request now is the production-grade network: many nodes of
 six types, a customer promise, late assignment, a middle and a last mile.
 Each of those changes at a different speed (nodes in years and months, lanes
-in days, waves in hours; see [research](/research/amazon-logistics-network)),
+in days, waves in hours; see [research](/network/research/amazon-logistics-network)),
 is owned by a different part of a real network, and has its own invariants.
 Amazon's own published account lists generating promises and assigning orders
 as separate software changes.

@@ -32,28 +32,28 @@ label.
 
 | Page | What it holds | ddd-crew tool it follows |
 | --- | --- | --- |
-| [Business Context](/contexts/customer-ordering/business-context) | The problem, actors, decisions, relation to the Amazon-like reality, out of scope | (narrative) |
-| [Ubiquitous Language](/contexts/customer-ordering/ubiquitous-language) | Terms, code identifiers, terms not to confuse | [Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas) (UL section) |
-| [Core Domain Chart](/contexts/customer-ordering/core-domain-chart) | Why this context is Generic | [Core Domain Charts](https://github.com/ddd-crew/core-domain-charts) |
-| [Bounded Context Canvas](/contexts/customer-ordering/bounded-context-canvas) | Purpose, classification, roles, inbound and outbound messages, decisions, metrics | [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas) |
-| [Context Map](/contexts/customer-ordering/context-map) | Every neighbour, direction and pattern | [Context Mapping](https://github.com/ddd-crew/context-mapping) |
-| [Aggregate Design Canvas](/contexts/customer-ordering/aggregate-design-canvas) | `CustomerOrder` and `Shopper`, states, invariants, commands | [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas) |
-| [Domain Events](/contexts/customer-ordering/domain-events) | Published and consumed CloudEvents, with an example envelope | [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling) (message catalogue) |
-| [Domain Message Flow](/contexts/customer-ordering/domain-message-flow) | Checkout, expired offer, fulfilment to delivery, cancellation | [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
-| [EventStorming](/contexts/customer-ordering/eventstorming) | Process-level boards with hotspots | [EventStorming glossary & cheat sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
-| [Use Cases](/contexts/customer-ordering/use-cases) | One section per command: trigger, flow, errors, events, idempotency | (application layer, fleet convention) |
-| [Class Diagram](/contexts/customer-ordering/class-diagram) | Proposed domain model and hexagonal ports and adapters | (UML, fleet convention) |
-| [Entity Relationship](/contexts/customer-ordering/entity-relationship) | Proposed Postgres schema | (fleet convention) |
-| [Sequence Diagrams](/contexts/customer-ordering/sequence-diagrams) | Adapter to Kafka for every command use case | (UML, fleet convention) |
+| [Business Context](/network/contexts/customer-ordering/business-context) | The problem, actors, decisions, relation to the Amazon-like reality, out of scope | (narrative) |
+| [Ubiquitous Language](/network/contexts/customer-ordering/ubiquitous-language) | Terms, code identifiers, terms not to confuse | [Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas) (UL section) |
+| [Core Domain Chart](/network/contexts/customer-ordering/core-domain-chart) | Why this context is Generic | [Core Domain Charts](https://github.com/ddd-crew/core-domain-charts) |
+| [Bounded Context Canvas](/network/contexts/customer-ordering/bounded-context-canvas) | Purpose, classification, roles, inbound and outbound messages, decisions, metrics | [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas) |
+| [Context Map](/network/contexts/customer-ordering/context-map) | Every neighbour, direction and pattern | [Context Mapping](https://github.com/ddd-crew/context-mapping) |
+| [Aggregate Design Canvas](/network/contexts/customer-ordering/aggregate-design-canvas) | `CustomerOrder` and `Shopper`, states, invariants, commands | [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas) |
+| [Domain Events](/network/contexts/customer-ordering/domain-events) | Published and consumed CloudEvents, with an example envelope | [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling) (message catalogue) |
+| [Domain Message Flow](/network/contexts/customer-ordering/domain-message-flow) | Checkout, expired offer, fulfilment to delivery, cancellation | [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
+| [EventStorming](/network/contexts/customer-ordering/eventstorming) | Process-level boards with hotspots | [EventStorming glossary & cheat sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
+| [Use Cases](/network/contexts/customer-ordering/use-cases) | One section per command: trigger, flow, errors, events, idempotency | (application layer, fleet convention) |
+| [Class Diagram](/network/contexts/customer-ordering/class-diagram) | Proposed domain model and hexagonal ports and adapters | (UML, fleet convention) |
+| [Entity Relationship](/network/contexts/customer-ordering/entity-relationship) | Proposed Postgres schema | (fleet convention) |
+| [Sequence Diagrams](/network/contexts/customer-ordering/sequence-diagrams) | Adapter to Kafka for every command use case | (UML, fleet convention) |
 
 ## Elsewhere
 
 - REST contract (proposed): `apis/customer-ordering/openapi.yaml`, rendered
-  under the [API reference](/api-reference).
-- [ADR 0006: PII confinement](/adr/0006-pii-confinement) explains why the
+  under the [API reference](/network/api-reference).
+- [ADR 0006: PII confinement](/network/adr/0006-pii-confinement) explains why the
   ship-to address lives here and is read by `shipping-and-tracking` only.
-- [ADR 0002: promise and assignment are separate](/adr/0002-promise-and-assignment-are-separate)
+- [ADR 0002: promise and assignment are separate](/network/adr/0002-promise-and-assignment-are-separate)
   explains why checkout talks to `delivery-promise` and never to
   `order-sourcing`.
-- The network-wide [Context Map](/strategic-design/context-map) and
-  [Subdomain Classification](/strategic-design/subdomain-classification).
+- The network-wide [Context Map](/network/strategic-design/context-map) and
+  [Subdomain Classification](/network/strategic-design/subdomain-classification).

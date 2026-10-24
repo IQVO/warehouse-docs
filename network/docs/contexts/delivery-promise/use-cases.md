@@ -13,13 +13,13 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 The proposed application services of `internal/application/usecases`, one per
 command of the model. Step-by-step interactions are on
-[the sequence diagrams page](/contexts/delivery-promise/sequence-diagrams);
-payloads are on [the domain events page](/contexts/delivery-promise/domain-events).
+[the sequence diagrams page](/network/contexts/delivery-promise/sequence-diagrams);
+payloads are on [the domain events page](/network/contexts/delivery-promise/domain-events).
 
 Reads are not use cases: `GET /delivery-offers/{offerId}`,
 `GET /promises/{promiseId}`, `GET /promises?orderId=` and
 `GET /promise-books?nodeId=&date=` read the repositories directly. Read-model
-projection (board 1 of [the EventStorming page](/contexts/delivery-promise/eventstorming))
+projection (board 1 of [the EventStorming page](/network/contexts/delivery-promise/eventstorming))
 is not a use case either: it changes no aggregate.
 
 ## Triggers at a glance
@@ -52,7 +52,7 @@ offer, creates the promise, holds capacity) in one local transaction. This is a
 deliberate, proposed exception: a promise without a hold would break the
 business decision "a promise reserves capacity", and all three rows live in
 this context's own database (open question 13 on
-[the canvas page](/contexts/delivery-promise/bounded-context-canvas)).
+[the canvas page](/network/contexts/delivery-promise/bounded-context-canvas)).
 
 ## Error mapping
 
@@ -89,7 +89,7 @@ no HTTP reply: the error column says what the consumer does instead.
 - **Preconditions**: none on aggregates. Reads only local read models and
   `PromiseBook` rows. Makes **no synchronous call**.
 - **Main flow** (`PromisePolicy`; worked example in
-  [the promise model](/network-model/promise-model), the AUS3 / DFW7 cart on
+  [the promise model](/network/network-model/promise-model), the AUS3 / DFW7 cart on
   Thursday at 14:05):
   1. Resolve the destination postal prefix to its delivery station and region
      (`RegionAndServiceAreaView`). None: every tier gets
@@ -247,7 +247,7 @@ no HTTP reply: the error column says what the consumer does instead.
 
 - **Actor / trigger**: `RepromiseOnRisk`, on `FulfillmentUnsourceable`
   (by `promiseId`), `PackageExceptionRaised` (by the group's assignment, see
-  open question 4 on [the canvas page](/contexts/delivery-promise/bounded-context-canvas)),
+  open question 4 on [the canvas page](/network/contexts/delivery-promise/bounded-context-canvas)),
   or `DepartureCancelled` (every `CONFIRMED` promise whose witness path uses
   the departure).
 - **Inbound adapter**: Kafka consumer `promise-lifecycle`.

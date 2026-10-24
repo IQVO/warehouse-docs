@@ -32,7 +32,7 @@ What this context does own is the transaction record:
 | It owns | Why here |
 | --- | --- |
 | The **customer order**: lines, the promise per shipment group, the customer-facing status | Someone must hold "what the shopper bought and what we told them" as one record. |
-| The **ship-to address** and the **shopper** account (synthetic PII) | PII is confined to one context and read by exactly one other, `shipping-and-tracking`, for the label ([ADR 0006](/adr/0006-pii-confinement)). |
+| The **ship-to address** and the **shopper** account (synthetic PII) | PII is confined to one context and read by exactly one other, `shipping-and-tracking`, for the label ([ADR 0006](/network/adr/0006-pii-confinement)). |
 | **Customer cancellation** | Only this context knows the shopper asked; it tells sourcing and promising. |
 | The **tracking view** | One customer-facing timeline assembled from three upstream streams. |
 
@@ -64,7 +64,7 @@ The model lists three business decisions (`contexts[customer-ordering].business_
    The model words this decision as "until every shipment group is locked",
    while the invariant says "while no group is locked"; these pages follow the
    invariant, and the difference is an open question on the
-   [canvas](/contexts/customer-ordering/bounded-context-canvas).
+   [canvas](/network/contexts/customer-ordering/bounded-context-canvas).
 
 It also runs two policies: **CheckoutPromising** (promise each group from the
 offer the shopper saw; re-quote if it expired) and **CancelOnUnfulfillable**
@@ -75,9 +75,9 @@ and the order if nothing remains).
 
 The research pages describe how a large online retailer's network separates
 the customer-facing order from the delivery promise and from the decision of
-which building ships it. See [Amazon logistics network](/research/amazon-logistics-network).
+which building ships it. See [Amazon logistics network](/network/research/amazon-logistics-network).
 They also describe the vendor-facing surface, where a purchase order never
-carries the end customer's account. See the [SP-API surface map](/research/sp-api-surface-map).
+carries the end customer's account. See the [SP-API surface map](/network/research/sp-api-surface-map).
 This model copies the shape, not any internal service name:
 
 - The storefront order is a **commodity**: every shop has one. What makes the
@@ -101,8 +101,8 @@ This model copies the shape, not any internal service name:
 | E-mail and push notifications on a revised promise or a delivery | future `customer-notification` (Generic, buy) |
 | Payments, invoices, tax | future `payments-and-invoicing` |
 | Authentication and real PII | no auth anywhere (`conventions.no_auth`); PII is synthetic |
-| Anything in the warehouse-systems fleet | This context never touches the fleet. The only seam between the two organizations is the Vendor API ([Vendor API](/integration/vendor-api)). |
+| Anything in the warehouse-systems fleet | This context never touches the fleet. The only seam between the two organizations is the Vendor API ([Vendor API](/network/integration/vendor-api)). |
 
-See the [Bounded Context Canvas](/contexts/customer-ordering/bounded-context-canvas)
-for every message and the [Context Map](/contexts/customer-ordering/context-map)
+See the [Bounded Context Canvas](/network/contexts/customer-ordering/bounded-context-canvas)
+for every message and the [Context Map](/network/contexts/customer-ordering/context-map)
 for every relationship.

@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).
 This is **customer-ordering's slice** of the
-[network-wide context map](/strategic-design/context-map): every
+[network-wide context map](/network/strategic-design/context-map): every
 relationship this context has, with the upstream (U) and downstream (D)
 side, the pattern and the channel.
 
@@ -69,7 +69,7 @@ include it, so the tracking view is event-fed only (see Notes).
 | `delivery-promise` (Core) | DP upstream, CO downstream | **Customer/Supplier** | Kafka `retailnetwork.delivery-promise.events` | `PromiseAtRisk`, `PromiseRevised`, `PromiseKept`, `PromiseBroken` | DP lists CO as a named consumer; CO keeps each group's window current (`UpdateGroupPromise`) and shows the verdict. |
 | `order-sourcing` (Core) | CO upstream, OS downstream | **Customer/Supplier** | Kafka `retailnetwork.customer-ordering.events` | `CustomerOrderPlaced`, `CustomerOrderCancelled` | OS queues one assignment per group from the placement. The event carries each group's promise snapshot so OS does not have to correlate it with DP's stream; that payload shape is negotiated for OS. |
 | `order-sourcing` (Core) | OS upstream, CO downstream | **Conformist** | Kafka `retailnetwork.order-sourcing.events` | `FulfillmentLocked`, `FulfillmentShipped`, `FulfillmentUnsourceable` | CO takes the assignment facts as published and only projects them into status; nothing is translated. |
-| `shipping-and-tracking` (Generic) | CO upstream, ST downstream | **Customer/Supplier** (ST is the Customer) | REST `GET /orders/{orderId}/ship-to` (in-org, restricted) | `GetShipTo` | The one sanctioned read of PII outside this context ([ADR 0006](/adr/0006-pii-confinement)). It is a dedicated, restricted route built for one customer, not part of the storefront OHS. |
+| `shipping-and-tracking` (Generic) | CO upstream, ST downstream | **Customer/Supplier** (ST is the Customer) | REST `GET /orders/{orderId}/ship-to` (in-org, restricted) | `GetShipTo` | The one sanctioned read of PII outside this context ([ADR 0006](/network/adr/0006-pii-confinement)). It is a dedicated, restricted route built for one customer, not part of the storefront OHS. |
 | `shipping-and-tracking` (Generic) | ST upstream, CO downstream | **Conformist** | Kafka `retailnetwork.shipping-and-tracking.events` | `LabelIssued`, `PackageScanned`, `PackageDelivered`, `PackageExceptionRaised` | Package facts are taken as published, for status and tracking. |
 
 ## Notes on the patterns
@@ -77,7 +77,7 @@ include it, so the tracking view is event-fed only (see Notes).
 - **No Anti-Corruption Layer.** Every upstream here is inside the same
   organization and speaks the network's language; the tracking projector
   reads the events as published. The only ACL in the network is in the fleet,
-  on the far side of the Vendor API ([Vendor API](/integration/vendor-api)).
+  on the far side of the Vendor API ([Vendor API](/network/integration/vendor-api)).
 - **No Shared Kernel.** Identifiers such as `promiseId`, `assignmentId` and
   `trackingNumber` are values copied from events, not shared code.
 - **No fleet edge.** Customer Ordering never consumes a `warehouse.*` topic

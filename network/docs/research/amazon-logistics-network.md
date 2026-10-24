@@ -11,7 +11,7 @@ This page holds **facts only**: what Amazon and peer-reviewed or trade sources
 have published. Every sentence that states a fact carries a numbered citation;
 the list at the bottom maps each number to its source and the verbatim
 sentence that supports it. The model this site proposes starts at
-[Domain Vision](/strategic-design/domain-vision); where this page draws a
+[Domain Vision](/network/strategic-design/domain-vision); where this page draws a
 conclusion for the model, the paragraph is headed **Model reading** and carries
 no citation.
 
@@ -44,7 +44,7 @@ that hire and manage their own employees with support from Amazon.[6]
 **Model reading.** The network has two very different kinds of node:
 inventory-holding nodes that pick and pack, and parcel nodes that only sort and
 move packages. That split is the first decision on
-[Node model](/network-model/node-model).
+[Node model](/network/network-model/node-model).
 
 ## Different parts change at different speeds
 
@@ -95,7 +95,7 @@ centres as separate software changes that regionalization required.[2]
 `delivery-promise` proves feasibility with a **witness path** and holds
 capacity; `order-sourcing` keeps the group in a virtual queue, re-optimizes
 until release, and locks the path at commitment. See
-[ADR 0002](/adr/0002-promise-and-assignment-are-separate).
+[ADR 0002](/network/adr/0002-promise-and-assignment-are-separate).
 
 ## The promise policy also shapes demand
 
@@ -117,7 +117,7 @@ every page that uses them.
 
 ## Sources
 
-Every number above maps to one source. The verbatim sentences that support each claim are on [Sources and evidence](/research/sources).
+Every number above maps to one source. The verbatim sentences that support each claim are on [Sources and evidence](/network/research/sources).
 
 - **[1]** [Amazon — Our Facilities](https://www.aboutamazon.com/workplace/facilities)
 - **[2]** [Regionalize and Scale: Amazon’s Fulfillment Network Design (INFORMS Journal on Applied Analytics, 2026)](https://pubsonline.informs.org/doi/full/10.1287/inte.2025.0295)

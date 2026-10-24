@@ -17,9 +17,9 @@ message from the model, prefixed `cmd:` (command), `qry:` (query) or `evt:`
 (event). Events travel on Kafka through the producer's outbox; the diagrams
 draw them from producer to consumer and leave Kafka out. Event names are
 written `<entity>.<EventName>`; the full types are on
-[Domain Events](/contexts/last-mile-delivery/domain-events). REST path
+[Domain Events](/network/contexts/last-mile-delivery/domain-events). REST path
 parameters are written without braces. The network-wide flows are on
-[Domain Message Flows](/strategic-design/domain-message-flows).
+[Domain Message Flows](/network/strategic-design/domain-message-flows).
 
 Scenarios 2 and 3 are the happy path, from arrival to the doorstep, split in
 two diagrams to stay readable. Scenario 4 is the most important failure path.
@@ -49,7 +49,7 @@ Derived from: model.yaml → `contexts[last-mile-delivery].rest`,
 `contexts[order-sourcing].read_models[NetworkGraphView]`.
 
 Omitted: the `ErrInvalidWaveTimes` reply (422) and how `delivery-promise`
-quotes on the wave (see [promise model](/network-model/promise-model)).
+quotes on the wave (see [promise model](/network/network-model/promise-model)).
 
 ## 2. A load arrives and its packages are inducted
 
@@ -145,4 +145,4 @@ third-failure branch is a gap in the model. The rule exists
 (`RetryNextWave`), but no command, event or state of this context carries
 the return to sender, and `shipping-and-tracking` has no inbound row for it.
 See the open questions on the
-[Bounded Context Canvas](/contexts/last-mile-delivery/bounded-context-canvas).
+[Bounded Context Canvas](/network/contexts/last-mile-delivery/bounded-context-canvas).

@@ -17,7 +17,7 @@ implementation. `UoW` is `ports.UnitOfWork`, one Postgres transaction.
 table; both are written inside the same transaction as the aggregate
 (`conventions.integration_rules`). The relay drains the outbox to Kafka
 outside that transaction. Use-case prose is on
-[Use Cases](/contexts/node-performance/use-cases).
+[Use Cases](/network/contexts/node-performance/use-cases).
 
 ## 1. RecordObservation (Kafka consumer)
 
@@ -77,7 +77,7 @@ Omitted: the dead-letter path for an undecodable message or a missing
 `nodeId`. No outbox row is written: `RecordObservation` emits no event, so
 there is no relay or Kafka publish in this diagram. The two scorecards are
 saved in one transaction (see
-[Entity Relationship](/contexts/node-performance/entity-relationship)).
+[Entity Relationship](/network/contexts/node-performance/entity-relationship)).
 
 ## 2. Recompute (per-minute ticker)
 

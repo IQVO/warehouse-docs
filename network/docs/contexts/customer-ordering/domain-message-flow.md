@@ -17,9 +17,9 @@ message from the model, prefixed `cmd:` (command), `qry:` (query) or `evt:`
 (event). A `Note` names a command a context runs on itself. Kafka is drawn
 as one participant. Event names are written `entity.EventName`; the full
 type is `com.retailnetwork.<tier>.<producer>.<entity>.<EventName>` (see
-[Domain Events](/contexts/customer-ordering/domain-events)). REST path
+[Domain Events](/network/contexts/customer-ordering/domain-events)). REST path
 parameters are written without braces. The network-wide flows are on
-[Domain Message Flows](/strategic-design/domain-message-flows).
+[Domain Message Flows](/network/strategic-design/domain-message-flows).
 
 ## 1. Checkout: every group promised, order placed
 
@@ -52,7 +52,7 @@ Derived from: `model.yaml → contexts[customer-ordering].inbound` (`POST /check
 `contexts[order-sourcing].aggregates[FulfillmentAssignment].commands`.
 
 Omitted: the outbox write and relay (the event leaves after the commit; see
-[Sequence Diagrams](/contexts/customer-ordering/sequence-diagrams)); the
+[Sequence Diagrams](/network/contexts/customer-ordering/sequence-diagrams)); the
 events `delivery-promise` and `order-sourcing` raise in reaction
 (`PromiseConfirmed` and `FulfillmentQueued`, both analytics-only). The shopper
 saw the offers earlier, by querying `delivery-promise` directly; that query is
@@ -138,7 +138,7 @@ the label (`vendor-connectivity` asks `shipping-and-tracking` for it after the
 purchase order is accepted); `PackageExceptionRaised`, which only updates the
 tracking view; more than one group or package. The event-to-command pairing
 is this pack's reading of the model (see the
-[canvas](/contexts/customer-ordering/bounded-context-canvas) open questions).
+[canvas](/network/contexts/customer-ordering/bounded-context-canvas) open questions).
 
 ## 4. Cancellation, by the shopper or by an unfulfillable group
 

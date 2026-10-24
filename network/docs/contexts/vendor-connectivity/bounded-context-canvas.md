@@ -134,7 +134,7 @@ asynchronous transaction a vendor reconciles.
 
 | Axis | Verdict |
 | --- | --- |
-| **Domain** | **Supporting**. See the [Core Domain Chart](/contexts/vendor-connectivity/core-domain-chart). |
+| **Domain** | **Supporting**. See the [Core Domain Chart](/network/contexts/vendor-connectivity/core-domain-chart). |
 | **Business Model** | Revenue-channel enabler (third-party capacity without integration cost). |
 | **Evolution** | Product: the protocol shape is well known and adopted in the network's own vocabulary. |
 
@@ -188,13 +188,13 @@ asynchronous transaction a vendor reconciles.
 | shipping-and-tracking | IssueLabel | Command | REST (in-org) `POST /labels` | Customer/Supplier (this context is the Customer) |
 | node-performance | GetScorecard | Query | REST (in-org) `GET /scorecards/{nodeId}` | Customer/Supplier (this context is the Customer) |
 
-Full payloads: [Domain Events](/contexts/vendor-connectivity/domain-events).
-Patterns and reasons: [Context Map](/contexts/vendor-connectivity/context-map).
+Full payloads: [Domain Events](/network/contexts/vendor-connectivity/domain-events).
+Patterns and reasons: [Context Map](/network/contexts/vendor-connectivity/context-map).
 
 ## Ubiquitous Language
 
 Full glossary with the fleet translation:
-[Ubiquitous Language](/contexts/vendor-connectivity/ubiquitous-language).
+[Ubiquitous Language](/network/contexts/vendor-connectivity/ubiquitous-language).
 Top terms: **Vendor**, **Purchase Order** (`poNumber`), **Acknowledgement**
 (fill-or-kill), **ackBy**, **Required Ship-By**, **Submission /
 Transaction** (`transactionId`), **Label** (never the address), **Vendor

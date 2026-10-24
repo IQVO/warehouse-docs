@@ -10,11 +10,11 @@ description: "How order-sourcing keeps each shipment group in a virtual queue, r
 :::info[Proposed design]
 Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml)
 → `contexts[order-sourcing]`, `contexts[vendor-connectivity]`. Owner:
-[`order-sourcing`](/contexts/order-sourcing) (Core). The published fact
+[`order-sourcing`](/network/contexts/order-sourcing) (Core). The published fact
 behind it: Amazon assigns items to fulfillment centres and paths after
 purchase, possibly differently from the path behind the promise, and the path
 can change until the item is picked, then stays locked
-([research](/research/amazon-logistics-network)).
+([research](/network/research/amazon-logistics-network)).
 :::
 
 ## Why assignment is not the promise
@@ -130,11 +130,11 @@ fleet's `network-fulfillment` releases the held `order-management` order only
 after a reconciled acceptance). Reassigning after acceptance would leave a
 vendor picking an order nobody wants. So acceptance is the vendor-node
 equivalent of "picked"
-([ADR 0005](/adr/0005-vendor-acceptance-is-the-path-lock)).
+([ADR 0005](/network/adr/0005-vendor-acceptance-is-the-path-lock)).
 
 ## Worked example, continued
 
-From [Promise model](/network-model/promise-model): the order was placed at
+From [Promise model](/network/network-model/promise-model): the order was placed at
 14:10 with a `NEXT_DAY` promise, witness `N-VWS-AUS3`, `shipBy` 18:00 CDT,
 `deliverByLatest` Fri 21:00.
 
@@ -152,4 +152,4 @@ From [Promise model](/network-model/promise-model): the order was placed at
 
 The fleet-side rows are what the fleet's `network-fulfillment` does today
 against its stub, plus the changes listed on
-[Fleet changes](/integration/fleet-changes).
+[Fleet changes](/network/integration/fleet-changes).

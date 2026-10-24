@@ -85,7 +85,7 @@ Derived from: `model.yaml → contexts[linehaul-transportation].aggregates[Depar
 
 Omitted: the error variables (`ErrInvalidDepartureTimes`, `ErrDepartureFull`,
 `ErrLaneClosed`, `ErrDepartureClosed`; see
-[Aggregate Design Canvas](/contexts/linehaul-transportation/aggregate-design-canvas)),
+[Aggregate Design Canvas](/network/contexts/linehaul-transportation/aggregate-design-canvas)),
 read accessors, and `version` handling (proposed optimistic concurrency, not
 in the model). `ScheduleDeparture` is drawn as a constructor; the
 `ErrLaneClosed` check needs the lane status from `LaneView`, passed in by the
@@ -236,7 +236,7 @@ Derived from: `model.yaml → contexts[linehaul-transportation].publishes`,
 `.policies`.
 
 Omitted: the CloudEvents envelope (see
-[Domain Events](/contexts/linehaul-transportation/domain-events)); the
+[Domain Events](/network/contexts/linehaul-transportation/domain-events)); the
 three read models `NodeProfileView`, `LaneView` and `ExpectedVolumeView`
 (projections, shown in the ports view below). `DepartureDeparted`,
 `DepartureArrived`, `LoadClosed`, `LoadDeparted` and `LoadArrived` are

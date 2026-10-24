@@ -34,13 +34,13 @@ Three things make that hard in this network:
 3. **Promising is not assigning.** The node that proves a date is feasible
    now (the **witness**) need not be the node that ships. `order-sourcing`
    decides that later, as late as the promise allows
-   ([ADR 0002](/adr/0002-promise-and-assignment-are-separate)). The promise
+   ([ADR 0002](/network/adr/0002-promise-and-assignment-are-separate)). The promise
    only has to be *true*; the assignment has to be *cheap* and still true.
 
 The context therefore makes a promise **true by construction**: a delivery
 offer exists only if a concrete witness path with remaining capacity exists
 right now, and a promise reserves capacity on the witness node's pickup cutoff
-before the shopper pays ([ADR 0008](/adr/0008-capacity-held-at-promise-time)).
+before the shopper pays ([ADR 0008](/network/adr/0008-capacity-held-at-promise-time)).
 
 ## Actors
 
@@ -77,8 +77,8 @@ directly. Their decisions reach it as events from the contexts they do talk to.
   `deliverByLatest`.
 
 The search itself is described step by step in the
-[Use Cases](/contexts/delivery-promise/use-cases) page, and worked through with
-numbers in [the promise model](/network-model/promise-model).
+[Use Cases](/network/contexts/delivery-promise/use-cases) page, and worked through with
+numbers in [the promise model](/network/network-model/promise-model).
 
 ## How this relates to the Amazon-like reality
 
@@ -87,12 +87,12 @@ network promises delivery: a date computed from the network's real schedules
 and capacity, regional fulfillment and delivery stations, scorecards that
 penalise vendors who ship late, and fast tiers that are constrained at peak.
 The facts, with citations, are on
-[the Amazon logistics network research page](/research/amazon-logistics-network).
+[the Amazon logistics network research page](/network/research/amazon-logistics-network).
 What a vendor can and cannot declare through a public API, and how promise and
 acknowledgement windows appear there, is mapped on
-[the SP-API surface map](/research/sp-api-surface-map). Other retailers and
+[the SP-API surface map](/network/research/sp-api-surface-map). Other retailers and
 order-management products used as benchmarks are on
-[the benchmarks page](/research/benchmarks).
+[the benchmarks page](/network/research/benchmarks).
 
 None of this pack claims anything about a real company's internal services.
 `DeliveryOffer`, `Promise`, `PromiseBook`, the witness path and the handicap
@@ -102,16 +102,16 @@ are this proposed model's names.
 
 | Out of scope | Who owns it instead |
 | --- | --- |
-| Choosing the node that actually ships, and moving it until the vendor accepts | `order-sourcing` (path lock on acceptance, [ADR 0005](/adr/0005-vendor-acceptance-is-the-path-lock)) |
+| Choosing the node that actually ships, and moving it until the vendor accepts | `order-sourcing` (path lock on acceptance, [ADR 0005](/network/adr/0005-vendor-acceptance-is-the-path-lock)) |
 | Registering nodes, lanes, service areas and regions | `node-topology` |
 | Scheduling departures and booking packages onto them | `linehaul-transportation` |
 | Delivery waves, routes and delivery attempts | `last-mile-delivery` |
 | Grading nodes | `node-performance` (this context only applies the grade) |
 | Listings and available quantities | `offer-availability` |
-| The shopper, the ship-to address and the order | `customer-ordering` (PII stays there, [ADR 0006](/adr/0006-pii-confinement)) |
+| The shopper, the ship-to address and the order | `customer-ordering` (PII stays there, [ADR 0006](/network/adr/0006-pii-confinement)) |
 | Notifying the customer of a revised date | `customer-ordering` today; a future `customer-notification` context |
 | Deciding which node should hold which item before demand | future `inventory-placement` context |
-| Anything inside a vendor's building | the vendor (the warehouse-systems fleet is one vendor, reached only through the [Vendor API](/integration/vendor-api)) |
+| Anything inside a vendor's building | the vendor (the warehouse-systems fleet is one vendor, reached only through the [Vendor API](/network/integration/vendor-api)) |
 
 This context never calls a warehouse-systems service and never reads a
 `warehouse.*` topic. It never sees an address: it promises to a **destination

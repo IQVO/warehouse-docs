@@ -134,7 +134,7 @@ the node's vendor through `vendor-connectivity`.
 
 | Axis | Verdict |
 | --- | --- |
-| **Domain** | **Supporting.** See the [Core Domain Chart](/contexts/node-performance/core-domain-chart) (complexity 0.34, differentiation 0.45). |
+| **Domain** | **Supporting.** See the [Core Domain Chart](/network/contexts/node-performance/core-domain-chart) (complexity 0.34, differentiation 0.45). |
 | **Business Model** | Risk reducer: promises rest on measured, not just declared, capability. |
 | **Evolution** | Custom-built. |
 
@@ -170,7 +170,7 @@ the node's vendor through `vendor-connectivity`.
 
 Every consumed event becomes, at most, one `RecordObservation` command on
 the node's scorecards. Which events actually produce an observation is in
-[Domain Events](/contexts/node-performance/domain-events).
+[Domain Events](/network/contexts/node-performance/domain-events).
 
 ## Outbound Communication
 
@@ -181,12 +181,12 @@ the node's scorecards. Which events actually produce an observation is in
 | Analytics only | `NodeThresholdBreached` | Event | Kafka `retailnetwork.node-performance.events`, `com.retailnetwork.partner.node-performance.scorecard.NodeThresholdBreached` | Published Language, no in-org consumer |
 
 No synchronous outbound call: `sync_calls` is empty. Full payloads:
-[Domain Events](/contexts/node-performance/domain-events). Relationship
-reasoning: [Context Map](/contexts/node-performance/context-map).
+[Domain Events](/network/contexts/node-performance/domain-events). Relationship
+reasoning: [Context Map](/network/contexts/node-performance/context-map).
 
 ## Ubiquitous Language
 
-Full glossary: [Ubiquitous Language](/contexts/node-performance/ubiquitous-language).
+Full glossary: [Ubiquitous Language](/network/contexts/node-performance/ubiquitous-language).
 Top terms: **Scorecard**, **Grade** (`A`-`D`, `PROVISIONAL`), **On-Time
 Handover Rate**, **Late Ack Rate**, **Declared vs Measured**, **Window**
 (7-day, 30-day).

@@ -34,7 +34,7 @@ Derived from: `model.yaml → contexts[vendor-connectivity].chart`
 `.aggregates[*]` for the three slices.
 
 Omitted: the other nine contexts (see the
-[network-wide chart](/strategic-design/core-domain-chart)) and the fleet's
+[network-wide chart](/network/strategic-design/core-domain-chart)) and the fleet's
 `network-fulfillment`, which sits on the fleet's own chart. Slice
 positions are judgement, not model values; only the context point comes
 from `chart`.
@@ -47,7 +47,7 @@ not where the network wins customers. The decisions that differentiate
 (which node, which path, which promise) belong to `order-sourcing` and
 `delivery-promise`, both Core. This context executes what they decide and
 reports what vendors answer. See
-[subdomain classification](/strategic-design/subdomain-classification).
+[subdomain classification](/network/strategic-design/subdomain-classification).
 
 **Business model.** Revenue-channel enabler: third-party capacity without
 integration cost. Every vendor that integrates once can be sourced from,
@@ -56,10 +56,10 @@ and the network pays no per-vendor integration.
 **Evolution: Product.** The shape of the protocol (polled orders, a
 whole-order acknowledgement inside a window, asynchronous writes reconciled
 by a transaction id, labels before shipment) is well known from public
-vendor interfaces (see [SP-API surface map](/research/sp-api-surface-map)).
+vendor interfaces (see [SP-API surface map](/network/research/sp-api-surface-map)).
 The network adopts that shape in its own vocabulary rather than inventing
 one. What stays custom is the `ackBy` rule and the link to the path lock
-([ADR 0005](/adr/0005-vendor-acceptance-is-the-path-lock)).
+([ADR 0005](/network/adr/0005-vendor-acceptance-is-the-path-lock)).
 
 ## Why the slices sit where they do
 

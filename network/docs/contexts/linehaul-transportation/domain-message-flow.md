@@ -16,9 +16,9 @@ Participants are contexts and actors. Every arrow is a message from
 `model.yaml`, prefixed `cmd:`, `qry:` or `evt:`. Events are written
 `entity.EventName`; the full type is
 `com.retailnetwork.<tier>.<producer>.<entity>.<EventName>` (see
-[Domain Events](/contexts/linehaul-transportation/domain-events)). Route
+[Domain Events](/network/contexts/linehaul-transportation/domain-events)). Route
 parameters are written without braces. The network-wide flows are on
-[Domain Message Flows](/strategic-design/domain-message-flows).
+[Domain Message Flows](/network/strategic-design/domain-message-flows).
 
 ## 1. A vendor cutoff becomes a pickup departure
 

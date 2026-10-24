@@ -12,7 +12,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 :::
 
 One UML sequence diagram per command use case of
-[Use Cases](/contexts/offer-availability/use-cases). Participants, in
+[Use Cases](/network/contexts/offer-availability/use-cases). Participants, in
 order: the inbound adapter (`HTTP` or the Kafka consumer `KC`), the use
 case (`UC`), the aggregate (`Item` = `catalog.Item`, `Listing` =
 `listing.Listing`, `Feed` = `feed.InventoryFeed`), the Postgres database (`DB`): the

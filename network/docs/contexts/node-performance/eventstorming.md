@@ -16,7 +16,7 @@ Process-level boards in the ddd-crew
 notation. Every sticky comes from `model.yaml`. Every hotspot is a gap or
 risk in the model, and the table at the end says where each comes from.
 The network-wide board is
-[EventStorming big picture](/strategic-design/eventstorming-big-picture).
+[EventStorming big picture](/network/strategic-design/eventstorming-big-picture).
 
 ## Legend
 

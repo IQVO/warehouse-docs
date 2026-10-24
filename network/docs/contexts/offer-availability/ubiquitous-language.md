@@ -19,7 +19,7 @@ Listing, Available Quantity, Availability Basis, Inventory Feed, Full Feed)
 and for every neighbour term, the code identifier is the one `model.yaml`
 gives. For the other rows it is a proposed Go name, following the same
 package names. The domain-wide glossary is
-[Ubiquitous Language](/strategic-design/ubiquitous-language).
+[Ubiquitous Language](/network/strategic-design/ubiquitous-language).
 
 ## This context's terms
 
@@ -63,4 +63,4 @@ For vendor V-WS the basis originates in the fleet's `network-fulfillment`
 `CapabilityOffer` (its `Basis` `PHYSICAL` / `THROUGHPUT_CONSTRAINED`) and
 reaches this context only through `vendor-connectivity`. The canonical
 translation table is on
-[WMS/WES integration](/integration/wms-wes-integration).
+[WMS/WES integration](/network/integration/wms-wes-integration).

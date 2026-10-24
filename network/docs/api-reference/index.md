@@ -11,7 +11,7 @@ slug: /api-reference
 Each context's REST contract is an OpenAPI 3.0 file at
 `apis/<context>/openapi.yaml`, rendered here at build time. All are proposed.
 The one that matters across organizations is
-[`vendor-connectivity`](/integration/vendor-api): it is the Published Language
+[`vendor-connectivity`](/network/integration/vendor-api): it is the Published Language
 the warehouse-systems fleet's `network-fulfillment` conforms to. Routes marked
 "in-org" in a context's canvas are called only by sibling network contexts.
 

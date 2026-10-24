@@ -17,8 +17,8 @@ description: "What the retail network does, where it wins, and the one loop that
 
 :::info[Proposed design]
 This is the model's vision statement. The public evidence it rests on is on
-[The Amazon logistics network](/research/amazon-logistics-network) and
-[SP-API surface map](/research/sp-api-surface-map).
+[The Amazon logistics network](/network/research/amazon-logistics-network) and
+[SP-API surface map](/network/research/sp-api-surface-map).
 :::
 
 ## Where this network wins
@@ -80,7 +80,7 @@ different reasons, under different owners.
   and what it measures afterwards.
 - **Not the fleet's customer.** The fleet is the network's vendor. The
   network is upstream; the fleet is Conformist behind an Anti-Corruption
-  Layer (`network-fulfillment`). See [Context Map](/strategic-design/context-map).
+  Layer (`network-fulfillment`). See [Context Map](/network/strategic-design/context-map).
 - **Not an inventory planner for vendors.** Which vendor node holds which
   item is the vendor's decision (the fleet's `network-inventory-planning`).
   The network's own inventory placement is a named future context.
@@ -100,5 +100,5 @@ different reasons, under different owners.
 | `customer-ordering` | Generic | Checkout and the customer order; holds the ship-to address. |
 | `shipping-and-tracking` | Generic | Labels and the package journey. |
 
-See [Subdomain Classification](/strategic-design/subdomain-classification)
+See [Subdomain Classification](/network/strategic-design/subdomain-classification)
 for the reasoning behind each label.

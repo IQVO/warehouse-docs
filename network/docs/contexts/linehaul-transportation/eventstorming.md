@@ -16,7 +16,7 @@ Process-level EventStorming in the ddd-crew
 notation. Every sticky comes from `model.yaml`. Hotspots are genuine open
 questions or risks in the model; the source of each is in the
 [hotspot table](#hotspots). The network-wide board is on
-[EventStorming big picture](/strategic-design/eventstorming-big-picture).
+[EventStorming big picture](/network/strategic-design/eventstorming-big-picture).
 
 ## Legend
 
@@ -190,7 +190,7 @@ Derived from: `model.yaml → contexts[linehaul-transportation].aggregates[Depar
 `contexts[delivery-promise].policies[RepromiseOnRisk]`.
 
 Omitted: `RepromiseOnRisk`'s outputs (`PromiseRevised`), shown in
-[Domain Message Flow](/contexts/linehaul-transportation/domain-message-flow).
+[Domain Message Flow](/network/contexts/linehaul-transportation/domain-message-flow).
 
 ## Hotspots
 

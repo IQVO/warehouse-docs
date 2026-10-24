@@ -16,7 +16,7 @@ One application service per command of the model's aggregates, proposed for
 changes it, and saves it with its events in **one transaction**. The events
 go into `outbox_events` in that transaction, and a relay publishes them
 (model `integration_rules`). The step-by-step diagrams are on
-[Sequence Diagrams](/contexts/last-mile-delivery/sequence-diagrams); the
+[Sequence Diagrams](/network/contexts/last-mile-delivery/sequence-diagrams); the
 contract is `apis/last-mile-delivery/openapi.yaml`.
 
 Reads are not use cases: `GET /waves?stationNodeId=&serviceDate=` reads the

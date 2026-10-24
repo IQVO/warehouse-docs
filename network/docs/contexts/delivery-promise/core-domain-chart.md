@@ -34,7 +34,7 @@ Derived from: `model.yaml → contexts[delivery-promise].chart`
 `ScorecardHandicap`), `.aggregates[PromiseBook]`.
 
 Omitted: the other nine contexts (they are on
-[the domain core domain chart](/strategic-design/core-domain-chart)). The three
+[the domain core domain chart](/network/strategic-design/core-domain-chart)). The three
 slice positions are this pack's estimate relative to the context point; only
 the context point comes from the model.
 
@@ -49,7 +49,7 @@ converts) and **cost reducer** (no promise the network cannot keep).
 
 - The promise is the one number every shopper sees before buying. Showing an
   earlier date than competitors, and keeping it, is the advantage
-  ([the research page](/research/amazon-logistics-network) explains why large
+  ([the research page](/network/research/amazon-logistics-network) explains why large
   networks treat it that way; this pack restates no figure).
 - Nothing here can be bought. The search runs on this network's own nodes,
   cutoffs, departures, waves and grades. A generic carrier "transit time" table
@@ -80,7 +80,7 @@ converts) and **cost reducer** (no promise the network cannot keep).
 | --- | --- | --- |
 | `PromisePolicy` (witness path search) | highest on both axes | The differentiating algorithm. Hardest to get right, most valuable. |
 | `PromiseBook` capacity holds | slightly lower | A classic reservation ledger, but on this network's own unit (orders per node cutoff) and contended. |
-| `ScorecardHandicap` | lower complexity | A small rule table, but it is what makes declared capability honest ([ADR 0003](/adr/0003-declared-and-measured-capability)). |
+| `ScorecardHandicap` | lower complexity | A small rule table, but it is what makes declared capability honest ([ADR 0003](/network/adr/0003-declared-and-measured-capability)). |
 
 ## Evolution
 

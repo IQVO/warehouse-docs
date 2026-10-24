@@ -55,7 +55,7 @@ drawn as terminal.
 
 - None inside this context. The model does not say whether discontinuing
   an item suppresses its listings (see Open Questions on the
-  [canvas](/contexts/offer-availability/bounded-context-canvas)).
+  [canvas](/network/contexts/offer-availability/bounded-context-canvas)).
 - Neighbours react to `CatalogItemDiscontinued`: `delivery-promise` and
   `order-sourcing` update their `AvailabilityView`.
 

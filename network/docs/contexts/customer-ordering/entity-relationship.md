@@ -16,7 +16,7 @@ shares no table with any other context (`conventions.integration_rules`).
 Column names are the model's field names in `snake_case`. A relationship line
 is drawn **only** inside one aggregate. The schema holds the network's only
 ship-to columns, together with the label snapshot in `shipping-and-tracking`
-([ADR 0006](/adr/0006-pii-confinement)).
+([ADR 0006](/network/adr/0006-pii-confinement)).
 
 ## Aggregate tables
 

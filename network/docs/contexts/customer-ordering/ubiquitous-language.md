@@ -16,7 +16,7 @@ implementation must use. The first table is the context's own `ul` list in
 `model.yaml`. The second holds the model elements of its aggregates. The
 third holds neighbour terms this context uses but does not own; their
 definitions come from the owning context's `ul` list. The network-wide
-glossary is [Ubiquitous Language](/strategic-design/ubiquitous-language).
+glossary is [Ubiquitous Language](/network/strategic-design/ubiquitous-language).
 
 ## Own terms
 
@@ -70,4 +70,4 @@ Derived from: `model.yaml → contexts[customer-ordering].aggregates[*]` (`value
 
 None. Customer Ordering never touches the warehouse-systems fleet. Only
 `vendor-connectivity` and `node-topology` do; see
-[WMS/WES integration](/integration/wms-wes-integration).
+[WMS/WES integration](/network/integration/wms-wes-integration).

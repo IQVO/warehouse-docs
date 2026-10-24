@@ -66,7 +66,7 @@ not change the state, so it is a note rather than an edge; it is refused on a
 | Invariant | Enforced by |
 | --- | --- |
 | The operator must be allowed for the node type; parcel nodes are `NETWORK`-operated | `RegisterNode` → `ErrOperatorNotAllowedForNodeType` |
-| `vendorNodeCode` is unique per vendor | `RegisterNode` → `ErrVendorNodeCodeTaken` (spans all `Node` aggregates; backed by a unique index, see [Entity Relationship](/contexts/node-topology/entity-relationship)) |
+| `vendorNodeCode` is unique per vendor | `RegisterNode` → `ErrVendorNodeCodeTaken` (spans all `Node` aggregates; backed by a unique index, see [Entity Relationship](/network/contexts/node-topology/entity-relationship)) |
 | The profile revision strictly increases | `DeclareOperationalProfile` → `ErrStaleProfileRevision` |
 | A `FULFILLMENT_CENTER` profile declares at least one cutoff and a `handlingTime` above zero before activation | `ActivateNode` → `ErrIncompleteOperationalProfile` |
 | Cutoffs fall inside the operating hours of their day | `DeclareOperationalProfile` → `ErrCutoffOutsideOperatingHours` |
@@ -168,7 +168,7 @@ Omitted: nothing. There is no reopen; a new lane is opened instead.
   `NetworkGraphView`.
 - The model has no policy that closes the lanes of a suspended or retired
   node (an open question on the
-  [Bounded Context Canvas](/contexts/node-topology/bounded-context-canvas)).
+  [Bounded Context Canvas](/network/contexts/node-topology/bounded-context-canvas)).
 
 ### 6. Handled Commands
 

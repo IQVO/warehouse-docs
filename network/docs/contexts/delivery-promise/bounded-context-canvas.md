@@ -149,7 +149,7 @@ to make that date true by construction:
 
 | Axis | Verdict |
 | --- | --- |
-| **Domain** | **Core** (model `classification: Core`; chart differentiation 0.92, complexity 0.85). See [the core domain chart page](/contexts/delivery-promise/core-domain-chart). |
+| **Domain** | **Core** (model `classification: Core`; chart differentiation 0.92, complexity 0.85). See [the core domain chart page](/network/contexts/delivery-promise/core-domain-chart). |
 | **Business Model** | Revenue generator (conversion) and cost reducer (no promise the network cannot keep). |
 | **Evolution** | Custom-built. |
 
@@ -203,7 +203,7 @@ to make that date true by construction:
 `GET /promises?orderId=` and `GET /promise-books?nodeId=&date=`. No `inbound`
 row names who calls them, so this canvas shows no collaborator for them (see
 Open Questions). They are in the
-[OpenAPI contract](/api-reference).
+[OpenAPI contract](/network/api-reference).
 
 ## Outbound Communication
 
@@ -225,12 +225,12 @@ subject and Kafka key = the aggregate root id.
 | own analytics | `DeliveryOfferQuoted` | Event (analytics only) | Kafka `retailnetwork.delivery-promise.analytics` | Internal |
 | — | — | Synchronous call | none: `sync_calls: []`; the promise hot path makes no synchronous call | — |
 
-Full message details: [the domain events page](/contexts/delivery-promise/domain-events).
-Relationship reasons: [the context map page](/contexts/delivery-promise/context-map).
+Full message details: [the domain events page](/network/contexts/delivery-promise/domain-events).
+Relationship reasons: [the context map page](/network/contexts/delivery-promise/context-map).
 
 ## Ubiquitous Language
 
-Full glossary: [the ubiquitous language page](/contexts/delivery-promise/ubiquitous-language).
+Full glossary: [the ubiquitous language page](/network/contexts/delivery-promise/ubiquitous-language).
 Top terms: **Delivery Offer**, **Service Tier**, **Promise**, **Ship-By**,
 **Deliver-By Window**, **Witness Path**, **Promise Basis** (`SCHEDULED` /
 `NOMINAL`), **Promise Book**, **Capacity Hold**, **Handicap**, **Re-promise**,
@@ -243,7 +243,7 @@ Top terms: **Delivery Offer**, **Service Tier**, **Promise**, **Ship-By**,
    blocked it (`OfferConstraint`).
 2. **Fast tiers are never quoted from nominal lane times.** Only `STANDARD` may
    fall back to nominal transit, and the promise records basis `NOMINAL`
-   (`ErrNominalBasisNotAllowedForTier`, [ADR 0008](/adr/0008-capacity-held-at-promise-time)).
+   (`ErrNominalBasisNotAllowedForTier`, [ADR 0008](/network/adr/0008-capacity-held-at-promise-time)).
 3. **A promise holds capacity.** It reserves capacity on the node's pickup
    cutoff (`PromiseBook`); provisional holds expire if the order is not placed
    (`ReleaseExpiredHolds`).
@@ -324,7 +324,7 @@ owner, not decided here.
    deadlines or `policyVersion`, and no `OfferConstraint` names "past the
    order deadline".
 9. **Handicap edge cases.** `ScorecardHandicap` in the model does not map
-   grade `PROVISIONAL` (the [promise model](/network-model/promise-model) page
+   grade `PROVISIONAL` (the [promise model](/network/network-model/promise-model) page
    reads it as no handicap), and does not say which scorecard window (7-day or
    30-day) applies.
 10. **A late `CustomerOrderPlaced`.** Confirmation is asynchronous. If the hold

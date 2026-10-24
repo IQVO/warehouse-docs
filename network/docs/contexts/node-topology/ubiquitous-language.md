@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 The terms this context speaks, each with the proposed Go identifier an
 implementation must use. The domain-wide glossary is on
-[Ubiquitous Language](/strategic-design/ubiquitous-language).
+[Ubiquitous Language](/network/strategic-design/ubiquitous-language).
 
 ## Context terms
 
@@ -76,7 +76,7 @@ Derived from: model.yaml → `contexts[vendor-connectivity|linehaul-transportati
 ## Fleet translation
 
 Network term against the warehouse-systems fleet term. The canonical table
-for the whole seam is on [WMS/WES integration](/integration/wms-wes-integration);
+for the whole seam is on [WMS/WES integration](/network/integration/wms-wes-integration);
 these rows are the ones this context owns. The fleet never sees this
 context: every row crosses through the Vendor API of `vendor-connectivity`,
 and the fleet's `network-fulfillment` translates.
@@ -85,7 +85,7 @@ and the fleet's `network-fulfillment` translates.
 | --- | --- | --- |
 | `nodeId` | `siteCode` (`facility-layout`) | The network mints `nodeId` when it registers the node. The fleet's `network-fulfillment` holds the `nodeId` to `siteCode` correspondence as a **persisted mapping**, never as a string convention. |
 | `vendorNodeCode` | chosen by `network-fulfillment` for the site | The vendor's own code for the node, unique per vendor. The network never parses it and never derives a `siteCode` from it. |
-| Node Type + Subtype | `siteRole` (`facility-layout`) | Mapped by the fleet-site-role table on [Business Context](/contexts/node-topology/business-context) (model `fleet_site_role_mapping`). |
+| Node Type + Subtype | `siteRole` (`facility-layout`) | Mapped by the fleet-site-role table on [Business Context](/network/contexts/node-topology/business-context) (model `fleet_site_role_mapping`). |
 | Parcel node (`SORTATION_CENTER`, `DELIVERY_STATION`, `AIR_HUB`) | `siteRole` `SORTATION_CENTER`, `DELIVERY_STATION`, `AIR_HUB_GATEWAY` | Network-operated. The fleet's rows are reference mirrors only and are never registered. |
 | Cutoff | CPT (Critical Pull Time) | A network cutoff is the local time a vendor node declares packages ready for a pickup departure. The fleet plans its floor against its CPT schedule. A purchase order's `requiredShipBy` is one cutoff instant, which the fleet reads as a CPT. |
 | Handling Time | `cycleTimeP95` (`process-path-management`) | Handling Time is one declared node-level figure. `cycleTimeP95` is a measured per-path percentile inside the fleet. The fleet may base its declaration on it; the network never sees `cycleTimeP95`. |

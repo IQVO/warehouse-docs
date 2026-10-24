@@ -41,7 +41,7 @@ a **FulfillmentAssignment** that:
    `delivery-promise` as **UNSOURCEABLE**, instead of letting the promise
    break quietly.
 
-The [order assignment model](/network-model/order-assignment-model) walks
+The [order assignment model](/network/network-model/order-assignment-model) walks
 through one group end to end with times. This page explains the business
 reasons.
 
@@ -66,7 +66,7 @@ network where the operator picks its own stock, the natural lock point is the
 pick. Here the fulfillment centres are operated by vendors, and the network
 cannot see their pick. The acceptance is the first moment the vendor commits,
 so it is the vendor-node equivalent of "the item is picked"
-([ADR 0005](/adr/0005-vendor-acceptance-is-the-path-lock)).
+([ADR 0005](/network/adr/0005-vendor-acceptance-is-the-path-lock)).
 
 ## Actors
 
@@ -101,24 +101,24 @@ separates generating a customer promise from assigning the order to a
 fulfillment centre, where the assigned centre and path may differ from the
 path that justified the promise and may change until the item is picked. The
 sources and quotations are on
-[Amazon logistics network](/research/amazon-logistics-network); this page
+[Amazon logistics network](/network/research/amazon-logistics-network); this page
 does not restate them.
 
 Two differences are deliberate and come from the model, not from the source:
 
 - The fulfillment nodes are **vendor-operated**
-  ([ADR 0004](/adr/0004-parcel-nodes-are-network-operated)), so a release is a
+  ([ADR 0004](/network/adr/0004-parcel-nodes-are-network-operated)), so a release is a
   purchase order with an acknowledgement window, close to the vendor
   direct-fulfillment shape mapped on
-  [SP-API surface map](/research/sp-api-surface-map). The lock is the
+  [SP-API surface map](/network/research/sp-api-surface-map). The lock is the
   acceptance, not the pick.
 - Promise and assignment are **two bounded contexts**
-  ([ADR 0002](/adr/0002-promise-and-assignment-are-separate)), joined by the
+  ([ADR 0002](/network/adr/0002-promise-and-assignment-are-separate)), joined by the
   promise constraint on the way in and by `FulfillmentUnsourceable` and
   `PromiseRevised` on the way back.
 
 Order-routing features of commercial order-management products are compared
-on [benchmarks](/research/benchmarks).
+on [benchmarks](/network/research/benchmarks).
 
 ## Deliberately out of scope
 
@@ -128,11 +128,11 @@ on [benchmarks](/research/benchmarks).
 | The purchase-order protocol: `ackBy`, fill-or-kill acknowledgement, labels, shipment confirmation | `vendor-connectivity` |
 | Picking, packing and stock placement inside a vendor node | The vendor (for `V-WS`, the warehouse-systems fleet). Inventory placement is a future context (`inventory-placement`), out of scope |
 | Booking the package on the pickup departure, building loads | `linehaul-transportation` |
-| The tracking timeline, labels and the ship-to address | `shipping-and-tracking`; no PII ever enters this context ([ADR 0006](/adr/0006-pii-confinement)) |
+| The tracking timeline, labels and the ship-to address | `shipping-and-tracking`; no PII ever enters this context ([ADR 0006](/network/adr/0006-pii-confinement)) |
 | Customer cancellation rules and the customer-facing status | `customer-ordering` |
 | Splitting a cart into shipment groups | `delivery-promise` (`ShipmentGrouping`); this context receives groups already formed |
 | Returns, payments, notifications | Future contexts `customer-returns`, `payments-and-invoicing`, `customer-notification` |
 
-See the [Bounded Context Canvas](/contexts/order-sourcing/bounded-context-canvas)
-for every message and the [Context Map](/contexts/order-sourcing/context-map)
+See the [Bounded Context Canvas](/network/contexts/order-sourcing/bounded-context-canvas)
+for every message and the [Context Map](/network/contexts/order-sourcing/context-map)
 for every relationship.

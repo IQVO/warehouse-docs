@@ -14,8 +14,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 These are **in-organization** events. Vendors never see them; vendors see
 the Vendor API's Published Language
 (`apis/vendor-connectivity/openapi.yaml`). The convention is on
-[Event standard: CloudEvents](/strategic-design/event-standard-cloudevents)
-and [ADR 0007](/adr/0007-cloudevents-namespace).
+[Event standard: CloudEvents](/network/strategic-design/event-standard-cloudevents)
+and [ADR 0007](/network/adr/0007-cloudevents-namespace).
 
 ## Envelope
 
@@ -180,7 +180,7 @@ No event carries a ship-to address, name or phone.
 ## Example envelope
 
 `PurchaseOrderAccepted` is the most important event: it is the path lock
-([ADR 0005](/adr/0005-vendor-acceptance-is-the-path-lock)).
+([ADR 0005](/network/adr/0005-vendor-acceptance-is-the-path-lock)).
 
 ```json
 {
@@ -223,4 +223,4 @@ Not consumed, though a reader might expect it:
 `com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared`.
 The `ackBy` rule needs the node's handling time, and the model gives this
 context no source for it. This is listed as an open question on the
-[canvas](/contexts/vendor-connectivity/bounded-context-canvas).
+[canvas](/network/contexts/vendor-connectivity/bounded-context-canvas).

@@ -17,7 +17,7 @@ notation. Every sticky comes from `model.yaml`. Events published by a
 neighbour are drawn as orange stickies prefixed with the producer. Every
 hotspot is a gap or a risk the model itself shows, and its source is given in
 the hotspot table. The big-picture board for the whole network is
-[EventStorming big picture](/strategic-design/eventstorming-big-picture).
+[EventStorming big picture](/network/strategic-design/eventstorming-big-picture).
 Boards 1 and 3 are drawn top to bottom and board 2 is split in two, because
 left to right they would not fit the page width.
 

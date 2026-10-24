@@ -17,7 +17,7 @@ identifiers (`order.CustomerOrder`, `order.ShipTo`, `shopper.Shopper`) and
 value objects. Fields are unexported in Go and shown with `-`; methods are
 shown with `+`. A member marked `*` is not in the model's value object; it
 carries an event field the aggregate must keep (see the
-[Aggregate Design Canvas](/contexts/customer-ordering/aggregate-design-canvas)).
+[Aggregate Design Canvas](/network/contexts/customer-ordering/aggregate-design-canvas)).
 
 ## 1. CustomerOrder aggregate
 

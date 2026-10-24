@@ -12,7 +12,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 :::
 
 One UML sequence diagram per command use case of
-[Use Cases](/contexts/shipping-and-tracking/use-cases). To stay readable,
+[Use Cases](/network/contexts/shipping-and-tracking/use-cases). To stay readable,
 `DB` stands for one Postgres transaction that holds the repositories, the
 `outbox_events` insert and, for consumers, the `processed_events` insert.
 `Relay` stands for the outbox relay that publishes committed rows to Kafka
@@ -206,7 +206,7 @@ Derived from: `model.yaml → contexts[shipping-and-tracking].policies[Exception
 
 Omitted: how the expected leg time is known; the model gives this context no
 departure, lane or wave data (an open question on the
-[canvas](/contexts/shipping-and-tracking/bounded-context-canvas)). The state
+[canvas](/network/contexts/shipping-and-tracking/bounded-context-canvas)). The state
 does not change.
 
 ## 5. ReturnToSender

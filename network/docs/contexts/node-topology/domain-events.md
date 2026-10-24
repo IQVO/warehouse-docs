@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 Every event this context publishes, with its full CloudEvents type, and the
 (empty) list of events it consumes. The envelope rules are the domain-wide
-[event standard](/strategic-design/event-standard-cloudevents).
+[event standard](/network/strategic-design/event-standard-cloudevents).
 
 ## Envelope
 
@@ -227,7 +227,7 @@ model names the fields but not their inner structure or vocabulary.
 
 None. The model's `consumes` list for `node-topology` is empty, so the
 context has no Kafka consumer, no consumer group and no inbox to dedupe. Its
-inputs are the REST commands listed on [Use Cases](/contexts/node-topology/use-cases).
+inputs are the REST commands listed on [Use Cases](/network/contexts/node-topology/use-cases).
 
 ## Analytics
 

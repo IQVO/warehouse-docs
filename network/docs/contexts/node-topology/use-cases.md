@@ -13,8 +13,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 One section per command in the model. Each would live in
 `internal/application/usecases` (proposed). The step-by-step diagrams are on
-[Sequence Diagrams](/contexts/node-topology/sequence-diagrams); payloads are on
-[Domain Events](/contexts/node-topology/domain-events); the HTTP contract is
+[Sequence Diagrams](/network/contexts/node-topology/sequence-diagrams); payloads are on
+[Domain Events](/network/contexts/node-topology/domain-events); the HTTP contract is
 `apis/node-topology/openapi.yaml`.
 
 Reads are not use cases here. `GET /nodes/{nodeId}`,

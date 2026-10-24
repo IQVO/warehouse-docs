@@ -128,7 +128,7 @@ sourcing) as events, so their hot paths make no synchronous call here.
 
 | Axis | Verdict |
 | --- | --- |
-| **Domain** | **Supporting**. See the [Core Domain Chart](/contexts/offer-availability/core-domain-chart). |
+| **Domain** | **Supporting**. See the [Core Domain Chart](/network/contexts/offer-availability/core-domain-chart). |
 | **Business Model** | Revenue enabler (what can be sold, from where). |
 | **Evolution** | Product. |
 
@@ -156,7 +156,7 @@ sourcing) as events, so their hot paths make no synchronous call here.
 
 Two routes in `rest` have no collaborator in `inbound`:
 `GET /listings?nodeId=&catalogItemId=` and `GET /inventory-feeds/{feedId}`.
-They are in the [REST contract](/api-reference) but not on the canvas,
+They are in the [REST contract](/network/api-reference) but not on the canvas,
 because the model does not say who calls them (see Open Questions).
 
 ## Outbound Communication
@@ -172,12 +172,12 @@ because the model does not say who calls them (see Open Questions).
 | `node-performance` | `InventoryFeedApplied` | Event | Kafka `retailnetwork.offer-availability.events`, `com.retailnetwork.commerce.offer-availability.inventoryfeed.InventoryFeedApplied` | Conformist (downstream) |
 | (none) | — | Sync call | `sync_calls` is empty: this context calls no one | — |
 
-Full message details: [Domain Events](/contexts/offer-availability/domain-events).
-Relationship evidence: [Context Map](/contexts/offer-availability/context-map).
+Full message details: [Domain Events](/network/contexts/offer-availability/domain-events).
+Relationship evidence: [Context Map](/network/contexts/offer-availability/context-map).
 
 ## Ubiquitous Language
 
-Full glossary: [Ubiquitous Language](/contexts/offer-availability/ubiquitous-language).
+Full glossary: [Ubiquitous Language](/network/contexts/offer-availability/ubiquitous-language).
 Top terms: **Catalog Item**, **Listing** (≠ Catalog Item), **Available
 Quantity**, **Availability Basis** `PHYSICAL` / `THROUGHPUT_CONSTRAINED` /
 `UNKNOWN` (≠ Promise Basis), **Inventory Feed** (≠ Submission), **Full

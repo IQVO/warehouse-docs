@@ -129,7 +129,7 @@ To turn a shopper's cart into a customer order. The context:
 
 | Axis | Verdict |
 | --- | --- |
-| **Domain** | **Generic** subdomain. See the [Core Domain Chart](/contexts/customer-ordering/core-domain-chart). |
+| **Domain** | **Generic** subdomain. See the [Core Domain Chart](/network/contexts/customer-ordering/core-domain-chart). |
 | **Business Model** | Engagement (the storefront transaction). |
 | **Evolution** | Commodity. |
 
@@ -178,12 +178,12 @@ What the consumers do with them (from their own model entries):
 (`ConfirmPromise`) on `CustomerOrderPlaced` and cancels it (`CancelPromise`)
 on `CustomerOrderCancelled`; `order-sourcing` queues one assignment per group
 (`QueueAssignment`) and cancels it (`CancelAssignment`). Full payloads:
-[Domain Events](/contexts/customer-ordering/domain-events). Relationship
-evidence: [Context Map](/contexts/customer-ordering/context-map).
+[Domain Events](/network/contexts/customer-ordering/domain-events). Relationship
+evidence: [Context Map](/network/contexts/customer-ordering/context-map).
 
 ## Ubiquitous Language
 
-Full glossary: [Ubiquitous Language](/contexts/customer-ordering/ubiquitous-language).
+Full glossary: [Ubiquitous Language](/network/contexts/customer-ordering/ubiquitous-language).
 Top terms: **Shopper**, **Customer Order**, **Ship-To** (PII, held only
 here), **Checkout**, **Group Promise** (a snapshot of the **Promise**),
 **Shipment Group**, **Delivery Offer**, **Path Lock** (ends customer

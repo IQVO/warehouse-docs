@@ -35,7 +35,7 @@ Derived from: model.yaml → `contexts[last-mile-delivery].chart`
 model places only the context.
 
 Omitted: the other nine contexts (each has its own chart; the network-wide
-chart is [Core Domain Chart](/strategic-design/core-domain-chart)), and the
+chart is [Core Domain Chart](/network/strategic-design/core-domain-chart)), and the
 future contexts.
 
 ## Classification: Supporting
@@ -77,7 +77,7 @@ a planned list of stops and does not specify an optimiser.
 | Delivery waves and induction | **Custom-built** | The wave is the network's own contract with the promise; no product owns it. |
 | Routes and attempts | **Custom-built**, leaning **Product** | Route planning and driver apps are a known market; the model keeps only the stop list and the attempt fact. |
 | DSP registry | **Product / Commodity** | A contract register with a van capacity. |
-| Plumbing (outbox, inbox, CloudEvents) | **Commodity** | The network-wide standard ([event standard](/strategic-design/event-standard-cloudevents)). |
+| Plumbing (outbox, inbox, CloudEvents) | **Commodity** | The network-wide standard ([event standard](/network/strategic-design/event-standard-cloudevents)). |
 
 **Movement to watch.** If station capacity became a live trading variable
 (for example, waves resized every hour from demand), the `DeliveryWave

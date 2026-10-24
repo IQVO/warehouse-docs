@@ -14,8 +14,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 Every event this context publishes and consumes, from
 `contexts[last-mile-delivery].publishes` and `.consumes` and the
 network-wide `conventions.cloudevents`
-([event standard](/strategic-design/event-standard-cloudevents),
-[ADR 0007](/adr/0007-cloudevents-namespace)).
+([event standard](/network/strategic-design/event-standard-cloudevents),
+[ADR 0007](/network/adr/0007-cloudevents-namespace)).
 
 ## Envelope
 
@@ -111,7 +111,7 @@ Consumers apply it as a full snapshot, not a delta, so the latest event by
 | `at` | date-time | when the attempt happened |
 
 No published event carries an address, a name or any other PII
-([ADR 0006](/adr/0006-pii-confinement)).
+([ADR 0006](/network/adr/0006-pii-confinement)).
 
 ### Example envelope
 

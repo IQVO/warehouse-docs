@@ -125,7 +125,7 @@ types (strings). Errors: `ApplyAvailability` returns
 `ErrNodeNotSellable`; the repository's `Insert` maps the unique-key
 violation to `ErrDuplicateListing`. `NewListing` taking `nodeActive` is the
 proposed answer to the missing initial state (H3 on
-[EventStorming](/contexts/offer-availability/eventstorming)).
+[EventStorming](/network/contexts/offer-availability/eventstorming)).
 
 ## 3. InventoryFeed aggregate
 

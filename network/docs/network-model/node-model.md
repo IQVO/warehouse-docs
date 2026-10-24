@@ -11,10 +11,10 @@ description: "The six node types, who operates them, the declared operational pr
 Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml)
 → `node_types`, `lane_rules`, `fleet_site_role_mapping` and
 `contexts[node-topology]`. The building types are grounded on
-[The Amazon logistics network](/research/amazon-logistics-network); the
+[The Amazon logistics network](/network/research/amazon-logistics-network); the
 declared profile on the Supply Sources schema in
-[SP-API surface map](/research/sp-api-surface-map). Owner:
-[`node-topology`](/contexts/node-topology).
+[SP-API surface map](/network/research/sp-api-surface-map). Owner:
+[`node-topology`](/network/contexts/node-topology).
 :::
 
 ## Two kinds of node
@@ -30,7 +30,7 @@ groups that behave differently in every other context:
   `SORTATION_CENTER` sorts by destination and consolidates onto loads, a
   `DELIVERY_STATION` runs the last mile for its service area, an `AIR_HUB`
   joins the ground network to air lanes. They are always
-  **network-operated** ([ADR 0004](/adr/0004-parcel-nodes-are-network-operated)).
+  **network-operated** ([ADR 0004](/network/adr/0004-parcel-nodes-are-network-operated)).
 
 | Node type | Operator | Capabilities | Takes customer demand | On a customer path as |
 | --- | --- | --- | --- | --- |
@@ -100,7 +100,7 @@ declaredBy: VENDOR
 
 Derived from: `model.yaml` → `contexts[node-topology].aggregates[Node].value_objects`.
 The numbers are an illustrative example, used again on
-[Promise model](/network-model/promise-model).
+[Promise model](/network/network-model/promise-model).
 
 What each field drives:
 
@@ -114,7 +114,7 @@ What each field drives:
 
 A declaration is only half the story. `node-performance` measures the node,
 and `delivery-promise` handicaps a node whose grade is below A
-([ADR 0003](/adr/0003-declared-and-measured-capability)).
+([ADR 0003](/network/adr/0003-declared-and-measured-capability)).
 
 ## Lanes
 
@@ -213,4 +213,4 @@ sequenceDiagram
 Derived from: `model.yaml` → `contexts[vendor-connectivity].sync_calls`,
 `contexts[node-topology].publishes`, `contexts[linehaul-transportation].policies`.
 The fleet stores `AUS3 <-> N-VWS-AUS3` as a persisted mapping; see
-[WMS/WES Integration](/integration/wms-wes-integration).
+[WMS/WES Integration](/network/integration/wms-wes-integration).

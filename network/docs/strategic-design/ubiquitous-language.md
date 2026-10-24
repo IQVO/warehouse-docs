@@ -15,7 +15,7 @@ This page is generated from [`model/model.yaml`](https://github.com/IQVO/retail-
 Each term belongs to the context that owns its meaning. Where the same word
 appears in two contexts with two meanings, both are listed. Code identifiers
 are the proposed Go package and type names. Each context's own
-[ubiquitous-language page](/contexts) adds usage notes.
+[ubiquitous-language page](/network/contexts) adds usage notes.
 
 | Term | Context | Definition | Code identifier |
 | --- | --- | --- | --- |
@@ -122,7 +122,7 @@ are read from `IQVO/network-fulfillment`, `IQVO/order-management` and
 | Vendor V-WS | the fleet | one vendor among many |
 | Node (`nodeId`) | Site (`siteCode`) | mapping persisted in `network-fulfillment`, never a string convention |
 | `vendorNodeCode` | `siteCode` | what the fleet sends when it registers a node |
-| Node type `FULFILLMENT_CENTER` + subtype | `siteRole` (facility-layout ADR 0037) | see [Node model](/network-model/node-model) |
+| Node type `FULFILLMENT_CENTER` + subtype | `siteRole` (facility-layout ADR 0037) | see [Node model](/network/network-model/node-model) |
 | Cutoff / pickup departure | CPT (`CPTSchedule`, process-path-management ADR 0010) | the fleet's CPT **is** the network's pickup cutoff at that node |
 | Handling Time | `cycleTimeP95` of the eligible path | declared from the fleet's own number |
 | Throughput Cap / cutoff `maxOrders` | remaining path capacity (`PathCapacityChanged`) | |

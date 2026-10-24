@@ -13,8 +13,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 One section per command in `contexts[offer-availability].aggregates[*].commands`.
 The proposed Go package is `internal/application/usecases`. Step-by-step
-diagrams are on [Sequence Diagrams](/contexts/offer-availability/sequence-diagrams);
-payloads are on [Domain Events](/contexts/offer-availability/domain-events).
+diagrams are on [Sequence Diagrams](/network/contexts/offer-availability/sequence-diagrams);
+payloads are on [Domain Events](/network/contexts/offer-availability/domain-events).
 
 Error mapping rule (proposed contract): validation → `422`, conflict or
 state → `409`, not found → `404`, stale → `409`. Every error body is
@@ -109,7 +109,7 @@ are not use cases: they read the repositories directly.
   `ErrDuplicateListing`.
 
 The model names no error for an unknown `catalogItemId` or `nodeId`; that
-gap is listed on the [canvas](/contexts/offer-availability/bounded-context-canvas).
+gap is listed on the [canvas](/network/contexts/offer-availability/bounded-context-canvas).
 
 ## ApplyInventoryFeed
 

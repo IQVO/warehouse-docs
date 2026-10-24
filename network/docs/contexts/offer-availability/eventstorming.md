@@ -17,7 +17,7 @@ notation. Every sticky is a command, aggregate, event, policy, read model
 or neighbour from `model.yaml`. Every hotspot is a genuine gap or risk in
 the model; the table at the end says where each one comes from. The
 domain-wide board is
-[EventStorming Big Picture](/strategic-design/eventstorming-big-picture).
+[EventStorming Big Picture](/network/strategic-design/eventstorming-big-picture).
 
 ## Legend
 
@@ -72,7 +72,7 @@ Derived from: `model.yaml → contexts[offer-availability].aggregates[CatalogIte
 `.aggregates[Listing]`, `.inbound`, `.publishes`.
 
 Omitted: the `ErrInvalidItemDimensions` and `ErrDuplicateListing` refusals
-(see [Use Cases](/contexts/offer-availability/use-cases)) and the
+(see [Use Cases](/network/contexts/offer-availability/use-cases)) and the
 storefront's `BrowseCatalog` query, which changes nothing.
 
 ## 2. Inventory feed application

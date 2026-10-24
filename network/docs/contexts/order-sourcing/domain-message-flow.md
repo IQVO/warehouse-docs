@@ -16,14 +16,14 @@ Participants are contexts and external systems. Every arrow is a message from
 the model, prefixed `cmd:` (command), `qry:` (query) or `evt:` (event).
 Commands handled inside this context are shown as notes, not arrows. The
 network-level view with worked times is the
-[order assignment model](/network-model/order-assignment-model); the flows
+[order assignment model](/network/network-model/order-assignment-model); the flows
 across all contexts are on
-[Domain message flows](/strategic-design/domain-message-flows).
+[Domain message flows](/network/strategic-design/domain-message-flows).
 
 Event names are short; the full types are
 `com.retailnetwork.commerce.order-sourcing.assignment.<EventName>` for this
 context and are listed for every neighbour on
-[Domain Events](/contexts/order-sourcing/domain-events). REST path
+[Domain Events](/network/contexts/order-sourcing/domain-events). REST path
 parameters are written without braces. A number after a release or
 purchase-order event is its `releaseNo`; a hyphen at a line end only wraps a
 long name (`Fulfillment-ReleasedToNode` is `FulfillmentReleasedToNode`).
@@ -118,7 +118,7 @@ at `STANDARD`, `delivery-promise` sends no `PromiseRevised`; it reports
 `PromiseBroken` at judgement, and `customer-ordering` may cancel the group
 (`CancelOnUnfulfillable`), which this context cannot apply to an
 `UNSOURCEABLE` assignment (open question on the
-[canvas](/contexts/order-sourcing/bounded-context-canvas)). Whether the
+[canvas](/network/contexts/order-sourcing/bounded-context-canvas)). Whether the
 revision clears the exclusions of A and B is not stated in the model.
 `ApplyRevisedPromise` raises no event in the model.
 

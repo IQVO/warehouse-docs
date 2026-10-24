@@ -130,13 +130,13 @@ In practice the context:
 - records each attempt, re-inducts a failed package into the next wave
   (`RetryNextWave`), and tells `shipping-and-tracking` what happened.
 
-It never sees an address ([ADR 0006](/adr/0006-pii-confinement)).
+It never sees an address ([ADR 0006](/network/adr/0006-pii-confinement)).
 
 ## Strategic Classification
 
 | Axis | Verdict |
 | --- | --- |
-| **Domain** | <span className="badge-supporting">Supporting</span> See [Core Domain Chart](/contexts/last-mile-delivery/core-domain-chart). |
+| **Domain** | <span className="badge-supporting">Supporting</span> See [Core Domain Chart](/network/contexts/last-mile-delivery/core-domain-chart). |
 | **Business Model** | Cost reducer and experience creator (the doorstep). |
 | **Evolution** | Custom-built. |
 
@@ -183,12 +183,12 @@ question below.
 | `shipping-and-tracking` | `DeliveryAttempted` | Event | Kafka `retailnetwork.last-mile-delivery.events`, type `com.retailnetwork.logistics.last-mile-delivery.route.DeliveryAttempted` | Open Host + Published Language (it is Conformist) |
 | — | (no synchronous call) | — | `sync_calls: []` | — |
 
-Full message details: [Domain Events](/contexts/last-mile-delivery/domain-events).
-Relationship reasoning: [Context Map](/contexts/last-mile-delivery/context-map).
+Full message details: [Domain Events](/network/contexts/last-mile-delivery/domain-events).
+Relationship reasoning: [Context Map](/network/contexts/last-mile-delivery/context-map).
 
 ## Ubiquitous Language
 
-Full glossary: [Ubiquitous Language](/contexts/last-mile-delivery/ubiquitous-language).
+Full glossary: [Ubiquitous Language](/network/contexts/last-mile-delivery/ubiquitous-language).
 Top terms: **Last Mile**, **Delivery Wave** (induct cutoff, delivery window,
 stop capacity), **Induction**, **Route**, **Delivery Service Partner (DSP)**,
 **Delivery Attempt** (`DELIVERED` or `FAILED`).
@@ -252,7 +252,7 @@ stop capacity), **Induction**, **Route**, **Delivery Service Partner (DSP)**,
 - **How does a package map to stops?** Wave capacity and van capacity are
   counted in stops, but induction is per package, and `Stop` groups several
   tracking numbers. Grouping packages into stops needs a delivery address,
-  which this context never receives ([ADR 0006](/adr/0006-pii-confinement)).
+  which this context never receives ([ADR 0006](/network/adr/0006-pii-confinement)).
 - **What happens when no wave is eligible?** If every wave is full or closed,
   `InductPackage` fails with `ErrWaveFull` or `ErrInductionClosed`. No
   event tells `delivery-promise` that the witness wave was missed. Today

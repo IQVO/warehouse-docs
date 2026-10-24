@@ -35,7 +35,7 @@ Derived from: `model.yaml → contexts[offer-availability].chart`
 this page's estimate, not model values.
 
 Omitted: the other nine contexts (each has its own chart; the domain-wide
-picture is [Core Domain Chart](/strategic-design/core-domain-chart)).
+picture is [Core Domain Chart](/network/strategic-design/core-domain-chart)).
 
 ## Classification: Supporting
 
@@ -82,4 +82,4 @@ vendor's number (for example, from `node-performance`'s measured feed
 freshness), the Listing slice would move right and up. The model rules
 that out today ("kept with the number, never re-derived"); such a change
 would need an ADR next to
-[ADR 0003](/adr/0003-declared-and-measured-capability).
+[ADR 0003](/network/adr/0003-declared-and-measured-capability).

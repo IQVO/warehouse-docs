@@ -89,7 +89,7 @@ Derived from: `model.yaml → contexts[shipping-and-tracking].aggregates[Shippin
 
 Omitted: read accessors; the errors `ErrLabelAlreadyIssued` and
 `ErrTrackingNumberTaken` (listed on the
-[Aggregate Design Canvas](/contexts/shipping-and-tracking/aggregate-design-canvas)).
+[Aggregate Design Canvas](/network/contexts/shipping-and-tracking/aggregate-design-canvas)).
 `ShipToSnapshot` exposes no plaintext accessor in the domain; decryption
 happens only in the (unmodelled) print path. `orderId` is an assumed field
 (see the canvas open questions).
@@ -282,7 +282,7 @@ classDiagram
 
 Derived from: `model.yaml → contexts[shipping-and-tracking].publishes`.
 
-Omitted: field types (on [Domain Events](/contexts/shipping-and-tracking/domain-events))
+Omitted: field types (on [Domain Events](/network/contexts/shipping-and-tracking/domain-events))
 and JSON tags (camelCase on the wire). No event has an address field.
 
 ## 4. Hexagonal ports and adapters

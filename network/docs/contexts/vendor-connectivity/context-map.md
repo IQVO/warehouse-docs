@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).
 This is **vendor-connectivity's slice** of the
-[network context map](/strategic-design/context-map). Arrows point from
+[network context map](/network/strategic-design/context-map). Arrows point from
 upstream (U) to downstream (D). Abbreviations: OHS = Open Host Service,
 PL = Published Language, CF = Conformist, ACL = Anti-Corruption Layer,
 C/S = Customer/Supplier.
@@ -89,7 +89,7 @@ abbreviate the full event names listed in the table.
 | node-topology (Supporting) | NT upstream (supplier of the service) | **Customer/Supplier**, VC is the Customer | REST (in-org) `POST /nodes`, `PUT /nodes/{nodeId}/operational-profile` | RegisterNode, DeclareOperationalProfile | Vendor node and profile writes are relayed to their owner; node-topology lists this context as a Customer. |
 | offer-availability (Supporting) | OA upstream | **Conformist** | Kafka `retailnetwork.offer-availability.events` | ListingCreated | Listings are owned there; this context keeps a `ListingView`. |
 | offer-availability (Supporting) | OA upstream (supplier of the service) | **Customer/Supplier**, VC is the Customer | REST (in-org) `POST /inventory-feeds` | ApplyInventoryFeed | Inventory feeds are applied by their owner. |
-| shipping-and-tracking (Generic) | ST upstream (supplier of the service) | **Customer/Supplier**, VC is the Customer | REST (in-org) `POST /labels` | IssueLabel | Only shipping-and-tracking may see the ship-to address ([ADR 0006](/adr/0006-pii-confinement)); this context passes back only `labelRef`, `trackingNumber`, `carrier`. |
+| shipping-and-tracking (Generic) | ST upstream (supplier of the service) | **Customer/Supplier**, VC is the Customer | REST (in-org) `POST /labels` | IssueLabel | Only shipping-and-tracking may see the ship-to address ([ADR 0006](/network/adr/0006-pii-confinement)); this context passes back only `labelRef`, `trackingNumber`, `carrier`. |
 | shipping-and-tracking (Generic) | VC upstream | **Customer/Supplier** | Kafka `retailnetwork.vendor-connectivity.events` | VendorShipmentConfirmed | Starts the package journey on the shipping side. |
 | node-performance (Supporting) | VC upstream | **Conformist** (NP downstream) | Kafka `retailnetwork.vendor-connectivity.events` | VendorOnboarded, PurchaseOrderIssued, PurchaseOrderAccepted, PurchaseOrderRejected, PurchaseOrderExpired, VendorShipmentConfirmed, SubmissionProcessed | Node-performance measures from observed facts and takes them as published. |
 | node-performance (Supporting) | NP upstream (supplier of the service) | **Customer/Supplier**, VC is the Customer | REST (in-org) `GET /scorecards/{nodeId}` | GetScorecard | A vendor reads its scorecard through the Vendor API; this context relays it. |
@@ -103,8 +103,8 @@ abbreviate the full event names listed in the table.
 - **The fleet's side.** network-fulfillment is Conformist (it cannot change
   the protocol) and keeps an ACL (`ports.NetworkGateway`), so no network
   term crosses into the rest of the fleet. The term mapping is on the
-  [Ubiquitous Language](/contexts/vendor-connectivity/ubiquitous-language)
-  page and, fleet-wide, on [WMS/WES integration](/integration/wms-wes-integration).
+  [Ubiquitous Language](/network/contexts/vendor-connectivity/ubiquitous-language)
+  page and, fleet-wide, on [WMS/WES integration](/network/integration/wms-wes-integration).
 - **Relay, not ownership.** For nodes, profiles, inventory and labels this
   context is a Customer of the owning context. It validates the vendor's
   right to act and turns a synchronous in-org answer into a transaction

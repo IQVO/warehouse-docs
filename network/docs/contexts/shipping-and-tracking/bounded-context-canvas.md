@@ -155,13 +155,13 @@ journey. The context:
   when a package goes silent.
 
 It is the only context outside `customer-ordering` that ever sees a ship-to
-address ([ADR 0006](/adr/0006-pii-confinement)). It publishes no address.
+address ([ADR 0006](/network/adr/0006-pii-confinement)). It publishes no address.
 
 ## Strategic Classification
 
 | Axis | Verdict |
 | --- | --- |
-| **Domain** | **Generic Subdomain** (`classification: Generic`). See [Core Domain Chart](/contexts/shipping-and-tracking/core-domain-chart). |
+| **Domain** | **Generic Subdomain** (`classification: Generic`). See [Core Domain Chart](/network/contexts/shipping-and-tracking/core-domain-chart). |
 | **Business Model** | Compliance / experience (labels and the tracking timeline). |
 | **Evolution** | **Commodity**. A candidate to buy rather than build, behind an ACL that keeps the published event names. |
 
@@ -204,12 +204,12 @@ address ([ADR 0006](/adr/0006-pii-confinement)). It publishes no address.
 | analytics only | `PackageReturned` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` | Published Language, no in-org consumer |
 | analytics only | `PackageLost` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | Published Language, no in-org consumer |
 
-Full message details: [Domain Events](/contexts/shipping-and-tracking/domain-events).
-Relationship evidence: [Context Map](/contexts/shipping-and-tracking/context-map).
+Full message details: [Domain Events](/network/contexts/shipping-and-tracking/domain-events).
+Relationship evidence: [Context Map](/network/contexts/shipping-and-tracking/context-map).
 
 ## Ubiquitous Language
 
-Full glossary: [Ubiquitous Language](/contexts/shipping-and-tracking/ubiquitous-language).
+Full glossary: [Ubiquitous Language](/network/contexts/shipping-and-tracking/ubiquitous-language).
 Top terms: **Tracking Number**, **Shipping Label** (≠ the Vendor API
 **Label**), **Package Journey**, **Scan**, **Handover** (≠
 `VendorShipmentConfirmed`), **ship-to snapshot**.

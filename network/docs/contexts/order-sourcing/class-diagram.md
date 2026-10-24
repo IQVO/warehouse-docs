@@ -148,14 +148,14 @@ lock, shipment and delivery fields, the `Line` shape of
 
 Omitted: the full `QueueAssignment` signature (`orderId, groupNo, promise,
 lines, best`); the read accessors; the six `Err...` variables (listed on
-[Aggregate Design Canvas](/contexts/order-sourcing/aggregate-design-canvas));
+[Aggregate Design Canvas](/network/contexts/order-sourcing/aggregate-design-canvas));
 `destinationPostalPrefix`, which the candidate search needs but the model
 does not place on the aggregate (open question). `Release` is a value object
 in the model; its `outcome` changes from `PENDING` once, so an implementation
 replaces the element identified by `releaseNo` rather than mutating it.
 `Line` is the release's line shape; before release a line has no
 `listingId`. The repository finders are this page's proposal, one per
-trigger on [Use Cases](/contexts/order-sourcing/use-cases).
+trigger on [Use Cases](/network/contexts/order-sourcing/use-cases).
 
 ## 2. Domain events
 
@@ -253,7 +253,7 @@ classDiagram
 Derived from: model.yaml → `contexts[order-sourcing].publishes` (event names
 and `data`).
 
-Omitted: field types (on [Domain Events](/contexts/order-sourcing/domain-events));
+Omitted: field types (on [Domain Events](/network/contexts/order-sourcing/domain-events));
 JSON tags are the camelCase `data` names. `AggregateID()` returns the
 `assignmentId`, which becomes the CloudEvents `subject` and the Kafka key.
 

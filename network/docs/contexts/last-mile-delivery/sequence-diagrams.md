@@ -12,7 +12,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 :::
 
 One UML sequence diagram per command use case on
-[Use Cases](/contexts/last-mile-delivery/use-cases). The participants are the
+[Use Cases](/network/contexts/last-mile-delivery/use-cases). The participants are the
 proposed hexagonal pieces:
 
 | Participant | Piece |

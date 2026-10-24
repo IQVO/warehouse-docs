@@ -16,10 +16,10 @@ Participants are contexts and actors. Every arrow is a message from
 `model.yaml`, prefixed `cmd:`, `qry:` or `evt:`. Events are written
 `<entity>.<EventName>`; the full type is
 `com.retailnetwork.<tier>.<producer>.<entity>.<EventName>` (see
-[Domain Events](/contexts/shipping-and-tracking/domain-events)). Kafka is not
+[Domain Events](/network/contexts/shipping-and-tracking/domain-events)). Kafka is not
 drawn: an event arrow goes straight from producer to consumer. Path
 parameters are written without braces. The domain-wide flows are on
-[Domain Message Flows](/strategic-design/domain-message-flows).
+[Domain Message Flows](/network/strategic-design/domain-message-flows).
 
 ## 1. A label is issued
 
@@ -53,7 +53,7 @@ The `IssueLabel` request carries `poNumber`, `packageNo`, `assignmentId`,
 Omitted: how `vendor-connectivity` answers the vendor (its own pages; never
 with the address); the failure branches (ship-to unavailable, duplicate
 `(poNumber, packageNo)`), shown in
-[Sequence Diagrams](/contexts/shipping-and-tracking/sequence-diagrams); how the vendor
+[Sequence Diagrams](/network/contexts/shipping-and-tracking/sequence-diagrams); how the vendor
 gets a printable label, which the model does not say.
 
 ## 2. Handover and the middle mile
@@ -89,7 +89,7 @@ Omitted: `VendorShipmentConfirmed` also goes to `order-sourcing` and
 `node-performance`, and `LoadArrived` also to `last-mile-delivery` (their
 pages). Telling a delivery station from a sortation centre needs node types
 this context does not consume (a model gap, see the
-[canvas open questions](/contexts/shipping-and-tracking/bounded-context-canvas)).
+[canvas open questions](/network/contexts/shipping-and-tracking/bounded-context-canvas)).
 A direct-injection lane from the vendor node to the station has no
 `HANDED_OVER -> AT_STATION` edge in the model.
 

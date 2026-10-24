@@ -132,9 +132,9 @@ It holds declared facts. It does not schedule, promise, assign or measure.
 
 | Axis | Verdict |
 | --- | --- |
-| **Domain** | **Supporting**. See [Core Domain Chart](/contexts/node-topology/core-domain-chart). |
+| **Domain** | **Supporting**. See [Core Domain Chart](/network/contexts/node-topology/core-domain-chart). |
 | **Business Model** | Enabler: every promise, assignment and route rests on it. |
-| **Evolution** | Custom-built. The operational profile is shaped after a Product surface (Supply Sources, see [SP-API surface map](/research/sp-api-surface-map)). |
+| **Evolution** | Custom-built. The operational profile is shaped after a Product surface (Supply Sources, see [SP-API surface map](/network/research/sp-api-surface-map)). |
 
 ## Domain Roles
 
@@ -187,12 +187,12 @@ Every event goes to topic `retailnetwork.node-topology.events`, source
 | `delivery-promise`, `order-sourcing` | `RegionDefined` | Event | `retailnetwork.node-topology.events`, `com.retailnetwork.logistics.node-topology.region.RegionDefined` | OHS + PL (Conformist) |
 
 No outbound command or query (`sync_calls: []`). Full payloads:
-[Domain Events](/contexts/node-topology/domain-events). Relationship
-reasoning: [Context Map](/contexts/node-topology/context-map).
+[Domain Events](/network/contexts/node-topology/domain-events). Relationship
+reasoning: [Context Map](/network/contexts/node-topology/context-map).
 
 ## Ubiquitous Language
 
-Full glossary: [Ubiquitous Language](/contexts/node-topology/ubiquitous-language).
+Full glossary: [Ubiquitous Language](/network/contexts/node-topology/ubiquitous-language).
 Top terms: **Node**, **Node Type**, **Node Operator**, **Operational
 Profile** (versioned by `profileRevision`), **Cutoff**, **Handling Time**,
 **Throughput Cap**, **Lane**, **Region**, **Service Area**.

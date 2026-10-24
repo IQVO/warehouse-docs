@@ -13,8 +13,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 Every event this context publishes (`contexts[delivery-promise].publishes`) and
 consumes (`.consumes`), following
-[the CloudEvents standard of this domain](/strategic-design/event-standard-cloudevents)
-and [ADR 0007](/adr/0007-cloudevents-namespace).
+[the CloudEvents standard of this domain](/network/strategic-design/event-standard-cloudevents)
+and [ADR 0007](/network/adr/0007-cloudevents-namespace).
 
 ## Envelope
 
@@ -113,7 +113,7 @@ The model names one analytics-only message, `DeliveryOfferQuoted`, published on
 `retailnetwork.delivery-promise.analytics` for every quote. It is not in the
 model's `publishes` list and has no data fields, so this pack prints no type or
 schema for it (open question on
-[the canvas page](/contexts/delivery-promise/bounded-context-canvas)).
+[the canvas page](/network/contexts/delivery-promise/bounded-context-canvas)).
 
 ### Example envelope: `PromiseRevised`
 

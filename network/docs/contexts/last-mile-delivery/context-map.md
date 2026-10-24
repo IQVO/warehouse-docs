@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).
 This is **last-mile-delivery's slice** of the
-[network context map](/strategic-design/context-map): every relationship this
+[network context map](/network/strategic-design/context-map): every relationship this
 context has, with the upstream (U) and downstream (D) side, the pattern and the
 channel.
 
@@ -67,11 +67,11 @@ contexts with no edge to this one (below).
 
 | Context | Classification | Why no edge |
 | --- | --- | --- |
-| `customer-ordering` | Generic | Holds the ship-to address; this context never sees PII ([ADR 0006](/adr/0006-pii-confinement)). Delivery reaches the customer through `shipping-and-tracking`. |
+| `customer-ordering` | Generic | Holds the ship-to address; this context never sees PII ([ADR 0006](/network/adr/0006-pii-confinement)). Delivery reaches the customer through `shipping-and-tracking`. |
 | `offer-availability` | Supporting | Catalogue and listings play no part at the station. |
-| `vendor-connectivity` | Supporting | Vendors never operate a station ([ADR 0004](/adr/0004-parcel-nodes-are-network-operated)). |
+| `vendor-connectivity` | Supporting | Vendors never operate a station ([ADR 0004](/network/adr/0004-parcel-nodes-are-network-operated)). |
 | `node-performance` | Supporting | Scores vendor nodes, not stations. |
-| `network-fulfillment` (warehouse-systems fleet, other organization) | Supporting (in the fleet) | Hard boundary: the only seam is the Vendor API ([WMS/WES integration](/integration/wms-wes-integration)). |
+| `network-fulfillment` (warehouse-systems fleet, other organization) | Supporting (in the fleet) | Hard boundary: the only seam is the Vendor API ([WMS/WES integration](/network/integration/wms-wes-integration)). |
 
 ## Notes on the patterns
 

@@ -12,7 +12,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 :::
 
 One UML sequence diagram per command use case of
-[Use Cases](/contexts/linehaul-transportation/use-cases), in the proposed
+[Use Cases](/network/contexts/linehaul-transportation/use-cases), in the proposed
 hexagonal layout: inbound adapter → use case → aggregate → repository →
 outbox (same transaction) → relay → Kafka. The relay and Kafka share one
 lifeline ("relay to Kafka") to keep each diagram at six participants or

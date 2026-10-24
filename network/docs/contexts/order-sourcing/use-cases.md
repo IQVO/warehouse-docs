@@ -13,10 +13,10 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 
 One application service per command of `FulfillmentAssignment`, in the
 proposed package `internal/application/usecases`. The runtime sequences are
-on [Sequence Diagrams](/contexts/order-sourcing/sequence-diagrams); event
-payloads on [Domain Events](/contexts/order-sourcing/domain-events). The
+on [Sequence Diagrams](/network/contexts/order-sourcing/sequence-diagrams); event
+payloads on [Domain Events](/network/contexts/order-sourcing/domain-events). The
 network-level walk-through with times is the
-[order assignment model](/network-model/order-assignment-model).
+[order assignment model](/network/network-model/order-assignment-model).
 
 ## Triggers at a glance
 

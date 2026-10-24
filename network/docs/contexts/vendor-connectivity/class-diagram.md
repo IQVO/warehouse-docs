@@ -315,7 +315,7 @@ classDiagram
 
 Derived from: `model.yaml → contexts[vendor-connectivity].publishes[*].data`.
 
-Omitted: types (on [Domain Events](/contexts/vendor-connectivity/domain-events))
+Omitted: types (on [Domain Events](/network/contexts/vendor-connectivity/domain-events))
 and the CloudEvents envelope.
 
 ## 5. Policies and read models

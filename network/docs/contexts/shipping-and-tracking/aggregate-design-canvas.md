@@ -47,7 +47,7 @@ Derived from: `model.yaml → contexts[shipping-and-tracking].aggregates[Shippin
 Omitted: nothing. `VOIDED` has no outgoing transition in the model, so it is
 drawn as final. What a void does to the journey of the same tracking number
 is not modelled (a `LABELLED` journey has no exit; see the
-[canvas open questions](/contexts/shipping-and-tracking/bounded-context-canvas)).
+[canvas open questions](/network/contexts/shipping-and-tracking/bounded-context-canvas)).
 
 ### 4. Enforced Invariants
 

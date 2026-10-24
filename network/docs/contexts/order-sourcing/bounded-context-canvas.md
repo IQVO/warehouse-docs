@@ -159,7 +159,7 @@ It holds no PII and calls no other context synchronously.
 
 | Axis | Verdict |
 | --- | --- |
-| **Domain** | **Core**. See the [Core Domain Chart](/contexts/order-sourcing/core-domain-chart) (`complexity 0.80`, `differentiation 0.85`). |
+| **Domain** | **Core**. See the [Core Domain Chart](/network/contexts/order-sourcing/core-domain-chart) (`complexity 0.80`, `differentiation 0.85`). |
 | **Business Model** | Cost reducer (cost-to-serve) and speed protector. |
 | **Evolution** | Custom-built. |
 
@@ -228,12 +228,12 @@ dataschema `urn:retailnetwork:order-sourcing:events:<EventName>:v1`.
 | `vendor-connectivity`, `linehaul-transportation` | `FulfillmentCancelled` | Event | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | Customer/Supplier |
 | — | (no synchronous call) | — | `sync_calls: []` | — |
 
-Full message details: [Domain Events](/contexts/order-sourcing/domain-events).
-Relationship reasons: [Context Map](/contexts/order-sourcing/context-map).
+Full message details: [Domain Events](/network/contexts/order-sourcing/domain-events).
+Relationship reasons: [Context Map](/network/contexts/order-sourcing/context-map).
 
 ## Ubiquitous Language
 
-Full glossary: [Ubiquitous Language](/contexts/order-sourcing/ubiquitous-language).
+Full glossary: [Ubiquitous Language](/network/contexts/order-sourcing/ubiquitous-language).
 Top terms: **Fulfillment Assignment**, **Virtual Queue**, **Release (to
 node)**, **Path Lock**, **Reassignment**, **Unsourceable**, and the model
 value objects **Promise Constraint**, **Candidate**, **Release record**,

@@ -133,7 +133,7 @@ consumers, on `hold_expires_at WHERE state = 'PROVISIONAL'` for
 (`ErrInvalidPromiseTerms`), and `basis = 'SCHEDULED' OR tier = 'STANDARD'`
 (`ErrNominalBasisNotAllowedForTier`). `assignment_id` is the correlation
 `PackageDelivered` needs; the model names no such field (open question 3 on
-[the canvas page](/contexts/delivery-promise/bounded-context-canvas)).
+[the canvas page](/network/contexts/delivery-promise/bounded-context-canvas)).
 
 ## 3. PromiseBook
 

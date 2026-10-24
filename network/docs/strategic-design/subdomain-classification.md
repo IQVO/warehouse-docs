@@ -11,11 +11,11 @@ Domain-Driven Design splits a domain into **Core**, **Supporting** and
 **Generic** subdomains by how much competitive advantage each gives, not by
 size or difficulty. The verdicts below are the model's; the evidence for why
 promise and assignment matter so much is on
-[The Amazon logistics network](/research/amazon-logistics-network).
+[The Amazon logistics network](/network/research/amazon-logistics-network).
 
 The **CloudEvents tier** column is the `<tier>` segment of every event type the
 context publishes (`com.retailnetwork.<tier>.<context>.<entity>.<Event>`, see
-[Event Standard](/strategic-design/event-standard-cloudevents)). Like the
+[Event Standard](/network/strategic-design/event-standard-cloudevents)). Like the
 fleet's `wms`/`wes` segment, the tier groups contexts by area of the business;
 it is not the Core/Supporting/Generic verdict.
 
@@ -42,7 +42,7 @@ it is not the Core/Supporting/Generic verdict.
 
 | Bounded context | Classification | Tier | Business model | Evolution | Why |
 | --- | --- | --- | --- | --- | --- |
-| `delivery-promise` | <span class="badge-core">Core</span> | `commerce` | Revenue (conversion) and cost (no promise the network cannot keep) | Custom-built | The promise is the customer-facing commitment; the published Amazon account says it is computed from network state and a feasible path (see [research](/research/amazon-logistics-network)). Doing it with a witness path, held capacity and a measured handicap is where speed and honesty are won or lost. Buying it would mean conforming to someone else's idea of your own network. |
+| `delivery-promise` | <span class="badge-core">Core</span> | `commerce` | Revenue (conversion) and cost (no promise the network cannot keep) | Custom-built | The promise is the customer-facing commitment; the published Amazon account says it is computed from network state and a feasible path (see [research](/network/research/amazon-logistics-network)). Doing it with a witness path, held capacity and a measured handicap is where speed and honesty are won or lost. Buying it would mean conforming to someone else's idea of your own network. |
 | `order-sourcing` | <span class="badge-core">Core</span> | `commerce` | Cost-to-serve reduction, speed protection | Custom-built | Late assignment with re-optimization until a lock is the second half of the same published split. It is where cost to serve is decided order by order. |
 | `node-topology` | <span class="badge-supporting">Supporting</span> | `logistics` | Enabler | Custom-built | Every decision depends on it, but nobody chooses a network for how it stores its node registry. The parcel-node rule and the versioned operational profile are specific to this network, so it is not Generic. |
 | `offer-availability` | <span class="badge-supporting">Supporting</span> | `commerce` | Revenue enabler | Product | Listings per node with a declared basis is necessary and specific (the basis matters to the promise) but well understood; marketplaces publish the same shape per ship node. |

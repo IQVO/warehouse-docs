@@ -15,9 +15,9 @@ Following ddd-crew [Domain Message Flow Modelling](https://github.com/ddd-crew/d
 Participants are contexts and actors. Every arrow is a message from the
 model, prefixed `cmd:`, `qry:` or `evt:`. Events travel on
 `retailnetwork.<producer>.events`; their full types are on
-[Domain Events](/contexts/vendor-connectivity/domain-events). Path
+[Domain Events](/network/contexts/vendor-connectivity/domain-events). Path
 parameters are written without braces. The network-wide flows are on
-[Domain message flows](/strategic-design/domain-message-flows).
+[Domain message flows](/network/strategic-design/domain-message-flows).
 
 ## 1. Purchase order accepted, labelled and shipped
 

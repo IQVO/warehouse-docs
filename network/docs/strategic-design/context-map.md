@@ -55,7 +55,7 @@ Derived from: `model.yaml` → `meta.hard_boundary`,
 `IQVO/network-fulfillment` `internal/application/ports/ports.go` on
 `origin/develop`. Separate Ways at the messaging level: no Kafka topic is
 shared in either direction. Details on
-[WMS/WES Integration](/integration/wms-wes-integration).
+[WMS/WES Integration](/network/integration/wms-wes-integration).
 
 ## Commerce view: promise, order, sourcing
 
