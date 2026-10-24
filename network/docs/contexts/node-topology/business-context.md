@@ -96,9 +96,9 @@ their sources are in public fulfillment-network research;
 this page does not repeat them.
 
 The **operational profile** is modelled after the `operationalConfiguration`
-of the vendor platform API's Supply Sources: a handling time, operating hours
+of the vendor platform API's supply-source (multi-location inventory) API: a handling time, operating hours
 by day, a throughput configuration expressed as a cap in orders per time unit,
-and a time zone. The mapping of that API surface to this model is on the
+and a time zone. The mapping of that API surface to this model is in
 the vendor platform API surface map. Two fields are this
 model's own additions, whatever that surface offers: the **cutoffs** a node
 declares (one pickup departure per cutoff, scheduled by
