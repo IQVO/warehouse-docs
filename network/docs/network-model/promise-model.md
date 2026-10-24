@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/bl
 [`delivery-promise`](/network/contexts/delivery-promise) (Core). The public facts it
 rests on (a promise from network state and a feasible path; assignment later
 and possibly elsewhere; a policy that shapes peak demand) are on
-[The Amazon logistics network](/network/research/amazon-logistics-network). The
+Public fulfillment-network research. The
 algorithm below is this site's proposal.
 :::
 

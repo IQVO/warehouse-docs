@@ -15,10 +15,10 @@ slug: /contexts/network-fulfillment
 network sends purchase orders to a warehouse it does not own, and that
 warehouse must acknowledge each one **in full or not at all** within 24
 hours. Since
-[ADR 0009](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0009-retail-network-not-amazon-counterpart.md)
+[ADR 0009](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0009-retail-network-not-a-real-network-counterpart.md)
 the counterpart is the fleet's own `retail-network` service, which plays
 the network's role. The original learning target was a large retailer's
-public Selling Partner API.
+public vendor platform API.
 
 It owns the **NetworkOrder** aggregate: demand that arrived from outside
 with a deadline we did not choose, and the answer we owe the network by a

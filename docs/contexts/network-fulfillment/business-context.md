@@ -18,7 +18,7 @@ capability to an external retail network?* — turned out to have a
 non-obvious answer.
 
 **No operation in the network's API accepts a declaration of
-capability.** Across the Selling Partner API's Vendor Direct Fulfillment
+capability.** Across the vendor platform API's Vendor Direct Fulfillment
 family there is nowhere to say "my cutoffs are 11:00 and 18:00, and my
 pick path takes 95 minutes at p95"; lead times and operating hours are
 Vendor Central configuration, not an API surface. Capability reaches a

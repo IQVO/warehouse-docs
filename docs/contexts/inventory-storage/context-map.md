@@ -238,7 +238,7 @@ registered over REST by `PUT /bins/{binId}` (ADR 0025).
 
 ## Where this sits in the reference model
 
-`amazon-fulfillment-ddd.md`'s context map places Inventory & Storage exactly
+The fulfillment reference model's context map places Inventory & Storage exactly
 where this service sits:
 
 > **Planning ↔ Inventory & Storage:** Customer/Supplier. Planning asks "can I

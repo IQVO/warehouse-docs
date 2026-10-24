@@ -24,7 +24,7 @@ second is Workforce Management.
 Everything about the shape of this service follows from that sentence, and
 in particular from its last clause.
 
-The Amazon-fulfillment DDD reference model classifies **Labor & Workforce
+The fulfillment DDD reference model classifies **Labor & Workforce
 Management** as a **Supporting** subdomain: "allocates workforce to
 workload; important, industry-common." It is genuinely necessary — a shift
 cannot be planned without knowing headcount — but nobody wins the market on

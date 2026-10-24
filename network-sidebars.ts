@@ -47,16 +47,8 @@ const apiCategories = CONTEXTS.map((ctx) => ({
 }));
 
 const sidebars: SidebarsConfig = {
-  researchSidebar: [
-    'overview',
-    {
-      type: 'category',
-      label: 'Research',
-      link: {type: 'doc', id: 'research/index'},
-      items: ['research/amazon-logistics-network', 'research/sp-api-surface-map', 'research/benchmarks', 'research/sources'],
-    },
-  ],
   strategicSidebar: [
+    'overview',
     {
       type: 'category',
       label: 'Strategic Design',

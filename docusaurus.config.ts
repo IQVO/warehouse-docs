@@ -317,7 +317,6 @@ const config: Config = {
           label: 'Retail Network',
           position: 'left',
           items: [
-            {type: 'docSidebar', sidebarId: 'researchSidebar', docsPluginId: 'network', label: 'Research'},
             {type: 'docSidebar', sidebarId: 'strategicSidebar', docsPluginId: 'network', label: 'Strategic Design'},
             {type: 'docSidebar', sidebarId: 'networkModelSidebar', docsPluginId: 'network', label: 'Nodes & Promise'},
             {type: 'docSidebar', sidebarId: 'integrationSidebar', docsPluginId: 'network', label: 'WMS/WES Integration'},

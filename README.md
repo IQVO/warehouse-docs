@@ -5,7 +5,7 @@ the strategic and tactical Domain-Driven Design artifacts, the generated REST
 and AsyncAPI references, and the business context for seventeen backend
 contexts: sixteen domain bounded contexts plus `warehouse-ops-agent`. Built with [Docusaurus](https://docusaurus.io/) and
 published to **GitHub Pages** through GitHub Actions. It also hosts the
-**retail-network** domain documentation — the Amazon-like retail and logistics
+**retail-network** domain documentation — the large-scale retail and logistics
 network, ten bounded contexts — as a second docs section served at `/network/`
 (merged from the former `IQVO/retail-network-docs` repository, history
 preserved under `network/`).
@@ -170,5 +170,5 @@ artifacts here.
 
 `warehouse-systems` is an educational Domain-Driven Design exercise
 following real industry-standard patterns. It is not a production system
-and is not affiliated with, endorsed by, or representative of Amazon,
+and is not affiliated with, endorsed by, or representative of
 Manhattan Associates, Blue Yonder, or any other company.

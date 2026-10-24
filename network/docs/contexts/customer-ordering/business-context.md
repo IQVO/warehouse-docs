@@ -71,13 +71,13 @@ offer the shopper saw; re-quote if it expired) and **CancelOnUnfulfillable**
 (cancel a group that is unsourceable when no revised promise is feasible,
 and the order if nothing remains).
 
-## How it relates to the Amazon-like reality
+## How it relates to the real fulfillment networks
 
 The research pages describe how a large online retailer's network separates
 the customer-facing order from the delivery promise and from the decision of
-which building ships it. See [Amazon logistics network](/network/research/amazon-logistics-network).
+which building ships it. See public fulfillment-network research.
 They also describe the vendor-facing surface, where a purchase order never
-carries the end customer's account. See the [SP-API surface map](/network/research/sp-api-surface-map).
+carries the end customer's account. See the the vendor platform API surface map.
 This model copies the shape, not any internal service name:
 
 - The storefront order is a **commodity**: every shop has one. What makes the

@@ -33,7 +33,7 @@ page, which maps every artifact on this site to the step that produces it.
 ## Method note
 
 This platform's strategic design is grounded in a public-research reference
-model — `amazon-fulfillment-ddd.md` — which reconstructs how large-scale
+model — the fulfillment reference research — which reconstructs how large-scale
 fulfillment operations (WMS/WES/WCS) actually work from cited public sources,
 then derives a defensible DDD model from that evidence. Every artifact on
 this site that classifies a subdomain or draws a context-map edge traces back

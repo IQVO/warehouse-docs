@@ -31,7 +31,7 @@ a local read model fed by events.
 
 | Page | What it holds | ddd-crew tool it follows |
 | --- | --- | --- |
-| [Business Context](/network/contexts/delivery-promise/business-context) | The business problem, actors, decisions, the Amazon-like reality and what is out of scope | — (narrative) |
+| [Business Context](/network/contexts/delivery-promise/business-context) | The business problem, actors, decisions, the real fulfillment networks and what is out of scope | — (narrative) |
 | [Ubiquitous Language](/network/contexts/delivery-promise/ubiquitous-language) | Every term of this context and the neighbour terms it uses | [Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas) (UL section, expanded) |
 | [Core Domain Chart](/network/contexts/delivery-promise/core-domain-chart) | Why this is the Core domain | [Core Domain Charts](https://github.com/ddd-crew/core-domain-charts) |
 | [Bounded Context Canvas](/network/contexts/delivery-promise/bounded-context-canvas) | Purpose, classification, roles, inbound and outbound messages, decisions, metrics, open questions | [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas) |

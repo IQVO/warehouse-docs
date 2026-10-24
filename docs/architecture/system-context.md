@@ -25,7 +25,7 @@ C4Context
 
     System_Ext(upstream, "Upstream order source", "Whatever places orders — a storefront, an ERP, or the e2e-tests harness. Calls POST /orders.")
     System_Ext(carrier, "Carrier / shipping", "Receives sealed, SLAM-labelled packages. Modelled as the downstream edge of fulfillment; not integrated in code.")
-    System_Ext(network, "External retail fulfillment network", "E.g. Amazon Vendor Direct Fulfillment. network-fulfillment polls it for demand; stub mode only today.")
+    System_Ext(network, "External retail fulfillment network", "E.g. a vendor direct-fulfillment program. network-fulfillment polls it for demand; stub mode only today.")
     System_Ext(llm, "LLM provider", "Consulted by warehouse-ops-agent's reasoner behind a policy layer, with a deterministic fallback when unavailable.")
     System_Ext(observability, "Observability stack", "OpenTelemetry collector, Jaeger, Prometheus/Grafana, Loki. Receives traces, metrics and logs from every service.")
 
@@ -83,7 +83,7 @@ a wired integration**:
 | --- | --- |
 | Upstream order source | **Real.** Any HTTP client calling `POST /orders`; the `e2e-tests` repo drives exactly this in its godog suite. |
 | Observability stack | **Real.** Every service exports OTLP traces and metrics; `warehouse-infra` deploys the collector, Jaeger, Prometheus/Grafana and Loki. |
-| External retail fulfillment network | **Stub only.** `network-fulfillment` polls a network gateway on an interval, but only the stub gateway (`NETWORK_MODE=stub`, the default) is built; there is no sandbox or live Selling Partner API call, and no acknowledgement or shipment-confirmation submission yet. |
+| External retail fulfillment network | **Stub only.** `network-fulfillment` polls a network gateway on an interval, but only the stub gateway (`NETWORK_MODE=stub`, the default) is built; there is no sandbox or live vendor platform API call, and no acknowledgement or shipment-confirmation submission yet. |
 | LLM provider | **Real but optional.** `warehouse-ops-agent`'s reasoner (its ADR 0004) calls a real LLM behind a policy layer and falls back to a deterministic brief when it is unavailable or disabled. |
 | Carrier / shipping | **Not integrated.** `fulfillment-execution` produces a sealed, SLAM-labelled package and the platform's responsibility ends there. The carrier is drawn to show where the boundary is, not to imply a wire. |
 
