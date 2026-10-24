@@ -56,6 +56,16 @@ jobs:
         run: npm run check:model:network
       - name: Network generated strategic pages match the model
         run: npm run check:pages:network
+      - name: Storefront model consistency (storefront/model/model.yaml vs storefront/docs/ + cross-model rules vs network/model/model.yaml)
+        run: npm run check:model:storefront
+      - name: Storefront generated strategic pages match the model
+        run: npm run check:pages:storefront
+      - name: Spectral lint of the storefront OpenAPI contracts (warn-clean, as the service repos)
+        run: |
+          npm install -g @stoplight/spectral-cli
+          for f in storefront/apis/*/openapi.yaml; do
+            spectral lint "$f" --ruleset storefront/.spectral.yaml --fail-severity=warn
+          done
       - run: npm run build
 
   build:

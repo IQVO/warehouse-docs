@@ -128,6 +128,25 @@ model.
 | G54 | S3 | **Pallets and inner packs are modelled, not used.** `PALLET` and `INNER` exist as pack levels and `parentSscc` links a carton to a pallet, but plans, validation and receipts work with eaches and cases only. `acceptsPallets` is a flag with no pallet manifest behind it. | seller-inbound, offer-availability, node-topology | A pallet as a logistic unit with its own SSCC and a count of cartons, checked against the node's `acceptsPallets`; inner packs once a seller needs them. | Open |
 | G55 | S4 | **Seller routes go beyond the pinned contract.** The pinned contract lists eight seller-facing routes. The model adds `POST /sellers/{sellerId}:suspend`, `POST /sellers/{sellerId}:reinstate`, `POST /inbound-plans/{planId}:cancel` and `POST /inbound-shipments/{shipmentId}:label`, because the contract names the commands `SuspendSeller`, `ReinstateSeller` and the `LABELLED` state but no route that causes them. The Vendor API poll names the seller `sellerId`, which the vendor keeps as its `ownerRef`. | seller-inbound, vendor-connectivity | Confirm the four extra routes when `apis/seller-inbound/openapi.yaml` is written (G53), or drop them and let the label be produced by `GET /inbound-shipments/{shipmentId}/labels`. | Open |
 
+## Storefront-driven gaps (G56+)
+
+Numbering continues at G56 for the digital-storefront campaign (the plan's
+section 7): G41-G55 were taken by [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)
+above. These are open gaps the storefront domain found in the network surface;
+NG1-NG3 are EXTENDs of `customer-ordering` owned and released by the network,
+merged before the storefront's checkout is built.
+
+| # | Severity | Gap | Contexts | Proposed resolution | Status |
+| --- | --- | --- | --- | --- | --- |
+| G56 (NG1) | S1 | Checkout cannot store a PII-free placement body it can replay to settle an in-doubt placement: `POST /checkout` takes only an inline `shipTo`. Saved addresses exist (`POST /shoppers`) but cannot be used at checkout or read back. | customer-ordering | Saved addresses: `POST /shoppers/{shopperId}/addresses` (max 20, the existing limit), `GET /shoppers/{shopperId}` (profile + addresses); `POST /checkout` accepts `shipToAddressId` as an alternative to inline `shipTo` (exactly one; the address is copied into the order). Keeps PII inside customer-ordering (RN-0006). | Open |
+| G57 (NG2) | S2 | No `GET /orders?shopperId=`: a storefront account area cannot list a shopper's orders. | customer-ordering | `GET /orders?shopperId=&after=&limit=` (keyset, newest first, no address). The alternative (a storefront copy that re-derives order status) duplicates the status rules. | Open |
+| G58 (NG3) | S2 | No `GET /shoppers?email=`: the no-auth "sign in" lookup is impossible. | customer-ordering | `GET /shoppers?email=` (exact, lower-cased, A16). | Open |
+| G59 (NG4) | S1 | Kong exposes the whole `/api/customer-ordering` and `/api/delivery-promise` prefixes, so the restricted ship-to route and the in-org promise routes are reachable from outside. | warehouse-infra | Browser traffic goes only to `/api/storefront`; decide whether the network prefixes stay public for ops tools or move to an internal-only listener. The model's "restricted, not exposed through the storefront edge" is not true on the cluster today. | Open |
+| G60 (NG5) | S3 | Every quote persists offers with a TTL; delivery dates on listing pages would write one offer row per product per view. | delivery-promise | Non-persisted batch estimate for listing pages (`POST /delivery-estimates:batch`): no offer rows, no TTL. | Open |
+| G61 (NG6) | S3 | `expiresAt` mixes TTL and pickup cutoff; there is no separate "order within" instant for messaging. | delivery-promise | Expose the order-by instant (cutoff-derived) on `DeliveryOffer`. | Open |
+| G62 (NG7) | S2 (later) | A future customer-notification context would have to re-derive order status from three streams. | customer-ordering | Publish group status facts (shipped, delivered, lost, returned) as customer-order events. Defer until notifications is planned. | Open |
+| G63 (NG8) | decision | The network's future `payments-and-invoicing` and the storefront's `customer-payments` would be two owners of one capability. | network model | Split `payments-and-invoicing` into `customer-payments` (storefront, now) and `vendor-settlement` (network, later): different language (authorize/capture/refund vs invoice/remittance) and different organisationally owned flows (storefront D5). | Open |
+
 ## How a gap gets closed
 
 1. Edit `model/model.yaml`.

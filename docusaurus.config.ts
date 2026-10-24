@@ -283,6 +283,62 @@ const config: Config = {
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],
+    [
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'storefront',
+        path: 'storefront/docs',
+        routeBasePath: 'storefront',
+        sidebarPath: './storefront-sidebars.ts',
+        editUrl: 'https://github.com/IQVO/warehouse-docs/tree/main/',
+        docItemComponent: '@theme/ApiItem',
+      },
+    ],
+    [
+      'docusaurus-plugin-openapi-docs',
+      {
+        id: 'storefront-api',
+        docsPluginId: 'storefront',
+        config: {
+          pricing: {
+            specPath: 'storefront/apis/pricing/openapi.yaml',
+            outputDir: 'storefront/docs/api-reference/rest/pricing',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          productContent: {
+            specPath: 'storefront/apis/product-content/openapi.yaml',
+            outputDir: 'storefront/docs/api-reference/rest/product-content',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          productDiscovery: {
+            specPath: 'storefront/apis/product-discovery/openapi.yaml',
+            outputDir: 'storefront/docs/api-reference/rest/product-discovery',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          shoppingCart: {
+            specPath: 'storefront/apis/shopping-cart/openapi.yaml',
+            outputDir: 'storefront/docs/api-reference/rest/shopping-cart',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          checkout: {
+            specPath: 'storefront/apis/checkout/openapi.yaml',
+            outputDir: 'storefront/docs/api-reference/rest/checkout',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          customerPayments: {
+            specPath: 'storefront/apis/customer-payments/openapi.yaml',
+            outputDir: 'storefront/docs/api-reference/rest/customer-payments',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+        } satisfies Record<string, OpenApiPlugin.Options>,
+      },
+    ],
   ],
 
   themes: ['docusaurus-theme-openapi-docs', '@docusaurus/theme-mermaid'],
@@ -326,6 +382,16 @@ const config: Config = {
           ],
         },
         {
+          type: 'dropdown',
+          label: 'Storefront',
+          position: 'left',
+          items: [
+            {type: 'docSidebar', sidebarId: 'strategicSidebar', docsPluginId: 'storefront', label: 'Strategic Design'},
+            {type: 'docSidebar', sidebarId: 'contextsSidebar', docsPluginId: 'storefront', label: 'Bounded Contexts'},
+            {type: 'docSidebar', sidebarId: 'apiSidebar', docsPluginId: 'storefront', label: 'API Reference'},
+          ],
+        },
+        {
           href: 'https://github.com/IQVO/warehouse-docs',
           label: 'GitHub',
           position: 'right',
@@ -352,6 +418,14 @@ const config: Config = {
             {label: 'Domain Vision', to: '/network/strategic-design/domain-vision'},
             {label: 'Promise Model', to: '/network/network-model/promise-model'},
             {label: 'WMS/WES Integration', to: '/network/integration/wms-wes-integration'},
+          ],
+        },
+        {
+          title: 'storefront',
+          items: [
+            {label: 'Storefront Overview', to: '/storefront/'},
+            {label: 'Context Map', to: '/storefront/strategic-design/context-map'},
+            {label: 'Benchmarks', to: '/storefront/research/benchmarks'},
           ],
         },
         {
@@ -389,7 +463,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `warehouse-systems documentation — built ${new Date().getFullYear()} with Docusaurus.`,
+      copyright: `warehouse-systems documentation — a domain-driven design study, not associated with, endorsed by or affiliated with any company; it uses no company's code, data, logos or trademarks, and all names, figures and examples are illustrative or synthetic. Built ${new Date().getFullYear()} with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,

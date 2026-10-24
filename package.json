@@ -5,7 +5,7 @@
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "docusaurus start",
-    "build": "npm run gen-api-docs:all && npm run gen-api-docs:network && npm run gen-async-docs:all && docusaurus build",
+    "build": "npm run gen-api-docs:all && npm run gen-api-docs:network && npm run gen-api-docs:storefront && npm run gen-async-docs:all && docusaurus build",
     "swizzle": "docusaurus swizzle",
     "deploy": "docusaurus deploy",
     "clear": "docusaurus clear",
@@ -17,11 +17,15 @@
     "clean-api-docs:all": "docusaurus clean-api-docs -p api all",
     "gen-api-docs:network": "docusaurus gen-api-docs -p network-api all",
     "clean-api-docs:network": "docusaurus clean-api-docs -p network-api all",
+    "gen-api-docs:storefront": "docusaurus gen-api-docs -p storefront-api all",
+    "clean-api-docs:storefront": "docusaurus clean-api-docs -p storefront-api all",
     "check:model:network": "python3 network/scripts/check_model.py --pages",
     "check:pages:network": "python3 network/scripts/gen_pages.py --check",
+    "check:model:storefront": "python3 storefront/scripts/check_model.py --pages",
+    "check:pages:storefront": "python3 storefront/scripts/gen_pages.py --check",
     "gen-async-docs:all": "node scripts/gen-async-docs.mjs",
     "gen-alert-catalogue": "node scripts/gen-alert-catalogue.mjs",
-    "validate:mermaid": "node scripts/validate-mermaid.cjs $(grep -rl '```mermaid' docs network/docs --include='*.md' --include='*.mdx')",
+    "validate:mermaid": "node scripts/validate-mermaid.cjs $(grep -rl '```mermaid' docs network/docs storefront/docs --include='*.md' --include='*.mdx')",
     "postinstall": "npm --prefix tools/asyncapi-gen install --no-audit --no-fund"
   },
   "dependencies": {

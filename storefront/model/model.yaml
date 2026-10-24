@@ -1,0 +1,734 @@
+# digital-storefront canonical domain model
+#
+# This file is the SINGLE SOURCE OF TRUTH for every page under docs/.
+# Every aggregate, invariant, command, event, consumer, relationship and
+# ubiquitous-language term printed on the site must exist here first.
+# Pages derive from it; they never introduce a new message or edge.
+#
+# Status: PROPOSED DESIGN. Nothing in this file is built. Identifiers
+# (Go-style Err... names, REST paths, CloudEvents types) are the names a
+# future implementation must use, so that the docs and the code agree from
+# day one.
+#
+# The storefront is a second domain inside the retail-network ORGANISATION
+# (decision D1): it may consume retailnetwork.* topics and call the
+# network's Open Host Service routes (network/model/model.yaml inbound rows
+# whose caller is "shopper / storefront"). It never produces or consumes a
+# warehouse.* topic and never calls a network route marked in-org or
+# restricted. The network never depends on the storefront: no network
+# context consumes a storefront topic or calls a storefront route.
+
+meta:
+  domain: Digital Storefront
+  slug: storefront
+  organization: >-
+    Part of the retail-network organisation (in-org), as a separate DOMAIN
+    ("Digital Storefront") with its own model, cadence and docs instance;
+    the network's ADR RN-0001 ("ten contexts") is untouched. Being in-org,
+    the storefront may consume retailnetwork.* topics and call the network
+    OHS storefront routes; it never touches a warehouse-systems topic,
+    service or dataset.
+  supersedes: >-
+    Nothing. The network model stays the source of truth for the ten
+    network contexts; this file is read alongside it, and
+    scripts/check_model.py loads network/model/model.yaml read-only for
+    the cross-model rules.
+  hard_boundary: >-
+    The storefront calls ONLY the network's Open Host Service routes
+    (network model inbound rows whose caller is "shopper / storefront"),
+    plus the customer-ordering EXTENDs NG1-NG3 once built. Never an in-org
+    or restricted route (GET /orders/{id}/ship-to, POST /promises, promise
+    confirm/cancel, POST /inventory-feeds, policy routes). PII (ship-to,
+    names, e-mail) lives only in customer-ordering: the storefront stores
+    shopperId and shipToAddressId references, never the data. The
+    storefront never sees a card number, only PSP tokens. No
+    authentication on REST, consistent with the estate rule. The network
+    never depends on the storefront.
+
+conventions:
+  cloudevents:
+    spec: CloudEvents 1.0, structured JSON, mandatory on every Kafka message (fleet rule carried over)
+    type: "com.retailnetwork.storefront.<context>.<entity>.<EventName>"
+    source: "/retailnetwork/<context>"
+    dataschema: "urn:retailnetwork:<context>:events:<EventName>:v1"
+    subject: aggregate root id (also the Kafka partition key)
+    topic: "retailnetwork.<context>.events"
+    analytics_topic: "retailnetwork.<context>.analytics"
+    tiers:
+      storefront: [product-content, pricing, product-discovery, shopping-cart, checkout, customer-payments]
+  integration_rules:
+    - "Every context owns its database; no shared tables."
+    - "Every published event leaves through a transactional outbox."
+    - "Every consumer is idempotent on the CloudEvents id (inbox table)."
+    - "Consumers dispatch on the full type string, never on a suffix."
+    - "Sibling data used in a decision is a local, event-fed read model."
+    - "Synchronous calls exist only where a user request needs an answer (listed under sync_calls)."
+    - "Analytics-only events go to the .analytics topic only."
+    - "Money is {amountMinor int64, currency}; one configured currency (ISO 4217, integer minor units)."
+    - "Shared problem types (RFC 9457, application/problem+json, type /problems/<slug>) are not-found 404, illegal-transition 409, concurrent-update 409, validation-failed 422, plus one kebab-case slug per Err in the model."
+    - "Every write route takes an Idempotency-Key header; a repeated key returns the stored response of the first call."
+  no_auth: "Consistent with the fleet and the network (no auth on REST). The storefront stores no PII: shopperId and shipToAddressId references only."
+  cross_model:
+    network_model: ../../network/model/model.yaml  # read-only, for scripts/check_model.py
+    ohs_caller: "shopper / storefront"
+    ops_only_exceptions:
+      # network routes whose inbound row does not name the OHS caller but
+      # that this model is explicitly allowed to call anyway.
+      - {context: offer-availability, route: "GET /listings?nodeId=&catalogItemId=", note: "product-discovery projection rebuild only (snapshot + catch-up); never on a user request"}
+    forbidden_routes:
+      # in-org or restricted network routes the storefront must never call
+      # (00-common rule 3):
+      - "GET /orders/{orderId}/ship-to"        # restricted: shipping-and-tracking only
+      - "POST /promises"                        # in-org: customer-ordering only
+      - "POST /promises/{promiseId}:confirm"    # in-org: customer-ordering only
+      - "POST /promises/{promiseId}:cancel"     # in-org: customer-ordering only
+      - "POST /inventory-feeds"                 # in-org: vendor-connectivity only
+
+# ---------------------------------------------------------------------------
+# Domain-wide ubiquitous language (context-owned terms live under contexts)
+# ---------------------------------------------------------------------------
+ul:
+  - {term: "Storefront Edge", definition: "The only routes a browser reaches: /api/storefront/* on the BFF.", code: "(experience layer)", not_to_be_confused_with: "in-org network routes"}
+
+# ---------------------------------------------------------------------------
+# Problem space (plan section 3.2)
+# ---------------------------------------------------------------------------
+subdomains:
+  - {name: "Pricing & Delivery Charges", must_be_good_at: "Item prices, sale windows, the price of speed per tier, a binding total at purchase", verdict: Core, rationale: "Cost is the top abandonment reason [1]; the tier charge is where the network's promise becomes revenue."}
+  - {name: "Product Discovery", must_be_good_at: "Finding the right purchasable item fast", verdict: Supporting, rationale: "Core candidate at scale; the engine itself is generic."}
+  - {name: "Cart", must_be_good_at: "Holding intent, delivery quote and tier choice per shipment group", verdict: Supporting, rationale: ""}
+  - {name: "Checkout", must_be_good_at: "One purchase transaction across price, payment and the network's promise confirmation", verdict: Supporting, rationale: ""}
+  - {name: "Product Content", must_be_good_at: "Descriptions, media, attributes, categories for an item the network already knows", verdict: Generic, rationale: "Buy a PIM in production."}
+  - {name: "Customer Payments", must_be_good_at: "Authorize, capture, release, refund through a payment provider", verdict: Generic, rationale: "Buy a PSP."}
+  - {name: "Customer Identity", must_be_good_at: "Sign-in, credentials", verdict: "Generic, deferred", rationale: "D4: authentication stays off; sign-in is a synthetic shopper lookup by e-mail."}
+  - {name: "Notifications / Returns / Promotions / Reviews / Recommendations", must_be_good_at: "", verdict: Later, rationale: "Notifications and returns are already network future contexts; promotions, reviews and recommendations are later phases."}
+
+# ---------------------------------------------------------------------------
+# Bounded contexts (plan sections 3.3 and 4)
+# ---------------------------------------------------------------------------
+contexts:
+
+  # =========================================================================
+  - id: pricing
+    name: Pricing
+    code: PR
+    tier: storefront
+    classification: Core
+    chart: {differentiation: 0.78, complexity: 0.52, evolution: Custom-built}
+    business_model: Revenue (the price of speed per tier is where the network's promise becomes revenue)
+    purpose: >-
+      Owns what a shopper pays: the list price and sale windows per
+      catalogue item, the delivery charge per service tier, a synthetic tax
+      table, and the binding, immutable, expiring PriceQuote a checkout
+      session is confirmed against. One configured currency, integer minor
+      units; promotions are a later phase (D10).
+    roles: ["Specification (price of an item, charge of a tier)", "Execution (price quotes)"]
+    business_decisions:
+      - "A sale price is always below the list price; sale windows of one item never overlap."
+      - "Exactly one delivery charge schedule and one tax table are current; a new version supersedes, never edits."
+      - "A PriceQuote is binding, immutable and expiring (policy QuoteTtl, default 15 min): the review page shows the binding total, and a changed total is visible before confirm (gap S2)."
+      - "The item master stays in offer-availability; pricing only references catalogItemId."
+    aggregates:
+      - name: ItemPrice
+        root_id: catalogItemId
+        description: "List price and sale windows of one catalogue item, versioned. The effective price is the lowest active sale price, else the list price."
+        states: [ACTIVE, WITHDRAWN]
+        transitions:
+          - [ACTIVE, WITHDRAWN, WithdrawPrice]
+        value_objects:
+          - "Money{amountMinor, currency}"
+          - "SaleWindow{saleId, price, from, to}"
+        invariants:
+          - {rule: "every amount >= 0", error: ErrNegativeAmount}
+          - {rule: "all prices of an item use the configured currency", error: ErrCurrencyMismatch}
+          - {rule: "a sale price is below the list price", error: ErrSaleNotBelowList}
+          - {rule: "sale windows of one item never overlap", error: ErrOverlappingSaleWindow}
+          - {rule: "the item exists in the local CatalogItemView and is not DISCONTINUED", error: ErrUnknownCatalogItem}
+        commands: [SetListPrice, ScheduleSale, CancelSale, WithdrawPrice]
+        events: [ItemPriceChanged, ItemPriceWithdrawn]
+        throughput_estimate: "low: merchandising writes; bursts on sale boundaries"
+        size_estimate: "one row per ACTIVE catalogue item; ~10^6"
+      - name: DeliveryChargeSchedule
+        root_id: scheduleId
+        description: "The delivery charge per service tier (SAME_DAY, NEXT_DAY, TWO_DAY, STANDARD), with an optional free-over threshold per tier. Exactly one schedule is current; versions strictly increase."
+        states: [CURRENT, SUPERSEDED]
+        transitions:
+          - [CURRENT, SUPERSEDED, PublishChargeSchedule]
+        value_objects:
+          - "TierCharge{tier, charge, freeOver?}"
+        invariants:
+          - {rule: "a schedule names a charge for every tier", error: ErrIncompleteChargeSchedule}
+          - {rule: "a new schedule's version strictly increases", error: ErrNonIncreasingVersion}
+        commands: [PublishChargeSchedule]
+        events: [DeliveryChargeScheduleChanged]
+        throughput_estimate: "rare"
+        size_estimate: "one current + history"
+        notes: "States CURRENT/SUPERSEDED are the least-surprising reading of \"one current, versioned\"; the plan names no states."
+      - name: TaxTable
+        root_id: taxTableId
+        description: "A synthetic tax table (D10): basis-point rates by destination postal-prefix band. Exactly one table is current; versions strictly increase."
+        states: [CURRENT, SUPERSEDED]
+        transitions:
+          - [CURRENT, SUPERSEDED, PublishTaxTable]
+        value_objects:
+          - "TaxBand{postalPrefixFrom, postalPrefixTo, rateBasisPoints}"
+        invariants:
+          - {rule: "bands never overlap", error: ErrOverlappingTaxBand}
+          - {rule: "a rate is within the configured range", error: ErrRateOutOfRange}
+        commands: [PublishTaxTable]
+        events: [TaxTableChanged]
+        throughput_estimate: "rare"
+        size_estimate: "one current + history"
+        notes: "States CURRENT/SUPERSEDED follow DeliveryChargeSchedule; the plan names no states."
+      - name: PriceQuote
+        root_id: quoteId
+        description: "A binding, immutable, expiring price snapshot for one checkout: lines with unit and line totals, groups with tier and delivery charge, tax, total, the versions of price, schedule and tax table used, issuedAt and expiresAt."
+        states: [ISSUED, EXPIRED]
+        transitions:
+          - [ISSUED, EXPIRED, ExpireQuote]
+        value_objects:
+          - "QuoteLine{catalogItemId, quantity, unitPrice, lineTotal}"
+          - "QuoteGroup{groupNo, tier, deliveryCharge}"
+        invariants:
+          - {rule: "every line names an ACTIVE price", error: ErrItemNotPriced}
+          - {rule: "a quote has at least one line", error: ErrEmptyQuote}
+          - {rule: "all amounts use the configured currency", error: ErrCurrencyMismatch}
+        commands: [IssuePriceQuote, ExpireQuote]
+        events: [PriceQuoteIssued]
+        throughput_estimate: "one per checkout session opened"
+        size_estimate: "TTL minutes; retained for the order's lifetime via the checkout session reference"
+    read_models:
+      - {name: CatalogItemView, source: "offer-availability CatalogItemCreated, CatalogItemDiscontinued"}
+    policies:
+      - {name: PublishEffectivePriceOnWindowBoundary, rule: "emit ItemPriceChanged when a sale starts or ends, idempotent per item and boundary"}
+      - {name: WithdrawOnDiscontinue, rule: "on CatalogItemDiscontinued withdraw the item's price"}
+      - {name: QuoteTtl, rule: "a PriceQuote expires 15 minutes (default) after issue; expiry is by time, immutable otherwise"}
+    inbound:
+      - {from: "storefront merchandiser (human)", type: cmd, channel: "REST /item-prices, /delivery-charge-schedules, /tax-tables", message: "SetListPrice, ScheduleSale, CancelSale, WithdrawPrice, PublishChargeSchedule, PublishTaxTable", relationship: UI}
+      - {from: checkout, type: cmd, channel: "REST POST /price-quotes", message: IssuePriceQuote, relationship: Customer/Supplier}
+      - {from: checkout, type: qry, channel: "REST GET /price-quotes/{quoteId}", message: GetPriceQuote, relationship: Customer/Supplier}
+      - {from: product-discovery, type: qry, channel: "REST GET /item-prices (bootstrap, paged)", message: ListItemPrices, relationship: Customer/Supplier}
+      - {from: "storefront-bff (experience layer)", type: qry, channel: "REST GET /item-prices/{catalogItemId}, GET /delivery-charge-schedules/current, GET /tax-tables/current", message: "GetItemPrice, GetCurrentChargeSchedule, GetCurrentTaxTable", relationship: UI}
+      - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated, CatalogItemDiscontinued", relationship: Conformist}
+    rest:
+      - "POST /item-prices"
+      - "POST /item-prices/{catalogItemId}:set-list-price"
+      - "POST /item-prices/{catalogItemId}/sales"
+      - "POST /item-prices/{catalogItemId}/sales/{saleId}:cancel"
+      - "GET /item-prices"
+      - "GET /item-prices/{catalogItemId}"
+      - "POST /delivery-charge-schedules"
+      - "GET /delivery-charge-schedules/current"
+      - "POST /tax-tables"
+      - "GET /tax-tables/current"
+      - "POST /price-quotes"
+      - "GET /price-quotes/{quoteId}"
+    publishes:
+      - {event: ItemPriceChanged, entity: itemprice, data: [catalogItemId, currency, listPriceMinor, effectivePriceMinor, saleEndsAt, version], consumers: [product-discovery, shopping-cart]}
+      - {event: ItemPriceWithdrawn, entity: itemprice, data: [catalogItemId, version], consumers: [product-discovery, shopping-cart]}
+      - {event: DeliveryChargeScheduleChanged, entity: deliverychargeschedule, data: [scheduleId, version, "tiers(tier, chargeMinor, freeOverMinor)"], consumers: [shopping-cart]}
+      - {event: TaxTableChanged, entity: taxtable, data: [taxTableId, version, "bands(postalPrefixFrom, postalPrefixTo, rateBasisPoints)"], consumers: [shopping-cart]}
+      - {event: PriceQuoteIssued, entity: pricequote, data: [quoteId, cartId, currency, totalMinor, expiresAt], consumers: ["analytics only"]}
+    consumes:
+      - {event: CatalogItemCreated, from: offer-availability, fields: [catalogItemId]}
+      - {event: CatalogItemDiscontinued, from: offer-availability, fields: [catalogItemId]}
+    sync_calls: []
+    ul:
+      - {term: "List Price", definition: "The item's standing price; a sale price is always below it.", code: "itemprice.ItemPrice.ListPrice"}
+      - {term: "Sale Window", definition: "A time-bounded sale price for one item; windows never overlap.", code: "itemprice.SaleWindow"}
+      - {term: "Effective Price", definition: "The lowest active sale price, else the list price.", code: "itemprice.ItemPrice.EffectivePrice"}
+      - {term: "Delivery Charge", definition: "The price of one service tier's speed, with an optional free-over threshold.", code: "schedule.TierCharge"}
+      - {term: "Tax Band", definition: "A basis-point rate for a destination postal-prefix range (synthetic, D10).", code: "tax.TaxBand"}
+      - {term: "Price Quote", definition: "A binding, immutable, expiring price snapshot for one checkout.", code: "quote.PriceQuote", not_to_be_confused_with: "the cart estimate (non-binding)"}
+
+  # =========================================================================
+  - id: product-content
+    name: Product Content
+    code: PC
+    tier: storefront
+    classification: Generic
+    chart: {differentiation: 0.18, complexity: 0.34, evolution: Commodity}
+    business_model: Engagement enabler (buy a PIM in production)
+    purpose: >-
+      Enriches the network's catalogue item with everything a product page
+      needs and the item master does not have: description, bullets,
+      attributes, media and the category tree. The title stays the item
+      master's; media upload is out of scope (URLs to static assets only).
+    roles: ["Specification (content of an item)", "Master data (category tree)"]
+    business_decisions:
+      - "Content publishes only when complete: a description, exactly one PRIMARY medium and a category."
+      - "Only catalogItemId crosses the boundary; content never redefines the item itself [19]."
+      - "The category tree is one versioned aggregate, at most four levels deep."
+    aggregates:
+      - name: ProductContent
+        root_id: catalogItemId
+        description: "The sellable content of one catalogue item: description, bullets (<= 10), attributes {name, value, unit?} (<= 50), media {mediaId, url, altText, role PRIMARY|GALLERY} (<= 12), primaryCategoryId, revision."
+        states: [DRAFT, PUBLISHED, RETIRED]
+        transitions:
+          - [DRAFT, PUBLISHED, PublishContent]
+          - [PUBLISHED, PUBLISHED, ReviseContent]
+          - [PUBLISHED, RETIRED, RetireContent]
+        value_objects:
+          - "Attribute{name, value, unit?}"
+          - "Media{mediaId, url, altText, role(PRIMARY|GALLERY)}"
+        invariants:
+          - {rule: "the item exists in the local CatalogItemView", error: ErrUnknownCatalogItem}
+          - {rule: "publish needs a description, exactly one PRIMARY medium and a category", error: ErrIncompleteContent}
+          - {rule: "primaryCategoryId names a category of the current tree", error: ErrUnknownCategory}
+          - {rule: "RETIRED content never publishes again", error: ErrContentRetired}
+        commands: [CreateProductContent, ReviseContent, PublishContent, RetireContent]
+        events: [ProductContentPublished, ProductContentRetired]
+        throughput_estimate: "low"
+        size_estimate: "one row per catalogue item + revisions"
+      - name: CategoryTree
+        root_id: categoryTreeId
+        description: "The single, versioned category tree a shopper browses; categories are created, moved and renamed between publications."
+        states: [DRAFT, PUBLISHED]
+        transitions:
+          - [DRAFT, PUBLISHED, PublishCategoryTree]
+          - [PUBLISHED, PUBLISHED, PublishCategoryTree]
+        value_objects:
+          - "Category{categoryId, parentId?, name, path}"
+        invariants:
+          - {rule: "the tree never contains a cycle", error: ErrCategoryCycle}
+          - {rule: "depth <= 4", error: ErrMaxDepth}
+          - {rule: "siblings never share a name", error: ErrDuplicateSiblingName}
+          - {rule: "a category in use by PUBLISHED content is never removed", error: ErrCategoryInUse}
+        commands: [CreateCategory, MoveCategory, RenameCategory, PublishCategoryTree]
+        events: [CategoryTreePublished]
+        throughput_estimate: "rare"
+        size_estimate: "one tree, ~10^3 categories"
+        notes: "States DRAFT/PUBLISHED are the least-surprising reading of \"single, versioned\"; the plan names no states."
+    read_models:
+      - {name: CatalogItemView, source: "offer-availability CatalogItemCreated, CatalogItemDiscontinued"}
+    policies:
+      - {name: RetireOnDiscontinue, rule: "on CatalogItemDiscontinued retire the item's PUBLISHED content"}
+    inbound:
+      - {from: "storefront content manager (human)", type: cmd, channel: "REST /product-contents, /categories", message: "CreateProductContent, ReviseContent, PublishContent, RetireContent, CreateCategory, MoveCategory, RenameCategory", relationship: UI}
+      - {from: product-discovery, type: qry, channel: "REST GET /product-contents (bootstrap, paged), GET /product-contents/{catalogItemId}, GET /categories", message: "ListProductContents, GetProductContent, ListCategories", relationship: Customer/Supplier}
+      - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated, CatalogItemDiscontinued", relationship: Conformist}
+    rest:
+      - "POST /product-contents"
+      - "GET /product-contents"
+      - "GET /product-contents/{catalogItemId}"
+      - "POST /product-contents/{catalogItemId}:revise"
+      - "POST /product-contents/{catalogItemId}:publish"
+      - "POST /product-contents/{catalogItemId}:retire"
+      - "POST /categories"
+      - "POST /categories/{categoryId}:move"
+      - "POST /categories/{categoryId}:rename"
+      - "GET /categories"
+    publishes:
+      - {event: ProductContentPublished, entity: productcontent, data: [catalogItemId, revision, description, bullets, attributes, media, primaryCategoryId], consumers: [product-discovery]}
+      - {event: ProductContentRetired, entity: productcontent, data: [catalogItemId, revision], consumers: [product-discovery]}
+      - {event: CategoryTreePublished, entity: categorytree, data: [version, "categories(categoryId, parentId, name, path)"], consumers: [product-discovery]}
+    consumes:
+      - {event: CatalogItemCreated, from: offer-availability, fields: [catalogItemId]}
+      - {event: CatalogItemDiscontinued, from: offer-availability, fields: [catalogItemId]}
+    sync_calls: []
+    ul:
+      - {term: "Product Content", definition: "Description, bullets, attributes and media of one catalogue item.", code: "content.ProductContent"}
+      - {term: "Revision", definition: "One published shape of an item's content; publishing bumps it.", code: "content.ProductContent.Revision"}
+      - {term: "Primary Medium", definition: "The one image a product page leads with; exactly one per published content.", code: "content.Media.RolePrimary"}
+      - {term: "Category", definition: "One node of the browsable category tree.", code: "category.Category"}
+      - {term: "Category Tree", definition: "The single, versioned tree of categories, at most four levels deep.", code: "category.CategoryTree"}
+
+  # =========================================================================
+  - id: product-discovery
+    name: Product Discovery
+    code: PD
+    tier: storefront
+    classification: Supporting
+    chart: {differentiation: 0.55, complexity: 0.62, evolution: Custom-built}
+    business_model: Conversion enabler (finding the right purchasable item fast)
+    purpose: >-
+      The read side of browsing and search: one ProductView per catalogue
+      item (title, flags, content, category path, list and effective price,
+      inStock, purchasable) and one CategoryView (tree plus purchasable
+      counts), fed by events from offer-availability, product-content and
+      pricing, searched with PostgreSQL full-text search and pg_trgm (D9),
+      behind a port so a dedicated engine is a later adapter swap.
+    roles: ["Analysis (search and browse)", "Gateway (the storefront's catalogue reads)"]
+    business_decisions:
+      - "No aggregate in v1 (its ADR 0002 says so plainly): projections only."
+      - "Search ranks title (A), category names (A), attributes (B), description (C) in a tsvector with a GIN index; pg_trgm similarity is the typo fallback; facets are category, price band and in-stock."
+      - "Product-type queries also return category suggestions [6]."
+      - "Out-of-order safety comes from per-source monotonic guards (listing asOf, content revision, price version) on top of the CloudEvents-id inbox."
+      - "Bootstrap is snapshot + catch-up: paged OHS reads of the network catalogue and the storefront's own pricing and content, then events; listing availability has no storefront OHS read, so the rebuild uses GET /listings as an in-org read on an ops-only path, never on a user request."
+    aggregates: []
+    read_models:
+      - {name: ProductView, source: "offer-availability CatalogItemCreated, CatalogItemDiscontinued, ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored; product-content ProductContentPublished, ProductContentRetired, CategoryTreePublished; pricing ItemPriceChanged, ItemPriceWithdrawn. Per-source monotonic guards: listing asOf, content revision, price version."}
+      - {name: CategoryView, source: "product-content CategoryTreePublished plus purchasable counts derived from ProductView"}
+    policies:
+      - {name: PurchasableRule, rule: "purchasable = item ACTIVE in the item master, content PUBLISHED, price ACTIVE, and at least one LIVE listing with quantity > 0"}
+      - {name: UnavailableNotBuyable, rule: "an item with no LIVE listing with quantity > 0 is shown as currently unavailable; out-of-stock purchase is impossible in this network (gap S6, future idea)"}
+    inbound:
+      - {from: "storefront-bff (experience layer)", type: qry, channel: "REST GET /products, GET /products/{catalogItemId}, GET /categories", message: "SearchProducts, GetProduct, ListCategories", relationship: OHS}
+      - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated, CatalogItemDiscontinued, ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored", relationship: Conformist}
+      - {from: product-content, type: evt, channel: "Kafka retailnetwork.product-content.events", message: "ProductContentPublished, ProductContentRetired, CategoryTreePublished", relationship: Conformist}
+      - {from: pricing, type: evt, channel: "Kafka retailnetwork.pricing.events", message: "ItemPriceChanged, ItemPriceWithdrawn", relationship: Conformist}
+    rest:
+      - "GET /products?q=&categoryId=&inStock=&priceMin=&priceMax=&sort=&after=&limit="
+      - "GET /products/{catalogItemId}"
+      - "GET /categories"
+    publishes: []
+    consumes:
+      - {event: CatalogItemCreated, from: offer-availability, fields: [catalogItemId, title, hazmat, fragile]}
+      - {event: CatalogItemDiscontinued, from: offer-availability, fields: [catalogItemId]}
+      - {event: ListingCreated, from: offer-availability, fields: [listingId, catalogItemId, nodeId]}
+      - {event: ListingAvailabilityChanged, from: offer-availability, fields: [listingId, catalogItemId, availableQty, asOf]}
+      - {event: ListingSuppressed, from: offer-availability, fields: [listingId]}
+      - {event: ListingRestored, from: offer-availability, fields: [listingId]}
+      - {event: ProductContentPublished, from: product-content, fields: [catalogItemId, revision, description, attributes, primaryCategoryId]}
+      - {event: ProductContentRetired, from: product-content, fields: [catalogItemId]}
+      - {event: CategoryTreePublished, from: product-content, fields: [version, categories]}
+      - {event: ItemPriceChanged, from: pricing, fields: [catalogItemId, effectivePriceMinor, version]}
+      - {event: ItemPriceWithdrawn, from: pricing, fields: [catalogItemId]}
+    sync_calls:
+      - {to: offer-availability, type: qry, message: ListCatalog, channel: "REST GET /catalog", note: "bootstrap only (snapshot + catch-up)"}
+      - {to: offer-availability, type: qry, message: ListListings, channel: "REST GET /listings?nodeId=&catalogItemId=", ops_only: true, note: "bootstrap only: listing availability has no storefront OHS read; in-org read, never on a user request"}
+      - {to: pricing, type: qry, message: ListItemPrices, channel: "REST GET /item-prices", note: "bootstrap only (paged)"}
+      - {to: product-content, type: qry, message: ListProductContents, channel: "REST GET /product-contents", note: "bootstrap only (paged)"}
+    ul:
+      - {term: "Purchasable", definition: "Item ACTIVE in the item master, content PUBLISHED, price ACTIVE, and at least one LIVE listing with quantity > 0.", code: "productview.Purchasable", not_to_be_confused_with: "the network's sellable listing (one node only)"}
+      - {term: "Product View", definition: "The projection one product page or search hit renders from.", code: "productview.ProductView"}
+      - {term: "Category View", definition: "The browsable tree with purchasable counts per category.", code: "categoryview.CategoryView"}
+      - {term: "In Stock", definition: "At least one LIVE listing with availableQty > 0 for the item.", code: "productview.InStock"}
+      - {term: "Product-Type Query", definition: "A search for a kind of product; the answer includes category suggestions.", code: "(search policy)"}
+
+  # =========================================================================
+  - id: shopping-cart
+    name: Shopping Cart
+    code: SC
+    tier: storefront
+    classification: Supporting
+    chart: {differentiation: 0.42, complexity: 0.5, evolution: Custom-built}
+    business_model: Conversion (holding intent without losing the total-cost-up-front rule)
+    purpose: >-
+      Holds a shopper's intent: cart lines, the destination postal prefix,
+      the delivery quote delivery-promise returned for the cart (per
+      shipment group, with its offers and expiry), the shopper's tier
+      selection per group, and a labelled, non-binding estimate (effective
+      prices + selected tier charges + tax band) so the total cost is
+      visible up front [1].
+    roles: ["Execution (cart lifecycle)", "Analysis (checkout readiness, estimate)"]
+    business_decisions:
+      - "One line per item; adding an item already in the cart merges quantities."
+      - "A quote holds no capacity: it is the set of offers delivery-promise returned; a selection must name an offer of the current quote."
+      - "Any line or destination change clears the quote and the selections."
+      - "The estimate is labelled non-binding; the binding total is the checkout session's PriceQuote (gap S2)."
+      - "Guest-first: shopperId is optional; sign-in is a synthetic shopper lookup by e-mail (D4)."
+    aggregates:
+      - name: Cart
+        root_id: cartId
+        description: "One shopper's cart: optional shopperId, lines {catalogItemId, quantity}, destinationPostalPrefix, deliveryQuote (groups with their lines and offers {offerId, tier, window, expiresAt}, unavailable tiers), selections{groupNo -> offerId}, version."
+        states: [OPEN, CHECKED_OUT, ABANDONED, MERGED]
+        transitions:
+          - [OPEN, CHECKED_OUT, CloseOnCheckoutCompleted]
+          - [OPEN, ABANDONED, AbandonInactive]
+          - [OPEN, MERGED, MergeInto]
+        value_objects:
+          - "CartLine{catalogItemId, quantity}"
+          - "QuotedOffer{offerId, groupNo, tier, deliverByEarliest, deliverByLatest, expiresAt}"
+          - "DeliverySelection{groupNo, offerId}"
+        invariants:
+          - {rule: "one line per item; adding an existing item merges quantities", error: ErrDuplicateLine}
+          - {rule: "quantity in 1..99", error: ErrQuantityOutOfRange}
+          - {rule: "at most 100 lines (customer-ordering A15)", error: ErrTooManyLines}
+          - {rule: "the item is purchasable in the local views", error: ErrItemNotPurchasable}
+          - {rule: "a delivery quote needs a destination postal prefix", error: ErrNoDestination}
+          - {rule: "a selection names an offer of the current quote; any line or destination change clears quote and selections", error: ErrStaleDeliverySelection}
+          - {rule: "no change to a CHECKED_OUT, ABANDONED or MERGED cart", error: ErrCartClosed}
+          - {rule: "a merge target is an OPEN cart of the same shopper, never the cart itself", error: ErrMergeTarget}
+        commands: [CreateCart, AddLine, SetLineQuantity, RemoveLine, SetDestination, QuoteDelivery, SelectDelivery, MergeInto, AbandonInactive, CloseOnCheckoutCompleted]
+        events: [CartLineAdded, CartDeliveryQuoted, CartAbandoned, CartCheckedOut]
+        throughput_estimate: "medium-high: every add-to-cart"
+        size_estimate: "one row per active cart; abandoned carts purged"
+    read_models:
+      - {name: CheckoutReadiness, source: "derived from the cart itself: every group selected, no offer expired"}
+      - {name: PurchasabilityView, source: "offer-availability CatalogItemCreated, CatalogItemDiscontinued; pricing ItemPriceChanged, ItemPriceWithdrawn"}
+      - {name: EstimateView, source: "pricing ItemPriceChanged, DeliveryChargeScheduleChanged, TaxTableChanged (effective prices, tier charges, tax band)"}
+    policies:
+      - {name: AbandonInactive, rule: "an OPEN cart with no change for 30 days is ABANDONED"}
+      - {name: CloseOnCheckoutCompleted, rule: "on CheckoutCompleted the cart is CHECKED_OUT"}
+    inbound:
+      - {from: "storefront-bff (experience layer)", type: cmd, channel: "REST /carts", message: "CreateCart, AddLine, SetLineQuantity, RemoveLine, SetDestination, QuoteDelivery, SelectDelivery, MergeInto", relationship: UI}
+      - {from: "storefront-bff (experience layer)", type: qry, channel: "REST GET /carts/{cartId}, GET /carts?shopperId=&state=", message: "GetCart, ListCarts", relationship: UI}
+      - {from: checkout, type: qry, channel: "REST GET /carts/{cartId}", message: GetCart, relationship: Customer/Supplier}
+      - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated, CatalogItemDiscontinued", relationship: Conformist}
+      - {from: pricing, type: evt, channel: "Kafka retailnetwork.pricing.events", message: "ItemPriceChanged, ItemPriceWithdrawn, DeliveryChargeScheduleChanged, TaxTableChanged", relationship: Customer/Supplier}
+      - {from: checkout, type: evt, channel: "Kafka retailnetwork.checkout.events", message: CheckoutCompleted, relationship: Customer/Supplier}
+    rest:
+      - "POST /carts"
+      - "GET /carts/{cartId}"
+      - "GET /carts?shopperId=&state="
+      - "POST /carts/{cartId}/lines"
+      - "POST /carts/{cartId}/lines/{catalogItemId}:set-quantity"
+      - "POST /carts/{cartId}/lines/{catalogItemId}:remove"
+      - "POST /carts/{cartId}:set-destination"
+      - "POST /carts/{cartId}:quote-delivery"
+      - "POST /carts/{cartId}:select-delivery"
+      - "POST /carts/{cartId}:merge-into"
+    publishes:
+      - {event: CartLineAdded, entity: cart, data: [cartId, catalogItemId, quantity, at], consumers: ["analytics only"]}
+      - {event: CartDeliveryQuoted, entity: cart, data: [cartId, destinationPostalPrefix, groupCount, at], consumers: ["analytics only"]}
+      - {event: CartAbandoned, entity: cart, data: [cartId, lastChangedAt], consumers: ["analytics only"]}
+      - {event: CartCheckedOut, entity: cart, data: [cartId, checkoutSessionId, at], consumers: ["analytics only"]}
+    consumes:
+      - {event: CatalogItemCreated, from: offer-availability, fields: [catalogItemId]}
+      - {event: CatalogItemDiscontinued, from: offer-availability, fields: [catalogItemId]}
+      - {event: ItemPriceChanged, from: pricing, fields: [catalogItemId, effectivePriceMinor]}
+      - {event: ItemPriceWithdrawn, from: pricing, fields: [catalogItemId]}
+      - {event: DeliveryChargeScheduleChanged, from: pricing, fields: [version, tiers]}
+      - {event: TaxTableChanged, from: pricing, fields: [version, bands]}
+      - {event: CheckoutCompleted, from: checkout, fields: [cartId, sessionId]}
+    sync_calls:
+      - {to: delivery-promise, type: qry, message: QuoteDeliveryOffers, channel: "REST POST /delivery-offers:quote"}
+    ul:
+      - {term: "Cart", definition: "One shopper's held intent: lines, destination, delivery quote and selections.", code: "cart.Cart"}
+      - {term: "Delivery Quote (cart)", definition: "The offers delivery-promise returned for the cart's lines and destination, held by the cart; a quote holds no capacity.", code: "cart.DeliveryQuote", not_to_be_confused_with: "the network's DeliveryOffer (one offer)"}
+      - {term: "Delivery Selection", definition: "The offer the shopper picked per shipment group.", code: "cart.DeliverySelection"}
+      - {term: "Estimate", definition: "The labelled, non-binding total in the cart: effective prices plus selected tier charges plus tax band.", code: "cart.Estimate", not_to_be_confused_with: "the binding PriceQuote of a checkout session"}
+      - {term: "Checkout Readiness", definition: "Every group selected and no offer expired.", code: "cart.CheckoutReadiness"}
+
+  # =========================================================================
+  - id: checkout
+    name: Checkout
+    code: CK
+    tier: storefront
+    classification: Supporting
+    chart: {differentiation: 0.48, complexity: 0.82, evolution: Custom-built}
+    business_model: Conversion (the purchase transaction)
+    purpose: >-
+      The purchase saga [14][16]: one transaction across price, payment and
+      the network's promise confirmation. Authorize before placing the
+      order (compensatable: void), place the order (pivot), then retriable
+      steps via events. PLACING is the semantic lock [15]: while the
+      place-order outcome is unknown there is no void and no new attempt.
+      Holds shopperId and shipToAddressId references, never PII; the stored
+      placement request is PII-free so it can be replayed byte for byte.
+    roles: ["Execution (saga orchestration)", "Enforcer (no two holds on a card for one session)"]
+    business_decisions:
+      - "Money flow (D5): authorize before placing; capture per shipment group on FulfillmentShipped; release on FulfillmentCancelled; refund on PackageLost or PackageReturned."
+      - "The network's \"Checkout\" (customer-ordering PlaceOrder) is this saga's place-order step, reached through an Anti-Corruption Layer (internal/adapters/outbound/customerordering, the only place that knows network wire names)."
+      - "A decline keeps the session open for another token while the price quote is valid; a definitive 409 voids the authorization and asks for a requote; a 422 is a contract bug: void, FAILED, alert."
+      - "A 503 or timeout leaves the session PLACING, answers 202, and ResolveInDoubtPlacements replays the stored body with the same Idempotency-Key until a definitive answer; alert at 20 h, before the network's 24 h idempotency window."
+    aggregates:
+      - name: CheckoutSession
+        root_id: sessionId
+        description: "The purchase transaction from review to placed order: cart id and version, shopper id, shipToAddressId (never the address), numbered lines and groups (groupNo, offerId, tier, lineNos), priceQuoteId, totals, quoteExpiresAt, authorizationId, the stored placement request, orderId, requotedOffers, failure code."
+        states: [OPEN, AUTHORIZING, DECLINED, PLACING, REQUOTE_REQUIRED, COMPLETED, EXPIRED, FAILED]
+        transitions:
+          - [OPEN, AUTHORIZING, ConfirmSession]
+          - [AUTHORIZING, PLACING, RecordAuthorization]
+          - [AUTHORIZING, DECLINED, RecordDecline]
+          - [DECLINED, AUTHORIZING, ConfirmSession]
+          - [PLACING, PLACING, RecordPlacementInDoubt]
+          - [PLACING, COMPLETED, RecordPlaced]
+          - [PLACING, REQUOTE_REQUIRED, RecordRequoteRequired]
+          - [PLACING, FAILED, RecordFailure]
+          - [OPEN, EXPIRED, ExpireSession]
+        value_objects:
+          - "SessionLine{lineNo, catalogItemId, quantity}"
+          - "SessionGroup{groupNo, offerId, tier, lineNos[]}"
+          - "RequotedOffer{offerId, groupNo, tier, deliverByEarliest, deliverByLatest, expiresAt}"
+        invariants:
+          - {rule: "the cart's checkout readiness holds at session open", error: ErrCartNotCheckoutReady}
+          - {rule: "the price quote is unexpired at confirm", error: ErrPriceQuoteExpired}
+          - {rule: "no transition out of COMPLETED, EXPIRED, FAILED or REQUOTE_REQUIRED", error: ErrSessionClosed}
+          - {rule: "the authorized amount equals the quote total", error: ErrAuthorizationMismatch}
+          - {rule: "no void and no new attempt while the place-order outcome is unknown (the semantic lock [15])", error: ErrPlacementInDoubt}
+        commands: [OpenSession, ConfirmSession, RecordAuthorization, RecordDecline, RecordPlacementInDoubt, RecordPlaced, RecordRequoteRequired, RecordFailure, ExpireSession]
+        events: [CheckoutCompleted, CheckoutOpened, CheckoutDeclined, CheckoutRequoteRequired, CheckoutFailed]
+        throughput_estimate: "medium: one session per purchase attempt"
+        size_estimate: "one row per session; placement request retained for the idempotency window"
+    read_models: []
+    policies:
+      - {name: ResolveInDoubtPlacements, rule: "re-send the stored placement body with the same Idempotency-Key (customer-ordering replays the first response) with backoff until a definitive answer; alert at 20 h"}
+      - {name: ExpireOnQuoteExpiry, rule: "an OPEN or DECLINED session expires with its price quote"}
+    inbound:
+      - {from: "storefront-bff (experience layer)", type: cmd, channel: "REST POST /checkout-sessions, POST /checkout-sessions/{sessionId}:confirm", message: "OpenSession, ConfirmSession", relationship: UI}
+      - {from: "storefront-bff (experience layer)", type: qry, channel: "REST GET /checkout-sessions/{sessionId}", message: GetSession, relationship: UI}
+    rest:
+      - "POST /checkout-sessions"
+      - "GET /checkout-sessions/{sessionId}"
+      - "POST /checkout-sessions/{sessionId}:confirm"
+    publishes:
+      - {event: CheckoutCompleted, entity: checkoutsession, data: [sessionId, orderId, shopperId, cartId, authorizationId, currency, totalMinor, "groups(groupNo, tier, amountMinor)", completedAt], consumers: [shopping-cart, customer-payments]}
+      - {event: CheckoutOpened, entity: checkoutsession, data: [sessionId, cartId, shopperId, totalMinor, openedAt], consumers: ["analytics only"]}
+      - {event: CheckoutDeclined, entity: checkoutsession, data: [sessionId, reason, at], consumers: ["analytics only"]}
+      - {event: CheckoutRequoteRequired, entity: checkoutsession, data: [sessionId, requotedOffers, at], consumers: ["analytics only"]}
+      - {event: CheckoutFailed, entity: checkoutsession, data: [sessionId, code, at], consumers: ["analytics only"]}
+    consumes: []
+    sync_calls:
+      - {to: shopping-cart, type: qry, message: GetCart, channel: "REST GET /carts/{cartId}"}
+      - {to: delivery-promise, type: qry, message: GetDeliveryOffer, channel: "REST GET /delivery-offers/{offerId}", note: "pre-check that every selected offer is still QUOTED, with margin"}
+      - {to: pricing, type: cmd, message: IssuePriceQuote, channel: "REST POST /price-quotes"}
+      - {to: customer-payments, type: cmd, message: AuthorizePayment, channel: "REST POST /payment-authorizations", note: "Idempotency-Key <sessionId>:auth, allocations per group"}
+      - {to: customer-payments, type: cmd, message: VoidAuthorization, channel: "REST POST /payment-authorizations/{authorizationId}:void", note: "Idempotency-Key <sessionId>:void; only after a definitive rejection"}
+      - {to: customer-ordering, type: cmd, message: PlaceOrder, channel: "REST POST /checkout", note: "ACL (internal/adapters/outbound/customerordering); Idempotency-Key is the sessionId; shipToAddressId (NG1), never an inline address"}
+    ul:
+      - {term: "Checkout Session", definition: "The purchase transaction from review to placed order.", code: "session.CheckoutSession", not_to_be_confused_with: "the network's \"Checkout\" (customer-ordering PlaceOrder), which is the session's place-order step"}
+      - {term: "Place-Order Step", definition: "The pivot of the saga: customer-ordering POST /checkout through the ACL.", code: "session.PlaceOrder"}
+      - {term: "In-Doubt Placement", definition: "The place-order outcome is unknown (timeout or 503); PLACING holds the semantic lock until the resolver settles it.", code: "session.PlacementInDoubt"}
+      - {term: "Requote", definition: "A definitive 409 from the network: the authorization is voided and the session carries the re-quoted offers for the cart.", code: "session.RequotedOffer"}
+      - {term: "Allocation", definition: "The share of an authorization that belongs to one shipment group.", code: "session.SessionGroup.Amount"}
+
+  # =========================================================================
+  - id: customer-payments
+    name: Customer Payments
+    code: CP
+    tier: storefront
+    classification: Generic
+    chart: {differentiation: 0.2, complexity: 0.66, evolution: Commodity}
+    business_model: Revenue collection (buy a PSP)
+    purpose: >-
+      Moves money with the shipment facts: authorize at checkout, capture
+      each shipment group's allocation when it ships, release on
+      cancellation, refund on lost or returned packages, re-authorize
+      uncaptured allocations before the provider's authorization validity
+      expires [9]. Speaks to the payment provider through an
+      Anti-Corruption Layer port (Authorize, Capture, Void, Refund,
+      Reauthorize); the payment-provider-simulator is the stand-in adapter
+      and swapping it for a real provider changes nothing else. Never sees
+      a card number, only PSP tokens [11][12].
+    roles: ["Execution (authorize, capture, void, refund)", "Enforcer (never two holds for one session)"]
+    business_decisions:
+      - "One authorization per checkout session; a replayed authorize returns the existing one."
+      - "Capture is per allocation (shipment group): zero captures without FulfillmentShipped, zero expired authorizations on shipped groups (section 8 correctness targets)."
+      - "Fulfilment facts for a not-yet-bound order are parked and applied on BindOrderOnCheckoutCompleted (cross-topic order, gap S4)."
+      - "Provider idempotency keys are deterministic per (operation, authorizationId, groupNo)."
+    aggregates:
+      - name: PaymentAuthorization
+        root_id: authorizationId
+        description: "One checkout session's authorization: unique checkoutSessionId, orderId (bound later), allocations {groupNo, amountMinor, state PENDING|CAPTURED|RELEASED}, provider refs, expiresAt."
+        states: [AUTHORIZED, PARTIALLY_CAPTURED, CAPTURED, VOIDED, EXPIRED, DECLINED]
+        transitions:
+          - [AUTHORIZED, PARTIALLY_CAPTURED, CaptureAllocation]
+          - [PARTIALLY_CAPTURED, PARTIALLY_CAPTURED, CaptureAllocation]
+          - [PARTIALLY_CAPTURED, CAPTURED, CaptureAllocation]
+          - [AUTHORIZED, VOIDED, VoidAuthorization]
+          - [AUTHORIZED, EXPIRED, ExpireAuthorization]
+          - [PARTIALLY_CAPTURED, EXPIRED, ExpireAuthorization]
+        value_objects:
+          - "Allocation{groupNo, amountMinor, state(PENDING|CAPTURED|RELEASED)}"
+          - "ProviderRef{providerAuthorizationId, providerCaptureIds[]}"
+        invariants:
+          - {rule: "one authorization per checkout session; a replay returns it", error: ErrDuplicateAuthorization}
+          - {rule: "allocations sum to the authorized total and name the session's groups", error: ErrAllocationMismatch}
+          - {rule: "captured per group never exceeds the allocation", error: ErrOverCapture}
+          - {rule: "no capture after expiresAt", error: ErrCaptureAfterExpiry}
+          - {rule: "a capture or release names an existing group", error: ErrUnknownGroup}
+        commands: [AuthorizePayment, CaptureAllocation, ReleaseAllocation, VoidAuthorization, ExpireAuthorization, ReauthorizePayment, BindOrder]
+        events: [PaymentAuthorized, PaymentCaptured, PaymentReleased, PaymentAuthorizationExpired, PaymentDeclined]
+        throughput_estimate: "one per checkout session; captures per shipment group"
+        size_estimate: "one row per session + allocations"
+        notes: "DECLINED is a terminal record of a declined authorize attempt (no transition into it); the checkout session stays DECLINED-open for another token."
+      - name: Refund
+        root_id: refundId
+        description: "Money returned for one order or group: reason LOST, RETURNED_TO_SENDER or MANUAL."
+        states: [REQUESTED, SUCCEEDED, FAILED]
+        transitions:
+          - [REQUESTED, SUCCEEDED, RecordRefundOutcome]
+          - [REQUESTED, FAILED, RecordRefundOutcome]
+        value_objects:
+          - "RefundReason(LOST|RETURNED_TO_SENDER|MANUAL)"
+        invariants:
+          - {rule: "refunds of an order never exceed its captured total", error: ErrOverRefund}
+        commands: [RequestRefund, RecordRefundOutcome]
+        events: [RefundIssued, RefundFailed]
+        throughput_estimate: "low"
+        size_estimate: "one row per refund"
+    read_models:
+      - {name: ParkedFulfillmentFacts, source: "order-sourcing FulfillmentShipped, FulfillmentCancelled and shipping-and-tracking PackageLost, PackageReturned facts for orders not yet bound to an authorization; applied on BindOrderOnCheckoutCompleted"}
+    policies:
+      - {name: BindOrderOnCheckoutCompleted, rule: "on CheckoutCompleted bind orderId to the session's authorization, then apply any parked fulfilment facts"}
+      - {name: CaptureOnShipment, rule: "on FulfillmentShipped{orderId, groupNo, trackingNumbers} capture that group's allocation; also store trackingNumber to group"}
+      - {name: ReleaseOnCancellation, rule: "on FulfillmentCancelled (customer cancellation or unsourceable group) release that group's allocation"}
+      - {name: RefundOnLostPackage, rule: "on PackageLost refund the affected group's captured amount (reason LOST)"}
+      - {name: RefundOnReturnToSender, rule: "on PackageReturned refund the affected group's captured amount (reason RETURNED_TO_SENDER)"}
+      - {name: ReauthorizeBeforeExpiry, rule: "re-authorize uncaptured allocations 24 h before expiresAt [9]"}
+      - {name: VoidUnboundAuthorizations, rule: "no CheckoutCompleted after 24 h: void (covers a checkout crash after authorize)"}
+    inbound:
+      - {from: checkout, type: cmd, channel: "REST POST /payment-authorizations, POST /payment-authorizations/{authorizationId}:void", message: "AuthorizePayment, VoidAuthorization", relationship: Customer/Supplier}
+      - {from: checkout, type: qry, channel: "REST GET /payment-authorizations/{authorizationId}", message: GetAuthorization, relationship: Customer/Supplier}
+      - {from: "storefront ops (human)", type: cmd, channel: "REST POST /refunds", message: RequestRefund, relationship: UI}
+      - {from: "storefront ops (human)", type: qry, channel: "REST GET /payment-authorizations?orderId=|checkoutSessionId=, GET /refunds?orderId=", message: "ListAuthorizations, ListRefunds", relationship: UI}
+      - {from: checkout, type: evt, channel: "Kafka retailnetwork.checkout.events", message: CheckoutCompleted, relationship: Customer/Supplier}
+      - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentShipped, FulfillmentCancelled", relationship: Conformist}
+      - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "PackageLost, PackageReturned", relationship: Conformist}
+    rest:
+      - "POST /payment-authorizations"
+      - "GET /payment-authorizations/{authorizationId}"
+      - "GET /payment-authorizations?orderId=|checkoutSessionId="
+      - "POST /payment-authorizations/{authorizationId}:void"
+      - "GET /refunds?orderId="
+      - "POST /refunds"
+    publishes:
+      - {event: PaymentAuthorized, entity: paymentauthorization, data: [authorizationId, checkoutSessionId, currency, totalMinor, "allocations(groupNo, amountMinor)", expiresAt], consumers: ["analytics only"]}
+      - {event: PaymentCaptured, entity: paymentauthorization, data: [authorizationId, orderId, groupNo, amountMinor], consumers: ["analytics only"]}
+      - {event: PaymentReleased, entity: paymentauthorization, data: [authorizationId, orderId, groupNo, amountMinor, reason], consumers: ["analytics only"]}
+      - {event: PaymentAuthorizationExpired, entity: paymentauthorization, data: [authorizationId, orderId, expiredAt], consumers: ["analytics only"]}
+      - {event: RefundIssued, entity: refund, data: [refundId, orderId, amountMinor, reason], consumers: ["analytics only"]}
+      - {event: RefundFailed, entity: refund, data: [refundId, orderId, code], consumers: ["analytics only"]}
+      - {event: PaymentDeclined, entity: paymentauthorization, data: [checkoutSessionId, reason, at], consumers: ["analytics only"]}
+    consumes:
+      - {event: CheckoutCompleted, from: checkout, fields: [sessionId, orderId, authorizationId, groups]}
+      - {event: FulfillmentShipped, from: order-sourcing, fields: [orderId, groupNo, trackingNumbers]}
+      - {event: FulfillmentCancelled, from: order-sourcing, fields: [orderId, groupNo, reason]}
+      - {event: PackageLost, from: shipping-and-tracking, fields: [orderId, trackingNumber]}
+      - {event: PackageReturned, from: shipping-and-tracking, fields: [orderId, trackingNumber]}
+    sync_calls:
+      - {to: payment-provider, type: cmd, message: "Authorize, Capture, Void, Refund, Reauthorize", channel: "provider port (ACL); adapter calls payment-provider-simulator", note: "external system; idempotency keys deterministic per (operation, authorizationId, groupNo); never receives a card number"}
+    ul:
+      - {term: "Payment Authorization", definition: "A hold on the shopper's payment method for the quote total, split into allocations per shipment group.", code: "authorization.PaymentAuthorization"}
+      - {term: "Capture", definition: "Taking an allocation's money when its shipment group ships.", code: "authorization.Allocation.Capture", not_to_be_confused_with: "authorize (the hold at checkout)"}
+      - {term: "Release", definition: "Letting an uncaptured allocation go when its group is cancelled.", code: "authorization.Allocation.Release"}
+      - {term: "Void", definition: "Cancelling the whole authorization before any capture.", code: "authorization.Void"}
+      - {term: "Refund", definition: "Returning captured money for a lost or returned package, or manually.", code: "refund.Refund"}
+      - {term: "Reauthorization", definition: "A fresh authorization replacing one about to expire, for allocations not yet captured.", code: "authorization.Reauthorize"}
+      - {term: "Payment Method Token", definition: "The PSP token standing in for the shopper's card; the storefront never sees a card number.", code: "(provider port)"}
+
+# ---------------------------------------------------------------------------
+# Out-of-scope / future contexts (named so the map is complete)
+# ---------------------------------------------------------------------------
+future_contexts:
+  - {id: customer-notifications, classification: Generic, note: "Adopt the network's future context customer-notification (needs NG7: group status facts as customer-order events) rather than building a storefront twin; it would consume PaymentCaptured, PaymentReleased and RefundIssued."}
+  - {id: promotions, classification: "Supporting (candidate)", note: "Coupons and promotions inside pricing; a later phase (D10)."}
+  - {id: identity, classification: Generic, note: "Sign-in and credentials; deferred by D4 (no auth). Revisit only if auth is re-adopted for the storefront edge."}
+  - {id: reviews-recommendations, classification: "Supporting (candidate)", note: "Reviews and recommendations; later (plan section 7)."}
+
+# ---------------------------------------------------------------------------
+# Experience layer (no domain model, not bounded contexts)
+# ---------------------------------------------------------------------------
+experience:
+  - {id: storefront-bff, kind: "Go BFF, the only storefront edge (/api/storefront)", note: "Composes the six contexts and the network OHS routes, mints Idempotency-Keys, keeps cart/shopper ids in a cookie (state, not authentication), passes saved addresses through without storing or logging them. No database. Never logs bodies."}
+  - {id: storefront-web, kind: "React SSR (React Router 7 framework mode on Vite, Node runtime)", note: "Pages; talks only to the BFF (D8)."}
+  - {id: payment-provider-simulator, kind: "Go stand-in for the external payment provider (own Postgres)", note: "Tokenize (hosted-fields stand-in), authorize, capture, void, refund and re-authorize with deterministic outcomes per test token (approve, decline, timeout, expire-early)."}
+
+# ---------------------------------------------------------------------------
+# External actors and systems
+# ---------------------------------------------------------------------------
+external:
+  - {id: offer-availability, org: retail-network, kind: upstream context, note: "Catalogue item master and listing availability; Conformist (Published Language); only catalogItemId is the join key. OHS reads GET /catalog, GET /catalog/{catalogItemId}."}
+  - {id: delivery-promise, org: retail-network, kind: upstream context, note: "Delivery offers and promises. OHS / PL, Conformist: POST /delivery-offers:quote (cart and product-page dates)."}
+  - {id: customer-ordering, org: retail-network, kind: upstream context, note: "Order capture, history, tracking; holds the (synthetic) PII. OHS + ACL in checkout. EXTENDs NG1-NG3 are prerequisites for checkout and the account area."}
+  - {id: order-sourcing, org: retail-network, kind: upstream context, note: "FulfillmentShipped and FulfillmentCancelled drive capture and release (Conformist)."}
+  - {id: shipping-and-tracking, org: retail-network, kind: upstream context, note: "PackageLost and PackageReturned drive refunds (Conformist)."}
+  - {id: payment-provider, kind: external system, note: "The real PSP; in the study, payment-provider-simulator stands in behind the ACL port. Hosted fields: the storefront never sees a card number [11][12]."}
+  - {id: shopper, kind: "person (synthetic) via storefront-web / e2e-tests"}
+
+# ---------------------------------------------------------------------------
+# Decisions (the plan's section 0 decisions this model embodies)
+# ---------------------------------------------------------------------------
+decisions:
+  - {id: D1, title: "The storefront belongs to the retail-network organisation (in-org) as a separate domain"}
+  - {id: D2, title: "The storefront model lives in warehouse-docs storefront/, with cross-model checks against network/model/model.yaml read-only"}
+  - {id: D3, title: "Six bounded contexts (product-content, pricing, product-discovery, shopping-cart, checkout, customer-payments) plus the experience layer and a PSP simulator"}
+  - {id: D4, title: "No authentication; guest-first flows; sign-in is a synthetic shopper lookup by e-mail"}
+  - {id: D5, title: "Authorize before placing, capture per shipment group, release on cancel, refund on lost/returned; the network's future payments-and-invoicing splits into customer-payments (storefront) and vendor-settlement (network)"}
+  - {id: D6, title: "The storefront records the price; customer-ordering stays price-free"}
+  - {id: D7, title: "Network changes are three EXTENDs of customer-ordering (NG1-NG3), merged before checkout is built"}
+  - {id: D8, title: "React SSR storefront-web behind a Go BFF (storefront-bff), the only storefront edge"}
+  - {id: D9, title: "Search is PostgreSQL full-text search and pg_trgm inside product-discovery, behind a port"}
+  - {id: D10, title: "One configured currency (ISO 4217, integer minor units); a synthetic tax table; promotions later"}
