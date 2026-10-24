@@ -19,7 +19,7 @@ the owning repository, under that repository's own ADR.
 | # | Today | Needed | Why |
 | --- | --- | --- | --- |
 | 1 | The gateway is a stub: `internal/adapters/outbound/network/gateway.go` and `seed.go` (`NETWORK_SEED_FILE`). | A live adapter in `internal/adapters/outbound/retailnetwork/` (the rename ADR 0009 §2 already decided), behind the same `NetworkGateway` port, selected by `NETWORK_MODE=live`. | There is nothing to call yet; the Vendor API on this site is that something. |
-| 2 | `DeclareCapability` is "a documented no-op", because "the network's real API has no such operation" (`internal/application/ports/ports.go`). | `PUT /vendor/nodes/{nodeId}/profile` from the site's `CPTScheduleChanged` cutoffs, eligible-path `cycleTimeP95` and `PathCapacityChanged`. A new ADR amends the port comment. | The network accepts a declared profile ([ADR 0003](/network/adr/0003-declared-and-measured-capability)); the real vendor platform API also has one for sellers (supply-source API, see public seller-API documentation). |
+| 2 | `DeclareCapability` is "a documented no-op", because "the network's real API has no such operation" (`internal/application/ports/ports.go`). | `PUT /vendor/nodes/{nodeId}/profile` from the site's `CPTScheduleChanged` cutoffs, eligible-path `cycleTimeP95` and `PathCapacityChanged`. A new ADR amends the port comment. | The network accepts a declared profile ([ADR 0003](/network/adr/0003-declared-and-measured-capability)); the real vendor platform API also has one for sellers (the supply-source (multi-location inventory) API, see the vendor platform API surface map). |
 | 3 | No node registration; sites are identified by `SiteId` only. | `POST /vendor/nodes` per site whose `siteRole` maps to a vendor node type ([Node model](/network/network-model/node-model)), and a persisted `siteCode ↔ nodeId` table. | The network keys everything by `nodeId`; the mapping must be data, never a string rule. |
 | 4 | `SubmitAvailability(update)` per SKU and site; SKUs translated by a file dictionary (`docs/adr/0013-product-translation-file-acl-dictionary.md`). | `POST /vendor/inventory` per node with `listingId`, `availableQty` and `basis`; `isFullUpdate=true` on the periodic recompute. The dictionary gains `listingId`. | Listings are (catalogue item, node) in the network. |
 | 5 | `SubmissionStatus(ref)` reconciles by `NetworkRef`. | Persist the `transactionId` returned by every 202 and reconcile by it. | Every Vendor API write is its own transaction. |
@@ -47,19 +47,3 @@ the owning repository, under that repository's own ADR.
 3. `network-fulfillment` rows 1-7 land against them in `NETWORK_MODE=live`.
 4. `order-sourcing`, `delivery-promise`, `linehaul-transportation`, `last-mile-delivery`, `shipping-and-tracking` and `node-performance` follow; `customer-ordering` last.
 5. Row 8 when the fleet wants shipment confirmation without a manual call.
-
-## Seller inbound (proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments))
-
-The "Today" column is omitted here on purpose. The fleet's own handling of
-case-packed receiving is designed in the fleet's repositories, not in this
-one, and this page makes no claim about its current state. What the network
-side needs from `network-fulfillment`, and nothing else, is:
-
-| # | Needed | Why |
-| --- | --- | --- |
-| 9 | Poll `GET /vendor/inbound-shipments` for the vendor's nodes and translate the carton tree into the fleet's own advance shipment notice, with the seller's `ownerRef` carried as an opaque tag. | The manifest reaches the fleet only through the Vendor API. |
-| 10 | When a shipment is received, submit `POST /vendor/inbound-receipts` with per-SSCC status and eaches per GTIN, keeping the `transactionId`. | `seller-inbound` closes the shipment from this receipt. |
-| 11 | Translate catalogue packaging (levels, GTINs, `unitsPerPack`) into the fleet's own item master through the fleet's own interfaces. | The packaging hierarchy is the catalogue's fact. |
-
-No new Kafka topic is needed in either direction, and no fleet context other
-than `network-fulfillment` is touched by the network's design.

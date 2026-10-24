@@ -51,9 +51,9 @@ flowchart LR
         purpose ~~~ rules
     end
     in0 -->|"cmd - REST in-org<br/>RegisterNode,<br/>DeclareOperational<br/>Profile"| BC
-    in1 -->|"cmd - REST<br/>RegisterNode,<br/>DeclareOperational<br/>Profile, ActivateNode,<br/>SuspendNode,<br/>RetireNode"| BC
+    in1 -->|"cmd - REST<br/>RegisterNode,<br/>ActivateNode,<br/>SuspendNode,<br/>RetireNode"| BC
     in1 -->|"cmd - REST<br/>OpenLane, CloseLane,<br/>AssignServiceArea,<br/>DefineRegion"| BC
-    in2 -.->|"qry - REST<br/>GetNode, ListNodes,<br/>ListLanes,<br/>ResolveServiceArea"| BC
+    in2 -.->|"qry - REST<br/>GetNode, list nodes,<br/>ListLanes,<br/>ResolveServiceArea"| BC
     linkStyle 0 stroke:#1971c2,stroke-width:1.5px
     linkStyle 1 stroke:#1971c2,stroke-width:1.5px
     linkStyle 2 stroke:#1971c2,stroke-width:1.5px
@@ -134,7 +134,7 @@ It holds declared facts. It does not schedule, promise, assign or measure.
 | --- | --- |
 | **Domain** | **Supporting**. See [Core Domain Chart](/network/contexts/node-topology/core-domain-chart). |
 | **Business Model** | Enabler: every promise, assignment and route rests on it. |
-| **Evolution** | Custom-built. The operational profile is shaped after a Product surface (supply-source API, see public seller-API documentation). |
+| **Evolution** | Custom-built. The operational profile is shaped after a Product surface (the supply-source (multi-location inventory) API, see the vendor platform API surface map). |
 
 ## Domain Roles
 
@@ -152,7 +152,6 @@ It holds declared facts. It does not schedule, promise, assign or measure.
 | `vendor-connectivity` | `RegisterNode` (vendor node) | Command | REST `POST /nodes` (in-org) | Customer/Supplier (this context is the Supplier) |
 | `vendor-connectivity` | `DeclareOperationalProfile` | Command | REST `PUT /nodes/{nodeId}/operational-profile` (in-org) | Customer/Supplier |
 | network-ops planner | `RegisterNode` (network node) | Command | REST `POST /nodes` | UI |
-| network-ops planner | `DeclareOperationalProfile` (`declaredBy` `NETWORK_OPS`) | Command | REST `PUT /nodes/{nodeId}/operational-profile` | UI |
 | network-ops planner | `ActivateNode` | Command | REST `POST /nodes/{nodeId}:activate` | UI |
 | network-ops planner | `SuspendNode` | Command | REST `POST /nodes/{nodeId}:suspend` | UI |
 | network-ops planner | `RetireNode` | Command | REST `POST /nodes/{nodeId}:retire` | UI |
@@ -161,7 +160,7 @@ It holds declared facts. It does not schedule, promise, assign or measure.
 | network-ops planner | `AssignServiceArea` | Command | REST `PUT /service-areas/{postalPrefix}` | UI |
 | network-ops planner | `DefineRegion` | Command | REST `POST /regions` | UI |
 | Any context | `GetNode` | Query | REST `GET /nodes/{nodeId}` | Open Host Service |
-| Any context | `ListNodes` | Query | REST `GET /nodes?type=&region=&status=` | Open Host Service |
+| Any context | list nodes (no message name in the model) | Query | REST `GET /nodes?type=&region=&status=` | Open Host Service |
 | Any context | `ListLanes` | Query | REST `GET /lanes?origin=&destination=` | Open Host Service |
 | Any context | `ResolveServiceArea` | Query | REST `GET /service-areas/{postalPrefix}` | Open Host Service |
 
@@ -211,26 +210,16 @@ Profile** (versioned by `profileRevision`), **Cutoff**, **Handling Time**,
    their `NodeProfileView`).
 3. **Profiles are versioned, never edited.** `profileRevision` strictly
    increases (`ErrStaleProfileRevision`). A `FULFILLMENT_CENTER` needs at
-   least one cutoff and a `handlingTime` above zero before activation, and
-   every later revision of an `ACTIVE` `FULFILLMENT_CENTER` keeps both
-   (`ErrIncompleteOperationalProfile`). Every day of a cutoff falls inside the
-   operating hours of that day (`ErrCutoffOutsideOperatingHours`).
+   least one cutoff and a `handlingTime` above zero before activation
+   (`ErrIncompleteOperationalProfile`), and every cutoff falls inside the
+   operating hours of its day (`ErrCutoffOutsideOperatingHours`).
 4. **Lanes follow the allowed type pairs, and both ends are `ACTIVE` when
    opened.** `ErrLaneLoop`, `ErrLaneTypePairNotAllowed`,
    `ErrLaneEndpointNotActive`; at most one `OPEN` lane per origin,
    destination and mode (`ErrDuplicateLane`).
 5. **One delivery station per postal prefix per assignment version.**
-   `ErrNotADeliveryStation`, `ErrStaleAssignmentVersion`; the assigned region
-   is defined and matches the station's (`ErrUnknownRegion`).
+   `ErrNotADeliveryStation`, `ErrStaleAssignmentVersion`.
 6. **`RETIRED` is terminal** (`ErrNodeRetired`).
-7. **Regions, subtypes and sort dwell are checked.** A node's `regionId` names
-   a defined region (`ErrUnknownRegion`), a given `subtype` belongs to the node
-   type (`ErrSubtypeNotAllowed`), and only `SORTATION_CENTER` and `AIR_HUB`
-   nodes declare `sortDwellMinutes` (`ErrSortDwellNotAllowed`).
-8. **A node that leaves service closes nothing.** Policy
-   `SuspendedEndpointsUnusable`: its `OPEN` lanes and `ASSIGNED` service areas
-   stay as they are, and consumers treat them as unusable while the node is
-   not `ACTIVE`.
 
 ## Assumptions
 
@@ -264,8 +253,22 @@ Proposed, measurable once built:
 
 ## Open Questions
 
-None for this context. The questions the earlier drafts raised (lanes and
-service areas after a node leaves service, who declares a network node's
-profile, a new profile on an `ACTIVE` fulfillment centre, cutoff days, region
-membership, not-found and illegal-transition errors) are answered in the model
-and stated in the sections above.
+- **Lanes and service areas after a node leaves service.** When a node is
+  suspended or retired, its lanes stay `OPEN` and the prefixes assigned to a
+  retired delivery station stay `ASSIGNED`. The model has no policy that
+  closes or reassigns them.
+- **Who declares a network node's profile?** `declaredBy` allows
+  `NETWORK_OPS`, but the planner's inbound row in the model does not list
+  `DeclareOperationalProfile`.
+- **A new profile on an `ACTIVE` fulfillment centre.** The completeness rule
+  holds "before activation". Whether a later revision may drop every cutoff
+  is not stated.
+- **Cutoffs have no day.** `CutoffSlot{localTime, maxOrders?}` carries no
+  day of week, so "inside the operating hours of their day" must be read as
+  "inside the hours of every operating day".
+- **Region membership is not checked.** No invariant makes a node's or a
+  service area's `regionId` name a defined region.
+- **Not-found and illegal-transition errors are unnamed.** The model names
+  no `Err...` for an unknown `nodeId`, `laneId` or `postalPrefix`, nor for a
+  transition outside the table (for example `SuspendNode` on a `PROPOSED`
+  node).

@@ -172,3 +172,7 @@ artifacts here.
 following real industry-standard patterns. It is not a production system
 and is not affiliated with, endorsed by, or representative of
 Manhattan Associates, Blue Yonder, or any other company.
+
+## Disclaimer
+
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.

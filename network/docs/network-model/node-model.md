@@ -11,8 +11,8 @@ description: "The six node types, who operates them, the declared operational pr
 Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml)
 → `node_types`, `lane_rules`, `fleet_site_role_mapping` and
 `contexts[node-topology]`. The building types are grounded on
-Public fulfillment-network research; the
-declared profile on the supply-source schema in
+public fulfillment-network research; the
+declared profile on the supply-source (multi-location inventory) API schema in
 the vendor platform API surface map. Owner:
 [`node-topology`](/network/contexts/node-topology).
 :::
@@ -34,17 +34,12 @@ groups that behave differently in every other context:
 
 | Node type | Operator | Capabilities | Takes customer demand | On a customer path as |
 | --- | --- | --- | --- | --- |
-| `FULFILLMENT_CENTER` | VENDOR | OUTBOUND, INBOUND | yes, while ACTIVE | origin |
+| `FULFILLMENT_CENTER` | VENDOR | OUTBOUND | yes, while ACTIVE | origin |
 | `INBOUND_CROSS_DOCK` | VENDOR | INBOUND | no | never |
 | `RETURNS_CENTER` | VENDOR | RETURNS | no | return destination only |
 | `SORTATION_CENTER` | NETWORK | SORT | no | intermediate |
 | `DELIVERY_STATION` | NETWORK | LAST_MILE | no | last network node |
 | `AIR_HUB` | NETWORK | SORT, AIR | no | intermediate |
-
-`FULFILLMENT_CENTER` also has the `INBOUND` capability, so that a seller's
-cartons can be received where the stock is stored
-([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)); an
-`INBOUND_CROSS_DOCK` remains the only type that is inbound-only.
 
 `FULFILLMENT_CENTER` carries a subtype: `SORTABLE`, `NON_SORTABLE`, `XL`,
 `SOFT_LINES`, `SUB_SAME_DAY`, `FRESH`, `MICRO`. Only `SUB_SAME_DAY` and
@@ -76,8 +71,9 @@ Derived from: `model.yaml` → `contexts[node-topology].aggregates[Node]`.
 
 ## The operational profile: what a node declares
 
-A vendor node declares how it works. The shape follows the published Supply
-Sources operational configuration (handling time, operating hours by day,
+A vendor node declares how it works. The shape follows the published
+supply-source (multi-location inventory) API operational configuration
+(handling time, operating hours by day,
 throughput cap in orders per time unit, time zone) and adds what a promise
 needs that the supply-source schema does not carry: the cutoffs, a holiday
 calendar, and a revision number.

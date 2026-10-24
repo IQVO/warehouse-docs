@@ -11,7 +11,7 @@ description: "The Open Host Service the warehouse-systems fleet conforms to: eve
 Contract: [`apis/vendor-connectivity/openapi.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/apis/vendor-connectivity/openapi.yaml),
 rendered under [API Reference](/network/api-reference). Owner:
 [`vendor-connectivity`](/network/contexts/vendor-connectivity). The protocol keeps the
-shape of the operator's direct-fulfillment vendor workflow (poll, acknowledge in full, label after
+shape of a direct-fulfillment vendor program (poll, acknowledge in full, label after
 acceptance, confirm shipment) in this network's own vocabulary, as the fleet's
 `network-fulfillment` ADR 0009 expects.
 :::
@@ -31,9 +31,6 @@ acceptance, confirm shipment) in this network's own vocabulary, as the fleet's
 | `POST /vendor/shipping-labels` | a label per package of an accepted order | `200 {labelRef, trackingNumber, carrier}` |
 | `POST /vendor/shipment-confirmations` | confirm shipment with the tracking numbers | `202 {transactionId}` |
 | `GET /vendor/transactions/{transactionId}` | outcome of any write | `200 {status: PROCESSING or SUCCESS or FAILURE, errors}` |
-| `GET /vendor/inbound-shipments?nodeId=&createdAfter=&nextToken=` | poll the inbound shipments sellers are sending to the vendor's nodes, paged (proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)) | `200 {inboundShipments, nextToken}` |
-| `GET /vendor/inbound-shipments/{shipmentId}` | one inbound shipment as a carton tree (proposed) | `200` |
-| `POST /vendor/inbound-receipts` | a carton-level receipt: per SSCC a status, eaches received per GTIN, compliance codes (proposed) | `202 {transactionId}` |
 
 ## Semantics a vendor must implement
 
@@ -50,12 +47,6 @@ acceptance, confirm shipment) in this network's own vocabulary, as the fleet's
    and never drops the call.
 6. **Redelivery happens.** The same `poNumber` can appear on two polls; the
    vendor deduplicates.
-7. **Inbound shipments are cartons, in eaches.** (Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).) A shipment is a
-   tree: shipment, optional pallet (`parentSscc`), carton (`sscc`, `kind`,
-   weight, size), item (`gtin`, `qtyEaches`, `lot`, `expiry`), with the seller
-   of record as `ownerRef`. Every quantity is eaches; a case's quantity is its
-   `unitsPerPack`. A receipt answers per carton and may be sent in parts. The
-   vendor never talks to the seller: the manifest is the only thing it gets.
 
 ## Deliberately absent
 

@@ -1,6 +1,6 @@
 # retail-network-docs
 
-Domain documentation for **retail-network**: an large-scale retail and
+Domain documentation for **retail-network**: a large-scale retail and
 logistics network (catalogue, delivery promise, order sourcing, vendor
 connectivity, middle mile, last mile, tracking, node performance) modelled
 with Domain-Driven Design, and the one seam through which it connects to the
@@ -20,7 +20,7 @@ everything else is the design this site proposes.
 | --- | --- |
 | `model/model.yaml` | The canonical model. Every aggregate, invariant, command, event, consumer and relationship on the site exists here first. |
 | `scripts/check_model.py` | Consistency gate: publish/consume symmetry, states, and every CloudEvents type printed under `docs/`. |
-| `research/citations-ledger.json` | The grounded-citations ledger behind the Research pages. |
+| `research/citations-ledger.json` | The grounded-citations ledger (verbatim quotes and source URLs) is held privately, outside this repo. |
 | `docs/` | The site (Docusaurus). |
 | `apis/<context>/openapi.yaml` | REST contracts per context; `vendor-connectivity` is the Published Language the fleet's `network-fulfillment` conforms to. |
 
@@ -32,3 +32,7 @@ python3 scripts/check_model.py --pages
 npm run validate:mermaid
 npm start
 ```
+
+## Disclaimer
+
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
