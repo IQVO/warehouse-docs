@@ -35,7 +35,7 @@ Derived from: model.yaml → `contexts[order-sourcing].chart`
 slice positions are this page's estimate; the model gives a position only for
 the context.
 
-Omitted: the other nine contexts; their positions are on the
+Omitted: the other ten contexts; their positions are on the
 [network Core Domain Chart](/network/strategic-design/core-domain-chart).
 `delivery-promise`, the other Core context, sits higher and further right
 (`[0.85, 0.92]` in the model).

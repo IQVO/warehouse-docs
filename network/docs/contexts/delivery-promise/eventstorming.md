@@ -184,7 +184,7 @@ flowchart TB
     P1["Policy: the hold that<br/>reaches share signals"]:::policy
     E2["PromiseBookExhausted"]:::event
     OS["order-sourcing"]:::external
-    H5["Hotspot H5: no command opens<br/>a book, share formula not given"]:::hotspot
+    H5["Resolved H5: lazy opening,<br/>share formula, clock close"]:::hotspot
     CO --> C1
     C1 --> G0
     C1 --> G1
@@ -199,9 +199,9 @@ flowchart TB
 
 Derived from: `model.yaml → contexts[delivery-promise].aggregates[Promise]`,
 `.aggregates[PromiseBook]`, `.aggregates[DeliveryOffer].transitions`,
-`.publishes[PromiseBookExhausted].consumers`; H5 from
-`.aggregates[PromiseBook]` (states `OPEN`, `CLOSED`, no creating command; `share`
-with no formula).
+`.publishes[PromiseBookExhausted].consumers`; H5
+(resolved by G9) from `.aggregates[PromiseBook]` (`OpenBook`, `BookTimes`) and
+`.policies[LazyBookOpening, BookShare, CloseBooksAtCutoff]`.
 
 Omitted: the refusals (`ErrOfferNotQuotable`, `ErrPromiseCapacityExhausted`,
 `ErrBookClosed`, `ErrGroupSpansNodes`), listed on
@@ -255,8 +255,9 @@ Derived from: `model.yaml → contexts[delivery-promise].aggregates[Promise].tra
 `.aggregates[Promise].invariants` (`ErrPromiseHoldExpired`) with confirmation
 arriving asynchronously by event and no recovery policy in the model.
 
-Omitted: who triggers `CloseBook` (the model names no trigger; this pack proposes
-the clock at pickup cutoff minus handling time).
+Omitted: nothing about the trigger. A clock job closes every `OPEN` book at its
+`cutoffAt` (`policies[CloseBooksAtCutoff]`); holds are already refused from the
+`holdDeadline`, the cutoff minus handling time.
 
 ## 5. Re-promising when the path breaks
 
@@ -380,7 +381,7 @@ them.
 | H2 | An offer is per item; a promise covers a multi-line group with one `offerId` | `DeliveryOffer.description` vs `ShipmentGroup`, `PromiseMade.data` | 2 |
 | H3 | `TierOrderDeadline` has no owner, route or event | `policies[TierOrderDeadline]` | 2 |
 | H4 | The hot path is only as fresh as its slowest topic | `conventions.integration_rules` | 2 |
-| H5 | No command opens a book; no `share` formula; no `CloseBook` trigger | `aggregates[PromiseBook]` | 3 |
+| H5 | Resolved (G9): the first hold opens the book (`OpenBook`), `share` has a formula, a clock job closes the book at `cutoffAt` | `aggregates[PromiseBook]`, `policies[LazyBookOpening, BookShare, CloseBooksAtCutoff]` | 3 |
 | H6 | A `CustomerOrderPlaced` that arrives after hold expiry | `ErrPromiseHoldExpired`, asynchronous `ConfirmPromise` | 4 |
 | H7 | Capacity on revision is unspecified | `aggregates[PromiseBook].commands`, `policies[RepromiseOnRisk]` | 5 |
 | H8 | `FulfillmentLocked` has no stated use; packages carry no `promiseId` | `consumes[FulfillmentLocked]`, `PackageDelivered.data` | 6 |

@@ -440,7 +440,7 @@ sequenceDiagram
     participant B as PromiseBook
     participant DB as Postgres tx
     S->>UC: tick
-    UC->>DB: OPEN books with closesAt before now
+    UC->>DB: OPEN books with cutoffAt before now
     loop each book
         UC->>B: Close(now)
         alt already CLOSED
@@ -458,4 +458,4 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[delivery-promise].aggregates[PromiseBook]`
 (`transitions[OPEN, CLOSED]`, `invariants[ErrBookClosed]`).
 
-Omitted: the trigger is this pack's proposal; the model names none.
+Omitted: nothing. The trigger is the policy `CloseBooksAtCutoff`: a clock job at `cutoffAt`.

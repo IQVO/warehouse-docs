@@ -71,3 +71,12 @@ Vendor API; the canonical network ↔ fleet term table is on
 | "last 10% of the window" | Read here as the purchase order's ack window (issue to `ackBy`), not the scorecard window. The model does not say. |
 | Reject, expiry, promise-kept, feed-freshness | No `ul` definition: no denominator and, for feed freshness, no sampling rule. |
 | `PROVISIONAL` as a grade | `Grade` is `A`, `B`, `C` or `D` in the value object, but the `ul` entry and the event's `grade` field also carry `PROVISIONAL`. |
+
+## Inbound metrics
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+| Term | Definition | Code identifier | Not to be confused with |
+| --- | --- | --- | --- |
+| **Inbound Timeliness** | p95 minutes between a shipment's `shippedAt` (`InboundShipmentShipped`) and the `receivedAt` of its `InboundReceiptSubmitted`. Informational. | `scorecard.Metrics.InboundTimelinessP95Minutes` | Feed freshness. |
+| **Inbound Accuracy Rate** | Share of cartons in receipts with status `RECEIVED`. Informational; mixes node and seller causes (gap G52). | `scorecard.Metrics.InboundAccuracyRate` | A reject rate on purchase orders. |

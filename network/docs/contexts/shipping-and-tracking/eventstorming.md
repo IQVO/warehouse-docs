@@ -125,8 +125,8 @@ flowchart TB
     E2["PackageHandedOver"]:::event
     NP["node-performance"]:::external
     CO["customer-ordering"]:::external
-    H1["Hotspot: no node types,<br/>station vs sort centre"]:::hotspot
-    H3["Hotspot: no departure kind,<br/>VSC effect not modelled"]:::hotspot
+    H1["Resolved: LoadArrived<br/>carries nodeType"]:::hotspot
+    H3["Resolved: LoadDeparted carries<br/>departureKind"]:::hotspot
     VC --> F1
     LH --> F2
     LH --> F3
@@ -176,7 +176,7 @@ flowchart TB
     E3["PackageDelivered"]:::event
     DS["delivery-promise,<br/>order-sourcing"]:::external
     CO["customer-ordering"]:::external
-    H2["Hotspot: no HANDED_OVER to<br/>AT_STATION, direct injection"]:::hotspot
+    H2["Resolved: HANDED_OVER to<br/>AT_STATION, direct injection"]:::hotspot
     LM --> F4
     LM --> F5
     F4 --> P0
@@ -274,8 +274,8 @@ Omitted: `ErrJourneyClosed` on a closed journey; the analytics sink for
 | Printable label not modelled | 1 | `vendor-connectivity` `po.Label` is `labelRef + trackingNumber + carrier`; no route here renders a label |
 | `StartJourney` has no trigger | 1 | `aggregates[PackageJourney].commands` lists it; no policy, route or event starts it |
 | `VoidLabel` caller and journey effect | 1b | `rest` has `POST /labels/{labelRef}:void`; no `inbound` row; `PackageJourney` has no exit from `LABELLED` |
-| No node types | 2a | `IN_TRANSIT -> AT_STATION` transition; `consumes` has no `node-topology` event |
-| No `HANDED_OVER -> AT_STATION` | 2b | `lane_rules.allowed` has `FULFILLMENT_CENTER -> DELIVERY_STATION`; `PackageJourney.transitions` has no such edge |
-| No departure kind; `VendorShipmentConfirmed` effect | 2a | `policies[HandoverOnFirstScan]` says "PICKUP-load"; `linehaul-transportation` `publishes[LoadDeparted].data` has no kind; no `LABELLED -> LABELLED` edge |
+| Resolved (G3): node types | 2a | `LoadArrived` carries `nodeType`; policy `ScanTypeFromLoadFacts` |
+| Resolved (G3): `HANDED_OVER -> AT_STATION` | 2b | `lane_rules.allowed` has `FULFILLMENT_CENTER -> DELIVERY_STATION`; `PackageJourney.transitions` now has the edge (direct injection) |
+| Resolved (G3): departure kind; `VendorShipmentConfirmed` effect still open | 2a | `policies[HandoverOnFirstScan]` reads `departureKind` PICKUP from `LoadDeparted`; no `LABELLED -> LABELLED` edge |
 | Expected leg time and tolerance | 3 | `policies[ExceptionOnSilence]`; `consumes` has no departure, lane or wave event |
 | No trigger for `ReturnToSender`, `DeclareLost` | 3 | `aggregates[PackageJourney].commands`; `last-mile-delivery` `policies[RetryNextWave]` publishes no event |

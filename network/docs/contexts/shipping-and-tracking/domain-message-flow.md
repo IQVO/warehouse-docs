@@ -87,11 +87,11 @@ Derived from: `model.yaml → contexts[shipping-and-tracking].consumes`,
 
 Omitted: `VendorShipmentConfirmed` also goes to `order-sourcing` and
 `node-performance`, and `LoadArrived` also to `last-mile-delivery` (their
-pages). Telling a delivery station from a sortation centre needs node types
-this context does not consume (a model gap, see the
-[canvas open questions](/network/contexts/shipping-and-tracking/bounded-context-canvas)).
-A direct-injection lane from the vendor node to the station has no
-`HANDED_OVER -> AT_STATION` edge in the model.
+pages). A delivery station is told from a sortation centre by the `nodeType`
+that `LoadArrived` carries, and a pickup from a linehaul departure by its
+`departureKind` (policy `ScanTypeFromLoadFacts`). A direct-injection lane from
+the vendor node to the station arrives through the edge
+`HANDED_OVER -> AT_STATION`.
 
 ## 3. Out for delivery and delivered
 

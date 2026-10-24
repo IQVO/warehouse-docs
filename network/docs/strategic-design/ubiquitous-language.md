@@ -23,25 +23,39 @@ are the proposed Go package and type names. Each context's own
 | **Acknowledgement** | `vendor-connectivity` | The vendor's single, whole-order accept or reject. | `po.AckDecision` |
 | **Availability Basis** | `offer-availability` | Why the node gave that number: PHYSICAL stock, THROUGHPUT_CONSTRAINED by its capacity before the next cutoff, or UNKNOWN. | `listing.Basis` |
 | **Available Quantity** | `offer-availability` | What a node claims it can ship now for one listing. | `listing.Availability.AvailableQty` |
+| **Book Share** | `delivery-promise` | The number of orders a promise book may hold for one pickup cutoff: the node's declared limit for the window, scaled by the policy's capacitySharePercent, at least 1. | `book.Capacity.Share` |
+| **Break Case** | `seller-inbound` | Opening a sealed case at a vendor node to release its eaches. A vendor-node operation, not a network event; quantities stay in eaches. | `(vendor node operation, not modelled)` |
 | **Capacity Hold** | `delivery-promise` | A provisional reservation on a promise book released if the order is not placed in time. | `book.Capacity.Provisional` |
+| **Carton** | `seller-inbound` | One physical outer carton of a shipment, identified by an SSCC and holding the contents it declares. | `inbound.Carton` |
+| **Case Pack** | `seller-inbound` | The quantity of eaches in one case of an item (unitsPerPack). Fixed by the case's GTIN; a different quantity needs a different GTIN. | `catalog.PackLevelDef.UnitsPerPack` |
 | **Catalog Item** | `offer-availability` | The network's own entry for a product, independent of who ships it. | `catalog.Item` |
 | **Checkout** | `customer-ordering` | The act of turning a cart into a customer order, promising every group. | `order.PlaceOrder` |
 | **Customer Order** | `customer-ordering` | What the shopper bought, with a promise per shipment group. | `order.CustomerOrder` |
 | **Cutoff** | `node-topology` | A local time by which a node declares packages are ready to be handed over; the network schedules one pickup departure per cutoff. | `node.CutoffSlot` |
 | **Declared vs Measured** | `node-performance` | What a vendor says (profile) against what the network observes (scorecard). | `(principle)` |
+| **Default Outbound Lane** | `linehaul-transportation` | The lane a pickup departure uses, chosen by linehaul-transportation among the node's open ground lanes (sort centre first, then shortest nominal transit, then lowest lane id); node-topology declares none. | `schedule.DefaultOutboundLane` |
 | **Deliver-By Window** | `delivery-promise` | deliverByEarliest..deliverByLatest shown to the customer. | `promise.PromiseTerms` |
 | **Delivery Attempt** | `last-mile-delivery` | One try to hand a package over: DELIVERED or FAILED with a reason. | `route.Attempt` |
 | **Delivery Offer** | `delivery-promise` | A quoted delivery window for an item, quantity, destination and tier, valid until it expires. | `offer.DeliveryOffer` |
 | **Delivery Service Partner (DSP)** | `last-mile-delivery` | An independent delivery business working for a station. | `partner.DeliveryServicePartner` |
 | **Delivery Wave** | `last-mile-delivery` | A station's dispatch slot: induct cutoff, delivery window and stop capacity. | `wave.DeliveryWave` |
 | **Departure** | `linehaul-transportation` | One scheduled trip on a lane with a cutoff and a capacity. | `departure.Departure` |
+| **Each** | `seller-inbound` | The lowest packaging level, intended for individual resale and the unit of every quantity in the network's ledgers. | `catalog.PackLevel.EACH` |
+| **EAN** | `seller-inbound` | A 13-digit GTIN as printed on a consumer unit. Treated as a GTIN input like any other length. | `catalog.Gtin` |
 | **Fulfillment Assignment** | `order-sourcing` | The decision of which node and path fulfil one shipment group. | `assignment.FulfillmentAssignment` |
 | **Full Feed** | `offer-availability` | A feed that is the complete truth for its node; omitted listings become zero. | `feed.InventoryFeed.FullUpdate` |
 | **Grade** | `node-performance` | A, B, C or D; PROVISIONAL below the observation minimum. | `scorecard.Grade` |
+| **GTIN** | `seller-inbound` | The global trade item number identifying an item at one packaging level. Stored as 14 digits, zero-left-padded; accepted as 8, 12, 13 or 14 digits with a valid check digit. | `catalog.Gtin` |
 | **Handicap** | `delivery-promise` | The scorecard-driven delay applied to a node's shipBy. | `promise.ScorecardHandicap` |
 | **Handling Time** | `node-topology` | Declared time from order release to a package ready for handover. | `node.OperationalProfile.HandlingTime` |
 | **Handover** | `shipping-and-tracking` | The instant a vendor node's package enters the network. | `journey.HandedOver` |
+| **Hold Deadline** | `delivery-promise` | The instant from which a promise book accepts no new hold: the pickup cutoff minus the node's handling time. | `book.BookTimes.HoldDeadline` |
+| **Inbound Limits** | `node-topology` | A receiving node's declared carton weight and size limits, whether it accepts pallets and whether it requires an SSCC on every carton. | `node.OperationalProfile.Inbound` |
+| **Inbound Plan** | `seller-inbound` | A seller's declaration, in eaches, of what it will send to one node and with which packing option. | `inbound.InboundPlan` |
+| **Inbound Receipt** | `vendor-connectivity` | A vendor's carton-level report of what arrived for one inbound shipment: per SSCC a status, the eaches received per GTIN and any compliance codes. | `submission.InboundReceipt` |
+| **Inbound Shipment** | `seller-inbound` | One physical consignment of a plan to a node: its cartons, labels and receipt outcome. | `inbound.InboundShipment` |
 | **Induction** | `last-mile-delivery` | Placing an arrived package into a wave. | `wave.InductPackage` |
+| **Inner Pack** | `seller-inbound` | An intermediate package of several eaches of one item. In the model but not used by any flow in the first version. | `catalog.PackLevel.INNER` |
 | **Inventory Feed** | `offer-availability` | One vendor submission of availability for one node, full or partial. | `feed.InventoryFeed` |
 | **Label** | `vendor-connectivity` | labelRef + trackingNumber + carrier; never the address. | `po.Label` |
 | **Lane** | `node-topology` | A directed, mode-specific connection between two nodes. | `lane.Lane` |
@@ -50,13 +64,21 @@ are the proposed Go package and type names. Each context's own
 | **Late Ack Rate** | `node-performance` | Share of purchase orders acknowledged in the last 10% of the window or expired. | `scorecard.Metrics.LateAckRate` |
 | **Listing** | `offer-availability` | A catalogue item offered from one node. | `listing.Listing` |
 | **Load** | `linehaul-transportation` | The packages consolidated onto one departure. | `load.Load` |
+| **Logistic Unit** | `seller-inbound` | Any combination of items packed for transport or storage and identified by an SSCC, such as a carton or a pallet. | `inbound.Carton` |
+| **Master Carton** | `seller-inbound` | An outer carton holding one case: identical sellable units of one item, labelled with an SSCC. A HOMOGENEOUS_CASE carton in the model. | `inbound.Carton (kind HOMOGENEOUS_CASE)` |
 | **Middle Mile** | `linehaul-transportation` | Transport between nodes: vendor node to sortation centre, sortation centre to delivery station, air. | `(context)` |
+| **Mixed Carton** | `seller-inbound` | A carton holding more than one item. It has no pack GTIN: it is a logistic unit identified by its SSCC and carton manifest only. | `inbound.Carton (kind MIXED)` |
 | **Node** | `node-topology` | One physical building of the network, of exactly one node type. | `node.Node` |
 | **Node Operator** | `node-topology` | Who runs the building: NETWORK or a VENDOR. | `node.Operator` |
 | **Node Type** | `node-topology` | FULFILLMENT_CENTER, INBOUND_CROSS_DOCK, RETURNS_CENTER, SORTATION_CENTER, DELIVERY_STATION or AIR_HUB. | `node.Type` |
 | **On-Time Handover Rate** | `node-performance` | Share of packages handed over before requiredShipBy. | `scorecard.Metrics.OnTimeHandoverRate` |
 | **Operational Profile** | `node-topology` | The node's declared operating hours, cutoffs, handling time, throughput cap and time zone, versioned by profileRevision. | `node.OperationalProfile` |
+| **Owner / Seller of Record** | `seller-inbound` | Whose stock it is. On the network ownerRef equals the sellerId; stock, listings and reservations are segregated by it. | `seller.OwnerRef` |
+| **Owner Reference** | `offer-availability` | The opaque ownerRef on a listing: the seller of record of the stock. Empty means the vendor's own stock. | `listing.OwnerRef` |
+| **Pack Level** | `offer-availability` | One of EACH, INNER, CASE or PALLET. A level other than EACH knows its child level's GTIN and how many of it it holds. | `catalog.PackLevel` |
 | **Package Journey** | `shipping-and-tracking` | The customer-visible timeline of one package. | `journey.PackageJourney` |
+| **Packaging Hierarchy** | `offer-availability` | The pack levels of one catalogue item (each, inner pack, case, pallet), each with its own GTIN and a fixed content quantity. Quantities stay in eaches. | `catalog.PackagingHierarchy` |
+| **Packing Option** | `seller-inbound` | INDIVIDUAL (eaches packed freely) or CASE_PACKED (cartons are case packs of a declared CASE level). | `inbound.PackingOption` |
 | **Path Lock** | `order-sourcing` | The point after which an assignment never changes node: the vendor's acceptance. | `assignment.Lock` |
 | **Pickup Departure** | `linehaul-transportation` | The departure that collects packages at a vendor node at one of its declared cutoffs. | `departure.KindPickup` |
 | **Promise** | `delivery-promise` | The network's commitment of a delivery window for one shipment group. | `promise.Promise` |
@@ -72,13 +94,19 @@ are the proposed Go package and type names. Each context's own
 | **Route** | `last-mile-delivery` | One van's ordered stops in one wave. | `route.Route` |
 | **Scan** | `shipping-and-tracking` | One observation of a package at a node. | `journey.Scan` |
 | **Scorecard** | `node-performance` | A node's measured performance over a rolling window, with a grade. | `scorecard.NodeScorecard` |
+| **Seller** | `seller-inbound` | An organisation that sends its own stock to the network. Distinct from a Vendor, which operates fulfillment nodes. | `seller.SellerAccount` |
 | **Service Area** | `node-topology` | The postal prefixes one delivery station serves. | `servicearea.ServiceArea` |
 | **Service Tier** | `delivery-promise` | SAME_DAY, NEXT_DAY, TWO_DAY or STANDARD. | `promise.Tier` |
 | **Ship-By** | `delivery-promise` | The pickup cutoff at the witness node the package must be ready for. | `promise.PromiseTerms.ShipBy` |
 | **Ship-To** | `customer-ordering` | The delivery address; synthetic PII held only here. | `order.ShipTo` |
+| **Ship-To Snapshot** | `shipping-and-tracking` | The encrypted copy of the ship-to address kept to print a label; never published and purged 30 days after the journey closes. | `label.ShipToSnapshot` |
 | **Shipment Group** | `delivery-promise` | The lines of an order promised and shipped together from one node. | `promise.ShipmentGroup` |
 | **Shipping Label** | `shipping-and-tracking` | What is printed on the package; the only artefact outside customer-ordering that carries the address. | `label.ShippingLabel` |
 | **Shopper** | `customer-ordering` | The (synthetic) customer placing orders. | `shopper.Shopper` |
+| **Sort Dwell** | `node-topology` | Declared minutes a package normally spends inside a sortation centre or air hub between arrival and departure; declared only by those node types. | `node.OperationalProfile.SortDwellMinutes` |
+| **SSCC** | `seller-inbound` | The 18-digit serial shipping container code identifying one logistic unit. Unique network-wide, with a mod-10 check digit. | `inbound.Sscc` |
+| **Stop** | `last-mile-delivery` | The packages of one route that share one stop key; wave capacity is counted in stops. | `route.Stop` |
+| **Stop Key** | `shipping-and-tracking` | An opaque keyed hash of the normalized ship-to address, put on the label event so last-mile-delivery can group packages into stops without ever receiving an address. | `label.StopKey` |
 | **Submission / Transaction** | `vendor-connectivity` | An asynchronous vendor write and its outcome, reconciled by transactionId. | `submission.Submission` |
 | **Throughput Cap** | `node-topology` | Declared maximum orders per time unit a node accepts. | `node.ThroughputCap` |
 | **Tracking Number** | `shipping-and-tracking` | The network-wide unique id of one package. | `journey.TrackingNumber` |
@@ -92,7 +120,7 @@ are the proposed Go package and type names. Each context's own
 
 | Node type | Operator | Capabilities | Meaning |
 | --- | --- | --- | --- |
-| `FULFILLMENT_CENTER` | VENDOR | OUTBOUND | Stores sellable inventory, picks, packs and hands packages to the network at a pickup departure. |
+| `FULFILLMENT_CENTER` | VENDOR | OUTBOUND, INBOUND | Stores sellable inventory, receives inbound stock (including seller shipments), picks, packs and hands packages to the network at a pickup departure. |
 | `INBOUND_CROSS_DOCK` | VENDOR | INBOUND | Receives bulk inbound and pushes it into fulfillment centres. Never a ship-from node for customer orders. |
 | `RETURNS_CENTER` | VENDOR | RETURNS | The return location a customer return is routed to. |
 | `SORTATION_CENTER` | NETWORK | SORT | Sorts packages by final destination and consolidates them onto outbound loads. |

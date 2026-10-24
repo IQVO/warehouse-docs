@@ -244,3 +244,25 @@ line, kept 30 days; one event per applied feed.
 | Read model | Source events | Used for | Why it is not an aggregate |
 | --- | --- | --- | --- |
 | `NodeStatusView` | `node-topology` `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | `ErrNodeNotSellable` on `RestoreListing`; deciding which listings `SuppressOnNodeUnavailable` acts on | It holds no rule of its own; it is a local copy of `node-topology`'s facts, rebuilt from the topic, and this context never changes it by command. |
+
+## Packaging hierarchy and owner
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+**CatalogItem** gains optional `Identifiers{gtin}` (the each-level GTIN) and a
+`PackagingHierarchy` of `PackLevelDef{level, gtin, childGtin?, unitsPerPack, dimsMm?, grossWeightG?, active}`. New commands: `DeclarePackaging`, `RetirePackLevel`. New events: `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`.
+
+| Invariant | Error |
+| --- | --- |
+| A GTIN is 8, 12, 13 or 14 digits with a valid mod-10 check digit, stored as 14 digits | `ErrInvalidGTIN` |
+| A GTIN identifies exactly one (item, level) | `ErrGtinAlreadyAssigned` |
+| Once a level is active its `unitsPerPack` never changes for that GTIN: a new quantity is a new GTIN at that level and a re-declaration of every level above, and the old level is retired | `ErrPackQuantityImmutable` |
+| A level's child level is lower than the level itself | `ErrPackLevelOrder` |
+| `unitsPerPack` is at least 2 for every level above `EACH` and 1 for `EACH` | `ErrInvalidPackQuantity` |
+| Variable-measure GTINs (indicator digit 9) are rejected | `ErrVariableMeasureUnsupported` |
+
+**Listing** gains an optional `OwnerRef`. The invariant `ErrDuplicateListing`
+becomes "one listing per (`catalogItemId`, `nodeId`, `ownerRef`)"; an absent
+`ownerRef` is its own owner. The policy `SegregatedByOwner` states that
+availability is per listing and never summed, merged or moved between owners.
+This context does not check that an `ownerRef` is an active seller (gap G48).

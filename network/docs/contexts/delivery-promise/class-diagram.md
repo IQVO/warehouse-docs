@@ -224,11 +224,11 @@ classDiagram
         -nodeId string
         -pickupDepartureId string
         -cutoffAt time.Time
-        -closesAt time.Time
+        -holdDeadline time.Time
         -capacity Capacity
         -state BookState
         -version int
-        +Open(nodeId, departureId, cutoffAt, closesAt, share)$ PromiseBook
+        +Open(nodeId, departureId, cutoffAt, holdDeadline, share)$ PromiseBook
         +Hold(now) exhausted bool
         +Confirm() error
         +Release(kind) error
@@ -267,9 +267,10 @@ Omitted: `GroupLine`, `Tier` and `WitnessPath`, shared with diagram 1.
 description and invariant. `lines` on the offer is this pack's reading for a
 multi-line group (open question 1 on
 [the canvas page](/network/contexts/delivery-promise/bounded-context-canvas)).
-`cutoffAt` and `closesAt` on the book are proposed: `ErrBookClosed` needs the
-instant "pickup cutoff minus handling time", which the book must know. `Open`
-is the proposed creating constructor the model does not name (open question 7).
+`cutoffAt` and `holdDeadline` on the book are the model's `BookTimes`:
+`ErrBookClosed` needs the instant "pickup cutoff minus handling time", which the
+book must know. `Open` is the constructor behind the model's `OpenBook` command
+(policy `LazyBookOpening`).
 `Hold` reports whether the book became exhausted, so the use case can raise
 `PromiseBookExhausted`.
 

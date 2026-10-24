@@ -110,3 +110,15 @@ abbreviate the full event names listed in the table.
   right to act and turns a synchronous in-org answer into a transaction
   outcome; it does not keep a second copy of the truth.
 - **No Shared Kernel.** No code or table is shared with any neighbour.
+
+## Seller inbound
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+| Neighbour | Direction | Pattern | Channel | Messages | Why |
+| --- | --- | --- | --- | --- | --- |
+| `seller-inbound` | U → D (VC downstream) | Customer/Supplier | Kafka `retailnetwork.seller-inbound.events` | `InboundShipmentLabelled`, `InboundShipmentShipped`, `InboundShipmentReceived` | The Vendor API needs the carton manifest and the shipment's closing status; `seller-inbound` publishes what it needs. |
+| `seller-inbound` | U → D (VC upstream) | Customer/Supplier | Kafka `retailnetwork.vendor-connectivity.events` | `InboundReceiptSubmitted` | The vendor's carton-level answer is relayed; `seller-inbound` applies it. |
+| `offer-availability` | U → D | Conformist | Kafka `retailnetwork.offer-availability.events` | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | Packaging belongs to the catalogue. |
+| `node-performance` | U → D (NP downstream) | Conformist | Kafka `retailnetwork.vendor-connectivity.events` | `InboundReceiptSubmitted` (besides the seven listed above) | Inbound timeliness and accuracy observations. |
+| `network-fulfillment` (fleet) | Vendor API | OHS + PL | REST | `GET /vendor/inbound-shipments`, `GET /vendor/inbound-shipments/{shipmentId}`, `POST /vendor/inbound-receipts` | The seam is unchanged: the fleet calls the Vendor API and nothing else. |

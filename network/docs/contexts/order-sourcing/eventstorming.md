@@ -309,9 +309,9 @@ Derived from: model.yaml → `contexts[order-sourcing].consumes`
 | H1 Promise-book hold stays on the witness node | 1 | `business_decisions[0]` (the assigned node may differ from the witness) against `delivery-promise` `PromiseBook` (capacity held on the witness cutoff); no policy moves the hold, and `delivery-promise` names no use for `FulfillmentLocked` |
 | H2 No `releaseAt` when no candidate is left | 2 | `policies[VirtualQueue]` derives `releaseAt` from the best candidate; `QUEUED → UNSOURCEABLE` happens only by `ReleaseToNode` |
 | H3 Cross-region as penalty vs rule | 1 | `business_decisions[4]` ("only when it is the only way") against `policies[AssignmentCost]` (`crossRegionPenalty`) |
-| H4 Acceptance after cancellation | 4 | `CancelAssignment` from `RELEASED` against `vendor-connectivity` `ErrCancelAfterAcknowledgement` (cancel only while `ISSUED`) |
+| H4 Acceptance after cancellation (known residual, G12) | 4 | `CancelAssignment` from `RELEASED` against `vendor-connectivity` `ErrCancelAfterAcknowledgement` (cancel only while `ISSUED`); an acceptance that arrives after the cancel is only logged (`policies[AcceptanceAfterCancelOnlyLogged]`) |
 | H5 `ApplyRevisedPromise` raises no event | 4 | `aggregates[FulfillmentAssignment].events` has none for `UNSOURCEABLE → QUEUED` |
-| H6 `UNSOURCEABLE` cannot be cancelled | 4 | `transitions` (no `UNSOURCEABLE → CANCELLED`) against `customer-ordering` `CancelOnUnfulfillable` |
+| H6 `UNSOURCEABLE` can be cancelled (resolved) | 4 | `transitions` now has `UNSOURCEABLE → CANCELLED`, so `customer-ordering` `CancelOnUnfulfillable` has a target |
 | H7 Exclusion per promise revision without `revisionNo` | 3 | `invariants` (`ErrNodeExcluded`, "same promise revision") against `value_objects` (`PromiseConstraint` has no revision) |
 | H8 Multi-package delivery | 5 | `FulfillmentShipped.trackingNumbers` (several) against `PackageDelivered` (one `trackingNumber`) |
 | H9 Revision of an assignment that is not `UNSOURCEABLE` | 4 | `delivery-promise` `RepromiseOnRisk` also fires on cancelled departures and package exceptions; the only transition is from `UNSOURCEABLE` |

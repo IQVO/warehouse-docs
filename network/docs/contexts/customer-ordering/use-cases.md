@@ -136,9 +136,12 @@ Error responses use `application/problem+json` (RFC 9457) with `type`
 - **Idempotency:** `Idempotency-Key`, and a cancel of a `CANCELLED` order is
   a no-op.
 - **Race:** a lock that `order-sourcing` has made but this context has not
-  consumed yet is invisible here. The cancel succeeds, and `order-sourcing`
-  then refuses its `CancelAssignment` with its own `ErrCancelAfterLock`. The
-  model has no compensation for this.
+  consumed yet is invisible here. The request is accepted, and `order-sourcing`
+  answers `FulfillmentCancelRefused` (`CANCEL_AFTER_LOCK`); the group returns to
+  `LOCKED` (command `RefuseGroupCancellation`) and the vendor ships. A cancel
+  is only a request: `FulfillmentCancelled` (`ConfirmGroupCancelled`) is what
+  makes a group `CANCELLED`, and this context's `ErrCancelAfterLock` is
+  advisory.
 
 ## CancelOrder (policy CancelOnUnfulfillable)
 

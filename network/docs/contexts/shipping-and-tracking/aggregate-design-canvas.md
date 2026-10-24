@@ -147,10 +147,10 @@ this context does not receive.
 | Source fact | Journey state before | State after | Note |
 | --- | --- | --- | --- |
 | `VendorShipmentConfirmed` (per tracking number) | `LABELLED` | `LABELLED` | Stored as a timeline scan at the vendor node, not applied. The model has no `LABELLED -> LABELLED` edge, and handover is the network's own scan (`HandoverOnFirstScan`). *Gap: the model does not say what this event does to the journey.* |
-| First `LoadDeparted` naming the tracking number | `LABELLED` | `HANDED_OVER` | The pickup departure at the vendor node. Raises `PackageHandedOver` with `handedOverAt = departedAt`, `nodeId = originNodeId`. *Gap: the event has no departure kind, so "PICKUP-load" is inferred from the state.* |
+| First `LoadDeparted` naming the tracking number | `LABELLED` | `HANDED_OVER` | The pickup departure at the vendor node. Raises `PackageHandedOver` with `handedOverAt = departedAt`, `nodeId = originNodeId`. The event carries `departureKind`; `PICKUP` marks the pickup departure (policy `ScanTypeFromLoadFacts`). |
 | `LoadArrived` at a sortation centre or air hub | `HANDED_OVER` or `IN_TRANSIT` | `IN_TRANSIT` | |
 | Later `LoadDeparted` | `IN_TRANSIT` | `IN_TRANSIT` | |
-| `LoadArrived` at a delivery station | `IN_TRANSIT` | `AT_STATION` | *Gap: this context has no node-type view to tell a station from a sortation centre. A direct-injection arrival from `HANDED_OVER` has no edge.* |
+| `LoadArrived` at a delivery station | `IN_TRANSIT` | `AT_STATION` | `LoadArrived` carries `nodeType`; `DELIVERY_STATION` is a station arrival. A direct-injection arrival moves `HANDED_OVER` to `AT_STATION` (policy `ScanTypeFromLoadFacts`). |
 | `PackageOutForDelivery` | `AT_STATION` | `OUT_FOR_DELIVERY` | |
 | `DeliveryAttempted`, `outcome` `DELIVERED` | `OUT_FOR_DELIVERY` | `DELIVERED` | Raises `PackageDelivered` with `deliveredAt = at`. |
 | `DeliveryAttempted`, `outcome` `FAILED` | `OUT_FOR_DELIVERY` | `AT_STATION` | The package goes back to the station for the next wave (`last-mile-delivery` `RetryNextWave`). |

@@ -125,3 +125,12 @@ the changes the fleet needs are on [Fleet changes](/network/integration/fleet-ch
 | `DISCONTINUED` | none today | — |
 | no reason code: the PO goes `EXPIRED` | `ACKNOWLEDGEMENT_DEADLINE_MISSED` | Nothing is sent after `ackBy` |
 | no reason code: the transaction ends `FAILURE` | `SUBMISSION_FAILED` | The PO returns to `ISSUED` on the network side and expires at `ackBy` unless acknowledged again |
+
+## Inbound terms
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+| Term | Definition | Code identifier | Not to be confused with |
+| --- | --- | --- | --- |
+| **Inbound Receipt** | A vendor's carton-level report of what arrived for one inbound shipment: per SSCC a status, the eaches received per GTIN and any compliance codes. | `submission.InboundReceipt` | A purchase-order acknowledgement, which answers an order the network sent. |
+| **ownerRef** (on the Vendor API) | The seller of record of the cartons: the `sellerId` of `seller-inbound` (carried on the poll as `sellerId`, kept by the vendor as its own `ownerRef`), opaque to the vendor. | `InboundShipmentView.sellerId` | The vendor. |

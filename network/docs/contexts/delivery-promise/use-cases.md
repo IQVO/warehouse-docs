@@ -35,7 +35,7 @@ is not a use case either: it changes no aggregate.
 | `JudgePromise` | `JudgePromise` | `JudgeOnDelivery`: `PackageDelivered` | Kafka consumer `promise-lifecycle` |
 | `ReleaseExpiredHolds` | `ReleaseExpiredHolds`, `ReleaseCapacity` | clock | scheduler (proposed every minute) |
 | `ExpireOffers` | `ExpireOffers` | clock | scheduler (proposed every minute) |
-| `CloseBook` | `CloseBook` | clock, at pickup cutoff minus handling time | scheduler (the model names no trigger) |
+| `CloseBook` | `CloseBook` | clock, at the pickup `cutoffAt` | scheduler (policy `CloseBooksAtCutoff`) |
 
 ## How a change commits
 
@@ -348,9 +348,10 @@ no HTTP reply: the error column says what the consumer does instead.
 
 ## CloseBook
 
-- **Actor / trigger**: the clock, at the witness pickup cutoff minus the node's
-  handling time (the instant `ErrBookClosed` protects). The model names no
-  trigger; this is the pack's proposal.
+- **Actor / trigger**: the clock, at the witness pickup's `cutoffAt` (policy
+  `CloseBooksAtCutoff`). Holds are refused earlier, from the `holdDeadline`,
+  the cutoff minus the node's handling time (the instant `ErrBookClosed`
+  protects).
 - **Inbound adapter**: scheduler.
 - **Main flow**: `CloseBook` (`OPEN` → `CLOSED`); save.
 - **Errors**: already `CLOSED`: no-op.

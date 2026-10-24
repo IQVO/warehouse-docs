@@ -53,20 +53,41 @@ classDiagram
         -handlingTime Duration
         -cutoffs CutoffSlot[]
         -throughputCap ThroughputCap
-        -sortDwell Duration
+        -sortDwellMinutes int optional
         -declaredBy DeclaredBy
         -declaredAt Time
     }
     class CutoffSlot {
         <<ValueObject>>
         -localTime LocalTime
+        -days Weekday[]
         -maxOrders int optional
+    }
+    class OperatingHours {
+        <<ValueObject>>
+        -monday DayHours optional
+        -tuesday DayHours optional
+        -wednesday DayHours optional
+        -thursday DayHours optional
+        -friday DayHours optional
+        -saturday DayHours optional
+        -sunday DayHours optional
+    }
+    class DayHours {
+        <<ValueObject>>
+        -start LocalTime
+        -end LocalTime
     }
     class ThroughputCap {
         <<ValueObject>>
         -value int
         -timeUnit TimeUnit
         -unit ORDER
+    }
+    class TimeUnit {
+        <<Enumeration>>
+        HOUR
+        DAY
     }
     class DeclaredBy {
         <<Enumeration>>
@@ -83,7 +104,10 @@ classDiagram
     Node *-- OperationalProfile : current revision
     Node --> Status
     OperationalProfile *-- CutoffSlot : 0..*
+    OperationalProfile *-- OperatingHours
+    OperatingHours *-- DayHours : 0..7
     OperationalProfile *-- ThroughputCap
+    ThroughputCap --> TimeUnit
     OperationalProfile --> DeclaredBy
 ```
 
@@ -93,9 +117,10 @@ Derived from: model.yaml → `contexts[node-topology].aggregates[Node]`
 Omitted: the read accessors and the `Err...` variables (on
 [Aggregate Design Canvas](/network/contexts/node-topology/aggregate-design-canvas)).
 The model shows one `OperationalProfile` per `Node`; the repository keeps
-every past revision, which the aggregate never edits. `OperatingHours` and
-`TimeUnit` are named here but their inner structure is not given by the
-model. `version` is the optimistic-concurrency counter, not a domain field.
+every past revision, which the aggregate never edits. `OperatingHours` is the
+map `{monday … sunday: {start, end}}` (`HH:mm`); a missing day is closed.
+`CutoffSlot.days` defaults to every operating day. `sortDwellMinutes` is set
+only on `SORTATION_CENTER` and `AIR_HUB` nodes. `version` is the optimistic-concurrency counter, not a domain field.
 
 ## 2. Node aggregate: identity, capabilities, policy and repository
 
@@ -252,8 +277,9 @@ Derived from: model.yaml → `contexts[node-topology].aggregates[ServiceArea|Reg
 
 Omitted: `deliveryStationNodeId` and `regionId` are ids, not associations:
 each aggregate is loaded and saved on its own. `ServiceArea` and `Region`
-have a single state each (`ASSIGNED`, `DEFINED`), so no status enumeration
-is drawn.
+have a single state each (`ASSIGNED`, `DEFINED`; `ServiceArea` has one
+transition, `ASSIGNED` to `ASSIGNED` on `AssignServiceArea`), so no status
+enumeration is drawn.
 
 ## 5. Domain events
 
@@ -366,13 +392,13 @@ Proposed packages, under `internal/`:
 
 | Package | Contents |
 | --- | --- |
-| `internal/domain/node` | `Node`, `OperationalProfile`, `CutoffSlot`, `ThroughputCap`, `NodeCapabilities`, `GeoLocation`, `VendorRef`, `Type`, `Subtype`, `Operator`, `Status`, `DefaultCapabilitiesByType`, the six `Err...` of `Node` |
+| `internal/domain/node` | `Node`, `OperationalProfile`, `CutoffSlot`, `ThroughputCap`, `NodeCapabilities`, `GeoLocation`, `VendorRef`, `Type`, `Subtype`, `Operator`, `Status`, `DefaultCapabilitiesByType`, the nine `Err...` of `Node` |
 | `internal/domain/lane` | `Lane`, `NominalTransit`, `LaneMode`, the allowed type pairs, the four `Err...` of `Lane` |
-| `internal/domain/servicearea` | `ServiceArea`, `ErrNotADeliveryStation`, `ErrStaleAssignmentVersion` |
+| `internal/domain/servicearea` | `ServiceArea`, `ErrNotADeliveryStation`, `ErrStaleAssignmentVersion`, `ErrUnknownRegion` |
 | `internal/domain/region` | `Region`, `ErrRegionCodeTaken` |
 | `internal/application/usecases` | the nine command use cases |
 | `internal/application/ports` | the four repositories, `EventPublisher`, `UnitOfWork`, `Clock`, `IdempotencyStore` |
-| `internal/adapters/inbound/http` | the thirteen REST routes, problem+json mapping, `Idempotency-Key` handling |
+| `internal/adapters/inbound/http` | the thirteen REST routes, problem+json mapping (the shared `not-found`, `illegal-transition`, `concurrent-update` and `validation-failed` problems), `Idempotency-Key` handling |
 | `internal/adapters/inbound/kafka` | empty: the context consumes no topic |
 | `internal/adapters/outbound/postgres` | repositories, unit of work, outbox writer, idempotency store, migrations |
 | `internal/adapters/outbound/kafka` | outbox relay to `retailnetwork.node-topology.events`, CloudEvents encoder |

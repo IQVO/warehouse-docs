@@ -17,17 +17,17 @@ One section per command in the model. Each would live in
 [Domain Events](/network/contexts/node-topology/domain-events); the HTTP contract is
 `apis/node-topology/openapi.yaml`.
 
-Reads are not use cases here. `GET /nodes/{nodeId}`,
-`GET /nodes?type=&region=&status=`, `GET /lanes?origin=&destination=` and
-`GET /service-areas/{postalPrefix}` read the repositories directly; an
-unknown id answers 404.
+Reads are not use cases here. `GET /nodes/{nodeId}` (`GetNode`),
+`GET /nodes?type=&region=&status=` (`ListNodes`), `GET /lanes?origin=&destination=`
+(`ListLanes`) and `GET /service-areas/{postalPrefix}` (`ResolveServiceArea`)
+read the repositories directly; an unknown id answers 404.
 
 ## Triggers at a glance
 
 | Use case | Actor / trigger | Inbound adapter | Event on success |
 | --- | --- | --- | --- |
 | `RegisterNode` | `vendor-connectivity` (vendor node) or network-ops planner (network node) | REST `POST /nodes` | `NodeRegistered` |
-| `DeclareOperationalProfile` | `vendor-connectivity` | REST `PUT /nodes/{nodeId}/operational-profile` | `NodeOperationalProfileDeclared` |
+| `DeclareOperationalProfile` | `vendor-connectivity` (`declaredBy` `VENDOR`) or network-ops planner (`declaredBy` `NETWORK_OPS`) | REST `PUT /nodes/{nodeId}/operational-profile` | `NodeOperationalProfileDeclared` |
 | `ActivateNode` | network-ops planner | REST `POST /nodes/{nodeId}:activate` | `NodeActivated` |
 | `SuspendNode` | network-ops planner | REST `POST /nodes/{nodeId}:suspend` | `NodeSuspended` |
 | `RetireNode` | network-ops planner | REST `POST /nodes/{nodeId}:retire` | `NodeRetired` |
@@ -44,7 +44,9 @@ Derived from: model.yaml → `contexts[node-topology].aggregates[*].commands`,
 ## How every command commits
 
 1. The HTTP adapter checks the `Idempotency-Key` header. A key already seen
-   with the same request replays the stored response; nothing runs again.
+   on the same route with the same request replays the stored response;
+   nothing runs again. Keys are kept for 24 hours in the context's
+   `idempotency_keys` table, keyed by `(route, key)`.
 2. The use case loads the aggregate (and, where an invariant needs it, the
    other aggregate it reads), calls the domain method, and saves the
    aggregate with an optimistic-concurrency version check.
@@ -61,9 +63,13 @@ step 2 writes nothing and publishes nothing.
 
 | Error | HTTP | Problem `type` slug | Note |
 | --- | --- | --- | --- |
-| Request body fails the schema | 422 | `validation-failed` | Not a domain invariant; the adapter rejects it before the use case runs. |
-| Unknown `nodeId`, `laneId` or `postalPrefix` in the path, or an unknown node named in the body | 404 | `node-not-found`, `lane-not-found`, `service-area-not-found` | The model names no `Err...` for a repository miss (a model gap). |
-| Optimistic-concurrency conflict after one retry | 409 | `concurrent-update` | Infrastructure, not a model invariant. |
+| `ErrValidation` | 422 | `validation-failed` | The request is well-formed JSON but violates a value-object rule; the adapter rejects it before the use case runs. |
+| `ErrNotFound` | 404 | `not-found` | An addressed aggregate does not exist: an unknown `nodeId`, `laneId` or `postalPrefix` in the path, or an unknown node named in the body. |
+| `ErrIllegalTransition` | 409 | `illegal-transition` | The command is not allowed from the aggregate's current state. Listed per use case below where it applies. |
+| `ErrConcurrentUpdate` | 409 | `concurrent-update` | Optimistic-concurrency version mismatch after one retry; the caller re-reads and retries. |
+
+These four are the shared errors of model `conventions.errors`, the same in
+every context.
 
 Problems are `application/problem+json` (RFC 9457) with `type`, `title`,
 `status` and `detail`.
@@ -84,14 +90,18 @@ Problems are `application/problem+json` (RFC 9457) with `type`, `title`,
   1. Check the operator against `node_types[nodeType].operator_allowed`.
   2. For a vendor node, check that `(vendorId, vendorNodeCode)` is free.
   3. Derive `NodeCapabilities` from the node type (`DefaultCapabilitiesByType`).
-  4. Create the `Node` in `PROPOSED` with a new `nodeId`.
-  5. Save, write `NodeRegistered` to the outbox, commit.
-  6. Answer `201` with the node.
+  4. Check `regionId` names a defined `Region` and, when given, that
+     `subtype` is one of the node type's subtypes.
+  5. Create the `Node` in `PROPOSED` with a new `nodeId`.
+  6. Save, write `NodeRegistered` to the outbox, commit.
+  7. Answer `201` with the node.
 - **Errors**:
 
 | `Err...` | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrOperatorNotAllowedForNodeType` | 422 | `operator-not-allowed-for-node-type` |
+| `ErrUnknownRegion` | 422 | `unknown-region` |
+| `ErrSubtypeNotAllowed` | 422 | `subtype-not-allowed` |
 | `ErrVendorNodeCodeTaken` | 409 | `vendor-node-code-taken` |
 
 - **Events**: `NodeRegistered`.
@@ -103,26 +113,38 @@ Problems are `application/problem+json` (RFC 9457) with `type`, `title`,
 ## DeclareOperationalProfile
 
 - **Actor / trigger**: `vendor-connectivity` while processing a
-  `DeclareNodeProfile` submission.
+  `DeclareNodeProfile` submission (`declaredBy` `VENDOR`); or the network-ops
+  planner for a network node (`declaredBy` `NETWORK_OPS`).
 - **Inbound adapter**: REST `PUT /nodes/{nodeId}/operational-profile`.
 - **Input**: `profileRevision`, `timezone`, `operatingHoursByDay`,
-  `holidays[]`, `handlingTimeMinutes`, `cutoffs[{localTime, maxOrders?}]`,
-  `throughputCap{value, timeUnit, unit}`, `sortDwellMinutes`, `declaredBy`.
+  `holidays[]` (ISO dates), `handlingTimeMinutes`,
+  `cutoffs[{localTime, days?, maxOrders?}]`,
+  `throughputCap{value, timeUnit, unit}`, `sortDwellMinutes` (sortation
+  centres and air hubs only), `declaredBy`. `operatingHoursByDay` is
+  `{monday … sunday: {start, end}}` in `HH:mm`; a missing day is closed.
+  `timeUnit` is `HOUR` or `DAY`.
 - **Preconditions**: the node exists and is not `RETIRED`.
 - **Main flow**:
   1. Load the `Node`.
   2. Refuse a revision not above the current one.
-  3. Check every cutoff against the operating hours of each operating day.
-  4. Append the profile as a new revision with `declaredAt` = now; the old
+  3. Check every day of every cutoff (`days`, default every operating day)
+     against the operating hours of that day.
+  4. For an `ACTIVE` `FULFILLMENT_CENTER`, check the new revision still has at
+     least one cutoff and a `handlingTime` above zero.
+  5. Check `sortDwellMinutes` is absent unless the node is a
+     `SORTATION_CENTER` or `AIR_HUB`.
+  6. Append the profile as a new revision with `declaredAt` = now; the old
      revision is kept unchanged.
-  5. Save, write `NodeOperationalProfileDeclared` to the outbox, commit.
-  6. Answer `200` with the node and its current profile.
+  7. Save, write `NodeOperationalProfileDeclared` to the outbox, commit.
+  8. Answer `200` with the node and its current profile.
 - **Errors**:
 
 | `Err...` | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrStaleProfileRevision` | 409 | `stale-profile-revision` |
 | `ErrCutoffOutsideOperatingHours` | 422 | `cutoff-outside-operating-hours` |
+| `ErrSortDwellNotAllowed` | 422 | `sort-dwell-not-allowed` |
+| `ErrIncompleteOperationalProfile` | 409 | `incomplete-operational-profile` |
 | `ErrNodeRetired` | 409 | `node-retired` |
 
 - **Events**: `NodeOperationalProfileDeclared`.
@@ -150,11 +172,11 @@ Problems are `application/problem+json` (RFC 9457) with `type`, `title`,
 | --- | --- | --- |
 | `ErrIncompleteOperationalProfile` | 409 | `incomplete-operational-profile` |
 | `ErrNodeRetired` | 409 | `node-retired` |
-| (unnamed in the model) node already `ACTIVE` | 409 | not yet named |
+| `ErrIllegalTransition` (node already `ACTIVE`) | 409 | `illegal-transition` |
 
 - **Events**: `NodeActivated`.
 - **Idempotency**: by `Idempotency-Key`. Without a key replay, a second
-  activation of an `ACTIVE` node is a transition outside the model's table.
+  activation of an `ACTIVE` node is refused with `ErrIllegalTransition`.
 
 ## SuspendNode
 
@@ -172,7 +194,7 @@ Problems are `application/problem+json` (RFC 9457) with `type`, `title`,
 | `Err...` | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrNodeRetired` | 409 | `node-retired` |
-| (unnamed in the model) node `PROPOSED` or already `SUSPENDED` | 409 | not yet named |
+| `ErrIllegalTransition` (node `PROPOSED` or already `SUSPENDED`) | 409 | `illegal-transition` |
 
 - **Events**: `NodeSuspended`. Downstream, `offer-availability` suppresses
   the node's listings and `linehaul-transportation` cancels future pickups.
@@ -193,11 +215,12 @@ Problems are `application/problem+json` (RFC 9457) with `type`, `title`,
 | `Err...` | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrNodeRetired` | 409 | `node-retired` |
-| (unnamed in the model) node still `PROPOSED` | 409 | not yet named |
+| `ErrIllegalTransition` (node still `PROPOSED`) | 409 | `illegal-transition` |
 
 - **Events**: `NodeRetired`.
 - **Idempotency**: by `Idempotency-Key`. Lanes and service areas of the node
-  are not touched (an open question).
+  are not touched (policy `SuspendedEndpointsUnusable`): consumers treat them
+  as unusable while the node is not `ACTIVE`.
 
 ## OpenLane
 
@@ -244,7 +267,7 @@ Problems are `application/problem+json` (RFC 9457) with `type`, `title`,
 
 | `Err...` | HTTP | Problem `type` slug |
 | --- | --- | --- |
-| (unnamed in the model) lane already `CLOSED` | 409 | not yet named |
+| `ErrIllegalTransition` (lane already `CLOSED`) | 409 | `illegal-transition` |
 
 - **Events**: `LaneClosed`. `linehaul-transportation` then refuses to
   schedule on it (`ErrLaneClosed`, its invariant).
@@ -256,18 +279,23 @@ Problems are `application/problem+json` (RFC 9457) with `type`, `title`,
 - **Inbound adapter**: REST `PUT /service-areas/{postalPrefix}`.
 - **Input**: `deliveryStationNodeId`, `assignmentVersion`.
 - **Preconditions**: the station exists, is a `DELIVERY_STATION` and is
-  `ACTIVE`; the version is above the prefix's current one.
+  `ACTIVE` with a defined region; the version is above the prefix's current
+  one.
 - **Main flow**:
   1. Load the `ServiceArea` for the prefix, or start a new one.
   2. Load the station `Node` (read only) and check type and state.
   3. Refuse a version not above the current one.
-  4. Assign the station; take `regionId` from the station.
-  5. Save, write `ServiceAreaAssigned`, commit.
-  6. Answer `200` with the service area.
+  4. Take `regionId` from the station and check it names a defined `Region`
+     (read only).
+  5. Assign the station. The prefix is `ASSIGNED`, whether new or reassigned
+     (`ASSIGNED` to `ASSIGNED`).
+  6. Save, write `ServiceAreaAssigned`, commit.
+  7. Answer `200` with the service area.
 - **Errors**:
 
 | `Err...` | HTTP | Problem `type` slug |
 | --- | --- | --- |
+| `ErrUnknownRegion` | 422 | `unknown-region` |
 | `ErrNotADeliveryStation` | 409 | `not-a-delivery-station` |
 | `ErrStaleAssignmentVersion` | 409 | `stale-assignment-version` |
 

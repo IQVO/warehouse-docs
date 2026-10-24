@@ -97,8 +97,9 @@ default to well-behaved:
   (`payments-and-invoicing`).
 - **Vendor authentication.** No auth, consistent with the fleet. The vendor
   names itself in each write.
-- **Inventory placement.** Vendors place their own stock; the candidate
-  context `inventory-placement` is not modelled.
+- **Inventory placement.** Vendors place their own stock; the network does
+  not advise where (gap G49). A seller names the destination node in
+  `seller-inbound`.
 - **Returns authorisation.** The future `customer-returns` context routes
   returns to a `RETURNS_CENTER`; this context only lets a vendor register
   one.
@@ -109,3 +110,15 @@ default to well-behaved:
 - **Anything inside the warehouse.** No retail-network context reads a
   `warehouse.*` topic or calls a fleet service. The fleet calls this API;
   this context never calls the fleet.
+
+## Inbound shipments and receipts
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+A seller's cartons reach a vendor node through this context, not directly.
+The vendor polls `GET /vendor/inbound-shipments` for a carton manifest
+(published by `seller-inbound` as `InboundShipmentLabelled`, and made visible to the vendor once `InboundShipmentShipped`) and answers with
+`POST /vendor/inbound-receipts`, a carton-level receipt. The Vendor API stays
+the only channel between the two organizations. The model decides the shape
+of the exchange; how a vendor's own systems receive the cartons is the
+vendor's business.

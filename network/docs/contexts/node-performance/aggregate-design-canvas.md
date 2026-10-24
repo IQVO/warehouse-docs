@@ -161,3 +161,9 @@ declared profile, the vendor's ack window). The **Declared vs Measured**
 principle suggests the declared profile should sit next to the scorecard
 for reading, but the model defines neither a read model nor a field for
 it. It is listed as an open question rather than invented here.
+
+## Inbound observations
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+`Metrics` gains two informational fields, `inboundTimelinessP95Minutes` (receipt `receivedAt` minus the shipment's `shippedAt`, from `InboundShipmentShipped`) and `inboundAccuracyRate` (share of reported cartons with status `RECEIVED`), from the inputs `InboundShipmentShipped` and `InboundReceiptSubmitted` (policy `InboundObservations`; light, informational). They are shown on the scorecard and are **not** an input to `Grading`; they are not on `NodeScorecardUpdated`, so `delivery-promise` and `order-sourcing` are unaffected. A missing or damaged carton can be the seller's fault as much as the node's, so the accuracy rate mixes causes until they are separated (gap G52).

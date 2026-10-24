@@ -249,10 +249,13 @@ stop capacity), **Induction**, **Route**, **Delivery Service Partner (DSP)**,
 - **Who calls `POST /partners` and `GET /waves`?** The routes are in `rest`
   but no `inbound` row names a caller. `CloseInduction` has a route but is
   missing from the planner's `inbound` row.
-- **How does a package map to stops?** Wave capacity and van capacity are
-  counted in stops, but induction is per package, and `Stop` groups several
-  tracking numbers. Grouping packages into stops needs a delivery address,
-  which this context never receives ([ADR 0006](/network/adr/0006-pii-confinement)).
+- **How does a package map to stops? (resolved, G11).** Wave capacity and van
+  capacity are counted in stops, and induction is per package. Packages are
+  grouped into stops by the `stopKey` of `LabelIssued`, an opaque keyed hash of
+  the normalized address, so this context never receives an address
+  ([ADR 0006](/network/adr/0006-pii-confinement)). A package for a stop already in the
+  wave takes no capacity. How the driver learns the address is not decided: no
+  address route is built.
 - **What happens when no wave is eligible?** If every wave is full or closed,
   `InductPackage` fails with `ErrWaveFull` or `ErrInductionClosed`. No
   event tells `delivery-promise` that the witness wave was missed. Today

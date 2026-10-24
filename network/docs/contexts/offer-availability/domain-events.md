@@ -39,8 +39,10 @@ transaction as the aggregate change (`conventions.integration_rules`).
 
 | Event | Full `type` | Subject / key | Producing command (use case) | Consumers |
 | --- | --- | --- | --- | --- |
-| `CatalogItemCreated` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | `catalogItemId` | `CreateCatalogItem` | `delivery-promise`, `shipping-and-tracking` |
-| `CatalogItemDiscontinued` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued` | `catalogItemId` | `DiscontinueItem` | `delivery-promise`, `order-sourcing` |
+| `CatalogItemCreated` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | `catalogItemId` | `CreateCatalogItem` | `delivery-promise`, `shipping-and-tracking`, `seller-inbound` |
+| `CatalogItemDiscontinued` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued` | `catalogItemId` | `DiscontinueItem` | `delivery-promise`, `order-sourcing`, `seller-inbound` |
+| `CatalogItemPackagingDeclared` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackagingDeclared` | `catalogItemId` | `DeclarePackaging` | `seller-inbound`, `vendor-connectivity` |
+| `CatalogItemPackLevelRetired` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackLevelRetired` | `catalogItemId` | `RetirePackLevel` | `seller-inbound`, `vendor-connectivity` |
 | `ListingCreated` | `com.retailnetwork.commerce.offer-availability.listing.ListingCreated` | `listingId` | `CreateListing` | `delivery-promise`, `order-sourcing`, `vendor-connectivity` |
 | `ListingAvailabilityChanged` | `com.retailnetwork.commerce.offer-availability.listing.ListingAvailabilityChanged` | `listingId` | `ApplyAvailability` (inside `ApplyInventoryFeed`, including `FullFeedZeroing`) | `delivery-promise`, `order-sourcing` |
 | `ListingSuppressed` | `com.retailnetwork.commerce.offer-availability.listing.ListingSuppressed` | `listingId` | `SuppressListing` (policy `SuppressOnNodeUnavailable`) | `delivery-promise`, `order-sourcing` |
@@ -64,6 +66,7 @@ types.
 | `weightG` | integer | Weight in grams, > 0. |
 | `hazmat` | boolean | Hazardous-material handling flag. |
 | `fragile` | boolean | Fragile handling flag. |
+| `gtin` | string, optional | Proposed ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)): the each-level GTIN, 14 digits. Additive. |
 
 **`CatalogItemDiscontinued`**
 
@@ -173,3 +176,32 @@ All four come from `node-topology` on `retailnetwork.node-topology.events`
   events arrive in order on one partition.
 - **Replays are safe.** Suppressing a `SUPPRESSED` listing or restoring a
   `LIVE` one is a no-op that raises no event (proposed).
+
+## Packaging and owner fields
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+**`CatalogItemPackagingDeclared`** (entity `catalogitem`, subject `catalogItemId`)
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `catalogItemId` | string | The item. |
+| `level` | enum | `EACH`, `INNER`, `CASE` or `PALLET`: the one level this event declares. |
+| `gtin` | string | The level's GTIN, 14 digits. |
+| `childGtin` | string, optional | The next lower level's GTIN; absent for `EACH`. |
+| `unitsPerPack` | integer | Direct factor to eaches: at least 2 above `EACH`, 1 for `EACH`. |
+| `declaredAt` | RFC 3339 instant | When the level was declared. |
+
+**`CatalogItemPackLevelRetired`** (same entity and subject)
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `catalogItemId`, `level`, `gtin` | string | The level that ends. It is retired (inactive), not deleted, so shipments in flight still validate. |
+| `retiredAt` | RFC 3339 instant | When the level was retired. |
+
+**`ListingCreated`** and **`ListingAvailabilityChanged`** gain an optional
+`ownerRef` (the seller of record; absent means the vendor's own stock). Both
+are additive, so the `:v1` data schema stays `v1`; no existing consumer reads
+the field.
+
+Quantities everywhere stay in eaches.

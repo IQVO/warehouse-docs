@@ -33,7 +33,7 @@ Derived from: `model.yaml → contexts[vendor-connectivity].chart`
 (`complexity: 0.46`, `differentiation: 0.36`), `.classification`,
 `.aggregates[*]` for the three slices.
 
-Omitted: the other nine contexts (see the
+Omitted: the other ten contexts (see the
 [network-wide chart](/network/strategic-design/core-domain-chart)) and the fleet's
 `network-fulfillment`, which sits on the fleet's own chart. Slice
 positions are judgement, not model values; only the context point comes

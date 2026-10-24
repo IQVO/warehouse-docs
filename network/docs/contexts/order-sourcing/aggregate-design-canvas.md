@@ -58,6 +58,7 @@ stateDiagram-v2
     RELEASED --> UNSOURCEABLE: HandleNodeRefusal
     RELEASED --> LOCKED: LockAssignment
     RELEASED --> CANCELLED: CancelAssignment
+    UNSOURCEABLE --> CANCELLED: CancelAssignment
     UNSOURCEABLE --> QUEUED: ApplyRevisedPromise
     LOCKED --> SHIPPED: MarkShipped
     SHIPPED --> DELIVERED: MarkDelivered
@@ -86,7 +87,7 @@ never changes.
 | A node that refused this group is never released to again for the same promise revision | `ReleaseToNode`, `ReoptimiseAssignment` (candidate selection) → `ErrNodeExcluded` |
 | At most one release `PENDING` at a time | `ReleaseToNode` while `RELEASED`; `ReoptimiseAssignment` while `RELEASED` → `ErrReleaseInFlight` |
 | `assignmentVersion` strictly increases | every save (optimistic concurrency) → `ErrStaleAssignmentVersion` |
-| Cancel only before `LOCKED` | `CancelAssignment` → `ErrCancelAfterLock` |
+| Cancel only before `LOCKED`; a request on a locked assignment is refused with `FulfillmentCancelRefused` | `CancelAssignment` → `ErrCancelAfterLock`, then `RefuseCancel` |
 
 Derived from: model.yaml → `aggregates[FulfillmentAssignment].invariants`.
 Which command checks which invariant is this pack's reading of the rule text;
@@ -117,7 +118,7 @@ Neighbours' reactions that close the loops:
 | `vendor-connectivity` **CancelOnSourcingCancel** | `FulfillmentCancelled` | Cancels the `ISSUED` purchase order of that release. |
 | `delivery-promise` **RepromiseOnRisk** | `FulfillmentUnsourceable` | Recomputes and revises the promise (`PromiseRevised` → `ApplyRevisedPromise`); if nothing is feasible even at `STANDARD`, reports `PromiseBroken` at judgement time. |
 | `linehaul-transportation` **BookOnLock** | `FulfillmentLocked`; `FulfillmentCancelled` or reassignment | Books one package on the pickup departure; releases it on cancel or reassignment. |
-| `customer-ordering` **CancelOnUnfulfillable** | `FulfillmentUnsourceable` and no feasible revision | Cancels the group (`CustomerOrderCancelled`). See the open question on cancelling an `UNSOURCEABLE` assignment. |
+| `customer-ordering` **CancelOnUnfulfillable** | `FulfillmentUnsourceable` and no feasible revision | Cancels the group (`CustomerOrderCancelled`); an `UNSOURCEABLE` assignment can be cancelled. |
 
 ### 6. Handled Commands
 
@@ -130,7 +131,8 @@ Neighbours' reactions that close the loops:
 | `LockAssignment` | `RELEASED → LOCKED` | Kafka consumer of `PurchaseOrderAccepted` |
 | `MarkShipped` | `LOCKED → SHIPPED` | Kafka consumer of `VendorShipmentConfirmed` |
 | `MarkDelivered` | `SHIPPED → DELIVERED` | Kafka consumer of `PackageDelivered` |
-| `CancelAssignment` | `QUEUED → CANCELLED` or `RELEASED → CANCELLED` | Kafka consumer of `CustomerOrderCancelled`, per `groupNos` |
+| `CancelAssignment` | `QUEUED → CANCELLED`, `RELEASED → CANCELLED` or `UNSOURCEABLE → CANCELLED` | Kafka consumer of `CustomerOrderCancelled`, per `groupNos` |
+| `RefuseCancel` | `LOCKED`, `SHIPPED` or `DELIVERED`, unchanged (version + 1) | same consumer, when `CancelAssignment` hits `ErrCancelAfterLock` |
 | `ApplyRevisedPromise` | `UNSOURCEABLE → QUEUED` | Kafka consumer of `PromiseRevised` |
 
 ### 7. Created Events

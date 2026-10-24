@@ -90,7 +90,7 @@ flowchart TB
     DP["delivery-promise<br/>order-sourcing"]:::external
     SP["Station planner"]:::actor
     C2["CloseInduction"]:::command
-    H4["H4 stops need an<br/>address LM never has"]:::hotspot
+    H4["Resolved H4: stops grouped<br/>by stopKey, no address"]:::hotspot
     H5["H5 no event when no<br/>wave is eligible"]:::hotspot
 
     LH --> E0 --> RM1
@@ -210,7 +210,7 @@ Omitted: `ErrRouteNotStarted` and `ErrAlreadyDelivered`, and
 | H1 | A suspended or retired station can still get waves. | `read_models[StationView].source` lists only `NodeRegistered`, `ServiceAreaAssigned`; `node-topology` does not list this context as a consumer of `NodeSuspended` or `NodeRetired`. `DeliveryWave.invariants` has no station check. |
 | H2 | A cancelled wave may stay in the promise's view. | `publishes[DeliveryWaveCancelled].consumers` is `analytics only`; `delivery-promise.read_models[DeliveryWaveView]` reads only `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged`; `RepromiseOnRisk` names cancelled departures, not waves. |
 | H3 | `CancelWave`, `CompleteWave` and `CompleteRoute` have no trigger. | They are in `aggregates[*].commands` and `transitions` but have no `rest` route, `inbound` row or policy. |
-| H4 | Capacity is in stops, induction is per package. | `StopCapacity{stops, assigned}`, `Stop{stopNo, trackingNumbers[], outcome}` and `InductPackage` per package; grouping packages into stops needs an address, which is confined to `customer-ordering` and `shipping-and-tracking` (`conventions.no_auth`, [ADR 0006](/network/adr/0006-pii-confinement)). |
+| H4 | Resolved (G11): capacity is in stops, induction is per package, and stops are grouped by the opaque `stopKey` of `LabelIssued`, never by an address. | `StopCapacity{stops, assigned}`, `Stop{stopNo, trackingNumbers[], outcome}`, `read_models[PackageStopView]`, `policies[GroupByStopKey]`; the address stays in `customer-ordering` and `shipping-and-tracking` ([ADR 0006](/network/adr/0006-pii-confinement)) and no address route exists (`policies[NoAddressAtLastMile]`). |
 | H5 | When no wave is eligible, nobody hears about it. | `InductOnArrival` has no failure outcome and no event; only `shipping-and-tracking`'s `ExceptionOnSilence` would surface it later. |
 | H6 | "Three failures return it to sender" has no home. | `RetryNextWave.rule`; no aggregate holds a failure count across routes; no event or command carries the return to sender; `shipping-and-tracking`'s `ReturnToSender` has no inbound trigger from this context. |
 | H7 | A stop has one `outcome`, an attempt is per package. | `Route.entities` `Stop{..., outcome}` against `DeliveryAttempted.data` (`trackingNumber`, `outcome`). |

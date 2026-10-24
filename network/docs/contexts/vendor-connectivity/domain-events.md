@@ -171,7 +171,7 @@ transaction as the aggregate change.
 | --- | --- | --- |
 | `transactionId` | string | The submission |
 | `vendorId` | string | The vendor that wrote |
-| `kind` | enum | `ACKNOWLEDGEMENT`, `INVENTORY`, `NODE_REGISTRATION`, `NODE_PROFILE`, `SHIPMENT_CONFIRMATION` |
+| `kind` | enum | `ACKNOWLEDGEMENT`, `INVENTORY`, `NODE_REGISTRATION`, `NODE_PROFILE`, `SHIPMENT_CONFIRMATION`, `INBOUND_RECEIPT` (proposed, ADR 0009) |
 | `status` | enum | `SUCCESS` or `FAILURE` |
 | `errorCount` | integer | Number of `SubmissionError`s |
 
@@ -212,7 +212,7 @@ and dispatches on the full `type` string.
 | Producer | Full type | What this context does | Idempotency beyond the inbox |
 | --- | --- | --- | --- |
 | order-sourcing | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | Policy `IssueOnRelease`: if `nodeId` is a `VENDOR` node in `VendorNodeView`, `IssuePurchaseOrder` with `requiredShipBy` and `lines` (`listingId`, `quantity`); ignores `orderId`, `tier` and `promisedDeliverByLatest` | `poNumber` is derived from `assignmentId + releaseNo`; a second release event with the same pair finds the order and does nothing |
-| order-sourcing | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | Policy `CancelOnSourcingCancel`: `CancelPurchaseOrder` on the `ISSUED` order of that assignment | A `CANCELLED` order is left as is; a non-`ISSUED` one is refused (`ErrCancelAfterAcknowledgement`) and logged |
+| order-sourcing | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | Policy `CancelOnSourcingCancel`: `CancelPurchaseOrder` on the order of the assignment's highest `releaseNo` (no order is a no-op) | A `CANCELLED` order is left as is; a non-`ISSUED` one is refused (`ErrCancelAfterAcknowledgement`), logged at INFO, nothing published and not retried |
 | node-topology | `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | Upsert `VendorNodeView` (`nodeId`, `vendorId`, `vendorNodeCode`, `nodeType`, `operator`, status `PROPOSED`) | Upsert by `nodeId` |
 | node-topology | `com.retailnetwork.logistics.node-topology.node.NodeActivated` | Set status `ACTIVE` in `VendorNodeView` | Last write by event time wins |
 | node-topology | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | Set status `SUSPENDED` | Last write by event time wins |
@@ -224,3 +224,37 @@ Not consumed, though a reader might expect it:
 The `ackBy` rule needs the node's handling time, and the model gives this
 context no source for it. This is listed as an open question on the
 [canvas](/network/contexts/vendor-connectivity/bounded-context-canvas).
+
+## Inbound receipts
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+### InboundReceiptSubmitted (published)
+
+| | |
+| --- | --- |
+| Type | `com.retailnetwork.partner.vendor-connectivity.submission.InboundReceiptSubmitted` |
+| Subject / key | `transactionId` |
+| Produced by | `ProcessSubmission` of an `INBOUND_RECEIPT` submission that ends in `SUCCESS` (policy `ReceiptRelay`) |
+| Consumers | `seller-inbound` (`RecordInboundReceipt`), `node-performance` (inbound timeliness and accuracy observations) |
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `transactionId` | string | The submission |
+| `vendorId` | string | The vendor that wrote |
+| `nodeId` | string | The receiving node |
+| `shipmentId` | string | The inbound shipment the receipt answers |
+| `receivedAt` | RFC 3339 instant | When the vendor says the cartons arrived |
+| `cartons` | array | Per carton: `sscc`, `status` (`RECEIVED`, `MISSING`, `UNEXPECTED`, `DAMAGED`), `items` (`gtin`, `qtyEaches` received), `complianceCodes` |
+
+Quantities are eaches. No event carries a ship-to address, name or phone.
+
+### Consumed
+
+| Producer | Full type | What this context does |
+| --- | --- | --- |
+| `seller-inbound` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentLabelled` | Insert into `InboundShipmentView` (the carton manifest the vendor polls), with `sellerId` exposed unchanged (the vendor carries it as its `ownerRef`). |
+| `seller-inbound` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentShipped` | Mark the shipment `SHIPPED` in `InboundShipmentView`; only `SHIPPED` shipments are returned by the poll. |
+| `seller-inbound` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | Mark the shipment closed in `InboundShipmentView`; it leaves the poll. |
+| `offer-availability` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackagingDeclared` | Upsert `CatalogPackagingView` (levels, GTINs, `unitsPerPack`). |
+| `offer-availability` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackLevelRetired` | Mark the level inactive in `CatalogPackagingView`. |

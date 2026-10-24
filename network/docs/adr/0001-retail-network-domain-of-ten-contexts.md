@@ -45,9 +45,10 @@ with its own database, publishing CloudEvents on its own topic:
 
 `vendor-connectivity` is the Open Host Service the fleet's
 `network-fulfillment` conforms to; its Vendor API keeps the routes the draft
-and ADR 0009 already named. Four contexts are named for later:
+and ADR 0009 already named. Four contexts were named for later:
 `inventory-placement`, `customer-returns`, `customer-notification`,
-`payments-and-invoicing`.
+`payments-and-invoicing`. **Amended by [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments):** `inventory-placement` is absorbed by
+a new eleventh context, `seller-inbound` (tier `partner`).
 
 ## Alternatives
 

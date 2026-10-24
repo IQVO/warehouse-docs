@@ -247,7 +247,7 @@ retried forever.
   `CustomerOrderCancelled`.
 - **Inbound adapter:** Kafka consumer of
   `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderCancelled`.
-- **Preconditions:** state `QUEUED` or `RELEASED`.
+- **Preconditions:** state `QUEUED`, `RELEASED` or `UNSOURCEABLE`; from `LOCKED`, `SHIPPED` or `DELIVERED` the request is refused (below).
 - **Main flow:**
   1. Inbox check.
   2. For each `groupNo` in `groupNos`, load the assignment of (`orderId`,
@@ -259,11 +259,10 @@ retried forever.
 
   | Error | When | HTTP | Problem `type` |
   | --- | --- | --- | --- |
-  | `ErrCancelAfterLock` | state `LOCKED`, `SHIPPED` or `DELIVERED` | 409 | `cancel-after-lock` |
+  | `ErrCancelAfterLock` | state `LOCKED`, `SHIPPED` or `DELIVERED` | no HTTP (consumer): `RefuseCancel` keeps the state and publishes `FulfillmentCancelRefused` (`CANCEL_AFTER_LOCK`) | `cancel-after-lock` |
   | `ErrStaleAssignmentVersion` | concurrent change | 409 | `stale-assignment-version` (retry) |
-  | (no `Err...` in the model) | state `UNSOURCEABLE` | 409 | not named (open question) |
 
-- **Events:** `FulfillmentCancelled`.
+- **Events:** `FulfillmentCancelled`, or `FulfillmentCancelRefused` for a refused request.
 - **Idempotency:** inbox; an already `CANCELLED` assignment is a no-op.
 
 ## ApplyRevisedPromise

@@ -110,7 +110,7 @@ are this proposed model's names.
 | Listings and available quantities | `offer-availability` |
 | The shopper, the ship-to address and the order | `customer-ordering` (PII stays there, [ADR 0006](/network/adr/0006-pii-confinement)) |
 | Notifying the customer of a revised date | `customer-ordering` today; a future `customer-notification` context |
-| Deciding which node should hold which item before demand | future `inventory-placement` context |
+| Deciding which node should hold which item before demand | not modelled (gap G49); the seller names the destination node in `seller-inbound` |
 | Anything inside a vendor's building | the vendor (the warehouse-systems fleet is one vendor, reached only through the [Vendor API](/network/integration/vendor-api)) |
 
 This context never calls a warehouse-systems service and never reads a

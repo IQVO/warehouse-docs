@@ -4,7 +4,7 @@
 Pages written (fully generated; edit this script or the model, not the page):
   docs/strategic-design/context-map.md
   docs/strategic-design/ubiquitous-language.md
-  docs/strategic-design/event-standard-cloudevents.md
+  docs/strategic-design/event-standard-cloudevents.md (also the Reason vocabularies section)
 
   python3 scripts/gen_pages.py           # write
   python3 scripts/gen_pages.py --check   # fail if a page differs from what the model gives
@@ -106,7 +106,7 @@ def mermaid_view(title, nodes, ext=None):
 def context_map():
     E = edges()
     out = ["---", "id: context-map", "title: Context Map", "sidebar_label: Context Map",
-           'description: "Every relationship between the ten retail-network bounded contexts and the one seam to the warehouse-systems fleet, with the ddd-crew context-mapping pattern on each edge."',
+           'description: "Every relationship between the eleven retail-network bounded contexts and the one seam to the warehouse-systems fleet, with the ddd-crew context-mapping pattern on each edge."',
            "---", "", "# Context Map", "", BANNER, ""]
     out.append("""Following the ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping)
 notation. On every edge, **U** is upstream and **D** downstream; the pattern
@@ -139,7 +139,7 @@ flowchart TB
         WWP["wes-work-planning"]:::fleet
         INV["inventory-storage"]:::fleet
     end
-    NF -->|"REST: poll POs, acknowledge,<br/>inventory feed, node profile,<br/>labels, shipment confirmation"| VC
+    NF -->|"REST: poll POs, acknowledge,<br/>inventory feed, node profile,<br/>labels, shipment confirmation,<br/>poll inbound shipments,<br/>submit inbound receipts"| VC
     NF -->|"held order, FeasibleBy,<br/>release, cancel"| OM
     PPM ==>|"CPT schedule,<br/>cycle time p95"| NF
     WWP ==>|"PathCapacityChanged"| NF
@@ -159,6 +159,10 @@ shared in either direction. Details on
     out.append("Derived from: `model.yaml` → `contexts[*].publishes[*].consumers`, `contexts[*].sync_calls`, `contexts[*].inbound[*].relationship`.\n")
     out.append("## Logistics view: topology, middle mile, last mile, tracking\n")
     out.append(mermaid_view("logistics", ["node-topology", "linehaul-transportation", "last-mile-delivery", "shipping-and-tracking", "vendor-connectivity"]))
+    out.append("Derived from: same sections as above.\n")
+    out.append("## Partner view: sellers, inbound shipments and receipts\n")
+    out.append("`seller-inbound` is the proposed eleventh context ([ADR 0009](/adr/0009-seller-inbound-and-case-packed-shipments)). It reaches the vendor only through `vendor-connectivity`.\n")
+    out.append(mermaid_view("partner", ["seller-inbound", "vendor-connectivity", "offer-availability", "node-topology", "node-performance"]))
     out.append("Derived from: same sections as above.\n")
     out.append("## Feedback view: what feeds the two Core contexts\n")
     out.append(mermaid_view("feedback", ["node-topology", "offer-availability", "linehaul-transportation", "last-mile-delivery", "node-performance", "delivery-promise", "order-sourcing"]))
@@ -192,6 +196,15 @@ shared in either direction. Details on
   fact. It never owns node profiles, availability or labels itself.
 - **`shipping-and-tracking` → `customer-ordering` is a restricted
   Customer/Supplier read.** The label needs the address; nothing else does.
+- **`seller-inbound` ↔ `vendor-connectivity` is Customer/Supplier in both
+  directions by event.** The shipment manifest goes out as
+  `InboundShipmentShipped`; the vendor's carton-level answer comes back as
+  `InboundReceiptSubmitted`. The vendor never calls `seller-inbound`: the
+  Vendor API stays the only channel, and the seller never reaches the vendor.
+- **`seller-inbound` conforms to `node-topology` and `offer-availability`.**
+  A node's inbound limits and a catalogue item's packaging hierarchy are
+  their facts; `seller-inbound` keeps local, event-fed copies
+  (`NodeInboundView`, `CatalogPackagingView`) and makes no synchronous call.
 """)
     return "\n".join(out) + "\n"
 
@@ -275,7 +288,7 @@ topic, so no consumer can mistake one organization's event for the other's.
 | Attribute | Rule |
 | --- | --- |
 | `specversion` | `1.0` |
-| `type` | `{cv['type']}` |
+| `type` | `{cv['type']}` ({cv['entity_rule']}) |
 | `source` | `{cv['source']}` |
 | `subject` | {cv['subject']} |
 | `dataschema` | `{cv['dataschema']}` |
@@ -335,7 +348,52 @@ Tiers (the `<tier>` segment):
             cons = ", ".join(f"`{x}`" if x in CTX else x for x in p.get("consumers", [])) or "-"
             out.append(f"| `{p['event']}` | `{ce_type(c['id'], p['entity'], p['event'])}` | {cons} |")
         out.append("")
+    out.extend(reason_vocabularies())
     return "\n".join(out) + "\n"
+
+
+def where(f):
+    if f.startswith("rest:"):
+        return f"REST `{f[5:]}`"
+    if f.startswith("stored:"):
+        return f"stored by `{f[7:]}`"
+    return f"`{f}`"
+
+
+def reason_vocabularies():
+    """The `Reason vocabularies` section: one table per vocabulary of each
+    context's `reasons`, plus the contexts that own none."""
+    out = ["## Reason vocabularies", "",
+           "Closed vocabularies of reason-like fields (`reason`, `cause`, `kind`, `outcome`), "
+           "one block per owning context, from `contexts[*].reasons` in the model. A value is "
+           "listed only when the spec or the domain code of the built service has it. Fields "
+           "that carry free text are not listed. A consumer line names a consumer that "
+           "branches on a value; consumers that only store the text are not listed.", ""]
+    for c in M["contexts"]:
+        if not c.get("reasons"):
+            continue
+        out.append(f"### Reasons of `{c['id']}`")
+        out.append("")
+        for r in c["reasons"]:
+            out.append(f"**`{r['name']}`**: {r['about']}")
+            out.append("")
+            out.append("Appears in: " + ", ".join(where(f) for f in r["fields"]) + ".")
+            out.append("")
+            out.append("| Value | Meaning |")
+            out.append("| --- | --- |")
+            for v in r["values"]:
+                out.append(f"| `{v['value']}` | {v['meaning']} |")
+            out.append("")
+            for cons in r.get("consumers", []):
+                uses = ", ".join(f"`{u}`" for u in cons["uses"])
+                out.append(f"Branched on by `{cons['context']}` ({uses}): {cons['rule']}")
+                out.append("")
+    none = [c["id"] for c in M["contexts"] if not c.get("reasons")]
+    if none:
+        out.append("Contexts that own no closed reason vocabulary (their reason fields, if any, are free text): "
+                   + ", ".join(f"`{x}`" for x in none) + ".")
+        out.append("")
+    return out
 
 
 PAGES = {

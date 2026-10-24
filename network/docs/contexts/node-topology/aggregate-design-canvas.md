@@ -29,9 +29,11 @@ objects are:
 
 | Value object | Fields |
 | --- | --- |
-| `OperationalProfile` | `profileRevision`, `timezone`, `operatingHoursByDay`, `holidays[]`, `handlingTime`, `cutoffs[CutoffSlot]`, `throughputCap`, `sortDwell`, `declaredBy` (`VENDOR` or `NETWORK_OPS`), `declaredAt` |
-| `CutoffSlot` | `localTime`, `maxOrders` (optional) |
-| `ThroughputCap` | `value`, `timeUnit`, `unit` = `ORDER` |
+| `OperationalProfile` | `profileRevision`, `timezone`, `operatingHoursByDay`, `holidays[]`, `handlingTime`, `cutoffs[CutoffSlot]`, `throughputCap`, `sortDwellMinutes` (sort centres and air hubs only), `declaredBy` (`VENDOR` or `NETWORK_OPS`), `declaredAt` |
+| `operatingHoursByDay` | `{monday … sunday: {start, end}}`, times as `HH:mm`; a missing day is closed |
+| `holidays[]` | ISO dates; the node is closed all day |
+| `CutoffSlot` | `localTime` (`HH:mm`), `days[]` (default: every operating day), `maxOrders` (optional) |
+| `ThroughputCap` | `value` (integer above zero), `timeUnit` (`HOUR` or `DAY`), `unit` = `ORDER` |
 | `NodeCapabilities` | `outbound`, `inbound`, `returns`, `sort`, `lastMile`, `air` |
 | `GeoLocation` | `postalCode`, `countryCode`, `lat`, `lon` |
 | `VendorRef` | `vendorId`, `vendorNodeCode` |
@@ -68,8 +70,11 @@ not change the state, so it is a note rather than an edge; it is refused on a
 | The operator must be allowed for the node type; parcel nodes are `NETWORK`-operated | `RegisterNode` → `ErrOperatorNotAllowedForNodeType` |
 | `vendorNodeCode` is unique per vendor | `RegisterNode` → `ErrVendorNodeCodeTaken` (spans all `Node` aggregates; backed by a unique index, see [Entity Relationship](/network/contexts/node-topology/entity-relationship)) |
 | The profile revision strictly increases | `DeclareOperationalProfile` → `ErrStaleProfileRevision` |
-| A `FULFILLMENT_CENTER` profile declares at least one cutoff and a `handlingTime` above zero before activation | `ActivateNode` → `ErrIncompleteOperationalProfile` |
-| Cutoffs fall inside the operating hours of their day | `DeclareOperationalProfile` → `ErrCutoffOutsideOperatingHours` |
+| A `FULFILLMENT_CENTER` profile declares at least one cutoff and a `handlingTime` above zero before activation, and every later revision of an `ACTIVE` `FULFILLMENT_CENTER` keeps both | `ActivateNode`, `DeclareOperationalProfile` → `ErrIncompleteOperationalProfile` |
+| Every day of a cutoff falls inside the operating hours of that day | `DeclareOperationalProfile` → `ErrCutoffOutsideOperatingHours` |
+| The node's `regionId` names a defined `Region` | `RegisterNode` → `ErrUnknownRegion` |
+| `subtype`, when given, is one of the node type's subtypes in `node_types` | `RegisterNode` → `ErrSubtypeNotAllowed` |
+| `sortDwellMinutes` is declared only by `SORTATION_CENTER` and `AIR_HUB` nodes | `DeclareOperationalProfile` → `ErrSortDwellNotAllowed` |
 | `RETIRED` is terminal | `ActivateNode`, `SuspendNode`, `RetireNode`, `DeclareOperationalProfile` → `ErrNodeRetired` |
 
 ### 5. Corrective Policies
@@ -77,6 +82,10 @@ not change the state, so it is a note rather than an edge; it is refused on a
 - **`DefaultCapabilitiesByType`** (this context): node capabilities are
   derived from the node type, never typed by hand. `RegisterNode` sets
   `NodeCapabilities` from `node_types`.
+- **`SuspendedEndpointsUnusable`** (this context): suspending or retiring a
+  node closes nothing. Its `OPEN` lanes and `ASSIGNED` service areas stay as
+  they are, and consumers treat them as unusable while the node is not
+  `ACTIVE` (they react to `NodeSuspended` and `NodeRetired`).
 - **`SuppressOnNodeUnavailable`** (`offer-availability`): on `NodeSuspended`
   or `NodeRetired` every listing of the node is suppressed; on
   `NodeActivated` the listings suppressed for that reason are restored.
@@ -97,7 +106,7 @@ not change the state, so it is a note rather than an edge; it is refused on a
 | Command | Inbound route | Issued by |
 | --- | --- | --- |
 | `RegisterNode` | `POST /nodes` | `vendor-connectivity` (vendor node), network-ops planner (network node) |
-| `DeclareOperationalProfile` | `PUT /nodes/{nodeId}/operational-profile` | `vendor-connectivity` |
+| `DeclareOperationalProfile` | `PUT /nodes/{nodeId}/operational-profile` | `vendor-connectivity` (`declaredBy` `VENDOR`), network-ops planner (`declaredBy` `NETWORK_OPS`) |
 | `ActivateNode` | `POST /nodes/{nodeId}:activate` | network-ops planner |
 | `SuspendNode` | `POST /nodes/{nodeId}:suspend` | network-ops planner |
 | `RetireNode` | `POST /nodes/{nodeId}:retire` | network-ops planner |
@@ -162,13 +171,13 @@ Omitted: nothing. There is no reopen; a new lane is opened instead.
 
 ### 5. Corrective Policies
 
-- None in this context. Consumers react: `linehaul-transportation` refuses to
-  schedule on a closed lane (`ErrLaneClosed`, its own invariant) and keeps a
-  `LaneView`; `delivery-promise` and `order-sourcing` keep `LaneView` and
+- **`SuspendedEndpointsUnusable`** (this context, see [Node](#node)): the
+  `OPEN` lanes of a suspended or retired node are not closed; consumers
+  treat them as unusable while an endpoint is not `ACTIVE`.
+- Consumers react: `linehaul-transportation` refuses to schedule on a closed
+  lane (`ErrLaneClosed`, its own invariant) and keeps a `LaneView`;
+  `delivery-promise` and `order-sourcing` keep `LaneView` and
   `NetworkGraphView`.
-- The model has no policy that closes the lanes of a suspended or retired
-  node (an open question on the
-  [Bounded Context Canvas](/network/contexts/node-topology/bounded-context-canvas)).
 
 ### 6. Handled Commands
 
@@ -213,12 +222,14 @@ stateDiagram-v2
 ```
 
 Derived from: model.yaml → `contexts[node-topology].aggregates[ServiceArea].states`,
-`.commands`, `.invariants`.
+`.transitions`, `.initial_state`, `.commands`, `.invariants`.
 
-Omitted: the model lists no transitions for `ServiceArea`. The self-loop is
-drawn because the assignment is versioned (`ErrStaleAssignmentVersion`), so a
-prefix can be reassigned to another station under a higher version. There is
-no unassign.
+The model gives `ServiceArea` one state, `ASSIGNED`, which is also its
+initial state, and one transition: `ASSIGNED` → `ASSIGNED` on
+`AssignServiceArea`. A prefix is reassigned to another station under a higher
+`assignmentVersion` (`ErrStaleAssignmentVersion`). There is no unassign.
+
+Omitted: nothing.
 
 ### 4. Enforced Invariants
 
@@ -226,11 +237,16 @@ no unassign.
 | --- | --- |
 | The assigned node is an `ACTIVE` `DELIVERY_STATION` | `AssignServiceArea` → `ErrNotADeliveryStation` (reads the `Node` aggregate) |
 | The assignment version strictly increases | `AssignServiceArea` → `ErrStaleAssignmentVersion` |
+| The assigned region is a defined `Region` and matches the station's region | `AssignServiceArea` → `ErrUnknownRegion` (reads the `Region` and `Node` aggregates) |
 
 ### 5. Corrective Policies
 
-- None in this context. The region of the prefix is taken from the station's
-  `regionId` at assignment time and published in `ServiceAreaAssigned`.
+- **`SuspendedEndpointsUnusable`** (this context, see [Node](#node)): the
+  `ASSIGNED` service areas of a suspended or retired station are not
+  unassigned; consumers treat them as unusable while the station is not
+  `ACTIVE`.
+- The region of the prefix is published in `ServiceAreaAssigned` and must
+  match the station's `regionId`.
 - Consumers react: `delivery-promise` (`RegionAndServiceAreaView`),
   `order-sourcing` (`NetworkGraphView`), `last-mile-delivery`
   (`StationView`).
@@ -277,7 +293,8 @@ stateDiagram-v2
 Derived from: model.yaml → `contexts[node-topology].aggregates[Region].states`,
 `.commands`.
 
-Omitted: nothing. The model has no rename and no removal.
+`DEFINED` is the initial state. Omitted: nothing. The model has no rename and
+no removal.
 
 ### 4. Enforced Invariants
 
@@ -313,8 +330,9 @@ event per region.
 ## Read models
 
 The model gives this context **no read model** (`read_models: []`). The four
-query routes (`GET /nodes/{nodeId}`, `GET /nodes?type=&region=&status=`,
-`GET /lanes?origin=&destination=`, `GET /service-areas/{postalPrefix}`) read
+query routes (`GET /nodes/{nodeId}` is `GetNode`, `GET /nodes?type=&region=&status=`
+is `ListNodes`, `GET /lanes?origin=&destination=` is `ListLanes`,
+`GET /service-areas/{postalPrefix}` is `ResolveServiceArea`) read
 the aggregates' own tables directly. That is enough here because:
 
 - the write rate is low, so the query load never contends with writes;
@@ -328,3 +346,12 @@ the aggregates' own tables directly. That is enough here because:
 The three uniqueness rules that span aggregates (`ErrVendorNodeCodeTaken`,
 `ErrDuplicateLane`, `ErrRegionCodeTaken`) are enforced by unique indexes in
 the same database, not by a read model and not by a bigger aggregate.
+
+## Inbound limits and the INBOUND capability
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+- `OperationalProfile` gains an optional `inbound{maxCartonWeightG, maxCartonDimsMm{l,w,h}, acceptsPallets, requiresSscc}`. Like the rest of the profile it is versioned by `profileRevision` and never edited in place.
+- New invariant `ErrInboundLimitsNotAllowed`: `inbound` is declared only by nodes with the `INBOUND` capability, and the weight and every dimension are positive.
+- `FULFILLMENT_CENTER` now has the `INBOUND` capability as well as `OUTBOUND`, because a seller's cartons are received at the building that stores them. `INBOUND_CROSS_DOCK` already had it. `DefaultCapabilitiesByType` is unchanged in kind: capabilities still come from the node type.
+- `NodeOperationalProfileDeclared` carries `inbound`. `seller-inbound` keeps it in `NodeInboundView` and checks carton weight and size against it; `node-topology` does not know sellers.

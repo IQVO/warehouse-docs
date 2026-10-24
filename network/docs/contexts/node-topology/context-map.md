@@ -52,7 +52,7 @@ flowchart LR
 
     NT -->|"U to D: C/S<br/>VC is Customer<br/>REST POST /nodes,<br/>PUT .../operational-profile"| VC
     NT -->|"U to D: UI<br/>REST nodes, lanes,<br/>service-areas, regions"| PL
-    NT -.->|"U to D: OHS<br/>REST GET nodes, lanes,<br/>service-areas"| ANY
+    NT -.->|"U to D: OHS<br/>REST GET nodes, list nodes,<br/>lanes, service-areas"| ANY
     NF -. "Separate Ways<br/>Vendor API only" .- NT
     CO -. "Separate Ways" .- NT
     ST -. "Separate Ways" .- NT
@@ -71,8 +71,8 @@ parameters are written without braces inside the diagrams.
 
 Omitted: Kafka and Postgres as infrastructure; the analytics topic (the model
 names no analytics event for this context); the future contexts
-(`inventory-placement`, `customer-returns`, `customer-notification`,
-`payments-and-invoicing`), which have no edge in the model.
+(`customer-returns`, `customer-notification`, `payments-and-invoicing`),
+which have no edge in the model.
 
 ## Relationships
 
@@ -86,8 +86,8 @@ names no analytics event for this context); the future contexts
 | `node-performance` (Supporting) | NT upstream, NP downstream | OHS + PL / Conformist | Kafka `retailnetwork.node-topology.events` | `NodeRegistered`, `NodeOperationalProfileDeclared` | NP measures a node against what it declared; it needs the declaration as published. |
 | `vendor-connectivity` (Supporting) | NT upstream, VC downstream | OHS + PL / Conformist | Kafka `retailnetwork.node-topology.events` | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | VC's `VendorNodeView` lets it answer vendors about their nodes without calling this context. |
 | `vendor-connectivity` (Supporting) | NT upstream (Supplier), VC downstream (Customer) | Customer/Supplier | REST in-org `POST /nodes`, `PUT /nodes/{nodeId}/operational-profile` | `RegisterNode`, `DeclareOperationalProfile` | VC needs an answer inside the processing of a vendor submission. The routes exist for this customer; the Supplier keeps the invariants (`ErrOperatorNotAllowedForNodeType`, `ErrStaleProfileRevision`) and VC turns a refusal into a failed submission. |
-| network-ops planner (person) | NT upstream | UI | REST `/nodes`, `/lanes`, `/service-areas`, `/regions` | `RegisterNode` (network node), `ActivateNode`, `SuspendNode`, `RetireNode`, `OpenLane`, `CloseLane`, `AssignServiceArea`, `DefineRegion` | A person drives the network's shape; there is no upstream system for it. |
-| any context or client | NT upstream | Open Host Service | REST `GET /nodes/{nodeId}`, `GET /nodes?type=&region=&status=`, `GET /lanes?origin=&destination=`, `GET /service-areas/{postalPrefix}` | `GetNode`, list nodes, `ListLanes`, `ResolveServiceArea` | One public read protocol for everyone. No neighbour declares these as a `sync_call`; they serve tools, planners and diagnosis. |
+| network-ops planner (person) | NT upstream | UI | REST `/nodes`, `/lanes`, `/service-areas`, `/regions` | `RegisterNode` (network node), `DeclareOperationalProfile` (`declaredBy` `NETWORK_OPS`), `ActivateNode`, `SuspendNode`, `RetireNode`, `OpenLane`, `CloseLane`, `AssignServiceArea`, `DefineRegion` | A person drives the network's shape; there is no upstream system for it. |
+| any context or client | NT upstream | Open Host Service | REST `GET /nodes/{nodeId}`, `GET /nodes?type=&region=&status=`, `GET /lanes?origin=&destination=`, `GET /service-areas/{postalPrefix}` | `GetNode`, `ListNodes`, `ListLanes`, `ResolveServiceArea` | One public read protocol for everyone. No neighbour declares these as a `sync_call`; they serve tools, planners and diagnosis. |
 | `network-fulfillment` (warehouse-systems fleet, Supporting in the fleet, external) | none | Separate Ways | none | none | The hard boundary: the fleet reaches the network only through the Vendor API of `vendor-connectivity` (model `meta.hard_boundary`; [ADR 0007](/network/adr/0007-cloudevents-namespace), [WMS/WES integration](/network/integration/wms-wes-integration)). |
 | `customer-ordering` (Generic) | none | Separate Ways | none | none | It works with promises and postal prefixes, never with nodes. |
 | `shipping-and-tracking` (Generic) | none | Separate Ways | none | none | Scans name a `nodeId` as a value; it keeps no node read model in the model. |
@@ -109,3 +109,11 @@ names no analytics event for this context); the future contexts
   Vendor API) and in `vendor-connectivity`'s Published Language.
 - **No Shared Kernel.** Consumers re-declare the few node fields they need
   in their own read models.
+
+## Seller inbound
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+| Neighbour | Direction | Pattern | Channel | Messages | Why |
+| --- | --- | --- | --- | --- | --- |
+| `seller-inbound` | U → D | Conformist | Kafka `retailnetwork.node-topology.events` | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | A node's status, `INBOUND` capability and carton limits are this context's facts. `seller-inbound` keeps a local `NodeInboundView`. |

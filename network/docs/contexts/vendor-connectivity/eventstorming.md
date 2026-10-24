@@ -284,7 +284,7 @@ goes out for every processed write (board 2).
 | `IssueOnRelease`, `CancelOnSourcingCancel`, `ExpireUnacknowledged`, `SimulationKnobs` | Policy | `policies` |
 | `VendorNodeView`, `ListingView`, purchase-order poll | Read Model | `read_models`; `rest` `GET /vendor/purchase-orders` |
 | H1: `ackBy` needs `handlingTime`, no source | Hotspot | `business_decisions` (`ackBy = min(...)`) vs `consumes` (no `NodeOperationalProfileDeclared`) and `read_models` (`VendorNodeView` sources) |
-| H2: cancel after acknowledgement is refused and nobody is told | Hotspot | `invariants` (`ErrCancelAfterAcknowledgement`) vs order-sourcing `transitions` (`RELEASED` to `CANCELLED`); no event or message covers the refusal |
+| H2: cancel after acknowledgement is refused (resolved, G12; one race stays open) | Hotspot | `invariants` (`ErrCancelAfterAcknowledgement`), `policies[CancelOnSourcingCancel]`: logged, nothing published; order-sourcing decides the cancel (`CancelDecision`) and an acceptance after a cancel is only logged there (`AcceptanceAfterCancelOnlyLogged`) |
 | H3: label is synchronous | Hotspot | `business_decisions` ("every vendor write returns 202") vs `SubmissionKind` (no label kind) and `sync_calls` (`IssueLabel`) |
 | H4: vendor suspension has no route, event or effect | Hotspot | `aggregates[VendorAccount].commands` vs `rest`, `publishes`, `invariants` |
 | H5: vendor never learns its `nodeId` | Hotspot | `aggregates[Submission]` (status and errors only) vs `rest` (`GET /vendor/nodes/{nodeId}` needs it) |

@@ -235,7 +235,8 @@ instance: 3 on the happy path (`PromiseMade`, `PromiseConfirmed`,
 
 The promise-side capacity ledger of one node pickup cutoff: how many orders the
 network has promised onto it against the node's declared share. Value object:
-`Capacity{share, provisional, confirmed}`. It counts orders, not packages
+`Capacity{share, provisional, confirmed}` and
+`BookTimes{cutoffAt, holdDeadline}`. It counts orders, not packages
 (packages on the truck belong to `linehaul-transportation`'s `Departure`).
 
 ### 3. State Transitions
@@ -253,8 +254,9 @@ Derived from: `model.yaml → contexts[delivery-promise].aggregates[PromiseBook]
 `.transitions`, `.commands`, `.invariants`.
 
 Omitted: the model's only transition is `OPEN → CLOSED: CloseBook`. The
-creating edge and the self-loops are this pack's reading: the model names no
-command that opens a book. `ConfirmCapacity` and `ReleaseCapacity` on a
+creating edge is the command `OpenBook`, run by the first hold for the pickup
+(policy `LazyBookOpening`); the self-loops are counter changes, not state
+changes. `ConfirmCapacity` and `ReleaseCapacity` on a
 `CLOSED` book are needed because closing only stops new holds: an order placed
 after the close must still confirm a hold made before it, and a promise
 cancelled or released after the close must still return its count (see Open Questions on
@@ -265,7 +267,7 @@ cancelled or released after the close must still return its count (see Open Ques
 | Invariant | Enforced by |
 | --- | --- |
 | `provisional + confirmed <= share` | `ErrPromiseCapacityExhausted` |
-| No hold after the pickup cutoff minus handling time | `ErrBookClosed` |
+| No hold once the book is `CLOSED` or from its `holdDeadline` (the pickup cutoff minus handling time) | `ErrBookClosed` |
 | A release never makes `provisional` or `confirmed` negative | `ErrCapacityUnderflow` |
 | Concurrent holds do not overbook (proposed, infrastructure) | optimistic `version` check, retried by the use case |
 
@@ -276,9 +278,11 @@ cancelled or released after the close must still return its count (see Open Ques
   its `AssignmentCost` (`bookPressurePenalty`).
 - **Holds expire**: `ReleaseExpiredHolds` returns provisional capacity of
   promises never confirmed.
-- **Close at the cutoff**: `CloseBook` at pickup cutoff minus handling time
-  (the instant behind `ErrBookClosed`). The model names no trigger; this pack
-  proposes a clock sweep.
+- **Close at the cutoff**: a clock job runs `CloseBook` at `cutoffAt`
+  (policy `CloseBooksAtCutoff`). Holds stop earlier, from the `holdDeadline`
+  (cutoff minus handling time, the instant behind `ErrBookClosed`).
+- **Share**: fixed when the book opens, by `BookShare`: `ceil(min(maxOrders,
+  throughput cap x window) x capacitySharePercent / 100)`, at least 1.
 - **A full book is not a dead end**: the search moves on to the next pickup
   cutoff of the same node, or another node (constraint
   `NODE_CAPACITY_EXHAUSTED` only when every candidate book is full).
@@ -287,10 +291,11 @@ cancelled or released after the close must still return its count (see Open Ques
 
 | Command | Issued by | Effect |
 | --- | --- | --- |
+| `OpenBook` | the first `HoldCapacity` for a (node, pickup departure), in the same transaction | creates the book `OPEN` with its `share`, `cutoffAt` and `holdDeadline` |
 | `HoldCapacity` | `MakePromise`; `RevisePromise` on a new book (this pack's reading) | `provisional + 1` |
 | `ConfirmCapacity` | `ConfirmPromise` | `provisional - 1`, `confirmed + 1` |
 | `ReleaseCapacity` | `ReleaseExpiredHolds` (provisional), `CancelPromise` and `RevisePromise` on the old book (confirmed) | `provisional - 1` or `confirmed - 1` |
-| `CloseBook` | clock sweep | `OPEN` → `CLOSED` |
+| `CloseBook` | clock job at `cutoffAt` | `OPEN` → `CLOSED` |
 
 ### 7. Created Events
 
