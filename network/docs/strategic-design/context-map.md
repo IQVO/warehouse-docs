@@ -139,7 +139,8 @@ flowchart TB
     OA ==>|"CF 1e"| NP
     VC ==>|"CF 8e"| NP
     VC ==>|"C/S 1e"| SI
-    SI ==>|"C/S 1e"| VC
+    SI ==>|"C/S 3e"| VC
+    SI ==>|"CF 1e"| NP
     NP -->|"C/S +REST"| VC
 ```
 
@@ -223,7 +224,8 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `order-sourcing` | `delivery-promise` | ? + C/S | `FulfillmentLocked`, `FulfillmentShipped`, `FulfillmentUnsourceable` | - |
 | `order-sourcing` | `linehaul-transportation` | C/S | `FulfillmentReleasedToNode`, `FulfillmentReassigned`, `FulfillmentLocked`, `FulfillmentCancelled` | - |
 | `order-sourcing` | `vendor-connectivity` | C/S | `FulfillmentReleasedToNode`, `FulfillmentCancelled` | - |
-| `seller-inbound` | `vendor-connectivity` | C/S | `InboundShipmentShipped` | - |
+| `seller-inbound` | `node-performance` | CF | `InboundShipmentShipped` | - |
+| `seller-inbound` | `vendor-connectivity` | C/S | `InboundShipmentLabelled`, `InboundShipmentShipped`, `InboundShipmentReceived` | - |
 | `shipping-and-tracking` | `customer-ordering` | ? + CF | `LabelIssued`, `LabelVoided`, `PackageScanned`, `PackageDelivered`, `PackageExceptionRaised`, `PackageReturned`, `PackageLost` | - |
 | `shipping-and-tracking` | `delivery-promise` | ? + CF | `PackageDelivered`, `PackageExceptionRaised`, `PackageReturned`, `PackageLost` | - |
 | `shipping-and-tracking` | `last-mile-delivery` | ? | `LabelIssued` | - |

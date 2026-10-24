@@ -233,15 +233,15 @@ Topic `retailnetwork.seller-inbound.events`.
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
-| `SellerOnboarded` | `com.retailnetwork.partner.seller-inbound.selleraccount.SellerOnboarded` | analytics only |
-| `SellerSuspended` | `com.retailnetwork.partner.seller-inbound.selleraccount.SellerSuspended` | analytics only |
-| `SellerReinstated` | `com.retailnetwork.partner.seller-inbound.selleraccount.SellerReinstated` | analytics only |
+| `SellerOnboarded` | `com.retailnetwork.partner.seller-inbound.seller.SellerOnboarded` | analytics only |
+| `SellerSuspended` | `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | analytics only |
+| `SellerReinstated` | `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | analytics only |
 | `InboundPlanConfirmed` | `com.retailnetwork.partner.seller-inbound.inboundplan.InboundPlanConfirmed` | analytics only |
-| `InboundShipmentLabelled` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentLabelled` | analytics only |
-| `InboundShipmentShipped` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentShipped` | `vendor-connectivity` |
-| `InboundShipmentReceived` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | analytics only |
+| `InboundShipmentLabelled` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentLabelled` | `vendor-connectivity` |
+| `InboundShipmentShipped` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentShipped` | `vendor-connectivity`, `node-performance` |
+| `InboundShipmentReceived` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | `vendor-connectivity` |
 | `InboundDiscrepancyRecorded` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundDiscrepancyRecorded` | analytics only |
-| `SellerComplianceViolationRecorded` | `com.retailnetwork.partner.seller-inbound.inboundshipment.SellerComplianceViolationRecorded` | analytics only |
+| `SellerComplianceViolationRecorded` | `com.retailnetwork.partner.seller-inbound.seller.SellerComplianceViolationRecorded` | analytics only |
 
 ## Reason vocabularies
 
@@ -432,25 +432,25 @@ Appears in: stored by `NodeScorecard`.
 
 ### Reasons of `seller-inbound`
 
-**`InboundShipmentOutcome`**: How a shipment closed after the vendor's carton-level receipt.
+**`InboundShipmentStatus`**: How a shipment closed after the vendor's carton-level receipt.
 
-Appears in: `InboundShipmentReceived.outcome`.
+Appears in: `InboundShipmentReceived.status`.
 
 | Value | Meaning |
 | --- | --- |
 | `CLOSED` | Every carton has a final status and nothing differs from the manifest. |
 | `CLOSED_WITH_DISCREPANCY` | At least one carton or quantity differs from the manifest; each difference is also published as InboundDiscrepancyRecorded. |
 
-**`InboundDiscrepancyKind`**: What differed between the manifest and the vendor's receipt.
+**`CartonReceiptStatus`**: The vendor's per-carton receipt status, reported on the receipt and carried on the shipment's closing event.
 
-Appears in: `InboundDiscrepancyRecorded.kind`.
+Appears in: `InboundShipmentReceived.cartons(sscc, status)`.
 
 | Value | Meaning |
 | --- | --- |
+| `RECEIVED` | The carton was received. |
 | `MISSING` | A manifest carton was not received. |
 | `UNEXPECTED` | A carton was received that the manifest does not list. |
 | `DAMAGED` | A carton was received damaged. |
-| `QUANTITY_MISMATCH` | A carton was received but the eaches of a GTIN differ from the manifest. |
 
 Contexts that own no closed reason vocabulary (their reason fields, if any, are free text): `node-topology`, `customer-ordering`.
 
