@@ -59,7 +59,7 @@ its thresholds are where the business states what "good enough" means.
 **Model complexity is low to moderate (x = 0.34).** One aggregate,
 `NodeScorecard`, with two states (`PROVISIONAL`, `GRADED`), three
 transitions all driven by `Recompute`, two commands and three invariants.
-The real work is in the inputs: fifteen consumed event types from five
+The real work is in the inputs: fifteen consumed event types from six
 producers, idempotent on the source event id
 (`ErrDuplicateObservation`), joined by `poNumber` and `nodeId`, and
 recomputed over two rolling windows. That is data plumbing more than
@@ -86,7 +86,7 @@ The scorecard could have lived inside `vendor-connectivity` (which sees
 most purchase-order facts) or inside `delivery-promise` (which uses the
 grade). It does not, for three reasons taken from the model:
 
-1. **It reads from five producers.** Handover comes from
+1. **It reads from six producers.** Handover comes from
    `shipping-and-tracking`, promise judgement from `delivery-promise`,
    feed freshness from `offer-availability`. Putting the scorecard in any
    one of them would make that context consume the others' facts for a
