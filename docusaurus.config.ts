@@ -4,7 +4,7 @@ import type * as Preset from '@docusaurus/preset-classic';
 import type * as OpenApiPlugin from 'docusaurus-plugin-openapi-docs';
 
 const config: Config = {
-  title: 'warehouse-systems Documentation',
+  title: 'IQVO ecosystem documentation',
   tagline:
     'The single reference for every bounded context in the warehouse-systems ecosystem — strategic & tactical DDD artifacts, REST and async APIs, and business context.',
   favicon: 'img/favicon.svg',
@@ -203,6 +203,86 @@ const config: Config = {
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],
+    [
+      '@docusaurus/plugin-content-docs',
+      {
+        id: 'network',
+        path: 'network/docs',
+        routeBasePath: 'network',
+        sidebarPath: './network-sidebars.ts',
+        editUrl: 'https://github.com/IQVO/warehouse-docs/tree/main/',
+        docItemComponent: '@theme/ApiItem',
+      },
+    ],
+    [
+      'docusaurus-plugin-openapi-docs',
+      {
+        id: 'network-api',
+        docsPluginId: 'network',
+        config: {
+          nodeTopology: {
+            specPath: 'network/apis/node-topology/openapi.yaml',
+            outputDir: 'network/docs/api-reference/rest/node-topology',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          offerAvailability: {
+            specPath: 'network/apis/offer-availability/openapi.yaml',
+            outputDir: 'network/docs/api-reference/rest/offer-availability',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          deliveryPromise: {
+            specPath: 'network/apis/delivery-promise/openapi.yaml',
+            outputDir: 'network/docs/api-reference/rest/delivery-promise',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          customerOrdering: {
+            specPath: 'network/apis/customer-ordering/openapi.yaml',
+            outputDir: 'network/docs/api-reference/rest/customer-ordering',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          orderSourcing: {
+            specPath: 'network/apis/order-sourcing/openapi.yaml',
+            outputDir: 'network/docs/api-reference/rest/order-sourcing',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          vendorConnectivity: {
+            specPath: 'network/apis/vendor-connectivity/openapi.yaml',
+            outputDir: 'network/docs/api-reference/rest/vendor-connectivity',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          linehaulTransportation: {
+            specPath: 'network/apis/linehaul-transportation/openapi.yaml',
+            outputDir: 'network/docs/api-reference/rest/linehaul-transportation',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          lastMileDelivery: {
+            specPath: 'network/apis/last-mile-delivery/openapi.yaml',
+            outputDir: 'network/docs/api-reference/rest/last-mile-delivery',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          shippingAndTracking: {
+            specPath: 'network/apis/shipping-and-tracking/openapi.yaml',
+            outputDir: 'network/docs/api-reference/rest/shipping-and-tracking',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          nodePerformance: {
+            specPath: 'network/apis/node-performance/openapi.yaml',
+            outputDir: 'network/docs/api-reference/rest/node-performance',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+        } satisfies Record<string, OpenApiPlugin.Options>,
+      },
+    ],
   ],
 
   themes: ['docusaurus-theme-openapi-docs', '@docusaurus/theme-mermaid'],
@@ -212,7 +292,7 @@ const config: Config = {
       respectPrefersColorScheme: true,
     },
     navbar: {
-      title: 'warehouse-systems Docs',
+      title: 'IQVO Ecosystem Docs',
       logo: {
         alt: 'warehouse-systems',
         src: 'img/logo.svg',
@@ -260,6 +340,20 @@ const config: Config = {
           position: 'left',
         },
         {
+          type: 'dropdown',
+          label: 'Retail Network',
+          position: 'left',
+          items: [
+            {type: 'docSidebar', sidebarId: 'researchSidebar', docsPluginId: 'network', label: 'Research'},
+            {type: 'docSidebar', sidebarId: 'strategicSidebar', docsPluginId: 'network', label: 'Strategic Design'},
+            {type: 'docSidebar', sidebarId: 'networkModelSidebar', docsPluginId: 'network', label: 'Nodes & Promise'},
+            {type: 'docSidebar', sidebarId: 'integrationSidebar', docsPluginId: 'network', label: 'WMS/WES Integration'},
+            {type: 'docSidebar', sidebarId: 'contextsSidebar', docsPluginId: 'network', label: 'Bounded Contexts'},
+            {type: 'docSidebar', sidebarId: 'apiSidebar', docsPluginId: 'network', label: 'API Reference'},
+            {to: '/network/adr', label: 'ADRs'},
+          ],
+        },
+        {
           href: 'https://github.com/IQVO/warehouse-docs',
           label: 'GitHub',
           position: 'right',
@@ -277,6 +371,15 @@ const config: Config = {
             {label: 'WMS and WES', to: '/wms-wes'},
             {label: 'Business Capability Architecture', to: '/business-capability-architecture'},
             {label: 'Bounded Contexts', to: '/contexts'},
+          ],
+        },
+        {
+          title: 'retail network',
+          items: [
+            {label: 'Network Overview', to: '/network/'},
+            {label: 'Domain Vision', to: '/network/strategic-design/domain-vision'},
+            {label: 'Promise Model', to: '/network/network-model/promise-model'},
+            {label: 'WMS/WES Integration', to: '/network/integration/wms-wes-integration'},
           ],
         },
         {
