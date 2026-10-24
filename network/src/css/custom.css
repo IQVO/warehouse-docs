@@ -1,0 +1,74 @@
+/**
+ * retail-network documentation theme.
+ * Slate/blue primary — a neutral, fleet-wide identity distinct from any
+ * single bounded context's own docs site accent colour.
+ */
+
+:root {
+  --ifm-color-primary: #c2410c;
+  --ifm-color-primary-dark: #ae3a0b;
+  --ifm-color-primary-darker: #a5370a;
+  --ifm-color-primary-darkest: #882d08;
+  --ifm-color-primary-light: #d6480d;
+  --ifm-color-primary-lighter: #e04f0f;
+  --ifm-color-primary-lightest: #f0703a;
+  --ifm-code-font-size: 92%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.08);
+  --ifm-heading-font-weight: 650;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #fb923c;
+  --ifm-color-primary-dark: #fa7d1a;
+  --ifm-color-primary-darker: #f97316;
+  --ifm-color-primary-darkest: #d65a06;
+  --ifm-color-primary-light: #fca85e;
+  --ifm-color-primary-lighter: #fdb672;
+  --ifm-color-primary-lightest: #fed7aa;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+}
+
+.navbar__logo {
+  color: var(--ifm-color-primary);
+}
+
+/* Tables carry a lot of this site's content — make them breathe. */
+.markdown table {
+  display: table;
+  width: 100%;
+}
+
+.markdown table th,
+.markdown table td {
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+/* Mermaid diagrams sit better centred with a little air around them. */
+.docusaurus-mermaid-container {
+  margin: 1.75rem 0;
+  text-align: center;
+}
+
+/* Classification badges used across strategic-design and context pages. */
+.badge-core {
+  background: #1e3a8a;
+  color: #fff;
+  padding: 0.1rem 0.5rem;
+  border-radius: 0.35rem;
+  font-weight: 600;
+}
+.badge-supporting {
+  background: #0f766e;
+  color: #fff;
+  padding: 0.1rem 0.5rem;
+  border-radius: 0.35rem;
+  font-weight: 600;
+}
+.badge-generic {
+  background: #475569;
+  color: #fff;
+  padding: 0.1rem 0.5rem;
+  border-radius: 0.35rem;
+  font-weight: 600;
+}

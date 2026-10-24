@@ -1,0 +1,432 @@
+openapi: 3.0.3
+info:
+  title: Offer & Availability API (proposed)
+  version: 0.1.0-proposed
+  description: |
+    Proposed contract of the `offer-availability` bounded context of the
+    retail network, derived from `model/model.yaml`
+    (`contexts[offer-availability].rest`). Nothing is built yet; the
+    routes, schemas and problem `type` slugs are the names an
+    implementation must use.
+
+    The context owns catalogue items, one listing per (catalogue item,
+    node), and the vendor-declared available quantity of each listing with
+    its basis (`PHYSICAL`, `THROUGHPUT_CONSTRAINED`, `UNKNOWN`).
+    `POST /inventory-feeds` is an in-organization call made by
+    `vendor-connectivity` while it processes a vendor's inventory
+    submission; vendors never call this API directly.
+
+    No authentication, consistent with the rest of the domain. Errors are
+    `application/problem+json` (RFC 9457).
+servers:
+  - url: http://localhost:8000/api/retail-network/offer-availability
+tags:
+  - name: Catalog items
+    description: The network's own item master (merchandising writes).
+  - name: Catalog
+    description: Storefront catalogue browse (Open Host Service).
+  - name: Listings
+    description: One listing per (catalogue item, node) and its availability.
+  - name: Inventory feeds
+    description: Vendor inventory feeds for one node, applied atomically (in-org, called by vendor-connectivity).
+paths:
+  /catalog-items:
+    post:
+      tags: [Catalog items]
+      operationId: createCatalogItem
+      summary: Create a catalogue item (CreateCatalogItem)
+      description: Creates an ACTIVE catalogue item and publishes CatalogItemCreated.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCatalogItemRequest'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogItem'
+        '422':
+          description: "`ErrInvalidItemDimensions` (type `invalid-item-dimensions`)."
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /catalog-items/{catalogItemId}:discontinue:
+    post:
+      tags: [Catalog items]
+      operationId: discontinueCatalogItem
+      summary: Discontinue a catalogue item (DiscontinueItem)
+      description: Moves the item from ACTIVE to DISCONTINUED and publishes CatalogItemDiscontinued. Discontinuing a DISCONTINUED item returns it unchanged (proposed).
+      parameters:
+        - $ref: '#/components/parameters/CatalogItemId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The item, now DISCONTINUED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogItem'
+        '404':
+          description: Unknown catalogItemId (type `not-found`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '409':
+          description: Concurrent modification (type `concurrent-modification`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /catalog:
+    get:
+      tags: [Catalog]
+      operationId: browseCatalog
+      summary: Browse the catalogue (BrowseCatalog)
+      responses:
+        '200':
+          description: Catalogue items.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogPage'
+  /catalog/{catalogItemId}:
+    get:
+      tags: [Catalog]
+      operationId: getCatalogItem
+      summary: Get one catalogue item (BrowseCatalog)
+      parameters:
+        - $ref: '#/components/parameters/CatalogItemId'
+      responses:
+        '200':
+          description: The item.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogItem'
+        '404':
+          description: Unknown catalogItemId (type `not-found`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /listings:
+    post:
+      tags: [Listings]
+      operationId: createListing
+      summary: Create a listing (CreateListing)
+      description: Creates the listing of one catalogue item on one node and publishes ListingCreated. The listing starts LIVE if the node is ACTIVE, otherwise SUPPRESSED (proposed).
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateListingRequest'
+      responses:
+        '201':
+          description: Created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Listing'
+        '409':
+          description: "`ErrDuplicateListing` (type `duplicate-listing`)."
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    get:
+      tags: [Listings]
+      operationId: listListings
+      summary: List listings by node and/or catalogue item
+      parameters:
+        - name: nodeId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: catalogItemId
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Matching listings.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListingPage'
+  /inventory-feeds:
+    post:
+      tags: [Inventory feeds]
+      operationId: applyInventoryFeed
+      summary: Apply an inventory feed for one node (ApplyInventoryFeed)
+      description: |
+        In-org call from vendor-connectivity. The feed is recorded RECEIVED
+        and applied atomically: APPLIED (with one ListingAvailabilityChanged
+        per changed listing and one InventoryFeedApplied) or FAILED (no line
+        applied, no event). A full feed (`fullUpdate: true`) sets
+        `availableQty` to 0 on every listing of the node it omits. A line
+        whose `asOf` is not after the listing's current `asOf` is ignored.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyInventoryFeedRequest'
+      responses:
+        '201':
+          description: The feed, APPLIED.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryFeed'
+        '409':
+          description: "`ErrFeedAlreadyApplied` (type `feed-already-applied`)."
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: "The feed is FAILED: `ErrListingNotOnNode` (type `listing-not-on-node`) or `ErrNegativeAvailability` (type `negative-availability`)."
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /inventory-feeds/{feedId}:
+    get:
+      tags: [Inventory feeds]
+      operationId: getInventoryFeed
+      summary: Get one inventory feed and its outcome
+      parameters:
+        - name: feedId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The feed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InventoryFeed'
+        '404':
+          description: Unknown feedId (type `not-found`).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: A repeated key with the same body replays the stored answer.
+      schema:
+        type: string
+        maxLength: 128
+    CatalogItemId:
+      name: catalogItemId
+      in: path
+      required: true
+      schema:
+        type: string
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 problem details. `type` is the slug of the domain error.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          description: Problem type slug, for example `duplicate-listing`.
+          example: duplicate-listing
+        title:
+          type: string
+        status:
+          type: integer
+          format: int32
+        detail:
+          type: string
+        instance:
+          type: string
+    CreateCatalogItemRequest:
+      type: object
+      required: [title, lengthMm, widthMm, heightMm, weightG, hazmat, fragile]
+      properties:
+        title:
+          type: string
+        lengthMm:
+          type: integer
+          minimum: 1
+        widthMm:
+          type: integer
+          minimum: 1
+        heightMm:
+          type: integer
+          minimum: 1
+        weightG:
+          type: integer
+          minimum: 1
+        hazmat:
+          type: boolean
+        fragile:
+          type: boolean
+    CatalogItem:
+      type: object
+      required: [catalogItemId, title, lengthMm, widthMm, heightMm, weightG, hazmat, fragile, state]
+      properties:
+        catalogItemId:
+          type: string
+        title:
+          type: string
+        lengthMm:
+          type: integer
+        widthMm:
+          type: integer
+        heightMm:
+          type: integer
+        weightG:
+          type: integer
+        hazmat:
+          type: boolean
+        fragile:
+          type: boolean
+        state:
+          type: string
+          enum: [ACTIVE, DISCONTINUED]
+    CatalogPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/CatalogItem'
+    CreateListingRequest:
+      type: object
+      required: [catalogItemId, nodeId]
+      properties:
+        catalogItemId:
+          type: string
+        nodeId:
+          type: string
+    Basis:
+      type: string
+      description: Why the node gave the number; kept as the vendor declared it, never re-derived.
+      enum: [PHYSICAL, THROUGHPUT_CONSTRAINED, UNKNOWN]
+    Availability:
+      type: object
+      required: [availableQty, basis]
+      properties:
+        availableQty:
+          type: integer
+          minimum: 0
+        basis:
+          $ref: '#/components/schemas/Basis'
+        asOf:
+          type: string
+          format: date-time
+          nullable: true
+          description: Strictly increasing per listing; null before the first feed (proposed).
+        feedId:
+          type: string
+          nullable: true
+    Listing:
+      type: object
+      required: [listingId, catalogItemId, nodeId, state, availability]
+      properties:
+        listingId:
+          type: string
+        catalogItemId:
+          type: string
+        nodeId:
+          type: string
+        state:
+          type: string
+          enum: [LIVE, SUPPRESSED]
+        suppressionReason:
+          type: string
+          nullable: true
+        availability:
+          $ref: '#/components/schemas/Availability'
+    ListingPage:
+      type: object
+      required: [listings]
+      properties:
+        listings:
+          type: array
+          items:
+            $ref: '#/components/schemas/Listing'
+    FeedLine:
+      type: object
+      description: Proposed line shape; the model names lines but does not define them.
+      required: [listingId, availableQty, basis]
+      properties:
+        listingId:
+          type: string
+        availableQty:
+          type: integer
+          description: Must be >= 0, else ErrNegativeAvailability fails the feed.
+        basis:
+          $ref: '#/components/schemas/Basis'
+    ApplyInventoryFeedRequest:
+      type: object
+      required: [feedId, nodeId, fullUpdate, asOf, lines]
+      properties:
+        feedId:
+          type: string
+          description: Chosen by the caller; a feed is applied at most once.
+        nodeId:
+          type: string
+        fullUpdate:
+          type: boolean
+          description: True for a full feed, the complete truth for its node.
+        asOf:
+          type: string
+          format: date-time
+          description: The instant the numbers are true for (proposed feed-level asOf).
+        lines:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeedLine'
+    InventoryFeed:
+      type: object
+      required: [feedId, nodeId, fullUpdate, state, lineCount]
+      properties:
+        feedId:
+          type: string
+        nodeId:
+          type: string
+        fullUpdate:
+          type: boolean
+        asOf:
+          type: string
+          format: date-time
+        state:
+          type: string
+          enum: [RECEIVED, APPLIED, FAILED]
+        lineCount:
+          type: integer
+        appliedAt:
+          type: string
+          format: date-time
+          nullable: true
+        failureCode:
+          type: string
+          nullable: true
+          description: The Err identifier of a FAILED feed.
