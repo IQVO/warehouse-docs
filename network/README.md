@@ -4,9 +4,11 @@ Domain documentation for **retail-network**: an Amazon-like retail and
 logistics network (catalogue, delivery promise, order sourcing, vendor
 connectivity, middle mile, last mile, tracking, node performance) modelled
 with Domain-Driven Design, and the one seam through which it connects to the
-[warehouse-systems](https://iqvo.github.io/warehouse-docs/) WMS/WES fleet.
+[warehouse-systems](/) WMS/WES fleet.
 
-Published at https://iqvo.github.io/retail-network-docs/.
+Merged into [warehouse-docs](https://github.com/IQVO/warehouse-docs) as the
+`network/` section (served at `/network/`); this directory is no longer a
+standalone site. Full history preserved via the subtree merge.
 
 **Status: proposed design, docs only.** Nothing described here is built.
 Facts about Amazon, the Selling Partner API and other benchmarks are on the

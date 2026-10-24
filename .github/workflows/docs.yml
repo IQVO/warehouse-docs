@@ -51,6 +51,11 @@ jobs:
       # scripts/capability-map/capabilities.py: fail when a page and the model
       # disagree (stdlib-only Python, preinstalled on the runner).
       - run: python3 scripts/capability-map/generate.py --check
+      - run: pip install pyyaml
+      - name: Network model consistency (network/model/model.yaml vs network/docs/)
+        run: npm run check:model:network
+      - name: Network generated strategic pages match the model
+        run: npm run check:pages:network
       - run: npm run build
 
   build:
