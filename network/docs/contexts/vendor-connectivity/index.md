@@ -7,8 +7,8 @@ description: "The network's Open Host Service for vendors: a Supporting partner-
 
 # Vendor Connectivity
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-supporting">Supporting</span>
@@ -47,6 +47,16 @@ between the two organizations.
 
 ## Elsewhere
 
+- Read-only MCP server (service ADR 0006): `cmd/mcp`, a second binary serving Streamable HTTP
+  on `:8090` with no auth; it sources this context's own reads and nothing that writes. Nine
+  tools: `get_inbound_shipment`, `get_node_scorecard`, `get_purchase_order`,
+  `get_transaction`, `get_vendor`, `get_vendor_node`, `list_vendor_nodes`,
+  `poll_inbound_shipments`, `poll_purchase_orders`. The gateway (Kong) exposes it at
+  `/api/mcp/vendor-connectivity`, rewritten to the server's `/mcp` mount.
+- Console remote (service ADR 0007): `web/`, a Vite + React Module Federation remote —
+  federation container `vendor_connectivity_mfe`, gateway mount `/mfes/vendor-connectivity/`,
+  dev/preview port `4021` — read-only screens over the existing REST reads, calling only this
+  context's API.
 - The Vendor API contract: `apis/vendor-connectivity/openapi.yaml`,
   rendered under [API reference](/network/api-reference). The protocol in prose is
   on [Vendor API](/network/integration/vendor-api).

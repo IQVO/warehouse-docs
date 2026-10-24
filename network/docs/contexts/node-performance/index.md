@@ -7,8 +7,8 @@ description: The Supporting context that grades every node from observed facts o
 
 # Node Performance
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span class="badge-supporting">Supporting</span>
@@ -55,6 +55,14 @@ root: two read-only routes, `GET /scorecards/{nodeId}` and
 
 ## Elsewhere
 
+- Read-only MCP server (service ADR 0007): `cmd/mcp`, a second binary serving Streamable HTTP
+  on `:8090` with no auth; it sources this context's own reads and nothing that writes. Two
+  tools: `get_scorecard`, `list_scorecards_by_grade`. The gateway (Kong) exposes it at
+  `/api/mcp/node-performance`, rewritten to the server's `/mcp` mount.
+- Console remote (service ADR 0008): `web/`, a Vite + React Module Federation remote —
+  federation container `node_performance_mfe`, gateway mount `/mfes/node-performance/`,
+  dev/preview port `4016` — read-only screens over the existing REST reads, calling only this
+  context's API.
 - [Domain vision](/network/strategic-design/domain-vision) and the network-wide
   [Context Map](/network/strategic-design/context-map).
 - [ADR 0003: capability is declared and measured](/network/adr/0003-declared-and-measured-capability):

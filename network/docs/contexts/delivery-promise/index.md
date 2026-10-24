@@ -7,8 +7,8 @@ description: The Core context that quotes a delivery date only from a feasible, 
 
 # Delivery Promise
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-core">Core</span>
@@ -47,6 +47,15 @@ a local read model fed by events.
 
 ## Elsewhere
 
+- Read-only MCP server (service ADR 0007): `cmd/mcp`, a second binary serving Streamable HTTP
+  on `:8090` with no auth; it sources this context's own reads and nothing that writes. Five
+  tools: `get_current_policy`, `get_delivery_offer`, `get_promise`, `list_promise_books`,
+  `list_promises_by_order`. The gateway (Kong) exposes it at `/api/mcp/delivery-promise`,
+  rewritten to the server's `/mcp` mount.
+- Console remote (service ADR 0008): `web/`, a Vite + React Module Federation remote —
+  federation container `delivery_promise_mfe`, gateway mount `/mfes/delivery-promise/`,
+  dev/preview port `4013` — read-only screens over the existing REST reads, calling only this
+  context's API.
 - The worked promise example (one cart, one destination, every step of the
   search with numbers) lives in [the promise model](/network/network-model/promise-model).
   This pack links to it rather than repeating it.

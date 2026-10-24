@@ -5,10 +5,11 @@
 # ubiquitous-language term printed on the site must exist here first.
 # Pages derive from it; they never introduce a new message or edge.
 #
-# Status: PROPOSED DESIGN. Nothing in this file is built. Identifiers
-# (Go-style Err... names, REST paths, CloudEvents types) are the names a
-# future implementation must use, so that the docs and the code agree from
-# day one.
+# Status: AS BUILT for the ten services (every context except seller-inbound,
+# which stays proposed design). The events, fields, consumers, routes and
+# reason vocabularies below were checked against each service's
+# specification; identifiers (Go-style Err... names, REST paths, CloudEvents
+# types) are the names the services use.
 #
 # This file is the MODEL derived from public fulfillment-network
 # benchmarks plus the warehouse-systems estate; it makes no claim

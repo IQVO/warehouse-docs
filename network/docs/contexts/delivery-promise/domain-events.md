@@ -7,8 +7,8 @@ description: Every event Delivery Promise publishes and consumes, with full Clou
 
 # Domain Events
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 Every event this context publishes (`contexts[delivery-promise].publishes`) and
