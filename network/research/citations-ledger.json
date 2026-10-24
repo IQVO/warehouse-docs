@@ -1,0 +1,525 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": 1,
+      "url": "https://www.aboutamazon.com/workplace/facilities",
+      "title": "Amazon — Our Facilities",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "At sortation centers, associates sort customer orders by final destination and consolidate them onto trucks for faster delivery.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "Amazon’s receive centers support customer fulfillment by taking in large orders of the types of inventory that we expect to quickly sell and allocating it to fulfillment centers within the network.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "In these buildings, customer orders are prepared for last-mile delivery to customers.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "url": "https://pubsonline.informs.org/doi/full/10.1287/inte.2025.0295",
+      "title": "Regionalize and Scale: Amazon’s Fulfillment Network Design (INFORMS Journal on Applied Analytics, 2026)",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Internally, the promise is given based on an analysis of the network state, and verification that at least one feasible delivery path exists.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "The assigned FC and path at order assignment time may be different from the feasible path that was used to generate the customer promise, because the final FC assignment is an opportunity for Amazon to optimize the network performance.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "The assigned path may change more than once until the item is picked in the FC, after which the path stays locked until delivery",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "partitioned the country into eight interconnected but largely self-sufficient regions",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "increased in-region fulfillment from 62% to 76%",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "In our software systems, we made changes in how we manage inventory, generate customer promises, and assign orders to FCs.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "Following successful pilot and full network deployment by March 2023",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "url": "https://www.amazon.science/news-and-features/how-amazon-reworked-its-fulfillment-network-to-meet-customer-demand",
+      "title": "Amazon Science — How Amazon reworked its fulfillment network",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "As soon as a customer clicks the \"buy now\" button, Amazon's Adaptive TRansportation OPtimization Service (ATROPS) assigns the optimal route for the purchased item.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "each region must carry the breadth of selection that customers expect",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "eight largely self-sufficient regional networks, while retaining national coverage.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "url": "https://pubsonline.informs.org/do/10.1287/orms.2022.05.24n/full",
+      "title": "ORMS Today — IFORS Lecture: The Amazon Fulfillment Network: Topology and Capacity Planning",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "The Amazon fulfillment network is comprised of Amazon buildings and transportation lanes among them.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "The lanes of this network are highly dynamic: their capacity can be changed a few days in advance",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "the fulfillment and sortation centers are planned years in advance whereas delivery stations are only planned months in advance.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "In addition, Amazon Air Gateway is also available",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "The Amazon operations supply chain network includes the inbound network – global vendors (FBA and retail), inbound cross dock and domestic vendors (FBA and retail) – and outbound network including middle mile (transport) to the fulfillment and sortation centers, to delivery stations and finally the last-mile destination.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "long-term planning is about 6+ months,  medium-term planning is three months and short-term planning is less than one month",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "url": "https://amazon.science/latest-news/how-amazons-middle-mile-team-helps-packages-make-the-journey-to-your-doorstep",
+      "title": "Amazon Science — How Amazon's Middle Mile team helps packages",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Amazon Transportation Services’ Middle Mile team develops routing solutions to move customer orders from its vendors and fulfillment centers to its network of sortation centers, air facilities, and delivery stations in the most efficient way possible.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "url": "https://www.aboutamazon.com/news/policy-news-views/amazon-dsp-program-update",
+      "title": "About Amazon — Delivery Service Partner program",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "While DSPs as independent businesses hire and manage their own employees, they receive support from Amazon to help them be successful.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "url": "https://www.aboutamazon.com/news/operations/doug-herrington-amazon-prime-delivery-speed",
+      "title": "About Amazon — Doug Herrington on delivery speed",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Across the top 60 largest U.S. metro areas, more than half of Prime member orders arrived the same or next day.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "Items shipped from nearby fulfillment centers or delivery stations helps packages get to customers not only faster, but also with fewer emissions.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "url": "https://developer-docs.amazon/sp-api/docs/supply-sources-api",
+      "title": "SP-API — Supply Sources API",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "to manage the configurations and capabilities of seller supply sources.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "url": "https://github.com/amzn/selling-partner-api-models/blob/main/models/supply-sources-api-model/supplySources_2020-07-01.json",
+      "title": "SP-API model — supplySources_2020-07-01.json",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "The opening time, ISO 8601 formatted timestamp without date, HH:mm.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "The operational configuration of `supplySources`.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "The outbound capability of a supply source.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "url": "https://github.com/amzn/selling-partner-api-models/blob/main/models/shipping-api-model/shippingV2.json",
+      "title": "SP-API model — Amazon Shipping API v2 (shippingV2.json)",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "The time windows promised for pickup and delivery events.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "The ship date and time (the requested pickup). This defaults to the current date and time.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 11,
+      "url": "https://github.com/amzn/selling-partner-api-models/blob/main/models/fulfillment-outbound-api-model/fulfillmentOutbound_2020-07-01.json",
+      "title": "SP-API model — Fulfillment Outbound 2020-07-01",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "The earliest date that the shipment is expected to be sent from the fulfillment center, in ISO 8601 date time format.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "The timestamp at which a delivery offer expires.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "If an item in a fulfillment order is determined to be unfulfillable before any shipment in the order has acquired the status of Pending",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "url": "https://github.com/amzn/selling-partner-api-models/blob/main/models/vendor-direct-fulfillment-orders-api-model/vendorDirectFulfillmentOrdersV1.json",
+      "title": "SP-API model — Vendor Direct Fulfillment Orders v1",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Time by which the vendor is required to ship the order.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "Delivery date promised to the Amazon customer.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "Status for orders accepted by vendors.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "url": "https://developer-docs.amazon/sp-api/docs/vendor-df-workflow-guide",
+      "title": "SP-API — Vendor Direct Fulfillment Workflow Guide",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Integrating with the Direct Fulfillment APIs starts with the vendor pulling the orders for fulfillment using the",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "You must acknowledge an order before you submit a shipping label request.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "This is a restricted operation and requires a Restricted Data Token (RDT) for authorization.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "url": "https://developer-docs.amazon/sp-api/docs/get-dynamic-delivery-offers",
+      "title": "SP-API — Get dynamic delivery offers",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Items that cannot be delivered at a requested tier return an empty `offers` array and a `constraints` array explaining why",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 15,
+      "url": "https://developer-docs.amazon/sp-api/reference/deliveryoffers",
+      "title": "SP-API — getDeliveryOffers",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "A list of delivery offers, including offer expiration, earliest and latest date and time range, and the delivery offer policy.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "url": "https://developer-docs.amazon.com/sp-api/reference/getfulfillmentpreview",
+      "title": "SP-API — getFulfillmentPreview",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "A list of fulfillment order previews, including estimated shipping weights, estima",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 17,
+      "url": "https://developer-docs.amazon.com/sp-api/changelog/new-introducing-the-external-fulfillment-apis-v2024-09-11",
+      "title": "SP-API — External Fulfillment APIs v2024-09-11",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "These APIs allow programmatic handling of inventory, returns, and shipping across multiple external fulfillment channels, including Seller Flex, Easy Ship, Self Ship, and MFN Self Delivery.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "url": "https://developer-docs.amazon.com/sp-api/reference/listhandoverslots",
+      "title": "SP-API — Easy Ship listHandoverSlots",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "A time window to hand over an Easy Ship package to Amazon Logistics.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 19,
+      "url": "https://developer-docs.amazon/sp-api/lang-ja_JP/reference/listplacementoptions",
+      "title": "SP-API — Fulfillment Inbound listPlacementOptions",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Contains information pertaining to the placement of the contents of an inbound plan and the related costs.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 20,
+      "url": "https://github.com/amzn/selling-partner-api-samples/discussions/124",
+      "title": "SP-API samples — Managing Handling Time on Amazon",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "it’s the number of business days a seller takes to pick, pack and ship a **Merchant Fulfilled Network (MFN)** order after receiving it.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 21,
+      "url": "https://support.google.com/merchants/answer/14949917?hl=en",
+      "title": "Google Merchant Center — Set up estimated delivery time",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "To calculate overall delivery time, you need to specify cut-off time, handling time, and transit time.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "This calculation is based on business days and takes your order cut-off time into account.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "We calculate this value as “maximum handling days + maximum transit days”.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "If an order's handling or transit time overlaps with a holiday, Google adds an extra day to the estimated delivery date.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 22,
+      "url": "https://developers.google.com/merchant/api/guides/shipping-settings/overview",
+      "title": "Google Merchant API — Overview of shipping settings",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Warehouse information can be managed by including a `warehouses` section in your `shippingsettings` resource, allowing you to specify details like address, handling time, and business days.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "url": "https://support.google.com/merchants/answer/16543665?hl=en",
+      "title": "Google Merchant Center — Handling cutoff time",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "attribute to specify the latest time an order can be placed to still be processed on the same day.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 24,
+      "url": "https://marketplacelearn.walmart.com/guides/Shipping%20&%20fulfillment/Fulfillment%20settings/Update-fulfillment-lag-time-in-Seller-Center",
+      "title": "Walmart Marketplace — Update fulfillment lag time",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Fulfillment lag time is the number of days it takes you to prepare an item for shipment.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "Walmart Marketplace requires you to ship orders within two operational days",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "unless you’ve submitted a",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 25,
+      "url": "https://developer.walmart.com/us-marketplace/reference/updatemultinodeinventory",
+      "title": "Walmart Marketplace API — Update item inventory per ship node",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "The unique alphanumeric ID you assign to an item.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "Update item inventory per ship node",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 26,
+      "url": "https://shopify.dev/docs/api/admin-graphql/2026-10/objects/DeliveryPromiseProvider",
+      "title": "Shopify Admin GraphQL — DeliveryPromiseProvider",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "The time zone to be used for interpreting day of week and cutoff times in delivery schedules when looking up delivery promises.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "A delivery promise provider. Currently restricted to select approved delivery promise partners.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "The location associated with this delivery promise provider.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 27,
+      "url": "https://shopify.dev/docs/api/admin-graphql/latest/objects/FulfillmentOrder",
+      "title": "Shopify Admin GraphQL — FulfillmentOrder",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Once the order routing process is complete, one or more fulfillment orders will be created and assigned to these locations.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "the order routing process which determines which locations will be responsible for fulfilling the purchased items.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 28,
+      "url": "https://www.ibm.com/products/intelligent-promising/promising",
+      "title": "IBM Sterling Intelligent Promising — Promising",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Inventory promising is no longer just about providing delivery estimates.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 29,
+      "url": "https://www.manh.com/solutions/omnichannel-software-solutions/order-management-system/precise-order-promising",
+      "title": "Manhattan Active Order Management — Precise Order Promising",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Precise order promises help retailers move from static day range promises (e.g., 5 to 7 days) to personalized and exact dates",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "refining order promises while considering the operational capabilities of a retailer’s supply chain.",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 30,
+      "url": "https://docs.oracle.com/en/cloud/saas/supply-chain-and-manufacturing/26c/faiom/set-up-promising-rules-and-sourcing-rules-for-order-management.html",
+      "title": "Oracle Order Management — Promising rules and sourcing rules",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Use an available-to-promise (ATP) rule and a sourcing rule to promise your sales o",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "You create a sourcing rule that specifies the supply sources to consider when promising",
+          "added": "2026-10-22"
+        }
+      ]
+    },
+    {
+      "id": 31,
+      "url": "https://dspace.mit.edu/handle/1721.1/122587",
+      "title": "MIT thesis — Optimization of delivery promise policy to control peak demand on a fulfillment network",
+      "accessed": "2026-10-22",
+      "quotes": [
+        {
+          "text": "Delivery promise policy establishes daily deadlines by which orders must be placed to be eligible for a two-day promise.",
+          "added": "2026-10-22"
+        },
+        {
+          "text": "This paper presents a methodology for using the promise policy to control the rate of new workable demand (NWD) arrival to the fulfillment network during a peak period.",
+          "added": "2026-10-22"
+        }
+      ]
+    }
+  ]
+}

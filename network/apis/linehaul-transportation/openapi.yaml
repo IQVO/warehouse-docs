@@ -1,0 +1,529 @@
+openapi: 3.0.3
+info:
+  title: Linehaul Transportation API (proposed)
+  version: 0.1.0
+  description: >-
+    Proposed REST contract of the linehaul-transportation bounded context of
+    the retail network, derived from model/model.yaml
+    (contexts[linehaul-transportation].rest). Nothing is built yet. It
+    exposes lane schedules, departures and loads. Domain events
+    (DepartureScheduled, DepartureCapacityChanged, DepartureCancelled,
+    DepartureDeparted, DepartureArrived, LoadClosed, LoadDeparted,
+    LoadArrived) are published on Kafka topic
+    retailnetwork.linehaul-transportation.events, not over REST. Errors are
+    RFC 9457 problem details. No authentication, consistent with the model's
+    no_auth convention. The LaneSchedule slot shape is a proposal: the model
+    lists no LaneSchedule fields.
+servers:
+  - url: http://localhost:8000/api/retail-network/linehaul-transportation
+tags:
+  - name: Lane schedules
+    description: Weekly templates that generate a lane's departures (aggregate LaneSchedule).
+  - name: Departures
+    description: Scheduled trips on lanes with cutoff and package capacity (aggregate Departure).
+  - name: Loads
+    description: Packages consolidated onto one departure at its origin node (aggregate Load).
+paths:
+  /lane-schedules:
+    post:
+      tags: [Lane schedules]
+      operationId: defineLaneSchedule
+      summary: Define the weekly schedule of a lane (DefineLaneSchedule)
+      description: >-
+        Creates the ACTIVE weekly template of one lane. Departures are
+        generated from it by the nightly GenerateDepartures (policy
+        HorizonRoll). Raises no event.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DefineLaneScheduleRequest'
+      responses:
+        '201':
+          description: Schedule defined.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaneSchedule'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /lane-schedules/{laneId}:retire:
+    post:
+      tags: [Lane schedules]
+      operationId: retireLaneSchedule
+      summary: Retire the schedule of a lane (RetireLaneSchedule)
+      description: Moves the schedule from ACTIVE to RETIRED. Raises no event.
+      parameters:
+        - $ref: '#/components/parameters/LaneId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Schedule retired (or already retired).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LaneSchedule'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /departures:
+    get:
+      tags: [Departures]
+      operationId: listDepartures
+      summary: List departures by origin, destination and time window (ListDepartures)
+      parameters:
+        - name: origin
+          in: query
+          required: false
+          description: Origin node id.
+          schema:
+            type: string
+        - name: destination
+          in: query
+          required: false
+          description: Destination node id.
+          schema:
+            type: string
+        - name: from
+          in: query
+          required: false
+          description: Earliest cutoffAt, inclusive.
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          required: false
+          description: Latest cutoffAt, exclusive.
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: Matching departures.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DepartureList'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /departures/{departureId}:
+    get:
+      tags: [Departures]
+      operationId: getDeparture
+      summary: Get one departure
+      parameters:
+        - $ref: '#/components/parameters/DepartureId'
+      responses:
+        '200':
+          description: The departure.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Departure'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /departures/{departureId}:cancel:
+    post:
+      tags: [Departures]
+      operationId: cancelDeparture
+      summary: Cancel a scheduled departure (CancelDeparture)
+      description: >-
+        Moves a SCHEDULED departure to CANCELLED and publishes
+        DepartureCancelled, which delivery-promise uses to re-promise.
+        Cancel before cutoffAt wherever possible.
+      parameters:
+        - $ref: '#/components/parameters/DepartureId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelDepartureRequest'
+      responses:
+        '200':
+          description: Departure cancelled (or already cancelled).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Departure'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /loads:
+    post:
+      tags: [Loads]
+      operationId: openLoad
+      summary: Open a load on a departure (OpenLoad)
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenLoadRequest'
+      responses:
+        '201':
+          description: Load opened.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Load'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /loads/{loadId}/packages:
+    post:
+      tags: [Loads]
+      operationId: addPackageToLoad
+      summary: Add a package to an open load (AddPackage)
+      description: >-
+        Refused with 409 package-already-loaded (ErrPackageAlreadyLoaded) if
+        the tracking number is on another OPEN or CLOSED load, and with 409
+        load-over-capacity (ErrLoadOverCapacity) if the load would exceed
+        the departure capacity.
+      parameters:
+        - $ref: '#/components/parameters/LoadId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddPackageRequest'
+      responses:
+        '200':
+          description: Package added (or already on this load).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Load'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /loads/{loadId}:close:
+    post:
+      tags: [Loads]
+      operationId: closeLoad
+      summary: Close an open load (CloseLoad)
+      description: OPEN to CLOSED; publishes LoadClosed.
+      parameters:
+        - $ref: '#/components/parameters/LoadId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Load closed.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Load'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /loads/{loadId}:dispatch:
+    post:
+      tags: [Loads]
+      operationId: dispatchLoad
+      summary: Dispatch a closed load (DispatchLoad)
+      description: CLOSED to DEPARTED; publishes LoadDeparted.
+      parameters:
+        - $ref: '#/components/parameters/LoadId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Load dispatched.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Load'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+  /loads/{loadId}:receive:
+    post:
+      tags: [Loads]
+      operationId: receiveLoad
+      summary: Receive a load at its destination node (ReceiveLoad)
+      description: >-
+        DEPARTED to ARRIVED; publishes LoadArrived, which last-mile-delivery
+        uses to induct the packages at a delivery station.
+      parameters:
+        - $ref: '#/components/parameters/LoadId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: Load received.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Load'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-chosen key; a replay with the same key returns the first response.
+      schema:
+        type: string
+        maxLength: 128
+    LaneId:
+      name: laneId
+      in: path
+      required: true
+      description: Lane id (owned by node-topology).
+      schema:
+        type: string
+    DepartureId:
+      name: departureId
+      in: path
+      required: true
+      description: Departure id.
+      schema:
+        type: string
+    LoadId:
+      name: loadId
+      in: path
+      required: true
+      description: Load id.
+      schema:
+        type: string
+  responses:
+    NotFound:
+      description: Unknown id (problem type not-found; no Err identifier in the model).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: >-
+        State or capacity conflict. Types: departure-full (ErrDepartureFull),
+        departure-closed (ErrDepartureClosed), lane-closed (ErrLaneClosed),
+        package-already-loaded (ErrPackageAlreadyLoaded), load-over-capacity
+        (ErrLoadOverCapacity), invalid-state-transition and
+        concurrent-modification (no Err identifier in the model).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unprocessable:
+      description: >-
+        Validation failure. Types: overlapping-slots (ErrOverlappingSlots),
+        invalid-departure-times (ErrInvalidDepartureTimes).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 problem details.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri
+          example: https://retailnetwork.example/problems/departure-full
+        title:
+          type: string
+          example: Departure full
+        status:
+          type: integer
+          example: 409
+        detail:
+          type: string
+          example: booked equals capacity on this departure
+        instance:
+          type: string
+    DepartureKind:
+      type: string
+      enum: [PICKUP, LINEHAUL, AIR]
+    DepartureState:
+      type: string
+      enum: [SCHEDULED, CLOSED, DEPARTED, ARRIVED, CANCELLED]
+    Departure:
+      type: object
+      required: [departureId, laneId, kind, originNodeId, destinationNodeId, cutoffAt, departsAt, arrivesAt, capacityPackages, bookedPackages, remainingPackages, state]
+      properties:
+        departureId:
+          type: string
+        laneId:
+          type: string
+        kind:
+          $ref: '#/components/schemas/DepartureKind'
+        originNodeId:
+          type: string
+        destinationNodeId:
+          type: string
+        cutoffAt:
+          type: string
+          format: date-time
+          description: No booking after this instant (ErrDepartureClosed).
+        departsAt:
+          type: string
+          format: date-time
+        arrivesAt:
+          type: string
+          format: date-time
+        capacityPackages:
+          type: integer
+          minimum: 0
+        bookedPackages:
+          type: integer
+          minimum: 0
+          description: Never above capacityPackages (ErrDepartureFull).
+        remainingPackages:
+          type: integer
+          minimum: 0
+        state:
+          $ref: '#/components/schemas/DepartureState'
+        cancelReason:
+          type: string
+          nullable: true
+        cancelledAt:
+          type: string
+          format: date-time
+          nullable: true
+        departedAt:
+          type: string
+          format: date-time
+          nullable: true
+        arrivedAt:
+          type: string
+          format: date-time
+          nullable: true
+    DepartureList:
+      type: object
+      required: [departures]
+      properties:
+        departures:
+          type: array
+          items:
+            $ref: '#/components/schemas/Departure'
+    CancelDepartureRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason:
+          type: string
+          minLength: 1
+    LaneScheduleSlot:
+      type: object
+      description: Proposed slot shape, mirroring Departure Times and Capacity; the model lists no slot fields.
+      required: [dayOfWeek, cutoffLocalTime, departsLocalTime, arrivesLocalTime, capacityPackages]
+      properties:
+        dayOfWeek:
+          type: string
+          enum: [MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY]
+        cutoffLocalTime:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          example: '18:00'
+        departsLocalTime:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          example: '18:30'
+        arrivesLocalTime:
+          type: string
+          pattern: '^([01][0-9]|2[0-3]):[0-5][0-9]$'
+          example: '22:45'
+        capacityPackages:
+          type: integer
+          minimum: 0
+    DefineLaneScheduleRequest:
+      type: object
+      required: [laneId, slots]
+      properties:
+        laneId:
+          type: string
+        slots:
+          type: array
+          minItems: 1
+          description: Slots must not overlap on the lane (ErrOverlappingSlots).
+          items:
+            $ref: '#/components/schemas/LaneScheduleSlot'
+    LaneSchedule:
+      type: object
+      required: [laneId, state, slots]
+      properties:
+        laneId:
+          type: string
+        state:
+          type: string
+          enum: [ACTIVE, RETIRED]
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/LaneScheduleSlot'
+    OpenLoadRequest:
+      type: object
+      required: [departureId]
+      properties:
+        departureId:
+          type: string
+    AddPackageRequest:
+      type: object
+      required: [trackingNumber]
+      properties:
+        trackingNumber:
+          type: string
+          minLength: 1
+    Load:
+      type: object
+      required: [loadId, departureId, originNodeId, destinationNodeId, capacityPackages, packageCount, trackingNumbers, state]
+      properties:
+        loadId:
+          type: string
+        departureId:
+          type: string
+        originNodeId:
+          type: string
+        destinationNodeId:
+          type: string
+        capacityPackages:
+          type: integer
+          minimum: 0
+          description: Snapshot of the departure capacity at OpenLoad (ErrLoadOverCapacity).
+        packageCount:
+          type: integer
+          minimum: 0
+        trackingNumbers:
+          type: array
+          items:
+            type: string
+        state:
+          type: string
+          enum: [OPEN, CLOSED, DEPARTED, ARRIVED]
+        departedAt:
+          type: string
+          format: date-time
+          nullable: true
+        arrivedAt:
+          type: string
+          format: date-time
+          nullable: true

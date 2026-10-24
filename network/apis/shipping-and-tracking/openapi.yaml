@@ -1,0 +1,319 @@
+openapi: 3.0.3
+info:
+  title: Shipping & Tracking API (proposed)
+  version: 0.1.0-proposed
+  description: >-
+    Proposed contract derived from model/model.yaml
+    (contexts[shipping-and-tracking].rest). Nothing is built yet. It covers
+    label issue and void, and reading and recording a package journey. No
+    schema carries a ship-to address or any part of it: the address is read
+    from customer-ordering at issue time, kept only as an encrypted snapshot
+    and never returned. The IssueLabel request fields are an assumption; the
+    model does not list them. No authentication (consistent with the model's
+    no_auth convention).
+servers:
+  - url: http://localhost:8000/api/retail-network/shipping-and-tracking
+tags:
+  - name: Labels
+    description: Shipping labels (ShippingLabel aggregate).
+  - name: Journeys
+    description: Package journeys (PackageJourney aggregate).
+paths:
+  /labels:
+    post:
+      tags: [Labels]
+      operationId: issueLabel
+      summary: Issue a shipping label for one package
+      description: >-
+        In-org route called by vendor-connectivity. Reads the ship-to from
+        customer-ordering (GET /orders/{orderId}/ship-to), stores it
+        encrypted, starts the package journey and publishes LabelIssued. The
+        response never contains the address.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/IssueLabelRequest'
+      responses:
+        '201':
+          description: Label issued (or replayed for a known Idempotency-Key).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Label'
+        '409':
+          description: ErrLabelAlreadyIssued (label-already-issued) or ErrTrackingNumberTaken (tracking-number-taken).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+        '503':
+          description: customer-ordering did not return the ship-to (ship-to-unavailable). No label is stored.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /labels/{labelRef}:void:
+    post:
+      tags: [Labels]
+      operationId: voidLabel
+      summary: Void an issued label
+      description: >-
+        Moves the label ISSUED to VOIDED and publishes LabelVoided. Voiding a
+        VOIDED label returns it unchanged. The model names no caller for this
+        route.
+      parameters:
+        - $ref: '#/components/parameters/LabelRef'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VoidLabelRequest'
+      responses:
+        '200':
+          description: Label voided.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Label'
+        '404':
+          description: Label not found (label-not-found).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+  /journeys/{trackingNumber}:
+    get:
+      tags: [Journeys]
+      operationId: getJourney
+      summary: Get the journey of one package
+      description: Open Host query for shoppers and customer-ordering (GetJourney).
+      parameters:
+        - $ref: '#/components/parameters/TrackingNumber'
+      responses:
+        '200':
+          description: The package journey and its scans.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Journey'
+        '404':
+          $ref: '#/components/responses/JourneyNotFound'
+  /journeys/{trackingNumber}/scans:
+    post:
+      tags: [Journeys]
+      operationId: recordScan
+      summary: Record one scan on a package journey
+      description: >-
+        RecordScan over REST. Scans apply in time order; an older scan is
+        stored but does not move the state (scan-out-of-order). The model
+        names no caller for this route.
+      parameters:
+        - $ref: '#/components/parameters/TrackingNumber'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordScanRequest'
+      responses:
+        '200':
+          description: Scan applied; the journey after the scan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Journey'
+        '404':
+          $ref: '#/components/responses/JourneyNotFound'
+        '409':
+          description: ErrDuplicateScan (duplicate-scan), ErrScanOutOfOrder (scan-out-of-order, the scan is stored but not applied) or ErrJourneyClosed (journey-closed).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Client-chosen key; a repeat with the same key and body replays the first response.
+      schema:
+        type: string
+        maxLength: 128
+    LabelRef:
+      name: labelRef
+      in: path
+      required: true
+      schema:
+        type: string
+    TrackingNumber:
+      name: trackingNumber
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    ValidationFailed:
+      description: The request is malformed (validation-failed).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    JourneyNotFound:
+      description: No journey for this tracking number (journey-not-found).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    ServiceTier:
+      type: string
+      enum: [SAME_DAY, NEXT_DAY, TWO_DAY, STANDARD]
+    LabelStatus:
+      type: string
+      enum: [ISSUED, VOIDED]
+    JourneyState:
+      type: string
+      enum: [LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, DELIVERED, RETURNED, LOST]
+    IssueLabelRequest:
+      type: object
+      description: Assumed shape; orderId is needed for GetShipTo and for PackageDelivered.
+      required: [poNumber, packageNo, assignmentId, orderId, tier]
+      additionalProperties: false
+      properties:
+        poNumber:
+          type: string
+        packageNo:
+          type: integer
+          minimum: 1
+        assignmentId:
+          type: string
+        orderId:
+          type: string
+        tier:
+          $ref: '#/components/schemas/ServiceTier'
+    Label:
+      type: object
+      description: Label metadata. Never contains the ship-to address.
+      required: [labelRef, trackingNumber, carrier, poNumber, packageNo, assignmentId, tier, status, issuedAt]
+      properties:
+        labelRef:
+          type: string
+        trackingNumber:
+          type: string
+        carrier:
+          type: string
+        poNumber:
+          type: string
+        packageNo:
+          type: integer
+        assignmentId:
+          type: string
+        tier:
+          $ref: '#/components/schemas/ServiceTier'
+        status:
+          $ref: '#/components/schemas/LabelStatus'
+        issuedAt:
+          type: string
+          format: date-time
+        voidReason:
+          type: string
+          nullable: true
+        voidedAt:
+          type: string
+          format: date-time
+          nullable: true
+    VoidLabelRequest:
+      type: object
+      required: [reason]
+      additionalProperties: false
+      properties:
+        reason:
+          type: string
+          minLength: 1
+    Scan:
+      type: object
+      required: [scanId, nodeId, scanType, at, applied]
+      properties:
+        scanId:
+          type: string
+        nodeId:
+          type: string
+        scanType:
+          type: string
+          description: Kind of observation; not enumerated in the model (pages use the source fact name).
+        at:
+          type: string
+          format: date-time
+        applied:
+          type: boolean
+          description: False for a scan stored out of order.
+    RecordScanRequest:
+      type: object
+      required: [scanId, nodeId, scanType, at]
+      additionalProperties: false
+      properties:
+        scanId:
+          type: string
+        nodeId:
+          type: string
+        scanType:
+          type: string
+        at:
+          type: string
+          format: date-time
+    Journey:
+      type: object
+      required: [trackingNumber, state, scans]
+      properties:
+        trackingNumber:
+          type: string
+        state:
+          $ref: '#/components/schemas/JourneyState'
+        poNumber:
+          type: string
+        assignmentId:
+          type: string
+        orderId:
+          type: string
+        handedOverAt:
+          type: string
+          format: date-time
+          nullable: true
+        deliveredAt:
+          type: string
+          format: date-time
+          nullable: true
+        scans:
+          type: array
+          items:
+            $ref: '#/components/schemas/Scan'
+    Problem:
+      type: object
+      description: RFC 9457 problem details.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          description: Problem type slug, for example label-already-issued.
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
