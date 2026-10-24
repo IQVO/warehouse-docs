@@ -37,15 +37,15 @@ Quantities are eaches. `sellerId` here is `ownerRef` on the Vendor API.
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
-| `SellerOnboarded` | `com.retailnetwork.partner.seller-inbound.selleraccount.SellerOnboarded` | analytics only |
-| `SellerSuspended` | `com.retailnetwork.partner.seller-inbound.selleraccount.SellerSuspended` | analytics only |
-| `SellerReinstated` | `com.retailnetwork.partner.seller-inbound.selleraccount.SellerReinstated` | analytics only |
+| `SellerOnboarded` | `com.retailnetwork.partner.seller-inbound.seller.SellerOnboarded` | analytics only |
+| `SellerSuspended` | `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | analytics only |
+| `SellerReinstated` | `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | analytics only |
 | `InboundPlanConfirmed` | `com.retailnetwork.partner.seller-inbound.inboundplan.InboundPlanConfirmed` | analytics only |
-| `InboundShipmentLabelled` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentLabelled` | analytics only |
-| `InboundShipmentShipped` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentShipped` | `vendor-connectivity` |
-| `InboundShipmentReceived` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | analytics only |
+| `InboundShipmentLabelled` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentLabelled` | `vendor-connectivity` |
+| `InboundShipmentShipped` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentShipped` | `vendor-connectivity`, `node-performance` |
+| `InboundShipmentReceived` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | `vendor-connectivity` |
 | `InboundDiscrepancyRecorded` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundDiscrepancyRecorded` | analytics only |
-| `SellerComplianceViolationRecorded` | `com.retailnetwork.partner.seller-inbound.inboundshipment.SellerComplianceViolationRecorded` | analytics only |
+| `SellerComplianceViolationRecorded` | `com.retailnetwork.partner.seller-inbound.seller.SellerComplianceViolationRecorded` | analytics only |
 
 ### Payloads
 
@@ -55,15 +55,18 @@ Quantities are eaches. `sellerId` here is `ownerRef` on the Vendor API.
 | `SellerSuspended` | `sellerId`, `suspendedAt`, `reason` |
 | `SellerReinstated` | `sellerId`, `reinstatedAt` |
 | `InboundPlanConfirmed` | `planId`, `sellerId`, `destinationNodeId`, `packingOption`, `lines` (`catalogItemId`, `gtin`, `qtyEaches`), `confirmedAt` |
-| `InboundShipmentLabelled` | `shipmentId`, `planId`, `sellerId`, `nodeId`, `cartonCount`, `labelledAt` |
-| `InboundShipmentShipped` | `shipmentId`, `planId`, `sellerId`, `nodeId`, `shippedAt`, `cartons` (`sscc`, `parentSscc`, `kind`, `grossWeightG`, `dimsMm`, `sealed`, `contents` (`catalogItemId`, `gtin`, `qtyEaches`, `lot`, `expiry`)) |
-| `InboundShipmentReceived` | `shipmentId`, `planId`, `sellerId`, `nodeId`, `outcome`, `receivedAt`, `received` (`catalogItemId`, `gtin`, `qtyEaches`) |
-| `InboundDiscrepancyRecorded` | `shipmentId`, `planId`, `sellerId`, `nodeId`, `kind`, `sscc`, `gtin`, `expectedEaches`, `receivedEaches`, `recordedAt` |
-| `SellerComplianceViolationRecorded` | `shipmentId`, `sellerId`, `sscc`, `complianceCode`, `recordedAt` |
+| `InboundShipmentLabelled` | `shipmentId`, `planId`, `sellerId`, `nodeId`, `cartons` (`sscc`, `parentSscc`, `kind`, `contents` (`catalogItemId`, `gtin`, `qtyEaches`, `lot`, `expiry`), `grossWeightG`, `dimsMm`), `labelledAt` |
+| `InboundShipmentShipped` | `shipmentId`, `planId`, `sellerId`, `nodeId`, `shippedAt` |
+| `InboundShipmentReceived` | `shipmentId`, `sellerId`, `nodeId`, `status`, `cartons` (`sscc`, `status`), `receivedAt` |
+| `InboundDiscrepancyRecorded` | `shipmentId`, `sellerId`, `nodeId`, `sscc` (optional), `kind`, `expected` (optional), `actual` (optional), `recordedAt` |
+| `SellerComplianceViolationRecorded` | `sellerId`, `shipmentId` (optional), `code`, `recordedAt` |
 
-Proposed value sets (the model names the fields, not their values):
-`outcome` is `CLOSED` or `CLOSED_WITH_DISCREPANCY`; `kind` is `MISSING`,
-`UNEXPECTED`, `DAMAGED` or `QUANTITY_MISMATCH`. `InboundShipmentReceived` is
+Value sets: `status` of the shipment is `CLOSED` or
+`CLOSED_WITH_DISCREPANCY`; the carton `status` is `RECEIVED`, `MISSING`,
+`UNEXPECTED` or `DAMAGED`. `kind` of a discrepancy is passed through
+unchanged from the vendor's receipt (the receiving fleet's carton discrepancy
+kind strings); this context does not own a closed vocabulary for it and
+branches on none of its values. `InboundShipmentReceived` is
 published once, when the shipment closes. `InboundDiscrepancyRecorded` is
 published for each discrepancy as receipts are processed, including while
 the shipment is still `RECEIVING`. Whether the analytics-only events go to
@@ -71,37 +74,37 @@ the `.analytics` topic follows `conventions.analytics_rule`.
 
 ### Example envelope
 
-`InboundShipmentShipped` is the only event another context acts on. The
-values are illustrative.
+`InboundShipmentLabelled` carries the carton manifest and
+`InboundShipmentShipped` marks it shippable to the vendor; both feed
+`InboundShipmentView` in `vendor-connectivity`. The values are illustrative.
 
 ```json
 {
   "specversion": "1.0",
   "id": "3f1a7c52-9d0e-4b6a-8c21-5e7f0a9b1c33",
   "source": "/retailnetwork/seller-inbound",
-  "type": "com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentShipped",
+  "type": "com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentLabelled",
   "subject": "ish-01J9Z7K3M4",
-  "time": "2026-10-23T13:20:00Z",
+  "time": "2026-10-23T13:10:00Z",
   "datacontenttype": "application/json",
-  "dataschema": "urn:retailnetwork:seller-inbound:events:InboundShipmentShipped:v1",
+  "dataschema": "urn:retailnetwork:seller-inbound:events:InboundShipmentLabelled:v1",
   "data": {
     "shipmentId": "ish-01J9Z7K3M4",
     "planId": "ipl-01J9Z7H8Q2",
     "sellerId": "seller-acme",
     "nodeId": "N-VWS-AUS3",
-    "shippedAt": "2026-10-23T13:20:00Z",
     "cartons": [
       {
         "sscc": "000123450000000010",
         "kind": "HOMOGENEOUS_CASE",
-        "grossWeightG": 7200,
-        "dimsMm": {"l": 400, "w": 300, "h": 250},
-        "sealed": true,
         "contents": [
           {"catalogItemId": "ci-1001", "gtin": "00012345678905", "qtyEaches": 12, "lot": "L2209", "expiry": "2028-09-30"}
-        ]
+        ],
+        "grossWeightG": 7200,
+        "dimsMm": {"l": 400, "w": 300, "h": 250}
       }
-    ]
+    ],
+    "labelledAt": "2026-10-23T13:10:00Z"
   }
 }
 ```

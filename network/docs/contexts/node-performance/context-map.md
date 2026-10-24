@@ -30,7 +30,9 @@ flowchart LR
     OA["offer-availability<br/>Supporting"]
     NT["node-topology<br/>Supporting"]
     NP["node-performance<br/>Supporting"]
+    SI["seller-inbound<br/>Supporting"]
     VC -->|"U to D: CF<br/>Kafka PO + vendor events"| NP
+    SI -->|"U to D: CF<br/>Kafka InboundShipmentShipped"| NP
     ST -->|"U to D: CF<br/>Kafka PackageHandedOver"| NP
     DP -->|"U to D: CF<br/>Kafka PromiseKept/Broken"| NP
     OA -->|"U to D: CF<br/>Kafka InventoryFeedApplied"| NP
@@ -112,4 +114,5 @@ to this one, which are Separate Ways: `customer-ordering` (Generic),
 
 | Neighbour | Direction | Pattern | Channel | Messages | Why |
 | --- | --- | --- | --- | --- | --- |
-| `vendor-connectivity` | U → D (NP downstream) | Conformist | Kafka `retailnetwork.vendor-connectivity.events` | `InboundReceiptSubmitted` (the eighth `vendor-connectivity` event this context reads) | The vendor's carton-level receipt is a fact about the node: how quickly it reported and how many cartons differed. |
+| `vendor-connectivity` | U → D (NP downstream) | Conformist | Kafka `retailnetwork.vendor-connectivity.events` | `InboundReceiptSubmitted` (the eighth `vendor-connectivity` event this context reads) | The vendor's carton-level receipt is a fact about the node: how many cartons were received in full. |
+| `seller-inbound` | U → D | Conformist | Kafka `retailnetwork.seller-inbound.events` | `InboundShipmentShipped` | The shipped instant is `seller-inbound`'s fact; it starts the inbound timeliness metric. |

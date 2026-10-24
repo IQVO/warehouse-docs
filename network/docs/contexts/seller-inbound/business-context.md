@@ -46,7 +46,7 @@ which cartons, and did it arrive as declared?*
 | --- | --- |
 | A seller | Is onboarded, creates and confirms an inbound plan, creates a shipment, adds cartons, prints labels, ships. Reads the shipment back. |
 | Network partner manager | Suspends and reinstates a seller. |
-| `vendor-connectivity` | Receives `InboundShipmentShipped` into `InboundShipmentView` and serves it on the Vendor API; relays the vendor's carton-level receipt as `InboundReceiptSubmitted`. |
+| `vendor-connectivity` | Receives `InboundShipmentLabelled`, `InboundShipmentShipped` and `InboundShipmentReceived` into `InboundShipmentView` and serves it on the Vendor API; relays the vendor's carton-level receipt as `InboundReceiptSubmitted`. |
 | A vendor (for example the warehouse-systems fleet, vendor V-WS) | Sees the shipment as a carton manifest through the Vendor API only, receives the cartons, and submits a receipt. It never calls this context. |
 | `node-topology`, `offer-availability` | Upstream facts: the destination node's inbound limits, the catalogue item's packaging hierarchy. |
 

@@ -49,7 +49,7 @@ proposed model):
    `InboundPlan`, `InboundShipment` with its `Carton` entity.
 2. **Eaches are the ledger unit.** Every quantity on every existing event,
    field and API keeps meaning eaches. New pack fields are named `cases`,
-   `unitsPerPack`, `qtyOfChild`; a bare `qty` never changes meaning. All new
+   `unitsPerPack`; a bare `qty` never changes meaning. All new
    event fields are optional and additive; no event changes meaning, so no
    event version changes.
 3. **GTIN and SSCC are values, validated by the receiver.** A GTIN is stored as
@@ -61,10 +61,16 @@ proposed model):
    network issues one from its own GS1 company prefix and returns the label.
 5. **GS1 immutability on the packaging hierarchy.** `offer-availability`'s
    `CatalogItem` gains the each GTIN and a `PackagingHierarchy` of pack levels
-   `EACH | INNER | CASE | PALLET`. Once a level is active its `qtyOfChild` and
-   `unitsPerPack` never change (`ErrPackQuantityImmutable`): a new content
-   quantity is a new GTIN at that level and a re-declaration of every level
-   above, and the old level is end-dated and kept for shipments in flight.
+   `EACH | INNER | CASE | PALLET`, each `{level, gtin, childGtin?,
+   unitsPerPack, dimsMm?, grossWeightG?, active}` (`unitsPerPack` is the direct
+   factor to eaches: at least 2 above `EACH`, 1 for `EACH`). Once a level is
+   active its `unitsPerPack` never changes for that GTIN
+   (`ErrPackQuantityImmutable`): a new content quantity is a new GTIN at that
+   level and a re-declaration of every level above, and the old level is
+   retired (inactive) and kept for shipments in flight. A level is declared with
+   `PUT /catalog-items/{id}/packaging/{level}` and retired with
+   `POST /catalog-items/{id}/packaging/{level}:retire`; each emits one
+   `CatalogItemPackagingDeclared` or `CatalogItemPackLevelRetired` event.
    Variable-measure GTINs are rejected. A mixed carton gets no pack GTIN: it
    is a logistic unit only.
 6. **Owner-segregated stock.** `ownerRef` (an opaque string, on the network
@@ -72,15 +78,20 @@ proposed model):
    per (catalogue item, node, owner). Quantities of different owners are never
    summed or merged. Commingling is not designed.
 7. **The boundary does not move.** `seller-inbound` publishes the carton
-   manifest as `InboundShipmentShipped`; `vendor-connectivity` serves it on the
-   Vendor API (`GET /vendor/inbound-shipments`) and takes the vendor's
+   manifest on `InboundShipmentLabelled` and the shipped instant on
+   `InboundShipmentShipped`; `vendor-connectivity` keeps both (and
+   `InboundShipmentReceived`) in a local `InboundShipmentView`, serves the
+   shipped ones on the Vendor API (`GET /vendor/inbound-shipments`) and takes the vendor's
    carton-level answer (`POST /vendor/inbound-receipts`, a new
    `SubmissionKind(INBOUND_RECEIPT)`), which it relays as
    `InboundReceiptSubmitted`. No retail-network context consumes a
    `warehouse.*` topic or calls a warehouse-systems service, and the fleet
    consumes no `retailnetwork.*` topic.
 8. **Node limits are declared.** `node-topology`'s `OperationalProfile` gains
-   `inbound{maxCartonWeightG, maxCartonDimsMm, acceptsPallets, requiresSscc}`.
+   `inbound{maxCartonWeightG, maxCartonDimsMm{l,w,h}, acceptsPallets,
+   requiresSscc}`, carried by `NodeOperationalProfileDeclared`. A profile
+   without it declares no limits: `seller-inbound` then treats the limits as
+   unchecked and the node as accepting cartons.
 9. **Receiving nodes need the `INBOUND` capability.** The model already gave it
    to `INBOUND_CROSS_DOCK`; this decision also gives it to `FULFILLMENT_CENTER`,
    because a seller's cartons are received at the building that stores them.
@@ -91,17 +102,26 @@ proposed model):
     start; nothing allocates by them.
 12. **Levels in the model, flows in two.** `INNER` exists in the model;
     receiving flows use `EACH` and `CASE` only.
+13. **Wire conventions.** Payloads are camelCase; quantities are always eaches
+    (`qtyEaches`); instants are RFC 3339 UTC; enums are UPPER_SNAKE; optional
+    fields are omitted when empty and arrays are always present. The
+    `kind` of an `InboundDiscrepancyRecorded` is passed through unchanged from
+    the vendor's receipt (the receiving side's carton discrepancy kind
+    strings); this model owns no closed vocabulary for it.
 
 ## Consequences
 
 - Eleven contexts: `seller-inbound` joins the `partner` tier, and its events
   are `com.retailnetwork.partner.seller-inbound.<entity>.<Event>`.
 - `vendor-connectivity` gains two endpoint groups and the
-  `InboundReceiptSubmitted` event; `node-performance` consumes it for two
-  informational inbound metrics that are not part of the grade.
+  `InboundReceiptSubmitted` event; `node-performance` consumes it, with
+  `InboundShipmentShipped`, for two informational inbound metrics (timeliness:
+  `receivedAt` minus `shippedAt`; accuracy: the share of cartons `RECEIVED`)
+  that are not part of the grade.
 - A listing now has an owner, but `order-sourcing` and `delivery-promise`
   are unchanged and ignore `ownerRef`. Choosing between two sellers of the
-  same item at the same node is therefore unspecified (gap G47).
+  same item at the same node is therefore unspecified (gap G47). Making
+  `order-sourcing` seller-aware is a follow-up, outside this decision.
 - Not solved here, and recorded in the
   [gap register](/network/strategic-design/model-gap-register): commingling, a seller
   compliance scorecard, inbound freight, X12 and EDIFACT adapters, FEFO,

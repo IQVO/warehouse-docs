@@ -52,7 +52,7 @@ Vendor API of `vendor-connectivity` remains the only channel.
   [API reference](/network/api-reference) and described on
   [Vendor API](/network/integration/vendor-api).
 - What this design does not solve:
-  [Model gap register](/network/strategic-design/model-gap-register), G41 to G54.
+  [Model gap register](/network/strategic-design/model-gap-register), G41 to G55.
 - There is no OpenAPI file for the seller-facing routes yet; the routes are
   listed in `contexts[seller-inbound].rest` in the model.
 - Where the context sits among the eleven: [Context Map](/network/strategic-design/context-map).

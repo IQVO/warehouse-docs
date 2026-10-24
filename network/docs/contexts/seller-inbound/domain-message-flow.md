@@ -51,14 +51,15 @@ sequenceDiagram
     participant V as vendor
     participant NP as node-<br/>performance
     S->>SI: cmd: ShipInboundShipment
-    SI->>VC: evt: InboundShipmentShipped<br/>carton manifest
+    SI->>VC: evt: InboundShipmentLabelled<br/>carton manifest
+    SI->>VC: evt: InboundShipmentShipped
     V->>VC: qry: PollInboundShipments
     V->>VC: cmd: SubmitInboundReceipt<br/>3 cartons RECEIVED
     VC-->>V: 202 and transactionId
     VC->>SI: evt: InboundReceiptSubmitted
     VC->>NP: evt: InboundReceiptSubmitted
     Note over SI: RecordInboundReceipt<br/>nothing differs
-    Note over SI: InboundShipmentReceived<br/>outcome CLOSED
+    Note over SI: InboundShipmentReceived<br/>status CLOSED
 ```
 
 ## 2. A receipt with a discrepancy

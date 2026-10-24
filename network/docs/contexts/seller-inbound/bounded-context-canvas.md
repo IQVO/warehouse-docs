@@ -25,7 +25,8 @@ flowchart TB
     NT -->|"evt NodeInboundView"| SI
     OA -->|"evt CatalogPackagingView"| SI
     VC -->|"evt InboundReceiptSubmitted"| SI
-    SI -->|"evt InboundShipmentShipped"| VC
+    SI -->|"evt InboundShipmentLabelled,<br/>Shipped, Received"| VC
+    SI -->|"evt InboundShipmentShipped"| NP
     VC -->|"evt InboundReceiptSubmitted"| NP
 ```
 
@@ -77,9 +78,9 @@ other context (`conventions.no_auth`).
 | --- | --- | --- |
 | `SellerOnboarded`, `SellerSuspended`, `SellerReinstated` | event | analytics only |
 | `InboundPlanConfirmed` | event | analytics only |
-| `InboundShipmentLabelled` | event | analytics only |
-| `InboundShipmentShipped` | event | `vendor-connectivity` |
-| `InboundShipmentReceived`, `InboundDiscrepancyRecorded`, `SellerComplianceViolationRecorded` | event | analytics only |
+| `InboundShipmentLabelled`, `InboundShipmentReceived` | event | `vendor-connectivity` |
+| `InboundShipmentShipped` | event | `vendor-connectivity`, `node-performance` |
+| `InboundDiscrepancyRecorded`, `SellerComplianceViolationRecorded` | event | analytics only |
 
 This context makes **no synchronous call** (`sync_calls` is empty).
 
@@ -110,6 +111,6 @@ first receipt; share of case-packed cartons refused at `AddCarton`.
 
 ## 11. Open questions
 
-See the gap register, [G41 to G54](/network/strategic-design/model-gap-register#introduced-by-seller-inbound-and-case-packed-shipments):
+See the gap register, [G41 to G55](/network/strategic-design/model-gap-register#introduced-by-seller-inbound-and-case-packed-shipments):
 commingling, compliance scoring, inbound freight, EDI adapters, FEFO, who
 creates owner-scoped listings from received stock, pallets and inner packs.

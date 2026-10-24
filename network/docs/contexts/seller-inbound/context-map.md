@@ -38,7 +38,9 @@ flowchart LR
     SEL["sellers<br/>external"]
     AN["analytics<br/>no in-org consumer"]
     NF["network-fulfillment<br/>fleet"]
-    SI -->|"U to D: C/S<br/>Kafka InboundShipmentShipped"| VC
+    NP["node-performance<br/>Supporting"]
+    SI -->|"U to D: C/S<br/>Kafka InboundShipmentLabelled,<br/>Shipped, Received"| VC
+    SI -->|"U to D: CF<br/>Kafka InboundShipmentShipped"| NP
     SI -->|"OHS<br/>REST seller API"| SEL
     SI -.->|"U to D: PL<br/>analytics-only events"| AN
     SI -. "Separate Ways<br/>manifest only via Vendor API" .- NF
@@ -58,9 +60,10 @@ Omitted: the contexts with no edge to this one, which are Separate Ways:
 | `node-topology` | U → D | Conformist | Kafka `retailnetwork.node-topology.events` | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | A node's status, capabilities and inbound limits are `node-topology`'s facts. Kept in `NodeInboundView`. |
 | `offer-availability` | U → D | Conformist | Kafka `retailnetwork.offer-availability.events` | `CatalogItemCreated`, `CatalogItemDiscontinued`, `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | The packaging hierarchy and its GTINs are the catalogue's. Kept in `CatalogPackagingView`. |
 | `vendor-connectivity` | U → D (SI downstream) | Customer/Supplier | Kafka `retailnetwork.vendor-connectivity.events` | `InboundReceiptSubmitted` | The receipt shape is the Published Language; `seller-inbound` states what it needs. |
-| `vendor-connectivity` | U → D (SI upstream) | Customer/Supplier | Kafka `retailnetwork.seller-inbound.events` | `InboundShipmentShipped` | The Vendor API needs the manifest; `seller-inbound` publishes what it needs. |
+| `vendor-connectivity` | U → D (SI upstream) | Customer/Supplier | Kafka `retailnetwork.seller-inbound.events` | `InboundShipmentLabelled`, `InboundShipmentShipped`, `InboundShipmentReceived` | The Vendor API needs the manifest and the closing status; `seller-inbound` publishes what it needs. |
+| `node-performance` | U → D (SI upstream) | Conformist (`node-performance` conforms) | Kafka `retailnetwork.seller-inbound.events` | `InboundShipmentShipped` | The shipped instant is the start of the inbound timeliness metric; `node-performance` keeps what it needs. |
 | Sellers (external) | U → D | Open Host Service | REST (seller-facing, no auth) | plans, shipments, cartons, labels | A published, versionable seller API. |
-| Analytics | U → D | Published Language | Kafka `retailnetwork.seller-inbound.analytics` | seven analytics-only events | Consumers: "analytics only". |
+| Analytics | U → D | Published Language | Kafka `retailnetwork.seller-inbound.analytics` | six analytics-only events | Consumers: "analytics only". |
 | `network-fulfillment` (warehouse-systems fleet) | none | Separate Ways | none | none | The hard boundary: the fleet reads the manifest through the Vendor API of `vendor-connectivity` only. |
 
 ## Notes on the patterns

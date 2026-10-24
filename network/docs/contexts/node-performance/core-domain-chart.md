@@ -59,7 +59,7 @@ its thresholds are where the business states what "good enough" means.
 **Model complexity is low to moderate (x = 0.34).** One aggregate,
 `NodeScorecard`, with two states (`PROVISIONAL`, `GRADED`), three
 transitions all driven by `Recompute`, two commands and three invariants.
-The real work is in the inputs: fourteen consumed event types from five
+The real work is in the inputs: fifteen consumed event types from five
 producers, idempotent on the source event id
 (`ErrDuplicateObservation`), joined by `poNumber` and `nodeId`, and
 recomputed over two rolling windows. That is data plumbing more than

@@ -133,4 +133,4 @@ the changes the fleet needs are on [Fleet changes](/network/integration/fleet-ch
 | Term | Definition | Code identifier | Not to be confused with |
 | --- | --- | --- | --- |
 | **Inbound Receipt** | A vendor's carton-level report of what arrived for one inbound shipment: per SSCC a status, the eaches received per GTIN and any compliance codes. | `submission.InboundReceipt` | A purchase-order acknowledgement, which answers an order the network sent. |
-| **ownerRef** (on the Vendor API) | The seller of record of the cartons: the `sellerId` of `seller-inbound`, opaque to the vendor. | `InboundShipmentView.ownerRef` | The vendor. |
+| **ownerRef** (on the Vendor API) | The seller of record of the cartons: the `sellerId` of `seller-inbound` (carried on the poll as `sellerId`, kept by the vendor as its own `ownerRef`), opaque to the vendor. | `InboundShipmentView.sellerId` | The vendor. |

@@ -236,7 +236,7 @@ context no source for it. This is listed as an open question on the
 | Type | `com.retailnetwork.partner.vendor-connectivity.submission.InboundReceiptSubmitted` |
 | Subject / key | `transactionId` |
 | Produced by | `ProcessSubmission` of an `INBOUND_RECEIPT` submission that ends in `SUCCESS` (policy `ReceiptRelay`) |
-| Consumers | `seller-inbound` (`RecordInboundReceipt`), `node-performance` (inbound latency and discrepancy observations) |
+| Consumers | `seller-inbound` (`RecordInboundReceipt`), `node-performance` (inbound timeliness and accuracy observations) |
 
 | Field | Type | Meaning |
 | --- | --- | --- |
@@ -245,7 +245,6 @@ context no source for it. This is listed as an open question on the
 | `nodeId` | string | The receiving node |
 | `shipmentId` | string | The inbound shipment the receipt answers |
 | `receivedAt` | RFC 3339 instant | When the vendor says the cartons arrived |
-| `submittedAt` | RFC 3339 instant | When the receipt was submitted |
 | `cartons` | array | Per carton: `sscc`, `status` (`RECEIVED`, `MISSING`, `UNEXPECTED`, `DAMAGED`), `items` (`gtin`, `qtyEaches` received), `complianceCodes` |
 
 Quantities are eaches. No event carries a ship-to address, name or phone.
@@ -254,6 +253,8 @@ Quantities are eaches. No event carries a ship-to address, name or phone.
 
 | Producer | Full type | What this context does |
 | --- | --- | --- |
-| `seller-inbound` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentShipped` | Insert into `InboundShipmentView` (the carton manifest the vendor polls), with `sellerId` exposed as `ownerRef`. |
+| `seller-inbound` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentLabelled` | Insert into `InboundShipmentView` (the carton manifest the vendor polls), with `sellerId` exposed unchanged (the vendor carries it as its `ownerRef`). |
+| `seller-inbound` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentShipped` | Mark the shipment `SHIPPED` in `InboundShipmentView`; only `SHIPPED` shipments are returned by the poll. |
+| `seller-inbound` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | Mark the shipment closed in `InboundShipmentView`; it leaves the poll. |
 | `offer-availability` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackagingDeclared` | Upsert `CatalogPackagingView` (levels, GTINs, `unitsPerPack`). |
-| `offer-availability` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackLevelRetired` | End-date the level in `CatalogPackagingView`. |
+| `offer-availability` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackLevelRetired` | Mark the level inactive in `CatalogPackagingView`. |

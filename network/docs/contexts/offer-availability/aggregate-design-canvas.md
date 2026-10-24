@@ -250,15 +250,15 @@ line, kept 30 days; one event per applied feed.
 > **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
 
 **CatalogItem** gains optional `Identifiers{gtin}` (the each-level GTIN) and a
-`PackagingHierarchy` of `PackLevelDef{level, gtin, childGtin, qtyOfChild, unitsPerPack, isOrderable, isDespatchUnit, effectiveFrom, effectiveTo?}`. New commands: `DeclarePackaging`, `RetirePackLevel`. New events: `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`.
+`PackagingHierarchy` of `PackLevelDef{level, gtin, childGtin?, unitsPerPack, dimsMm?, grossWeightG?, active}`. New commands: `DeclarePackaging`, `RetirePackLevel`. New events: `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`.
 
 | Invariant | Error |
 | --- | --- |
 | A GTIN is 8, 12, 13 or 14 digits with a valid mod-10 check digit, stored as 14 digits | `ErrInvalidGTIN` |
 | A GTIN identifies exactly one (item, level) | `ErrGtinAlreadyAssigned` |
-| Once a level is active its `qtyOfChild` and `unitsPerPack` never change: a new quantity is a new GTIN at that level and a re-declaration of every level above, and the old level is end-dated | `ErrPackQuantityImmutable` |
+| Once a level is active its `unitsPerPack` never changes for that GTIN: a new quantity is a new GTIN at that level and a re-declaration of every level above, and the old level is retired | `ErrPackQuantityImmutable` |
 | A level's child level is lower than the level itself | `ErrPackLevelOrder` |
-| `qtyOfChild` is at least 2 for every level above `EACH` | `ErrInvalidPackQuantity` |
+| `unitsPerPack` is at least 2 for every level above `EACH` and 1 for `EACH` | `ErrInvalidPackQuantity` |
 | Variable-measure GTINs (indicator digit 9) are rejected | `ErrVariableMeasureUnsupported` |
 
 **Listing** gains an optional `OwnerRef`. The invariant `ErrDuplicateListing`

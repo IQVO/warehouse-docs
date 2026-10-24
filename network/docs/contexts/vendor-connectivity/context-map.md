@@ -117,8 +117,8 @@ abbreviate the full event names listed in the table.
 
 | Neighbour | Direction | Pattern | Channel | Messages | Why |
 | --- | --- | --- | --- | --- | --- |
-| `seller-inbound` | U → D (VC downstream) | Customer/Supplier | Kafka `retailnetwork.seller-inbound.events` | `InboundShipmentShipped` | The Vendor API needs the carton manifest; `seller-inbound` publishes what it needs. |
+| `seller-inbound` | U → D (VC downstream) | Customer/Supplier | Kafka `retailnetwork.seller-inbound.events` | `InboundShipmentLabelled`, `InboundShipmentShipped`, `InboundShipmentReceived` | The Vendor API needs the carton manifest and the shipment's closing status; `seller-inbound` publishes what it needs. |
 | `seller-inbound` | U → D (VC upstream) | Customer/Supplier | Kafka `retailnetwork.vendor-connectivity.events` | `InboundReceiptSubmitted` | The vendor's carton-level answer is relayed; `seller-inbound` applies it. |
 | `offer-availability` | U → D | Conformist | Kafka `retailnetwork.offer-availability.events` | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | Packaging belongs to the catalogue. |
-| `node-performance` | U → D (NP downstream) | Conformist | Kafka `retailnetwork.vendor-connectivity.events` | `InboundReceiptSubmitted` (besides the seven listed above) | Inbound latency and discrepancy observations. |
+| `node-performance` | U → D (NP downstream) | Conformist | Kafka `retailnetwork.vendor-connectivity.events` | `InboundReceiptSubmitted` (besides the seven listed above) | Inbound timeliness and accuracy observations. |
 | `network-fulfillment` (fleet) | Vendor API | OHS + PL | REST | `GET /vendor/inbound-shipments`, `GET /vendor/inbound-shipments/{shipmentId}`, `POST /vendor/inbound-receipts` | The seam is unchanged: the fleet calls the Vendor API and nothing else. |

@@ -117,7 +117,7 @@ default to well-behaved:
 
 A seller's cartons reach a vendor node through this context, not directly.
 The vendor polls `GET /vendor/inbound-shipments` for a carton manifest
-(published by `seller-inbound` as `InboundShipmentShipped`) and answers with
+(published by `seller-inbound` as `InboundShipmentLabelled`, and made visible to the vendor once `InboundShipmentShipped`) and answers with
 `POST /vendor/inbound-receipts`, a carton-level receipt. The Vendor API stays
 the only channel between the two organizations. The model decides the shape
 of the exchange; how a vendor's own systems receive the cartons is the

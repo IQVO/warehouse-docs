@@ -279,4 +279,4 @@ payload reference and zero or more errors. One event in its life.
 
 **Submission** gains the kind `INBOUND_RECEIPT` and the command `SubmitInboundReceipt` (REST `POST /vendor/inbound-receipts`, `202` and a `transactionId`, like every vendor write). New invariant `ErrUnknownInboundShipment`: an `INBOUND_RECEIPT` names a shipment in `InboundShipmentView` addressed to a node of the submitting vendor (`ErrNodeNotOwnedByVendor` still applies to the node). New event `InboundReceiptSubmitted`, raised by `ProcessSubmission` on success (policy `ReceiptRelay`). This context does not apply the receipt to the shipment: `seller-inbound` owns that.
 
-New read models: `InboundShipmentView` (from `InboundShipmentShipped`) and `CatalogPackagingView` (from `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`).
+New read models: `InboundShipmentView` (from `InboundShipmentLabelled`, `InboundShipmentShipped`, `InboundShipmentReceived`; the poll returns only `SHIPPED` shipments of the vendor's nodes) and `CatalogPackagingView` (from `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`), exposed on the listing payload as `packaging[]`.

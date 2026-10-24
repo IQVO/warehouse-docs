@@ -186,17 +186,18 @@ All four come from `node-topology` on `retailnetwork.node-topology.events`
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `catalogItemId` | string | The item. |
-| `levels` | array | One entry per declared level: `level` (`EACH`, `INNER`, `CASE`, `PALLET`), `gtin` (14 digits), `childGtin` (the next lower level's GTIN, absent for `EACH`), `qtyOfChild` (at least 2 above `EACH`), `unitsPerPack` (direct factor to eaches), `isOrderable`, `isDespatchUnit`, `effectiveFrom`. |
-| `version` | integer | Version of the item's hierarchy. |
+| `level` | enum | `EACH`, `INNER`, `CASE` or `PALLET`: the one level this event declares. |
+| `gtin` | string | The level's GTIN, 14 digits. |
+| `childGtin` | string, optional | The next lower level's GTIN; absent for `EACH`. |
+| `unitsPerPack` | integer | Direct factor to eaches: at least 2 above `EACH`, 1 for `EACH`. |
+| `declaredAt` | RFC 3339 instant | When the level was declared. |
 
 **`CatalogItemPackLevelRetired`** (same entity and subject)
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `catalogItemId`, `level`, `gtin` | string | The level that ends. |
-| `effectiveTo` | date | The old level is end-dated, not deleted, so shipments in flight still validate. |
-| `reason` | string | Why. |
-| `version` | integer | Version of the hierarchy. |
+| `catalogItemId`, `level`, `gtin` | string | The level that ends. It is retired (inactive), not deleted, so shipments in flight still validate. |
+| `retiredAt` | RFC 3339 instant | When the level was retired. |
 
 **`ListingCreated`** and **`ListingAvailabilityChanged`** gain an optional
 `ownerRef` (the seller of record; absent means the vendor's own stock). Both

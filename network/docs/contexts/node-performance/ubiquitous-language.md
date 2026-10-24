@@ -78,5 +78,5 @@ Vendor API; the canonical network ↔ fleet term table is on
 
 | Term | Definition | Code identifier | Not to be confused with |
 | --- | --- | --- | --- |
-| **Inbound Receipt Latency** | p95 minutes between `receivedAt` and `submittedAt` on `InboundReceiptSubmitted`. Informational. | `scorecard.Metrics.InboundReceiptLatencyP95Minutes` | Feed freshness. |
-| **Inbound Discrepancy Rate** | Share of cartons in receipts not `RECEIVED` in full. Informational; mixes node and seller causes (gap G52). | `scorecard.Metrics.InboundDiscrepancyRate` | A reject rate on purchase orders. |
+| **Inbound Timeliness** | p95 minutes between a shipment's `shippedAt` (`InboundShipmentShipped`) and the `receivedAt` of its `InboundReceiptSubmitted`. Informational. | `scorecard.Metrics.InboundTimelinessP95Minutes` | Feed freshness. |
+| **Inbound Accuracy Rate** | Share of cartons in receipts with status `RECEIVED`. Informational; mixes node and seller causes (gap G52). | `scorecard.Metrics.InboundAccuracyRate` | A reject rate on purchase orders. |

@@ -118,14 +118,14 @@ Reads (`GetInboundShipment`, `GetLabels`) go straight to the repository.
   single-shipment plan). After this, `GET .../labels` returns one printable
   label per carton.
 - **Errors:** `ErrCartonContentsMismatchPlan`, `ErrSellerSuspended`, `ErrIllegalTransition`.
-- **Events:** `InboundShipmentLabelled`.
+- **Events:** `InboundShipmentLabelled` (the carton manifest, with contents, weights and sizes).
 
 ## ShipInboundShipment
 
 - **REST:** `POST /inbound-shipments/{shipmentId}:ship`.
 - **Flow:** `LABELLED → SHIPPED`, re-checks the node and the seller.
 - **Errors:** `ErrShipmentNotLabelled`, `ErrNodeCannotReceive`, `ErrSellerSuspended`.
-- **Events:** `InboundShipmentShipped` (the carton manifest).
+- **Events:** `InboundShipmentShipped` (`shippedAt`; the manifest was published on `InboundShipmentLabelled`).
 
 ## RecordInboundReceipt
 
