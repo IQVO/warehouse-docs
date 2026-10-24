@@ -45,7 +45,7 @@ assignment for good. When no node can still meet the promise's
 
 | Page | What it covers | ddd-crew tool it follows |
 | --- | --- | --- |
-| [Business Context](/network/contexts/order-sourcing/business-context) | The sourcing problem in plain language, actors, decisions, the Amazon-like reality, scope | — (narrative) |
+| [Business Context](/network/contexts/order-sourcing/business-context) | The sourcing problem in plain language, actors, decisions, the real fulfillment networks, scope | — (narrative) |
 | [Ubiquitous Language](/network/contexts/order-sourcing/ubiquitous-language) | Every term of this context and the neighbour terms it uses | glossary, from the [DDD Starter Modelling Process](https://github.com/ddd-crew/ddd-starter-modelling-process) (Define step) |
 | [Core Domain Chart](/network/contexts/order-sourcing/core-domain-chart) | Why this context is Core | [core-domain-charts](https://github.com/ddd-crew/core-domain-charts) |
 | [Bounded Context Canvas](/network/contexts/order-sourcing/bounded-context-canvas) | Purpose, classification, roles, every inbound and outbound message, decisions, open questions | [bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas) v5 |

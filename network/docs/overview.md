@@ -2,13 +2,13 @@
 id: overview
 title: retail-network
 sidebar_label: Overview
-description: "An Amazon-like retail and logistics network, modelled with Domain-Driven Design as ten bounded contexts, and the one seam through which it connects to the warehouse-systems WMS/WES fleet."
+description: "An large-scale retail and logistics network, modelled with Domain-Driven Design as ten bounded contexts, and the one seam through which it connects to the warehouse-systems WMS/WES fleet."
 slug: /
 ---
 
 # retail-network
 
-**retail-network** is a model of an Amazon-like retail and logistics network:
+**retail-network** is a model of an large-scale retail and logistics network:
 a storefront that promises an arrival date, a network of nodes (vendor
 fulfillment centres, sortation centres, delivery stations, air hubs) joined by
 lanes, the decision of which node fulfils each order, the middle and last mile,
@@ -22,10 +22,7 @@ context is the only fleet service that talks to the network, through the
 network's Vendor API.
 
 :::info[Proposed design, docs only]
-Nothing on this site is built. Facts about Amazon, the Selling Partner API and
-other networks are on the [Research](/network/research) pages with numbered
-citations. Everything else is the model this site proposes, derived from that
-evidence and from the fleet's repositories. The canonical model is
+Nothing on this site is built. The model is derived from public fulfillment-network research and the fleet's repositories. The canonical model is
 [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml);
 every page is derived from it, and a CI gate fails the build when a page names
 a message the model does not have.
@@ -92,7 +89,7 @@ map with every relationship pattern is on
 
 ## How to read this site
 
-1. [Research](/network/research): what is publicly known, with citations.
+1. public research: what is publicly known, with citations.
 2. [Strategic Design](/network/strategic-design): vision, subdomains, core domain
    chart, capability map, context map, EventStorming, message flows,
    ubiquitous language, event standard (the ddd-crew strategic set), and the

@@ -15,7 +15,7 @@ description: "After a vendor accepts a purchase order in full, order-sourcing ne
 
 ## Context
 
-In Amazon's own buildings the published lock point is "picked". The network
+In the reference operator's buildings the published lock point is "picked". The network
 cannot see a vendor's floor. A vendor that accepts fill-or-kill commits stock
 and work: the fleet's `network-fulfillment` releases its held
 `order-management` order only after a reconciled acceptance.

@@ -1,6 +1,6 @@
 # retail-network-docs
 
-Domain documentation for **retail-network**: an Amazon-like retail and
+Domain documentation for **retail-network**: an large-scale retail and
 logistics network (catalogue, delivery promise, order sourcing, vendor
 connectivity, middle mile, last mile, tracking, node performance) modelled
 with Domain-Driven Design, and the one seam through which it connects to the
@@ -11,9 +11,8 @@ Merged into [warehouse-docs](https://github.com/IQVO/warehouse-docs) as the
 standalone site. Full history preserved via the subtree merge.
 
 **Status: proposed design, docs only.** Nothing described here is built.
-Facts about Amazon, the Selling Partner API and other benchmarks are on the
-Research pages with numbered citations; everything else is the model derived
-from them.
+The model is derived from public fulfillment-network benchmarks;
+everything else is the design this site proposes.
 
 ## Layout
 

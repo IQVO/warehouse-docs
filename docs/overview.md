@@ -175,9 +175,8 @@ artifacts here.
 `warehouse-systems` is an educational Domain-Driven Design exercise
 following real industry-standard patterns (WMS/WES/WCS, CloudEvents,
 RFC 7807, hexagonal architecture). It is not a production system and is not
-affiliated with, endorsed by, or representative of Amazon, Manhattan
+affiliated with, endorsed by, or representative of Manhattan
 Associates, Blue Yonder, or any other company. Where this documentation
-grounds a design decision in public industry research (e.g. how Amazon's
-fulfillment centers work), that research is cited. Anything derived from it
+grounds a design decision in public industry research (e.g. how large-scale fulfillment centers work), that research is cited. Anything derived from it
 is labeled as a *reference model*, not as a factual claim about any real
 company's internal systems.

@@ -11,9 +11,9 @@ description: "The six node types, who operates them, the declared operational pr
 Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml)
 → `node_types`, `lane_rules`, `fleet_site_role_mapping` and
 `contexts[node-topology]`. The building types are grounded on
-[The Amazon logistics network](/network/research/amazon-logistics-network); the
+Public fulfillment-network research; the
 declared profile on the Supply Sources schema in
-[SP-API surface map](/network/research/sp-api-surface-map). Owner:
+the vendor platform API surface map. Owner:
 [`node-topology`](/network/contexts/node-topology).
 :::
 

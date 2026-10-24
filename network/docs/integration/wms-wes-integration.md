@@ -59,13 +59,13 @@ Hard rules, both directions:
    (`internal/application/ports/ports.go`).
 3. No ship-to PII crosses the seam. The fleet side already decided this
    ("No ship-to PII reaches this context at all", `network-fulfillment`
-   `docs/adr/0009-retail-network-not-amazon-counterpart.md` §3); the network
+   `docs/adr/0009-retail-network-not-a-real-network-counterpart.md` §3); the network
    side keeps the address in `customer-ordering` and `shipping-and-tracking`
    ([ADR 0006](/network/adr/0006-pii-confinement)).
 4. Identifiers are mapped, never parsed: the fleet persists
    `siteCode ↔ nodeId` and `NetworkRef ↔ poNumber`; it never builds one from
    the other by string convention (`network-fulfillment`
-   `docs/adr/0009-retail-network-not-amazon-counterpart.md` §5, "correlation
+   `docs/adr/0009-retail-network-not-a-real-network-counterpart.md` §5, "correlation
    as a persisted mapping", and its ADR 0014, which refused to correlate
    `PackageManifested` by string).
 

@@ -80,19 +80,19 @@ The search itself is described step by step in the
 [Use Cases](/network/contexts/delivery-promise/use-cases) page, and worked through with
 numbers in [the promise model](/network/network-model/promise-model).
 
-## How this relates to the Amazon-like reality
+## How this relates to the real fulfillment networks
 
 The shape of this context follows public descriptions of how a large retail
 network promises delivery: a date computed from the network's real schedules
 and capacity, regional fulfillment and delivery stations, scorecards that
 penalise vendors who ship late, and fast tiers that are constrained at peak.
 The facts, with citations, are on
-[the Amazon logistics network research page](/network/research/amazon-logistics-network).
+public fulfillment-network research.
 What a vendor can and cannot declare through a public API, and how promise and
 acknowledgement windows appear there, is mapped on
-[the SP-API surface map](/network/research/sp-api-surface-map). Other retailers and
+the vendor platform API surface map. Other retailers and
 order-management products used as benchmarks are on
-[the benchmarks page](/network/research/benchmarks).
+the benchmarks page.
 
 None of this pack claims anything about a real company's internal services.
 `DeliveryOffer`, `Promise`, `PromiseBook`, the witness path and the handicap

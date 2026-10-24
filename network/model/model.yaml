@@ -10,9 +10,8 @@
 # future implementation must use, so that the docs and the code agree from
 # day one.
 #
-# Facts about Amazon, SP-API and the other benchmarks live in
-# docs/research/* with numbered citations. This file is the MODEL derived
-# from those facts plus the warehouse-systems estate; it makes no claim
+# This file is the MODEL derived from public fulfillment-network
+# benchmarks plus the warehouse-systems estate; it makes no claim
 # about any real company's internal service names.
 
 meta:

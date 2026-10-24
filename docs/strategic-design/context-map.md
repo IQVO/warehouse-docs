@@ -739,7 +739,7 @@ the rest of the fleet sees only SKUs, quantities and a deadline. Today only
 `StubGateway` exists, and `NETWORK_MODE=live` refuses to boot because there is
 no adapter. The reference deployment pins `networkMode = "stub"`. The
 relationship is decided in
-[`network-fulfillment` ADR 0009](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0009-retail-network-not-amazon-counterpart.md)
+[`network-fulfillment` ADR 0009](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0009-retail-network-not-a-real-network-counterpart.md)
 (Accepted). Its companion `retail-network` ADR 0001 is still a draft at
 `docs/planning/retail-network-adr-0001-DRAFT-for-new-repo.md` in
 `network-fulfillment`, and no `retail-network` repository exists yet.

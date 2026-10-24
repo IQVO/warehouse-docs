@@ -69,7 +69,7 @@ const SECTIONS = [
   {
     key: 'network',
     name: 'Retail Network',
-    tagline: 'The Amazon-like retail & logistics network',
+    tagline: 'The large-scale retail & logistics network',
     description:
       'Ten bounded contexts modelling catalogue, delivery promise, order sourcing, vendor connectivity, middle and last mile, tracking and node performance — the seam through which the network connects to the WMS/WES fleet. Source of truth: the retail-network domain model.',
     links: [

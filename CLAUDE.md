@@ -33,7 +33,7 @@ never copies).
 
 > **Study project.** `warehouse-systems` is an educational DDD exercise
 > using real industry-standard patterns. Not a production system, not
-> affiliated with Amazon, Manhattan Associates, Blue Yonder, or any other
+> affiliated with Manhattan Associates, Blue Yonder, or any other
 > company.
 
 ## Project Overview

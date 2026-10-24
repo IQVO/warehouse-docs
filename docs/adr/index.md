@@ -38,10 +38,7 @@ read against `origin/develop`.
 | `returns-processing` | 4 (0001–0004) | [0004](https://github.com/IQVO/returns-processing/blob/develop/docs/adr/0004-cloudevents-envelope-and-type-catalogue.md) CloudEvents envelope and type catalogue (analytics mirror planned, not built) · [0003](https://github.com/IQVO/returns-processing/blob/develop/docs/adr/0003-local-copies-and-consumed-contracts.md) event-fed local copies and the consumed contracts · [0002](https://github.com/IQVO/returns-processing/blob/develop/docs/adr/0002-aggregates-and-policy.md) aggregates and policy · [0001](https://github.com/IQVO/returns-processing/blob/develop/docs/adr/0001-returns-processing-bounded-context.md) the reverse flow (RMA, receipt, disposition) | [`docs/adr`](https://github.com/IQVO/returns-processing/tree/develop/docs/adr) |
 | `exception-management` | 5 (0001–0005) | [0005](https://github.com/IQVO/exception-management/blob/develop/docs/adr/0005-outbox-relay-attempt-cap-and-dlq.md) outbox relay: delete-on-publish, attempt cap, dead-letter topic · [0004](https://github.com/IQVO/exception-management/blob/develop/docs/adr/0004-cloudevents-envelope-and-type-catalogue.md) CloudEvents envelope and type catalogue · [0003](https://github.com/IQVO/exception-management/blob/develop/docs/adr/0003-local-copies-and-consumed-contracts.md) frozen local copies and the six consumed contracts · [0002](https://github.com/IQVO/exception-management/blob/develop/docs/adr/0002-aggregates-and-policy.md) aggregates and policy · [0001](https://github.com/IQVO/exception-management/blob/develop/docs/adr/0001-exception-management-bounded-context.md) the Problem Solve lifecycle | [`docs/adr`](https://github.com/IQVO/exception-management/tree/develop/docs/adr) |
 
-In `network-fulfillment`, the number 0002 is used by two files. The real ADR 0002 is
-`0002-mcp-and-analytics-data-product.md`.
-`0002-retail-network-not-amazon-counterpart.md` is only a "Moved: see
-ADR 0009" stub, and it is not counted above.
+`0002-mcp-and-analytics-data-product.md` is `network-fulfillment`'s ADR 0002.
 
 ## Cross-cutting decisions worth reading first
 
