@@ -299,45 +299,18 @@ const config: Config = {
       },
       items: [
         {
-          type: 'docSidebar',
-          sidebarId: 'strategicSidebar',
+          type: 'dropdown',
+          label: 'WMS/WES',
           position: 'left',
-          label: 'Strategic Design',
-        },
-        {
-          type: 'docSidebar',
-          sidebarId: 'wmsWesSidebar',
-          position: 'left',
-          label: 'WMS & WES',
-        },
-        {
-          type: 'docSidebar',
-          sidebarId: 'capabilitySidebar',
-          position: 'left',
-          label: 'Business Capabilities',
-        },
-        {
-          type: 'docSidebar',
-          sidebarId: 'architectureSidebar',
-          position: 'left',
-          label: 'Architecture',
-        },
-        {
-          type: 'docSidebar',
-          sidebarId: 'contextsSidebar',
-          position: 'left',
-          label: 'Bounded Contexts',
-        },
-        {
-          type: 'docSidebar',
-          sidebarId: 'apiSidebar',
-          position: 'left',
-          label: 'API Reference',
-        },
-        {
-          to: '/adr',
-          label: 'ADRs',
-          position: 'left',
+          items: [
+            {type: 'docSidebar', sidebarId: 'strategicSidebar', label: 'Strategic Design'},
+            {type: 'docSidebar', sidebarId: 'wmsWesSidebar', label: 'WMS & WES'},
+            {type: 'docSidebar', sidebarId: 'capabilitySidebar', label: 'Business Capabilities'},
+            {type: 'docSidebar', sidebarId: 'architectureSidebar', label: 'Architecture'},
+            {type: 'docSidebar', sidebarId: 'contextsSidebar', label: 'Bounded Contexts'},
+            {type: 'docSidebar', sidebarId: 'apiSidebar', label: 'API Reference'},
+            {to: '/adr', label: 'ADRs'},
+          ],
         },
         {
           type: 'dropdown',
