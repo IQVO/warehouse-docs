@@ -1,0 +1,487 @@
+openapi: 3.0.3
+info:
+  title: Product Content API (proposed)
+  version: 0.1.0-proposed
+  contact:
+    name: product-content maintainers
+    url: https://github.com/IQVO/product-content
+  description: >-
+    Proposed REST contract of the product-content bounded context of the
+    digital storefront, derived from storefront/model/model.yaml
+    (contexts[product-content].rest). Nothing is built yet. Product Content
+    enriches the network's catalogue item with description, bullets (<= 10),
+    attributes (<= 50), media (<= 12, URLs to static assets only; upload is
+    out of scope) and the category tree. The title stays the item master's.
+    Content publishes only when complete: a description, exactly one PRIMARY
+    medium and a category. Errors are RFC 9457 problem details
+    (application/problem+json) whose type is /problems/<slug>; shared types
+    are not-found (404), illegal-transition (409), concurrent-update (409)
+    and validation-failed (422), plus one kebab-case slug per Err of the
+    model. Every write takes an Idempotency-Key header. No authentication.
+servers:
+  - url: http://localhost:8080
+tags:
+  - name: ProductContents
+    description: Content per catalogue item (ProductContent, revisions).
+  - name: Categories
+    description: The single, versioned category tree (CategoryTree).
+paths:
+  /product-contents:
+    post:
+      tags: [ProductContents]
+      operationId: createProductContent
+      summary: Create the draft content of a catalogue item
+      description: >-
+        CreateProductContent. The item must exist in the local CatalogItemView
+        (fed by offer-availability events). The content starts DRAFT.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductContentInput'
+      responses:
+        '201':
+          description: The created content (DRAFT).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductContent'
+        '409':
+          description: concurrent-update.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: validation-failed, unknown-catalog-item (ErrUnknownCatalogItem) or unknown-category (ErrUnknownCategory).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    get:
+      tags: [ProductContents]
+      operationId: listProductContents
+      summary: List product contents, paged (projection bootstrap)
+      description: >-
+        Paged list of product contents. Used by product-discovery's projection
+        rebuild (snapshot + catch-up); not part of a user request path.
+      parameters:
+        - name: after
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 500
+      responses:
+        '200':
+          description: The page of product contents.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductContentList'
+        '422':
+          $ref: '#/components/responses/Unprocessable'
+  /product-contents/{catalogItemId}:
+    get:
+      tags: [ProductContents]
+      operationId: getProductContent
+      summary: Get the content of one catalogue item
+      description: Returns the ProductContent with its current revision.
+      parameters:
+        - $ref: '#/components/parameters/CatalogItemId'
+      responses:
+        '200':
+          description: The product content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductContent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+  /product-contents/{catalogItemId}:revise:
+    post:
+      tags: [ProductContents]
+      operationId: reviseProductContent
+      summary: Revise the content of a catalogue item
+      description: ReviseContent. A revision of PUBLISHED content stays PUBLISHED with a bumped revision once published again.
+      parameters:
+        - $ref: '#/components/parameters/CatalogItemId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProductContentInput'
+      responses:
+        '200':
+          description: The revised content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductContent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: content-retired (ErrContentRetired) or concurrent-update.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: validation-failed or unknown-category (ErrUnknownCategory).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /product-contents/{catalogItemId}:publish:
+    post:
+      tags: [ProductContents]
+      operationId: publishProductContent
+      summary: Publish the content of a catalogue item
+      description: >-
+        PublishContent. Publish needs a description, exactly one PRIMARY
+        medium and a category (ErrIncompleteContent). Publishes
+        ProductContentPublished.
+      parameters:
+        - $ref: '#/components/parameters/CatalogItemId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The published content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductContent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: content-retired (ErrContentRetired) or concurrent-update.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: incomplete-content (ErrIncompleteContent) or unknown-category (ErrUnknownCategory).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /product-contents/{catalogItemId}:retire:
+    post:
+      tags: [ProductContents]
+      operationId: retireProductContent
+      summary: Retire the content of a catalogue item
+      description: >-
+        RetireContent. RETIRED is terminal. RetireOnDiscontinue retires
+        content automatically when the network discontinues the item.
+        Publishes ProductContentRetired.
+      parameters:
+        - $ref: '#/components/parameters/CatalogItemId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The retired content.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProductContent'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: illegal-transition or concurrent-update.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /categories:
+    post:
+      tags: [Categories]
+      operationId: createCategory
+      summary: Create a category in the draft tree
+      description: CreateCategory. The tree is at most four levels deep and never contains a cycle; siblings never share a name.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CategoryInput'
+      responses:
+        '201':
+          description: The created category.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '422':
+          description: validation-failed, category-cycle (ErrCategoryCycle), max-depth (ErrMaxDepth) or duplicate-sibling-name (ErrDuplicateSiblingName).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+    get:
+      tags: [Categories]
+      operationId: listCategories
+      summary: Get the published category tree
+      description: Returns the categories of the current CategoryTree version.
+      responses:
+        '200':
+          description: The category tree.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CategoryList'
+  /categories/{categoryId}:move:
+    post:
+      tags: [Categories]
+      operationId: moveCategory
+      summary: Move a category under a new parent
+      description: MoveCategory. Moving never creates a cycle and never exceeds depth four.
+      parameters:
+        - $ref: '#/components/parameters/CategoryId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveCategoryRequest'
+      responses:
+        '200':
+          description: The moved category.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: category-in-use (ErrCategoryInUse) or concurrent-update.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '422':
+          description: validation-failed, category-cycle (ErrCategoryCycle), max-depth (ErrMaxDepth) or duplicate-sibling-name (ErrDuplicateSiblingName).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+  /categories/{categoryId}:rename:
+    post:
+      tags: [Categories]
+      operationId: renameCategory
+      summary: Rename a category
+      description: RenameCategory. Siblings never share a name.
+      parameters:
+        - $ref: '#/components/parameters/CategoryId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+      responses:
+        '200':
+          description: The renamed category.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Category'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          description: validation-failed or duplicate-sibling-name (ErrDuplicateSiblingName).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+components:
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: A repeated key returns the stored response of the first call.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    CatalogItemId:
+      name: catalogItemId
+      in: path
+      required: true
+      schema:
+        type: string
+    CategoryId:
+      name: categoryId
+      in: path
+      required: true
+      schema:
+        type: string
+  responses:
+    NotFound:
+      description: not-found.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unprocessable:
+      description: validation-failed (invalid query parameter).
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 problem details.
+      required: [type, title, status]
+      properties:
+        type:
+          type: string
+          format: uri-reference
+          description: Problem type slug, for example incomplete-content.
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+          format: uri-reference
+    Attribute:
+      type: object
+      required: [name, value]
+      properties:
+        name:
+          type: string
+        value:
+          type: string
+        unit:
+          type: string
+          nullable: true
+    Media:
+      type: object
+      required: [mediaId, url, altText, role]
+      properties:
+        mediaId:
+          type: string
+        url:
+          type: string
+          format: uri
+          description: URL to a static asset; media upload is out of scope.
+        altText:
+          type: string
+        role:
+          type: string
+          enum: [PRIMARY, GALLERY]
+    ProductContentInput:
+      type: object
+      required: [catalogItemId]
+      properties:
+        catalogItemId:
+          type: string
+        description:
+          type: string
+        bullets:
+          type: array
+          maxItems: 10
+          items:
+            type: string
+        attributes:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/Attribute'
+        media:
+          type: array
+          maxItems: 12
+          items:
+            $ref: '#/components/schemas/Media'
+        primaryCategoryId:
+          type: string
+    ProductContent:
+      allOf:
+        - $ref: '#/components/schemas/ProductContentInput'
+        - type: object
+          required: [state, revision]
+          properties:
+            state:
+              type: string
+              enum: [DRAFT, PUBLISHED, RETIRED]
+            revision:
+              type: integer
+              minimum: 1
+    ProductContentList:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProductContent'
+        next:
+          type: string
+          nullable: true
+    Category:
+      type: object
+      required: [categoryId, name, path]
+      properties:
+        categoryId:
+          type: string
+        parentId:
+          type: string
+          nullable: true
+        name:
+          type: string
+        path:
+          type: string
+    CategoryInput:
+      type: object
+      required: [name]
+      properties:
+        parentId:
+          type: string
+          nullable: true
+        name:
+          type: string
+          minLength: 1
+    MoveCategoryRequest:
+      type: object
+      required: [parentId]
+      properties:
+        parentId:
+          type: string
+          nullable: true
+    CategoryList:
+      type: object
+      required: [version, categories]
+      properties:
+        version:
+          type: integer
+          minimum: 1
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
