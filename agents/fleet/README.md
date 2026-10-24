@@ -14,3 +14,12 @@ when matching files are touched; OpenCode and Codex find them through each repo'
 | context-boundaries.md | outbound adapters, ports |
 | gitflow-and-ci.md | workflows, Makefile, branching |
 | idempotency-and-outbox.md | HTTP handlers, Postgres adapters |
+
+## Second set: retail network
+
+`agents/retailnetwork/` is the parallel canonical set for the retail-network services. It carries the same rules
+with the network's own CloudEvents namespace (`com.retailnetwork.<tier>.<context>...`, topics
+`retailnetwork.<ctx>.events` / `.analytics`): its `cloudevents.md` is the network variant, the other five rule
+files are byte-identical copies of the ones here. When you edit any of those five files, apply the identical edit
+to `agents/retailnetwork/` in the same change so the two sets never drift; edit each set's `cloudevents.md`
+independently.
