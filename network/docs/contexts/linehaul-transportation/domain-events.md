@@ -52,8 +52,8 @@ transaction as the aggregate change.
 | Event | Full `type` | `data` fields | Producing command / use case | Consumers |
 | --- | --- | --- | --- | --- |
 | `LoadClosed` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadClosed` | `loadId`, `departureId`, `packageCount` | `CloseLoad` | analytics only |
-| `LoadDeparted` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted` | `loadId`, `departureId`, `originNodeId`, `trackingNumbers`, `departedAt` | `DispatchLoad` | `shipping-and-tracking` (journey scans, `HandoverOnFirstScan`) |
-| `LoadArrived` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived` | `loadId`, `departureId`, `destinationNodeId`, `trackingNumbers`, `arrivedAt` | `ReceiveLoad` | `shipping-and-tracking` (journey scans), `last-mile-delivery` (`InductOnArrival`, `InboundPackagesView`) |
+| `LoadDeparted` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted` | `loadId`, `departureId`, `originNodeId`, `trackingNumbers`, `departedAt`, `departureKind`, `nodeType` (the type of the origin node; policy `NodeTypeSnapshot`) | `DispatchLoad` | `shipping-and-tracking` (journey scans, `HandoverOnFirstScan`) |
+| `LoadArrived` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived` | `loadId`, `departureId`, `destinationNodeId`, `trackingNumbers`, `arrivedAt`, `departureKind`, `nodeType` (the type of the destination node; policy `NodeTypeSnapshot`) | `ReceiveLoad` | `shipping-and-tracking` (journey scans), `last-mile-delivery` (`InductOnArrival`, `InboundPackagesView`) |
 
 "Analytics only" means the model names no in-org consumer. The events are
 still published on the integration topic; no context may depend on them for

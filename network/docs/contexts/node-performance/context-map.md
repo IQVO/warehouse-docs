@@ -105,3 +105,11 @@ to this one, which are Separate Ways: `customer-ordering` (Generic),
   scorecard route fails; nothing else does.
 - **No Shared Kernel.** `nodeId` and `poNumber` are values copied from the
   events, not shared code.
+
+## Inbound receipts
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+| Neighbour | Direction | Pattern | Channel | Messages | Why |
+| --- | --- | --- | --- | --- | --- |
+| `vendor-connectivity` | U → D (NP downstream) | Conformist | Kafka `retailnetwork.vendor-connectivity.events` | `InboundReceiptSubmitted` (the eighth `vendor-connectivity` event this context reads) | The vendor's carton-level receipt is a fact about the node: how quickly it reported and how many cartons differed. |

@@ -42,8 +42,8 @@ Derived from: model.yaml → `contexts[node-topology].purpose`, `.aggregates`,
 | Actor | What they do here | Channel |
 | --- | --- | --- |
 | **Vendor** (through `vendor-connectivity`) | Registers its own `FULFILLMENT_CENTER`, `INBOUND_CROSS_DOCK` or `RETURNS_CENTER` nodes and declares their operational profile. A vendor never calls this context directly: its write lands in the Vendor API, and `vendor-connectivity` calls `POST /nodes` and `PUT /nodes/{nodeId}/operational-profile` in-organization when it processes the submission. | REST (in-org), Customer/Supplier |
-| **Network-ops planner** (person) | Registers the network's own parcel nodes, activates, suspends and retires nodes, opens and closes lanes, assigns service areas and defines regions. | REST, UI |
-| **Any context** | Reads a node, lists lanes, resolves a postal prefix. | REST queries, Open Host Service |
+| **Network-ops planner** (person) | Registers the network's own parcel nodes, declares their operational profile (`declaredBy` `NETWORK_OPS`), activates, suspends and retires nodes, opens and closes lanes, assigns service areas and defines regions. | REST, UI |
+| **Any context** | Reads a node, lists nodes, lists lanes, resolves a postal prefix. | REST queries, Open Host Service |
 | **Seven consuming contexts** | Build local read models from the nine published events. | Kafka, Open Host Service + Published Language |
 
 ## Decisions this context makes
@@ -73,7 +73,7 @@ Derived from: model.yaml → `contexts[node-topology].business_decisions`,
 
 | Node type | Operator allowed | Capabilities | Subtypes |
 | --- | --- | --- | --- |
-| `FULFILLMENT_CENTER` | `VENDOR` | `OUTBOUND` | `SORTABLE`, `NON_SORTABLE`, `XL`, `SOFT_LINES`, `SUB_SAME_DAY`, `FRESH`, `MICRO` |
+| `FULFILLMENT_CENTER` | `VENDOR` | `OUTBOUND`, `INBOUND` | `SORTABLE`, `NON_SORTABLE`, `XL`, `SOFT_LINES`, `SUB_SAME_DAY`, `FRESH`, `MICRO` |
 | `INBOUND_CROSS_DOCK` | `VENDOR` | `INBOUND` | none |
 | `RETURNS_CENTER` | `VENDOR` | `RETURNS` | none |
 | `SORTATION_CENTER` | `NETWORK` | `SORT` | none |
@@ -96,13 +96,13 @@ their sources are in public fulfillment-network research;
 this page does not repeat them.
 
 The **operational profile** is modelled after the `operationalConfiguration`
-of the vendor platform API's Supply Sources: a handling time, operating hours
+of a seller supply-source (multi-location inventory) API: a handling time, operating hours
 by day, a throughput configuration expressed as a cap in orders per time unit,
 and a time zone. The mapping of that API surface to this model is on the
 the vendor platform API surface map. Two fields are this
 model's own additions, whatever that surface offers: the **cutoffs** a node
 declares (one pickup departure per cutoff, scheduled by
-`linehaul-transportation`), and the **sort dwell**.
+`linehaul-transportation`), and the **sort dwell**, declared only by sortation centres and air hubs.
 
 What a node *declares* is only half of its capability. What it actually does
 is measured by `node-performance`, and both feed the promise
@@ -160,7 +160,7 @@ convention. Term-by-term translation is on the
 | Measured performance and grades of a node | `node-performance` |
 | What a node can sell, and in what quantity | `offer-availability` |
 | Vendor accounts, ack windows, rate limits, and the Vendor API itself | `vendor-connectivity` |
-| Which node should hold which item before demand arrives | future context `inventory-placement` (vendors place their own stock) |
+| Which node should hold which item before demand arrives | not modelled (gap G49); the seller names the destination node on its plan in `seller-inbound`, and vendors place their own stock |
 | Suspending a node because of poor performance | nobody automatically: `node-performance` never suspends a node; a planner decides |
 
 Derived from: model.yaml → `contexts[*].purpose`, `future_contexts`,

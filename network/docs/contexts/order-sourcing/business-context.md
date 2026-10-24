@@ -126,7 +126,7 @@ on benchmarks.
 | --- | --- |
 | Computing the promise, holding promise-book capacity, judging kept or broken | `delivery-promise` |
 | The purchase-order protocol: `ackBy`, fill-or-kill acknowledgement, labels, shipment confirmation | `vendor-connectivity` |
-| Picking, packing and stock placement inside a vendor node | The vendor (for `V-WS`, the warehouse-systems fleet). Inventory placement is a future context (`inventory-placement`), out of scope |
+| Picking, packing and stock placement inside a vendor node | The vendor (for `V-WS`, the warehouse-systems fleet). Which node a seller's stock goes to is chosen on its inbound plan in `seller-inbound`, not here |
 | Booking the package on the pickup departure, building loads | `linehaul-transportation` |
 | The tracking timeline, labels and the ship-to address | `shipping-and-tracking`; no PII ever enters this context ([ADR 0006](/network/adr/0006-pii-confinement)) |
 | Customer cancellation rules and the customer-facing status | `customer-ordering` |

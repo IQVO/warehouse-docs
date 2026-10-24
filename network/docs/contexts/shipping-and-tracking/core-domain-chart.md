@@ -33,7 +33,7 @@ Derived from: `model.yaml → contexts[shipping-and-tracking].chart`
 (`complexity: 0.62`, `differentiation: 0.22`), `.aggregates`, `.policies`.
 The three slices are this page's placement, not model values.
 
-Omitted: the other nine contexts (they are on the
+Omitted: the other ten contexts (they are on the
 [domain-wide chart](/network/strategic-design/core-domain-chart)) and the future
 `customer-notification` context, also Generic.
 

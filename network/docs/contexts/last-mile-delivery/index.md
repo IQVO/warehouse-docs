@@ -61,7 +61,7 @@ aggregates: `DeliveryWave`, `Route` and `DeliveryServicePartner`.
 
 ## Elsewhere
 
-- REST contract (proposed): `apis/last-mile-delivery/openapi.yaml`, listed
+- REST contract (as built, from the service repository): `apis/last-mile-delivery/openapi.yaml`, listed
   under the [API reference](/network/api-reference).
 - Strategic view: [context map](/network/strategic-design/context-map),
   [subdomain classification](/network/strategic-design/subdomain-classification),

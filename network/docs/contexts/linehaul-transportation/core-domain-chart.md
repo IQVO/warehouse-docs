@@ -34,7 +34,7 @@ Derived from: `model.yaml → contexts[linehaul-transportation].chart`
 (`complexity: 0.48`, `differentiation: 0.47`, `evolution: Custom-built`),
 `.aggregates[Departure]`, `.aggregates[Load]`, `.policies[PickupFromCutoffs]`.
 
-Omitted: the other nine contexts (their positions are on their own charts
+Omitted: the other ten contexts (their positions are on their own charts
 and on the network-wide chart). The three internal slices are this page's
 reading of the model, not values from `model.yaml`; all of them stay in
 quadrant 3.

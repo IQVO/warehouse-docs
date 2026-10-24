@@ -34,7 +34,7 @@ Derived from: model.yaml → `contexts[last-mile-delivery].chart`
 `.aggregates`, `.policies`. The three slices are this page's estimate; the
 model places only the context.
 
-Omitted: the other nine contexts (each has its own chart; the network-wide
+Omitted: the other ten contexts (each has its own chart; the network-wide
 chart is [Core Domain Chart](/network/strategic-design/core-domain-chart)), and the
 future contexts.
 

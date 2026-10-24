@@ -82,8 +82,8 @@ not this context's relationship.
 
 Omitted: analytics-only events (`FulfillmentQueued`, `FulfillmentDelivered`,
 no domain consumer), Postgres and Kafka as infrastructure, and the future
-contexts (`inventory-placement`, `customer-returns`,
-`customer-notification`, `payments-and-invoicing`), which have no edge here.
+contexts (`customer-returns`, `customer-notification`,
+`payments-and-invoicing`), which have no edge here.
 
 ## Relationships
 

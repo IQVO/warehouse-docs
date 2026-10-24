@@ -42,11 +42,11 @@ Derived from: model.yaml → `conventions.cloudevents`,
 
 | Event | Full `type` | Subject / key | Producing command | Consumers |
 | --- | --- | --- | --- | --- |
-| `NodeRegistered` | `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | `nodeId` | `RegisterNode` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `last-mile-delivery`, `node-performance`, `vendor-connectivity` |
-| `NodeOperationalProfileDeclared` | `com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared` | `nodeId` | `DeclareOperationalProfile` | `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `node-performance` |
-| `NodeActivated` | `com.retailnetwork.logistics.node-topology.node.NodeActivated` | `nodeId` | `ActivateNode` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity` |
-| `NodeSuspended` | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | `nodeId` | `SuspendNode` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity` |
-| `NodeRetired` | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `nodeId` | `RetireNode` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity` |
+| `NodeRegistered` | `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | `nodeId` | `RegisterNode` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `last-mile-delivery`, `node-performance`, `vendor-connectivity`, `seller-inbound` |
+| `NodeOperationalProfileDeclared` | `com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared` | `nodeId` | `DeclareOperationalProfile` | `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `node-performance`, `vendor-connectivity`, `seller-inbound` |
+| `NodeActivated` | `com.retailnetwork.logistics.node-topology.node.NodeActivated` | `nodeId` | `ActivateNode` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound` |
+| `NodeSuspended` | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | `nodeId` | `SuspendNode` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound` |
+| `NodeRetired` | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `nodeId` | `RetireNode` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound` |
 | `LaneOpened` | `com.retailnetwork.logistics.node-topology.lane.LaneOpened` | `laneId` | `OpenLane` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
 | `LaneClosed` | `com.retailnetwork.logistics.node-topology.lane.LaneClosed` | `laneId` | `CloseLane` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
 | `ServiceAreaAssigned` | `com.retailnetwork.logistics.node-topology.servicearea.ServiceAreaAssigned` | `postalPrefix` | `AssignServiceArea` | `delivery-promise`, `order-sourcing`, `last-mile-delivery` |
@@ -93,12 +93,13 @@ records the declaration it will measure against.
 | `nodeId` | string | The node |
 | `profileRevision` | integer | Strictly increasing per node |
 | `timezone` | string | IANA time zone the local times are in |
-| `operatingHoursByDay` | object | Per day of week, the open and close local times |
-| `holidays` | array of dates | Days the node does not operate |
+| `operatingHoursByDay` | object | `{monday … sunday: {start, end}}`, local times as `HH:mm`; a missing day is closed |
+| `holidays` | array of ISO dates | Days the node is closed all day |
 | `handlingTimeMinutes` | integer | Declared time from order release to a package ready for handover |
-| `cutoffs` | array of `{localTime, maxOrders?}` | Local times packages are ready for handover; `maxOrders` optional |
-| `throughputCap` | `{value, timeUnit, unit}` | Maximum orders per time unit; `unit` is `ORDER` |
-| `sortDwellMinutes` | integer | Declared sort dwell |
+| `cutoffs` | array of `{localTime, days?, maxOrders?}` | `localTime` (`HH:mm`) is when packages are ready for handover; `days` lists the weekdays it applies to (default: every operating day); `maxOrders` optional |
+| `throughputCap` | `{value, timeUnit, unit}` | Maximum orders per time unit; `value` is an integer above zero, `timeUnit` is `HOUR` or `DAY`, `unit` is `ORDER` |
+| `sortDwellMinutes` | integer, optional | Declared sort dwell; present only for `SORTATION_CENTER` and `AIR_HUB` nodes |
+| `inbound` | object, optional | Proposed ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)): `{maxCartonWeightG, maxCartonDimsMm{l,w,h}, acceptsPallets, requiresSscc}`; present only for nodes with the `INBOUND` capability. Additive: a consumer that ignores it is unaffected. |
 | `declaredBy` | enum | `VENDOR` or `NETWORK_OPS` |
 
 ### NodeActivated
@@ -198,30 +199,31 @@ from it. One complete envelope, with illustrative values:
     "profileRevision": 3,
     "timezone": "America/Sao_Paulo",
     "operatingHoursByDay": {
-      "MONDAY": [{"open": "06:00", "close": "22:00"}],
-      "TUESDAY": [{"open": "06:00", "close": "22:00"}],
-      "WEDNESDAY": [{"open": "06:00", "close": "22:00"}],
-      "THURSDAY": [{"open": "06:00", "close": "22:00"}],
-      "FRIDAY": [{"open": "06:00", "close": "22:00"}],
-      "SATURDAY": [{"open": "08:00", "close": "14:00"}],
-      "SUNDAY": []
+      "monday": {"start": "06:00", "end": "22:00"},
+      "tuesday": {"start": "06:00", "end": "22:00"},
+      "wednesday": {"start": "06:00", "end": "22:00"},
+      "thursday": {"start": "06:00", "end": "22:00"},
+      "friday": {"start": "06:00", "end": "22:00"},
+      "saturday": {"start": "08:00", "end": "14:00"}
     },
     "holidays": ["2026-12-25"],
     "handlingTimeMinutes": 240,
     "cutoffs": [
       {"localTime": "11:00"},
-      {"localTime": "18:00", "maxOrders": 1200}
+      {"localTime": "18:00", "days": ["monday", "tuesday", "wednesday", "thursday", "friday"], "maxOrders": 1200}
     ],
     "throughputCap": {"value": 400, "timeUnit": "HOUR", "unit": "ORDER"},
-    "sortDwellMinutes": 0,
     "declaredBy": "VENDOR"
   }
 }
 ```
 
-The values are illustrative. The shape of `operatingHoursByDay` (day keys,
-`open`/`close` pairs) and the `timeUnit` value are this page's proposal: the
-model names the fields but not their inner structure or vocabulary.
+The values are illustrative. Sunday is absent, so the node is closed on
+Sunday. The 11:00 cutoff has no `days`, so it applies to every operating day
+(Monday to Saturday); the 18:00 cutoff names Monday to Friday because
+Saturday closes at 14:00 (`ErrCutoffOutsideOperatingHours`). The example is a
+fulfillment centre, so it carries no `sortDwellMinutes`
+(`ErrSortDwellNotAllowed`).
 
 ## Consumed
 

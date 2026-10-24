@@ -253,10 +253,12 @@ patched here.
 - **How does capacity change?** `DepartureCapacityChanged` carries
   `capacityPackages`, but the only commands that touch capacity are
   `BookCapacity` and `ReleaseCapacity`, which change `booked`.
-- **Pickup capacity and destination.** The model does not say how a
-  `PICKUP` departure's package capacity is set, nor which lane (and so which
-  destination node) it uses when a vendor node has more than one outbound
-  lane.
+- **Pickup capacity and destination (resolved, G9).** The lane of a `PICKUP`
+  departure is the node's open ground lane that ranks first by destination type
+  (sort centre first), then lowest nominal transit, then lowest lane id (policy
+  `DefaultOutboundLane`). Its package capacity is the orders the node can take
+  in the window times this context's own `packagesPerOrder` setting (policy
+  `PickupCapacity`). `node-topology` declares neither.
 - **Pickups on activation.** `PickupFromCutoffs` fires on
   `NodeOperationalProfileDeclared`, but a profile is declared before the
   node is `ACTIVE`; `NodeActivated` is consumed with no stated reaction.

@@ -54,7 +54,7 @@ Generic.
 | Network Logistics | Shipping and Tracking | issue labels and tracking numbers; consolidate scans into a journey; raise exceptions on silence | `shipping-and-tracking` |
 | Partner Management | Vendor Integration | onboard vendors; publish the Vendor API; issue purchase orders; enforce fill-or-kill and the ack window; process asynchronous transactions; rate-limit | `vendor-connectivity` |
 | Partner Management | Node Performance Management | record observations; compute rolling scorecards; grade nodes; alert on thresholds | `node-performance` |
-| Network Logistics | Inventory Placement (future) | decide which node should hold which item; propose inbound placement | `inventory-placement` (future) |
+| Partner Management | Seller Inbound (proposed) | onboard sellers; plan inbound shipments in eaches; validate case-packed cartons; issue SSCCs and labels; reconcile receipts and record discrepancies | `seller-inbound` |
 | Commerce | Returns (future) | authorize returns; route to a returns centre | `customer-returns` (future) |
 
 ## Heat: where investment goes

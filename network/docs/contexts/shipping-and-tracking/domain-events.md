@@ -41,7 +41,7 @@ it.
 
 | Event | Full `type` | Subject / key | Producing use case | Consumers |
 | --- | --- | --- | --- | --- |
-| `LabelIssued` | `com.retailnetwork.logistics.shipping-and-tracking.label.LabelIssued` | `labelRef` | `IssueLabel` | `linehaul-transportation`, `customer-ordering` |
+| `LabelIssued` | `com.retailnetwork.logistics.shipping-and-tracking.label.LabelIssued` | `labelRef` | `IssueLabel` | `linehaul-transportation`, `customer-ordering`, `last-mile-delivery` |
 | `LabelVoided` | `com.retailnetwork.logistics.shipping-and-tracking.label.LabelVoided` | `labelRef` | `VoidLabel` | analytics only |
 | `PackageScanned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageScanned` | `trackingNumber` | `RecordScan` (every applied scan) | `customer-ordering` |
 | `PackageHandedOver` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageHandedOver` | `trackingNumber` | `RecordScan` (`LABELLED -> HANDED_OVER`) | `node-performance` |
@@ -65,6 +65,8 @@ model's.
 | `packageNo` | integer | Package number within the purchase order |
 | `tier` | enum `SAME_DAY`, `NEXT_DAY`, `TWO_DAY`, `STANDARD` | Service tier printed on the label |
 | `carrier` | string | Carrier printed on the label |
+| `stopKey` | string | Opaque keyed hash of the normalized ship-to address; packages with the same value share a stop. The address itself never leaves this context |
+| `destinationPostalPrefix` | string | The first 5 letters or digits of the normalized postal code |
 
 ### LabelVoided
 
@@ -159,8 +161,8 @@ the promise. Values are synthetic.
 | Producer | Full `type` | Topic | Fields used | What this context does |
 | --- | --- | --- | --- | --- |
 | `vendor-connectivity` | `com.retailnetwork.partner.vendor-connectivity.purchaseorder.VendorShipmentConfirmed` | `retailnetwork.vendor-connectivity.events` | `poNumber`, `nodeId`, `trackingNumbers`, `shippedAt` | For each tracking number, `RecordScan` at `nodeId`, time `shippedAt`. Stored on the timeline; it does not move a `LABELLED` journey (handover comes from the pickup scan) |
-| `linehaul-transportation` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted` | `retailnetwork.linehaul-transportation.events` | `originNodeId`, `trackingNumbers`, `departedAt` | For each tracking number, `RecordScan` at `originNodeId`. On a `LABELLED` journey this is the pickup: `HANDED_OVER` and `PackageHandedOver` |
-| `linehaul-transportation` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived` | `retailnetwork.linehaul-transportation.events` | `destinationNodeId`, `trackingNumbers`, `arrivedAt` | For each tracking number, `RecordScan` at `destinationNodeId`: `IN_TRANSIT`, or `AT_STATION` at a delivery station |
+| `linehaul-transportation` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted` | `retailnetwork.linehaul-transportation.events` | `originNodeId`, `trackingNumbers`, `departedAt`, `departureKind` | For each tracking number, `RecordScan` at `originNodeId`. Kind `PICKUP` (or no kind on a `LABELLED` journey) is the pickup: `HANDED_OVER` and `PackageHandedOver`; any other kind is a departure scan |
+| `linehaul-transportation` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived` | `retailnetwork.linehaul-transportation.events` | `destinationNodeId`, `trackingNumbers`, `arrivedAt`, `nodeType` | For each tracking number, `RecordScan` at `destinationNodeId`: `AT_STATION` when `nodeType` is `DELIVERY_STATION` (from `IN_TRANSIT`, or from `HANDED_OVER` on direct injection), otherwise `IN_TRANSIT` |
 | `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.route.PackageOutForDelivery` | `retailnetwork.last-mile-delivery.events` | `trackingNumber`, `stationNodeId`, `at` | `RecordScan` at `stationNodeId`: `OUT_FOR_DELIVERY` |
 | `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.route.DeliveryAttempted` | `retailnetwork.last-mile-delivery.events` | `trackingNumber`, `outcome`, `failureReason`, `at` | `RecordScan`: `DELIVERED` and `PackageDelivered` on `DELIVERED`; back to `AT_STATION` on `FAILED`. The event has no node id; the scan takes the station of the journey's last out-for-delivery scan |
 | `offer-availability` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | `retailnetwork.offer-availability.events` | all eight fields | Upsert `CatalogDimensionsView` |

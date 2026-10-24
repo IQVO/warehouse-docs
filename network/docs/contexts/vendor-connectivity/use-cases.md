@@ -344,3 +344,13 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
   a vendor reading `SUCCESS` always sees the PO in its new state. This is a
   proposed exception to "one aggregate per transaction", listed as an open
   question.
+
+## SubmitInboundReceipt
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+- **Actor / trigger:** a vendor (for the fleet, `network-fulfillment`). REST `POST /vendor/inbound-receipts` with an `Idempotency-Key`.
+- **Preconditions:** the shipment is in `InboundShipmentView` and its `nodeId` belongs to the vendor.
+- **Flow:** validate the body (carton statuses, GTIN and SSCC shapes, quantities as eaches), create a `Submission` of kind `INBOUND_RECEIPT` in `PROCESSING`, return `202` with the `transactionId`. `ProcessSubmission` later marks it `SUCCESS` and writes `SubmissionProcessed` and `InboundReceiptSubmitted` to the outbox in one transaction.
+- **Errors:** `ErrNodeNotOwnedByVendor` (404), `ErrUnknownInboundShipment` (404 `not-found`, so a vendor cannot probe another vendor's shipments), body malformed (422 `validation`).
+- **Reads:** `GET /vendor/inbound-shipments?nodeId=&createdAfter=&nextToken=` and `GET /vendor/inbound-shipments/{shipmentId}` read `InboundShipmentView` directly. They return the shipment as a tree (shipment, optional pallet, carton, item) with `sscc`, `gtin`, `qtyEaches`, `lot`, `expiry` and `ownerRef`.

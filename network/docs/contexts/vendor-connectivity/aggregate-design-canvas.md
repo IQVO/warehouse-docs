@@ -272,3 +272,11 @@ payload reference and zero or more errors. One event in its life.
 | --- | --- | --- | --- |
 | `VendorNodeView` | node-topology `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | Which vendor owns a node (`ErrNodeNotOwnedByVendor`), whether a release targets a `VENDOR` node (`IssueOnRelease`), `GET /vendor/nodes/{nodeId}` | node-topology owns the node; this is a local, event-fed copy with no rules of its own |
 | `ListingView` | offer-availability `ListingCreated` | Checking that inventory lines and PO lines name listings of the node | offer-availability owns the listing; this context only looks it up |
+
+## Inbound receipts
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+**Submission** gains the kind `INBOUND_RECEIPT` and the command `SubmitInboundReceipt` (REST `POST /vendor/inbound-receipts`, `202` and a `transactionId`, like every vendor write). New invariant `ErrUnknownInboundShipment`: an `INBOUND_RECEIPT` names a shipment in `InboundShipmentView` addressed to a node of the submitting vendor (`ErrNodeNotOwnedByVendor` still applies to the node). New event `InboundReceiptSubmitted`, raised by `ProcessSubmission` on success (policy `ReceiptRelay`). This context does not apply the receipt to the shipment: `seller-inbound` owns that.
+
+New read models: `InboundShipmentView` (from `InboundShipmentShipped`) and `CatalogPackagingView` (from `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`).

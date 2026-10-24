@@ -9,7 +9,7 @@ description: "The proposed decisions behind the retail-network model."
 
 # Architecture Decision Records
 
-All eight are **Proposed**: they become Accepted when the network's
+All nine are **Proposed**: they become Accepted when the network's
 repositories are created and the user accepts them. Each context repository
 will then carry its own ADR sequence; these are domain-level decisions.
 
@@ -23,3 +23,4 @@ will then carry its own ADR sequence; these are domain-level decisions.
 | [0006](/network/adr/0006-pii-confinement) | PII is confined to customer-ordering and shipping-and-tracking | Proposed |
 | [0007](/network/adr/0007-cloudevents-namespace) | CloudEvents namespace com.retailnetwork, no shared topic | Proposed |
 | [0008](/network/adr/0008-capacity-held-at-promise-time) | Fast tiers are never promised from nominal times, and capacity is held at promise time | Proposed |
+| [0009](/network/adr/0009-seller-inbound-and-case-packed-shipments) | Seller inbound and case-packed shipments: SSCC cartons, owner-segregated stock, eaches as the ledger unit | Proposed |

@@ -34,7 +34,7 @@ contexts[node-performance].classification,
 contexts[node-performance].aggregates[NodeScorecard],
 contexts[node-performance].policies.
 
-Omitted: the other nine contexts (their positions are on the
+Omitted: the other ten contexts (their positions are on the
 [network-wide chart](/network/strategic-design/core-domain-chart)). The three
 internal slices are placed by this page, not by the model; the model gives
 only the context point.
@@ -59,7 +59,7 @@ its thresholds are where the business states what "good enough" means.
 **Model complexity is low to moderate (x = 0.34).** One aggregate,
 `NodeScorecard`, with two states (`PROVISIONAL`, `GRADED`), three
 transitions all driven by `Recompute`, two commands and three invariants.
-The real work is in the inputs: thirteen consumed event types from five
+The real work is in the inputs: fourteen consumed event types from five
 producers, idempotent on the source event id
 (`ErrDuplicateObservation`), joined by `poNumber` and `nodeId`, and
 recomputed over two rolling windows. That is data plumbing more than

@@ -315,13 +315,21 @@ resolved here.
   `delivery-promise` also re-promises on a cancelled departure or a package
   exception. The only transition is `UNSOURCEABLE → QUEUED`; a queued,
   released or locked assignment keeps its old `deliverByLatest`.
-- **An `UNSOURCEABLE` assignment cannot be cancelled.** `CancelAssignment`
-  is allowed from `QUEUED` and `RELEASED` only, while `customer-ordering`'s
-  `CancelOnUnfulfillable` cancels exactly the groups that are unsourceable.
-- **Acceptance after cancellation.** If `CancelAssignment` runs while the
-  vendor's acceptance is being processed, `vendor-connectivity` can cancel
-  only an `ISSUED` purchase order (`ErrCancelAfterAcknowledgement`). An
-  accepted PO for a cancelled assignment is not modelled.
+- **An `UNSOURCEABLE` assignment can be cancelled (resolved).**
+  `CancelAssignment` is allowed from `QUEUED`, `RELEASED` and `UNSOURCEABLE`,
+  so `customer-ordering`'s `CancelOnUnfulfillable` has a target.
+- **Cancel decision (resolved, G12).** `CustomerOrderCancelled` is a request.
+  From `QUEUED`, `RELEASED` or `UNSOURCEABLE` this context publishes
+  `FulfillmentCancelled`; from `LOCKED`, `SHIPPED` or `DELIVERED` it keeps the
+  state and publishes `FulfillmentCancelRefused` with reason `CANCEL_AFTER_LOCK`
+  (policy `CancelDecision`).
+- **Acceptance after cancellation (known residual, open).** If
+  `CancelAssignment` runs while the vendor's acceptance is being processed,
+  `vendor-connectivity` can cancel only an `ISSUED` purchase order
+  (`ErrCancelAfterAcknowledgement`, logged, nothing published). An acceptance
+  that then reaches this context for a `CANCELLED` assignment is only recorded
+  and logged (policy `AcceptanceAfterCancelOnlyLogged`), so the vendor may
+  still ship a cancelled group.
 - **No `releaseAt` without a candidate.** `VirtualQueue` derives the release
   point from the best candidate; when re-optimisation finds none, the model
   does not say when `ReleaseToNode` fires to declare the group unsourceable.

@@ -37,7 +37,7 @@ between the two organizations.
 | [Bounded Context Canvas](/network/contexts/vendor-connectivity/bounded-context-canvas) | Purpose, roles, inbound and outbound messages, decisions | [bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas) |
 | [Context Map](/network/contexts/vendor-connectivity/context-map) | Every neighbour with direction and pattern | [context-mapping](https://github.com/ddd-crew/context-mapping) |
 | [Aggregate Design Canvas](/network/contexts/vendor-connectivity/aggregate-design-canvas) | `VendorAccount`, `PurchaseOrder`, `Submission` | [aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas) |
-| [Domain Events](/network/contexts/vendor-connectivity/domain-events) | Eight published events, seven consumed | — |
+| [Domain Events](/network/contexts/vendor-connectivity/domain-events) | Eleven published events, eleven consumed, including the proposed inbound ones ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)) | — |
 | [Domain Message Flow](/network/contexts/vendor-connectivity/domain-message-flow) | Happy path, refusal, node onboarding, failed transaction | [domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
 | [EventStorming](/network/contexts/vendor-connectivity/eventstorming) | Process-level boards with hotspots | [eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
 | [Use Cases](/network/contexts/vendor-connectivity/use-cases) | One section per command, errors mapped to HTTP | — |
@@ -57,4 +57,4 @@ between the two organizations.
   [ADR 0006, PII confinement](/network/adr/0006-pii-confinement),
   [ADR 0003, declared and measured capability](/network/adr/0003-declared-and-measured-capability),
   [ADR 0004, parcel nodes are network-operated](/network/adr/0004-parcel-nodes-are-network-operated).
-- Where the context sits among the ten: [Context Map](/network/strategic-design/context-map).
+- Where the context sits among the eleven: [Context Map](/network/strategic-design/context-map).

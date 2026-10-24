@@ -178,7 +178,7 @@ sequenceDiagram
         OS->>LH: evt: FulfillmentCancelled
         Note over VC: CancelOnSourcing-<br/>Cancel, PO CANCELLED
     else already LOCKED
-        Note over OS: ErrCancelAfterLock,<br/>nothing published
+        OS->>CO: evt: FulfillmentCancelRefused,<br/>CANCEL_AFTER_LOCK
     end
 ```
 
@@ -186,9 +186,13 @@ Derived from: model.yaml → `contexts[order-sourcing].aggregates[FulfillmentAss
 `.invariants` (`ErrCancelAfterLock`); `contexts[customer-ordering].aggregates[CustomerOrder].invariants`
 (its own `ErrCancelAfterLock`); `contexts[vendor-connectivity].policies[CancelOnSourcingCancel]`.
 
-Omitted: `customer-ordering` refuses the cancellation once it has seen
-`FulfillmentLocked`, so the `else` branch is reached only by a race. If the
-vendor's acceptance is already being processed when the cancellation lands,
+Omitted: `customer-ordering` also consumes `FulfillmentCancelled` (the group
+becomes `CANCELLED`) and `FulfillmentCancelRefused` (the group returns to
+`LOCKED`; the vendor ships and the shopper's path is a return). Its own
+`ErrCancelAfterLock` is advisory: this context decides. If the vendor's
+acceptance is already being processed when the cancellation lands,
 `vendor-connectivity` cannot cancel an accepted PO
-(`ErrCancelAfterAcknowledgement`); that case is not modelled (open question).
+(`ErrCancelAfterAcknowledgement`, logged, nothing published). An acceptance that
+reaches this context after it cancelled a `RELEASED` assignment is only logged:
+a known residual (policy `AcceptanceAfterCancelOnlyLogged`).
 `PurchaseOrderCancelled` is analytics only and not consumed here.

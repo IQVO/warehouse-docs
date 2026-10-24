@@ -2,7 +2,7 @@
 id: domain-events
 title: Domain Events
 sidebar_label: Domain Events
-description: The two events Node Performance publishes and the thirteen it consumes, with full CloudEvents types, payloads and idempotency rules.
+description: The two events Node Performance publishes and the fourteen it consumes, with full CloudEvents types, payloads and idempotency rules.
 ---
 
 # Domain Events
@@ -138,6 +138,7 @@ new `id`, which the producers' outboxes rule out), the aggregate's
 | `delivery-promise` | `com.retailnetwork.commerce.delivery-promise.promise.PromiseKept` | `promiseId`, `nodeId`, `deliveredAt`, `deliverByLatest` | `RecordObservation`: a kept promise for the node. |
 | `delivery-promise` | `com.retailnetwork.commerce.delivery-promise.promise.PromiseBroken` | `promiseId`, `nodeId`, `lateByMinutes`, `cause` | `RecordObservation`: a broken promise for the node. Which `cause` values count against the node is open. |
 | `offer-availability` | `com.retailnetwork.commerce.offer-availability.inventoryfeed.InventoryFeedApplied` | `feedId`, `nodeId`, `appliedAt` | `RecordObservation`: a feed instant for the freshness metric. The sampling rule is open. |
+| `vendor-connectivity` | `com.retailnetwork.partner.vendor-connectivity.submission.InboundReceiptSubmitted` | `nodeId`, `receivedAt`, `submittedAt`, `cartons[].status` | `RecordObservation` (informational, proposed in ADR 0009): receipt latency is `submittedAt` minus `receivedAt`, discrepancy rate is the share of reported cartons not `RECEIVED` in full. Never graded, and not on `NodeScorecardUpdated`. |
 | `node-topology` | `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | none | Nothing the model specifies; the inbox records it. A node's scorecards are created by its first observation. Open question. |
 | `node-topology` | `com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared` | none | Nothing the model specifies. It is the declared side of Declared vs Measured, and by decision it never enters a metric; no read model holds it. Open question. |
 

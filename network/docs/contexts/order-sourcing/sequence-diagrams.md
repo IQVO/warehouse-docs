@@ -281,7 +281,7 @@ Derived from: model.yaml → `.policies[LockOnCommit]`,
 `.invariants` (`ErrAssignmentLocked`, `ErrStaleAssignmentVersion`).
 
 Omitted: the consumers' reactions (`linehaul-transportation` `BookOnLock`).
-The `CANCELLED` branch is the open question "acceptance after cancellation".
+The `CANCELLED` branch is the known residual "acceptance after cancellation": the acceptance is only recorded and logged (policy `AcceptanceAfterCancelOnlyLogged`).
 
 ## 6. MarkShipped
 
@@ -377,7 +377,7 @@ sequenceDiagram
             Note over UC: no-op
         else LOCKED, SHIPPED or DELIVERED
             A-->>UC: ErrCancelAfterLock
-            Note over UC: logged, nothing published
+            UC->>R: outbox FulfillmentCancelRefused
         end
     end
     UC->>R: insert inbox row, COMMIT
@@ -389,12 +389,14 @@ sequenceDiagram
 ```
 
 Derived from: model.yaml → `aggregates[FulfillmentAssignment].transitions`
-(`QUEUED → CANCELLED`, `RELEASED → CANCELLED`), `.invariants`
-(`ErrCancelAfterLock`); `contexts[vendor-connectivity].policies[CancelOnSourcingCancel]`.
+(`QUEUED → CANCELLED`, `RELEASED → CANCELLED`, `UNSOURCEABLE → CANCELLED`,
+`RefuseCancel`), `.invariants` (`ErrCancelAfterLock`), `.policies[CancelDecision]`;
+`contexts[vendor-connectivity].policies[CancelOnSourcingCancel]`.
 
-Omitted: an `UNSOURCEABLE` assignment, which the model does not allow to be
-cancelled (open question). All groups of one event are cancelled in one
-transaction.
+Omitted: an `UNSOURCEABLE` assignment is cancelled the same way as a `QUEUED`
+one. All groups of one event are decided in one transaction. The refused
+branch (`LOCKED`, `SHIPPED`, `DELIVERED`) keeps the state, bumps the version
+and publishes `FulfillmentCancelRefused` with reason `CANCEL_AFTER_LOCK`.
 
 ## 9. ApplyRevisedPromise
 

@@ -219,8 +219,10 @@ Top terms: **Tracking Number**, **Shipping Label** (≠ the Vendor API
 1. **A tracking number is unique network-wide and is issued once per
    package** (`ErrLabelAlreadyIssued`, `ErrTrackingNumberTaken`).
 2. **The address is fetched from `customer-ordering` at issue time and never
-   published.** Only the encrypted snapshot needed to print is kept. No event,
-   response or read model carries it.
+   published.** Only the encrypted snapshot needed to print is kept, for 30 days
+   after the journey closes. No event, response or read model carries it. What
+   leaves is an opaque `stopKey` and a postal prefix on `LabelIssued`; no
+   address route is built (policy `NoAddressRoute`).
 3. **The journey only moves forward.** A duplicate scan is refused
    (`ErrDuplicateScan`); an out-of-order scan is stored, not applied
    (`ErrScanOutOfOrder`); `DELIVERED`, `RETURNED` and `LOST` are terminal
@@ -242,8 +244,9 @@ Top terms: **Tracking Number**, **Shipping Label** (≠ the Vendor API
 - The scan time a producer reports (`departedAt`, `arrivedAt`, `at`,
   `shippedAt`) is the time order the journey applies. Kafka order across
   topics is not.
-- A `LoadDeparted` that names a `LABELLED` journey is that package's pickup
-  departure at the vendor node (the event has no departure kind).
+- A `LoadDeparted` whose `departureKind` is `PICKUP` is that package's pickup
+  departure at the vendor node. Without a kind, the event counts as a pickup
+  only while the journey is still `LABELLED`.
 
 ## Verification Metrics
 
@@ -275,12 +278,12 @@ and are not resolved on these pages.
 - **How does the vendor print the label?** The Vendor API Label is only
   `labelRef + trackingNumber + carrier`, and no route of this context renders
   a printable label.
-- **Where does the journey learn node types?** `IN_TRANSIT -> AT_STATION`
-  needs to know that a `LoadArrived` destination is a delivery station; this
-  context consumes no `node-topology` event.
-- **Direct injection.** A `FULFILLMENT_CENTER -> DELIVERY_STATION` lane (the
-  `SAME_DAY` path) arrives at a station straight after handover. The model has
-  no `HANDED_OVER -> AT_STATION` transition.
+- **Node types (resolved, G3).** `LoadArrived` carries `nodeType`, so a
+  delivery station is told from a sortation centre without a
+  `node-topology` event.
+- **Direct injection (resolved, G3).** A `FULFILLMENT_CENTER -> DELIVERY_STATION`
+  lane (the `SAME_DAY` path) arrives at a station straight after handover
+  through the transition `HANDED_OVER -> AT_STATION`.
 - **What is the expected leg time for `ExceptionOnSilence`?** This context
   consumes no departure, lane or wave data, and the tolerance is not set.
 - **What triggers `ReturnToSender`, `DeclareLost` and `StartJourney`?** No
@@ -289,4 +292,4 @@ and are not resolved on these pages.
   event for it.
 - **What does `VoidLabel` do to the journey?** A voided label leaves a
   `LABELLED` journey with no exit transition.
-- **How long is the ship-to snapshot kept?** Retention is not modelled.
+- **How long is the ship-to snapshot kept? (resolved, G40).** 30 days after the journey closes (`DELIVERED`, `RETURNED`, `LOST`, or `VOIDED` when the label was voided), then the job `PurgeShipTo` deletes it (policy `ShipToRetention`).

@@ -49,7 +49,7 @@ package names. The domain-wide glossary is
 | **Node Type** | `FULFILLMENT_CENTER`, `INBOUND_CROSS_DOCK`, `RETURNS_CENTER`, `SORTATION_CENTER`, `DELIVERY_STATION` or `AIR_HUB`. | `node.Type` (`node-topology`) | Node subtype (`SORTABLE`, `XL`, ...). |
 | **Node Operator** | Who runs the building: `NETWORK` or a `VENDOR`. | `node.Operator` (`node-topology`) | The vendor organisation (`vendor.VendorAccount`). |
 | **Cutoff** | A local time by which a node declares packages are ready to be handed over. | `node.CutoffSlot` (`node-topology`) | The time scope of a `THROUGHPUT_CONSTRAINED` quantity, which the vendor computed against its own next cutoff. |
-| **Vendor** | An organisation operating fulfillment nodes for the network (the warehouse-systems fleet is vendor V-WS). | `vendor.VendorAccount` (`vendor-connectivity`) | A seller of an item: the model has no seller concept. |
+| **Vendor** | An organisation operating fulfillment nodes for the network (the warehouse-systems fleet is vendor V-WS). | `vendor.VendorAccount` (`vendor-connectivity`) | A **Seller** (`seller-inbound`): an owner of stock, not an operator of nodes. A listing's `ownerRef` names the seller of record. |
 | **Submission / Transaction** | An asynchronous vendor write and its outcome, reconciled by `transactionId`. | `submission.Submission` (`vendor-connectivity`) | An **Inventory Feed** (what this context applies). |
 | **Vendor API** | The Open Host Service of `vendor-connectivity`; its JSON schemas are the Published Language. | `apis/vendor-connectivity/openapi.yaml` | This context's in-organization API (`apis/offer-availability/openapi.yaml`), which vendors never call. |
 | **Delivery Offer** | A quoted delivery window for an item, quantity, destination and tier, valid until it expires. | `offer.DeliveryOffer` (`delivery-promise`) | A **Listing**. |
@@ -64,3 +64,13 @@ For vendor V-WS the basis originates in the fleet's `network-fulfillment`
 reaches this context only through `vendor-connectivity`. The canonical
 translation table is on
 [WMS/WES integration](/network/integration/wms-wes-integration).
+
+## Packaging and ownership terms
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+| Term | Definition | Code identifier | Not to be confused with |
+| --- | --- | --- | --- |
+| **Packaging Hierarchy** | The pack levels of one catalogue item (each, inner pack, case, pallet), each with its own GTIN and a fixed content quantity. Quantities stay in eaches. | `catalog.PackagingHierarchy` | A listing's available quantity. |
+| **Pack Level** | One of `EACH`, `INNER`, `CASE`, `PALLET`. A level other than `EACH` knows its child level's GTIN and how many of it it holds. | `catalog.PackLevel` | A node subtype. |
+| **Owner Reference** | The opaque `ownerRef` on a listing: the seller of record of the stock. Empty means the vendor's own stock. | `listing.OwnerRef` | The vendor operating the node. |

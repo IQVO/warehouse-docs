@@ -87,7 +87,7 @@ of them:
 - public fulfillment-network research: the node
   types a package crosses after it leaves a fulfillment centre.
 - the vendor platform API surface map: where the vendor's
-  shipping-label request sits in the vendor direct-fulfillment workflow,
+  shipping-label request sits in the direct-fulfillment vendor workflow,
   relative to acknowledgement and shipment confirmation.
 
 The model keeps the order the research shows: a label is issued only for an

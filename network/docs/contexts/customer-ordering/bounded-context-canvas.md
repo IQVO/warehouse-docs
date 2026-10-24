@@ -203,7 +203,9 @@ cancellation).
    `GET /orders/{orderId}/ship-to`. Published events carry
    `destinationPostalPrefix` only.
 4. **Cancel only while no group is locked** (`ErrCancelAfterLock`). After the
-   lock, cancellation is a return.
+   lock, cancellation is a return. The check is advisory: a cancel is a request
+   and `order-sourcing` decides (`FulfillmentCancelled`, or
+   `FulfillmentCancelRefused` after the lock).
 5. **Status moves forward only** (`ErrStatusRegression`). A late or
    duplicated upstream event never moves the order back.
 6. **An unfulfillable group is cancelled, not kept open.** When a group is

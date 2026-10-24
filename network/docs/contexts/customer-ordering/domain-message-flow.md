@@ -192,8 +192,10 @@ Derived from: `model.yaml → contexts[customer-ordering].inbound` (`POST /order
 
 Omitted: Kafka between `order-sourcing` and the two consumers of
 `FulfillmentUnsourceable`. `order-sourcing` re-queues the group on
-`PromiseRevised` (`ApplyRevisedPromise`). Two consequences of the model are
-listed as open questions. First, `order-sourcing` has no transition from
-`UNSOURCEABLE` to `CANCELLED`, so a cancellation of an unsourceable group has
-no target transition there. Second, "no revised promise is feasible" has no
-event.
+`PromiseRevised` (`ApplyRevisedPromise`). A cancel is a request: this context
+publishes `CustomerOrderCancelled`, and `order-sourcing` decides per group,
+answering `FulfillmentCancelled` (the group becomes `CANCELLED`) or
+`FulfillmentCancelRefused` (the group returns to `LOCKED`). The `409
+ErrCancelAfterLock` above is therefore advisory. `order-sourcing` can cancel an
+`UNSOURCEABLE` assignment. "No revised promise is feasible" still has no event
+in this page's model reading.

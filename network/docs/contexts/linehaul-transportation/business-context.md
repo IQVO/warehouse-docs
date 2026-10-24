@@ -110,5 +110,6 @@ internal systems.
   vendor V-WS and never talks to this context: the only channel between the
   two organizations is the Vendor API (see
   [WMS/WES integration](/network/integration/wms-wes-integration)).
-- **Inventory placement** (which node should hold which item). Named as a
-  future context (`inventory-placement`) and out of scope.
+- **Inventory placement** (which node should hold which item). Out of scope;
+  a seller names the destination node in `seller-inbound`. Seller inbound
+  freight is out of scope too (gap G43).

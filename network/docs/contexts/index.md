@@ -2,7 +2,7 @@
 id: index
 title: Bounded Contexts
 sidebar_label: Overview
-description: "The ten retail-network bounded contexts, each documented with the same 14-page ddd-crew pack."
+description: "The eleven retail-network bounded contexts, each documented with the same 14-page ddd-crew pack."
 slug: /contexts
 ---
 
@@ -18,15 +18,18 @@ relationship and sequence diagrams. All are derived from
 | Context | Classification | Tier | Aggregates | Events published | Events consumed |
 | --- | --- | --- | --- | --- | --- |
 | [`node-topology`](/network/contexts/node-topology) | <span class="badge-supporting">Supporting</span> | `logistics` | 4 | 9 | 0 |
-| [`offer-availability`](/network/contexts/offer-availability) | <span class="badge-supporting">Supporting</span> | `commerce` | 3 | 7 | 4 |
-| [`delivery-promise`](/network/contexts/delivery-promise) | <span class="badge-core">Core</span> | `commerce` | 3 | 9 | 27 |
-| [`customer-ordering`](/network/contexts/customer-ordering) | <span class="badge-generic">Generic</span> | `commerce` | 2 | 2 | 11 |
-| [`order-sourcing`](/network/contexts/order-sourcing) | <span class="badge-core">Core</span> | `commerce` | 1 | 8 | 29 |
-| [`vendor-connectivity`](/network/contexts/vendor-connectivity) | <span class="badge-supporting">Supporting</span> | `partner` | 3 | 8 | 7 |
-| [`linehaul-transportation`](/network/contexts/linehaul-transportation) | <span class="badge-supporting">Supporting</span> | `logistics` | 3 | 8 | 12 |
-| [`last-mile-delivery`](/network/contexts/last-mile-delivery) | <span class="badge-supporting">Supporting</span> | `logistics` | 3 | 6 | 3 |
-| [`shipping-and-tracking`](/network/contexts/shipping-and-tracking) | <span class="badge-generic">Generic</span> | `logistics` | 2 | 8 | 6 |
-| [`node-performance`](/network/contexts/node-performance) | <span class="badge-supporting">Supporting</span> | `partner` | 1 | 2 | 13 |
+| [`offer-availability`](/network/contexts/offer-availability) | <span class="badge-supporting">Supporting</span> | `commerce` | 3 | 9 | 4 |
+| [`delivery-promise`](/network/contexts/delivery-promise) | <span class="badge-core">Core</span> | `commerce` | 3 | 12 | 34 |
+| [`customer-ordering`](/network/contexts/customer-ordering) | <span class="badge-generic">Generic</span> | `commerce` | 2 | 2 | 17 |
+| [`order-sourcing`](/network/contexts/order-sourcing) | <span class="badge-core">Core</span> | `commerce` | 1 | 10 | 32 |
+| [`vendor-connectivity`](/network/contexts/vendor-connectivity) | <span class="badge-supporting">Supporting</span> | `partner` | 3 | 11 | 11 |
+| [`linehaul-transportation`](/network/contexts/linehaul-transportation) | <span class="badge-supporting">Supporting</span> | `logistics` | 3 | 10 | 13 |
+| [`last-mile-delivery`](/network/contexts/last-mile-delivery) | <span class="badge-supporting">Supporting</span> | `logistics` | 3 | 8 | 4 |
+| [`shipping-and-tracking`](/network/contexts/shipping-and-tracking) | <span class="badge-generic">Generic</span> | `logistics` | 2 | 8 | 7 |
+| [`node-performance`](/network/contexts/node-performance) | <span class="badge-supporting">Supporting</span> | `partner` | 1 | 2 | 14 |
+| [`seller-inbound`](/network/contexts/seller-inbound) (proposed, no service) | <span class="badge-supporting">Supporting</span> | `partner` | 3 | 9 | 10 |
 
-Future contexts named by the model but not documented: `inventory-placement`,
-`customer-returns`, `customer-notification`, `payments-and-invoicing`.
+Future contexts named by the model but not documented: `customer-returns`,
+`customer-notification`, `payments-and-invoicing`. `inventory-placement`, named
+earlier, is absorbed by `seller-inbound`
+([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)).

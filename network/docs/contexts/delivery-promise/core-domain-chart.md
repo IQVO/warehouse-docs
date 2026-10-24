@@ -33,7 +33,7 @@ Derived from: `model.yaml → contexts[delivery-promise].chart`
 (`differentiation: 0.92`, `complexity: 0.85`), `.policies` (`PromisePolicy`,
 `ScorecardHandicap`), `.aggregates[PromiseBook]`.
 
-Omitted: the other nine contexts (they are on
+Omitted: the other ten contexts (they are on
 [the domain core domain chart](/network/strategic-design/core-domain-chart)). The three
 slice positions are this pack's estimate relative to the context point; only
 the context point comes from the model.

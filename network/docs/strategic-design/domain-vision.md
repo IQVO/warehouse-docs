@@ -67,7 +67,7 @@ flowchart TB
 Derived from: `model.yaml` → `delivery-promise.policies`,
 `order-sourcing.policies`, `node-performance.policies`.
 
-The loop is the reason the network is ten contexts, not one: each arrow is a
+The loop is the reason the network is eleven contexts, not one: each arrow is a
 published event between two models that change at different speeds, for
 different reasons, under different owners.
 
@@ -83,9 +83,11 @@ different reasons, under different owners.
   Layer (`network-fulfillment`). See [Context Map](/network/strategic-design/context-map).
 - **Not an inventory planner for vendors.** Which vendor node holds which
   item is the vendor's decision (the fleet's `network-inventory-planning`).
-  The network's own inventory placement is a named future context.
+  Sellers that send their own stock plan and ship it through the proposed
+  `seller-inbound` context, which picks no node for them: the seller names
+  the destination ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)).
 
-## The ten contexts in one sentence each
+## The eleven contexts in one sentence each
 
 | Context | Classification | Purpose |
 | --- | --- | --- |
@@ -97,6 +99,7 @@ different reasons, under different owners.
 | `linehaul-transportation` | Supporting | Scheduled departures with capacity, pickups at vendor cutoffs, loads. |
 | `last-mile-delivery` | Supporting | Delivery waves, routes for delivery partners, delivery attempts. |
 | `node-performance` | Supporting | Scorecards and grades from observed facts. |
+| `seller-inbound` | Supporting | Proposed. Sellers plan, pack, label and ship stock in eaches or case-packed cartons identified by SSCC; receipts close each shipment. |
 | `customer-ordering` | Generic | Checkout and the customer order; holds the ship-to address. |
 | `shipping-and-tracking` | Generic | Labels and the package journey. |
 

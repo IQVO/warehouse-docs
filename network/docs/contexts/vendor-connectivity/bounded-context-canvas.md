@@ -248,10 +248,14 @@ API**.
   declared handling time, but this context consumes neither
   `NodeOperationalProfileDeclared` nor any other source of it. Raised as a
   model gap.
-- **Cancellation after acknowledgement.** order-sourcing may cancel a
-  `RELEASED` assignment while its purchase order is `ACK_PROCESSING` or
-  `ACCEPTED`; here cancel is refused (`ErrCancelAfterAcknowledgement`) and no
-  message tells the vendor or order-sourcing. Raised as a model gap.
+- **Cancellation after acknowledgement (resolved, G12; one race stays open).**
+  order-sourcing may cancel a `RELEASED` assignment while its purchase order is
+  `ACK_PROCESSING` or `ACCEPTED`; here cancel is refused
+  (`ErrCancelAfterAcknowledgement`), logged, and nothing is published. The
+  decision lives in order-sourcing, which refuses a cancel after the lock
+  (`FulfillmentCancelRefused`). An acceptance that arrives after order-sourcing
+  cancelled a `RELEASED` assignment is only logged there, so the vendor may
+  still ship a cancelled group.
 - **Vendor suspension.** `SuspendVendor` and `ReinstateVendor` have no
   route, no event and no invariant saying what a `SUSPENDED` vendor may not
   do. Raised as a model gap.

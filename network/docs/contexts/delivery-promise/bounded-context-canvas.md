@@ -317,9 +317,11 @@ owner, not decided here.
 6. **A cancelled delivery wave.** `DeliveryWaveCancelled` is analytics-only.
    `DeliveryWaveView` cannot drop a cancelled wave, and `RepromiseOnRisk` cannot
    react to one on a witness path.
-7. **Where a book comes from.** `PromiseBook` has no creating command, the
-   `share` formula (cutoff `maxOrders`, throughput cap, proportional share) is
-   not given, and no policy triggers `CloseBook`.
+7. **Where a book comes from (resolved, G9).** The first `HoldCapacity` for a
+   pickup opens the book (`OpenBook`, policy `LazyBookOpening`). Its `share` is
+   `ceil(min(maxOrders, throughput cap x window) x capacitySharePercent / 100)`,
+   at least 1 (policy `BookShare`). A clock job closes the book at `cutoffAt`
+   (policy `CloseBooksAtCutoff`), and holds stop from the `holdDeadline`.
 8. **Who owns `TierOrderDeadline`.** No aggregate, route or event carries the
    deadlines or `policyVersion`, and no `OfferConstraint` names "past the
    order deadline".

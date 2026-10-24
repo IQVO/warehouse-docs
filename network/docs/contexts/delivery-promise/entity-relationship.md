@@ -144,7 +144,7 @@ erDiagram
         TEXT node_id
         TEXT pickup_departure_id
         TIMESTAMPTZ cutoff_at
-        TIMESTAMPTZ closes_at "cutoff minus handling time"
+        TIMESTAMPTZ hold_deadline_at "cutoff minus handling time"
         TEXT state "CHECK OPEN, CLOSED"
         INTEGER share "CHECK >= 0"
         INTEGER provisional "CHECK >= 0"

@@ -2,13 +2,17 @@
 id: overview
 title: retail-network
 sidebar_label: Overview
-description: "An large-scale retail and logistics network, modelled with Domain-Driven Design as ten bounded contexts, and the one seam through which it connects to the warehouse-systems WMS/WES fleet."
+description: "A large-scale retail and logistics network, modelled with Domain-Driven Design as eleven bounded contexts, and the one seam through which it connects to the warehouse-systems WMS/WES fleet."
 slug: /
 ---
 
+:::note[Study disclaimer]
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
+:::
+
 # retail-network
 
-**retail-network** is a model of an large-scale retail and logistics network:
+**retail-network** is a model of a large-scale retail and logistics network:
 a storefront that promises an arrival date, a network of nodes (vendor
 fulfillment centres, sortation centres, delivery stations, air hubs) joined by
 lanes, the decision of which node fulfils each order, the middle and last mile,
@@ -25,10 +29,10 @@ network's Vendor API.
 Nothing on this site is built. The model is derived from public fulfillment-network research and the fleet's repositories. The canonical model is
 [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml);
 every page is derived from it, and a CI gate fails the build when a page names
-a message the model does not have.
+a message the model does not have. Where a service had to decide something the model left open, the decision is an assumption in that service's ADR 0002 and appears in the [gap register](/network/strategic-design/model-gap-register).
 :::
 
-## The ten bounded contexts
+## The eleven bounded contexts
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 18, "rankSpacing": 36, "padding": 6}}}%%
@@ -55,6 +59,7 @@ flowchart TB
         direction TB
         VC["vendor-connectivity"]:::sup
         NP["node-performance"]:::sup
+        SI["seller-inbound"]:::sup
     end
     NF[["warehouse-systems<br/>network-fulfillment"]]:::ext
     CO --> DP
@@ -67,6 +72,7 @@ flowchart TB
     LM --> DP
     NP --> DP
     OA --> DP
+    SI --> VC
 ```
 
 Derived from: `model.yaml` → `contexts[*].classification`, `contexts[*].tier`,
@@ -86,6 +92,7 @@ map with every relationship pattern is on
 | [`node-performance`](/network/contexts/node-performance) | Scorecards measured from facts, never from declarations; grades feed the promise. |
 | [`customer-ordering`](/network/contexts/customer-ordering) | Checkout and the customer order; the only holder of the (synthetic) ship-to address. Generic. |
 | [`shipping-and-tracking`](/network/contexts/shipping-and-tracking) | Labels and the package journey timeline. Generic. |
+| [`seller-inbound`](/network/contexts/seller-inbound) | Proposed. Sellers plan, pack, label and ship stock, including case-packed master cartons identified by SSCC, to vendor nodes; receipts close each shipment. |
 
 ## How to read this site
 
@@ -100,6 +107,6 @@ map with every relationship pattern is on
 4. [WMS/WES Integration](/network/integration): exactly how the warehouse-systems
    fleet plugs in, what crosses the seam, and what the fleet must change.
 5. [Bounded Contexts](/network/contexts): the same 14-page ddd-crew pack for each of
-   the ten contexts, and [API Reference](/network/api-reference) for their REST
+   the eleven contexts, and [API Reference](/network/api-reference) for their REST
    contracts.
-6. [ADRs](/network/adr): the eight proposed decisions.
+6. [ADRs](/network/adr): the nine proposed decisions.

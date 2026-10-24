@@ -34,7 +34,7 @@ Derived from: `model.yaml → contexts[customer-ordering].chart` (`complexity:
 `.policies[CheckoutPromising]`.
 
 The two slices are placed by judgement, not by the model; the model gives
-only the context's point. Omitted: the other nine contexts (their positions
+only the context's point. Omitted: the other ten contexts (their positions
 are on their own pages and on the network-wide chart) and the `Shopper`
 aggregate. `Shopper` is a one-state registry, so it would sit in the
 Supporting corner on complexity alone. It is still part of a Generic context,

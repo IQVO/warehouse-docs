@@ -84,9 +84,13 @@ the vendor platform API surface map.
 ## Out of scope (deliberately)
 
 - **Inventory placement**: which node should hold which item before demand
-  arrives. Vendors place their own stock; the model lists
-  `inventory-placement` as a future context.
+  arrives. Vendors place their own stock, and a seller names the destination
+  node on its inbound plan in `seller-inbound`; placement advice is not
+  modelled (gap G49).
 - **Pricing and competing offers between sellers**: not in the model.
+  A listing does carry an optional `ownerRef` (the seller of record), but
+  no pricing and no rule for choosing between two sellers' listings of the
+  same item (gap G47).
 - **Capacity**: how many orders a node can take at a cutoff is
   `delivery-promise`'s `PromiseBook`, fed by `node-topology`'s declared
   profile. This context keeps only the vendor's claimed quantity and its

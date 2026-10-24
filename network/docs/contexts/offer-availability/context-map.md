@@ -94,3 +94,12 @@ shopper / storefront actor, not as a `customer-ordering` edge),
   `listingId`, `availableQty`, `basis`.
 - **No Shared Kernel.** `nodeId`, `catalogItemId` and `listingId` cross
   boundaries by value only.
+
+## Seller inbound and vendor packaging view
+
+> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+
+| Neighbour | Direction | Pattern | Channel | Messages | Why |
+| --- | --- | --- | --- | --- | --- |
+| `seller-inbound` | U → D | Conformist | Kafka `retailnetwork.offer-availability.events` | `CatalogItemCreated`, `CatalogItemDiscontinued`, `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | The packaging hierarchy and its GTINs are this context's facts; `seller-inbound` keeps `CatalogPackagingView`. |
+| `vendor-connectivity` | U → D | Conformist | Kafka `retailnetwork.offer-availability.events` | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` (besides `ListingCreated`) | `vendor-connectivity` keeps `CatalogPackagingView` to describe cartons on the Vendor API. |

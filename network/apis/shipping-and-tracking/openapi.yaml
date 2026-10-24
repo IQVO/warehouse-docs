@@ -1,34 +1,45 @@
 openapi: 3.0.3
 info:
-  title: Shipping & Tracking API (proposed)
-  version: 0.1.0-proposed
+  title: Shipping & Tracking API
+  version: 0.1.0
+  contact:
+    name: shipping-and-tracking maintainers
+    url: https://github.com/IQVO/shipping-and-tracking
   description: >-
-    Proposed contract derived from model/model.yaml
-    (contexts[shipping-and-tracking].rest). Nothing is built yet. It covers
-    label issue and void, and reading and recording a package journey. No
-    schema carries a ship-to address or any part of it: the address is read
-    from customer-ordering at issue time, kept only as an encrypted snapshot
-    and never returned. The IssueLabel request fields are an assumption; the
-    model does not list them. No authentication (consistent with the model's
-    no_auth convention).
+    REST contract of the shipping-and-tracking bounded context of the retail
+    network, derived from retail-network-docs model/model.yaml
+    (contexts[shipping-and-tracking].rest, .aggregates, .publishes,
+    conventions.errors) and the orchestrator's contracts-delta (G2, G3, G11,
+    G18). It issues shipping labels and owns each package's journey. No schema
+    of this contract carries a ship-to address or any part of it: the address
+    is read from customer-ordering at issue time (GetShipTo), kept only as an
+    encrypted snapshot (purged 30 days after the journey closes) and never
+    returned (ADR RN-0006, ADR 0002 A9). vendor-connectivity calls POST /labels
+    in-organization; the other routes are read by shoppers, customer-ordering
+    and operations tooling. No authentication, consistent with the fleet.
+    Errors are RFC 9457 problem details. The shared problem types are
+    not-found (404), illegal-transition (409), concurrent-update (409) and
+    validation-failed (422), plus one slug per model Err name.
 servers:
-  - url: http://localhost:8000/api/retail-network/shipping-and-tracking
+  - url: http://localhost:8080
 tags:
   - name: Labels
-    description: Shipping labels (ShippingLabel aggregate).
+    description: Shipping labels (aggregate ShippingLabel).
   - name: Journeys
-    description: Package journeys (PackageJourney aggregate).
+    description: Package journeys (aggregate PackageJourney).
 paths:
   /labels:
     post:
       tags: [Labels]
       operationId: issueLabel
-      summary: Issue a shipping label for one package
+      summary: Issue a shipping label for one package (IssueLabel)
       description: >-
-        In-org route called by vendor-connectivity. Reads the ship-to from
-        customer-ordering (GET /orders/{orderId}/ship-to), stores it
-        encrypted, starts the package journey and publishes LabelIssued. The
-        response never contains the address.
+        In-org route called by vendor-connectivity (contracts-delta E2). Reads
+        the ship-to from customer-ordering (GET /orders/{orderId}/ship-to)
+        BEFORE the transaction opens, stores it encrypted, starts the package
+        journey (LABELLED) and publishes LabelIssued. The response never
+        contains the address. A replay of the same Idempotency-Key returns the
+        first response.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -38,6 +49,8 @@ paths:
             schema:
               $ref: '#/components/schemas/IssueLabelRequest'
       responses:
+        '400':
+          $ref: '#/components/responses/IdempotencyKeyRequired'
         '201':
           description: Label issued (or replayed for a known Idempotency-Key).
           content:
@@ -45,15 +58,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/Label'
         '409':
-          description: ErrLabelAlreadyIssued (label-already-issued) or ErrTrackingNumberTaken (tracking-number-taken).
+          description: label-already-issued (ErrLabelAlreadyIssued), tracking-number-taken (ErrTrackingNumberTaken) or concurrent-update (ErrConcurrentUpdate).
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '422':
-          $ref: '#/components/responses/ValidationFailed'
+          description: validation-failed (a malformed request, or the order is unknown to customer-ordering).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '503':
-          description: customer-ordering did not return the ship-to (ship-to-unavailable). No label is stored.
+          description: ship-to-unavailable. customer-ordering did not return the ship-to in time. No label is stored.
           content:
             application/problem+json:
               schema:
@@ -62,11 +79,13 @@ paths:
     post:
       tags: [Labels]
       operationId: voidLabel
-      summary: Void an issued label
+      summary: Void an issued label (VoidLabel)
       description: >-
-        Moves the label ISSUED to VOIDED and publishes LabelVoided. Voiding a
-        VOIDED label returns it unchanged. The model names no caller for this
-        route.
+        Moves the label ISSUED to VOIDED, closes the LABELLED journey of the
+        same tracking number as VOIDED and publishes LabelVoided (contracts-delta
+        E16). Refused once the package has been handed over
+        (void-after-handover). Voiding a VOIDED label returns it unchanged and
+        publishes nothing.
       parameters:
         - $ref: '#/components/parameters/LabelRef'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -77,14 +96,18 @@ paths:
             schema:
               $ref: '#/components/schemas/VoidLabelRequest'
       responses:
+        '400':
+          $ref: '#/components/responses/IdempotencyKeyRequired'
         '200':
-          description: Label voided.
+          description: Label voided (or already voided).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Label'
         '404':
-          description: Label not found (label-not-found).
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: void-after-handover (ErrVoidAfterHandover) or concurrent-update (ErrConcurrentUpdate).
           content:
             application/problem+json:
               schema:
@@ -95,8 +118,11 @@ paths:
     get:
       tags: [Journeys]
       operationId: getJourney
-      summary: Get the journey of one package
-      description: Open Host query for shoppers and customer-ordering (GetJourney).
+      summary: Get the journey of one package (GetJourney)
+      description: >-
+        Open Host query for shoppers and customer-ordering. Returns the
+        customer-visible timeline: the state and every stored scan, applied or
+        not, in the order they were recorded.
       parameters:
         - $ref: '#/components/parameters/TrackingNumber'
       responses:
@@ -107,16 +133,19 @@ paths:
               schema:
                 $ref: '#/components/schemas/Journey'
         '404':
-          $ref: '#/components/responses/JourneyNotFound'
+          $ref: '#/components/responses/NotFound'
   /journeys/{trackingNumber}/scans:
     post:
       tags: [Journeys]
       operationId: recordScan
-      summary: Record one scan on a package journey
+      summary: Record one scan on a package journey (RecordScan)
       description: >-
         RecordScan over REST. Scans apply in time order; an older scan is
-        stored but does not move the state (scan-out-of-order). The model
-        names no caller for this route.
+        stored but does not move the state (409 scan-out-of-order, the scan is
+        kept with applied=false). A scan whose scanType has no edge from the
+        current state is stored with applied=false and answers 409
+        illegal-transition. A known scanId answers 409 duplicate-scan and
+        stores nothing. A closed journey answers 409 journey-closed.
       parameters:
         - $ref: '#/components/parameters/TrackingNumber'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -127,6 +156,8 @@ paths:
             schema:
               $ref: '#/components/schemas/RecordScanRequest'
       responses:
+        '400':
+          $ref: '#/components/responses/IdempotencyKeyRequired'
         '200':
           description: Scan applied; the journey after the scan.
           content:
@@ -134,9 +165,9 @@ paths:
               schema:
                 $ref: '#/components/schemas/Journey'
         '404':
-          $ref: '#/components/responses/JourneyNotFound'
+          $ref: '#/components/responses/NotFound'
         '409':
-          description: ErrDuplicateScan (duplicate-scan), ErrScanOutOfOrder (scan-out-of-order, the scan is stored but not applied) or ErrJourneyClosed (journey-closed).
+          description: duplicate-scan (ErrDuplicateScan), scan-out-of-order (ErrScanOutOfOrder, stored not applied), journey-closed (ErrJourneyClosed), illegal-transition (stored not applied) or concurrent-update.
           content:
             application/problem+json:
               schema:
@@ -149,7 +180,7 @@ components:
       name: Idempotency-Key
       in: header
       required: true
-      description: Client-chosen key; a repeat with the same key and body replays the first response.
+      description: Client-chosen key (at most 128 characters); a repeat with the same key replays the first response (24 hours).
       schema:
         type: string
         maxLength: 128
@@ -166,14 +197,20 @@ components:
       schema:
         type: string
   responses:
-    ValidationFailed:
-      description: The request is malformed (validation-failed).
+    IdempotencyKeyRequired:
+      description: idempotency-key-required. The Idempotency-Key header is missing.
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
-    JourneyNotFound:
-      description: No journey for this tracking number (journey-not-found).
+    ValidationFailed:
+      description: validation-failed. The request is well-formed JSON but violates a value rule.
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: not-found. The addressed label or journey does not exist.
       content:
         application/problem+json:
           schema:
@@ -187,28 +224,47 @@ components:
       enum: [ISSUED, VOIDED]
     JourneyState:
       type: string
-      enum: [LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, DELIVERED, RETURNED, LOST]
+      enum: [LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, DELIVERED, RETURNED, LOST, VOIDED]
+    ScanType:
+      type: string
+      description: >-
+        Kind of observation (ADR 0002 A5). Each type has fixed edges:
+        SHIPMENT_CONFIRMED (LABELLED stays), PICKUP_DEPARTURE (LABELLED to
+        HANDED_OVER), DEPARTURE (HANDED_OVER or IN_TRANSIT to IN_TRANSIT),
+        TRANSIT_ARRIVAL (HANDED_OVER or IN_TRANSIT to IN_TRANSIT),
+        STATION_ARRIVAL (HANDED_OVER or IN_TRANSIT to AT_STATION),
+        OUT_FOR_DELIVERY (AT_STATION to OUT_FOR_DELIVERY), DELIVERED
+        (OUT_FOR_DELIVERY to DELIVERED), DELIVERY_FAILED (OUT_FOR_DELIVERY to
+        AT_STATION).
+      enum: [SHIPMENT_CONFIRMED, PICKUP_DEPARTURE, DEPARTURE, TRANSIT_ARRIVAL, STATION_ARRIVAL, OUT_FOR_DELIVERY, DELIVERED, DELIVERY_FAILED]
     IssueLabelRequest:
       type: object
-      description: Assumed shape; orderId is needed for GetShipTo and for PackageDelivered.
+      description: In-org request (contracts-delta E2). orderId is needed for GetShipTo and for PackageDelivered.
       required: [poNumber, packageNo, assignmentId, orderId, tier]
       additionalProperties: false
       properties:
         poNumber:
           type: string
+          minLength: 1
+          maxLength: 64
         packageNo:
           type: integer
           minimum: 1
+          maximum: 2147483647
         assignmentId:
           type: string
+          minLength: 1
+          maxLength: 64
         orderId:
           type: string
+          minLength: 1
+          maxLength: 64
         tier:
           $ref: '#/components/schemas/ServiceTier'
     Label:
       type: object
-      description: Label metadata. Never contains the ship-to address.
-      required: [labelRef, trackingNumber, carrier, poNumber, packageNo, assignmentId, tier, status, issuedAt]
+      description: Label metadata. Never contains the ship-to address. labelRef, trackingNumber and carrier are what vendor-connectivity returns to the vendor.
+      required: [labelRef, trackingNumber, carrier, poNumber, packageNo, assignmentId, orderId, tier, status, issuedAt]
       properties:
         labelRef:
           type: string
@@ -222,6 +278,8 @@ components:
           type: integer
         assignmentId:
           type: string
+        orderId:
+          type: string
         tier:
           $ref: '#/components/schemas/ServiceTier'
         status:
@@ -231,11 +289,9 @@ components:
           format: date-time
         voidReason:
           type: string
-          nullable: true
         voidedAt:
           type: string
           format: date-time
-          nullable: true
     VoidLabelRequest:
       type: object
       required: [reason]
@@ -244,6 +300,7 @@ components:
         reason:
           type: string
           minLength: 1
+          maxLength: 500
     Scan:
       type: object
       required: [scanId, nodeId, scanType, at, applied]
@@ -253,14 +310,13 @@ components:
         nodeId:
           type: string
         scanType:
-          type: string
-          description: Kind of observation; not enumerated in the model (pages use the source fact name).
+          $ref: '#/components/schemas/ScanType'
         at:
           type: string
           format: date-time
         applied:
           type: boolean
-          description: False for a scan stored out of order.
+          description: False for a scan stored out of order or without an edge from the state it met.
     RecordScanRequest:
       type: object
       required: [scanId, nodeId, scanType, at]
@@ -268,16 +324,20 @@ components:
       properties:
         scanId:
           type: string
+          minLength: 1
+          maxLength: 256
         nodeId:
           type: string
+          minLength: 1
+          maxLength: 64
         scanType:
-          type: string
+          $ref: '#/components/schemas/ScanType'
         at:
           type: string
           format: date-time
     Journey:
       type: object
-      required: [trackingNumber, state, scans]
+      required: [trackingNumber, state, poNumber, assignmentId, orderId, tier, scans]
       properties:
         trackingNumber:
           type: string
@@ -289,14 +349,14 @@ components:
           type: string
         orderId:
           type: string
+        tier:
+          $ref: '#/components/schemas/ServiceTier'
         handedOverAt:
           type: string
           format: date-time
-          nullable: true
         deliveredAt:
           type: string
           format: date-time
-          nullable: true
         scans:
           type: array
           items:

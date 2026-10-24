@@ -154,3 +154,13 @@ network-operated. The fleet never registers them through the Vendor API, and
 the network never reads the fleet's rows; they are reference mirrors so fleet
 screens can name the building a package left for. See
 [Node model](/network/network-model/node-model).
+
+## Seller inbound over the same seam
+
+[ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments) adds two groups of routes to the Vendor API and nothing else to the
+seam: `GET /vendor/inbound-shipments` (and `/{shipmentId}`) to read the carton
+manifest a seller declared, and `POST /vendor/inbound-receipts` to answer with
+what arrived. The sellers themselves reach only `seller-inbound`. The hard
+rules above are unchanged: no shared topic, no network context reading a
+`warehouse.*` topic, no fleet context other than `network-fulfillment` calling
+the network.

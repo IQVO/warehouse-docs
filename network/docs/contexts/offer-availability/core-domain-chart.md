@@ -34,7 +34,7 @@ Derived from: `model.yaml → contexts[offer-availability].chart`
 `contexts[offer-availability].aggregates`. The three slice positions are
 this page's estimate, not model values.
 
-Omitted: the other nine contexts (each has its own chart; the domain-wide
+Omitted: the other ten contexts (each has its own chart; the domain-wide
 picture is [Core Domain Chart](/network/strategic-design/core-domain-chart)).
 
 ## Classification: Supporting

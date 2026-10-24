@@ -187,7 +187,7 @@ only, never the address.
 | Table | Aggregate / role | Notes |
 | --- | --- | --- |
 | `shipping_labels` | **ShippingLabel** (root) | One row per label. Unique `(po_number, package_no)` and `tracking_number`. |
-| `label_ship_to_snapshots` | **ShippingLabel** (its encrypted snapshot) | Kept apart so the PII can be purged or re-keyed without touching the label row. Retention is not modelled. |
+| `label_ship_to_snapshots` | **ShippingLabel** (its encrypted snapshot) | Kept apart so the PII can be purged or re-keyed without touching the label row. Purged 30 days after the journey closes (policy `ShipToRetention`). |
 | `package_journeys` | **PackageJourney** (root) | One row per package; `version` for optimistic concurrency, because three topics write it. |
 | `journey_scans` | **PackageJourney** (its `Scan` entities) | Append-only; `(tracking_number, scan_id)` enforces `ErrDuplicateScan`; `applied = false` keeps out-of-order scans. |
 | `rm_catalog_dimensions` | none (read model `CatalogDimensionsView`) | Upsert on `CatalogItemCreated`. |
