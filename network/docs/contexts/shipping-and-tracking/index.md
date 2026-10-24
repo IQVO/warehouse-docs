@@ -7,8 +7,8 @@ description: "Shipping & Tracking (proposed): a Generic subdomain that issues sh
 
 # Shipping & Tracking
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-generic">Generic Subdomain</span>
@@ -61,6 +61,14 @@ as an exception (`ExceptionOnSilence`).
 
 ## Elsewhere
 
+- Read-only MCP server (service ADR 0006): `cmd/mcp`, a second binary serving Streamable HTTP
+  on `:8090` with no auth; it sources this context's own reads and nothing that writes. One
+  tool: `get_journey`. The gateway (Kong) exposes it at `/api/mcp/shipping-and-tracking`,
+  rewritten to the server's `/mcp` mount.
+- Console remote (service ADR 0007): `web/`, a Vite + React Module Federation remote —
+  federation container `shipping_mfe`, gateway mount `/mfes/shipping-and-tracking/`,
+  dev/preview port `4020` — read-only screens over the existing REST reads, calling only this
+  context's API.
 - REST contract (as built, from the service repository): `apis/shipping-and-tracking/openapi.yaml`,
   rendered under the [API reference](/network/api-reference).
 - [ADR 0006: PII confinement](/network/adr/0006-pii-confinement): why the ship-to

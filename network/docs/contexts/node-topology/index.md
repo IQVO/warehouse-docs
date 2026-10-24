@@ -7,8 +7,8 @@ description: "The authoritative registry of the retail network's physical shape:
 
 # Node Topology
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span class="badge-supporting">Supporting</span>
@@ -49,6 +49,15 @@ The REST contract is `apis/node-topology/openapi.yaml`, rendered under the
 
 ## Elsewhere
 
+- Read-only MCP server (service ADR 0008): `cmd/mcp`, a second binary serving Streamable HTTP
+  on `:8090` with no auth; it sources this context's own reads and nothing that writes. Six
+  tools: `get_node`, `get_region`, `list_lanes`, `list_nodes`, `list_regions`,
+  `resolve_service_area`. The gateway (Kong) exposes it at `/api/mcp/node-topology`, rewritten
+  to the server's `/mcp` mount.
+- Console remote (service ADR 0009): `web/`, a Vite + React Module Federation remote —
+  federation container `node_topology_mfe`, gateway mount `/mfes/node-topology/`, dev/preview
+  port `4017` — read-only screens over the existing REST reads, calling only this context's
+  API.
 - [Node model](/network/network-model/node-model): the network-wide view of node types,
   lane rules and service tiers.
 - [ADR 0003: declared and measured capability](/network/adr/0003-declared-and-measured-capability)

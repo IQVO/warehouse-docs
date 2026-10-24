@@ -7,8 +7,8 @@ description: The ddd-crew Bounded Context Canvas v5 for Customer Ordering, with 
 
 # Bounded Context Canvas
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 Following the ddd-crew [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas).
@@ -43,7 +43,7 @@ flowchart LR
     classDef none fill:#f8f9fa,stroke:#adb5bd,stroke-dasharray:5 5,color:#495057
     subgraph IN["Inbound - who commands, queries or feeds it"]
         direction TB
-        in0(["Shopper via storefront,<br/>e2e-tests, future UI"]):::actor
+        in0(["Shopper via storefront,<br/>e2e-tests, console remote"]):::actor
         in1["shipping-and-tracking"]:::ctx
         in2["order-sourcing"]:::ctx
         in3["delivery-promise"]:::ctx

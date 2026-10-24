@@ -7,8 +7,8 @@ description: "The proposed Last-Mile Delivery context: it runs the network's del
 
 # Last-Mile Delivery
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-supporting">Supporting</span> &nbsp; tier `logistics` · code `LM`
@@ -61,6 +61,14 @@ aggregates: `DeliveryWave`, `Route` and `DeliveryServicePartner`.
 
 ## Elsewhere
 
+- Read-only MCP server (service ADR 0006): `cmd/mcp`, a second binary serving Streamable HTTP
+  on `:8090` with no auth; it sources this context's own reads and nothing that writes. Three
+  tools: `get_route`, `get_wave_stops`, `list_waves`. The gateway (Kong) exposes it at
+  `/api/mcp/last-mile-delivery`, rewritten to the server's `/mcp` mount.
+- Console remote (service ADR 0007): `web/`, a Vite + React Module Federation remote —
+  federation container `last_mile_mfe`, gateway mount `/mfes/last-mile-delivery/`, dev/preview
+  port `4014` — read-only screens over the existing REST reads, calling only this context's
+  API.
 - REST contract (as built, from the service repository): `apis/last-mile-delivery/openapi.yaml`, listed
   under the [API reference](/network/api-reference).
 - Strategic view: [context map](/network/strategic-design/context-map),

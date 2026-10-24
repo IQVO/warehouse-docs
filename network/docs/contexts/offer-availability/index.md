@@ -7,8 +7,8 @@ description: "The proposed Offer & Availability context: a Supporting subdomain 
 
 # Offer & Availability
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-supporting">Supporting</span>
@@ -47,6 +47,15 @@ models from them.
 
 ## Elsewhere
 
+- Read-only MCP server (service ADR 0007): `cmd/mcp`, a second binary serving Streamable HTTP
+  on `:8090` with no auth; it sources this context's own reads and nothing that writes. Four
+  tools: `browse_catalog`, `get_catalog_item`, `get_inventory_feed`, `list_listings`. The
+  gateway (Kong) exposes it at `/api/mcp/offer-availability`, rewritten to the server's `/mcp`
+  mount.
+- Console remote (service ADR 0008): `web/`, a Vite + React Module Federation remote —
+  federation container `offer_availability_mfe`, gateway mount `/mfes/offer-availability/`,
+  dev/preview port `4018` — read-only screens over the existing REST reads, calling only this
+  context's API.
 - REST contract (as built, from the service repository): `apis/offer-availability/openapi.yaml`, rendered
   under the [API reference](/network/api-reference).
 - The domain-wide [Context Map](/network/strategic-design/context-map) and

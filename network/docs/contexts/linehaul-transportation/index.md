@@ -7,8 +7,8 @@ description: The middle mile of the retail network, a proposed Supporting contex
 
 # Linehaul Transportation
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet; identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-supporting">Supporting</span>
@@ -52,6 +52,14 @@ under [API reference](/network/api-reference).
 
 ## Elsewhere
 
+- Read-only MCP server (service ADR 0008): `cmd/mcp`, a second binary serving Streamable HTTP
+  on `:8090` with no auth; it sources this context's own reads and nothing that writes. Two
+  tools: `get_departure`, `list_departures`. The gateway (Kong) exposes it at
+  `/api/mcp/linehaul-transportation`, rewritten to the server's `/mcp` mount.
+- Console remote (service ADR 0009): `web/`, a Vite + React Module Federation remote —
+  federation container `linehaul_mfe`, gateway mount `/mfes/linehaul-transportation/`,
+  dev/preview port `4015` — read-only screens over the existing REST reads, calling only this
+  context's API.
 - [Strategic context map](/network/strategic-design/context-map) and
   [subdomain classification](/network/strategic-design/subdomain-classification).
 - [Node model](/network/network-model/node-model) (lanes and node types) and
