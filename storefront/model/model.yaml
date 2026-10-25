@@ -148,6 +148,7 @@ contexts:
         events: [ItemPriceChanged, ItemPriceWithdrawn]
         throughput_estimate: "low: merchandising writes; bursts on sale boundaries"
         size_estimate: "one row per ACTIVE catalogue item; ~10^6"
+        notes: "WithdrawPrice is reachable: POST /item-prices/{catalogItemId}:withdraw (merchandising UI, cmd channel) and by the WithdrawOnDiscontinue policy. CancelSale raises no event of its own: cancelling a live sale changes the effective price, and the window-boundary policy emits ItemPriceChanged for it (idempotent per item and boundary), so a separate event would duplicate the fact."
       - name: DeliveryChargeSchedule
         root_id: scheduleId
         description: "The delivery charge per service tier (SAME_DAY, NEXT_DAY, TWO_DAY, STANDARD), with an optional free-over threshold per tier. Exactly one schedule is current; versions strictly increase."
@@ -163,7 +164,7 @@ contexts:
         events: [DeliveryChargeScheduleChanged]
         throughput_estimate: "rare"
         size_estimate: "one current + history"
-        notes: "States CURRENT/SUPERSEDED are the least-surprising reading of \"one current, versioned\"; the plan names no states."
+        notes: "States CURRENT then SUPERSEDED: publishing a new schedule supersedes the previous one in the same transaction, and the read route GET /delivery-charge-schedules/current serves the CURRENT one."
       - name: TaxTable
         root_id: taxTableId
         description: "A synthetic tax table (D10): basis-point rates by destination postal-prefix band. Exactly one table is current; versions strictly increase."
@@ -179,7 +180,7 @@ contexts:
         events: [TaxTableChanged]
         throughput_estimate: "rare"
         size_estimate: "one current + history"
-        notes: "States CURRENT/SUPERSEDED follow DeliveryChargeSchedule; the plan names no states."
+        notes: "States CURRENT then SUPERSEDED, as for DeliveryChargeSchedule: publishing a new table supersedes the previous one in the same transaction, and GET /tax-tables/current serves the CURRENT one."
       - name: PriceQuote
         root_id: quoteId
         description: "A binding, immutable, expiring price snapshot for one checkout: lines with unit and line totals, groups with tier and delivery charge, tax, total, the versions of price, schedule and tax table used, issuedAt and expiresAt."
@@ -197,6 +198,7 @@ contexts:
         events: [PriceQuoteIssued]
         throughput_estimate: "one per checkout session opened"
         size_estimate: "TTL minutes; retained for the order's lifetime via the checkout session reference"
+        notes: "Quote expiry (ISSUED to EXPIRED) is checkout-internal TTL state, not a business fact anyone consumes: ExpireQuote raises no event and no PriceQuoteExpired exists. Checkout keeps its own clock (ExpireOnQuoteExpiry)."
     read_models:
       - {name: CatalogItemView, source: "offer-availability CatalogItemCreated, CatalogItemDiscontinued"}
     policies:
@@ -205,14 +207,15 @@ contexts:
       - {name: QuoteTtl, rule: "a PriceQuote expires 15 minutes (default) after issue; expiry is by time, immutable otherwise"}
     inbound:
       - {from: "storefront merchandiser (human)", type: cmd, channel: "REST /item-prices, /delivery-charge-schedules, /tax-tables", message: "SetListPrice, ScheduleSale, CancelSale, WithdrawPrice, PublishChargeSchedule, PublishTaxTable", relationship: UI}
-      - {from: checkout, type: cmd, channel: "REST POST /price-quotes", message: IssuePriceQuote, relationship: Customer/Supplier}
+      - {from: checkout, type: cmd, channel: "REST POST /price-quotes", message: IssuePriceQuote, fields: ["cartId", "lines[catalogItemId, quantity]", "groups[groupNo, offerId, tier, lineNos]", "destinationPostalPrefix"], note: "the caller is checkout; the quote prices exactly what the checkout session froze", relationship: Customer/Supplier}
       - {from: checkout, type: qry, channel: "REST GET /price-quotes/{quoteId}", message: GetPriceQuote, relationship: Customer/Supplier}
-      - {from: product-discovery, type: qry, channel: "REST GET /item-prices (bootstrap, paged)", message: ListItemPrices, relationship: Customer/Supplier}
-      - {from: "storefront-bff (experience layer)", type: qry, channel: "REST GET /item-prices/{catalogItemId}, GET /delivery-charge-schedules/current, GET /tax-tables/current", message: "GetItemPrice, GetCurrentChargeSchedule, GetCurrentTaxTable", relationship: UI}
+      - {from: product-discovery, type: qry, channel: "REST GET /item-prices (bootstrap and rebuild only, paged)", message: ListItemPrices, note: "bootstrap and projection rebuild only; the shopper-facing price is read through product-discovery's ProductView (price facet), never from pricing directly", relationship: Customer/Supplier}
+      - {from: "storefront merchandiser (human)", type: qry, channel: "REST GET /item-prices/{catalogItemId}, GET /delivery-charge-schedules/current, GET /tax-tables/current", message: "GetItemPrice, GetCurrentChargeSchedule, GetCurrentTaxTable", relationship: UI}
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated, CatalogItemDiscontinued", relationship: Conformist}
     rest:
       - "POST /item-prices"
       - "POST /item-prices/{catalogItemId}:set-list-price"
+      - "POST /item-prices/{catalogItemId}:withdraw"
       - "POST /item-prices/{catalogItemId}/sales"
       - "POST /item-prices/{catalogItemId}/sales/{saleId}:cancel"
       - "GET /item-prices"

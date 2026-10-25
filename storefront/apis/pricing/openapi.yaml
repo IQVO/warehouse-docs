@@ -75,7 +75,10 @@ paths:
       summary: List item prices, paged (projection bootstrap)
       description: >-
         Paged list of item prices. Used by product-discovery's projection
-        rebuild (snapshot + catch-up); not part of a user request path.
+        bootstrap and rebuild only (snapshot + catch-up); not part of a user
+        request path. The shopper-facing price is read through
+        product-discovery's ProductView (price facet), never from pricing
+        directly, so this route is ops and bootstrap only.
       parameters:
         - name: after
           in: query
@@ -153,6 +156,34 @@ paths:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
+  /item-prices/{catalogItemId}:withdraw:
+    post:
+      tags: [ItemPrices]
+      operationId: withdrawPrice
+      summary: Withdraw the price of a catalogue item
+      description: >-
+        WithdrawPrice (merchandising UI, command channel): moves the ItemPrice
+        from ACTIVE to WITHDRAWN and publishes ItemPriceWithdrawn. The same
+        command is raised by the WithdrawOnDiscontinue policy when the item is
+        discontinued. A withdrawn item cannot be quoted (item-not-priced).
+      parameters:
+        - $ref: '#/components/parameters/CatalogItemId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      responses:
+        '200':
+          description: The withdrawn item price.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ItemPrice'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: illegal-transition (price already WITHDRAWN) or concurrent-update.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
   /item-prices/{catalogItemId}/sales:
     post:
       tags: [ItemPrices]
@@ -197,7 +228,11 @@ paths:
       tags: [ItemPrices]
       operationId: cancelSale
       summary: Cancel a scheduled sale window
-      description: CancelSale. Cancelling a live sale emits ItemPriceChanged at the boundary.
+      description: >-
+        CancelSale. Raises no event of its own. Cancelling a live sale changes
+        the effective price (it reverts to the list price) and the
+        window-boundary policy publishes ItemPriceChanged for it, idempotent
+        per item and boundary.
       parameters:
         - $ref: '#/components/parameters/CatalogItemId'
         - $ref: '#/components/parameters/SaleId'
@@ -259,7 +294,9 @@ paths:
       tags: [DeliveryCharges]
       operationId: getCurrentChargeSchedule
       summary: Get the current delivery charge schedule
-      description: Returns the one current DeliveryChargeSchedule.
+      description: >-
+        Returns the one CURRENT DeliveryChargeSchedule (publishing a new one
+        supersedes the previous in the same transaction).
       responses:
         '200':
           description: The current schedule.
@@ -310,7 +347,9 @@ paths:
       tags: [TaxTables]
       operationId: getCurrentTaxTable
       summary: Get the current tax table
-      description: Returns the one current TaxTable.
+      description: >-
+        Returns the one CURRENT TaxTable (publishing a new one supersedes the
+        previous in the same transaction).
       responses:
         '200':
           description: The current tax table.
@@ -330,7 +369,11 @@ paths:
         QuoteTtl, default 15 minutes): lines with unit and line totals, groups
         with tier and delivery charge, tax, total, and the versions of price,
         schedule and tax table used. PriceQuoteIssued is published to the
-        analytics topic. Called by checkout at session open.
+        analytics topic. Called by checkout at session open; the request
+        carries exactly what the checkout session froze (cart id, numbered
+        lines, groups with offer, tier and line numbers, destination postal
+        prefix). Quote expiry is checkout-internal TTL state: no
+        PriceQuoteExpired event exists.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -357,7 +400,9 @@ paths:
       tags: [PriceQuotes]
       operationId: getPriceQuote
       summary: Get a price quote
-      description: Returns the immutable PriceQuote, ISSUED or EXPIRED.
+      description: >-
+        Returns the immutable PriceQuote, ISSUED or EXPIRED. Expiry is TTL
+        state derived from expiresAt and raises no event.
       parameters:
         - $ref: '#/components/parameters/QuoteId'
       responses:
@@ -622,6 +667,9 @@ components:
           $ref: '#/components/schemas/Money'
     IssuePriceQuoteRequest:
       type: object
+      description: >-
+        What the checkout session froze: the quote prices exactly these lines
+        and groups. lineNo is the 1-based position in cart line order.
       required: [cartId, destinationPostalPrefix, lines, groups]
       properties:
         cartId:
@@ -645,13 +693,21 @@ components:
           minItems: 1
           items:
             type: object
-            required: [groupNo, tier]
+            required: [groupNo, offerId, tier, lineNos]
             properties:
               groupNo:
                 type: integer
                 minimum: 1
+              offerId:
+                type: string
               tier:
                 $ref: '#/components/schemas/Tier'
+              lineNos:
+                type: array
+                minItems: 1
+                items:
+                  type: integer
+                  minimum: 1
     PriceQuote:
       type: object
       required: [quoteId, cartId, state, currency, lines, groups, taxMinor, totalMinor, versions, issuedAt, expiresAt]
