@@ -2,7 +2,7 @@
 id: aggregate-design-canvas
 title: Aggregate Design Canvas
 sidebar_label: Aggregate Design Canvas
-description: The ddd-crew Aggregate Design Canvas applied to Product Discovery's two read models, ProductView and CategoryView — the context has no aggregate by decision (its ADR 0002): projections only.
+description: "The ddd-crew Aggregate Design Canvas applied to Product Discovery's two read models, ProductView and CategoryView — the context has no aggregate by decision (its ADR 0002): projections only."
 ---
 
 # Aggregate Design Canvas
