@@ -1,8 +1,8 @@
 import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 
 /**
- * Storefront docs instance sidebars. Per-context ddd-crew packs are a later
- * wave; the contexts sidebar is a single overview until then.
+ * Storefront docs instance sidebars. Contexts get their 14-page ddd-crew
+ * pack one per wave; a context with a pack gets its own category below.
  */
 const CONTEXTS = [
   'pricing',
@@ -12,6 +12,36 @@ const CONTEXTS = [
   'checkout',
   'customer-payments',
 ];
+
+/**
+ * Contexts whose ddd-crew pack exists under contexts/<ctx>/. Every pack
+ * lists the same page set, in the same order, so contexts can be compared
+ * page for page.
+ */
+const PACK_CONTEXTS = ['pricing'];
+
+const CONTEXT_PAGES = [
+  'business-context',
+  'ubiquitous-language',
+  'core-domain-chart',
+  'bounded-context-canvas',
+  'context-map',
+  'aggregate-design-canvas',
+  'domain-events',
+  'domain-message-flow',
+  'eventstorming',
+  'use-cases',
+  'class-diagram',
+  'entity-relationship',
+  'sequence-diagrams',
+];
+
+const contextCategories = PACK_CONTEXTS.map((ctx) => ({
+  type: 'category' as const,
+  label: ctx,
+  link: {type: 'doc' as const, id: `contexts/${ctx}/index`},
+  items: CONTEXT_PAGES.map((p) => `contexts/${ctx}/${p}`),
+}));
 
 const apiCategories = CONTEXTS.map((ctx) => ({
   type: 'category' as const,
@@ -40,7 +70,7 @@ const sidebars: SidebarsConfig = {
       items: ['research/benchmarks'],
     },
   ],
-  contextsSidebar: ['contexts/index'],
+  contextsSidebar: ['contexts/index', ...contextCategories],
   apiSidebar: ['api-reference/index', ...apiCategories],
 };
 

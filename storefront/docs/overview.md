@@ -53,8 +53,8 @@ The experience layer — `storefront-bff` (Go, the only storefront edge under
    context map, ubiquitous language, event standard (generated from the
    model), and the [Model Gap Register](/storefront/strategic-design/model-gap-register)
    (S1-S6).
-3. [Bounded Contexts](/storefront/contexts): the six contexts at a glance; the
-   14-page ddd-crew packs are a later wave.
+3. [Bounded Contexts](/storefront/contexts): the six contexts at a glance and
+   the 14-page ddd-crew packs (pricing first; one context per wave).
 4. [API Reference](/storefront/api-reference): the proposed REST contracts.
 
 ## Disclaimer
