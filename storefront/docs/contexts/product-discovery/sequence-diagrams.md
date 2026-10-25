@@ -221,7 +221,7 @@ sequenceDiagram
     end
     R->>DB: write snapshot rows,<br/>seed the guards (shapes not modelled, H7)
     R->>K: consume all three topics<br/>from the recorded offsets
-    Note over R,DB: catch-up folds run the guards;<br/>the overlap with the snapshot is safe
+    Note over R,DB: catch-up folds run the guards,<br/>the overlap with the snapshot is safe
     R-->>OP: rebuild report
 ```
 

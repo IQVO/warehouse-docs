@@ -31,7 +31,7 @@ sequenceDiagram
     actor SH as Shopper (BFF)
     participant PD as product-discovery
     SH->>PD: qry: SearchProducts<br/>GET /products q, filters, sort, after, limit
-    Note over PD: tsvector weights title A,<br/>category names A, attributes B,<br/>description C; facets category,<br/>price band, in-stock
+    Note over PD: tsvector weights title A,<br/>category names A, attributes B,<br/>description C, facets category,<br/>price band, in-stock
     alt full-text search returns too little
         Note over PD: pg_trgm similarity fallback<br/>(trigger not modelled)
     end
@@ -177,7 +177,7 @@ sequenceDiagram
     end
     Note over PD: snapshot loaded, guards seeded<br/>(snapshot shapes not modelled)
     K->>PD: evt: catch-up on all three topics<br/>from the recorded offsets
-    Note over PD: never on a user request;<br/>guards make the overlap safe
+    Note over PD: never on a user request,<br/>guards make the overlap safe
 ```
 
 Derived from: `model.yaml → contexts[product-discovery].business_decisions`
