@@ -84,8 +84,8 @@ Derived from: `model.yaml → contexts[pricing].aggregates[ItemPrice].invariants
 | --- | --- | --- |
 | `SetListPrice` | Merchandiser, REST `POST /item-prices` / `POST /item-prices/{catalogItemId}:set-list-price` | `[*] → ACTIVE`, then list-price updates in `ACTIVE` |
 | `ScheduleSale` | Merchandiser, REST `POST /item-prices/{catalogItemId}/sales` | none (adds a window) |
-| `CancelSale` | Merchandiser, REST `POST /item-prices/{catalogItemId}/sales/{saleId}:cancel` | none (removes a window) |
-| `WithdrawPrice` | Merchandiser (REST, route not named) or `WithdrawOnDiscontinue` on Kafka `CatalogItemDiscontinued` | `ACTIVE → WITHDRAWN` |
+| `CancelSale` | Merchandiser, REST `POST /item-prices/{catalogItemId}/sales/{saleId}:cancel` | none (removes a window); raises `ItemPriceChanged` when the effective price reverts |
+| `WithdrawPrice` | Merchandiser, REST `POST /item-prices/{catalogItemId}:withdraw`, or `WithdrawOnDiscontinue` on Kafka `CatalogItemDiscontinued` | `ACTIVE → WITHDRAWN` |
 
 ### 7. Created Events
 
@@ -94,8 +94,11 @@ Derived from: `model.yaml → contexts[pricing].aggregates[ItemPrice].invariants
 | `ItemPriceChanged` | `SetListPrice`, `ScheduleSale`, `CancelSale` are saved, and on a sale window boundary (`PublishEffectivePriceOnWindowBoundary`) | `com.retailnetwork.storefront.pricing.itemprice.ItemPriceChanged` |
 | `ItemPriceWithdrawn` | `WithdrawPrice` is saved | `com.retailnetwork.storefront.pricing.itemprice.ItemPriceWithdrawn` |
 
-`CancelSale` raising `ItemPriceChanged` (with the effective price back at
-list) is this pack's reading; the model names no distinct event. Both
+`CancelSale` raises `ItemPriceChanged` (the effective price reverts to the
+list price) and has no event of its own, by decision: a cancelled sale
+changes the effective price, the window-boundary policy already emits that
+as `ItemPriceChanged` (idempotent per item and boundary), and a separate
+event would duplicate the fact. Both
 events leave through the transactional outbox in the same transaction as
 the save.
 
@@ -138,8 +141,7 @@ stateDiagram-v2
     SUPERSEDED --> [*]
     note right of SUPERSEDED
         a new version supersedes, never edits;
-        states are the least-surprising reading
-        (the plan names no states, model notes)
+        the read route serves the CURRENT one
     end note
 ```
 
@@ -147,7 +149,8 @@ Derived from: `model.yaml → contexts[pricing].aggregates[DeliveryChargeSchedul
 `.transitions`, `.notes`.
 
 Publishing a new schedule creates it `CURRENT` and moves the previous
-current one to `SUPERSEDED` in the same decision.
+current one to `SUPERSEDED` in the same transaction; the read route
+`GET /delivery-charge-schedules/current` serves the `CURRENT` one.
 
 ### 4. Enforced Invariants
 
@@ -206,7 +209,7 @@ stateDiagram-v2
     SUPERSEDED --> [*]
     note right of SUPERSEDED
         follows DeliveryChargeSchedule;
-        the plan names no states (model notes)
+        GET /tax-tables/current serves CURRENT
     end note
 ```
 
@@ -291,7 +294,7 @@ Derived from: `model.yaml → contexts[pricing].aggregates[PriceQuote].states`,
 | Policy | Owner | Rule | Effect on this aggregate |
 | --- | --- | --- | --- |
 | `QuoteTtl` | this context | A PriceQuote expires 15 minutes (default) after issue; expiry is by time, immutable otherwise. | `ISSUED → EXPIRED` through `ExpireQuote`. |
-| `ExpireOnQuoteExpiry` | `checkout` | An `OPEN` or `DECLINED` session expires with its price quote. | None here; checkout mirrors the TTL because pricing publishes no expiry event (open question). |
+| `ExpireOnQuoteExpiry` | `checkout` | An `OPEN` or `DECLINED` session expires with its price quote. | None here; quote expiry is checkout-internal TTL state, so checkout keeps its own clock and pricing publishes no expiry event. |
 
 ### 6. Handled Commands
 
@@ -307,9 +310,10 @@ Derived from: `model.yaml → contexts[pricing].aggregates[PriceQuote].states`,
 | `PriceQuoteIssued` | `IssuePriceQuote` is saved | `com.retailnetwork.storefront.pricing.pricequote.PriceQuoteIssued` |
 
 `PriceQuoteIssued` is analytics-only (topic
-`retailnetwork.pricing.analytics`). `ExpireQuote` publishes nothing in the
-model: expiry is observable from `expiresAt`, and `checkout` enforces it at
-confirm (`ErrPriceQuoteExpired`).
+`retailnetwork.pricing.analytics`). `ExpireQuote` publishes nothing, by decision (no
+`PriceQuoteExpired` exists): expiry is checkout-internal TTL state, not a
+business fact anyone consumes. It is observable from `expiresAt`, and
+`checkout` enforces it at confirm (`ErrPriceQuoteExpired`).
 
 ### 8. Throughput
 
