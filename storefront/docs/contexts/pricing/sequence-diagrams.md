@@ -158,7 +158,7 @@ sequenceDiagram
             UC-->>H: 200
         end
     end
-    Note over UC,DB: no distinct CancelSale event in the model;<br/>ItemPriceChanged carries the fact
+    Note over UC,DB: no distinct CancelSale event in the model<br/>ItemPriceChanged carries the fact
 ```
 
 Derived from: `model.yaml → contexts[pricing].aggregates[ItemPrice].commands`,
