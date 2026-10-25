@@ -27,13 +27,13 @@ flowchart LR
     AN(["analytics<br/>consumers"])
     CP["customer-payments<br/>Generic"]
 
-    CP -->|"U to D: C/S, CP is Supplier<br/>REST POST /payment-authorizations,<br/>POST authorizationId:void<br/>AuthorizePayment, VoidAuthorization,<br/>GetAuthorization"| CK
+    CP -->|"U to D: C/S, CP is Supplier<br/>REST authorizations<br/>AuthorizePayment, VoidAuthorization,<br/>GetAuthorization"| CK
     CK ==>|"U to D: C/S, CP is Customer<br/>Kafka CheckoutCompleted"| CP
-    CP -->|"U to D: UI<br/>REST POST /refunds,<br/>GET /payment-authorizations,<br/>GET /refunds"| OPS
+    CP -->|"U to D: UI<br/>REST refunds and reads"| OPS
     OS ==>|"U to D: CF<br/>Kafka FulfillmentShipped,<br/>FulfillmentCancelled"| CP
     ST ==>|"U to D: CF<br/>Kafka PackageLost,<br/>PackageReturned"| CP
-    CP -->|"U to D: ACL<br/>provider port<br/>Authorize, Capture, Void,<br/>Refund, Reauthorize"| PSP
-    CP ==>|"U to D, analytics only<br/>Kafka PaymentAuthorized,<br/>PaymentCaptured, PaymentReleased,<br/>PaymentAuthorizationExpired,<br/>PaymentDeclined, RefundIssued,<br/>RefundFailed"| AN
+    CP -->|"U to D: ACL<br/>provider port, five verbs"| PSP
+    CP ==>|"U to D, analytics only<br/>Kafka, seven payment<br/>and refund events"| AN
 ```
 
 Derived from: `model.yaml → contexts[customer-payments].inbound`,
@@ -44,10 +44,10 @@ Derived from: `model.yaml → contexts[customer-payments].inbound`,
 `contexts[shipping-and-tracking].publishes` (consumer rows).
 
 Legend: arrows point from upstream to downstream, except the Kafka arrow
-from `checkout`, whose label gives the true direction. A solid arrow is a
+from `checkout`, whose label gives the true direction. The routes and the
+seven event names are listed in the Relationships table below. A solid arrow is a
 synchronous relationship (REST or the provider port) and a thick arrow is a
-Kafka event relationship. The path parameter `{authorizationId}` is written
-`authorizationId` inside the diagram.
+Kafka event relationship.
 
 Omitted, because they have no edge with this context (**Separate Ways**):
 `pricing` (Core; the totals reach this context only inside checkout's

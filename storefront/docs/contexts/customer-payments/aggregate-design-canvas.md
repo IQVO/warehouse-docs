@@ -59,13 +59,8 @@ stateDiagram-v2
     EXPIRED --> [*]
     DECLINED --> [*]
     note right of DECLINED
-        terminal record of a declined attempt;
-        no transition leads into it from another state
-    end note
-    note right of AUTHORIZED
-        ReleaseAllocation, ReauthorizePayment and
-        BindOrder change an allocation, the provider
-        reference or the order, not the state
+        terminal record of
+        a declined attempt
     end note
 ```
 
@@ -75,8 +70,9 @@ Derived from: `model.yaml → contexts[customer-payments].aggregates[PaymentAuth
 The entry arrows are the creating command `AuthorizePayment`: an accepted
 authorize creates the record `AUTHORIZED`, a declined one creates it
 `DECLINED`, and the checkout session stays open for another token. The three
-other terminal states are entered from the live states only. Transitions the
-model does not list are therefore not drawn: in particular there is no row
+other terminal states are entered from the live states only. `ReleaseAllocation`, `ReauthorizePayment` and `BindOrder` change an
+allocation, the provider reference or the order, not the state. Transitions
+the model does not list are therefore not drawn: in particular there is no row
 for `AUTHORIZED → CAPTURED`, none for `ReleaseAllocation`, and none that
 moves an authorization whose every allocation is released (hotspot H3 below).
 

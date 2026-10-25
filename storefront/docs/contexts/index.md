@@ -18,7 +18,7 @@ The six storefront contexts, all derived from
 | [`product-discovery`](/storefront/contexts/product-discovery) | <span class="badge-supporting">Supporting</span> | `storefront` | 0 (read side: ProductView, CategoryView) | 0 | 11 |
 | [`shopping-cart`](/storefront/contexts/shopping-cart) | <span class="badge-supporting">Supporting</span> | `storefront` | 1 (Cart) | 4 (analytics) | 7 |
 | `checkout` | <span class="badge-supporting">Supporting</span> | `storefront` | 1 (CheckoutSession) | 5 | 0 |
-| `customer-payments` | <span class="badge-generic">Generic</span> | `storefront` | 2 (PaymentAuthorization, Refund) | 7 | 5 |
+| [`customer-payments`](/storefront/contexts/customer-payments) | <span class="badge-generic">Generic</span> | `storefront` | 2 (PaymentAuthorization, Refund) | 7 | 5 |
 
 **The per-context packs land one context per wave.** The 14-page ddd-crew
 pack (business context, ubiquitous language, core domain chart, bounded
@@ -28,9 +28,10 @@ and sequence diagrams) that each network context carries under
 [network/contexts](/network/contexts) exists so far for
 [`pricing`](/storefront/contexts/pricing),
 [`product-content`](/storefront/contexts/product-content),
-[`product-discovery`](/storefront/contexts/product-discovery) and
-[`shopping-cart`](/storefront/contexts/shopping-cart), written strictly
-from the model. For the other two contexts the canonical detail is the model
+[`product-discovery`](/storefront/contexts/product-discovery),
+[`shopping-cart`](/storefront/contexts/shopping-cart) and
+[`customer-payments`](/storefront/contexts/customer-payments), written strictly
+from the model. For the other context the canonical detail is the model
 itself plus the generated [strategic-design pages](/storefront/strategic-design).
 
 Future contexts named by the model but not built in this phase:

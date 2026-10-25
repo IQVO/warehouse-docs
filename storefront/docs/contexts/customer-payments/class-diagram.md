@@ -134,13 +134,7 @@ model does not say which aggregate or domain service holds that sum
 
 ```mermaid
 classDiagram
-    direction TB
-    class ParkedFulfillmentFacts {
-        <<ReadModel>>
-        -facts map orderId to fact[]
-        +Park(orderId, fact)
-        +Take(orderId) fact[]
-    }
+    direction LR
     class PaymentAuthorized {
         <<DomainEvent>>
         +authorizationId string
@@ -150,6 +144,23 @@ classDiagram
         +allocations groupNo, amountMinor
         +expiresAt time.Time
     }
+    class PaymentDeclined {
+        <<DomainEvent>>
+        +checkoutSessionId string
+        +reason string
+        +at time.Time
+    }
+    class PaymentAuthorizationExpired {
+        <<DomainEvent>>
+        +authorizationId string
+        +orderId string
+        +expiredAt time.Time
+    }
+```
+
+```mermaid
+classDiagram
+    direction LR
     class PaymentCaptured {
         <<DomainEvent>>
         +authorizationId string
@@ -165,18 +176,17 @@ classDiagram
         +amountMinor int64
         +reason string
     }
-    class PaymentAuthorizationExpired {
-        <<DomainEvent>>
-        +authorizationId string
-        +orderId string
-        +expiredAt time.Time
+    class ParkedFulfillmentFacts {
+        <<ReadModel>>
+        -facts map orderId to fact[]
+        +Park(orderId, fact)
+        +Take(orderId) fact[]
     }
-    class PaymentDeclined {
-        <<DomainEvent>>
-        +checkoutSessionId string
-        +reason string
-        +at time.Time
-    }
+```
+
+```mermaid
+classDiagram
+    direction LR
     class RefundIssued {
         <<DomainEvent>>
         +refundId string

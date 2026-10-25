@@ -62,21 +62,21 @@ sequenceDiagram
             UC->>P: Authorize(token, total, key)
             alt provider unreachable or timed out
                 P-->>UC: error
-                UC-->>H: 503 payment-provider-unavailable<br/>retry with the same key
+                UC-->>H: 503 provider unavailable,<br/>retry with the same key
             else approved
                 P-->>UC: providerAuthorizationId, expiresAt
                 UC->>A: AuthorizePayment(...)
                 A-->>UC: AUTHORIZED, PaymentAuthorized
                 UC->>DB: BEGIN, insert authorization and allocations
-                UC->>DB: insert outbox PaymentAuthorized<br/>store key response, COMMIT
+                UC->>DB: outbox PaymentAuthorized,<br/>key response, COMMIT
                 UC-->>H: 201 AUTHORIZED
                 DB-->>K: relay publishes after commit
             else declined
                 P-->>UC: declined, reason
                 UC->>A: AuthorizePayment(...) declined
                 A-->>UC: DECLINED, PaymentDeclined
-                UC->>DB: BEGIN, insert DECLINED record<br/>outbox PaymentDeclined<br/>store key response, COMMIT
-                UC-->>H: 201 DECLINED, session stays open
+                UC->>DB: BEGIN, insert DECLINED,<br/>outbox PaymentDeclined,<br/>key response, COMMIT
+                UC-->>H: 201 DECLINED
                 DB-->>K: relay publishes after commit
             end
         end
@@ -149,7 +149,7 @@ authorization is selected as unbound for 24 h).
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
-    participant H as http or kafka consumer
+    participant H as http / kafka
     participant UC as RequestRefund
     participant R as Refund
     participant P as PaymentProvider
@@ -171,19 +171,19 @@ sequenceDiagram
             UC->>P: Refund(key)
             alt provider unreachable or timed out
                 P-->>UC: error
-                UC-->>H: 503 payment-provider-unavailable<br/>retry with the same key
+                UC-->>H: 503 provider unavailable,<br/>retry with the same key
             else refunded
                 P-->>UC: refunded
                 UC->>R: RecordRefundOutcome(success)
                 R-->>UC: SUCCEEDED, RefundIssued
-                UC->>DB: BEGIN, save refund, outbox RefundIssued<br/>key response or inbox row, COMMIT
+                UC->>DB: BEGIN, save refund,<br/>outbox RefundIssued,<br/>key or inbox row, COMMIT
                 UC-->>H: 201 SUCCEEDED
                 DB-->>K: relay publishes after commit
             else failed
                 P-->>UC: failure code
                 UC->>R: RecordRefundOutcome(failure)
                 R-->>UC: FAILED, RefundFailed
-                UC->>DB: BEGIN, save refund, outbox RefundFailed<br/>key response or inbox row, COMMIT
+                UC->>DB: BEGIN, save refund,<br/>outbox RefundFailed,<br/>key or inbox row, COMMIT
                 UC-->>H: 201 FAILED
                 DB-->>K: relay publishes after commit
             end

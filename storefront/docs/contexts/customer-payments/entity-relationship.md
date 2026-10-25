@@ -34,7 +34,7 @@ erDiagram
         TEXT order_id "nullable until bound"
         TEXT currency
         BIGINT total_minor
-        TEXT status "AUTHORIZED PARTIALLY_CAPTURED CAPTURED VOIDED EXPIRED DECLINED"
+        TEXT status "6 authorization states"
         TEXT provider_authorization_id "nullable"
         TIMESTAMPTZ expires_at
         BIGINT version

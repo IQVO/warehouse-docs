@@ -75,12 +75,12 @@ sequenceDiagram
     participant CP as customer-payments
     participant PSP as payment-provider
     participant AN as Kafka analytics
-    OS->>K: evt: assignment.FulfillmentShipped<br/>orderId, groupNo, trackingNumbers
-    K->>CP: evt: assignment.FulfillmentShipped
-    Note over CP: CaptureOnShipment:<br/>CaptureAllocation for the group,<br/>ErrOverCapture, ErrCaptureAfterExpiry,<br/>ErrUnknownGroup
-    CP->>PSP: cmd: Capture<br/>key per operation, authorizationId, groupNo
+    OS->>K: evt: assignment.<br/>FulfillmentShipped
+    K->>CP: evt: assignment.<br/>FulfillmentShipped
+    Note over CP: CaptureOnShipment:<br/>CaptureAllocation,<br/>ErrOverCapture,<br/>ErrCaptureAfterExpiry,<br/>ErrUnknownGroup
+    CP->>PSP: cmd: Capture<br/>deterministic key
     PSP-->>CP: reply providerCaptureId
-    Note over CP: allocation CAPTURED,<br/>tracking numbers stored for the group,<br/>AUTHORIZED to PARTIALLY_CAPTURED<br/>or CAPTURED
+    Note over CP: allocation CAPTURED,<br/>tracking numbers stored,<br/>state moves on
     CP->>AN: evt: paymentauthorization.PaymentCaptured
 ```
 
@@ -163,10 +163,10 @@ sequenceDiagram
     participant CP as customer-payments
     participant PSP as payment-provider
     participant AN as Kafka analytics
-    ST->>K: evt: journey.PackageLost<br/>or journey.PackageReturned<br/>orderId, trackingNumber
-    K->>CP: evt: journey.PackageLost or PackageReturned
-    Note over CP: RefundOnLostPackage or<br/>RefundOnReturnToSender:<br/>RequestRefund for the group's<br/>captured amount, ErrOverRefund.<br/>Refund REQUESTED
-    CP->>PSP: cmd: Refund<br/>key per operation, authorizationId, groupNo
+    ST->>K: evt: journey.PackageLost<br/>or PackageReturned
+    K->>CP: evt: journey.PackageLost<br/>or PackageReturned
+    Note over CP: RefundOnLostPackage or<br/>RefundOnReturnToSender:<br/>RequestRefund, ErrOverRefund.<br/>Refund REQUESTED
+    CP->>PSP: cmd: Refund<br/>deterministic key
     alt the provider refunds
         PSP-->>CP: reply refunded
         Note over CP: RecordRefundOutcome:<br/>REQUESTED to SUCCEEDED
