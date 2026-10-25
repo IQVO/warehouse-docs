@@ -78,16 +78,18 @@ one kebab-case slug per `Err` in the model. Every write route takes an
   1. `Idempotency-Key` lookup; replay the stored response on a hit.
   2. `GetCart` (`shopping-cart`): the cart snapshot, its version, groups,
      selections and readiness.
-  3. `CheckoutSession.OpenSession(...)`: `ErrCartNotCheckoutReady` unless the
-     readiness holds; lines numbered `1..n`, groups by the quote's `groupNo`
-     (gap S1).
+  3. Fail fast: if the snapshot's checkout readiness does not hold, answer
+     `ErrCartNotCheckoutReady` before calling anyone else (the aggregate
+     enforces the same invariant in step 6).
   4. `GetDeliveryOffer` (`delivery-promise`) for each selected offer: still
      `QUOTED`, with margin (what a failure here does is not defined,
      hotspot H3).
   5. `IssuePriceQuote` (`pricing`): the binding `PriceQuote`; the session
      records `priceQuoteId`, `currency`, `totalMinor` and `quoteExpiresAt`.
-  6. In one transaction: insert the session `OPEN`, outbox
-     `CheckoutOpened`, store the key response.
+  6. `CheckoutSession.OpenSession(cart, quote, now)`: `ErrCartNotCheckoutReady`
+     unless the readiness holds; lines numbered `1..n`, groups by the quote's
+     `groupNo` (gap S1). In one transaction: insert the session `OPEN`,
+     outbox `CheckoutOpened`, store the key response.
   7. Answer `201` with the session and its binding total.
 - **Errors:**
 
