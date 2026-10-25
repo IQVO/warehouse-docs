@@ -14,7 +14,7 @@ The six storefront contexts, all derived from
 | Context | Classification | Tier | Aggregates | Events published | Events consumed |
 | --- | --- | --- | --- | --- | --- |
 | [`pricing`](/storefront/contexts/pricing) | <span class="badge-core">Core</span> | `storefront` | 4 (ItemPrice, DeliveryChargeSchedule, TaxTable, PriceQuote) | 5 | 2 |
-| `product-content` | <span class="badge-generic">Generic</span> | `storefront` | 2 (ProductContent, CategoryTree) | 3 | 2 |
+| [`product-content`](/storefront/contexts/product-content) | <span class="badge-generic">Generic</span> | `storefront` | 2 (ProductContent, CategoryTree) | 3 | 2 |
 | `product-discovery` | <span class="badge-supporting">Supporting</span> | `storefront` | 0 (read side: ProductView, CategoryView) | 0 | 11 |
 | `shopping-cart` | <span class="badge-supporting">Supporting</span> | `storefront` | 1 (Cart) | 4 (analytics) | 7 |
 | `checkout` | <span class="badge-supporting">Supporting</span> | `storefront` | 1 (CheckoutSession) | 5 | 0 |
@@ -26,9 +26,10 @@ context canvas, context map, aggregate design canvas, domain events, domain
 message flow, EventStorming, use cases, class diagram, entity relationship
 and sequence diagrams) that each network context carries under
 [network/contexts](/network/contexts) exists so far for
-[`pricing`](/storefront/contexts/pricing), written strictly from the model.
-For the other five contexts the canonical detail is the model itself plus
-the generated [strategic-design pages](/storefront/strategic-design).
+[`pricing`](/storefront/contexts/pricing) and
+[`product-content`](/storefront/contexts/product-content), written strictly
+from the model. For the other four contexts the canonical detail is the model
+itself plus the generated [strategic-design pages](/storefront/strategic-design).
 
 Future contexts named by the model but not built in this phase:
 `customer-notifications` (adopt the network's future `customer-notification`
