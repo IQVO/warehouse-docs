@@ -204,8 +204,8 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[pricing].aggregates[ItemPrice]`
 (`WithdrawPrice`, transitions), `.publishes[ItemPriceWithdrawn]`.
 
-Omitted: the route itself — the model names no path for this command
-(hotspot H1 on [EventStorming](/storefront/contexts/pricing/eventstorming)).
+Omitted: the HTTP adapter detail. The route is
+`POST /item-prices/{catalogItemId}:withdraw`.
 
 ## 5. WithdrawPrice by policy WithdrawOnDiscontinue (Kafka)
 
@@ -335,8 +335,8 @@ Derived from: `model.yaml → contexts[pricing].aggregates[PriceQuote]`
 (`IssuePriceQuote`, invariants, description), `.policies[QuoteTtl]`,
 `.publishes[PriceQuoteIssued]`; `contexts[checkout].sync_calls`.
 
-Omitted: the request's exact fields, which the model does not list (hotspot
-H4). There is no version conflict on an insert: the `quoteId` is minted
+Omitted: the request's field list, which the model gives (`cartId`, `lines`,
+`groups`, `destinationPostalPrefix`). There is no version conflict on an insert: the `quoteId` is minted
 here. The reads of prices, schedule and table are store reads through
 ports, not aggregate method calls; the quote pins their versions so a later
 change never rewrites it.

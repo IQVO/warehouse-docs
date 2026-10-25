@@ -38,10 +38,9 @@ money (`customer-payments`).
 
 | Actor | What they do here | Channel |
 | --- | --- | --- |
-| Storefront merchandiser (human) | Sets list prices, schedules and cancels sales, withdraws prices, publishes charge schedules and tax tables | REST `/item-prices`, `/delivery-charge-schedules`, `/tax-tables` |
-| `storefront-bff` (experience layer) | Reads the current price of an item, the current charge schedule and the current tax table to render pages | REST `GET /item-prices/{catalogItemId}`, `GET /delivery-charge-schedules/current`, `GET /tax-tables/current` |
+| Storefront merchandiser (human) | Sets list prices, schedules and cancels sales, withdraws prices, publishes charge schedules and tax tables, and reads the current price, charge schedule and tax table | REST `/item-prices`, `/delivery-charge-schedules`, `/tax-tables` |
 | `checkout` | Issues a `PriceQuote` when a session opens; reads it back at confirm | REST `POST /price-quotes`, `GET /price-quotes/{quoteId}` |
-| `product-discovery` | Re-reads all prices when its projections are rebuilt (bootstrap only, paged) | REST `GET /item-prices` |
+| `product-discovery` | Re-reads all prices when its projections are rebuilt (bootstrap and rebuild only, paged) | REST `GET /item-prices` |
 | `product-discovery`, `shopping-cart` | Follow price, schedule and tax changes to keep their views and estimates current | Kafka `retailnetwork.pricing.events` |
 | `offer-availability` (network) | Reports catalogue items created and discontinued | Kafka `retailnetwork.offer-availability.events` |
 
