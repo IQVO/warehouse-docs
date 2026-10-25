@@ -24,7 +24,7 @@ the [Context Map](/storefront/strategic-design/context-map).
 ## 1. A shopper opens a session from a ready cart
 
 ```mermaid
-%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+%%{init: {"sequence": {"wrap": true, "width": 110, "actorMargin": 12, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
     participant BFF as storefront-bff
@@ -37,7 +37,7 @@ sequenceDiagram
     CK->>SC: qry: GetCart<br/>GET /carts/cartId
     SC-->>CK: qry: reply cart, version,<br/>groups, selections, readiness
     Note over CK: ErrCartNotCheckoutReady<br/>when readiness does not hold
-    CK->>DP: qry: GetDeliveryOffer<br/>GET /delivery-offers/offerId<br/>(once per selected offer)
+    CK->>DP: qry: GetDeliveryOffer<br/>per selected offer
     DP-->>CK: qry: reply offer still QUOTED<br/>with margin
     CK->>PR: cmd: IssuePriceQuote<br/>POST /price-quotes
     PR-->>CK: cmd: reply binding quote,<br/>total, expiresAt
@@ -64,7 +64,7 @@ model does not define (hotspot H3 on
 ## 2. Confirm: authorize, place the order, complete
 
 ```mermaid
-%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+%%{init: {"sequence": {"wrap": true, "width": 96, "actorMargin": 8, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
     participant BFF as storefront-bff
@@ -73,18 +73,18 @@ sequenceDiagram
     participant CO as customer-ordering
     participant K as Kafka
     participant SC as shopping-cart
-    BFF->>CK: cmd: ConfirmSession<br/>POST /checkout-sessions/sessionId:confirm<br/>payment method token
+    BFF->>CK: cmd: ConfirmSession<br/>POST :confirm, token
     Note over CK: ErrPriceQuoteExpired<br/>OPEN to AUTHORIZING
-    CK->>CP: cmd: AuthorizePayment<br/>POST /payment-authorizations<br/>key sessionId:auth, allocations per group
+    CK->>CP: cmd: AuthorizePayment<br/>key sessionId:auth,<br/>allocations per group
     CP-->>CK: cmd: reply authorizationId, total
     Note over CK: RecordAuthorization<br/>ErrAuthorizationMismatch<br/>AUTHORIZING to PLACING,<br/>placement request stored
-    CK->>CO: cmd: PlaceOrder through the ACL<br/>POST /checkout<br/>key sessionId, shipToAddressId
+    CK->>CO: cmd: PlaceOrder via ACL<br/>POST /checkout<br/>key sessionId
     CO-->>CK: cmd: reply orderId
     Note over CK: RecordPlaced<br/>PLACING to COMPLETED
     CK->>K: evt: checkoutsession.CheckoutCompleted
     CK-->>BFF: cmd: reply 200 COMPLETED<br/>with orderId
-    K->>SC: evt: CheckoutCompleted<br/>CloseOnCheckoutCompleted
-    K->>CP: evt: CheckoutCompleted<br/>BindOrderOnCheckoutCompleted
+    K->>SC: evt: CheckoutCompleted<br/>cart closes
+    K->>CP: evt: CheckoutCompleted<br/>order bound
 ```
 
 Derived from: `model.yaml → contexts[checkout].aggregates[CheckoutSession]`
@@ -103,7 +103,7 @@ fulfilment facts `customer-payments` applies after the bind (gap S4).
 ## 3. A decline, then another token
 
 ```mermaid
-%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+%%{init: {"sequence": {"wrap": true, "width": 110, "actorMargin": 12, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
     participant BFF as storefront-bff
@@ -140,7 +140,7 @@ not say (hotspot H2), and the missing `DECLINED → EXPIRED` transition
 ## 4. A late requote, or a contract failure
 
 ```mermaid
-%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+%%{init: {"sequence": {"wrap": true, "width": 110, "actorMargin": 12, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
     participant BFF as storefront-bff
@@ -149,11 +149,11 @@ sequenceDiagram
     participant CP as customer-payments
     participant K as Kafka analytics
     Note over CK: session PLACING,<br/>authorization held,<br/>PlaceOrder just sent
-    CK->>CO: cmd: PlaceOrder through the ACL<br/>POST /checkout
+    CK->>CO: cmd: PlaceOrder via ACL<br/>POST /checkout
     alt definitive 409, offer no longer quotable
         CO-->>CK: cmd: reply 409 with requoted offers
         Note over CK: the ACL maps it to a requote<br/>a definitive rejection allows a void
-        CK->>CP: cmd: VoidAuthorization<br/>POST /payment-authorizations/authorizationId:void<br/>key sessionId:void
+        CK->>CP: cmd: VoidAuthorization<br/>POST :void<br/>key sessionId:void
         CP-->>CK: cmd: reply voided
         Note over CK: RecordRequoteRequired<br/>PLACING to REQUOTE_REQUIRED
         CK->>K: evt: checkoutsession.CheckoutRequoteRequired
@@ -187,7 +187,7 @@ which are the ACL's concern and are not yet in the network model (hotspot H8).
 ## 5. An in-doubt placement, resolved by replay
 
 ```mermaid
-%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+%%{init: {"sequence": {"wrap": true, "width": 110, "actorMargin": 12, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
     participant BFF as storefront-bff
@@ -195,7 +195,7 @@ sequenceDiagram
     participant CO as customer-ordering
     participant K as Kafka
     Note over CK: session PLACING,<br/>authorization held
-    CK->>CO: cmd: PlaceOrder through the ACL<br/>key sessionId
+    CK->>CO: cmd: PlaceOrder via ACL<br/>key sessionId
     CO--xCK: timeout or 503
     Note over CK: RecordPlacementInDoubt<br/>PLACING stays PLACING,<br/>no void, no new attempt
     CK-->>BFF: cmd: reply 202 PLACING

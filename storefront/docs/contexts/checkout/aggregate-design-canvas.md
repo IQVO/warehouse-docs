@@ -60,15 +60,6 @@ stateDiagram-v2
     EXPIRED --> [*]
     REQUOTE_REQUIRED --> [*]
     FAILED --> [*]
-    note right of PLACING
-        the semantic lock: no void and no
-        new attempt while the place-order
-        outcome is unknown
-    end note
-    note right of DECLINED
-        another token may be tried
-        while the price quote is valid
-    end note
 ```
 
 Derived from: `model.yaml → contexts[checkout].aggregates[CheckoutSession].states`,
@@ -76,7 +67,9 @@ Derived from: `model.yaml → contexts[checkout].aggregates[CheckoutSession].sta
 
 The entry arrow `[*] --> OPEN` is the creating command `OpenSession`. Four
 states are terminal: `COMPLETED`, `EXPIRED`, `REQUOTE_REQUIRED` and `FAILED`
-(`ErrSessionClosed`). The only loops are `DECLINED → AUTHORIZING` (a new
+(`ErrSessionClosed`). `PLACING` is the semantic lock (no void and no new
+attempt while the place-order outcome is unknown) and `DECLINED` accepts
+another token while the price quote is valid. The only loops are `DECLINED → AUTHORIZING` (a new
 token) and `PLACING → PLACING` (an in-doubt outcome that stays in doubt).
 `DECLINED → EXPIRED` has no row, although `ExpireOnQuoteExpiry` says a
 `DECLINED` session expires (hotspot H1).
