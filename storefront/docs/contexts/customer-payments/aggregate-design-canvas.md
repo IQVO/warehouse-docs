@@ -39,8 +39,8 @@ references and `expiresAt`. Value objects:
 The model's description of this aggregate is cut off in the middle of
 "unique checkoutSessionId" (a literal ellipsis in `model.yaml`); the field
 list above restores it from the invariants, the REST contract and the
-`PaymentAuthorized` payload (hotspot H11 below). The aggregate stores a PSP
-token reference, never a card number.
+`PaymentAuthorized` payload (hotspot H11 below). The aggregate holds no
+card data; the PSP token is an argument of the provider port.
 
 ### 3. State Transitions
 
