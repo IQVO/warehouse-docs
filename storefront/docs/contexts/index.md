@@ -26,9 +26,10 @@ context canvas, context map, aggregate design canvas, domain events, domain
 message flow, EventStorming, use cases, class diagram, entity relationship
 and sequence diagrams) that each network context carries under
 [network/contexts](/network/contexts) exists so far for
-[`pricing`](/storefront/contexts/pricing) and
-[`product-content`](/storefront/contexts/product-content), written strictly
-from the model. For the other four contexts the canonical detail is the model
+[`pricing`](/storefront/contexts/pricing),
+[`product-content`](/storefront/contexts/product-content) and
+[`shopping-cart`](/storefront/contexts/shopping-cart), written strictly
+from the model. For the other three contexts the canonical detail is the model
 itself plus the generated [strategic-design pages](/storefront/strategic-design).
 
 Future contexts named by the model but not built in this phase:

@@ -18,7 +18,7 @@ const CONTEXTS = [
  * lists the same page set, in the same order, so contexts can be compared
  * page for page.
  */
-const PACK_CONTEXTS = ['pricing', 'product-content'];
+const PACK_CONTEXTS = ['pricing', 'product-content', 'shopping-cart'];
 
 /** ddd-crew pack page set, same order as the network packs. */
 const CONTEXT_PAGES = [
