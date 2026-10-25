@@ -15,8 +15,8 @@ The six storefront contexts, all derived from
 | --- | --- | --- | --- | --- | --- |
 | [`pricing`](/storefront/contexts/pricing) | <span class="badge-core">Core</span> | `storefront` | 4 (ItemPrice, DeliveryChargeSchedule, TaxTable, PriceQuote) | 5 | 2 |
 | [`product-content`](/storefront/contexts/product-content) | <span class="badge-generic">Generic</span> | `storefront` | 2 (ProductContent, CategoryTree) | 3 | 2 |
-| `product-discovery` | <span class="badge-supporting">Supporting</span> | `storefront` | 0 (read side: ProductView, CategoryView) | 0 | 11 |
-| `shopping-cart` | <span class="badge-supporting">Supporting</span> | `storefront` | 1 (Cart) | 4 (analytics) | 7 |
+| [`product-discovery`](/storefront/contexts/product-discovery) | <span class="badge-supporting">Supporting</span> | `storefront` | 0 (read side: ProductView, CategoryView) | 0 | 11 |
+| [`shopping-cart`](/storefront/contexts/shopping-cart) | <span class="badge-supporting">Supporting</span> | `storefront` | 1 (Cart) | 4 (analytics) | 7 |
 | `checkout` | <span class="badge-supporting">Supporting</span> | `storefront` | 1 (CheckoutSession) | 5 | 0 |
 | `customer-payments` | <span class="badge-generic">Generic</span> | `storefront` | 2 (PaymentAuthorization, Refund) | 7 | 5 |
 
@@ -27,9 +27,10 @@ message flow, EventStorming, use cases, class diagram, entity relationship
 and sequence diagrams) that each network context carries under
 [network/contexts](/network/contexts) exists so far for
 [`pricing`](/storefront/contexts/pricing),
-[`product-content`](/storefront/contexts/product-content) and
+[`product-content`](/storefront/contexts/product-content),
+[`product-discovery`](/storefront/contexts/product-discovery) and
 [`shopping-cart`](/storefront/contexts/shopping-cart), written strictly
-from the model. For the other three contexts the canonical detail is the model
+from the model. For the other two contexts the canonical detail is the model
 itself plus the generated [strategic-design pages](/storefront/strategic-design).
 
 Future contexts named by the model but not built in this phase:

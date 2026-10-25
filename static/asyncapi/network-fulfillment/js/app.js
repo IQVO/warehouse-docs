@@ -4,7 +4,7 @@
   "info": {
     "title": "Network Fulfillment Events",
     "version": "2.0.0",
-    "description": "Domain-event catalog for **Network Fulfillment**, a Supporting bounded\ncontext in the WES (Warehouse Execution Systems) subdomain: the\nanti-corruption layer between the warehouse-systems fleet and an\nexternal retail fulfillment network. One aggregate raises every event\ndocumented here:\n\n- `NetworkOrder` (package `internal/domain/networkorder`) — one network\n  purchase order and its acknowledgement lifecycle. Raises\n  `NetworkOrderReceived`, `NetworkOrderSubmitted`,\n  `NetworkOrderAcknowledged` (v2: raised when the order settles\n  `ACKNOWLEDGED`, ADR 0016), `NetworkOrderRejected`,\n  `NetworkOrderShipmentConfirmed` and (from the\n  acknowledgement sweep, without a state transition)\n  `AcknowledgementDeadlineAtRisk`.\n\n**Envelope (mandatory, ADR 0008).** Every message on every channel of\nthis service is a CloudEvents 1.0 event in *structured content mode*\n(Kafka protocol binding): the Kafka message value is the JSON event\nformat, content type `application/cloudevents+json`, and every message\ncarries the Kafka header\n`content-type: application/cloudevents+json; charset=UTF-8`. There is no\nother envelope. All of `specversion`, `id`, `source`, `type`, `subject`,\n`time`, `datacontenttype` and `dataschema` are REQUIRED. W3C trace\ncontext, when present, travels in Kafka headers, never as extension\nattributes: an event written through the transactional outbox inside a\nspan carries that span's `traceparent` (and `tracestate` / `baggage`\nwhen present), stored with the outbox row and sent by the relay\n(ADR 0022). Consumers may extract these headers and must not require\nthem. The Kafka message key is the network order reference\n(`networkRef`, identical to `subject`), so every event for one order\nlands on the same partition.\n\n**Type naming.** `type` is\n`com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`. For\nthis context the subdomain is `wes`, the bounded context is\n`network-fulfillment` and the entity is `networkorder`, e.g.\n`com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderReceived`.\nThe SAME `type` is used for the occurrence on the integration and on\nthe analytics channel; `dataschema`\n(`urn:warehouse:network-fulfillment:<events|analytics>:<EventName>:v<N>`)\nnames the payload shape. A breaking change gets a new `.v2`\ntype and a new dataschema version, never a mutation of these:\n`NetworkOrderAcknowledged` changed meaning in ADR 0016 and is published\nas `...networkorder.NetworkOrderAcknowledged.v2` /\n`...:NetworkOrderAcknowledged:v2`.\n\n**Consumers** must dispatch on the full `type`, ignore unknown types,\ndedupe on `id` (stable across outbox redelivery), and dead-letter or\nskip — never parse as a legacy shape — anything that fails CloudEvents\nvalidation.\n",
+    "description": "Domain-event catalog for **Network Fulfillment**, a Supporting bounded\ncontext in the WES (Warehouse Execution Systems) subdomain: the\nanti-corruption layer between the warehouse-systems fleet and an\nexternal retail fulfillment network. One aggregate raises every event\ndocumented here:\n\n- `NetworkOrder` (package `internal/domain/networkorder`) — one network\n  purchase order and its acknowledgement lifecycle. Raises\n  `NetworkOrderReceived`, `NetworkOrderSubmitted`,\n  `NetworkOrderAcknowledged` (v2: raised when the order settles\n  `ACKNOWLEDGED`, ADR 0016), `NetworkOrderRejected`,\n  `NetworkOrderShipmentConfirmed` and (from the\n  acknowledgement sweep, without a state transition)\n  `AcknowledgementDeadlineAtRisk`; and (from the orphaned-hold sweep,\n  ADR 0024, also without a state transition) `OrphanedHoldCancelled`.\n\n**Envelope (mandatory, ADR 0008).** Every message on every channel of\nthis service is a CloudEvents 1.0 event in *structured content mode*\n(Kafka protocol binding): the Kafka message value is the JSON event\nformat, content type `application/cloudevents+json`, and every message\ncarries the Kafka header\n`content-type: application/cloudevents+json; charset=UTF-8`. There is no\nother envelope. All of `specversion`, `id`, `source`, `type`, `subject`,\n`time`, `datacontenttype` and `dataschema` are REQUIRED. W3C trace\ncontext, when present, travels in Kafka headers, never as extension\nattributes: an event written through the transactional outbox inside a\nspan carries that span's `traceparent` (and `tracestate` / `baggage`\nwhen present), stored with the outbox row and sent by the relay\n(ADR 0022). Consumers may extract these headers and must not require\nthem. The Kafka message key is the network order reference\n(`networkRef`, identical to `subject`), so every event for one order\nlands on the same partition.\n\n**Type naming.** `type` is\n`com.warehouse.<subdomain>.<bounded-context>.<entity>.<EventName>`. For\nthis context the subdomain is `wes`, the bounded context is\n`network-fulfillment` and the entity is `networkorder`, e.g.\n`com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderReceived`.\nThe SAME `type` is used for the occurrence on the integration and on\nthe analytics channel; `dataschema`\n(`urn:warehouse:network-fulfillment:<events|analytics>:<EventName>:v<N>`)\nnames the payload shape. A breaking change gets a new `.v2`\ntype and a new dataschema version, never a mutation of these:\n`NetworkOrderAcknowledged` changed meaning in ADR 0016 and is published\nas `...networkorder.NetworkOrderAcknowledged.v2` /\n`...:NetworkOrderAcknowledged:v2`.\n\n**Consumers** must dispatch on the full `type`, ignore unknown types,\ndedupe on `id` (stable across outbox redelivery), and dead-letter or\nskip — never parse as a legacy shape — anything that fails CloudEvents\nvalidation.\n",
     "contact": {
       "name": "Network Fulfillment — IQVO",
       "url": "https://github.com/IQVO/network-fulfillment",
@@ -835,13 +835,138 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "OrphanedHoldCancelled",
+              "title": "Orphaned order-management hold cancelled",
+              "summary": "A hold order-management made for demand nobody decided was found past the acknowledgement window plus the grace and cancelled — a reported fact, not a state transition.",
+              "description": "Raised by `SweepOrphanedHolds` (ADR 0024) once per hold it frees: the order-management order raised for this demand was still held after `acknowledgeBy` plus `ORPHAN_HOLD_GRACE`, the `NetworkOrder` was never committed to (still `NEW`, or `REJECTED` with the cancel never confirmed), and order-management confirmed the hold is gone. The sweep NEVER changes the order's state — `RejectOverdueOrders` owns that and publishes `NetworkOrderRejected` — and it raises this event only when the hold was actually freed: a hold order-management reports as already released (409/422) was not an orphan and raises nothing. The outcome is recorded in the same transaction as the event, so it fires once per hold and is not re-raised on later passes.\n\n`answer` is what order-management said to the cancel: `CANCELLED` (2xx) or `NOT_FOUND` (404, the hold no longer existed — still done). `localOrderId` is the order-management order that was held; it is published here and nowhere else for an order that was never submitted, because `GET /network-orders/{networkRef}` exposes `localOrderId` only from `SUBMITTED` on.\n\n`type`: `com.warehouse.wes.network-fulfillment.networkorder.OrphanedHoldCancelled` — `dataschema`: `urn:warehouse:network-fulfillment:events:OrphanedHoldCancelled:v1`.\n",
+              "contentType": "application/cloudevents+json",
+              "headers": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].headers",
+              "bindings": {
+                "kafka": {
+                  "key": {
+                    "type": "string",
+                    "description": "Network order reference (networkRef), identical to `subject`."
+                  }
+                }
+              },
+              "tags": [
+                {
+                  "name": "networkorder"
+                },
+                {
+                  "name": "network-fulfillment"
+                }
+              ],
+              "payload": {
+                "title": "OrphanedHoldCancelled CloudEvent (events)",
+                "allOf": [
+                  "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.network-fulfillment.networkorder.OrphanedHoldCancelled",
+                        "x-parser-schema-id": "<anonymous-schema-61>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:network-fulfillment:events:OrphanedHoldCancelled:v1",
+                        "x-parser-schema-id": "<anonymous-schema-62>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "title": "OrphanedHoldCancelled payload",
+                        "required": [
+                          "networkRef",
+                          "siteId",
+                          "localOrderId",
+                          "acknowledgeBy",
+                          "answer",
+                          "at"
+                        ],
+                        "properties": {
+                          "networkRef": {
+                            "type": "string",
+                            "description": "Network order reference; also the `subject`.",
+                            "x-parser-schema-id": "<anonymous-schema-63>"
+                          },
+                          "siteId": {
+                            "type": "string",
+                            "description": "Fulfilling site.",
+                            "x-parser-schema-id": "<anonymous-schema-64>"
+                          },
+                          "localOrderId": {
+                            "type": "string",
+                            "description": "The order-management order that was held for this demand and is now freed.",
+                            "x-parser-schema-id": "<anonymous-schema-65>"
+                          },
+                          "acknowledgeBy": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "The order's acknowledgement deadline. The hold was freed after this instant plus `ORPHAN_HOLD_GRACE`.",
+                            "x-parser-schema-id": "<anonymous-schema-66>"
+                          },
+                          "answer": {
+                            "type": "string",
+                            "enum": [
+                              "CANCELLED",
+                              "NOT_FOUND"
+                            ],
+                            "description": "What order-management answered to the cancel: `CANCELLED` (2xx) or `NOT_FOUND` (404, the hold no longer existed). A hold already released (409/422) raises no event.",
+                            "x-parser-schema-id": "<anonymous-schema-67>"
+                          },
+                          "at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "When the sweep freed the hold (same instant as `time`).",
+                            "x-parser-schema-id": "<anonymous-schema-68>"
+                          }
+                        },
+                        "x-parser-schema-id": "OrphanedHoldCancelledData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-60>"
+                  }
+                ],
+                "x-parser-schema-id": "OrphanedHoldCancelledEvent"
+              },
+              "examples": [
+                {
+                  "name": "orphanedHoldCancelled",
+                  "summary": "The hold order-management made for network order po-1 was cancelled two hours after its window closed.",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "2b3c4d5e-6f70-4899-8011-bbccddeeff00",
+                    "source": "/warehouse/network-fulfillment",
+                    "type": "com.warehouse.wes.network-fulfillment.networkorder.OrphanedHoldCancelled",
+                    "subject": "po-1",
+                    "time": "2026-09-23T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:network-fulfillment:events:OrphanedHoldCancelled:v1",
+                    "data": {
+                      "networkRef": "po-1",
+                      "siteId": "site-1",
+                      "localOrderId": "ord-1",
+                      "acknowledgeBy": "2026-09-22T06:00:00Z",
+                      "answer": "CANCELLED",
+                      "at": "2026-09-23T08:00:00Z"
+                    }
+                  }
+                }
+              ]
             }
           ]
         }
       }
     },
     "warehouse.network-fulfillment.analytics": {
-      "description": "The internal analytics topic (the `AnalyticsTopic` constant in\n`internal/adapters/outbound/kafka/analytics_publisher.go`). Carries the\nsame six occurrences with the same `type` and payload, but a distinct\n`id` per occurrence and dataschema\n`urn:warehouse:network-fulfillment:analytics:<EventName>:v<N>` (v1,\nexcept `NetworkOrderAcknowledged` which is v2). There is\nno `schema_version` field. Consumed by this service's own analytics\nprojector (`internal/adapters/inbound/kafka/analytics_consumer.go`),\nwhich handles `NetworkOrderReceived`, `NetworkOrderSubmitted` (claimed,\nno report effect), `NetworkOrderAcknowledged` v2, the HISTORIC\n`NetworkOrderAcknowledged` v1 still on the topic (unsuffixed type,\npublished before ADR 0016, counted as before so a replay keeps the\nreport numbers) and `NetworkOrderRejected`, ignores other types\n(`NetworkOrderShipmentConfirmed` and `AcknowledgementDeadlineAtRisk`\ntoday), and dead-letters to\n`warehouse.network-fulfillment.analytics.dlq` anything that is not a\nvalid CloudEvent.\n",
+      "description": "The internal analytics topic (the `AnalyticsTopic` constant in\n`internal/adapters/outbound/kafka/analytics_publisher.go`). Carries the\nsame seven occurrences with the same `type` and payload, but a distinct\n`id` per occurrence and dataschema\n`urn:warehouse:network-fulfillment:analytics:<EventName>:v<N>` (v1,\nexcept `NetworkOrderAcknowledged` which is v2). There is\nno `schema_version` field. Consumed by this service's own analytics\nprojector (`internal/adapters/inbound/kafka/analytics_consumer.go`),\nwhich handles `NetworkOrderReceived`, `NetworkOrderSubmitted` (claimed,\nno report effect), `NetworkOrderAcknowledged` v2, the HISTORIC\n`NetworkOrderAcknowledged` v1 still on the topic (unsuffixed type,\npublished before ADR 0016, counted as before so a replay keeps the\nreport numbers) and `NetworkOrderRejected`, ignores other types\n(`NetworkOrderShipmentConfirmed`, `AcknowledgementDeadlineAtRisk` and\n`OrphanedHoldCancelled` today), and dead-letters to\n`warehouse.network-fulfillment.analytics.dlq` anything that is not a\nvalid CloudEvent.\n",
       "subscribe": {
         "operationId": "consumeNetworkFulfillmentAnalytics",
         "summary": "Consume Network Fulfillment analytics events.",
@@ -886,16 +1011,16 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderReceived",
-                        "x-parser-schema-id": "<anonymous-schema-61>"
+                        "x-parser-schema-id": "<anonymous-schema-70>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:analytics:NetworkOrderReceived:v1",
-                        "x-parser-schema-id": "<anonymous-schema-62>"
+                        "x-parser-schema-id": "<anonymous-schema-71>"
                       },
                       "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-60>"
+                    "x-parser-schema-id": "<anonymous-schema-69>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderReceivedAnalyticsEvent"
@@ -961,16 +1086,16 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderSubmitted",
-                        "x-parser-schema-id": "<anonymous-schema-64>"
+                        "x-parser-schema-id": "<anonymous-schema-73>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:analytics:NetworkOrderSubmitted:v1",
-                        "x-parser-schema-id": "<anonymous-schema-65>"
+                        "x-parser-schema-id": "<anonymous-schema-74>"
                       },
                       "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[1].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-63>"
+                    "x-parser-schema-id": "<anonymous-schema-72>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderSubmittedAnalyticsEvent"
@@ -1035,16 +1160,16 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderAcknowledged.v2",
-                        "x-parser-schema-id": "<anonymous-schema-67>"
+                        "x-parser-schema-id": "<anonymous-schema-76>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:analytics:NetworkOrderAcknowledged:v2",
-                        "x-parser-schema-id": "<anonymous-schema-68>"
+                        "x-parser-schema-id": "<anonymous-schema-77>"
                       },
                       "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[2].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-66>"
+                    "x-parser-schema-id": "<anonymous-schema-75>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderAcknowledgedAnalyticsEvent"
@@ -1109,16 +1234,16 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderRejected",
-                        "x-parser-schema-id": "<anonymous-schema-70>"
+                        "x-parser-schema-id": "<anonymous-schema-79>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:analytics:NetworkOrderRejected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-71>"
+                        "x-parser-schema-id": "<anonymous-schema-80>"
                       },
                       "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[3].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-69>"
+                    "x-parser-schema-id": "<anonymous-schema-78>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderRejectedAnalyticsEvent"
@@ -1182,16 +1307,16 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.NetworkOrderShipmentConfirmed",
-                        "x-parser-schema-id": "<anonymous-schema-73>"
+                        "x-parser-schema-id": "<anonymous-schema-82>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:analytics:NetworkOrderShipmentConfirmed:v1",
-                        "x-parser-schema-id": "<anonymous-schema-74>"
+                        "x-parser-schema-id": "<anonymous-schema-83>"
                       },
                       "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[4].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-72>"
+                    "x-parser-schema-id": "<anonymous-schema-81>"
                   }
                 ],
                 "x-parser-schema-id": "NetworkOrderShipmentConfirmedAnalyticsEvent"
@@ -1255,16 +1380,16 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.network-fulfillment.networkorder.AcknowledgementDeadlineAtRisk",
-                        "x-parser-schema-id": "<anonymous-schema-76>"
+                        "x-parser-schema-id": "<anonymous-schema-85>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:network-fulfillment:analytics:AcknowledgementDeadlineAtRisk:v1",
-                        "x-parser-schema-id": "<anonymous-schema-77>"
+                        "x-parser-schema-id": "<anonymous-schema-86>"
                       },
                       "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-75>"
+                    "x-parser-schema-id": "<anonymous-schema-84>"
                   }
                 ],
                 "x-parser-schema-id": "AcknowledgementDeadlineAtRiskAnalyticsEvent"
@@ -1294,6 +1419,81 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "OrphanedHoldCancelledAnalytics",
+              "title": "Orphaned order-management hold cancelled (analytics)",
+              "summary": "A hold order-management made for demand nobody decided was found past the acknowledgement window plus the grace and cancelled — a reported fact, not a state transition.",
+              "description": "Raised by `SweepOrphanedHolds` (ADR 0024) once per hold it frees: the order-management order raised for this demand was still held after `acknowledgeBy` plus `ORPHAN_HOLD_GRACE`, the `NetworkOrder` was never committed to (still `NEW`, or `REJECTED` with the cancel never confirmed), and order-management confirmed the hold is gone. The sweep NEVER changes the order's state — `RejectOverdueOrders` owns that and publishes `NetworkOrderRejected` — and it raises this event only when the hold was actually freed: a hold order-management reports as already released (409/422) was not an orphan and raises nothing. The outcome is recorded in the same transaction as the event, so it fires once per hold and is not re-raised on later passes.\n\n`answer` is what order-management said to the cancel: `CANCELLED` (2xx) or `NOT_FOUND` (404, the hold no longer existed — still done). `localOrderId` is the order-management order that was held; it is published here and nowhere else for an order that was never submitted, because `GET /network-orders/{networkRef}` exposes `localOrderId` only from `SUBMITTED` on.\n\nPublished on the analytics topic like every other event (the composition root's fan-out publishes each event to both topics). Not used by the analytics projector today (ignored as an unknown type).\n\n`type`: `com.warehouse.wes.network-fulfillment.networkorder.OrphanedHoldCancelled` — `dataschema`: `urn:warehouse:network-fulfillment:analytics:OrphanedHoldCancelled:v1`.\n",
+              "contentType": "application/cloudevents+json",
+              "headers": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].headers",
+              "bindings": {
+                "kafka": {
+                  "key": {
+                    "type": "string",
+                    "description": "Network order reference (networkRef), identical to `subject`."
+                  }
+                }
+              },
+              "tags": [
+                {
+                  "name": "networkorder"
+                },
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": {
+                "title": "OrphanedHoldCancelled CloudEvent (analytics)",
+                "allOf": [
+                  "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wes.network-fulfillment.networkorder.OrphanedHoldCancelled",
+                        "x-parser-schema-id": "<anonymous-schema-88>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:network-fulfillment:analytics:OrphanedHoldCancelled:v1",
+                        "x-parser-schema-id": "<anonymous-schema-89>"
+                      },
+                      "data": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[6].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-87>"
+                  }
+                ],
+                "x-parser-schema-id": "OrphanedHoldCancelledAnalyticsEvent"
+              },
+              "examples": [
+                {
+                  "name": "orphanedHoldCancelledAnalytics",
+                  "summary": "The hold order-management made for network order po-1 was cancelled two hours after its window closed.",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3c4d5e6f-7081-4900-9122-ccddeeff0011",
+                    "source": "/warehouse/network-fulfillment",
+                    "type": "com.warehouse.wes.network-fulfillment.networkorder.OrphanedHoldCancelled",
+                    "subject": "po-1",
+                    "time": "2026-09-23T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:network-fulfillment:analytics:OrphanedHoldCancelled:v1",
+                    "data": {
+                      "networkRef": "po-1",
+                      "siteId": "site-1",
+                      "localOrderId": "ord-1",
+                      "acknowledgeBy": "2026-09-22T06:00:00Z",
+                      "answer": "CANCELLED",
+                      "at": "2026-09-23T08:00:00Z"
+                    }
+                  }
+                }
+              ]
             }
           ]
         }
@@ -1308,12 +1508,14 @@
       "NetworkOrderRejected": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[3]",
       "NetworkOrderShipmentConfirmed": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[4]",
       "AcknowledgementDeadlineAtRisk": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[5]",
+      "OrphanedHoldCancelled": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[6]",
       "NetworkOrderReceivedAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[0]",
       "NetworkOrderSubmittedAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[1]",
       "NetworkOrderAcknowledgedAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[2]",
       "NetworkOrderRejectedAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[3]",
       "NetworkOrderShipmentConfirmedAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[4]",
-      "AcknowledgementDeadlineAtRiskAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[5]"
+      "AcknowledgementDeadlineAtRiskAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[5]",
+      "OrphanedHoldCancelledAnalytics": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[6]"
     },
     "schemas": {
       "KafkaHeaders": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].headers",
@@ -1324,18 +1526,21 @@
       "NetworkOrderRejectedData": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[3].payload.allOf[1].properties.data",
       "NetworkOrderShipmentConfirmedData": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[4].payload.allOf[1].properties.data",
       "AcknowledgementDeadlineAtRiskData": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data",
+      "OrphanedHoldCancelledData": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[6].payload.allOf[1].properties.data",
       "NetworkOrderReceivedEvent": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].payload",
       "NetworkOrderSubmittedEvent": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[1].payload",
       "NetworkOrderAcknowledgedEvent": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[2].payload",
       "NetworkOrderRejectedEvent": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[3].payload",
       "NetworkOrderShipmentConfirmedEvent": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[4].payload",
       "AcknowledgementDeadlineAtRiskEvent": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[5].payload",
+      "OrphanedHoldCancelledEvent": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[6].payload",
       "NetworkOrderReceivedAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[0].payload",
       "NetworkOrderSubmittedAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[1].payload",
       "NetworkOrderAcknowledgedAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[2].payload",
       "NetworkOrderRejectedAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[3].payload",
       "NetworkOrderShipmentConfirmedAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[4].payload",
-      "AcknowledgementDeadlineAtRiskAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[5].payload"
+      "AcknowledgementDeadlineAtRiskAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[5].payload",
+      "OrphanedHoldCancelledAnalyticsEvent": "$ref:$.channels.warehouse.network-fulfillment.analytics.subscribe.message.oneOf[6].payload"
     }
   },
   "x-parser-spec-parsed": true,
