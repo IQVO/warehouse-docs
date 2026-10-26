@@ -42,18 +42,18 @@ flowchart LR
     C2["SetLineQuantity<br/>POST ...:set-quantity"]:::command
     C3["RemoveLine<br/>POST ...:remove"]:::command
     C4["MergeInto<br/>POST /carts/cartId:merge-into"]:::command
+    C4b["AcceptRequotedOffers<br/>POST /carts/cartId/delivery/requoted<br/>OPEN to OPEN, no delivery-promise call"]:::command
     RM0["PurchasabilityView"]:::readmodel
     G1["Cart"]:::aggregate
     E1["CartLineAdded"]:::event
     AN(["analytics"]):::actor
-    H1["H1 only AddLine<br/>publishes an event"]:::hotspot
-    H2["H2 ErrDuplicateLine<br/>names the merge rule"]:::hotspot
 
     S --> C0
     S --> C1
     S --> C2
     S --> C3
     S --> C4
+    S --> C4b
     C1 --> RM0
     RM0 -->|purchasable| G1
     C0 --> G1
@@ -61,12 +61,9 @@ flowchart LR
     C2 --> G1
     C3 --> G1
     C4 --> G1
+    C4b --> G1
     G1 --> E1
-    E1 --> AN
-    C2 --- H1
-    C3 --- H1
-    C4 --- H1
-    C1 --- H2
+    E1 -->|only AddLine publishes, by design| AN
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
     classDef command fill:#a5d8ff,stroke:#1971c2,color:#000
@@ -83,8 +80,14 @@ Derived from: `model.yaml → contexts[shopping-cart].inbound` (BFF cmd row),
 Omitted: the invariant errors on the add path
 (`ErrQuantityOutOfRange`, `ErrTooManyLines`, `ErrItemNotPurchasable`,
 `ErrCartClosed` on a closed cart, `ErrMergeTarget` on a bad merge target)
-and the outbox. Every mutating command on this board also clears the quote
+and the outbox. Adding an existing item merges quantities into the one
+line; nothing is rejected as a duplicate. Only `AddLine` publishes, by
+design: analytics needs add, quote, abandon and checkout. Every mutating
+command on this board except `AcceptRequotedOffers` also clears the quote
 and the selections (business decision 3; board 2).
+`AcceptRequotedOffers {offers[]}` writes the selected delivery from the
+supplied set without calling `delivery-promise`; checkout re-verifies the
+offers through its pre-authorize check.
 
 ## 2. Destination, quote and selection
 
@@ -100,7 +103,7 @@ flowchart LR
     E2["CartDeliveryQuoted"]:::event
     RM1["CheckoutReadiness<br/>every group selected,<br/>no offer expired"]:::readmodel
     AN(["analytics"]):::actor
-    H6["H6 estimate before<br/>a destination exists"]:::hotspot
+    ES["Estimate without a destination<br/>item subtotal only,<br/>estimateComplete=false"]:::readmodel
 
     S --> C5
     S --> C6
@@ -113,7 +116,7 @@ flowchart LR
     G1 --> E2
     E2 --> AN
     G1 --> RM1
-    C6 --- H6
+    C5 --> ES
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
     classDef command fill:#a5d8ff,stroke:#1971c2,color:#000
@@ -121,7 +124,6 @@ flowchart LR
     classDef event fill:#ffc078,stroke:#d9480f,color:#000
     classDef readmodel fill:#b2f2bb,stroke:#2f9e44,color:#000
     classDef external fill:#fcc2d7,stroke:#c2255c,color:#000
-    classDef hotspot fill:#ff8787,stroke:#c92a2a,color:#000
 ```
 
 Derived from: `model.yaml → contexts[shopping-cart].sync_calls`,
@@ -130,7 +132,9 @@ Derived from: `model.yaml → contexts[shopping-cart].sync_calls`,
 `.publishes[CartDeliveryQuoted]`, `.read_models[CheckoutReadiness]`;
 `network/model/model.yaml → contexts[delivery-promise].inbound`.
 
-Omitted: the estimate arithmetic (board 3) and the offer expiry clock
+Before a destination is set the estimate shows the item subtotal only with
+`estimateComplete=false`; the delivery charge and tax appear once a
+destination exists. Omitted: the estimate arithmetic (board 3) and the offer expiry clock
 (readiness compares `expiresAt`; no event announces an expiry). A quote
 holds no capacity: the offers are `delivery-promise` facts frozen at quote
 time, and capacity is held only when checkout places the order.
@@ -148,7 +152,6 @@ flowchart LR
     RM2["EstimateView<br/>effective prices, tier<br/>charges, tax bands"]:::readmodel
     RM3["Estimate<br/>labelled, non-binding"]:::readmodel
     CK["checkout"]:::external
-    H3["H3 purchasability narrower<br/>than discovery's verdict"]:::hotspot
 
     PR --> E3
     PR --> E4
@@ -159,17 +162,17 @@ flowchart LR
     E4 --> RM2
     RM2 --> RM3
     RM0 -->|ErrItemNotPurchasable<br/>on AddLine| CK
-    RM0 --- H3
 
     classDef event fill:#ffc078,stroke:#d9480f,color:#000
     classDef readmodel fill:#b2f2bb,stroke:#2f9e44,color:#000
     classDef external fill:#fcc2d7,stroke:#c2255c,color:#000
-    classDef hotspot fill:#ff8787,stroke:#c92a2a,color:#000
 ```
 
 Derived from: `model.yaml → contexts[shopping-cart].consumes`,
 `.read_models[PurchasabilityView, EstimateView]`;
-`contexts[product-discovery].ul[Purchasable]` (the comparison behind H3).
+`contexts[product-discovery].ul[Purchasable]`. The cart is lenient by
+design: it accepts any catalogued, priced item, and checkout's binding
+quote is the gate.
 
 Omitted: `CheckoutReadiness` (derived from the cart itself, board 2) and
 the inbox. No pricing or catalogue event touches the `Cart` aggregate: a
@@ -192,8 +195,7 @@ flowchart LR
     E7["CartAbandoned"]:::event
     E8["CartCheckedOut"]:::event
     AN(["analytics"]):::actor
-    H4["H4 the .events topic<br/>carries nothing"]:::hotspot
-    H5["H5 purge of abandoned<br/>carts is unnamed"]:::hotspot
+    P3["PurgeAbandonedCarts<br/>idle 30 days, deleted, no event"]:::policy
 
     T --> P1
     P1 --> C8
@@ -206,9 +208,8 @@ flowchart LR
     G1 --> E8
     E7 --> AN
     E8 --> AN
-    E7 --- H4
-    E8 --- H4
-    C8 --- H5
+    G1 --> P3
+    T --> P3
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
     classDef command fill:#a5d8ff,stroke:#1971c2,color:#000
@@ -216,7 +217,6 @@ flowchart LR
     classDef event fill:#ffc078,stroke:#d9480f,color:#000
     classDef policy fill:#d0bfff,stroke:#6741d9,color:#000
     classDef external fill:#fcc2d7,stroke:#c2255c,color:#000
-    classDef hotspot fill:#ff8787,stroke:#c92a2a,color:#000
 ```
 
 Derived from: `model.yaml → contexts[shopping-cart].policies`,
@@ -232,9 +232,9 @@ model — in practice the race needs a session to outlive 30 idle days.
 
 | # | Hotspot | Where it comes from in the model |
 | --- | --- | --- |
-| H1 | Only `AddLine` publishes an event. `SetLineQuantity`, `RemoveLine`, `SetDestination`, `SelectDelivery`, `MergeInto` and `CreateCart` raise nothing, so analytics sees adds, quotes, abandons and checkouts but never a removal or a merge. | `aggregates[Cart].commands` vs `publishes` |
-| H2 | `ErrDuplicateLine` names a rule whose stated behaviour is a merge ("adding an existing item merges quantities"); the REST contract reads it as "the invariant behind the merge". No input in the model is ever rejected with it. | `aggregates[Cart].invariants`, `storefront/apis/shopping-cart/openapi.yaml` (`addCartLine`) |
-| H3 | `PurchasabilityView` is fed by catalogue and price events only; `product-discovery`'s `Purchasable` also requires content `PUBLISHED` and a `LIVE` listing with stock. The cart can accept an item discovery would refuse; the gap surfaces later at checkout's quote. | `read_models[PurchasabilityView]` vs `contexts[product-discovery].ul[Purchasable]` |
-| H4 | All four published events are analytics-only, so `retailnetwork.shopping-cart.events` carries nothing and no sibling or network context consumes a cart fact; checkout reads the cart synchronously instead. | `publishes` rows ("analytics only"); `conventions.integration_rules` |
-| H5 | The size estimate says "abandoned carts purged", but no command or policy names the purge, its retention or its visible effect. | `aggregates[Cart].size_estimate` vs `.commands`, `.policies` |
-| H6 | The estimate is defined as effective prices plus selected tier charges plus tax band; with no destination there is no quote, no charge and no band, and the model does not say what the estimate shows before a destination is set. | `purpose`, `business_decisions` (estimate bullet), `invariants[ErrNoDestination]` |
+| H1 | **Resolved in the model-fix (by design):** only `AddLine` publishes an event, because analytics needs add, quote, abandon and checkout. Removals, quantity changes, destination changes, selections and merges raise nothing. No new events. | `business_decisions`; `aggregates[Cart].commands` vs `publishes` |
+| H2 | **Resolved in the model-fix:** `ErrDuplicateLine` is removed. Adding an existing item merges quantities into its line; nothing is ever rejected with it. The REST wording and this pack are corrected. | `aggregates[Cart].invariants`, `storefront/apis/shopping-cart/openapi.yaml` (`addCartLine`) |
+| H3 | **Resolved in the model-fix (by design):** `PurchasabilityView` is lenient. The cart accepts any catalogued, priced item; `product-discovery`'s stricter `Purchasable` is not mirrored and checkout's binding quote is the gate. Stated in the cart and discovery context-map relationship. | `business_decisions`; `read_models[PurchasabilityView]` |
+| H4 | **Resolved in the model-fix (by design):** no cart consumer. All four events are analytics-only; checkout reads the cart synchronously (`GET /carts/{cartId}`). | `publishes`; `business_decisions` |
+| H5 | **Resolved in the model-fix:** the policy `PurgeAbandonedCarts` (scheduled) deletes carts idle for 30 days and raises no event. | `policies[PurgeAbandonedCarts]` |
+| H6 | **Resolved in the model-fix:** with no destination the estimate shows the item subtotal only with `estimateComplete=false`; the delivery charge and tax appear once a destination is set. | `business_decisions`; `aggregates[Cart].notes`; `apis/shopping-cart/openapi.yaml` (`Estimate`) |

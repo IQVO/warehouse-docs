@@ -507,7 +507,7 @@ components:
           format: date-time
     ItemPrice:
       type: object
-      required: [catalogItemId, listPrice, effectivePrice, sales, version, state]
+      required: [catalogItemId, listPrice, effectivePrice, sales, version, state, updatedAt]
       properties:
         catalogItemId:
           type: string
@@ -525,6 +525,10 @@ components:
         version:
           type: integer
           minimum: 1
+        updatedAt:
+          type: string
+          format: date-time
+          description: Seeds the per-key guard of a snapshot consumer (product-discovery bootstrap).
     ItemPriceList:
       type: object
       required: [items]

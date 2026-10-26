@@ -22,6 +22,7 @@ Code identifiers are the proposed Go package and type names.
 | **Capture** | `customer-payments` | Taking an allocation's money when its shipment group ships. | authorize (the hold at checkout) | `authorization.Allocation.Capture` |
 | **Cart** | `shopping-cart` | One shopper's held intent: lines, destination, delivery quote and selections. | - | `cart.Cart` |
 | **Category** | `product-content` | One node of the browsable category tree. | - | `category.Category` |
+| **Category Suggestion** | `product-discovery` | A category whose name matches the query terms, returned beside the hits; there is no product-type detection. | - | `productview.CategorySuggestion` |
 | **Category Tree** | `product-content` | The single, versioned tree of categories, at most four levels deep. | - | `category.CategoryTree` |
 | **Category View** | `product-discovery` | The browsable tree with purchasable counts per category. | - | `categoryview.CategoryView` |
 | **Checkout Readiness** | `shopping-cart` | Every group selected and no offer expired. | - | `cart.CheckoutReadiness` |
@@ -41,7 +42,6 @@ Code identifiers are the proposed Go package and type names.
 | **Primary Medium** | `product-content` | The one image a product page leads with; exactly one per published content. | - | `content.Media.RolePrimary` |
 | **Product Content** | `product-content` | Description, bullets, attributes and media of one catalogue item. | - | `content.ProductContent` |
 | **Product View** | `product-discovery` | The projection one product page or search hit renders from. | - | `productview.ProductView` |
-| **Product-Type Query** | `product-discovery` | A search for a kind of product; the answer includes category suggestions. | - | `(search policy)` |
 | **Purchasable** | `product-discovery` | Item ACTIVE in the item master, content PUBLISHED, price ACTIVE, and at least one LIVE listing with quantity > 0. | the network's sellable listing (one node only) | `productview.Purchasable` |
 | **Reauthorization** | `customer-payments` | A fresh authorization replacing one about to expire, for allocations not yet captured. | - | `authorization.Reauthorize` |
 | **Refund** | `customer-payments` | Returning captured money for a lost or returned package, or manually. | - | `refund.Refund` |

@@ -119,7 +119,7 @@ analytics-only events, which have no integration consumer.
 | `pricing` | `checkout` | C/S | - | cmd IssuePriceQuote (`REST POST /price-quotes`) |
 | `pricing` | `product-discovery` | C/S + CF | `ItemPriceChanged`, `ItemPriceWithdrawn` | qry ListItemPrices (`REST GET /item-prices`) |
 | `pricing` | `shopping-cart` | C/S | `ItemPriceChanged`, `ItemPriceWithdrawn`, `DeliveryChargeScheduleChanged`, `TaxTableChanged` | - |
-| `product-content` | `product-discovery` | C/S + CF | `ProductContentPublished`, `ProductContentRetired`, `CategoryTreePublished` | qry ListProductContents (`REST GET /product-contents`) |
+| `product-content` | `product-discovery` | C/S + CF | `ProductContentPublished`, `ProductContentRetired`, `CategoryTreePublished` | qry ListProductContents (`REST GET /product-contents`); qry ListCategories (`REST GET /categories`) |
 | `shipping-and-tracking` | `customer-payments` | CF | `PackageLost`, `PackageReturned` | - |
 | `shopping-cart` | `checkout` | C/S | - | qry GetCart (`REST GET /carts/{cartId}`) |
 | `customer-payments` | `payment-provider` (external) | ACL | none | provider port: Authorize, Capture, Void, Refund, Reauthorize |

@@ -48,8 +48,8 @@ flowchart LR
         direction TB
         card["<b>Purpose</b><br/>Enrich a catalogue item with<br/>description, bullets, attributes,<br/>media and the category tree;<br/>publish only complete content;<br/>retire it when the item is<br/>discontinued.<br/><br/><b>Domain roles</b><br/>- Specification (content of an item)<br/>- Master data (category tree)<br/><br/><b>Business decisions it enforces</b><br/>- Publish only when complete<br/>- Only catalogItemId crosses<br/>the boundary<br/>- One versioned tree,<br/>at most four levels deep"]:::card
     end
-    in0 -->|"cmd - REST<br/>CreateProductContent,<br/>ReviseContent, PublishContent,<br/>RetireContent, CreateCategory,<br/>MoveCategory, RenameCategory"| BC
-    in1 -.->|"qry - REST<br/>ListProductContents,<br/>GetProductContent,<br/>ListCategories"| BC
+    in0 -->|"cmd - REST<br/>CreateProductContent,<br/>ReviseDraft, ReviseContent,<br/>PublishContent, DiscardDraft,<br/>RetireContent, CreateCategory,<br/>MoveCategory, RenameCategory,<br/>PublishCategoryTree"| BC
+    in1 -.->|"qry - REST<br/>ListProductContents,<br/>ListCategories"| BC
     in2 ==>|"evt - Kafka<br/>retailnetwork.offer-<br/>availability.events<br/>CatalogItemCreated,<br/>CatalogItemDiscontinued"| BC
     linkStyle 0 stroke:#1971c2,stroke-width:1.5px
     linkStyle 1 stroke:#2f9e44,stroke-width:1.5px
@@ -78,9 +78,8 @@ Derived from: `model.yaml → contexts[product-content].inbound`,
 
 The diagrams omit assumptions, verification metrics, open questions and the
 ubiquitous language (sections below), the relationship pattern per message
-(see the tables), and the synchronous replies. `PublishCategoryTree` is a
-command with an event but **no inbound row and no REST route**; the diagrams
-cannot draw its trigger (see Open Questions). This context makes **no
+(see the tables), and the synchronous replies. `PublishCategoryTree` is
+triggered by the content manager through `POST /categories:publish`. This context makes **no
 synchronous calls** (`sync_calls: []`): the item data it needs is the local,
 event-fed `CatalogItemView`.
 
@@ -99,8 +98,9 @@ needs and the item master does not have. The context:
 - publishes content only when complete — a description, exactly one PRIMARY
   medium and a category (`ErrIncompleteContent`);
 - owns the single, versioned category tree, at most four levels deep;
-- retires published content when the network discontinues the item
-  (`RetireOnDiscontinue`).
+- retires published and draft content when the network discontinues the item
+  (`RetireOnDiscontinue`); a discontinued item can never publish
+  (`ErrItemDiscontinued`).
 
 ## Strategic Classification
 
@@ -123,8 +123,10 @@ needs and the item master does not have. The context:
 
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
-| Storefront content manager (human) | `CreateProductContent`, `ReviseContent`, `PublishContent`, `RetireContent`, `CreateCategory`, `MoveCategory`, `RenameCategory` | Command | REST `/product-contents`, `/categories` | UI |
-| `product-discovery` | `ListProductContents`, `GetProductContent`, `ListCategories` | Query | REST `GET /product-contents` (bootstrap, paged), `GET /product-contents/{catalogItemId}`, `GET /categories` | Customer/Supplier (we are the Supplier) |
+| Storefront content manager (human) | `CreateProductContent`, `ReviseDraft`, `ReviseContent`, `PublishContent`, `DiscardDraft`, `RetireContent`, `CreateCategory`, `MoveCategory`, `RenameCategory` | Command | REST `/product-contents`, `/categories` | UI |
+| Storefront content manager (human) | `PublishCategoryTree` | Command | REST `POST /categories:publish` | UI |
+| Storefront content manager (human) | `GetProductContent` | Query | REST `GET /product-contents/{catalogItemId}` | UI |
+| `product-discovery` | `ListProductContents`, `ListCategories` | Query | REST `GET /product-contents` (bootstrap, paged), `GET /categories` (`product-discovery` does not call `GetProductContent`) | Customer/Supplier (we are the Supplier) |
 | `offer-availability` | `CatalogItemCreated` | Event | Kafka `retailnetwork.offer-availability.events`, `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | Conformist |
 | `offer-availability` | `CatalogItemDiscontinued` | Event | Kafka `retailnetwork.offer-availability.events`, `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued` | Conformist |
 
@@ -155,11 +157,14 @@ Top terms: **Product Content**, **Revision**, **Primary Medium**,
    PRIMARY medium and a category (`ErrIncompleteContent`).
 2. **Only `catalogItemId` crosses the boundary**; content never redefines
    the item itself [19]. The item must exist in the local `CatalogItemView`
-   (`ErrUnknownCatalogItem`).
-3. **The category tree is one versioned aggregate**, at most four levels
+   (`ErrUnknownCatalogItem`) and must not be DISCONTINUED
+   (`ErrItemDiscontinued`).
+3. **The category tree is one versioned, always-published aggregate** with no draft state (every command
+   applies to the live tree and publishes a new version), at most four levels
    deep (`ErrMaxDepth`), never cyclic (`ErrCategoryCycle`), with unique
    sibling names (`ErrDuplicateSiblingName`); a category in use by PUBLISHED
-   content is never removed (`ErrCategoryInUse`).
+   content is never removed (`ErrCategoryInUse`, which guards a future
+   removal: categories are only renamed or moved, never deleted).
 4. **RETIRED content never publishes again** (`ErrContentRetired`).
 
 ## Assumptions
@@ -196,31 +201,12 @@ Top terms: **Product Content**, **Revision**, **Primary Medium**,
 
 ## Open Questions
 
-- **What triggers `PublishCategoryTree`?** The command and its
-  `CategoryTreePublished` event exist, but no `inbound` row names the
-  command and no route in `rest` publishes the tree (`POST /categories`,
-  `:move`, `:rename`, `GET /categories` only). These pages draw it as a
-  content-manager action whose route the model has not named yet.
-- **A draft can be neither edited nor discarded.** `ReviseContent` is
-  `PUBLISHED → PUBLISHED` and `RetireContent` is `PUBLISHED → RETIRED`;
-  there is no `DRAFT → DRAFT` and no `DRAFT → RETIRED`. These pages read
-  `CreateProductContent` as taking the full content in one call.
-- **`ErrCategoryInUse` can never fire.** It guards removing a category in
-  use by PUBLISHED content, but the command list has no remove-category
-  command (`CreateCategory`, `MoveCategory`, `RenameCategory`,
-  `PublishCategoryTree` only).
-- **Collection limits have no named errors.** The aggregate description
-  bounds bullets (at most 10), attributes (at most 50) and media (at most
-  12), but no `Err...` invariant names them.
-- **Drafts of discontinued items.** `RetireOnDiscontinue` retires only
-  PUBLISHED content; the model does not say what happens to a DRAFT. And
-  unlike `pricing`'s rule, this context's `ErrUnknownCatalogItem` checks
-  existence in `CatalogItemView` without excluding DISCONTINUED items, so
-  whether content may still be created or published for a discontinued item
-  is unspecified.
-- **Which tree states accept edits.** The description says categories are
-  created, moved and renamed "between publications", but no transition ties
-  `CreateCategory`, `MoveCategory` or `RenameCategory` to a state, and the
-  tree's states are only DRAFT and PUBLISHED (a least-surprising reading,
-  says the model note): whether editing a PUBLISHED tree opens a new DRAFT
-  is not modelled.
+None remain from the model-fix. The eight earlier gaps are resolved in the
+model: `POST /categories:publish` triggers `PublishCategoryTree`; a DRAFT is
+editable (`ReviseDraft`) and discardable (`DiscardDraft`); re-publication is
+`PUBLISHED → PUBLISHED` via `PublishContent`; there is no remove-category
+command by design (`ErrCategoryInUse` guards a future removal); the
+collection limits are `ErrTooManyBullets`, `ErrTooManyAttributes` and
+`ErrTooManyMedia`; `RetireOnDiscontinue` also retires DRAFTs and a
+discontinued item can never publish (`ErrItemDiscontinued`); and the tree has
+no draft state.

@@ -122,6 +122,8 @@ Topic `retailnetwork.checkout.events` (analytics-only events on `retailnetwork.c
 | `CheckoutDeclined` | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutDeclined` | analytics only |
 | `CheckoutRequoteRequired` | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutRequoteRequired` | analytics only |
 | `CheckoutFailed` | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutFailed` | analytics only |
+| `CheckoutSessionExpired` | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutSessionExpired` | analytics only |
+| `CheckoutPlacementInDoubt` | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutPlacementInDoubt` | analytics only |
 
 ### `customer-payments`
 

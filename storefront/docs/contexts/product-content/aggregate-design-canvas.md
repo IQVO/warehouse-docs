@@ -30,10 +30,10 @@ the revision. It holds two value objects:
 
 | Value object | Fields | Note |
 | --- | --- | --- |
-| `Attribute` | `name`, `value`, `unit` (optional) | One named fact of the item. The collection bound (at most 50) has no named `Err` (model gap). |
+| `Attribute` | `name`, `value`, `unit` (optional) | One named fact of the item. The collection bound (at most 50) is `ErrTooManyAttributes`. |
 | `Media` | `mediaId`, `url`, `altText`, `role` (PRIMARY or GALLERY) | A URL to a static asset; upload is out of scope. Exactly one PRIMARY at publish (`ErrIncompleteContent`). |
 
-The bullets are plain strings (at most 10; no named `Err` either). The
+The bullets are plain strings (at most 10, `ErrTooManyBullets`; media at most 12, `ErrTooManyMedia`). The
 `revision` counts published shapes and is the monotonic guard
 `product-discovery` orders content by. The aggregate also needs the
 publication timestamps the REST read returns; the model's description does
@@ -45,56 +45,60 @@ reading.
 ```mermaid
 stateDiagram-v2
     [*] --> DRAFT: CreateProductContent
+    DRAFT --> DRAFT: ReviseDraft
     DRAFT --> PUBLISHED: PublishContent
+    DRAFT --> RETIRED: DiscardDraft, RetireOnDiscontinue
     PUBLISHED --> PUBLISHED: ReviseContent
-    PUBLISHED --> RETIRED: RetireContent
+    PUBLISHED --> PUBLISHED: PublishContent (new revision)
+    PUBLISHED --> RETIRED: RetireContent, RetireOnDiscontinue
     RETIRED --> [*]
     note right of PUBLISHED
-        ReviseContent edits a published content in place.
-        How a revised content publishes again is not
-        modelled (PublishContent is DRAFT to PUBLISHED only);
-        see the canvas open questions.
+        ReviseContent edits a published content in place;
+        PublishContent then re-publishes it with a new revision.
     end note
 ```
 
 Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent].states`,
-`.transitions`, `.commands`.
+`.transitions`, `.commands`, `.notes`.
 
 The entry arrow `[*] --> DRAFT` is the creating command
 `CreateProductContent`; the model lists transitions between states only.
-Two consequences of the model as written, both model gaps:
 
-- A DRAFT can be neither edited nor discarded: there is no `DRAFT → DRAFT`
-  transition (revise) and no `DRAFT → RETIRED` transition. The proposed API
-  reads `CreateProductContent` as taking the full content in one call and
-  names no error for `ReviseContent` of a DRAFT.
-- Re-publication after a revision has no transition. The proposed API
-  description of `:revise` says the revision bumps "once published again",
-  and `product-discovery` needs a new `ProductContentPublished` per
-  revision, but `PublishContent` is `DRAFT → PUBLISHED` only.
+- A DRAFT is editable and discardable: `ReviseDraft` is `DRAFT → DRAFT` with
+  a new revision, and `DiscardDraft` is `DRAFT → RETIRED` with reason
+  `DISCARDED` and no event, because nothing was ever published.
+- Re-publication after a revision is `PUBLISHED → PUBLISHED` through
+  `PublishContent`, carrying the new `revision` in `ProductContentPublished`
+  (the revise-then-publish-again path `product-discovery` orders by).
+- `RETIRED` carries a reason: `DISCARDED`, `DISCONTINUED` or
+  `RETIRED_BY_HAND`. Only the retirement of PUBLISHED content raises
+  `ProductContentRetired`.
 
 ### 4. Enforced Invariants
 
 | Invariant | Enforced by |
 | --- | --- |
 | The item exists in the local `CatalogItemView` | `CreateProductContent` → `ErrUnknownCatalogItem` |
+| Content is neither created nor published for a DISCONTINUED item | `CreateProductContent`, `PublishContent` → `ErrItemDiscontinued` |
+| At most 10 bullets, 50 attributes, 12 media | `CreateProductContent`, `ReviseDraft`, `ReviseContent` → `ErrTooManyBullets`, `ErrTooManyAttributes`, `ErrTooManyMedia` |
 | Publish needs a description, exactly one PRIMARY medium and a category | `PublishContent` → `ErrIncompleteContent` |
-| `primaryCategoryId` names a category of the current tree | `CreateProductContent`, `ReviseContent`, `PublishContent` → `ErrUnknownCategory` |
-| RETIRED content never publishes again | `PublishContent`, `ReviseContent` → `ErrContentRetired` |
+| `primaryCategoryId` names a category of the current tree | `CreateProductContent`, `ReviseDraft`, `ReviseContent`, `PublishContent` → `ErrUnknownCategory` |
+| RETIRED content never publishes again | `PublishContent`, `ReviseDraft`, `ReviseContent` → `ErrContentRetired` |
 
 Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent].invariants`.
 
 The command pairing of the first three invariants is this pack's reading of
 the proposed API's error table: the model lists the rules and the errors
 but not which command checks which. The collection bounds (bullets,
-attributes, media) are validation rules of the proposed API
-(`maxItems` in the schema), not `Err`-named invariants.
+attributes, media) are the named invariants `ErrTooManyBullets`,
+`ErrTooManyAttributes` and `ErrTooManyMedia`; the schema also carries
+`maxItems`.
 
 ### 5. Corrective Policies
 
 | Policy | Owner | Rule | Effect on this aggregate |
 | --- | --- | --- | --- |
-| `RetireOnDiscontinue` | this context | On `CatalogItemDiscontinued`, retire the item's PUBLISHED content. | `RetireContent` without a human; `ProductContentRetired` is published. A DRAFT is untouched (the model is silent). |
+| `RetireOnDiscontinue` | this context | On `CatalogItemDiscontinued`, retire the item's content: PUBLISHED to RETIRED, and DRAFT to RETIRED (reason `DISCONTINUED`). | `RetireContent` without a human; `ProductContentRetired` is published for PUBLISHED content only (a DRAFT retires with no event). A discontinued item can never publish (`ErrItemDiscontinued`). |
 | Idempotent consumption | this context | Every consumed event is applied once (inbox on the CloudEvents `id`). | The projection into `CatalogItemView` never double-applies. |
 
 ### 6. Handled Commands
@@ -102,9 +106,11 @@ attributes, media) are validation rules of the proposed API
 | Command | Trigger | Transition |
 | --- | --- | --- |
 | `CreateProductContent` | Content manager, REST `POST /product-contents` | `[*] → DRAFT` |
+| `ReviseDraft` | Content manager, REST `POST /product-contents/{catalogItemId}:revise-draft` | `DRAFT → DRAFT` |
 | `ReviseContent` | Content manager, REST `POST /product-contents/{catalogItemId}:revise` | `PUBLISHED → PUBLISHED` |
-| `PublishContent` | Content manager, REST `POST /product-contents/{catalogItemId}:publish` | `DRAFT → PUBLISHED` |
-| `RetireContent` | Content manager, REST `POST /product-contents/{catalogItemId}:retire`; or the `RetireOnDiscontinue` policy on `CatalogItemDiscontinued` | `PUBLISHED → RETIRED` |
+| `PublishContent` | Content manager, REST `POST /product-contents/{catalogItemId}:publish` | `DRAFT → PUBLISHED`, `PUBLISHED → PUBLISHED` |
+| `DiscardDraft` | Content manager, REST `POST /product-contents/{catalogItemId}:discard` | `DRAFT → RETIRED` (reason `DISCARDED`) |
+| `RetireContent` | Content manager, REST `POST /product-contents/{catalogItemId}:retire`; or the `RetireOnDiscontinue` policy on `CatalogItemDiscontinued` | `PUBLISHED → RETIRED`, `DRAFT → RETIRED` (policy, reason `DISCONTINUED`) |
 
 Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent].commands`,
 `.inbound`, `.policies`.
@@ -114,14 +120,15 @@ Derived from: `model.yaml → contexts[product-content].aggregates[ProductConten
 | Event | Raised when | Full CloudEvents type |
 | --- | --- | --- |
 | `ProductContentPublished` | `PublishContent` is saved (state PUBLISHED, revision bumped) | `com.retailnetwork.storefront.product-content.productcontent.ProductContentPublished` |
-| `ProductContentRetired` | `RetireContent` is saved | `com.retailnetwork.storefront.product-content.productcontent.ProductContentRetired` |
+| `ProductContentRetired` | `RetireContent` is saved for PUBLISHED content (also via the policy) | `com.retailnetwork.storefront.product-content.productcontent.ProductContentRetired` |
 
 Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent].events`,
 `.publishes`.
 
-`CreateProductContent` and `ReviseContent` raise no event per this reading:
-the model's two events name the two state changes that leave the boundary.
-Whether a revision of PUBLISHED content re-publishes is a model gap (above).
+`CreateProductContent`, `ReviseDraft`, `ReviseContent` and `DiscardDraft`
+raise no event: the model's two events name the two state changes that leave
+the boundary. A revision of PUBLISHED content leaves it on the next
+`PublishContent`.
 Both events leave through the transactional outbox in the same transaction
 as the save.
 
@@ -149,7 +156,7 @@ read shows).
 ### 2. Description
 
 The single, versioned category tree a shopper browses; categories are
-created, moved and renamed between publications. One value object:
+created, moved and renamed on the live tree, and every command publishes a new version. One value object:
 
 | Value object | Fields | Note |
 | --- | --- | --- |
@@ -159,13 +166,12 @@ created, moved and renamed between publications. One value object:
 
 ```mermaid
 stateDiagram-v2
-    [*] --> DRAFT: first category created
-    DRAFT --> PUBLISHED: PublishCategoryTree
+    [*] --> PUBLISHED: first category created
+    PUBLISHED --> PUBLISHED: CreateCategory, MoveCategory, RenameCategory
     PUBLISHED --> PUBLISHED: PublishCategoryTree
-    note right of DRAFT
-        States are the least-surprising reading
-        of "single, versioned"; the model note
-        says the plan names no states.
+    note right of PUBLISHED
+        No draft state: every command applies to
+        the live tree and publishes a new version.
     end note
 ```
 
@@ -173,12 +179,11 @@ Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree]
 `.transitions`, `.notes`.
 
 The entry arrow is this pack's reading: the model has no create-tree
-command, so the tree exists once the first `CreateCategory` lands. Which
-states accept `CreateCategory`, `MoveCategory` and `RenameCategory` is not
-modelled ("between publications"); the proposed API titles them "in the
-draft tree", so these pages read edits as landing on a working draft that
-`PublishCategoryTree` publishes, without stating whether editing a
-PUBLISHED tree opens a new DRAFT.
+command, so the tree exists once the first `CreateCategory` lands. The tree
+is a single published aggregate: there is no DRAFT state, and `CreateCategory`,
+`MoveCategory` and `RenameCategory` each apply to the live tree and publish a
+new version. `PublishCategoryTree` re-publishes the live tree unchanged so
+consumers can resync.
 
 ### 4. Enforced Invariants
 
@@ -187,14 +192,13 @@ PUBLISHED tree opens a new DRAFT.
 | The tree never contains a cycle | `CreateCategory`, `MoveCategory` → `ErrCategoryCycle` |
 | Depth at most 4 | `CreateCategory`, `MoveCategory` → `ErrMaxDepth` |
 | Siblings never share a name | `CreateCategory`, `MoveCategory`, `RenameCategory` → `ErrDuplicateSiblingName` |
-| A category in use by PUBLISHED content is never removed | (no remove command) → `ErrCategoryInUse` |
+| A category in use by PUBLISHED content is never removed | no remove-category command by design; `ErrCategoryInUse` guards a future removal |
 
 Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree].invariants`.
 The command pairing is this pack's reading of the proposed API's error
-tables. `ErrCategoryInUse` can never fire as written — the command list has
-no remove-category command — yet the proposed API maps it to `:move`; both
-facts are model gaps on the
-[canvas](/storefront/contexts/product-content/bounded-context-canvas).
+tables. Categories are never deleted, only renamed or moved, so
+`ErrCategoryInUse` is not raised by any current command and the proposed API
+no longer maps it to `:move`.
 
 ### 5. Corrective Policies
 
@@ -204,23 +208,22 @@ None in the model. Structural invariants are refused, not repaired.
 
 | Command | Trigger | Transition |
 | --- | --- | --- |
-| `CreateCategory` | Content manager, REST `POST /categories` | none (edits the working tree) |
-| `MoveCategory` | Content manager, REST `POST /categories/{categoryId}:move` | none (edits the working tree) |
-| `RenameCategory` | Content manager, REST `POST /categories/{categoryId}:rename` | none (edits the working tree) |
-| `PublishCategoryTree` | not named in the model (no `inbound` row, no route) | `DRAFT → PUBLISHED`, `PUBLISHED → PUBLISHED` |
+| `CreateCategory` | Content manager, REST `POST /categories` | `PUBLISHED → PUBLISHED` |
+| `MoveCategory` | Content manager, REST `POST /categories/{categoryId}:move` | `PUBLISHED → PUBLISHED` |
+| `RenameCategory` | Content manager, REST `POST /categories/{categoryId}:rename` | `PUBLISHED → PUBLISHED` |
+| `PublishCategoryTree` | Content manager, REST `POST /categories:publish` | `PUBLISHED → PUBLISHED` |
 
 Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree].commands`,
-`.rest`. The edit commands change the tree's shape but not its state; the
-state changes only on publication, which bumps the `version`.
+`.rest`. Each command applies to the live tree and bumps the `version`.
 
 ### 7. Created Events
 
 | Event | Raised when | Full CloudEvents type |
 | --- | --- | --- |
-| `CategoryTreePublished` | `PublishCategoryTree` is saved (state PUBLISHED, version bumped) | `com.retailnetwork.storefront.product-content.categorytree.CategoryTreePublished` |
+| `CategoryTreePublished` | any tree command is saved, including `PublishCategoryTree` (version bumped) | `com.retailnetwork.storefront.product-content.categorytree.CategoryTreePublished` |
 
-The edit commands raise no event: `product-discovery` learns a new tree
-only at publication, carrying the whole tree under one `version`.
+`product-discovery` learns each new tree version through this event, which
+carries the whole tree under one `version`.
 
 ### 8. Throughput
 
@@ -236,7 +239,7 @@ one row per category per version; the whole tree fits one event payload.
 
 | Read model | Source events | Serves | Why it is not an aggregate |
 | --- | --- | --- | --- |
-| `CatalogItemView` | `offer-availability` `CatalogItemCreated`, `CatalogItemDiscontinued` | The `ErrUnknownCatalogItem` existence check in `CreateProductContent`; the trigger of `RetireOnDiscontinue` | It protects no invariant of its own and takes no command. It is a projection of facts `offer-availability` owns, and it can be dropped and rebuilt by replaying the topic. Only `catalogItemId` (and the discontinued flag) is kept. |
+| `CatalogItemView` | `offer-availability` `CatalogItemCreated`, `CatalogItemDiscontinued` | The `ErrUnknownCatalogItem` and `ErrItemDiscontinued` checks in `CreateProductContent` and `PublishContent`; the trigger of `RetireOnDiscontinue` | It protects no invariant of its own and takes no command. It is a projection of facts `offer-availability` owns, and it can be dropped and rebuilt by replaying the topic. Only `catalogItemId` (and the discontinued flag) is kept. |
 
 Derived from: `model.yaml → contexts[product-content].read_models`,
 `.consumes` (fields declared: `catalogItemId`).
