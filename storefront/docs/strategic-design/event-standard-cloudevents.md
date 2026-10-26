@@ -122,6 +122,8 @@ Topic `retailnetwork.checkout.events` (analytics-only events on `retailnetwork.c
 | `CheckoutDeclined` | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutDeclined` | analytics only |
 | `CheckoutRequoteRequired` | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutRequoteRequired` | analytics only |
 | `CheckoutFailed` | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutFailed` | analytics only |
+| `CheckoutSessionExpired` | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutSessionExpired` | analytics only |
+| `CheckoutPlacementInDoubt` | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutPlacementInDoubt` | analytics only |
 
 ### `customer-payments`
 
@@ -130,6 +132,7 @@ Topic `retailnetwork.customer-payments.events` (analytics-only events on `retail
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
 | `PaymentAuthorized` | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentAuthorized` | analytics only |
+| `PaymentReauthorized` | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentReauthorized` | analytics only |
 | `PaymentCaptured` | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentCaptured` | analytics only |
 | `PaymentReleased` | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentReleased` | analytics only |
 | `PaymentAuthorizationExpired` | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentAuthorizationExpired` | analytics only |
@@ -160,6 +163,7 @@ full network catalogue):
 | `shopping-cart` | `CatalogItemDiscontinued` | `offer-availability` |
 | `customer-payments` | `FulfillmentShipped` | `order-sourcing` |
 | `customer-payments` | `FulfillmentCancelled` | `order-sourcing` |
+| `customer-payments` | `FulfillmentUnsourceable` | `order-sourcing` |
 | `customer-payments` | `PackageLost` | `shipping-and-tracking` |
 | `customer-payments` | `PackageReturned` | `shipping-and-tracking` |
 

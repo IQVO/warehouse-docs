@@ -45,15 +45,15 @@ flowchart LR
     OA["offer-availability<br/>(network)"]:::external
     E1["OA ListingAvailabilityChanged<br/>availableQty, asOf"]:::event
     P1["Projector<br/>inbox on id, asOf guard"]:::policy
+    MAP["ListingItemMap<br/>listingId to catalogItemId<br/>(learned from ListingCreated)"]:::readmodel
     RM["ProductView<br/>listing quantities"]:::readmodel
     P2["PurchasableRule<br/>item ACTIVE, content PUBLISHED,<br/>price ACTIVE, LIVE listing<br/>with quantity above 0"]:::policy
     RM2["ProductView<br/>inStock, purchasable"]:::readmodel
-    H1["H1 suppress or restore carries<br/>only listingId"]:::hotspot
-    H4["H4 no cross-key order:<br/>a listing fact may precede<br/>its CatalogItemCreated"]:::hotspot
+    P3["StubOnUnknownItem<br/>fold rule: invisible STUB row<br/>until CatalogItemCreated"]:::policy
 
     OA --> E1 --> P1 --> RM --> P2 --> RM2
-    P1 --- H1
-    RM --- H4
+    P1 --> MAP
+    P1 --> P3 --> RM
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
     classDef readmodel fill:#ffec99,stroke:#e67700,color:#000
@@ -67,10 +67,17 @@ flowchart LR
 
 Derived from: `model.yaml → contexts[product-discovery].consumes`
 (the six `offer-availability` events), `.business_decisions` (4),
-`.policies[PurchasableRule]`, `.read_models[ProductView]`.
+`.policies[PurchasableRule, StubOnUnknownItem]`, `.read_models[ProductView,
+ListingItemMap]`.
 
-Omitted: `ListingCreated` (learns the listing-to-item mapping),
-`ListingSuppressed`/`ListingRestored` (flip one listing's state, never
+The `ListingItemMap` read-side lookup is learned from `ListingCreated` and
+resolves `ListingSuppressed`/`ListingRestored`, which carry only
+`listingId`. There is no cross-key ordering between `catalogitem.*` and
+`listing.*`, so a listing, price or content fact for an unknown item upserts
+an invisible STUB `ProductView` row (`Purchasable` requires a catalogued
+item) and `CatalogItemCreated` completes it; the fold rule raises no error.
+
+Omitted: `ListingSuppressed`/`ListingRestored` (flip one listing's state, never
 count when SUPPRESSED), `CatalogItemCreated`/`CatalogItemDiscontinued`
 (title, flags, the ACTIVE input of the rule), and the search index write
 that rides along.
@@ -80,21 +87,18 @@ that rides along.
 ```mermaid
 flowchart LR
     PC["product-content"]:::external
-    E1["PC ProductContentPublished<br/>revision"]:::event
+    E1["PC ProductContentPublished<br/>revision, bullets, media"]:::event
     PR["pricing"]:::external
-    E2["PR ItemPriceChanged<br/>effectivePriceMinor, version"]:::event
+    E2["PR ItemPriceChanged<br/>listPriceMinor, currency,<br/>effectivePriceMinor, version"]:::event
     P1["Projector<br/>revision and version guards"]:::policy
-    RM["ProductView<br/>content, category path,<br/>effective price"]:::readmodel
+    RM["ProductView<br/>content, categoryId,<br/>list and effective price"]:::readmodel
     S["Search index<br/>tsvector + GIN, trgm"]:::search
-    H2["H2 bullets, media, list price<br/>not in declared consume fields"]:::hotspot
-    H3["H3 a category rename never<br/>re-indexes categoryPath"]:::hotspot
+    CV["CategoryView<br/>categoryPath joined<br/>at query time"]:::readmodel
 
     PC --> E1 --> P1
     PR --> E2 --> P1
     P1 --> RM --> S
-    E1 --- H2
-    E2 --- H2
-    S --- H3
+    CV -.-> RM
 
     classDef readmodel fill:#ffec99,stroke:#e67700,color:#000
     classDef event fill:#ffc078,stroke:#d9480f,color:#000
@@ -107,10 +111,12 @@ flowchart LR
 Derived from: `model.yaml → contexts[product-discovery].consumes`
 (`ProductContentPublished`, `ProductContentRetired`,
 `CategoryTreePublished`, `ItemPriceChanged`, `ItemPriceWithdrawn`),
-`.business_decisions` (2, 4).
+`.business_decisions` (2, 4, 6).
 
-Omitted: `ProductContentRetired` and `ItemPriceWithdrawn` (the verdict goes
-false, the row stays), and the `CategoryView` rebuild
+`ProductView` stores `categoryId` only; the `categoryPath` is joined from
+`CategoryView` at query time, so `CategoryTreePublished` never re-indexes
+`ProductView` rows. Omitted: `ProductContentRetired` and `ItemPriceWithdrawn`
+(the verdict goes false, the row stays), and the `CategoryView` rebuild
 (board 4). The index weights (title A, category names A, attributes B,
 description C) are business decision 2.
 
@@ -122,14 +128,12 @@ flowchart LR
     Q1["SearchProducts<br/>GET /products"]:::query
     S["SearchPort<br/>PostgreSQL FTS + pg_trgm<br/>(D9, adapter-swap later)"]:::search
     RM["ProductView rows"]:::readmodel
-    P1["Product-type queries also<br/>return category suggestions<br/>(benchmark 6)"]:::policy
-    H5["H5 no named policy, rule or<br/>thresholds for product-type<br/>detection"]:::hotspot
-    H6["H6 price-band facet edges<br/>and the trgm fallback<br/>trigger are unspecified"]:::hotspot
+    P1["Category suggestions: categories<br/>whose name matches the query<br/>(no product-type detection)"]:::policy
+    P2["Price bands: &lt;2500, 2500-5000,<br/>5000-10000, 10000-25000, 25000+<br/>trgm fallback on zero FTS rows"]:::policy
 
     SH --> Q1 --> S --> RM
     Q1 --- P1
-    P1 --- H5
-    S --- H6
+    S --- P2
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
     classDef readmodel fill:#ffec99,stroke:#e67700,color:#000
@@ -140,8 +144,8 @@ flowchart LR
 ```
 
 Derived from: `model.yaml → contexts[product-discovery].inbound` (the BFF
-query row), `.rest`, `.business_decisions` (2, 3), `.ul[Product-Type
-Query]`.
+query row), `.rest`, `.business_decisions` (2, 3, 7), `.ul[Category
+Suggestion]`.
 
 Omitted: `GetProduct` and `ListCategories` (the same store reads without
 the search path), the facets' counts (a group-by over the same rows), and
@@ -157,14 +161,12 @@ flowchart LR
     P1["Projector<br/>version guard"]:::policy
     RM["CategoryView<br/>tree + purchasable counts"]:::readmodel
     OP["Storefront operator<br/>(ops)"]:::actor
-    B1["Rebuild: snapshot + catch-up<br/>GET /catalog, GET /listings<br/>(ops-only), GET /item-prices,<br/>GET /product-contents, then events"]:::policy
-    H7["H7 snapshot response shapes<br/>not modelled: guard seeding<br/>unspecified"]:::hotspot
-    H8["H8 sync_calls lists<br/>ListProductContents only;<br/>product-content inbound also names<br/>GetProductContent, ListCategories"]:::hotspot
+    B1["Rebuild: snapshot + catch-up<br/>GET /catalog, GET /listings<br/>(ops-only), GET /item-prices,<br/>GET /product-contents,<br/>GET /categories, then events"]:::policy
+    G1["Guards seeded from<br/>each snapshot row updatedAt"]:::policy
 
     PC --> E1 --> P1 --> RM
     OP --> B1 --> RM
-    B1 --- H7
-    B1 --- H8
+    B1 --> G1 --> RM
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
     classDef readmodel fill:#ffec99,stroke:#e67700,color:#000
@@ -176,7 +178,9 @@ flowchart LR
 
 Derived from: `model.yaml → contexts[product-discovery].consumes`
 (`CategoryTreePublished`), `.read_models[CategoryView]`,
-`.business_decisions` (5), `.sync_calls`;
+`.business_decisions` (5), `.sync_calls`
+(`ListProductContents` and `ListCategories` against product-content;
+`GetProductContent` is not called by this context);
 `contexts[product-content].inbound`.
 
 Omitted: the catch-up consumption itself (board 1 and 2's projectors, from
@@ -189,11 +193,11 @@ ops-only — never on a user request (the documented exception in
 
 | # | Hotspot | Where it comes from in the model |
 | --- | --- | --- |
-| H1 | `ListingSuppressed` and `ListingRestored` declare only `listingId` as needed, so the projector must keep the listing-to-item mapping learned from `ListingCreated`; the mapping is a read-side fact the model names nowhere. | `contexts[product-discovery].consumes` vs `.read_models[ProductView]` |
-| H2 | The `ProductView` purpose and the proposed API render bullets, media and the list price, but the declared `consumes` fields name neither `bullets`/`media` (on `ProductContentPublished`) nor `listPriceMinor`/`currency` (on `ItemPriceChanged`). | `.purpose`, `apis/product-discovery/openapi.yaml` vs `.consumes` |
-| H3 | `read_models[ProductView].source` does not list `CategoryTreePublished`, yet the row carries `categoryPath` and the index weights category names (A): a rename or move never re-indexes existing rows. | `.read_models` vs `.business_decisions` (2) |
-| H4 | `catalogitem.*` events are keyed by `catalogItemId` and `listing.*` by `listingId`, so Kafka promises no cross-key order; the guards are per source, not cross-source. The projector must tolerate a listing fact before its `CatalogItemCreated`. | `conventions.cloudevents` (subject is the key); `.business_decisions` (4) |
-| H5 | The product-type-query rule (decision 3, UL term with code `(search policy)`) has no named policy — `policies` lists only `PurchasableRule` and `UnavailableNotBuyable` — and no detection rule or thresholds. | `.business_decisions`, `.ul` vs `.policies` |
-| H6 | The price-band facet edges and the `pg_trgm` fallback trigger ("when full-text search returns too little" is this pack's reading) are unspecified. | `.business_decisions` (2) |
-| H7 | The bootstrap snapshot reads (`ListCatalog`, `ListListings`, `ListItemPrices`, `ListProductContents`) declare no response fields in either model, so how the catch-up guards are seeded from the snapshot is unspecified. | `.business_decisions` (5), `.sync_calls` vs both models |
-| H8 | `sync_calls` names `ListProductContents` only, while `contexts[product-content].inbound` also names `GetProductContent` and `ListCategories` from `product-discovery`. | `.sync_calls` vs `contexts[product-content].inbound` |
+| H1 | **Resolved in the model-fix:** the read-side lookup `ListingItemMap` (listingId to catalogItemId) is declared in `read_models`; it is learned from `ListingCreated` and used by `ListingSuppressed` and `ListingRestored`, which carry only `listingId`. | `contexts[product-discovery].read_models[ListingItemMap]` |
+| H2 | **Resolved in the model-fix:** `consumes` now names `ProductContentPublished.bullets` and `.media`, and `ItemPriceChanged.listPriceMinor` and `.currency`. | `.consumes` |
+| H3 | **Resolved in the model-fix:** `ProductView` stores `categoryId` only; `categoryPath` is joined from `CategoryView` at query time, so a rename or move needs no re-index and `CategoryTreePublished` feeds `CategoryView` alone. | `.read_models[ProductView]`, `.business_decisions` |
+| H4 | **Resolved in the model-fix:** there is no cross-key ordering, so a listing, price or content fact for an unknown item upserts an invisible STUB `ProductView` row (`Purchasable` requires a catalogued item) and `CatalogItemCreated` completes it. The fold rule is named `StubOnUnknownItem` and raises no error. | `.policies[StubOnUnknownItem]` |
+| H5 | **Resolved in the model-fix:** there is no product-type detection. The rule is gone; the answer carries category suggestions, the categories whose name matches the query terms (UL term `Category Suggestion`). | `.business_decisions`, `.ul` |
+| H6 | **Resolved in the model-fix:** price-band edges are fixed, in minor units and configurable as a list: below 2500, 2500-5000, 5000-10000, 10000-25000, 25000 and above. The `pg_trgm` fallback fires when the full-text query returns zero rows. | `.business_decisions` |
+| H7 | **Resolved in the model-fix:** `sync_calls` now declares the response fields the rebuild reads; each snapshot row carries `updatedAt`, seeded into the per-key guard so replayed events older than the snapshot are dropped. | `.sync_calls[*].fields` |
+| H8 | **Resolved in the model-fix:** `sync_calls` are `ListProductContents` and `ListCategories`, because bootstrap needs both. `GetProductContent` is not called by this context, and product-content's inbound note says so. | `.sync_calls`; `contexts[product-content].inbound` |

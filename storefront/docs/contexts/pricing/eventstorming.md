@@ -40,15 +40,13 @@ flowchart LR
     C0["SetListPrice<br/>POST /item-prices"]:::command
     C1["ScheduleSale<br/>POST .../sales"]:::command
     C2["CancelSale<br/>POST .../sales/saleId:cancel"]:::command
-    C3["WithdrawPrice"]:::command
+    C3["WithdrawPrice<br/>POST .../item-prices/catalogItemId:withdraw"]:::command
     RM0["CatalogItemView"]:::readmodel
     G1["ItemPrice"]:::aggregate
-    E1["ItemPriceChanged"]:::event
+    E1["ItemPriceChanged<br/>also after CancelSale"]:::event
     E2["ItemPriceWithdrawn"]:::event
     PD["product-discovery"]:::external
     SC["shopping-cart"]:::external
-    H1["H1 no WithdrawPrice<br/>route named"]:::hotspot
-    H2["H2 CancelSale has no<br/>event of its own"]:::hotspot
 
     M --> C0
     M --> C1
@@ -66,8 +64,6 @@ flowchart LR
     E1 --> SC
     E2 --> PD
     E2 --> SC
-    C3 --- H1
-    C2 --- H2
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
     classDef command fill:#a5d8ff,stroke:#1971c2,color:#000
@@ -104,7 +100,6 @@ flowchart LR
     PD["product-discovery"]:::external
     SC["shopping-cart"]:::external
     CK["checkout<br/>ExpireOnQuoteExpiry"]:::external
-    H3["H3 ExpireQuote<br/>publishes nothing"]:::hotspot
 
     T --> P1
     P1 --> G1
@@ -114,8 +109,7 @@ flowchart LR
     T --> P2
     P2 --> C4
     C4 --> G4
-    G4 -.->|no event| CK
-    C4 --- H3
+    G4 -.->|no event, checkout keeps its own clock| CK
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
     classDef command fill:#a5d8ff,stroke:#1971c2,color:#000
@@ -131,15 +125,16 @@ Derived from: `model.yaml → contexts[pricing].policies`,
 
 Omitted: the scheduler mechanics. `PublishEffectivePriceOnWindowBoundary`
 is idempotent per item and boundary, so a redelivered tick is safe. The
-dashed arrow to `checkout` is not a message: checkout mirrors the TTL
-locally, which is exactly hotspot H3.
+dashed arrow to `checkout` is not a message: quote expiry is
+checkout-internal TTL state and checkout keeps its own clock
+(`ExpireOnQuoteExpiry`). No `PriceQuoteExpired` event exists by design.
 
 ## 3. Quote issuing for checkout
 
 ```mermaid
 flowchart LR
     CK["checkout<br/>session opened"]:::external
-    C5["IssuePriceQuote<br/>POST /price-quotes"]:::command
+    C5["IssuePriceQuote<br/>POST /price-quotes<br/>cartId, lines, groups,<br/>destinationPostalPrefix"]:::command
     G1["ItemPrice<br/>effective prices"]:::aggregate
     G2["DeliveryChargeSchedule<br/>current"]:::aggregate
     G3["TaxTable<br/>current"]:::aggregate
@@ -147,7 +142,6 @@ flowchart LR
     E3["PriceQuoteIssued<br/>analytics only"]:::event
     AN(["analytics"]):::actor
     RM1["GetPriceQuote<br/>GET /price-quotes/quoteId"]:::readmodel
-    H4["H4 request fields<br/>not in the model"]:::hotspot
     H5["H5 S2: price moves<br/>between cart and checkout"]:::hotspot
 
     CK --> C5
@@ -161,7 +155,6 @@ flowchart LR
     E3 --> AN
     CK --> RM1
     RM1 --> G4
-    C5 --- H4
     G4 --- H5
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
@@ -232,9 +225,9 @@ order per item.
 
 | # | Hotspot | Where it comes from in the model |
 | --- | --- | --- |
-| H1 | `rest` names no obvious `WithdrawPrice` route (no `:withdraw` action), although the command and the `ACTIVE → WITHDRAWN` transition exist. | `contexts[pricing].rest` vs `.aggregates[ItemPrice].commands` |
-| H2 | `CancelSale` has no event of its own; these pages read it as republishing `ItemPriceChanged` with the effective price back at list. | `aggregates[ItemPrice].commands` vs `publishes` |
-| H3 | `ExpireQuote` transitions `ISSUED → EXPIRED` but publishes no event, so `checkout` must mirror the TTL with its own `ExpireOnQuoteExpiry` policy instead of consuming a fact. | `aggregates[PriceQuote].events` (only `PriceQuoteIssued`); `contexts[checkout].policies` |
-| H4 | `IssuePriceQuote`'s request fields are not in the model; `PriceQuoteIssued` carries `cartId`, and the quote's description names lines, groups and versions, so the request obviously carries them, but nothing says so. | `inbound` (checkout cmd row), `publishes[PriceQuoteIssued].data`, `aggregates[PriceQuote].description` |
+| H1 | **Resolved in the model-fix:** `WithdrawPrice` gets the route `POST /item-prices/{catalogItemId}:withdraw` (merchandising UI, cmd channel), in `rest` and in the merchandiser inbound row. | `contexts[pricing].rest`, `.inbound` |
+| H2 | **Resolved in the model-fix:** `CancelSale` publishes no event of its own. A cancelled sale changes the effective price, which the window-boundary policy already emits as `ItemPriceChanged` (idempotent per item and boundary); a separate event would duplicate the fact. The aggregate documents that `CancelSale` raises `ItemPriceChanged`. | `aggregates[ItemPrice].notes` |
+| H3 | **Resolved in the model-fix:** no `PriceQuoteExpired` event. Quotes are checkout-internal TTL state and expiry is checkout's clock (`ExpireOnQuoteExpiry`), not a business fact anyone consumes. The `ISSUED → EXPIRED` transition stays. | `aggregates[PriceQuote].notes` |
+| H4 | **Resolved in the model-fix:** the `IssuePriceQuote` inbound row now lists its fields: `cartId`, `lines[catalogItemId, quantity]`, `groups[groupNo, offerId, tier, lineNos]`, `destinationPostalPrefix`. The caller is checkout and the quote prices exactly what the checkout session froze. | `contexts[pricing].inbound` (checkout cmd row) |
 | H5 | A price can move between the cart's non-binding estimate and checkout. Resolved by design: the binding `PriceQuote` pins versions and the review page shows the binding total; tracked as gap S2. | `business_decisions` (PriceQuote bullet); [Model Gap Register](/storefront/strategic-design/model-gap-register) S2 |
 | H6 | `SetListPrice` before `CatalogItemCreated` is consumed fails `ErrUnknownCatalogItem`; the merchandiser retries. The model names no pending state for "item announced, not yet visible". | `aggregates[ItemPrice].invariants`, `.read_models[CatalogItemView]` |

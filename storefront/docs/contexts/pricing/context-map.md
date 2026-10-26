@@ -20,15 +20,13 @@ every relationship this context has, with the upstream (U) and downstream
 ```mermaid
 flowchart LR
     MERCH(["Storefront merchandiser"])
-    BFF(["storefront-bff"])
     PR["pricing<br/>Core"]
     CK["checkout<br/>Supporting"]
     PD["product-discovery<br/>Supporting"]
     SC["shopping-cart<br/>Supporting"]
     OA["offer-availability<br/>network, Supporting"]
 
-    PR -->|"U to D: UI<br/>REST reads and merchandiser writes"| BFF
-    MERCH -->|"D commands U: UI<br/>REST /item-prices,<br/>/delivery-charge-schedules,<br/>/tax-tables"| PR
+    MERCH -->|"D commands and reads U: UI<br/>REST /item-prices,<br/>/delivery-charge-schedules,<br/>/tax-tables"| PR
     CK -->|"D to U: C/S, CK is Customer<br/>REST POST /price-quotes,<br/>GET /price-quotes/quoteId"| PR
     PD -.->|"D to U: C/S<br/>REST GET /item-prices<br/>bootstrap, paged"| PR
     PR ==>|"U to D: CF / C/S<br/>Kafka ItemPriceChanged,<br/>ItemPriceWithdrawn"| PD
@@ -61,11 +59,10 @@ to analytics consumers only.
 
 | Neighbour | Direction | Pattern | Channel | Messages | Why this pattern |
 | --- | --- | --- | --- | --- | --- |
-| Storefront merchandiser (human) | merchandiser downstream, pricing upstream | **UI** (inbound row `relationship: UI`) | REST `/item-prices`, `/delivery-charge-schedules`, `/tax-tables` writes | `SetListPrice`, `ScheduleSale`, `CancelSale`, `WithdrawPrice`, `PublishChargeSchedule`, `PublishTaxTable` | Pricing is the specification the merchandiser maintains; one writer keeps every derived view consistent. |
-| `storefront-bff` (experience layer) | pricing upstream, BFF downstream | **UI** | REST `GET /item-prices/{catalogItemId}`, `GET /delivery-charge-schedules/current`, `GET /tax-tables/current` | `GetItemPrice`, `GetCurrentChargeSchedule`, `GetCurrentTaxTable` | Page rendering reads current state straight from the owner; no projection is duplicated into the BFF. |
+| Storefront merchandiser (human) | merchandiser downstream, pricing upstream | **UI** (inbound row `relationship: UI`) | REST `/item-prices`, `/delivery-charge-schedules`, `/tax-tables` writes and the current-state reads | `SetListPrice`, `ScheduleSale`, `CancelSale`, `WithdrawPrice`, `PublishChargeSchedule`, `PublishTaxTable`, `GetItemPrice`, `GetCurrentChargeSchedule`, `GetCurrentTaxTable` | Pricing is the specification the merchandiser maintains; one writer keeps every derived view consistent. |
 | `checkout` (Supporting) | pricing upstream, checkout downstream | **Customer/Supplier** (checkout is the Customer) | REST `POST /price-quotes`, `GET /price-quotes/{quoteId}` | `IssuePriceQuote`, `GetPriceQuote` | The quote must be issued and read back inside the shopper's request, and its shape (lines, groups, versions, TTL) is negotiated for checkout's saga. |
 | `product-discovery` (Supporting) | pricing upstream, PD downstream | **Conformist** (events) | Kafka `retailnetwork.pricing.events` | `ItemPriceChanged`, `ItemPriceWithdrawn` | PD projects the events as published into `ProductView`, with its own monotonic guard on the price `version`. |
-| `product-discovery` (Supporting) | pricing upstream, PD downstream | **Customer/Supplier** (query) | REST `GET /item-prices` (bootstrap, paged) | `ListItemPrices` | Snapshot + catch-up rebuild: a deliberate paged read, never on a user request. |
+| `product-discovery` (Supporting) | pricing upstream, PD downstream | **Customer/Supplier** (query) | REST `GET /item-prices` (bootstrap and rebuild only, paged) | `ListItemPrices` | Snapshot + catch-up rebuild: a deliberate paged read, never on a user request. Shoppers see prices through `product-discovery`'s `ProductView`, never from pricing directly. |
 | `shopping-cart` (Supporting) | pricing upstream, SC downstream | **Customer/Supplier** (SC is the Customer) | Kafka `retailnetwork.pricing.events` | `ItemPriceChanged`, `ItemPriceWithdrawn`, `DeliveryChargeScheduleChanged`, `TaxTableChanged` | The cart's labelled estimate is computed from pricing's data; the estimate's shape is negotiated so the cart never has to call pricing synchronously. |
 | `offer-availability` (network, Supporting) | OA upstream, pricing downstream | **Conformist** | Kafka `retailnetwork.offer-availability.events` | `CatalogItemCreated`, `CatalogItemDiscontinued` | The item master is taken as published into `CatalogItemView`; pricing never redefines the item (business decision 4). |
 

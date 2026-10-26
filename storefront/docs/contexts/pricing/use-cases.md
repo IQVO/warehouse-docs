@@ -32,7 +32,7 @@ Reads are not use cases here: `GET /item-prices/{catalogItemId}`
 | `SetListPrice` | Merchandiser | REST `POST /item-prices`, `POST /item-prices/{catalogItemId}:set-list-price` | `ItemPriceChanged` |
 | `ScheduleSale` | Merchandiser | REST `POST /item-prices/{catalogItemId}/sales` | `ItemPriceChanged` |
 | `CancelSale` | Merchandiser | REST `POST /item-prices/{catalogItemId}/sales/{saleId}:cancel` | `ItemPriceChanged` |
-| `WithdrawPrice` | Merchandiser | REST (route not named in the model) | `ItemPriceWithdrawn` |
+| `WithdrawPrice` | Merchandiser | REST `POST /item-prices/{catalogItemId}:withdraw` | `ItemPriceWithdrawn` |
 | `WithdrawPrice` (policy) | `WithdrawOnDiscontinue` | Kafka consumer, `CatalogItemDiscontinued` | `ItemPriceWithdrawn` |
 | `PublishChargeSchedule` | Merchandiser | REST `POST /delivery-charge-schedules` | `DeliveryChargeScheduleChanged` |
 | `PublishTaxTable` | Merchandiser | REST `POST /tax-tables` | `TaxTableChanged` |
@@ -137,7 +137,7 @@ illegal-transition 409, concurrent-update 409, validation-failed 422.
 ## WithdrawPrice (merchandiser)
 
 - **Actor / trigger:** the merchandiser.
-- **Inbound adapter:** REST — the model names no route (hotspot H1).
+- **Inbound adapter:** REST `POST /item-prices/{catalogItemId}:withdraw` (merchandising UI, cmd channel).
 - **Main flow:** load `ItemPrice`, `WithdrawPrice(...)`: `ACTIVE →
   WITHDRAWN`; already `WITHDRAWN` → 200 unchanged, no event. Save, outbox
   `ItemPriceWithdrawn`, one transaction.
@@ -219,9 +219,9 @@ illegal-transition 409, concurrent-update 409, validation-failed 422.
 - **Inbound adapter:** REST `POST /price-quotes`, header
   `Idempotency-Key` required.
 - **Input:** `cartId`, the numbered lines (`catalogItemId`, `quantity`),
-  the groups (`groupNo`, `tier`, `lineNos`) and the destination postal
-  prefix (this pack's reading; the model lists no request fields — hotspot
-  H4).
+  the groups (`groupNo`, `offerId`, `tier`, `lineNos`) and the destination
+  postal prefix (`destinationPostalPrefix`), as the model's inbound row lists
+  them.
 - **Preconditions:** every line's item has an `ACTIVE` price.
 - **Main flow:**
   1. `Idempotency-Key` lookup.
@@ -256,7 +256,7 @@ illegal-transition 409, concurrent-update 409, validation-failed 422.
 - **Inbound adapter:** an internal scheduler scanning for `ISSUED` quotes
   past `expiresAt`.
 - **Main flow:** `ExpireQuote(...)`: `ISSUED → EXPIRED`; save with the
-  version check. Nothing is published (hotspot H3); `checkout` learns of
+  version check. Nothing is published, by decision; `checkout` learns of
   expiry from `expiresAt` and its own `ExpireOnQuoteExpiry` policy, and
   enforces `ErrPriceQuoteExpired` at confirm.
 - **Idempotency:** expiring an `EXPIRED` quote is a no-op.

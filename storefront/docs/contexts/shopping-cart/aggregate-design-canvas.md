@@ -50,6 +50,7 @@ stateDiagram-v2
     OPEN --> CHECKED_OUT: CloseOnCheckoutCompleted
     OPEN --> ABANDONED: AbandonInactive
     OPEN --> MERGED: MergeInto
+    OPEN --> OPEN: AcceptRequotedOffers
     CHECKED_OUT --> [*]
     ABANDONED --> [*]
     MERGED --> [*]
@@ -78,7 +79,7 @@ impossible in practice.
 
 | Invariant | Enforced by |
 | --- | --- |
-| One line per item; adding an existing item merges quantities | `AddLine` → `ErrDuplicateLine` (the invariant behind the merge; see the canvas open questions) |
+| One line per item; adding an existing item merges quantities | `AddLine` merges quantities into the existing line; no error exists for it, nothing is ever rejected as a duplicate |
 | Quantity in `1..99` | `AddLine`, `SetLineQuantity` → `ErrQuantityOutOfRange` |
 | At most 100 lines (customer-ordering A15) | `AddLine` → `ErrTooManyLines` |
 | The item is purchasable in the local views | `AddLine` → `ErrItemNotPurchasable` (against `PurchasabilityView`) |
@@ -96,6 +97,7 @@ Derived from: `model.yaml → contexts[shopping-cart].aggregates[Cart].invariant
 | `AbandonInactive` | this context | An `OPEN` cart with no change for 30 days is `ABANDONED`. | `OPEN → ABANDONED`, `CartAbandoned`. |
 | `CloseOnCheckoutCompleted` | this context | On `CheckoutCompleted` the cart is `CHECKED_OUT`. | `OPEN → CHECKED_OUT`, `CartCheckedOut`. |
 | Quote clearing | this context | Any line or destination change clears quote and selections (business decision 3). | No state change; the held quote and selections are dropped. |
+| `PurgeAbandonedCarts` | this context | Scheduled: carts idle for 30 days (`ABANDONED`, and closed carts past the same idle age) are deleted. | The row and its children are deleted; no event. |
 | Idempotent consumption | this context | Every consumed event is applied once (inbox on the CloudEvents `id`). | A repeated `CheckoutCompleted` is acknowledged without effect. |
 
 ### 6. Handled Commands
@@ -110,6 +112,7 @@ Derived from: `model.yaml → contexts[shopping-cart].aggregates[Cart].invariant
 | `QuoteDelivery` | Shopper via BFF, REST `POST /carts/{cartId}:quote-delivery` (calls `delivery-promise` `QuoteDeliveryOffers`) | none (holds the quote) |
 | `SelectDelivery` | Shopper via BFF, REST `POST /carts/{cartId}:select-delivery` | none (records a selection) |
 | `MergeInto` | Shopper via BFF, REST `POST /carts/{cartId}:merge-into` | `OPEN → MERGED` (this cart); the target cart takes the lines |
+| `AcceptRequotedOffers` | Shopper via BFF, REST `POST /carts/{cartId}/delivery/requoted` | `OPEN → OPEN` (writes the selected delivery from the supplied `offers[]` without calling `delivery-promise`; checkout re-verifies via its pre-authorize check) |
 | `AbandonInactive` | the `AbandonInactive` policy (clock, 30 days) | `OPEN → ABANDONED` |
 | `CloseOnCheckoutCompleted` | the `CloseOnCheckoutCompleted` policy on Kafka `CheckoutCompleted` | `OPEN → CHECKED_OUT` |
 
@@ -123,11 +126,12 @@ Derived from: `model.yaml → contexts[shopping-cart].aggregates[Cart].invariant
 | `CartCheckedOut` | `CloseOnCheckoutCompleted` is saved | `com.retailnetwork.storefront.shopping-cart.cart.CartCheckedOut` |
 
 All four are analytics-only (topic
-`retailnetwork.shopping-cart.analytics`). `SetLineQuantity`, `RemoveLine`,
-`SetDestination`, `SelectDelivery`, `MergeInto` and `CreateCart` raise
-nothing in the model (hotspot H1 on
-[EventStorming](/storefront/contexts/shopping-cart/eventstorming)). Events
-leave through the transactional outbox in the same transaction as the
+`retailnetwork.shopping-cart.analytics`); no cart consumer exists by
+design, because checkout reads the cart synchronously. Only `AddLine`
+publishes, by design: analytics needs add, quote, abandon and checkout, so
+`SetLineQuantity`, `RemoveLine`, `SetDestination`, `SelectDelivery`,
+`AcceptRequotedOffers`, `MergeInto`, `CreateCart` and `PurgeAbandonedCarts`
+raise nothing. Events leave through the transactional outbox in the same transaction as the
 save.
 
 ### 8. Throughput
@@ -139,10 +143,10 @@ them).
 
 ### 9. Size
 
-*Estimate.* The model says "one row per active cart; abandoned carts
-purged". One root row with its lines, its quote's groups and offers and
-its selections — a handful of child rows per cart, bounded at 100 lines.
-The purge of abandoned carts is unnamed in the model (hotspot H5).
+*Estimate.* The model says "one row per active cart; closed carts idle
+for 30 days are purged by `PurgeAbandonedCarts`". One root row with its
+lines, its quote's groups and offers and its selections — a handful of
+child rows per cart, bounded at 100 lines.
 
 ## Read models
 
@@ -154,7 +158,9 @@ The purge of abandoned carts is unnamed in the model (hotspot H5).
 
 Derived from: `model.yaml → contexts[shopping-cart].read_models`. The
 views keep exactly what the estimate and the purchasability check need.
-`PurchasabilityView` is narrower than `product-discovery`'s four-input
-`Purchasable` verdict (hotspot H3), and `EstimateView` keeps pricing's
+`PurchasabilityView` is deliberately narrower than `product-discovery`'s
+four-input `Purchasable` verdict (the cart accepts any catalogued, priced
+item; checkout's quote is the gate), and `EstimateView` with no destination
+shows the item subtotal only (`estimateComplete=false`), and `EstimateView` keeps pricing's
 current versions so the estimate always names the schedule and tax table
 it was computed from.

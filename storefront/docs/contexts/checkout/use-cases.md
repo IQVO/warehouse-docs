@@ -13,7 +13,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/ma
 
 One section per command of
 `contexts[checkout].aggregates[CheckoutSession].commands`, plus the
-`ResolveInDoubtPlacements` policy. They are proposed application services in
+`ResolveInDoubtPlacements`, `ResolveStuckAuthorizations` and `RetryOwedVoids`
+policies. They are proposed application services in
 `internal/application/usecases`. The step-by-step diagrams are on
 [Sequence Diagrams](/storefront/contexts/checkout/sequence-diagrams); the
 payloads are on [Domain Events](/storefront/contexts/checkout/domain-events);
@@ -36,12 +37,14 @@ after an in-doubt placement it is the endpoint the BFF polls.
 | `ConfirmSession` | Shopper via `storefront-bff` | REST `POST /checkout-sessions/{sessionId}:confirm` | the outcome's event (see below) |
 | `RecordAuthorization` | The answer to `AuthorizePayment` | inside `ConfirmSession` | none |
 | `RecordDecline` | The answer to `AuthorizePayment` | inside `ConfirmSession` | `CheckoutDeclined` |
-| `RecordPlacementInDoubt` | `PlaceOrder` timed out or answered `503` | inside `ConfirmSession` or `ResolveInDoubtPlacements` | none |
+| `RecordPlacementInDoubt` | `PlaceOrder` timed out or answered `503` | inside `ConfirmSession` or `ResolveInDoubtPlacements` | `CheckoutPlacementInDoubt` |
 | `RecordPlaced` | `PlaceOrder` succeeded | inside `ConfirmSession` or `ResolveInDoubtPlacements` | `CheckoutCompleted` |
-| `RecordRequoteRequired` | `PlaceOrder` answered a definitive `409`, after a void | inside `ConfirmSession` or `ResolveInDoubtPlacements` | `CheckoutRequoteRequired` |
-| `RecordFailure` | `PlaceOrder` answered `422`, after a void | inside `ConfirmSession` or `ResolveInDoubtPlacements` | `CheckoutFailed` |
-| `ExpireSession` | Clock, policy `ExpireOnQuoteExpiry` | scheduler | none |
-| `ResolveInDoubtPlacements` | Clock, policy (backoff, alert at 20 h) | scheduler | as the `Record...` it ends in |
+| `RecordRequoteRequired` | `PlaceOrder` answered a definitive `409`; sets `voidOwed` | inside `ConfirmSession` or `ResolveInDoubtPlacements` | `CheckoutRequoteRequired` |
+| `RecordFailure` | `PlaceOrder` answered `422`; sets `voidOwed` | inside `ConfirmSession` or `ResolveInDoubtPlacements` | `CheckoutFailed` |
+| `ExpireSession` | Clock, policy `ExpireOnQuoteExpiry` | scheduler | `CheckoutSessionExpired` |
+| `ResolveInDoubtPlacements` | Clock, policy (backoff, alert at 20 h, give up and void at 22 h) | scheduler | as the `Record...` it ends in |
+| `ResolveStuckAuthorizations` | Clock, policy (`AUTHORIZING` over 2 minutes) | scheduler | as the `Record...` it ends in |
+| `RetryOwedVoids` | Clock, policy (every minute) | scheduler | none |
 
 ## How save and publish commit
 
@@ -52,7 +55,7 @@ conflict is retried once inside the use case, then surfaces as 409
 `concurrent-update`. If an event is raised, the outbox row (`outbox_events`)
 is written in the same transaction. A relay publishes outbox rows to
 `retailnetwork.checkout.events` (`CheckoutCompleted`) and
-`retailnetwork.checkout.analytics` (the other four) after the commit.
+`retailnetwork.checkout.analytics` (the other six) after the commit.
 
 **An outbound call is never inside a database transaction.** The use cases
 save the state they are about to act from (`AUTHORIZING`, `PLACING` with the
@@ -82,8 +85,8 @@ one kebab-case slug per `Err` in the model. Every write route takes an
      `ErrCartNotCheckoutReady` before calling anyone else (the aggregate
      enforces the same invariant in step 6).
   4. `GetDeliveryOffer` (`delivery-promise`) for each selected offer: still
-     `QUOTED`, with margin (what a failure here does is not defined,
-     hotspot H3).
+     `QUOTED`, with margin; a failure here is `ErrOfferNotQuotable` (the same
+     check is repeated before authorize at confirm).
   5. `IssuePriceQuote` (`pricing`): the binding `PriceQuote`; the session
      records `priceQuoteId`, `currency`, `totalMinor` and `quoteExpiresAt`.
   6. `CheckoutSession.OpenSession(cart, quote, now)`: `ErrCartNotCheckoutReady`
@@ -115,31 +118,41 @@ one kebab-case slug per `Err` in the model. Every write route takes an
 - **Main flow:**
   1. `Idempotency-Key` lookup; replay the stored response on a hit.
   2. Load `CheckoutSession` (404 `not-found`).
-  3. `ConfirmSession(now)`: `ErrSessionClosed` on a terminal state,
+  3. `GetDeliveryOffer` (`delivery-promise`) for each selected offer, before
+     anything is authorized: still `QUOTED`, with margin. A failure is
+     `ErrOfferNotQuotable` (`422`), with no state change; the BFF refreshes
+     the cart quote.
+  4. `ConfirmSession(now)`: `ErrSessionClosed` on a terminal state,
      `ErrPlacementInDoubt` while `PLACING`, `ErrPriceQuoteExpired` past
-     `quoteExpiresAt`; `OPEN` or `DECLINED` becomes `AUTHORIZING`. Save.
-  4. `AuthorizePayment` (`customer-payments`), key `<sessionId>:auth`,
-     allocations per group. Declined: `RecordDecline`, answer `200`
-     `DECLINED`. Authorized: continue.
-  5. `RecordAuthorization(authorizationId, totalMinor)`: `ErrAuthorizationMismatch`
-     unless the authorized amount equals the quote total; `AUTHORIZING`
+     `quoteExpiresAt`; `OPEN` or `DECLINED` becomes `AUTHORIZING` (from
+     `DECLINED`, `authAttempt` is incremented). Save.
+  5. `AuthorizePayment` (`customer-payments`), key
+     `<sessionId>:auth:<authAttempt>`, allocations per group. Declined:
+     `RecordDecline`, answer `200` `DECLINED`. Authorized: continue.
+  6. `RecordAuthorization(authorizationId, totalMinor)`: `ErrAuthorizationMismatch`
+     unless the authorized amount equals the quote total (then `voidOwed` is
+     set with the decision to void); `AUTHORIZING`
      becomes `PLACING`, and the PII-free placement request is stored in the
      same save.
-  6. `PlaceOrder` (`customer-ordering`) through the Anti-Corruption Layer,
+  7. `PlaceOrder` (`customer-ordering`) through the Anti-Corruption Layer,
      `Idempotency-Key` the `sessionId`, `shipToAddressId` never an inline
      address.
-  7. Map the answer: success to `RecordPlaced` (`COMPLETED`, answer `200`);
-     definitive `409` to a void then `RecordRequoteRequired` (answer `200`
-     `REQUOTE_REQUIRED` with `requotedOffers`); `422` to a void then
-     `RecordFailure` and an alert (answer `200` `FAILED`); timeout or `503`
-     to `RecordPlacementInDoubt` (answer `202`, the session stays `PLACING`).
+  8. Map the answer: success to `RecordPlaced` (`COMPLETED`, answer `200`);
+     definitive `409` to `RecordRequoteRequired` (answer `200`
+     `REQUOTE_REQUIRED` with `requotedOffers`); `422` to `RecordFailure` and
+     an alert (answer `200` `FAILED`); timeout or `503` to
+     `RecordPlacementInDoubt` (answer `202`, the session stays `PLACING`).
+     For `409` and `422` the decision and `voidOwed` are saved in one
+     transaction, the void is then attempted at once, and `RetryOwedVoids`
+     retries it if it fails.
 - **Errors:**
 
 | Error | HTTP | Problem `type` slug | Note |
 | --- | --- | --- | --- |
-| `ErrSessionClosed` | 409 | `session-closed` | `COMPLETED`, `EXPIRED`, `FAILED` or `REQUOTE_REQUIRED`. |
+| `ErrSessionClosed` | 409 | `session-closed` | `COMPLETED`, `EXPIRED`, `FAILED` or `REQUOTE_REQUIRED`; `DECLINED` is not closed. |
 | `ErrPriceQuoteExpired` | 409 | `price-quote-expired` | Checked at confirm; the session is `OPEN` or `DECLINED`. |
-| `ErrAuthorizationMismatch` | 409 | `authorization-mismatch` | The authorized amount is not the quote total. |
+| `ErrOfferNotQuotable` | 422 | `offer-not-quotable` | A selected offer is no longer `QUOTED` at the pre-authorize check; no state change. |
+| `ErrAuthorizationMismatch` | 409 | `authorization-mismatch` | The authorized amount is not the quote total; the authorization is voided (`voidOwed`). |
 | `ErrPlacementInDoubt` | 409 | `placement-in-doubt` | A confirm or a void while `PLACING`: the semantic lock. |
 | session not found | 404 | `not-found` | |
 | invalid input | 422 | `validation-failed` | A missing `paymentMethodToken`. |
@@ -149,9 +162,10 @@ one kebab-case slug per `Err` in the model. Every write route takes an
   `CheckoutCompleted`, `CheckoutRequoteRequired` or `CheckoutFailed`; none
   for an in-doubt answer.
 - **Idempotency:** `Idempotency-Key`, plus the deterministic downstream keys
-  `<sessionId>:auth`, the `sessionId` and `<sessionId>:void`. A repeated
-  confirm returns the stored first response; a second authorize after a
-  decline needs a key the model does not define (hotspot H2).
+  `<sessionId>:auth:<authAttempt>`, the `sessionId` and `<sessionId>:void`.
+  A repeated confirm returns the stored first response; a second authorize
+  after a decline is a new attempt (`authAttempt` + 1), so it is not answered
+  with the first, declined response, while a stuck call replays the same key.
 
 ## RecordAuthorization
 
@@ -159,8 +173,8 @@ one kebab-case slug per `Err` in the model. Every write route takes an
   `ConfirmSession`.
 - **Main flow:** `AUTHORIZING → PLACING`; store `authorizationId` and the
   placement request; save. `ErrAuthorizationMismatch` if the authorized amount
-  is not the quote total. What happens to the authorization in that case is
-  not defined (hotspot H5).
+  is not the quote total; the authorization is then voided: `voidOwed` is set
+  in the same save and `RetryOwedVoids` retries the void until it succeeds.
 - **Events emitted:** none.
 - **Idempotency:** the transition is taken once; a replayed answer finds the
   session already `PLACING`.
@@ -169,7 +183,9 @@ one kebab-case slug per `Err` in the model. Every write route takes an
 
 - **Trigger:** the declined answer to `AuthorizePayment`.
 - **Main flow:** `AUTHORIZING → DECLINED`; store the reason; save. The session
-  stays open for another token while the price quote is valid.
+  stays open for another token while the price quote is valid; the next
+  `ConfirmSession` increments `authAttempt`, and `ExpireOnQuoteExpiry` can
+  take it to `EXPIRED`.
 - **Events emitted:** `CheckoutDeclined` (analytics).
 - **Idempotency:** a replayed confirm returns the stored response.
 
@@ -179,7 +195,8 @@ one kebab-case slug per `Err` in the model. Every write route takes an
   `ResolveInDoubtPlacements` that still gets no definitive answer.
 - **Main flow:** `PLACING → PLACING`. No void and no new attempt: the
   semantic lock. The session answers `202`.
-- **Events emitted:** none (hotspot H7).
+- **Events emitted:** `CheckoutPlacementInDoubt` (analytics; carries
+  `placingSince`).
 - **Idempotency:** recorded as often as it happens; it changes nothing.
 
 ## RecordPlaced
@@ -195,17 +212,19 @@ one kebab-case slug per `Err` in the model. Every write route takes an
 ## RecordRequoteRequired
 
 - **Trigger:** `PlaceOrder` answered a definitive `409` carrying re-quoted
-  offers, and the authorization was voided (`<sessionId>:void`).
-- **Main flow:** store `requotedOffers`; `PLACING → REQUOTE_REQUIRED`; save.
+  offers.
+- **Main flow:** store `requotedOffers` and set `voidOwed` to the
+  `authorizationId`; `PLACING → REQUOTE_REQUIRED`; save. The void
+  (`<sessionId>:void`) is attempted at once and retried by `RetryOwedVoids`.
 - **Events emitted:** `CheckoutRequoteRequired` (analytics).
 - **Idempotency:** terminal; the void is keyed `<sessionId>:void`.
 
 ## RecordFailure
 
-- **Trigger:** `PlaceOrder` answered `422`, a contract bug, and the
-  authorization was voided.
-- **Main flow:** store the failure code, raise an alert; `PLACING → FAILED`;
-  save.
+- **Trigger:** `PlaceOrder` answered `422`, a contract bug.
+- **Main flow:** store the failure code, set `voidOwed`, raise an alert;
+  `PLACING → FAILED`; save. The void is attempted at once and retried by
+  `RetryOwedVoids`.
 - **Events emitted:** `CheckoutFailed` (analytics).
 - **Idempotency:** terminal; the void is keyed `<sessionId>:void`.
 
@@ -214,9 +233,8 @@ one kebab-case slug per `Err` in the model. Every write route takes an
 - **Trigger:** the `ExpireOnQuoteExpiry` policy: an `OPEN` or `DECLINED`
   session expires with its price quote.
 - **Inbound adapter:** a scheduler, no route.
-- **Main flow:** `OPEN → EXPIRED`; save. A `DECLINED` session has no
-  transition to `EXPIRED` in the model (hotspot H1).
-- **Events emitted:** none (hotspot H7).
+- **Main flow:** `OPEN → EXPIRED` or `DECLINED → EXPIRED`; save.
+- **Events emitted:** `CheckoutSessionExpired` (analytics).
 - **Idempotency:** `EXPIRED` has no transition out.
 
 ## ResolveInDoubtPlacements (policy)
@@ -230,10 +248,33 @@ one kebab-case slug per `Err` in the model. Every write route takes an
   3. Apply the answer as in `ConfirmSession` step 7: `RecordPlaced`, or a void
      then `RecordRequoteRequired` or `RecordFailure`, or
      `RecordPlacementInDoubt` again.
-  4. Back off between passes; alert at 20 h, before the network's 24 h
-     idempotency window.
+  4. Back off between passes; alert at 20 h (from `placingSince`); give up and
+     void at 22 h, before `customer-payments`' 24 h backstop and the
+     network's 24 h idempotency window.
 - **Errors:** none surfaced to a shopper; the BFF polls `GetSession`.
 - **Idempotency:** the same body and the same key on every pass, so a pass that
   raced a slow first call cannot place a second order. The interplay with
-  `customer-payments`' 24 h void of an unbound authorization is not defined
-  (hotspot H6).
+  `customer-payments`' 24 h void of an unbound authorization is ordered:
+  alert at 20 h, give up and void at 22 h, backstop at 24 h. `Void` is
+  idempotent, so a race between the two is harmless.
+
+## ResolveStuckAuthorizations (policy)
+
+- **Trigger:** a scheduler, for every session in `AUTHORIZING` for more than
+  2 minutes (a crash or timeout between the save and the answer).
+- **Main flow:** re-call `AuthorizePayment` with the SAME key
+  `<sessionId>:auth:<authAttempt>`; it is idempotent and yields the true
+  outcome. Apply it as in `ConfirmSession`: `RecordAuthorization` or
+  `RecordDecline`.
+- **Errors:** none surfaced to a shopper; the BFF polls `GetSession`.
+- **Idempotency:** the same key on every pass. `customer-payments`' 24 h void
+  stays the backstop.
+
+## RetryOwedVoids (policy)
+
+- **Trigger:** a scheduler, every minute, for every session with `voidOwed`.
+- **Main flow:** void the authorization named by `voidOwed`
+  (`<sessionId>:void`); on success clear `voidOwed`. Covers the
+  `ErrAuthorizationMismatch` void and every definitive-rejection void.
+- **Errors:** none surfaced; retried until success.
+- **Idempotency:** `Void` is idempotent.

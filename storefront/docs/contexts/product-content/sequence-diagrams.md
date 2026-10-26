@@ -48,8 +48,14 @@ sequenceDiagram
             V-->>UC: false
             UC-->>H: 422 unknown-catalog-item<br/>ErrUnknownCatalogItem
         else item known
-            UC->>A: CreateProductContent(catalogItemId, input, categoryKnown)
-            alt ErrUnknownCategory
+            UC->>A: CreateProductContent(catalogItemId, input, categoryKnown, itemDiscontinued)
+            alt ErrItemDiscontinued
+                A-->>UC: error
+                UC-->>H: 422 item-discontinued
+            else ErrTooManyBullets, ErrTooManyAttributes or ErrTooManyMedia
+                A-->>UC: error
+                UC-->>H: 422 too-many-bullets, too-many-attributes or too-many-media
+            else ErrUnknownCategory
                 A-->>UC: error
                 UC-->>H: 422 unknown-category
             else valid
@@ -69,11 +75,13 @@ sequenceDiagram
 ```
 
 Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent]`
-(`CreateProductContent`, `ErrUnknownCatalogItem`, `ErrUnknownCategory`),
+(`CreateProductContent`, `ErrUnknownCatalogItem`, `ErrItemDiscontinued`,
+`ErrTooManyBullets`, `ErrTooManyAttributes`, `ErrTooManyMedia`,
+`ErrUnknownCategory`),
 `.read_models`; `apis/product-content/openapi.yaml`.
 
-Omitted: the validation of the collection bounds (422 validation-failed),
-which happens in the adapter before the use case. A lagging
+Omitted: the schema validation (422 validation-failed), which happens in the
+adapter before the use case. A lagging
 `CatalogItemView` rejects content for a brand-new item: the manager retries
 after the projection catches up.
 
@@ -100,9 +108,9 @@ sequenceDiagram
             alt ErrContentRetired
                 A-->>UC: error
                 UC-->>H: 409 content-retired
-            else ErrUnknownCategory
+            else ErrUnknownCategory or ErrTooMany...
                 A-->>UC: error
-                UC-->>H: 422 unknown-category
+                UC-->>H: 422 unknown-category or too-many-...
             else valid
                 A-->>UC: still PUBLISHED, content replaced
                 UC->>DB: BEGIN, update where version matches
@@ -116,15 +124,15 @@ sequenceDiagram
             end
         end
     end
-    Note over UC,DB: no event, no outbox row,<br/>re-publication is a model gap (H2)
+    Note over UC,DB: no event, no outbox row,<br/>the revised content leaves on the next PublishContent
 ```
 
 Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent]`
 (`ReviseContent`, `ErrContentRetired`, `ErrUnknownCategory`, transitions).
 
-Omitted: the DRAFT case, for which the model has no transition and the
-proposed API names no error (hotspot H1). How the revision reaches
-`product-discovery` is hotspot H2.
+Omitted: the DRAFT case, which is `ReviseDraft` (diagram 10). The revision
+reaches `product-discovery` through the next `PublishContent`
+(`PUBLISHED → PUBLISHED`, diagram 3).
 
 ## 3. PublishContent (REST POST /product-contents/catalogItemId:publish)
 
@@ -146,8 +154,11 @@ sequenceDiagram
         alt not found
             UC-->>H: 404 not-found
         else found
-            UC->>A: PublishContent()
-            alt ErrIncompleteContent
+            UC->>A: PublishContent(itemDiscontinued)
+            alt ErrItemDiscontinued
+                A-->>UC: error
+                UC-->>H: 422 item-discontinued
+            else ErrIncompleteContent
                 A-->>UC: error
                 UC-->>H: 422 incomplete-content
             else ErrUnknownCategory
@@ -157,7 +168,7 @@ sequenceDiagram
                 A-->>UC: error
                 UC-->>H: 409 content-retired
             else gate passes
-                A-->>UC: PUBLISHED, revision bumped<br/>+ ProductContentPublished
+                A-->>UC: PUBLISHED (from DRAFT or PUBLISHED),<br/>revision bumped + ProductContentPublished
                 UC->>DB: BEGIN, update where version matches
                 alt version changed
                     DB-->>UC: 0 rows, ROLLBACK, retry once, then 409
@@ -175,7 +186,9 @@ sequenceDiagram
 ```
 
 Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent]`
-(`PublishContent`, invariants), `.publishes[ProductContentPublished]`;
+(`PublishContent`, `ErrItemDiscontinued`, invariants, transitions
+`DRAFT → PUBLISHED` and `PUBLISHED → PUBLISHED`),
+`.publishes[ProductContentPublished]`;
 `conventions.integration_rules`.
 
 Omitted: nothing beyond the shared notes at the top.
@@ -225,8 +238,7 @@ Derived from: `model.yaml → contexts[product-content].aggregates[ProductConten
 (`RetireContent`, transitions), `.publishes[ProductContentRetired]`.
 
 Omitted: the relay marking the row published (as in diagram 3). A DRAFT
-cannot be retired (no `DRAFT → RETIRED` transition, hotspot H1): the answer
-is the 409 above.
+is not retired by hand: it is discarded with `DiscardDraft` (diagram 10).
 
 ## 5. RetireContent by policy (Kafka CatalogItemDiscontinued)
 
@@ -246,8 +258,12 @@ sequenceDiagram
         KC->>UC: Execute(catalogItemId)
         UC->>DB: BEGIN, mark discontinued in rm_catalog_items,<br/>insert inbox row, COMMIT
         UC->>DB: load content and version
-        alt no content, or not PUBLISHED
-            UC->>UC: nothing to retire (DRAFT: model silent, H7)
+        alt no content, or already RETIRED
+            UC->>UC: nothing to retire
+        else DRAFT
+            UC->>A: RetireContent(DISCONTINUED)
+            A-->>UC: RETIRED, no event
+            UC->>DB: update where version matches, COMMIT
         else PUBLISHED
             UC->>A: RetireContent()
             A-->>UC: RETIRED + ProductContentRetired
@@ -302,12 +318,12 @@ sequenceDiagram
             alt version changed
                 DB-->>UC: 0 rows, ROLLBACK, retry once, then 409
             else saved
-                UC->>DB: store key response, COMMIT
+                UC->>DB: insert outbox CategoryTreePublished<br/>store key response, COMMIT
                 UC-->>H: 201 category
             end
         end
     end
-    Note over UC,DB: no event: the tree crosses<br/>the boundary at publication only
+    Note over UC,DB: applies to the live tree and<br/>publishes CategoryTreePublished
 ```
 
 Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree]`
@@ -342,27 +358,25 @@ sequenceDiagram
             else ErrMaxDepth or ErrDuplicateSiblingName
                 T-->>UC: error
                 UC-->>H: 422 max-depth or duplicate-sibling-name
-            else ErrCategoryInUse
-                T-->>UC: error (mapped by the API, invariant guards removal, H3)
-                UC-->>H: 409 category-in-use
             else valid
                 T-->>UC: subtree moved, paths recomputed
                 UC->>DB: BEGIN, update where version matches
                 alt version changed
                     DB-->>UC: 0 rows, ROLLBACK, retry once, then 409
                 else saved
-                    UC->>DB: store key response, COMMIT
+                    UC->>DB: insert outbox CategoryTreePublished<br/>store key response, COMMIT
                     UC-->>H: 200 category
                 end
             end
         end
     end
-    Note over UC,DB: no event
+    Note over UC,DB: applies to the live tree and<br/>publishes CategoryTreePublished
 ```
 
 Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree]`
-(`MoveCategory`, invariants); `apis/product-content/openapi.yaml` (the
-`category-in-use` mapping, recorded as hotspot H3).
+(`MoveCategory`, invariants); `apis/product-content/openapi.yaml`.
+`ErrCategoryInUse` is not raised: there is no remove-category command by
+design, and the guard is for a future removal.
 
 Omitted: nothing beyond the shared notes.
 
@@ -395,13 +409,13 @@ sequenceDiagram
                 alt version changed
                     DB-->>UC: 0 rows, ROLLBACK, retry once, then 409
                 else saved
-                    UC->>DB: store key response, COMMIT
+                    UC->>DB: insert outbox CategoryTreePublished<br/>store key response, COMMIT
                     UC-->>H: 200 category
                 end
             end
         end
     end
-    Note over UC,DB: no event
+    Note over UC,DB: applies to the live tree and<br/>publishes CategoryTreePublished
 ```
 
 Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree]`
@@ -409,26 +423,27 @@ Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree]
 
 Omitted: nothing beyond the shared notes.
 
-## 9. PublishCategoryTree (trigger not modelled)
+## 9. PublishCategoryTree (REST POST /categories:publish)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
-    participant H as content manager (route unnamed)
+    participant H as http
     participant UC as PublishCategoryTree
     participant T as CategoryTree
     participant DB as Postgres
     participant K as Relay / Kafka
+    H->>DB: find Idempotency-Key
     H->>UC: Execute()
     UC->>DB: load tree and version
     UC->>T: PublishCategoryTree()
-    T-->>UC: PUBLISHED, tree version bumped<br/>+ CategoryTreePublished
+    T-->>UC: still PUBLISHED, tree version bumped<br/>+ CategoryTreePublished
     UC->>DB: BEGIN, update where version matches
     alt version changed
         DB-->>UC: 0 rows, ROLLBACK, retry once, then 409
     else saved
-        UC->>DB: insert outbox CategoryTreePublished, COMMIT
+        UC->>DB: insert outbox CategoryTreePublished<br/>store key response, COMMIT
         UC-->>H: 200 published tree
         K->>DB: poll unpublished outbox rows
         K->>K: publish key categoryTreeId
@@ -439,6 +454,43 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree]`
 (`PublishCategoryTree`, transitions), `.publishes[CategoryTreePublished]`.
 
-Omitted: the `Idempotency-Key` lookup, because the route (and with it the
-header) is not modelled (hotspot H6). The structural invariants need no
-re-check at publication: they hold for the working tree at all times.
+Omitted: nothing beyond the shared notes. `PublishCategoryTree` re-publishes
+the live tree unchanged so consumers can resync; the structural invariants need
+no re-check at publication: they hold for the live tree at all times.
+
+## 10. ReviseDraft and DiscardDraft (REST POST .../catalogItemId:revise-draft, :discard)
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as http
+    participant UC as ReviseDraft / DiscardDraft
+    participant A as ProductContent
+    participant DB as Postgres
+    H->>DB: find Idempotency-Key
+    H->>UC: Execute(catalogItemId, input?)
+    UC->>DB: load content and version
+    alt not found
+        UC-->>H: 404 not-found
+    else found
+        UC->>A: ReviseDraft(input) or DiscardDraft()
+        alt not DRAFT
+            A-->>UC: illegal transition
+            UC-->>H: 409 illegal-transition
+        else ErrTooMany... or ErrUnknownCategory (revise only)
+            A-->>UC: error
+            UC-->>H: 422 too-many-... or unknown-category
+        else DRAFT to DRAFT, or DRAFT to RETIRED (DISCARDED)
+            UC->>DB: BEGIN, update where version matches<br/>store key response, COMMIT
+            UC-->>H: 200 content
+        end
+    end
+    Note over UC,DB: no event, no outbox row:<br/>nothing was ever published
+```
+
+Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent]`
+(`ReviseDraft`, `DiscardDraft`, transitions `DRAFT → DRAFT` and
+`DRAFT → RETIRED`); `apis/product-content/openapi.yaml`.
+
+Omitted: the optimistic-concurrency retry, as in diagram 2.

@@ -26,6 +26,7 @@ classDiagram
         <<AggregateRoot>>
         -catalogItemId string
         -status ContentStatus
+        -retiredReason RetiredReason nullable
         -description string
         -bullets string[]
         -attributes Attribute[]
@@ -33,16 +34,24 @@ classDiagram
         -primaryCategoryId string
         -revision int64
         -version int
-        +CreateProductContent(catalogItemId, input, itemKnown, categoryKnown)$ ProductContent
+        +CreateProductContent(catalogItemId, input, itemKnown, categoryKnown, itemDiscontinued)$ ProductContent
+        +ReviseDraft(input) error
         +ReviseContent(input) error
-        +PublishContent() error
-        +RetireContent() error
+        +PublishContent(itemDiscontinued) error
+        +DiscardDraft() error
+        +RetireContent(reason) error
     }
     class ContentStatus {
         <<Enumeration>>
         DRAFT
         PUBLISHED
         RETIRED
+    }
+    class RetiredReason {
+        <<Enumeration>>
+        DISCARDED
+        DISCONTINUED
+        RETIRED_BY_HAND
     }
     class Attribute {
         <<ValueObject>>
@@ -69,6 +78,7 @@ classDiagram
         +Update(ctx, c, expectedVersion) error
     }
     ProductContent --> ContentStatus : status
+    ProductContent --> RetiredReason : retiredReason
     ProductContent *-- "0..50" Attribute : attributes
     ProductContent *-- "0..12" Media : media
     Media --> MediaRole : role
@@ -79,14 +89,18 @@ Derived from: `model.yaml → contexts[product-content].aggregates[ProductConten
 (`states`, `value_objects`, `commands`, `invariants`, `description`).
 
 Omitted: read accessors, the `Err...` variables (`ErrUnknownCatalogItem`,
-`ErrIncompleteContent`, `ErrUnknownCategory`, `ErrContentRetired`; listed on
+`ErrItemDiscontinued`, `ErrIncompleteContent`, `ErrUnknownCategory`, `ErrContentRetired`,
+`ErrTooManyBullets`, `ErrTooManyAttributes`, `ErrTooManyMedia`; listed on
 the [Aggregate Design Canvas](/storefront/contexts/product-content/aggregate-design-canvas)),
 and the publication timestamps the REST read returns. `itemKnown` and
 `categoryKnown` stand for the existence checks against `CatalogItemView` and
-the `CategoryTree`; the aggregate decides, the use case supplies the facts.
+the `CategoryTree`, and `itemDiscontinued` for the discontinued flag read from
+`CatalogItemView`; the aggregate decides, the use case supplies the facts.
 The collection bounds (0..10 bullets, 0..50 attributes, 0..12 media) come
-from the aggregate description and the proposed API schema; they have no
-`Err` names (model gap).
+from the aggregate description and the proposed API schema; they are the
+named invariants `ErrTooManyBullets`, `ErrTooManyAttributes` and
+`ErrTooManyMedia`. `RetireContent(reason)` is also what `RetireOnDiscontinue`
+runs, with reason `DISCONTINUED`.
 
 ## 2. CategoryTree aggregate
 
@@ -96,7 +110,6 @@ classDiagram
     class CategoryTree {
         <<AggregateRoot>>
         -categoryTreeId string
-        -status TreeStatus
         -treeVersion int64
         -categories Category[]
         -version int
@@ -104,11 +117,6 @@ classDiagram
         +MoveCategory(categoryId, parentId) error
         +RenameCategory(categoryId, name) error
         +PublishCategoryTree() error
-    }
-    class TreeStatus {
-        <<Enumeration>>
-        DRAFT
-        PUBLISHED
     }
     class Category {
         <<ValueObject>>
@@ -122,7 +130,6 @@ classDiagram
         +Get(ctx) CategoryTree
         +Update(ctx, t, expectedVersion) error
     }
-    CategoryTree --> TreeStatus : status
     CategoryTree *-- "0..*" Category : categories
     CategoryTreeRepository ..> CategoryTree : persists
 ```
@@ -131,12 +138,14 @@ Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree]
 (`states`, `value_objects`, `commands`, `invariants`, `notes`).
 
 Omitted: the `Err...` variables (`ErrCategoryCycle`, `ErrMaxDepth`,
-`ErrDuplicateSiblingName`, `ErrCategoryInUse`). `treeVersion` is the
+`ErrDuplicateSiblingName`, `ErrCategoryInUse`, which guards a future removal:
+no remove-category command exists by design). `treeVersion` is the
 published version the event carries; `version` is the
 optimistic-concurrency guard of the save. The tree is single
 (`size_estimate`: "one tree"), so the repository `Get` takes no id; the
-`categoryTreeId` still keys the Kafka messages. `TreeStatus` is the
-least-surprising reading of "single, versioned" (the model's own note).
+`categoryTreeId` still keys the Kafka messages. The tree has no status: it
+is a single published aggregate and every command applies to the live tree
+and publishes a new version.
 
 ## 3. Domain events and policy
 
@@ -171,7 +180,7 @@ classDiagram
     class RetireOnDiscontinue {
         <<Policy>>
         on CatalogItemDiscontinued
-        retire the item's PUBLISHED content
+        retire the item's PUBLISHED and DRAFT content
     }
     class CatalogItemView {
         <<ReadModel>>
@@ -201,7 +210,7 @@ flowchart TB
         HTTP["http<br/>content manager routes,<br/>bootstrap reads"]
         KC["kafka<br/>consumer: offer-availability"]
     end
-    APP["<b>internal/application/usecases</b><br/>CreateProductContent<br/>ReviseContent<br/>PublishContent<br/>RetireContent (REST and policy)<br/>CreateCategory, MoveCategory,<br/>RenameCategory<br/>PublishCategoryTree<br/>ProjectCatalogItems"]
+    APP["<b>internal/application/usecases</b><br/>CreateProductContent<br/>ReviseDraft, ReviseContent<br/>PublishContent, DiscardDraft<br/>RetireContent (REST and policy)<br/>CreateCategory, MoveCategory,<br/>RenameCategory<br/>PublishCategoryTree<br/>ProjectCatalogItems"]
     DOM["<b>internal/domain</b><br/>content.ProductContent<br/>category.CategoryTree"]
     PORTS["<b>internal/application/ports</b><br/>ProductContentRepository<br/>CategoryTreeRepository<br/>CatalogItemStore<br/>Outbox, Inbox<br/>IdempotencyStore<br/>UnitOfWork, Clock"]
     subgraph OUT["internal/adapters/outbound"]

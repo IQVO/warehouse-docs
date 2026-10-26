@@ -42,7 +42,6 @@ flowchart LR
     subgraph IN["Inbound - who commands, queries or feeds it"]
         direction TB
         in0(["Storefront merchandiser<br/>(human)"]):::actor
-        in1(["storefront-bff<br/>experience layer"]):::actor
         in2["checkout"]:::ctx
         in3["product-discovery"]:::ctx
         in4["offer-availability<br/>(network)"]:::net
@@ -52,7 +51,7 @@ flowchart LR
         card["<b>Purpose</b><br/>Own what a shopper pays: list<br/>prices and sale windows, the<br/>delivery charge per tier, a<br/>synthetic tax table, and the<br/>binding, expiring PriceQuote.<br/><br/><b>Domain roles</b><br/>- Specification (price of an item,<br/>charge of a tier)<br/>- Execution (price quotes)<br/><br/><b>Business decisions it enforces</b><br/>- Sale below list; sale windows<br/>of one item never overlap<br/>- One current charge schedule and<br/>tax table; versions supersede<br/>- A PriceQuote is binding,<br/>immutable and expiring<br/>- Item master stays in<br/>offer-availability"]:::card
     end
     in0 -->|"cmd - REST<br/>SetListPrice, ScheduleSale,<br/>CancelSale, WithdrawPrice,<br/>PublishChargeSchedule,<br/>PublishTaxTable"| BC
-    in1 -.->|"qry - REST<br/>GetItemPrice,<br/>GetCurrentChargeSchedule,<br/>GetCurrentTaxTable"| BC
+    in0 -.->|"qry - REST<br/>GetItemPrice,<br/>GetCurrentChargeSchedule,<br/>GetCurrentTaxTable"| BC
     in2 -->|"cmd - REST<br/>IssuePriceQuote"| BC
     in2 -.->|"qry - REST<br/>GetPriceQuote"| BC
     in3 -.->|"qry - REST paged,<br/>bootstrap only<br/>ListItemPrices"| BC
@@ -131,7 +130,7 @@ To own what a shopper pays. The context:
 | **Specification (price of an item, charge of a tier)** | **Yes, primary** | `ItemPrice`, `DeliveryChargeSchedule`, `TaxTable` with their invariants; the read routes every other surface renders from. |
 | **Execution (price quotes)** | **Yes** | `IssuePriceQuote`, `ExpireQuote`, the `PriceQuote` aggregate and `QuoteTtl`. |
 | Analysis | No | No read model here is a decision input for another context; `CatalogItemView` is an enforcement input. |
-| Gateway | No | The storefront edge is `storefront-bff`, the experience layer; pricing is one of the contexts behind it. |
+| Gateway | No | The storefront edge is `storefront-bff`, the experience layer; pricing is one of the contexts behind it, and shoppers never read it directly (they see prices through `product-discovery`). |
 
 ## Inbound Communication
 
@@ -139,15 +138,15 @@ To own what a shopper pays. The context:
 | --- | --- | --- | --- | --- |
 | Storefront merchandiser (human) | `SetListPrice` | Command | REST `POST /item-prices`, `POST /item-prices/{catalogItemId}:set-list-price` | UI |
 | Storefront merchandiser (human) | `ScheduleSale`, `CancelSale` | Command | REST `POST /item-prices/{catalogItemId}/sales`, `POST /item-prices/{catalogItemId}/sales/{saleId}:cancel` | UI |
-| Storefront merchandiser (human) | `WithdrawPrice` | Command | REST (route in the `/item-prices` group; the model names no path) | UI |
+| Storefront merchandiser (human) | `WithdrawPrice` | Command | REST `POST /item-prices/{catalogItemId}:withdraw` | UI |
 | Storefront merchandiser (human) | `PublishChargeSchedule` | Command | REST `POST /delivery-charge-schedules` | UI |
 | Storefront merchandiser (human) | `PublishTaxTable` | Command | REST `POST /tax-tables` | UI |
-| `storefront-bff` (experience layer) | `GetItemPrice` | Query | REST `GET /item-prices/{catalogItemId}` | UI |
-| `storefront-bff` (experience layer) | `GetCurrentChargeSchedule` | Query | REST `GET /delivery-charge-schedules/current` | UI |
-| `storefront-bff` (experience layer) | `GetCurrentTaxTable` | Query | REST `GET /tax-tables/current` | UI |
+| Storefront merchandiser (human) | `GetItemPrice` | Query | REST `GET /item-prices/{catalogItemId}` | UI |
+| Storefront merchandiser (human) | `GetCurrentChargeSchedule` | Query | REST `GET /delivery-charge-schedules/current` | UI |
+| Storefront merchandiser (human) | `GetCurrentTaxTable` | Query | REST `GET /tax-tables/current` | UI |
 | `checkout` | `IssuePriceQuote` | Command | REST `POST /price-quotes` | Customer/Supplier (we are the Supplier) |
 | `checkout` | `GetPriceQuote` | Query | REST `GET /price-quotes/{quoteId}` | Customer/Supplier (we are the Supplier) |
-| `product-discovery` | `ListItemPrices` | Query | REST `GET /item-prices` (bootstrap, paged) | Customer/Supplier (we are the Supplier) |
+| `product-discovery` | `ListItemPrices` | Query | REST `GET /item-prices` (bootstrap and rebuild only, paged) | Customer/Supplier (we are the Supplier) |
 | `offer-availability` (network) | `CatalogItemCreated` | Event | Kafka `retailnetwork.offer-availability.events`, `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | Conformist |
 | `offer-availability` (network) | `CatalogItemDiscontinued` | Event | Kafka `retailnetwork.offer-availability.events`, `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued` | Conformist |
 
@@ -227,23 +226,12 @@ Top terms: **List Price**, **Sale Window**, **Effective Price**,
 
 ## Open Questions
 
-- **Which route withdraws a price?** `rest` lists no obvious
-  `WithdrawPrice` route (no `POST /item-prices/{catalogItemId}:withdraw`).
-  The command exists; the route mapping is a model gap.
-- **`CancelSale` raises no event of its own.** `publishes` lists only
-  `ItemPriceChanged` and `ItemPriceWithdrawn` for `ItemPrice`. These pages
-  read a cancelled sale as republishing `ItemPriceChanged` with the
-  effective price back at list.
-- **Expiry is silent.** `ExpireQuote` transitions `ISSUED → EXPIRED`, but
-  the model publishes no `PriceQuoteExpired`. `checkout` mirrors the TTL
-  with its own `ExpireOnQuoteExpiry` policy instead of consuming an event.
-- **States of the schedule and the tax table are a least-surprising
-  reading.** The model's own `notes` say the plan names no states;
-  `CURRENT`/`SUPERSEDED` follow from "one current, versioned".
-- **What `IssuePriceQuote` takes as input.** `PriceQuoteIssued` carries
-  `cartId`, and `checkout` names the call `IssuePriceQuote`, but the model
-  lists no request fields (lines, groups, destination postal prefix are the
-  obvious reading).
-- **Who calls `GET /item-prices` besides the bootstrap?** The `inbound`
-  row marks `ListItemPrices` as bootstrap-only for `product-discovery`; the
-  route is listed with the BFF's reads too, unpaged.
+- **Resolved in the model-fix:** `WithdrawPrice` has the route
+  `POST /item-prices/{catalogItemId}:withdraw`; `CancelSale` raises no event
+  of its own (the window-boundary policy emits `ItemPriceChanged` for the
+  reverted price); quote expiry is checkout-internal TTL state with no
+  `PriceQuoteExpired` event; the schedule and the tax table have the states
+  `CURRENT` then `SUPERSEDED`; `IssuePriceQuote` lists its request fields
+  (`cartId`, `lines`, `groups`, `destinationPostalPrefix`); `GET /item-prices`
+  is bootstrap and rebuild only, and shoppers see prices through
+  `product-discovery`'s `ProductView`.

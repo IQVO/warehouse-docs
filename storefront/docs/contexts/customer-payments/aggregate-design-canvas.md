@@ -28,19 +28,17 @@ packages the UL code identifiers name).
 
 One checkout session's authorization: a unique `checkoutSessionId`, an
 `orderId` (bound later, by `BindOrder`), the `allocations` (`groupNo`,
-`amountMinor`, state `PENDING`, `CAPTURED` or `RELEASED`), the provider
-references and `expiresAt`. Value objects:
+`amountMinor`, state `PENDING`, `CAPTURED` or `RELEASED`, and a nullable
+`trackingNumber`), the provider references and `expiresAt`. The aggregate
+state is derived from the allocations. Value objects:
 
 | Value object | Fields | Note |
 | --- | --- | --- |
-| `Allocation` | `groupNo`, `amountMinor`, `state` (`PENDING`, `CAPTURED`, `RELEASED`) | The share of the authorization that belongs to one shipment group; the unit of capture and release. |
+| `Allocation` | `groupNo`, `amountMinor`, `state` (`PENDING`, `CAPTURED`, `RELEASED`), `trackingNumber?` | The share of the authorization that belongs to one shipment group; the unit of capture and release. The nullable `trackingNumber` is set at capture; `PackageLost` and `PackageReturned` map to a group by it. |
 | `ProviderRef` | `providerAuthorizationId`, `providerCaptureIds[]` | The provider's references; the only place provider ids live in the aggregate. |
 
-The model's description of this aggregate is cut off in the middle of
-"unique checkoutSessionId" (a literal ellipsis in `model.yaml`); the field
-list above restores it from the invariants, the REST contract and the
-`PaymentAuthorized` payload (hotspot H11 below). The aggregate holds no
-card data; the PSP token is an argument of the provider port.
+The aggregate holds no card data; the PSP token is an argument of the
+provider port.
 
 ### 3. State Transitions
 
@@ -49,12 +47,20 @@ stateDiagram-v2
     [*] --> AUTHORIZED: AuthorizePayment
     [*] --> DECLINED: AuthorizePayment declined
     AUTHORIZED --> PARTIALLY_CAPTURED: CaptureAllocation
+    AUTHORIZED --> CAPTURED: CaptureAllocation
     PARTIALLY_CAPTURED --> PARTIALLY_CAPTURED: CaptureAllocation
     PARTIALLY_CAPTURED --> CAPTURED: CaptureAllocation
+    AUTHORIZED --> AUTHORIZED: ReauthorizePayment
+    AUTHORIZED --> AUTHORIZED: ReleaseAllocation
+    AUTHORIZED --> RELEASED: ReleaseAllocation
+    PARTIALLY_CAPTURED --> PARTIALLY_CAPTURED: ReleaseAllocation
+    PARTIALLY_CAPTURED --> CAPTURED: ReleaseAllocation
+    PARTIALLY_CAPTURED --> RELEASED: ReleaseAllocation
     AUTHORIZED --> VOIDED: VoidAuthorization
     AUTHORIZED --> EXPIRED: ExpireAuthorization
     PARTIALLY_CAPTURED --> EXPIRED: ExpireAuthorization
     CAPTURED --> [*]
+    RELEASED --> [*]
     VOIDED --> [*]
     EXPIRED --> [*]
     DECLINED --> [*]
@@ -69,12 +75,14 @@ Derived from: `model.yaml → contexts[customer-payments].aggregates[PaymentAuth
 
 The entry arrows are the creating command `AuthorizePayment`: an accepted
 authorize creates the record `AUTHORIZED`, a declined one creates it
-`DECLINED`, and the checkout session stays open for another token. The three
-other terminal states are entered from the live states only. `ReleaseAllocation`, `ReauthorizePayment` and `BindOrder` change an
-allocation, the provider reference or the order, not the state. Transitions
-the model does not list are therefore not drawn: in particular there is no row
-for `AUTHORIZED → CAPTURED`, none for `ReleaseAllocation`, and none that
-moves an authorization whose every allocation is released (hotspot H3 below).
+`DECLINED`, and the checkout session stays open for another token. The state
+is derived from the allocations: `PARTIALLY_CAPTURED` while some are captured
+and some pending; `CAPTURED` when every allocation is captured or released
+with at least one captured; `RELEASED` when every allocation is released
+(H3). `ReauthorizePayment` keeps the state `AUTHORIZED` and replaces
+`expiresAt` and the provider reference. `BindOrder` sets the order and changes
+no state. A provider decline on re-authorization moves the authorization to
+`EXPIRED` and raises `PaymentDeclined{reason: REAUTH_DECLINED}`.
 
 ### 4. Enforced Invariants
 
@@ -96,10 +104,11 @@ the state does not allow, `concurrent-update` (409) and `validation-failed`
 | Policy | Owner | Rule | Effect on this aggregate |
 | --- | --- | --- | --- |
 | `BindOrderOnCheckoutCompleted` | this context | On `CheckoutCompleted` bind `orderId` to the session's authorization, then apply any parked fulfilment facts. | `BindOrder`; then the parked `CaptureAllocation`, `ReleaseAllocation` or refund commands run. |
-| `CaptureOnShipment` | this context | On `FulfillmentShipped{orderId, groupNo, trackingNumbers}` capture that group's allocation; also store the tracking number against the group. | `CaptureAllocation`; `PaymentCaptured`. |
-| `ReleaseOnCancellation` | this context | On `FulfillmentCancelled` release that group's allocation. | `ReleaseAllocation`; `PaymentReleased`. |
-| `ReauthorizeBeforeExpiry` | this context | Re-authorize uncaptured allocations 24 h before `expiresAt`. | `ReauthorizePayment`; no event (hotspot H1). |
-| `VoidUnboundAuthorizations` | this context | No `CheckoutCompleted` after 24 h: void. | `AUTHORIZED → VOIDED`; no event (hotspot H1). |
+| `CaptureOnShipment` | this context | On `FulfillmentShipped{orderId, groupNo, trackingNumbers}` capture that group's allocation; also store the tracking number against the group's allocation. | `CaptureAllocation`; `PaymentCaptured`. |
+| `ReleaseOnCancellation` | this context | On `FulfillmentCancelled` release that group's allocation. | `ReleaseAllocation`; `PaymentReleased` (reason `CANCELLED`). |
+| `ReleaseOnUnsourceable` | this context | On `FulfillmentUnsourceable` release that group's allocation. | `ReleaseAllocation`; `PaymentReleased` (reason `UNSOURCEABLE`). |
+| `ReauthorizeBeforeExpiry` | this context | At `expiresAt` minus 24 h re-authorize the uncaptured allocations; a provider decline moves the authorization to `EXPIRED`. | `ReauthorizePayment`; `PaymentReauthorized`, or `ExpireAuthorization` and `PaymentDeclined` (reason `REAUTH_DECLINED`). |
+| `VoidUnboundAuthorizations` | this context | No `CheckoutCompleted` after 24 h: void. | `AUTHORIZED → VOIDED`; `PaymentReleased` (reason `VOIDED`). |
 | Idempotent consumption | this context | Every consumed event is applied once (inbox on the CloudEvents `id`). | A repeated `FulfillmentShipped` does not capture twice; provider keys are also deterministic per (operation, `authorizationId`, `groupNo`). |
 
 ### 6. Handled Commands
@@ -107,11 +116,11 @@ the state does not allow, `concurrent-update` (409) and `validation-failed`
 | Command | Trigger | Transition |
 | --- | --- | --- |
 | `AuthorizePayment` | `checkout`, REST `POST /payment-authorizations` (provider `Authorize`) | `[*] → AUTHORIZED`, or `[*] → DECLINED` |
-| `CaptureAllocation` | `CaptureOnShipment` policy on Kafka `FulfillmentShipped` (provider `Capture`) | `AUTHORIZED → PARTIALLY_CAPTURED`, `PARTIALLY_CAPTURED → PARTIALLY_CAPTURED`, `PARTIALLY_CAPTURED → CAPTURED` |
-| `ReleaseAllocation` | `ReleaseOnCancellation` policy on Kafka `FulfillmentCancelled` | none listed (the allocation becomes `RELEASED`; hotspot H3) |
+| `CaptureAllocation` | `CaptureOnShipment` policy on Kafka `FulfillmentShipped` (provider `Capture`) | `AUTHORIZED → PARTIALLY_CAPTURED`, `AUTHORIZED → CAPTURED`, `PARTIALLY_CAPTURED → PARTIALLY_CAPTURED`, `PARTIALLY_CAPTURED → CAPTURED`; sets the allocation's `trackingNumber` |
+| `ReleaseAllocation` | `ReleaseOnCancellation` policy on Kafka `FulfillmentCancelled`; `ReleaseOnUnsourceable` policy on Kafka `FulfillmentUnsourceable` (provider `ReduceAuthorization(amount)` for a partial release) | the allocation becomes `RELEASED`; `AUTHORIZED → AUTHORIZED`, `AUTHORIZED → RELEASED`, `PARTIALLY_CAPTURED → PARTIALLY_CAPTURED`, `PARTIALLY_CAPTURED → CAPTURED`, `PARTIALLY_CAPTURED → RELEASED` |
 | `VoidAuthorization` | `checkout`, REST `POST /payment-authorizations/{authorizationId}:void`; `VoidUnboundAuthorizations` policy (provider `Void`) | `AUTHORIZED → VOIDED` |
-| `ExpireAuthorization` | not named in the model (hotspot H2) | `AUTHORIZED → EXPIRED`, `PARTIALLY_CAPTURED → EXPIRED` |
-| `ReauthorizePayment` | `ReauthorizeBeforeExpiry` policy (provider `Reauthorize`) | none (hotspot H1) |
+| `ExpireAuthorization` | a provider decline on re-authorization (`ReauthorizeBeforeExpiry`) | `AUTHORIZED → EXPIRED`, `PARTIALLY_CAPTURED → EXPIRED` |
+| `ReauthorizePayment` | `ReauthorizeBeforeExpiry` policy (provider `Reauthorize`) | `AUTHORIZED → AUTHORIZED` (new `expiresAt`, new provider reference) |
 | `BindOrder` | `BindOrderOnCheckoutCompleted` policy on Kafka `CheckoutCompleted` | none (sets `orderId`) |
 
 ### 7. Created Events
@@ -119,16 +128,14 @@ the state does not allow, `concurrent-update` (409) and `validation-failed`
 | Event | Raised when | Full CloudEvents type |
 | --- | --- | --- |
 | `PaymentAuthorized` | `AuthorizePayment` is accepted by the provider and saved | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentAuthorized` |
+| `PaymentReauthorized` | `ReauthorizePayment` is saved (new `expiresAt`, `providerRef`) | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentReauthorized` |
 | `PaymentCaptured` | `CaptureAllocation` is saved | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentCaptured` |
-| `PaymentReleased` | `ReleaseAllocation` is saved (the payload carries a `reason`) | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentReleased` |
+| `PaymentReleased` | `ReleaseAllocation` or `VoidAuthorization` is saved (`reason` is `CANCELLED`, `UNSOURCEABLE`, `VOIDED` or `EXPIRED`) | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentReleased` |
 | `PaymentAuthorizationExpired` | `ExpireAuthorization` is saved | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentAuthorizationExpired` |
-| `PaymentDeclined` | `AuthorizePayment` is declined by the provider and the `DECLINED` record is saved | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentDeclined` |
+| `PaymentDeclined` | `AuthorizePayment` is declined by the provider and the `DECLINED` record is saved, or a re-authorization is declined (reason `REAUTH_DECLINED`); carries `authorizationId` | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentDeclined` |
 
-All five are analytics-only (topic `retailnetwork.customer-payments.analytics`).
-`VoidAuthorization`, `ReauthorizePayment` and `BindOrder` raise nothing in the
-model (hotspot H1 on
-[EventStorming](/storefront/contexts/customer-payments/eventstorming)).
-Events leave through the transactional outbox in the same transaction as the
+All six are analytics-only by design (topic `retailnetwork.customer-payments.analytics`;
+no network consumer exists yet). `BindOrder` raises nothing. Events leave through the transactional outbox in the same transaction as the
 save.
 
 ### 8. Throughput
@@ -153,8 +160,8 @@ of the quote.
 
 ### 2. Description
 
-Money returned for one order or group: `refundId`, `orderId`, `amountMinor`,
-`reason` and the outcome. Value object:
+Money returned for one order or group: `refundId`, `orderId`, `groupNo`,
+`authorizationId`, `amountMinor`, `reason` and the outcome. Value object:
 
 | Value object | Fields | Note |
 | --- | --- | --- |
@@ -167,26 +174,29 @@ stateDiagram-v2
     [*] --> REQUESTED: RequestRefund
     REQUESTED --> SUCCEEDED: RecordRefundOutcome
     REQUESTED --> FAILED: RecordRefundOutcome
+    FAILED --> REQUESTED: RetryRefund
     SUCCEEDED --> [*]
-    FAILED --> [*]
     note right of FAILED
         RefundFailed is published;
-        the model names no retry
+        max 5 attempts, then stays
+        FAILED with an operator alert
     end note
 ```
 
 Derived from: `model.yaml → contexts[customer-payments].aggregates[Refund].states`,
-`.transitions`, `.commands`.
+`.transitions`, `.commands`, `.notes`.
 
 `RequestRefund` creates the refund `REQUESTED`; the provider's answer
-(`RecordRefundOutcome`) settles it as `SUCCEEDED` or `FAILED`. Both are
-terminal: a failed refund is never retried inside the aggregate (hotspot H8).
+(`RecordRefundOutcome`) settles it as `SUCCEEDED` or `FAILED`. `SUCCEEDED` is
+terminal. A `FAILED` refund is retryable: `RetryRefund` moves it back to
+`REQUESTED`, at most 5 attempts, after which it stays `FAILED` and an
+operator alert fires (H8).
 
 ### 4. Enforced Invariants
 
 | Invariant | Enforced by |
 | --- | --- |
-| Refunds of an order never exceed its captured total | `RequestRefund` → `ErrOverRefund` |
+| Refunds of an order never exceed its captured total; `REQUESTED` and issued refunds count, `FAILED` never does | `RequestRefund`, `RetryRefund` → `ErrOverRefund` |
 
 Derived from: `model.yaml → contexts[customer-payments].aggregates[Refund].invariants`.
 
@@ -204,6 +214,7 @@ Derived from: `model.yaml → contexts[customer-payments].aggregates[Refund].inv
 | --- | --- | --- |
 | `RequestRefund` | Storefront ops, REST `POST /refunds`; the two refund policies on Kafka `PackageLost`, `PackageReturned` (provider `Refund`) | `[*] → REQUESTED` |
 | `RecordRefundOutcome` | The provider's answer to `Refund` | `REQUESTED → SUCCEEDED`, `REQUESTED → FAILED` |
+| `RetryRefund` | Storefront ops or an automatic retry, up to 5 attempts (the model's `rest` list has no route for it) | `FAILED → REQUESTED` |
 
 ### 7. Created Events
 
@@ -227,29 +238,28 @@ package, or an ops request.
 
 | Read model | Source events | Serves | Why it is not an aggregate |
 | --- | --- | --- | --- |
-| `ParkedFulfillmentFacts` | `order-sourcing` `FulfillmentShipped`, `FulfillmentCancelled`; `shipping-and-tracking` `PackageLost`, `PackageReturned`, for orders not yet bound to an authorization | `BindOrderOnCheckoutCompleted`, which applies the parked facts after the bind | It protects no invariant: it holds facts to apply, and the commands they cause are validated by the aggregates. Rebuildable only by replaying the topics, which is why the model parks instead of dropping (gap S4). |
+| `ParkedFulfillmentFacts` | `order-sourcing` `FulfillmentShipped`, `FulfillmentCancelled`, `FulfillmentUnsourceable`; `shipping-and-tracking` `PackageLost`, `PackageReturned`, for orders not yet bound to an authorization | `BindOrderOnCheckoutCompleted`, which applies the parked facts after the bind | It protects no invariant: it holds facts to apply, and the commands they cause are validated by the aggregates. Rebuildable only by replaying the topics, which is why the model parks instead of dropping (gap S4). Retained 30 days, then purged; a gauge reports the parked count (H10). |
 
 Derived from: `model.yaml → contexts[customer-payments].read_models`.
 
 ## Model gaps and hotspots
 
-The model is silent or incomplete at these points. The pack records them and
-does not decide them; the model is not edited by this pack. The numbering is
-the one used by the hotspots on
-[EventStorming](/storefront/contexts/customer-payments/eventstorming).
+Every hotspot raised on
+[EventStorming](/storefront/contexts/customer-payments/eventstorming) is
+resolved in the model-fix (H1 to H12). The resolutions that land on these
+aggregates:
 
-| # | Gap | Where it shows |
+| # | Resolution | Where it shows |
 | --- | --- | --- |
-| H1 | `ReauthorizePayment` and `VoidAuthorization` raise no event and `ReauthorizePayment` has no transition; how a reauthorization is recorded (new `expiresAt`, new provider reference) is not stated. | Events table, commands table |
-| H2 | Nothing names what raises `ExpireAuthorization`. | Commands table |
-| H3 | `transitions` has no `AUTHORIZED → CAPTURED` (a one-group authorization has no direct path to `CAPTURED`), `ReleaseAllocation` has no transition, and the state after every allocation is released, or a mix of captured and released, is undefined. | State diagram |
-| H4 | The provider port has no partial release verb, so releasing one allocation of a multi-group authorization has no provider call. | Commands table |
-| H5 | `ReleaseOnCancellation` says `FulfillmentCancelled` covers an unsourceable group; the network publishes `FulfillmentUnsourceable` separately. | Policies table |
-| H6 | `PackageLost` and `PackageReturned` carry a tracking number; the model says it is stored against the group on capture, but `Allocation` and `ProviderRef` have no field for it. | Value objects |
-| H8 | A `FAILED` refund has no retry or follow-up, and the model does not say whether `REQUESTED` or `FAILED` refunds count toward `ErrOverRefund`. | Refund state diagram |
-| H11 | The `PaymentAuthorization.description` text is truncated in the middle of "unique checkoutSessionId". | Section 2 of this aggregate |
-| H12 | `Refund` and `RefundIssued` carry `orderId` only: no `groupNo` or `authorizationId`, although the policies refund "the affected group's captured amount" and the provider key is per group. | Refund description |
-
-H7 (`PaymentDeclined` has no `authorizationId`), H9 (the `.events` topic
-carries nothing) and H10 (parked facts for an order that never binds) sit
-outside these two aggregates' invariants and are described on EventStorming.
+| H1 | `VoidAuthorization` raises `PaymentReleased{reason: VOIDED}`; `ReauthorizePayment` has the transition `AUTHORIZED → AUTHORIZED` and raises `PaymentReauthorized`. | Events table, state diagram |
+| H2 | `ReauthorizeBeforeExpiry` (at `expiresAt` minus 24 h); a provider decline moves the authorization to `EXPIRED` and raises `PaymentDeclined{reason: REAUTH_DECLINED}`. | Policies table |
+| H3 | State derived from the allocations; `AUTHORIZED → CAPTURED` and the `ReleaseAllocation` transitions exist. | State diagram |
+| H4 | Provider port verb `ReduceAuthorization(amount)` for a partial release. | Commands table |
+| H5 | `FulfillmentUnsourceable` is consumed (`ReleaseOnUnsourceable`); `PaymentReleased.reason` is `CANCELLED`, `UNSOURCEABLE`, `VOIDED` or `EXPIRED`. | Policies table |
+| H6 | Nullable `Allocation.trackingNumber`, set at capture. | Value objects |
+| H7 | `PaymentDeclined` carries `authorizationId`. | Events table |
+| H8 | `RetryRefund` (`FAILED → REQUESTED`, max 5 attempts); `ErrOverRefund` counts `REQUESTED` and issued refunds, never `FAILED`. | Refund state diagram |
+| H9 | All events are analytics-only by design. | Events table |
+| H10 | Parked facts retained 30 days, then purged; gauge on the parked count. | Read models |
+| H11 | The description is complete. | Section 2 of this aggregate |
+| H12 | `Refund` and `RefundIssued` carry `groupNo` and `authorizationId`. | Refund description |

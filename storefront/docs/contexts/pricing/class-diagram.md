@@ -135,8 +135,8 @@ Omitted: the two repositories (same shape as `ItemPriceRepository`) and the
 `ErrNonIncreasingVersion`, `ErrOverlappingTaxBand`, `ErrRateOutOfRange`).
 `Tier` is the network's delivery-promise vocabulary, re-declared locally:
 there is no shared kernel. Both aggregates share `ScheduleStatus`
-(`CURRENT`/`SUPERSEDED`), the least-surprising reading the model's `notes`
-record.
+(`CURRENT`/`SUPERSEDED`): publishing a new version supersedes the
+previous one in the same transaction.
 
 ## 3. PriceQuote aggregate, events and policies
 
@@ -260,15 +260,15 @@ Derived from: `model.yaml → contexts[pricing].aggregates[PriceQuote]`,
 
 Omitted: the CloudEvents envelope (built in the Kafka adapter). The
 `QuoteTtl` edge is drawn to `PriceQuoteIssued` only to show the asymmetry:
-issue publishes, expiry does not (hotspot H3 on
-[EventStorming](/storefront/contexts/pricing/eventstorming)).
+issue publishes, expiry does not, by decision: expiry is checkout-internal
+TTL state (see [EventStorming](/storefront/contexts/pricing/eventstorming)).
 
 ## 4. Hexagonal ports and adapters
 
 ```mermaid
 flowchart TB
     subgraph IN["internal/adapters/inbound"]
-        HTTP["http<br/>merchandiser writes,<br/>BFF reads, checkout quote<br/>routes, paged bootstrap read"]
+        HTTP["http<br/>merchandiser writes and reads,<br/>checkout quote routes,<br/>paged bootstrap read"]
         KC["kafka<br/>consumer: offer-availability"]
         SCH["scheduler<br/>sale boundaries, quote expiry"]
     end

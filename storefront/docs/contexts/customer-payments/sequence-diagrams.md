@@ -19,7 +19,7 @@ names are the proposed packages and ports from the
 - `http`, `kafka consumer` and `scheduler` are the inbound adapters.
 - The use case is in `internal/application/usecases`.
 - `PaymentProvider` is the outbound adapter behind the Anti-Corruption Layer
-  port (`Authorize`, `Capture`, `Void`, `Refund`, `Reauthorize`); the
+  port (`Authorize`, `Capture`, `Void`, `Refund`, `Reauthorize`, `ReduceAuthorization`); the
   payment-provider simulator answers behind it. It is the context's only
   synchronous dependency.
 - `Postgres` stands for the repositories, the parked facts, the outbox, the
@@ -27,7 +27,7 @@ names are the proposed packages and ports from the
   `UnitOfWork`.
 - `Relay / Kafka` is the outbox relay. It reads committed `outbox_events`
   rows and publishes them to `retailnetwork.customer-payments.analytics` —
-  the only topic the context writes to (all seven events are analytics-only).
+  the only topic the context writes to (all eight events are analytics-only by design).
 
 The provider call is made **before** the transaction opens and carries the
 deterministic key per (operation, `authorizationId`, `groupNo`); a crash
@@ -121,15 +121,15 @@ sequenceDiagram
             else voided
                 P-->>UC: voided
                 UC->>A: VoidAuthorization(now)
-                A-->>UC: VOIDED
-                UC->>DB: BEGIN, save with version check
+                A-->>UC: VOIDED, PaymentReleased(VOIDED)
+                UC->>DB: BEGIN, save with version check,<br/>outbox PaymentReleased
                 alt version conflict
                     DB-->>UC: 0 rows
                     UC-->>H: 409 concurrent-update
                 else saved
                     UC->>DB: store key response, COMMIT
                     UC-->>H: 200 VOIDED
-                    Note over UC,DB: no event:<br/>VoidAuthorization publishes nothing
+                    DB-->>K: relay publishes PaymentReleased<br/>reason VOIDED after commit
                 end
             end
         end
@@ -159,7 +159,7 @@ sequenceDiagram
     alt already seen
         DB-->>H: replay or acknowledge
     else new
-        H->>UC: Execute(orderId, amountMinor, reason)
+        H->>UC: Execute(orderId, groupNo, authorizationId,<br/>amountMinor, reason)
         UC->>DB: load order's captured total and refunds
         alt order not bound (consumer path)
             UC->>DB: park the fact in parked facts
@@ -196,9 +196,12 @@ Derived from: `model.yaml → contexts[customer-payments].aggregates[Refund]`
 RefundOnReturnToSender]`, `.rest["POST /refunds"]`, `.sync_calls`,
 `.publishes[RefundIssued, RefundFailed]`.
 
-Omitted: the lookup of the group behind a tracking number (hotspot H6), the
-optimistic-concurrency branch and the retry of a `FAILED` refund, which the
-model does not define (hotspot H8). The REST route answers `201` with the
+Omitted: the optimistic-concurrency branch and `RetryRefund` (`FAILED →
+REQUESTED`, at most 5 attempts, then the refund stays `FAILED` with an
+operator alert; `ErrOverRefund` counts `REQUESTED` and issued refunds, never
+`FAILED`). On the policy path the group comes from the tracking number stored
+on its allocation at capture (H6), and the refund carries `groupNo` and
+`authorizationId` (H12). The REST route answers `201` with the
 refund in its final state when the provider replies in the same request; a
 slower outcome would leave `REQUESTED` visible through `GET /refunds`, a
 detail the model does not specify.
@@ -236,7 +239,7 @@ sequenceDiagram
                     UC->>DB: inbox row, log anomaly
                 else captured
                     A-->>UC: allocation CAPTURED, PaymentCaptured
-                    UC->>DB: BEGIN, save with version check<br/>store tracking numbers for the group
+                    UC->>DB: BEGIN, save with version check<br/>set the allocation's trackingNumber
                     UC->>DB: insert outbox PaymentCaptured, inbox row, COMMIT
                     DB-->>K: relay publishes after commit
                 end
@@ -257,7 +260,7 @@ this drawing; an implementation may run the aggregate guards first, so a
 capture the aggregate would refuse never reaches the provider (the model does
 not fix the order).
 
-## 5. ReleaseAllocation (Kafka FulfillmentCancelled)
+## 5. ReleaseAllocation (Kafka FulfillmentCancelled, FulfillmentUnsourceable)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
@@ -266,6 +269,7 @@ sequenceDiagram
     participant C as kafka consumer
     participant UC as ReleaseAllocation
     participant A as PaymentAuthorization
+    participant P as PaymentProvider
     participant DB as Postgres
     participant K as Relay / Kafka
     C->>DB: inbox lookup on CloudEvents id
@@ -277,6 +281,7 @@ sequenceDiagram
         alt order not bound yet
             UC->>DB: park the fact, inbox row
         else bound
+            UC->>P: ReduceAuthorization(amount) for a partial release
             UC->>A: ReleaseAllocation(groupNo, reason, now)
             alt ErrUnknownGroup
                 A-->>UC: error
@@ -291,13 +296,15 @@ sequenceDiagram
     end
 ```
 
-Derived from: `model.yaml → contexts[customer-payments].consumes[FulfillmentCancelled]`,
-`.policies[ReleaseOnCancellation]`, `.aggregates[PaymentAuthorization]`
+Derived from: `model.yaml → contexts[customer-payments].consumes[FulfillmentCancelled, FulfillmentUnsourceable]`,
+`.policies[ReleaseOnCancellation, ReleaseOnUnsourceable]`, `.aggregates[PaymentAuthorization]`
 (`commands`, `invariants`), `.publishes[PaymentReleased]`.
 
-Omitted: a provider call. The port has no partial release verb, so the model
-names none (hotspot H4); the state of an authorization whose last allocation
-is released is also undefined (hotspot H3).
+Omitted: the provider-error branch. A partial release calls the provider
+port's `ReduceAuthorization(amount)` (H4). The reason is `CANCELLED` for
+`FulfillmentCancelled` and `UNSOURCEABLE` for `FulfillmentUnsourceable`; the
+state follows the allocations, so releasing the last one gives `RELEASED` (or
+`CAPTURED` when some were captured) (H3).
 
 ## 6. BindOrder and apply parked facts (Kafka CheckoutCompleted)
 
@@ -351,14 +358,16 @@ sequenceDiagram
         S->>UC: Execute(authorizationId)
         UC->>DB: load authorization and version
         UC->>P: Reauthorize(uncaptured allocations, key)
-        alt provider unreachable or declines
-            P-->>UC: error or declined
-            Note over UC: outcome not defined in the model<br/>(hotspots H1 and H2)
+        alt provider declines
+            P-->>UC: declined
+            UC->>A: ExpireAuthorization(now)
+            A-->>UC: EXPIRED, PaymentDeclined(REAUTH_DECLINED)
+            UC->>DB: BEGIN, save with version check,<br/>outbox PaymentDeclined, COMMIT
         else reauthorized
-            P-->>UC: new provider reference
-            UC->>A: ReauthorizePayment(now)
-            UC->>DB: BEGIN, save with version check, COMMIT
-            Note over UC,DB: no event:<br/>ReauthorizePayment publishes nothing
+            P-->>UC: new expiresAt, providerRef
+            UC->>A: ReauthorizePayment(expiresAt, providerRef)
+            A-->>UC: AUTHORIZED, PaymentReauthorized
+            UC->>DB: BEGIN, save with version check,<br/>outbox PaymentReauthorized, COMMIT
         end
     end
 ```
@@ -369,16 +378,18 @@ Derived from: `model.yaml → contexts[customer-payments].policies[ReauthorizeBe
 
 Omitted: the idempotency detail — the scan selects only authorizations close
 to expiry and the provider key is deterministic, so a second sweep repeats
-the same call. What a successful reauthorization writes (a new `expiresAt`,
-a new provider reference) is not defined in the model (hotspot H1).
+the same call. A successful reauthorization keeps the state `AUTHORIZED` and
+records the new `expiresAt` and provider reference (H1); a provider decline
+moves the authorization to `EXPIRED` (H2). A provider timeout is retried by
+the next sweep.
 
-## 8. ExpireAuthorization (trigger not named)
+## 8. ExpireAuthorization (provider decline on re-authorization)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
-    participant T as trigger not named
+    participant T as ReauthorizePayment
     participant UC as ExpireAuthorization
     participant A as PaymentAuthorization
     participant DB as Postgres
@@ -400,6 +411,6 @@ Derived from: `model.yaml → contexts[customer-payments].aggregates[PaymentAuth
 (`commands[ExpireAuthorization]`, `transitions`, `events`),
 `.publishes[PaymentAuthorizationExpired]`.
 
-Omitted: the trigger itself, which the model does not name (hotspot H2).
-The diagram draws only what the model fixes: the two transitions into
-`EXPIRED` and the event they raise.
+Omitted: the trigger's own flow (sequence 7). `ExpireAuthorization` is raised
+by a provider decline on re-authorization (H2); the diagram draws the two
+transitions into `EXPIRED` and the event they raise.

@@ -29,6 +29,7 @@ erDiagram
     product_contents {
         TEXT catalog_item_id PK
         TEXT status "DRAFT, PUBLISHED, RETIRED"
+        TEXT retired_reason "nullable: DISCARDED, DISCONTINUED, RETIRED_BY_HAND"
         TEXT description "nullable in DRAFT"
         TEXT primary_category_id "nullable in DRAFT"
         BIGINT revision
@@ -64,7 +65,6 @@ erDiagram
     category_trees ||--|{ categories : "FK category_tree_id"
     category_trees {
         TEXT category_tree_id PK
-        TEXT status "DRAFT, PUBLISHED"
         BIGINT tree_version
         BIGINT version
     }
@@ -85,9 +85,11 @@ Derived from: `model.yaml → contexts[product-content].aggregates[ProductConten
 enum).
 
 Column notes: `product_contents.status` holds the three `ProductContent`
-states; `revision` is the published-shape counter `product-discovery`
+states and `retired_reason` says why a RETIRED content retired (a DRAFT retires
+with `DISCARDED` or `DISCONTINUED`); the tree row has no status column, since
+the tree is always published; `revision` is the published-shape counter `product-discovery`
 orders by; `version` on both roots is the optimistic-concurrency counter
-every save checks; `tree_version` is the published tree version the
+every save checks; `tree_version` is the tree version each tree command bumps and the
 `CategoryTreePublished` event carries; `categories.parent_id` points inside
 the same aggregate; `categories.path` is the materialized browse path,
 recomputed on move and rename. `content_attributes` is keyed by
@@ -194,12 +196,12 @@ replay. `schema_migrations` is the migration tool's bookkeeping.
 | Table | Aggregate / role | Notes |
 | --- | --- | --- |
 | `product_contents` | **ProductContent** (root) | One row per catalogue item, with `revision` for the consumer guard and `version` for optimistic concurrency. |
-| `content_bullets` | **ProductContent** (bullets) | Ordered by `bullet_no`; replaced wholesale by `ReviseContent`. |
-| `content_attributes` | **ProductContent** (`Attribute` value objects) | Keyed by `name` per item; replaced wholesale by `ReviseContent`. |
+| `content_bullets` | **ProductContent** (bullets) | Ordered by `bullet_no`; replaced wholesale by `ReviseDraft` or `ReviseContent`. |
+| `content_attributes` | **ProductContent** (`Attribute` value objects) | Keyed by `name` per item; replaced wholesale by `ReviseDraft` or `ReviseContent`. |
 | `content_media` | **ProductContent** (`Media` value objects) | Exactly one `PRIMARY` row when the gate passes; the check is the aggregate's. |
-| `category_trees` | **CategoryTree** (root) | One row; `tree_version` bumps on publication. |
+| `category_trees` | **CategoryTree** (root) | One row; `tree_version` bumps on every tree command, including `PublishCategoryTree`. |
 | `categories` | **CategoryTree** (`Category` value objects) | Written by `CreateCategory`, `MoveCategory`, `RenameCategory`, always with the root's `version`. |
-| `rm_catalog_items` | none (read model `CatalogItemView`) | Serves `ErrUnknownCatalogItem` and `RetireOnDiscontinue`. |
+| `rm_catalog_items` | none (read model `CatalogItemView`) | Serves `ErrUnknownCatalogItem`, `ErrItemDiscontinued` and `RetireOnDiscontinue`. |
 | `outbox_events` | none (infrastructure) | Transactional outbox. |
 | `processed_events` | none (infrastructure) | Inbox for idempotent consumers. |
 | `idempotency_keys` | none (infrastructure) | `Idempotency-Key` replay store. |
