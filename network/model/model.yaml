@@ -684,6 +684,8 @@ contexts:
     roles: [Execution (checkout), Gateway (storefront)]
     business_decisions:
       - No order is placed unless every line belongs to exactly one confirmed-able promise.
+      - "Checkout takes exactly one of an inline shipTo and a saved shipToAddressId (the address is copied into the order). When a selected offer is no longer quotable, nothing is placed: the response is 409 offer-not-quotable carrying requotedOffers (one per feasible tier of each failed group) for the shopper to re-confirm."
+      - "POST /checkout and the other state-changing routes are idempotent on (route, Idempotency-Key) inside a 24-hour window; a replay with the same body returns the stored response, which is how an in-doubt placement is settled."
       - The ship-to address never leaves this context except to shipping-and-tracking for a label.
       - A customer may cancel until every shipment group is locked; after that, cancellation is a return.
       - A cancel is a request: order-sourcing decides for each group, and its answer (FulfillmentCancelled or FulfillmentCancelRefused) is what this context shows.
@@ -715,11 +717,11 @@ contexts:
         size_estimate: "one row per order + lines"
       - name: Shopper
         root_id: shopperId
-        description: A synthetic customer account with saved addresses.
+        description: A synthetic customer account with saved addresses (at most 20).
         states: [ACTIVE]
         invariants:
           - {rule: "email unique", error: ErrShopperExists}
-        commands: [RegisterShopper]
+        commands: [RegisterShopper, AddShopperAddress]
         events: []
         throughput_estimate: "low"
         size_estimate: "small"
@@ -733,6 +735,9 @@ contexts:
       - {from: shopper / storefront, type: cmd, channel: "REST POST /checkout", routes: ["POST /checkout"], message: "PlaceOrder", relationship: OHS}
       - {from: shopper / storefront, type: cmd, channel: "REST POST /orders/{orderId}:cancel", routes: ["POST /orders/{orderId}:cancel"], message: "CancelOrder", relationship: OHS}
       - {from: shopper / storefront, type: cmd, channel: "REST POST /shoppers", routes: ["POST /shoppers"], message: "RegisterShopper", relationship: OHS}
+      - {from: shopper / storefront, type: cmd, channel: "REST POST /shoppers/{shopperId}/addresses", routes: ["POST /shoppers/{shopperId}/addresses"], message: "AddShopperAddress", relationship: OHS}
+      - {from: shopper / storefront, type: qry, channel: "REST GET /shoppers/{shopperId}, GET /shoppers?email=", routes: ["GET /shoppers/{shopperId}", "GET /shoppers?email="], message: "GetShopper, FindShopperByEmail", relationship: OHS}
+      - {from: shopper / storefront, type: qry, channel: "REST GET /orders?shopperId=", routes: ["GET /orders?shopperId="], message: "ListOrders", relationship: OHS}
       - {from: shopper / storefront, type: qry, channel: "REST GET /orders/{orderId}, GET /orders/{orderId}/tracking", routes: ["GET /orders/{orderId}", "GET /orders/{orderId}/tracking"], message: "GetOrder, GetTracking", relationship: OHS}
       - {from: shipping-and-tracking, type: qry, channel: "REST GET /orders/{orderId}/ship-to (in-org, restricted)", routes: ["GET /orders/{orderId}/ship-to"], message: "GetShipTo", relationship: Customer/Supplier}
       - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentLocked, FulfillmentShipped, FulfillmentUnsourceable", relationship: Conformist}
@@ -745,6 +750,10 @@ contexts:
       - "POST /orders/{orderId}:cancel"
       - "GET /orders/{orderId}/ship-to"
       - "POST /shoppers"
+      - "POST /shoppers/{shopperId}/addresses"
+      - "GET /shoppers/{shopperId}"
+      - "GET /shoppers?email="
+      - "GET /orders?shopperId="
     publishes:
       - {event: CustomerOrderPlaced, entity: customerorder, data: [orderId, shopperId, destinationPostalPrefix, placedAt, groups(groupNo, promiseId, tier, witnessNodeId, shipBy, deliverByEarliest, deliverByLatest, lines(lineNo, catalogItemId, quantity))], consumers: [order-sourcing, delivery-promise]}
       - {event: CustomerOrderCancelled, entity: customerorder, data: [orderId, reason, cancelledAt, groupNos], consumers: [order-sourcing, delivery-promise]}

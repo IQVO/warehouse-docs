@@ -33,7 +33,7 @@ Severity:
 | S2 | Price change between cart and checkout. | S2 | **Proposed.** Binding PriceQuote at session open; the review page shows the binding total; a changed total is visible before confirm. |
 | S3 | Requote after authorization. | S2 | **Proposed.** Pre-check offers before authorizing; on a late `offer-not-quotable`, void then REQUOTE_REQUIRED. |
 | S4 | Event order across topics (payments). | S2 | **Proposed.** Park fulfilment facts for an unbound order; apply on `CheckoutCompleted`. |
-| S5 | Projection rebuild beyond topic retention. | S3 | **Proposed.** Snapshot via OHS reads, then events. |
+| S5 | Projection rebuild beyond topic retention. | S3 | **Built** in product-discovery: snapshot via the OHS reads (each row carries `updatedAt`, seeded into the per-key guard), then events. |
 | S6 | Out-of-stock purchase (benchmark [5]). | S4 | **Proposed.** Not possible in this network; shown as unavailable; recorded as a future idea. |
 
 ## How a gap gets closed
