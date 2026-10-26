@@ -106,7 +106,7 @@ paths:
       description: >-
         ConfirmSession with the PSP payment method token (never a card
         number). AUTHORIZING calls customer-payments POST
-        /payment-authorizations (key <sessionId>:auth:<authAttempt>, allocations
+        /payment-authorizations (key: session id, then the literal auth, then authAttempt, joined by colons; allocations
         per group; authAttempt starts at 1 and is incremented on each DECLINED
         to AUTHORIZING, so a retry with another token is a new attempt); first,
         every selected offer is re-checked with delivery-promise GET
