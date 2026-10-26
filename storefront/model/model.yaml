@@ -644,20 +644,28 @@ contexts:
       - "Capture is per allocation (shipment group): zero captures without FulfillmentShipped, zero expired authorizations on shipped groups (section 8 correctness targets)."
       - "Fulfilment facts for a not-yet-bound order are parked and applied on BindOrderOnCheckoutCompleted (cross-topic order, gap S4)."
       - "Provider idempotency keys are deterministic per (operation, authorizationId, groupNo)."
+      - "All eight events are analytics-only, BY DESIGN: the topic carries them but no network consumer exists yet."
     aggregates:
       - name: PaymentAuthorization
         root_id: authorizationId
-        description: "One checkout session's authorization: unique checkoutSessionId, orderId (bound later), allocations {groupNo, amountMinor, state PENDING|CAPTURED|RELEASED}, provider refs, expiresAt."
-        states: [AUTHORIZED, PARTIALLY_CAPTURED, CAPTURED, VOIDED, EXPIRED, DECLINED]
+        description: "One checkout session's authorization: unique checkoutSessionId, orderId (bound later), allocations {groupNo, amountMinor, state PENDING|CAPTURED|RELEASED, trackingNumber?}, provider refs (providerAuthorizationId, providerCaptureIds), expiresAt. Its state is derived from the allocations."
+        states: [AUTHORIZED, PARTIALLY_CAPTURED, CAPTURED, RELEASED, VOIDED, EXPIRED, DECLINED]
         transitions:
           - [AUTHORIZED, PARTIALLY_CAPTURED, CaptureAllocation]
           - [PARTIALLY_CAPTURED, PARTIALLY_CAPTURED, CaptureAllocation]
           - [PARTIALLY_CAPTURED, CAPTURED, CaptureAllocation]
+          - [AUTHORIZED, CAPTURED, CaptureAllocation]
+          - [AUTHORIZED, AUTHORIZED, ReauthorizePayment]
+          - [AUTHORIZED, AUTHORIZED, ReleaseAllocation]
+          - [AUTHORIZED, RELEASED, ReleaseAllocation]
+          - [PARTIALLY_CAPTURED, PARTIALLY_CAPTURED, ReleaseAllocation]
+          - [PARTIALLY_CAPTURED, CAPTURED, ReleaseAllocation]
+          - [PARTIALLY_CAPTURED, RELEASED, ReleaseAllocation]
           - [AUTHORIZED, VOIDED, VoidAuthorization]
           - [AUTHORIZED, EXPIRED, ExpireAuthorization]
           - [PARTIALLY_CAPTURED, EXPIRED, ExpireAuthorization]
         value_objects:
-          - "Allocation{groupNo, amountMinor, state(PENDING|CAPTURED|RELEASED)}"
+          - "Allocation{groupNo, amountMinor, state(PENDING|CAPTURED|RELEASED), trackingNumber? (nullable, set at capture; PackageLost and PackageReturned map to a group by it)}"
           - "ProviderRef{providerAuthorizationId, providerCaptureIds[]}"
         invariants:
           - {rule: "one authorization per checkout session; a replay returns it", error: ErrDuplicateAuthorization}
@@ -666,34 +674,37 @@ contexts:
           - {rule: "no capture after expiresAt", error: ErrCaptureAfterExpiry}
           - {rule: "a capture or release names an existing group", error: ErrUnknownGroup}
         commands: [AuthorizePayment, CaptureAllocation, ReleaseAllocation, VoidAuthorization, ExpireAuthorization, ReauthorizePayment, BindOrder]
-        events: [PaymentAuthorized, PaymentCaptured, PaymentReleased, PaymentAuthorizationExpired, PaymentDeclined]
+        events: [PaymentAuthorized, PaymentReauthorized, PaymentCaptured, PaymentReleased, PaymentAuthorizationExpired, PaymentDeclined]
         throughput_estimate: "one per checkout session; captures per shipment group"
         size_estimate: "one row per session + allocations"
-        notes: "DECLINED is a terminal record of a declined authorize attempt (no transition into it); the checkout session stays DECLINED-open for another token."
+        notes: "DECLINED is a terminal record of a declined authorize attempt (no transition into it; the row exists even for a first-attempt decline, so PaymentDeclined carries authorizationId); the checkout session stays DECLINED-open for another token. Aggregate state is derived from the allocations: PARTIALLY_CAPTURED while some are captured and some pending; CAPTURED when every allocation is captured or released with at least one captured; RELEASED when every allocation is released. VoidAuthorization raises PaymentReleased{reason: VOIDED}. A provider decline on re-authorization moves the authorization to EXPIRED and raises PaymentDeclined{reason: REAUTH_DECLINED}. The provider port gains ReduceAuthorization(amount) for a partial release (the simulator implements it)."
       - name: Refund
         root_id: refundId
-        description: "Money returned for one order or group: reason LOST, RETURNED_TO_SENDER or MANUAL."
+        description: "Money returned for one order or group (groupNo, authorizationId): reason LOST, RETURNED_TO_SENDER or MANUAL."
         states: [REQUESTED, SUCCEEDED, FAILED]
         transitions:
           - [REQUESTED, SUCCEEDED, RecordRefundOutcome]
           - [REQUESTED, FAILED, RecordRefundOutcome]
+          - [FAILED, REQUESTED, RetryRefund]
         value_objects:
           - "RefundReason(LOST|RETURNED_TO_SENDER|MANUAL)"
         invariants:
-          - {rule: "refunds of an order never exceed its captured total", error: ErrOverRefund}
-        commands: [RequestRefund, RecordRefundOutcome]
+          - {rule: "refunds of an order never exceed its captured total; REQUESTED and ISSUED refunds count, FAILED never does", error: ErrOverRefund}
+        commands: [RequestRefund, RecordRefundOutcome, RetryRefund]
         events: [RefundIssued, RefundFailed]
         throughput_estimate: "low"
         size_estimate: "one row per refund"
+        notes: "A FAILED refund is retryable: RetryRefund (FAILED to REQUESTED), at most 5 attempts, after which it stays FAILED with an operator alert."
     read_models:
-      - {name: ParkedFulfillmentFacts, source: "order-sourcing FulfillmentShipped, FulfillmentCancelled and shipping-and-tracking PackageLost, PackageReturned facts for orders not yet bound to an authorization; applied on BindOrderOnCheckoutCompleted"}
+      - {name: ParkedFulfillmentFacts, source: "order-sourcing FulfillmentShipped, FulfillmentCancelled, FulfillmentUnsourceable and shipping-and-tracking PackageLost, PackageReturned facts for orders not yet bound to an authorization; applied on BindOrderOnCheckoutCompleted; retained 30 days, then purged; a gauge reports the parked count"}
     policies:
       - {name: BindOrderOnCheckoutCompleted, rule: "on CheckoutCompleted bind orderId to the session's authorization, then apply any parked fulfilment facts"}
       - {name: CaptureOnShipment, rule: "on FulfillmentShipped{orderId, groupNo, trackingNumbers} capture that group's allocation; also store trackingNumber to group"}
-      - {name: ReleaseOnCancellation, rule: "on FulfillmentCancelled (customer cancellation or unsourceable group) release that group's allocation"}
+      - {name: ReleaseOnCancellation, rule: "on FulfillmentCancelled (customer cancellation) release that group's allocation (PaymentReleased reason CANCELLED)"}
+      - {name: ReleaseOnUnsourceable, rule: "on FulfillmentUnsourceable release that group's allocation (PaymentReleased reason UNSOURCEABLE)"}
       - {name: RefundOnLostPackage, rule: "on PackageLost refund the affected group's captured amount (reason LOST)"}
       - {name: RefundOnReturnToSender, rule: "on PackageReturned refund the affected group's captured amount (reason RETURNED_TO_SENDER)"}
-      - {name: ReauthorizeBeforeExpiry, rule: "re-authorize uncaptured allocations 24 h before expiresAt [9]"}
+      - {name: ReauthorizeBeforeExpiry, rule: "scheduled at expiresAt minus 24 h [9]: call Reauthorize for the uncaptured allocations (raises PaymentReauthorized with the new expiresAt and providerRef); a provider decline moves the authorization to EXPIRED and raises PaymentDeclined{reason: REAUTH_DECLINED}"}
       - {name: VoidUnboundAuthorizations, rule: "no CheckoutCompleted after 24 h: void (covers a checkout crash after authorize)"}
     inbound:
       - {from: checkout, type: cmd, channel: "REST POST /payment-authorizations, POST /payment-authorizations/{authorizationId}:void", message: "AuthorizePayment, VoidAuthorization", relationship: Customer/Supplier}
@@ -701,7 +712,7 @@ contexts:
       - {from: "storefront ops (human)", type: cmd, channel: "REST POST /refunds", message: RequestRefund, relationship: UI}
       - {from: "storefront ops (human)", type: qry, channel: "REST GET /payment-authorizations?orderId=|checkoutSessionId=, GET /refunds?orderId=", message: "ListAuthorizations, ListRefunds", relationship: UI}
       - {from: checkout, type: evt, channel: "Kafka retailnetwork.checkout.events", message: CheckoutCompleted, relationship: Customer/Supplier}
-      - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentShipped, FulfillmentCancelled", relationship: Conformist}
+      - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentShipped, FulfillmentCancelled, FulfillmentUnsourceable", relationship: Conformist}
       - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "PackageLost, PackageReturned", relationship: Conformist}
     rest:
       - "POST /payment-authorizations"
@@ -712,20 +723,22 @@ contexts:
       - "POST /refunds"
     publishes:
       - {event: PaymentAuthorized, entity: paymentauthorization, data: [authorizationId, checkoutSessionId, currency, totalMinor, "allocations(groupNo, amountMinor)", expiresAt], consumers: ["analytics only"]}
+      - {event: PaymentReauthorized, entity: paymentauthorization, data: [authorizationId, expiresAt, providerRef], consumers: ["analytics only"]}
       - {event: PaymentCaptured, entity: paymentauthorization, data: [authorizationId, orderId, groupNo, amountMinor], consumers: ["analytics only"]}
-      - {event: PaymentReleased, entity: paymentauthorization, data: [authorizationId, orderId, groupNo, amountMinor, reason], consumers: ["analytics only"]}
+      - {event: PaymentReleased, entity: paymentauthorization, data: [authorizationId, orderId, groupNo, amountMinor, "reason(CANCELLED|UNSOURCEABLE|VOIDED|EXPIRED)"], consumers: ["analytics only"]}
       - {event: PaymentAuthorizationExpired, entity: paymentauthorization, data: [authorizationId, orderId, expiredAt], consumers: ["analytics only"]}
-      - {event: RefundIssued, entity: refund, data: [refundId, orderId, amountMinor, reason], consumers: ["analytics only"]}
+      - {event: RefundIssued, entity: refund, data: [refundId, orderId, groupNo, authorizationId, amountMinor, reason], consumers: ["analytics only"]}
       - {event: RefundFailed, entity: refund, data: [refundId, orderId, code], consumers: ["analytics only"]}
-      - {event: PaymentDeclined, entity: paymentauthorization, data: [checkoutSessionId, reason, at], consumers: ["analytics only"]}
+      - {event: PaymentDeclined, entity: paymentauthorization, data: [authorizationId, checkoutSessionId, reason, at], consumers: ["analytics only"]}
     consumes:
       - {event: CheckoutCompleted, from: checkout, fields: [sessionId, orderId, authorizationId, groups]}
       - {event: FulfillmentShipped, from: order-sourcing, fields: [orderId, groupNo, trackingNumbers]}
       - {event: FulfillmentCancelled, from: order-sourcing, fields: [orderId, groupNo, reason]}
+      - {event: FulfillmentUnsourceable, from: order-sourcing, fields: [orderId, groupNo, reason]}
       - {event: PackageLost, from: shipping-and-tracking, fields: [orderId, trackingNumber]}
       - {event: PackageReturned, from: shipping-and-tracking, fields: [orderId, trackingNumber]}
     sync_calls:
-      - {to: payment-provider, type: cmd, message: "Authorize, Capture, Void, Refund, Reauthorize", channel: "provider port (ACL); adapter calls payment-provider-simulator", note: "external system; idempotency keys deterministic per (operation, authorizationId, groupNo); never receives a card number"}
+      - {to: payment-provider, type: cmd, message: "Authorize, Capture, Void, Refund, Reauthorize, ReduceAuthorization", channel: "provider port (ACL); adapter calls payment-provider-simulator", note: "external system; idempotency keys deterministic per (operation, authorizationId, groupNo); never receives a card number"}
     ul:
       - {term: "Payment Authorization", definition: "A hold on the shopper's payment method for the quote total, split into allocations per shipment group.", code: "authorization.PaymentAuthorization"}
       - {term: "Capture", definition: "Taking an allocation's money when its shipment group ships.", code: "authorization.Allocation.Capture", not_to_be_confused_with: "authorize (the hold at checkout)"}

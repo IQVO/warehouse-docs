@@ -54,7 +54,7 @@ flowchart TB
     OA ==>|"CF 2e"| PC
     OA ==>|"C/S + CF + OHS + ops-only 6e +REST"| PD
     OA ==>|"CF 2e"| SC
-    OS ==>|"CF 2e"| CP
+    OS ==>|"CF 3e"| CP
     ST ==>|"CF 2e"| CP
     DP -->|"OHS +REST"| SC
     SC -->|"C/S +REST"| CK
@@ -115,7 +115,7 @@ analytics-only events, which have no integration consumer.
 | `offer-availability` | `product-content` | CF | `CatalogItemCreated`, `CatalogItemDiscontinued` | - |
 | `offer-availability` | `product-discovery` | C/S + CF + OHS + ops-only | `CatalogItemCreated`, `CatalogItemDiscontinued`, `ListingCreated`, `ListingAvailabilityChanged`, `ListingSuppressed`, `ListingRestored` | qry ListCatalog (`REST GET /catalog`); qry ListListings (`REST GET /listings?nodeId=&catalogItemId=`) |
 | `offer-availability` | `shopping-cart` | CF | `CatalogItemCreated`, `CatalogItemDiscontinued` | - |
-| `order-sourcing` | `customer-payments` | CF | `FulfillmentShipped`, `FulfillmentCancelled` | - |
+| `order-sourcing` | `customer-payments` | CF | `FulfillmentShipped`, `FulfillmentCancelled`, `FulfillmentUnsourceable` | - |
 | `pricing` | `checkout` | C/S | - | cmd IssuePriceQuote (`REST POST /price-quotes`) |
 | `pricing` | `product-discovery` | C/S + CF | `ItemPriceChanged`, `ItemPriceWithdrawn` | qry ListItemPrices (`REST GET /item-prices`) |
 | `pricing` | `shopping-cart` | C/S | `ItemPriceChanged`, `ItemPriceWithdrawn`, `DeliveryChargeScheduleChanged`, `TaxTableChanged` | - |
