@@ -43,11 +43,8 @@ flowchart LR
     G1["PaymentAuthorization"]:::aggregate
     E1["PaymentAuthorized"]:::event
     E2["PaymentDeclined"]:::event
-    E3["state VOIDED"]:::event
+    E3["PaymentReleased<br/>reason VOIDED"]:::event
     AN([analytics]):::actor
-    H1["H1 Void and Reauthorize<br/>raise no event"]:::hotspot
-    H7["H7 PaymentDeclined carries<br/>no authorizationId"]:::hotspot
-    H9["H9 the .events topic<br/>carries nothing"]:::hotspot
 
     CK --> C0
     CK -->|only after a definitive<br/>rejection| C1
@@ -60,16 +57,13 @@ flowchart LR
     G1 --> E3
     E1 --> AN
     E2 --> AN
-    C1 --- H1
-    E2 --- H7
-    E1 --- H9
+    E3 --> AN
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
     classDef command fill:#a5d8ff,stroke:#1971c2,color:#000
     classDef aggregate fill:#ffec99,stroke:#e67700,color:#000
     classDef event fill:#ffc078,stroke:#d9480f,color:#000
     classDef external fill:#fcc2d7,stroke:#c2255c,color:#000
-    classDef hotspot fill:#ff8787,stroke:#c92a2a,color:#000
 ```
 
 Derived from: `model.yaml → contexts[customer-payments].inbound` (checkout cmd
@@ -78,15 +72,16 @@ rows), `.aggregates[PaymentAuthorization]` (`commands`, `invariants`,
 
 Omitted: the saga around the call, the requote path (gap S3), the provider
 timeout and the outbox. A declined authorize is saved as a terminal
-`DECLINED` record and the checkout session stays open for another token. The
-voided state is drawn as a sticky because the model names no void event
-(H1).
+`DECLINED` record, which is why `PaymentDeclined` carries `authorizationId`
+(H7), and the checkout session stays open for another token. A void raises
+`PaymentReleased{reason: VOIDED}` (H1). Every event on this page is
+analytics-only by design (H9).
 
 ## 2. Bind the order and apply parked facts
 
 ```mermaid
 flowchart LR
-    OS["OS FulfillmentShipped,<br/>FulfillmentCancelled"]:::event
+    OS["OS FulfillmentShipped,<br/>FulfillmentCancelled,<br/>FulfillmentUnsourceable"]:::event
     ST["ST PackageLost,<br/>PackageReturned"]:::event
     CK["checkout"]:::external
     E4["CK CheckoutCompleted"]:::event
@@ -95,7 +90,7 @@ flowchart LR
     C2["BindOrder"]:::command
     G1["PaymentAuthorization"]:::aggregate
     P2["apply parked facts"]:::policy
-    H10["H10 parked facts for an<br/>order that never binds"]:::hotspot
+    PU["purge after 30 days,<br/>gauge on parked count"]:::policy
 
     OS -->|order not bound| RM0
     ST -->|order not bound| RM0
@@ -105,7 +100,7 @@ flowchart LR
     C2 --> G1
     G1 --> P2
     RM0 --> P2
-    RM0 --- H10
+    RM0 --> PU
 
     classDef command fill:#a5d8ff,stroke:#1971c2,color:#000
     classDef aggregate fill:#ffec99,stroke:#e67700,color:#000
@@ -113,7 +108,6 @@ flowchart LR
     classDef policy fill:#d0bfff,stroke:#6741d9,color:#000
     classDef readmodel fill:#b2f2bb,stroke:#2f9e44,color:#000
     classDef external fill:#fcc2d7,stroke:#c2255c,color:#000
-    classDef hotspot fill:#ff8787,stroke:#c92a2a,color:#000
 ```
 
 Derived from: `model.yaml → contexts[customer-payments].read_models`,
@@ -122,7 +116,9 @@ Derived from: `model.yaml → contexts[customer-payments].read_models`,
 
 Omitted: the commands the applied facts cause (boards 3 and 4) and the inbox.
 `BindOrder` raises no event of its own; gap S4 is the reason the board exists
-at all.
+at all. Parked facts are retained 30 days and then purged, and a gauge reports
+the parked count (H10); the 24 h `VoidUnboundAuthorizations` backstop still
+voids the authorization itself.
 
 ## 3. Capture and release
 
@@ -130,35 +126,33 @@ at all.
 flowchart LR
     OS["OS FulfillmentShipped"]:::event
     OC["OS FulfillmentCancelled"]:::event
+    OU["OS FulfillmentUnsourceable"]:::event
     P3["CaptureOnShipment"]:::policy
     P4["ReleaseOnCancellation"]:::policy
+    P4B["ReleaseOnUnsourceable"]:::policy
     C3["CaptureAllocation"]:::command
     C4["ReleaseAllocation"]:::command
     PSP["payment-provider<br/>Capture"]:::external
-    G1["PaymentAuthorization<br/>allocations"]:::aggregate
+    PSR["payment-provider<br/>ReduceAuthorization"]:::external
+    G1["PaymentAuthorization<br/>allocations,<br/>trackingNumber set at capture"]:::aggregate
     E5["PaymentCaptured"]:::event
     E6["PaymentReleased"]:::event
     AN([analytics]):::actor
-    H3["H3 no AUTHORIZED to CAPTURED,<br/>no release transition"]:::hotspot
-    H4["H4 no provider verb<br/>for a partial release"]:::hotspot
-    H5["H5 unsourceable group is not<br/>FulfillmentCancelled"]:::hotspot
-    H6["H6 tracking number has<br/>no field"]:::hotspot
 
     OS --> P3
     OC --> P4
+    OU --> P4B
+    P4B --> C4
     P3 --> C3
     P4 --> C4
     C3 -->|ErrOverCapture,<br/>ErrCaptureAfterExpiry,<br/>ErrUnknownGroup| PSP
     PSP --> G1
-    C4 -->|ErrUnknownGroup| G1
+    C4 -->|ErrUnknownGroup| PSR
+    PSR --> G1
     G1 --> E5
     G1 --> E6
     E5 --> AN
     E6 --> AN
-    G1 --- H3
-    C4 --- H4
-    OC --- H5
-    P3 --- H6
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
     classDef command fill:#a5d8ff,stroke:#1971c2,color:#000
@@ -166,17 +160,23 @@ flowchart LR
     classDef event fill:#ffc078,stroke:#d9480f,color:#000
     classDef policy fill:#d0bfff,stroke:#6741d9,color:#000
     classDef external fill:#fcc2d7,stroke:#c2255c,color:#000
-    classDef hotspot fill:#ff8787,stroke:#c92a2a,color:#000
 ```
 
 Derived from: `model.yaml → contexts[customer-payments].policies[CaptureOnShipment,
-ReleaseOnCancellation]`, `.consumes`, `.aggregates[PaymentAuthorization]`
+ReleaseOnCancellation, ReleaseOnUnsourceable]`, `.consumes`, `.aggregates[PaymentAuthorization]`
 (`commands`, `transitions`, `invariants`), `.sync_calls`, `.publishes`;
 `network/model/model.yaml → contexts[order-sourcing].publishes`.
 
-Omitted: the bind and parking (board 2), the provider call on release (the
-model names none) and the inbox. Capture and release both act on one
-allocation; the aggregate state follows only the capture transitions.
+Omitted: the bind and parking (board 2) and the inbox. Capture and release
+both act on one allocation, and the aggregate state is derived from the
+allocations: `PARTIALLY_CAPTURED` while some are captured and some pending,
+`CAPTURED` when all are captured or released with at least one captured,
+`RELEASED` when all are released (H3). A partial release calls the provider
+port's `ReduceAuthorization(amount)` (H4). `FulfillmentUnsourceable` is
+consumed separately from `FulfillmentCancelled`; `PaymentReleased.reason` is
+`CANCELLED`, `UNSOURCEABLE`, `VOIDED` or `EXPIRED` (H5). The allocation stores
+the nullable `trackingNumber` at capture, and `PackageLost` and
+`PackageReturned` map to a group by it (H6).
 
 ## 4. Refunds
 
@@ -193,8 +193,7 @@ flowchart LR
     C6["RecordRefundOutcome"]:::command
     E7["RefundIssued"]:::event
     E8["RefundFailed"]:::event
-    H8["H8 FAILED refund has no<br/>retry"]:::hotspot
-    H12["H12 refund carries no<br/>groupNo"]:::hotspot
+    C9["RetryRefund<br/>FAILED to REQUESTED,<br/>max 5 attempts"]:::command
 
     ST --> P5
     SR --> P6
@@ -207,8 +206,8 @@ flowchart LR
     C6 --> G2
     G2 --> E7
     G2 --> E8
-    E8 --- H8
-    C5 --- H12
+    E8 --> C9
+    C9 --> G2
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
     classDef command fill:#a5d8ff,stroke:#1971c2,color:#000
@@ -216,7 +215,6 @@ flowchart LR
     classDef event fill:#ffc078,stroke:#d9480f,color:#000
     classDef policy fill:#d0bfff,stroke:#6741d9,color:#000
     classDef external fill:#fcc2d7,stroke:#c2255c,color:#000
-    classDef hotspot fill:#ff8787,stroke:#c92a2a,color:#000
 ```
 
 Derived from: `model.yaml → contexts[customer-payments].aggregates[Refund]`,
@@ -226,7 +224,10 @@ rows), `.consumes`, `.sync_calls`, `.publishes[RefundIssued, RefundFailed]`;
 
 Omitted: the parking of a fact for an unbound order (board 2) and the read
 routes `GET /refunds?orderId=`. `RefundIssued` and `RefundFailed` are
-analytics-only.
+analytics-only. A `FAILED` refund is retryable through `RetryRefund`, at most
+5 attempts, after which it stays `FAILED` with an operator alert; `ErrOverRefund`
+counts `REQUESTED` and issued refunds, never `FAILED` (H8). `Refund` and
+`RefundIssued` carry `groupNo` and `authorizationId` (H12).
 
 ## 5. Clock policies
 
@@ -242,8 +243,8 @@ flowchart LR
     G1["PaymentAuthorization"]:::aggregate
     E9["PaymentAuthorizationExpired"]:::event
     AN([analytics]):::actor
-    H1["H1 reauthorization is<br/>not recorded"]:::hotspot
-    H2["H2 nothing raises<br/>ExpireAuthorization"]:::hotspot
+    E10["PaymentReauthorized<br/>new expiresAt, providerRef"]:::event
+    E11["PaymentDeclined<br/>reason REAUTH_DECLINED"]:::event
 
     T --> P7
     T --> P8
@@ -255,8 +256,11 @@ flowchart LR
     C8 --> G1
     G1 --> E9
     E9 --> AN
-    C7 --- H1
-    C8 --- H2
+    G1 --> E10
+    G1 --> E11
+    E10 --> AN
+    E11 --> AN
+    C7 -->|provider decline| C8
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
     classDef command fill:#a5d8ff,stroke:#1971c2,color:#000
@@ -264,30 +268,32 @@ flowchart LR
     classDef event fill:#ffc078,stroke:#d9480f,color:#000
     classDef policy fill:#d0bfff,stroke:#6741d9,color:#000
     classDef external fill:#fcc2d7,stroke:#c2255c,color:#000
-    classDef hotspot fill:#ff8787,stroke:#c92a2a,color:#000
 ```
 
 Derived from: `model.yaml → contexts[customer-payments].policies[ReauthorizeBeforeExpiry,
 VoidUnboundAuthorizations]`, `.aggregates[PaymentAuthorization]` (`commands`,
-`transitions`), `.sync_calls`, `.publishes[PaymentAuthorizationExpired]`.
+`transitions`), `.sync_calls`, `.publishes[PaymentAuthorizationExpired, PaymentReauthorized, PaymentDeclined]`.
 
 Omitted: the capture-after-expiry guard (`ErrCaptureAfterExpiry`, board 3).
-The two policies are the model's only clock-driven rules; the expiry itself
-has no named cause.
+The two policies are the model's only clock-driven rules. A successful
+reauthorization keeps the state `AUTHORIZED` and raises `PaymentReauthorized`
+with the new `expiresAt` and `providerRef` (H1). A provider decline moves the
+authorization to `EXPIRED` and raises `PaymentDeclined{reason:
+REAUTH_DECLINED}`, which is what raises `ExpireAuthorization` (H2).
 
 ## Hotspots
 
 | # | Hotspot | Where it comes from in the model |
 | --- | --- | --- |
-| H1 | `VoidAuthorization` and `ReauthorizePayment` raise no event, and `ReauthorizePayment` has no transition; how a reauthorization is recorded (new `expiresAt`, new provider reference) is not stated, and analytics never sees a void. | `aggregates[PaymentAuthorization].commands` vs `.events` and `.transitions` |
-| H2 | Nothing names what raises `ExpireAuthorization`: no policy, inbound row or provider callback. It also does not say what happens when a reauthorization is declined. | `aggregates[PaymentAuthorization].commands`, `policies` |
-| H3 | `transitions` has no `AUTHORIZED → CAPTURED` (a one-group authorization), `ReleaseAllocation` has no transition, and the state after every allocation is released, or a mix of captured and released, is undefined. | `aggregates[PaymentAuthorization].transitions` vs `.states` and `.commands` |
-| H4 | The provider port is Authorize, Capture, Void, Refund, Reauthorize; releasing one allocation of a multi-group authorization has no verb. | `sync_calls`, `policies[ReleaseOnCancellation]` |
-| H5 | `ReleaseOnCancellation` says `FulfillmentCancelled` covers "an unsourceable group"; the network publishes `FulfillmentUnsourceable` separately and this context does not consume it. The `reason` field of `PaymentReleased` has no named values. | `policies[ReleaseOnCancellation]`, `consumes`; `network/model/model.yaml → contexts[order-sourcing].publishes` |
-| H6 | `PackageLost` and `PackageReturned` carry `trackingNumber`; `CaptureOnShipment` "also stores trackingNumber to group", but `Allocation` and `ProviderRef` have no such field. | `policies[CaptureOnShipment]`, `aggregates[PaymentAuthorization].value_objects` |
-| H7 | `PaymentDeclined` carries `checkoutSessionId`, `reason` and `at` but no `authorizationId`, although it is published by the aggregate whose root id is the subject and partition key. | `publishes[PaymentDeclined]` vs `aggregates[PaymentAuthorization].root_id` |
-| H8 | A `FAILED` refund is terminal with no retry or follow-up, and the model does not say whether `REQUESTED` or `FAILED` refunds count toward `ErrOverRefund`. | `aggregates[Refund].transitions`, `.invariants` |
-| H9 | All seven events are analytics-only, so `retailnetwork.customer-payments.events` carries nothing; the future `customer-notifications` context would be the first consumer. | `publishes` rows ("analytics only"); `future_contexts[customer-notifications]` |
-| H10 | `ParkedFulfillmentFacts` has no expiry, size bound or alarm for an order that never binds (a `CheckoutCompleted` that never comes). | `read_models[ParkedFulfillmentFacts]`, `policies[VoidUnboundAuthorizations]` |
-| H11 | The `PaymentAuthorization` description in the model is cut off in the middle of "unique checkoutSessionId" (a literal ellipsis). | `aggregates[PaymentAuthorization].description` |
-| H12 | `Refund` and `RefundIssued` carry `orderId` only, no `groupNo` or `authorizationId`, although the policies refund "the affected group's captured amount" and the provider key is per group. | `aggregates[Refund]`, `publishes[RefundIssued]`, `policies[RefundOnLostPackage]` |
+| H1 | **Resolved in the model-fix:** `VoidAuthorization` raises `PaymentReleased{reason: VOIDED}`. `ReauthorizePayment` has the transition `AUTHORIZED → AUTHORIZED` and raises `PaymentReauthorized` (new `expiresAt`, `providerRef`). | `aggregates[PaymentAuthorization].transitions`, `.events`, `publishes[PaymentReauthorized]` |
+| H2 | **Resolved in the model-fix:** policy `ReauthorizeBeforeExpiry` (at `expiresAt` minus 24 h) calls Reauthorize for the uncaptured allocations; a provider decline moves the authorization to `EXPIRED` and raises `PaymentDeclined{reason: REAUTH_DECLINED}`. That is the cause of `ExpireAuthorization`. | `policies[ReauthorizeBeforeExpiry]`, `aggregates[PaymentAuthorization].notes` |
+| H3 | **Resolved in the model-fix:** the aggregate state is derived from the allocations (`PARTIALLY_CAPTURED`, `CAPTURED`, `RELEASED`), with `AUTHORIZED → CAPTURED` and `ReleaseAllocation` transitions. | `aggregates[PaymentAuthorization].transitions`, `.notes` |
+| H4 | **Resolved in the model-fix:** the provider port gains `ReduceAuthorization(amount)` for a partial release; the simulator implements it. | `sync_calls`, `aggregates[PaymentAuthorization].notes` |
+| H5 | **Resolved in the model-fix:** `FulfillmentUnsourceable` is consumed; policy `ReleaseOnUnsourceable` releases that group. `PaymentReleased.reason` is `CANCELLED`, `UNSOURCEABLE`, `VOIDED` or `EXPIRED`. | `consumes`, `policies[ReleaseOnUnsourceable]`, `publishes[PaymentReleased]` |
+| H6 | **Resolved in the model-fix:** `Allocation` has a nullable `trackingNumber`, set at capture from `FulfillmentShipped.trackingNumbers`; `PackageLost` and `PackageReturned` map to a group by it. | `aggregates[PaymentAuthorization].value_objects`, `policies[CaptureOnShipment]` |
+| H7 | **Resolved in the model-fix:** `PaymentDeclined` carries `authorizationId` (a declined attempt still has a terminal `DECLINED` row). | `publishes[PaymentDeclined]`, `aggregates[PaymentAuthorization].notes` |
+| H8 | **Resolved in the model-fix:** `RetryRefund` moves `FAILED → REQUESTED`, at most 5 attempts, then the refund stays `FAILED` and an operator alert fires. `ErrOverRefund` counts `REQUESTED` and issued refunds, never `FAILED`. The model's `rest` list has no `RetryRefund` route, so the OpenAPI carries none. | `aggregates[Refund].transitions`, `.invariants`, `.notes` |
+| H9 | **Resolved in the model-fix:** all eight events are analytics-only by design: the `.events` topic carries them but no network consumer exists yet; the future `customer-notifications` context would be the first. | `business_decisions`, `publishes`, `future_contexts[customer-notifications]` |
+| H10 | **Resolved in the model-fix:** `ParkedFulfillmentFacts` are retained 30 days and then purged; a gauge reports the parked count. | `read_models[ParkedFulfillmentFacts]` |
+| H11 | **Resolved in the model-fix:** the `PaymentAuthorization` description is complete (unique `checkoutSessionId`, `orderId` bound later, allocations, provider refs, `expiresAt`). | `aggregates[PaymentAuthorization].description` |
+| H12 | **Resolved in the model-fix:** `Refund` and `RefundIssued` carry `groupNo` and `authorizationId`. | `aggregates[Refund].description`, `publishes[RefundIssued]` |

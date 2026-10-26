@@ -28,7 +28,7 @@ Participant names are the proposed packages and ports from the
   They share one transaction through `UnitOfWork`.
 - `Relay / Kafka` is the outbox relay. It reads committed `outbox_events`
   rows and publishes `CheckoutCompleted` to `retailnetwork.checkout.events`
-  and the four other events to `retailnetwork.checkout.analytics`.
+  and the six other events to `retailnetwork.checkout.analytics`.
 
 Every save is conditional on the loaded `version` (optimistic concurrency).
 **No outbound call sits inside a database transaction**: the use case commits
@@ -78,8 +78,9 @@ Derived from: `model.yaml → contexts[checkout].aggregates[CheckoutSession].com
 
 Omitted: the `503` when `Clients` cannot answer (the shopper retries with the
 same `Idempotency-Key`), the `422` on invalid input, and the case where an
-offer is no longer `QUOTED` at the pre-check, which the model does not define
-(hotspot H3 on [EventStorming](/storefront/contexts/checkout/eventstorming)).
+offer is no longer `QUOTED` at the pre-check, which fails as
+`ErrOfferNotQuotable` (`422 offer-not-quotable`, no state change; hotspot H3,
+resolved, on [EventStorming](/storefront/contexts/checkout/eventstorming)).
 
 ## 2. ConfirmSession, part 1: authorize (REST POST ...:confirm)
 
@@ -90,6 +91,7 @@ sequenceDiagram
     participant H as http
     participant UC as ConfirmSession
     participant A as CheckoutSession
+    participant C as Clients
     participant P as Payments
     participant DB as Postgres
     participant K as Relay / Kafka
@@ -106,9 +108,14 @@ sequenceDiagram
             A-->>UC: ErrSessionClosed, ErrPlacementInDoubt<br/>or ErrPriceQuoteExpired
             UC-->>H: 409 problem
         else OPEN or DECLINED
-            A-->>UC: AUTHORIZING
+            UC->>C: GetDeliveryOffer(offerId) per selected offer
+            alt an offer is no longer QUOTED
+                C-->>UC: not quotable
+                UC-->>H: 422 offer-not-quotable, no state change
+            else all quotable
+            A-->>UC: AUTHORIZING, authAttempt + 1 from DECLINED
             UC->>DB: save, version-checked
-            UC->>P: AuthorizePayment<br/>key sessionId:auth, allocations per group
+            UC->>P: AuthorizePayment<br/>key sessionId:auth:authAttempt
             alt declined
                 P-->>UC: declined
                 UC->>A: RecordDecline(reason, now)
@@ -120,13 +127,15 @@ sequenceDiagram
                 P-->>UC: authorizationId, total
                 UC->>A: RecordAuthorization(authorizationId, total, request)
                 alt total differs from the quote total
-                    A-->>UC: ErrAuthorizationMismatch
+                    A-->>UC: ErrAuthorizationMismatch, voidOwed set
+                    UC->>DB: save voidOwed (RetryOwedVoids voids it)
                     UC-->>H: 409 authorization-mismatch
                 else equal
                     A-->>UC: PLACING with the stored request
                     UC->>DB: save, version-checked
                     Note over UC,DB: continues with part 2
                 end
+            end
             end
         end
     end
@@ -135,13 +144,14 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[checkout].aggregates[CheckoutSession]`
 (`transitions`, `invariants`), `.sync_calls[AuthorizePayment]`,
 `.rest["POST /checkout-sessions/{sessionId}:confirm"]`,
-`.publishes[CheckoutDeclined]`.
+`.publishes[CheckoutDeclined]`, `.policies[ResolveStuckAuthorizations, RetryOwedVoids]`.
 
 Omitted: the `404` for an unknown session, a version conflict retried once
-and then `409 concurrent-update`, and the `Payments` timeout on authorize,
-which has no defined outcome (hotspot H4). What the use case does with an
-authorization whose total mismatches is not defined (hotspot H5), and a second
-authorize after a decline has no defined key (hotspot H2).
+and then `409 concurrent-update`. A `Payments` timeout on authorize leaves
+the session `AUTHORIZING`; `ResolveStuckAuthorizations` re-calls after 2
+minutes with the same key (hotspot H4, resolved). A mismatching total sets
+`voidOwed` (hotspot H5, resolved), and a second authorize after a decline is
+a new attempt with its own key (hotspot H2, resolved).
 
 ## 3. ConfirmSession, part 2: place the order
 
@@ -166,25 +176,26 @@ sequenceDiagram
         DB-->>K: relay publishes CheckoutCompleted (events topic)
     else definitive 409, requoted offers
         O-->>UC: requote, translated by the ACL
-        UC->>P: VoidAuthorization<br/>key sessionId:void
-        P-->>UC: voided
-        UC->>A: RecordRequoteRequired(offers, now)
+        UC->>A: RecordRequoteRequired(offers, now)<br/>voidOwed = authorizationId
         UC->>DB: BEGIN, save REQUOTE_REQUIRED, outbox CheckoutRequoteRequired
         UC->>DB: store key response, COMMIT
+        UC->>P: VoidAuthorization<br/>key sessionId:void
+        P-->>UC: voided (else RetryOwedVoids retries)
         UC-->>H: 200 REQUOTE_REQUIRED with requotedOffers
     else definitive 422, contract bug
         O-->>UC: rejected
-        UC->>P: VoidAuthorization<br/>key sessionId:void
-        P-->>UC: voided
-        UC->>A: RecordFailure(code, now)
+        UC->>A: RecordFailure(code, now)<br/>voidOwed = authorizationId
         UC->>DB: BEGIN, save FAILED, outbox CheckoutFailed
         UC->>DB: store key response, COMMIT
+        UC->>P: VoidAuthorization<br/>key sessionId:void
+        P-->>UC: voided (else RetryOwedVoids retries)
         UC-->>H: 200 FAILED, alert raised
     else timeout or 503
         O--xUC: no definitive answer
         UC->>A: RecordPlacementInDoubt(now)
         Note over A: no void, no new attempt
-        UC->>DB: save (stays PLACING), store key response
+        UC->>DB: BEGIN, save (stays PLACING), outbox CheckoutPlacementInDoubt
+        UC->>DB: store key response, COMMIT
         UC-->>H: 202 PLACING
     end
 ```
@@ -193,13 +204,15 @@ Derived from: `model.yaml → contexts[checkout].business_decisions`,
 `.aggregates[CheckoutSession]` (`transitions`, `ErrPlacementInDoubt`),
 `.sync_calls` (`PlaceOrder`, `VoidAuthorization`),
 `.publishes` (`CheckoutCompleted`, `CheckoutRequoteRequired`,
-`CheckoutFailed`).
+`CheckoutFailed`, `CheckoutPlacementInDoubt`),
+`.policies[RetryOwedVoids]`.
 
 The stored request is PII-free and carries `shipToAddressId`, never an
 address; the `Idempotency-Key` towards the network is the `sessionId`. The
-`REQUOTE_REQUIRED` and `FAILED` states are recorded only after the void
-answered. Omitted: a failing void, which has no defined outcome (hotspot H5),
-and the mapping of the network's wire names, which happens inside `ACL` and is
+`REQUOTE_REQUIRED` and `FAILED` states are recorded together with
+`voidOwed`, in one transaction, before the void is attempted; a failing void
+is retried every minute by `RetryOwedVoids` (hotspot H5, resolved). Omitted:
+the mapping of the network's wire names, which happens inside `ACL` and is
 not yet in the network model (hotspot H8).
 
 ## 4. ResolveInDoubtPlacements (scheduler)
@@ -226,15 +239,17 @@ sequenceDiagram
             DB-->>K: relay publishes CheckoutCompleted
         else definitive 409 or 422
             O-->>UC: requote or rejected
-            UC->>P: VoidAuthorization<br/>key sessionId:void
-            P-->>UC: voided
-            UC->>A: RecordRequoteRequired or RecordFailure
+            UC->>A: RecordRequoteRequired or RecordFailure<br/>voidOwed set
             UC->>DB: BEGIN, save, outbox event, COMMIT
             DB-->>K: relay publishes the analytics event
+            UC->>P: VoidAuthorization<br/>key sessionId:void
         else still no answer
             O--xUC: timeout or 503
             UC->>A: RecordPlacementInDoubt(now)
-            Note over UC: alert at 20 h,<br/>before the 24 h window
+            Note over UC: alert at 20 h from placingSince
+        end
+        opt placing for 22 h or more
+            UC->>P: give up, VoidAuthorization<br/>key sessionId:void
         end
     end
 ```
@@ -245,9 +260,11 @@ Derived from: `model.yaml → contexts[checkout].policies[ResolveInDoubtPlacemen
 
 The replay is safe because the body is byte for byte the stored one and the
 key is the same: `customer-ordering` replays its first response. No shopper
-waits on this path; the BFF polls `GetSession`. Omitted: the interplay with
-`customer-payments`' void of an unbound authorization after 24 h (hotspot H6)
-and the backoff schedule, which the model does not give.
+waits on this path; the BFF polls `GetSession`. The timeline is ordered:
+alert at 20 h, give up and void at 22 h, `customer-payments`' void of an
+unbound authorization at 24 h as the backstop (hotspot H6, resolved); `Void`
+is idempotent, so a race is harmless. Omitted: the backoff schedule, which the
+model does not give.
 
 ## 5. ExpireSession (scheduler)
 
@@ -260,25 +277,25 @@ sequenceDiagram
     participant A as CheckoutSession
     participant DB as Postgres
     S->>UC: Execute() on the quote expiry clock
-    UC->>DB: load OPEN sessions with quoteExpiresAt before now
+    UC->>DB: load OPEN or DECLINED sessions with quoteExpiresAt before now
     loop each expired session
         UC->>A: ExpireSession(now)
-        alt still OPEN
+        alt still OPEN or DECLINED
             A-->>UC: EXPIRED
-            UC->>DB: save, version-checked
+            UC->>DB: BEGIN, save, outbox CheckoutSessionExpired, COMMIT
         else moved on meanwhile
             A-->>UC: ErrSessionClosed
             Note over UC: skip, nothing to expire
         end
     end
-    Note over UC,DB: no event: ExpireSession publishes nothing
+    Note over UC,DB: analytics-only CheckoutSessionExpired
 ```
 
 Derived from: `model.yaml → contexts[checkout].policies[ExpireOnQuoteExpiry]`,
-`.aggregates[CheckoutSession].transitions[OPEN, EXPIRED]`.
+`.aggregates[CheckoutSession].transitions[OPEN, EXPIRED]` and
+`[DECLINED, EXPIRED]`, `.publishes[CheckoutSessionExpired]`.
 
-Omitted: `DECLINED` sessions, which `ExpireOnQuoteExpiry` mentions but which
-have no transition to `EXPIRED` (hotspot H1). A session that moves to
+`DECLINED` sessions expire like `OPEN` ones (hotspot H1, resolved). A session that moves to
 `AUTHORIZING` between the load and the call is rejected by the version check
 and by the aggregate.
 

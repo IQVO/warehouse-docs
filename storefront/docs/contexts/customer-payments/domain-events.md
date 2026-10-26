@@ -31,7 +31,7 @@ Every Kafka message is a **CloudEvents 1.0 event in structured JSON mode**
 | `time` | the instant the fact happened, UTC |
 | `datacontenttype` | `application/json` |
 | `dataschema` | `urn:retailnetwork:customer-payments:events:<EventName>:v1` |
-| Kafka topic | `retailnetwork.customer-payments.analytics` — **every** published event is analytics-only, so by `conventions.integration_rules` the `.events` topic carries nothing from this context |
+| Kafka topic | `retailnetwork.customer-payments.analytics` — **every** published event is analytics-only by design, so by `conventions.integration_rules` the `.events` topic carries nothing from this context until a network consumer exists |
 | Kafka key | the subject: `authorizationId` for authorization events, `refundId` for refund events, so one aggregate's events stay on one partition and in order |
 
 No payment event carries a card number, a PSP token or any shopper data: the
@@ -41,8 +41,8 @@ payloads hold ids, amounts, reasons and timestamps only
 ## Published
 
 Every event is written to `outbox_events` in the same transaction as the
-aggregate save, and a relay publishes it. All seven events name their
-consumers as "analytics only": they go to the `.analytics` topic and no
+aggregate save, and a relay publishes it. All eight events name their
+consumers as "analytics only" by design: they go to the `.analytics` topic and no
 storefront or network context subscribes to a payment fact
 ([Context Map](/storefront/contexts/customer-payments/context-map)).
 
@@ -65,6 +65,23 @@ storefront or network context subscribes to a payment fact
 | `totalMinor` | integer | The authorized total in minor units. |
 | `allocations` | array | One entry per shipment group: `groupNo` and `amountMinor`. |
 | `expiresAt` | timestamp | When the provider's authorization stops being honoured. |
+
+### PaymentReauthorized
+
+| Item | Value |
+| --- | --- |
+| Full type | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentReauthorized` |
+| Topic | `retailnetwork.customer-payments.analytics` |
+| Subject / key | `authorizationId` |
+| Dataschema | `urn:retailnetwork:customer-payments:events:PaymentReauthorized:v1` |
+| Producing command / use case | `ReauthorizePayment` (the `ReauthorizeBeforeExpiry` policy, 24 h before `expiresAt`); the state stays `AUTHORIZED` |
+| Consumers | analytics only |
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `authorizationId` | string | The authorization that was re-authorized. |
+| `expiresAt` | timestamp | The new expiry of the provider's hold. |
+| `providerRef` | string | The provider's reference for the new hold. |
 
 ### PaymentCaptured
 
@@ -92,7 +109,7 @@ storefront or network context subscribes to a payment fact
 | Topic | `retailnetwork.customer-payments.analytics` |
 | Subject / key | `authorizationId` |
 | Dataschema | `urn:retailnetwork:customer-payments:events:PaymentReleased:v1` |
-| Producing command / use case | `ReleaseAllocation` (the `ReleaseOnCancellation` policy on `FulfillmentCancelled`) |
+| Producing command / use case | `ReleaseAllocation` (`ReleaseOnCancellation` on `FulfillmentCancelled`, `ReleaseOnUnsourceable` on `FulfillmentUnsourceable`) or `VoidAuthorization` (reason `VOIDED`) |
 | Consumers | analytics only (the future `customer-notifications` context would consume it) |
 
 | Field | Type | Meaning |
@@ -101,7 +118,7 @@ storefront or network context subscribes to a payment fact
 | `orderId` | string | The order bound to it. |
 | `groupNo` | integer | The group whose allocation was released. |
 | `amountMinor` | integer | The released amount in minor units. |
-| `reason` | string | Why it was released; the model names the field but not its values (see Open Questions on the [Bounded Context Canvas](/storefront/contexts/customer-payments/bounded-context-canvas)). |
+| `reason` | string | Why it was released: `CANCELLED`, `UNSOURCEABLE`, `VOIDED` or `EXPIRED`. |
 
 ### PaymentAuthorizationExpired
 
@@ -111,7 +128,7 @@ storefront or network context subscribes to a payment fact
 | Topic | `retailnetwork.customer-payments.analytics` |
 | Subject / key | `authorizationId` |
 | Dataschema | `urn:retailnetwork:customer-payments:events:PaymentAuthorizationExpired:v1` |
-| Producing command / use case | `ExpireAuthorization` (what raises it is not named in the model, hotspot H2) |
+| Producing command / use case | `ExpireAuthorization` (raised when a provider decline on re-authorization moves the authorization to `EXPIRED`) |
 | Consumers | analytics only |
 
 | Field | Type | Meaning |
@@ -126,15 +143,16 @@ storefront or network context subscribes to a payment fact
 | --- | --- |
 | Full type | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentDeclined` |
 | Topic | `retailnetwork.customer-payments.analytics` |
-| Subject / key | `authorizationId` (the `DECLINED` record's root id; the payload does not repeat it, hotspot H7) |
+| Subject / key | `authorizationId` (the `DECLINED` record's root id, repeated in the payload) |
 | Dataschema | `urn:retailnetwork:customer-payments:events:PaymentDeclined:v1` |
-| Producing command / use case | `AuthorizePayment` (declined by the provider; the `DECLINED` record is saved) |
+| Producing command / use case | `AuthorizePayment` (declined by the provider; the `DECLINED` record is saved), or `ReauthorizePayment` (reason `REAUTH_DECLINED`; the authorization moves to `EXPIRED`) |
 | Consumers | analytics only |
 
 | Field | Type | Meaning |
 | --- | --- | --- |
+| `authorizationId` | string | The authorization record (the `DECLINED` row for a declined authorize). |
 | `checkoutSessionId` | string | The session whose authorize was declined; it stays open for another token. |
-| `reason` | string | The decline reason, translated by the ACL. |
+| `reason` | string | The decline reason, translated by the ACL, or `REAUTH_DECLINED`. |
 | `at` | timestamp | When the decline happened. |
 
 ### RefundIssued
@@ -152,6 +170,8 @@ storefront or network context subscribes to a payment fact
 | --- | --- | --- |
 | `refundId` | string | The refund. |
 | `orderId` | string | The order refunded. |
+| `groupNo` | integer | The shipment group refunded. |
+| `authorizationId` | string | The authorization the money was captured from. |
 | `amountMinor` | integer | The refunded amount in minor units. |
 | `reason` | string | `LOST`, `RETURNED_TO_SENDER` or `MANUAL`. |
 
@@ -163,7 +183,7 @@ storefront or network context subscribes to a payment fact
 | Topic | `retailnetwork.customer-payments.analytics` |
 | Subject / key | `refundId` |
 | Dataschema | `urn:retailnetwork:customer-payments:events:RefundFailed:v1` |
-| Producing command / use case | `RecordRefundOutcome` (`REQUESTED → FAILED`) |
+| Producing command / use case | `RecordRefundOutcome` (`REQUESTED → FAILED`); the refund is then retryable by `RetryRefund`, max 5 attempts |
 | Consumers | analytics only |
 
 | Field | Type | Meaning |
@@ -191,26 +211,28 @@ type string**, never on a suffix. Proposed consumer groups:
 
 | Event | Full type | Fields used | What this context does |
 | --- | --- | --- | --- |
-| `FulfillmentShipped` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | `orderId`, `groupNo`, `trackingNumbers` | Runs `CaptureOnShipment`: captures that group's allocation (`PaymentCaptured`) and stores the tracking numbers against the group. Parked if the order is not yet bound. |
-| `FulfillmentCancelled` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | `orderId`, `groupNo`, `reason` | Runs `ReleaseOnCancellation`: releases that group's allocation (`PaymentReleased`). Parked if the order is not yet bound. |
+| `FulfillmentShipped` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | `orderId`, `groupNo`, `trackingNumbers` | Runs `CaptureOnShipment`: captures that group's allocation (`PaymentCaptured`) and stores the tracking number on the group's allocation. Parked if the order is not yet bound. |
+| `FulfillmentCancelled` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | `orderId`, `groupNo`, `reason` | Runs `ReleaseOnCancellation`: releases that group's allocation (`PaymentReleased`, reason `CANCELLED`). Parked if the order is not yet bound. |
+| `FulfillmentUnsourceable` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentUnsourceable` | `orderId`, `groupNo`, `reason` | Runs `ReleaseOnUnsourceable`: releases that group's allocation (`PaymentReleased`, reason `UNSOURCEABLE`). Parked if the order is not yet bound. |
 
 ### From shipping-and-tracking (`retailnetwork.shipping-and-tracking.events`, Conformist)
 
 | Event | Full type | Fields used | What this context does |
 | --- | --- | --- | --- |
-| `PackageLost` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | `orderId`, `trackingNumber` | Runs `RefundOnLostPackage`: refunds the affected group's captured amount, reason `LOST`. Parked if the order is not yet bound. |
-| `PackageReturned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` | `orderId`, `trackingNumber` | Runs `RefundOnReturnToSender`: refunds the affected group's captured amount, reason `RETURNED_TO_SENDER`. Parked if the order is not yet bound. |
+| `PackageLost` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | `orderId`, `trackingNumber` | Runs `RefundOnLostPackage`: refunds the affected group's captured amount (found by tracking number), reason `LOST`. Parked if the order is not yet bound. |
+| `PackageReturned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` | `orderId`, `trackingNumber` | Runs `RefundOnReturnToSender`: refunds the affected group's captured amount (found by tracking number), reason `RETURNED_TO_SENDER`. Parked if the order is not yet bound. |
 
 **Ordering.** The three topics have no order between them (gap S4).
-`CheckoutCompleted` is keyed by `sessionId` upstream, `FulfillmentShipped`
-and `FulfillmentCancelled` by the assignment, and `PackageLost` and
+`CheckoutCompleted` is keyed by `sessionId` upstream, `FulfillmentShipped`,
+`FulfillmentCancelled` and `FulfillmentUnsourceable` by the assignment, and `PackageLost` and
 `PackageReturned` by the tracking number, so nothing links an order's facts
 across topics. A fact whose `orderId` is not bound to an authorization yet
 is stored in `ParkedFulfillmentFacts` and applied on the bind; the inbox on
 the CloudEvents `id` makes a redelivery safe, and the aggregate refuses what
 the state does not allow (`ErrOverCapture`, `ErrCaptureAfterExpiry`,
-`ErrOverRefund`). The model gives parked facts no expiry for an order that
-never binds (hotspot H10).
+`ErrOverRefund`). Parked facts are retained 30 days and then
+purged, and a gauge reports the parked count, so an order that never binds
+cannot grow the table without bound.
 
 ## Example envelope
 

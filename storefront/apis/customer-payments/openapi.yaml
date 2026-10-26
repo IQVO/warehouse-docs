@@ -14,7 +14,10 @@ info:
     (FulfillmentShipped), release on cancellation (FulfillmentCancelled),
     refund on lost or returned packages (PackageLost, PackageReturned), and
     re-authorize uncaptured allocations before the provider's authorization
-    validity expires. The provider is reached through an ACL port (Authorize,
+    validity expires (ReauthorizeBeforeExpiry, 24 h ahead; a provider decline
+    expires the authorization and raises PaymentDeclined with reason
+    REAUTH_DECLINED). A fulfillment that cannot be sourced
+    (FulfillmentUnsourceable) releases that group's allocation. The provider is reached through an ACL port (Authorize,
     Capture, Void, Refund, Reauthorize) with deterministic idempotency keys
     per (operation, authorizationId, groupNo); the storefront never sees a
     card number, only PSP tokens. This surface is called by checkout
@@ -131,7 +134,8 @@ paths:
         only after a definitive rejection of the place-order step (never
         while the outcome is in doubt; that side is guarded by checkout's
         ErrPlacementInDoubt). VoidUnboundAuthorizations also voids an
-        authorization that no CheckoutCompleted bound within 24 h.
+        authorization that no CheckoutCompleted bound within 24 h. A void
+        raises PaymentReleased with reason VOIDED.
       parameters:
         - $ref: '#/components/parameters/AuthorizationId'
         - $ref: '#/components/parameters/IdempotencyKey'
@@ -164,7 +168,10 @@ paths:
       description: >-
         RequestRefund, the ops route. Automatic refunds come from the
         RefundOnLostPackage and RefundOnReturnToSender policies. Refunds of an
-        order never exceed its captured total (ErrOverRefund).
+        order never exceed its captured total (ErrOverRefund); REQUESTED and
+        issued refunds count, FAILED never does. A FAILED refund is retried by
+        RetryRefund (FAILED to REQUESTED, at most 5 attempts, then it stays
+        FAILED with an operator alert); there is no REST route for it.
       parameters:
         - $ref: '#/components/parameters/IdempotencyKey'
       requestBody:
@@ -279,6 +286,10 @@ components:
         state:
           type: string
           enum: [PENDING, CAPTURED, RELEASED]
+        trackingNumber:
+          type: string
+          nullable: true
+          description: Set at capture; PackageLost and PackageReturned map to a group by it.
     AllocationInput:
       type: object
       required: [groupNo, amountMinor]
@@ -325,7 +336,13 @@ components:
           description: Bound on CheckoutCompleted (BindOrderOnCheckoutCompleted).
         state:
           type: string
-          enum: [AUTHORIZED, PARTIALLY_CAPTURED, CAPTURED, VOIDED, EXPIRED, DECLINED]
+          enum: [AUTHORIZED, PARTIALLY_CAPTURED, CAPTURED, RELEASED, VOIDED, EXPIRED, DECLINED]
+          description: >-
+            Derived from the allocations: PARTIALLY_CAPTURED while some are
+            captured and some pending; CAPTURED when every allocation is
+            captured or released with at least one captured; RELEASED when
+            every allocation is released. DECLINED is the terminal record of a
+            declined authorize attempt.
         currency:
           type: string
           pattern: '^[A-Z]{3}$'
@@ -372,6 +389,14 @@ components:
           type: string
         orderId:
           type: string
+        groupNo:
+          type: integer
+          minimum: 1
+          nullable: true
+          description: The shipment group refunded (absent for a manual order-level refund).
+        authorizationId:
+          type: string
+          description: The authorization the refund is issued against.
         amountMinor:
           type: integer
           format: int64

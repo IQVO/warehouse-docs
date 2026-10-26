@@ -31,14 +31,14 @@ Every Kafka message is a **CloudEvents 1.0 event in structured JSON mode**
 | `time` | the instant the fact happened, UTC |
 | `datacontenttype` | `application/json` |
 | `dataschema` | `urn:retailnetwork:checkout:events:<EventName>:v1` |
-| Kafka topic | `retailnetwork.checkout.events` for `CheckoutCompleted`; `retailnetwork.checkout.analytics` for the four analytics-only events |
+| Kafka topic | `retailnetwork.checkout.events` for `CheckoutCompleted`; `retailnetwork.checkout.analytics` for the six analytics-only events |
 | Kafka key | `sessionId`, so one session's events stay on one partition and in order |
 
 ## Published
 
 Every event is written to `outbox_events` in the same transaction as the
 aggregate save, and a relay publishes it. `CheckoutCompleted` is the only
-integration event; the other four name their consumers as "analytics only"
+integration event; the other six name their consumers as "analytics only"
 ([Context Map](/storefront/contexts/checkout/context-map)).
 
 ### CheckoutCompleted
@@ -133,6 +133,45 @@ integration event; the other four name their consumers as "analytics only"
 | `sessionId` | string | The session that failed. |
 | `code` | string | The failure code stored on the session. |
 | `at` | timestamp | When the failure was recorded. |
+
+### CheckoutSessionExpired
+
+| Item | Value |
+| --- | --- |
+| Full type | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutSessionExpired` |
+| Topic | `retailnetwork.checkout.analytics` |
+| Subject / key | `sessionId` |
+| Dataschema | `urn:retailnetwork:checkout:events:CheckoutSessionExpired:v1` |
+| Producing command / use case | `ExpireSession` (policy `ExpireOnQuoteExpiry`, from `OPEN` or `DECLINED`) |
+| Consumers | analytics only |
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `sessionId` | string | The session that expired. |
+| `cartId` | string | The cart it was opened from. |
+| `quoteExpiresAt` | timestamp | When the binding price quote ran out. |
+| `at` | timestamp | When the expiry was recorded. |
+
+### CheckoutPlacementInDoubt
+
+| Item | Value |
+| --- | --- |
+| Full type | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutPlacementInDoubt` |
+| Topic | `retailnetwork.checkout.analytics` |
+| Subject / key | `sessionId` |
+| Dataschema | `urn:retailnetwork:checkout:events:CheckoutPlacementInDoubt:v1` |
+| Producing command / use case | `RecordPlacementInDoubt` (timeout or `503` from the network; the session stays `PLACING`) |
+| Consumers | analytics only |
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `sessionId` | string | The session whose place-order outcome is unknown. |
+| `placingSince` | timestamp | When the session entered `PLACING` (the clock of the 20 h alert and the 22 h give-up). |
+| `at` | timestamp | When the in-doubt outcome was recorded. |
+
+`ConfirmSession` and `RecordAuthorization` raise no event: `CheckoutCompleted`
+already covers the outcome. Expiry and an in-doubt placement are operator
+facts, published analytics-only.
 
 ## Consumed
 
