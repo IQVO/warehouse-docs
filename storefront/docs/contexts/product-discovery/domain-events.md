@@ -39,7 +39,7 @@ producer:
 CloudEvents `id` — the id is inserted into `processed_events` in the same
 transaction as the projection effect, and a duplicate is acknowledged
 without effect; dispatch on the **full type string**, never on a suffix.
-Proposed consumer groups: `product-discovery.offer-availability`,
+Consumer group names come from mandatory environment variables (`OFFER_AVAILABILITY_CONSUMER_GROUP`, `PRICING_CONSUMER_GROUP`, `PRODUCT_CONTENT_CONSUMER_GROUP`; the service refuses to start without them); the names the design suggests: `product-discovery.offer-availability`,
 `product-discovery.product-content`, `product-discovery.pricing`.
 
 **Ordering rules.** Within one producer, events keyed by the same root id
@@ -89,7 +89,7 @@ terms, zero-result and fallback rates) have no event to ride on.
 
 **Two payload notes (model gaps, also on the
 [canvas](/storefront/contexts/product-discovery/bounded-context-canvas) open
-questions).** The `ProductView` purpose and the proposed API render the
+questions).** The `ProductView` purpose and the API render the
 product page with **bullets, media and the list price**, yet the declared
 `consumes` fields name neither `bullets`/`media` (on
 `ProductContentPublished`) nor `listPriceMinor`/`currency` (on

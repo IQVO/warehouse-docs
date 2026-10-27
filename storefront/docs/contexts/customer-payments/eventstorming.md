@@ -243,7 +243,7 @@ flowchart LR
     G1["PaymentAuthorization"]:::aggregate
     E9["PaymentAuthorizationExpired"]:::event
     AN([analytics]):::actor
-    E10["PaymentReauthorized<br/>new expiresAt, providerRef"]:::event
+    E10["PaymentReauthorized<br/>new expiresAt,<br/>providerAuthorizationId"]:::event
     E11["PaymentDeclined<br/>reason REAUTH_DECLINED"]:::event
 
     T --> P7
@@ -277,7 +277,7 @@ VoidUnboundAuthorizations]`, `.aggregates[PaymentAuthorization]` (`commands`,
 Omitted: the capture-after-expiry guard (`ErrCaptureAfterExpiry`, board 3).
 The two policies are the model's only clock-driven rules. A successful
 reauthorization keeps the state `AUTHORIZED` and raises `PaymentReauthorized`
-with the new `expiresAt` and `providerRef` (H1). A provider decline moves the
+with the new `expiresAt` and `providerAuthorizationId` (H1; the design called it `providerRef`). A provider decline moves the
 authorization to `EXPIRED` and raises `PaymentDeclined{reason:
 REAUTH_DECLINED}`, which is what raises `ExpireAuthorization` (H2).
 

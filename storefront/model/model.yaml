@@ -431,6 +431,7 @@ contexts:
     name: Shopping Cart
     code: SC
     tier: storefront
+    analytics_dataschema: "urn:retailnetwork:shopping-cart:analytics:<EventName>:v1"   # as built (service ADR 0004)
     classification: Supporting
     chart: {differentiation: 0.42, complexity: 0.5, evolution: Custom-built}
     business_model: Conversion (holding intent without losing the total-cost-up-front rule)
@@ -534,6 +535,7 @@ contexts:
     name: Checkout
     code: CK
     tier: storefront
+    analytics_dataschema: "urn:retailnetwork:checkout:analytics:<EventName>:v1"   # as built (service ADR 0004)
     classification: Supporting
     chart: {differentiation: 0.40, complexity: 0.58, evolution: Custom-built}
     business_model: Conversion (the purchase transaction)
@@ -628,6 +630,7 @@ contexts:
     name: Customer Payments
     code: CP
     tier: storefront
+    analytics_topic: "retailnetwork.customer-payments.events"   # as built (service ADR 0003): every event on .events, no analytics topic
     classification: Generic
     chart: {differentiation: 0.2, complexity: 0.66, evolution: Commodity}
     business_model: Revenue collection (buy a PSP)

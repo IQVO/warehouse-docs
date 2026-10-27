@@ -61,7 +61,7 @@ Omitted: the saga around it (the binding `PriceQuote`, the offer pre-check,
 the place-order step, the requote path, gap S3: checkout's own pages), the
 outbox write and relay (see
 [Sequence Diagrams](/storefront/contexts/customer-payments/sequence-diagrams)),
-and the provider timeout, which the proposed REST contract answers with a
+and the provider timeout, which the REST contract answers with a
 503 to retry under the same `Idempotency-Key`.
 
 ## 2. A shipped group is captured

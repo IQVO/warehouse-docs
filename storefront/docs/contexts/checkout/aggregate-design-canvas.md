@@ -13,8 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/ma
 
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
 The model has one aggregate root in this context, **CheckoutSession**, and no
-read models (`read_models: []`). Proposed Go package: `internal/domain/session`
-(the package the UL code identifiers name).
+read models (`read_models: []`). Go packages **as built**: `internal/domain/checkoutsession` (plus `shared`); the design named `internal/domain/session`.
 
 ## CheckoutSession
 

@@ -38,13 +38,20 @@ phase (decision D10).
 | [Domain Message Flow](/storefront/contexts/pricing/domain-message-flow) | Price management, sale boundaries, quote issuing, discontinuation | [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
 | [EventStorming](/storefront/contexts/pricing/eventstorming) | Process-level boards with hotspots | [EventStorming glossary & cheat sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
 | [Use Cases](/storefront/contexts/pricing/use-cases) | One section per command: trigger, flow, errors, events, idempotency | (application layer, fleet convention) |
-| [Class Diagram](/storefront/contexts/pricing/class-diagram) | Proposed domain model and hexagonal ports and adapters | (UML, fleet convention) |
-| [Entity Relationship](/storefront/contexts/pricing/entity-relationship) | Proposed Postgres schema | (fleet convention) |
+| [Class Diagram](/storefront/contexts/pricing/class-diagram) | Domain model and hexagonal ports and adapters (the model's design, with the as-built packages) | (UML, fleet convention) |
+| [Entity Relationship](/storefront/contexts/pricing/entity-relationship) | Postgres schema as built (migration 0001) | (fleet convention) |
 | [Sequence Diagrams](/storefront/contexts/pricing/sequence-diagrams) | Adapter to Kafka for every command use case | (UML, fleet convention) |
+
+## Service and operations
+
+- **Service:** [`IQVO/pricing`](https://github.com/IQVO/pricing) on `develop` (`5a18326`, 2026-10-27): binaries `cmd/api`; REST contract [`apis/openapi.yaml`](https://github.com/IQVO/pricing/blob/develop/apis/openapi.yaml), event contract [`apis/asyncapi.yaml`](https://github.com/IQVO/pricing/blob/develop/apis/asyncapi.yaml), schema in `internal/adapters/outbound/postgres/migrations/` (see [Entity Relationship](/storefront/contexts/pricing/entity-relationship)). 5 ADRs, listed in the [ADR index](/storefront/adr#pricing).
+- **Configuration:** mandatory at boot (the service exits naming the missing variable): `DATABASE_URL`, `KAFKA_BROKERS`, `OFFER_AVAILABILITY_CONSUMER_GROUP`. There is no in-memory mode. Packaging: a Helm chart in `charts/pricing` (its `otel.endpoint` value is rendered into `OTEL_EXPORTER_OTLP_ENDPOINT`; the chart test expects `otel-collector.observability.svc.cluster.local:4317`).
+- **Deployment:** not deployed. warehouse-infra `develop` has no `terraform/apps.yaml` entry and no `helm-values/pricing.yaml`, so no database, consumer group or gateway route is provisioned. The kind cluster was not checked in this refresh.
+- **Observability:** [service ADR 0005](https://github.com/IQVO/pricing/blob/develop/docs/adr/0005-fleet-observability-standard.md), *Adopt the fleet observability standard (logs, metrics, traces)*, Accepted (2026-10-26). Logs, metrics and traces leave over OTLP/gRPC (`OTEL_EXPORTER_OTLP_ENDPOINT`, code default `localhost:4317`; `OTEL_SERVICE_NAME`); a collector that is down only drops telemetry. The Tier-2 business counter is `pricing.quotes.issued` (unit `{quote}`, in `internal/adapters/outbound/telemetry/quote_metrics.go`), with attribute `outcome` = `issued` or `rejected` and `reason` on the outcomes that are not a success. No warehouse-infra dashboard queries it yet.
 
 ## Elsewhere
 
-- REST contract (proposed): `storefront/apis/pricing/openapi.yaml`, rendered
+- REST contract: `storefront/apis/pricing/openapi.yaml` (a copy of the service\'s spec on develop), rendered
   under the [API reference](/storefront/api-reference).
 - The storefront-wide [Context Map](/storefront/strategic-design/context-map),
   [Subdomain Classification](/storefront/strategic-design/subdomain-classification)

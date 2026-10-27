@@ -14,8 +14,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/ma
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
 The model has one aggregate root in this context, **Cart**, and three read
 models, **CheckoutReadiness**, **PurchasabilityView** and **EstimateView**.
-Proposed Go package: `internal/domain/cart` (the package the UL code
-identifiers name).
+Go packages **as built**: `internal/domain/cart`, `internal/domain/estimate` (plus `shared`).
 
 ## Cart
 

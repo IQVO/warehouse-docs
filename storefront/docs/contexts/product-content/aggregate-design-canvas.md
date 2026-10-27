@@ -13,8 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/ma
 
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
 The model has two aggregate roots in this context, **ProductContent** and
-**CategoryTree**, and one read model, **CatalogItemView**. Proposed Go
-packages: `internal/domain/content` and `internal/domain/category`.
+**CategoryTree**, and one read model, **CatalogItemView**. Go packages **as built**: `internal/domain/category`, `internal/domain/content` (plus `shared`).
 
 ## ProductContent
 
@@ -88,7 +87,7 @@ The entry arrow `[*] --> DRAFT` is the creating command
 Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent].invariants`.
 
 The command pairing of the first three invariants is this pack's reading of
-the proposed API's error table: the model lists the rules and the errors
+the API's error table: the model lists the rules and the errors
 but not which command checks which. The collection bounds (bullets,
 attributes, media) are the named invariants `ErrTooManyBullets`,
 `ErrTooManyAttributes` and `ErrTooManyMedia`; the schema also carries
@@ -195,10 +194,10 @@ consumers can resync.
 | A category in use by PUBLISHED content is never removed | no remove-category command by design; `ErrCategoryInUse` guards a future removal |
 
 Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree].invariants`.
-The command pairing is this pack's reading of the proposed API's error
+The command pairing is this pack's reading of the API's error
 tables. Categories are never deleted, only renamed or moved, so
-`ErrCategoryInUse` is not raised by any current command and the proposed API
-no longer maps it to `:move`.
+`ErrCategoryInUse` is not raised by any current command and the API (as
+built) maps it to no route.
 
 ### 5. Corrective Policies
 

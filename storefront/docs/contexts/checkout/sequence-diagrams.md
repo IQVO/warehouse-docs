@@ -2,7 +2,7 @@
 id: sequence-diagrams
 title: Sequence Diagrams
 sidebar_label: Sequence Diagrams
-description: Proposed UML sequence diagrams for every Checkout command use case, from inbound adapter through aggregate, repository, the outbound clients and the Anti-Corruption Layer to the outbox and Kafka, with error, concurrency, idempotency and in-doubt branches.
+description: UML sequence diagrams for every Checkout command use case, from inbound adapter through aggregate, repository, the outbound clients and the Anti-Corruption Layer to the outbox and Kafka, with error, concurrency, idempotency and in-doubt branches.
 ---
 
 # Sequence Diagrams
@@ -14,7 +14,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/ma
 One UML sequence diagram per command use case on
 [Use Cases](/storefront/contexts/checkout/use-cases); the long
 `ConfirmSession` is drawn in two parts (authorize, then place the order).
-Participant names are the proposed packages and ports from the
+Participant names are the packages and ports the model designs, from the
 [Class Diagram](/storefront/contexts/checkout/class-diagram):
 
 - `http` and `scheduler` are the inbound adapters.
@@ -212,8 +212,8 @@ address; the `Idempotency-Key` towards the network is the `sessionId`. The
 `REQUOTE_REQUIRED` and `FAILED` states are recorded together with
 `voidOwed`, in one transaction, before the void is attempted; a failing void
 is retried every minute by `RetryOwedVoids` (hotspot H5, resolved). Omitted:
-the mapping of the network's wire names, which happens inside `ACL` and is
-not yet in the network model (hotspot H8).
+the mapping of the network's wire names, which happens inside `ACL`
+(`internal/adapters/outbound/customerordering`; hotspot H8, resolved).
 
 ## 4. ResolveInDoubtPlacements (scheduler)
 

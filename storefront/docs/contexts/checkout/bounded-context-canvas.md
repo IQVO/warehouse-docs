@@ -259,12 +259,17 @@ Top terms: **Checkout Session**, **Place-Order Step** (the network's
   an authorization without `CheckoutCompleted` (hotspot H6).
 - **Silent outcomes.** `ExpireSession` and `RecordPlacementInDoubt` publish
   nothing, so analytics cannot see expiry or in-doubt volume (hotspot H7).
-- **The network contract is still planned.** `shipToAddressId`,
-  `offer-not-quotable` and `requotedOffers` are not yet in the network
-  model, which lists the hard boundary as "once built" (hotspot H8).
+- **The network contract (hotspot H8): resolved.** `shipToAddressId`,
+  `offer-not-quotable` and `requotedOffers` are now in the network model
+  (customer-ordering) and in customer-ordering's `apis/openapi.yaml` on
+  develop (`POST /checkout`, 409 `offer-not-quotable` with `requotedOffers`).
 - **The stored placement request has no name.** Its shape, its retention
   ("for the idempotency window") and its purge are unnamed (hotspot H9).
 - **How does the cart take the requoted offers?** The REST contract says the
   BFF writes them into the cart as a new quote, yet the cart's commands only
   quote through `delivery-promise` (`QuoteDelivery`); none accepts an offer set
-  from outside (hotspot H10).
+  from outside (hotspot H10). The model now has
+  `AcceptRequotedOffers`, and **as built** shopping-cart serves
+  `POST /carts/{cartId}/delivery/requoted` (`acceptRequotedOffers`), but
+  `storefront-bff` exposes no route that calls it, so the requote path is
+  not reachable from the web app yet.

@@ -51,7 +51,7 @@ stores no PII, and it never sees a card number — only PSP tokens.
 | `order-sourcing` (network) | Reports that a group shipped (capture) or was cancelled (release) | Kafka `retailnetwork.order-sourcing.events`, `FulfillmentShipped`, `FulfillmentCancelled` |
 | `shipping-and-tracking` (network) | Reports that a package was lost or returned (refund) | Kafka `retailnetwork.shipping-and-tracking.events`, `PackageLost`, `PackageReturned` |
 | `payment-provider` (external) | Answers the five provider operations; in the study, the payment-provider simulator stands in behind the port | Provider port (ACL), the only synchronous call out |
-| Analytics consumers | Follow authorizations, captures, releases, expiries, declines and refunds | Kafka `retailnetwork.customer-payments.analytics` |
+| Analytics consumers | Follow authorizations, captures, releases, expiries, declines and refunds | Kafka `retailnetwork.customer-payments.events` |
 
 The shopper is a synthetic person who never calls a payment route: the
 card details are entered into the provider's hosted fields, and the

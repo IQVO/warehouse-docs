@@ -146,7 +146,7 @@ exists in the model (open question on the
 Every consumer is idempotent on the CloudEvents `id`: the id is inserted
 into `processed_events` in the same transaction as the effect, and a
 duplicate is acknowledged without effect. Consumers dispatch on the **full
-type string**, never on a suffix. Proposed consumer group:
+type string**, never on a suffix. Consumer group names come from mandatory environment variables (`OFFER_AVAILABILITY_CONSUMER_GROUP`; the service refuses to start without them); the names the design suggests:
 `pricing.offer-availability`.
 
 ### From offer-availability (`retailnetwork.offer-availability.events`, Conformist)

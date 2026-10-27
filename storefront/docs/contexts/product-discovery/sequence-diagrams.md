@@ -2,7 +2,7 @@
 id: sequence-diagrams
 title: Sequence Diagrams
 sidebar_label: Sequence Diagrams
-description: Proposed UML sequence diagrams for every Product Discovery use case — the three read routes, the projector folds with their guards, and the ops-run bootstrap rebuild — adapter to store, with error, duplicate and out-of-order branches.
+description: UML sequence diagrams for every Product Discovery use case — the three read routes, the projector folds with their guards, and the ops-run bootstrap rebuild — adapter to store, with error, duplicate and out-of-order branches.
 ---
 
 # Sequence Diagrams
@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/ma
 
 One UML sequence diagram per use case on
 [Use Cases](/storefront/contexts/product-discovery/use-cases). Participant
-names are the proposed packages and ports from the
+names are the packages and ports the model designs, from the
 [Class Diagram](/storefront/contexts/product-discovery/class-diagram):
 
 - `http` and `kafka` are the inbound adapters; `ops` is the rebuild job.

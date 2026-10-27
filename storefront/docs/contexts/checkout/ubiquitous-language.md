@@ -2,7 +2,7 @@
 id: ubiquitous-language
 title: Ubiquitous Language
 sidebar_label: Ubiquitous Language
-description: The terms Checkout speaks, each mapped to its proposed code identifier, plus the neighbour terms it uses and the terms most often confused with them, above all the network's Checkout.
+description: The terms Checkout speaks, each mapped to its code identifier on develop, plus the neighbour terms it uses and the terms most often confused with them, above all the network's Checkout.
 ---
 
 # Ubiquitous Language

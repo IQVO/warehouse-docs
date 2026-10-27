@@ -2,7 +2,7 @@
 id: class-diagram
 title: Class Diagram
 sidebar_label: Class Diagram
-description: Proposed UML class diagrams of Pricing's domain model, events and policies, and the hexagonal ports-and-adapters layout a Go implementation would use.
+description: UML class diagrams of Pricing's domain model, events and policies, and the hexagonal ports-and-adapters layout, as the model designs them, with the as-built Go packages.
 ---
 
 # Class Diagram
@@ -11,11 +11,13 @@ description: Proposed UML class diagrams of Pricing's domain model, events and p
 Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `pricing` service is built on develop ([`IQVO/pricing`](https://github.com/IQVO/pricing) at `5a18326`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/pricing#service-and-operations) section lists it.
 :::
 
-UML class diagrams of the **proposed** `internal/domain/**` packages, plus
+UML class diagrams of the `internal/domain/**` packages as the model designs them, plus
 the hexagonal ports and adapters. Type names come from the model's code
 identifiers (`itemprice.ItemPrice`, `schedule.TierCharge`, `tax.TaxBand`,
 `quote.PriceQuote`) and value objects. Fields are unexported in Go and shown
 with `-`; methods are shown with `+`.
+
+**As built** (`IQVO/pricing` develop `5a18326`): the domain packages are `internal/domain/itemprice`, `internal/domain/quote`, `internal/domain/schedule`, `internal/domain/tax`. Exported types per package: `itemprice`: `ItemPriceChanged`, `ItemPriceWithdrawn`, `ID`, `State`, `CatalogState`, `Inputs`, `SaleWindow`, `View`, `ItemPrice`, `Snapshot`; `quote`: `ID`, `State`, `LineInput`, `GroupInput`, `IssueInput`, `Line`, `Group`, `PriceQuote`, `PriceQuoteIssued`, `Snapshot`; `schedule`: `ID`, `State`, `TierCharge`, `DeliveryChargeSchedule`, `Snapshot`, `DeliveryChargeScheduleChanged`; `tax`: `ID`, `State`, `TaxBand`, `TaxTable`, `Snapshot`, `TaxTableChanged`. Application packages: `internal/application/idempotency`, `internal/application/outbox`, `internal/application/ports`, `internal/application/usecases`, `internal/application/views`; adapters: `internal/adapters/inbound/http`, `internal/adapters/inbound/kafka`, `internal/adapters/inbound/requestlog`, `internal/adapters/outbound/clock`, `internal/adapters/outbound/ids`, `internal/adapters/outbound/kafka`, `internal/adapters/outbound/memory`, `internal/adapters/outbound/outbox`, `internal/adapters/outbound/postgres`, `internal/adapters/outbound/repocontract`, `internal/adapters/outbound/telemetry`. Where a type name below differs (the UML keeps the design names), the [Ubiquitous Language](/storefront/contexts/pricing/ubiquitous-language) page carries the built identifier.
 
 ## 1. ItemPrice aggregate
 

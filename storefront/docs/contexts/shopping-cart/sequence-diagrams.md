@@ -2,7 +2,7 @@
 id: sequence-diagrams
 title: Sequence Diagrams
 sidebar_label: Sequence Diagrams
-description: Proposed UML sequence diagrams for every Shopping Cart command use case, from inbound adapter through aggregate, repository, the delivery-promise quote port and outbox to Kafka, with error, concurrency and idempotency branches.
+description: UML sequence diagrams for every Shopping Cart command use case, from inbound adapter through aggregate, repository, the delivery-promise quote port and outbox to Kafka, with error, concurrency and idempotency branches.
 ---
 
 # Sequence Diagrams
@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/ma
 
 One UML sequence diagram per command use case on
 [Use Cases](/storefront/contexts/shopping-cart/use-cases). Participant
-names are the proposed packages and ports from the
+names are the packages and ports the model designs, from the
 [Class Diagram](/storefront/contexts/shopping-cart/class-diagram):
 
 - `http`, `kafka consumer` and `scheduler` are the inbound adapters.

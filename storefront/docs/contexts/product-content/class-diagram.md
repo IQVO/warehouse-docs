@@ -2,7 +2,7 @@
 id: class-diagram
 title: Class Diagram
 sidebar_label: Class Diagram
-description: Proposed UML class diagrams of Product Content's domain model, events and policy, and the hexagonal ports-and-adapters layout a Go implementation would use.
+description: UML class diagrams of Product Content's domain model, events and policy, and the hexagonal ports-and-adapters layout, as the model designs them, with the as-built Go packages.
 ---
 
 # Class Diagram
@@ -11,11 +11,13 @@ description: Proposed UML class diagrams of Product Content's domain model, even
 Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-content` service is built on develop ([`IQVO/product-content`](https://github.com/IQVO/product-content) at `2f09dc0`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-content#service-and-operations) section lists it.
 :::
 
-UML class diagrams of the **proposed** `internal/domain/**` packages, plus
+UML class diagrams of the `internal/domain/**` packages as the model designs them, plus
 the hexagonal ports and adapters. Type names come from the model's code
 identifiers (`content.ProductContent`, `content.Media.RolePrimary`,
 `category.Tree`, `category.Category`) and value objects. Fields are
 unexported in Go and shown with `-`; methods are shown with `+`.
+
+**As built** (`IQVO/product-content` develop `2f09dc0`): the domain packages are `internal/domain/category`, `internal/domain/content`. Exported types per package: `category`: `Category`, `Tree`, `Snapshot`, `CategoryTreePublished`; `content`: `ID`, `State`, `RetiredReason`, `Role`, `ItemStatus`, `Categories`, `Attribute`, `Media`, `Body`, `ProductContent`, `Snapshot`, `ProductContentPublished`, `ProductContentRetired`. Application packages: `internal/application/idempotency`, `internal/application/outbox`, `internal/application/ports`, `internal/application/readmodel`, `internal/application/usecases`, `internal/application/views`; adapters: `internal/adapters/inbound/http`, `internal/adapters/inbound/kafka`, `internal/adapters/inbound/requestlog`, `internal/adapters/outbound/clock`, `internal/adapters/outbound/ids`, `internal/adapters/outbound/kafka`, `internal/adapters/outbound/memory`, `internal/adapters/outbound/outbox`, `internal/adapters/outbound/postgres`, `internal/adapters/outbound/repocontract`, `internal/adapters/outbound/telemetry`. Where a type name below differs (the UML keeps the design names), the [Ubiquitous Language](/storefront/contexts/product-content/ubiquitous-language) page carries the built identifier.
 
 ## 1. ProductContent aggregate
 
@@ -97,7 +99,7 @@ and the publication timestamps the REST read returns. `itemKnown` and
 the `CategoryTree`, and `itemDiscontinued` for the discontinued flag read from
 `CatalogItemView`; the aggregate decides, the use case supplies the facts.
 The collection bounds (0..10 bullets, 0..50 attributes, 0..12 media) come
-from the aggregate description and the proposed API schema; they are the
+from the aggregate description and the API schema; they are the
 named invariants `ErrTooManyBullets`, `ErrTooManyAttributes` and
 `ErrTooManyMedia`. `RetireContent(reason)` is also what `RetireOnDiscontinue`
 runs, with reason `DISCONTINUED`.

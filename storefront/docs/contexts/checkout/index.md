@@ -41,13 +41,21 @@ PII-free, so it can be replayed byte for byte with the same
 | [Domain Message Flow](/storefront/contexts/checkout/domain-message-flow) | The happy path, a decline, a requote, an in-doubt placement | [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
 | [EventStorming](/storefront/contexts/checkout/eventstorming) | Process-level boards with hotspots | [EventStorming glossary & cheat sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
 | [Use Cases](/storefront/contexts/checkout/use-cases) | One section per command: trigger, flow, errors, events, idempotency | (application layer, fleet convention) |
-| [Class Diagram](/storefront/contexts/checkout/class-diagram) | Proposed domain model and hexagonal ports and adapters | (UML, fleet convention) |
-| [Entity Relationship](/storefront/contexts/checkout/entity-relationship) | Proposed Postgres schema | (fleet convention) |
+| [Class Diagram](/storefront/contexts/checkout/class-diagram) | Domain model and hexagonal ports and adapters (the model's design, with the as-built packages) | (UML, fleet convention) |
+| [Entity Relationship](/storefront/contexts/checkout/entity-relationship) | Postgres schema as built (migration 0001) | (fleet convention) |
 | [Sequence Diagrams](/storefront/contexts/checkout/sequence-diagrams) | Adapter to Kafka for every command use case | (UML, fleet convention) |
+
+## Service and operations
+
+- **Service:** [`IQVO/checkout`](https://github.com/IQVO/checkout) on `develop` (`ab4f0e9`, 2026-10-27): binaries `cmd/api`, `cmd/mcp`; REST contract [`apis/openapi.yaml`](https://github.com/IQVO/checkout/blob/develop/apis/openapi.yaml), event contract [`apis/asyncapi.yaml`](https://github.com/IQVO/checkout/blob/develop/apis/asyncapi.yaml), schema in `internal/adapters/outbound/postgres/migrations/` (see [Entity Relationship](/storefront/contexts/checkout/entity-relationship)). 6 ADRs, listed in the [ADR index](/storefront/adr#checkout).
+- **Configuration:** mandatory at boot (the service exits naming the missing variable): `DATABASE_URL`, `KAFKA_BROKERS`, `SHOPPING_CART_URL`, `DELIVERY_PROMISE_URL`, `PRICING_URL`, `CUSTOMER_PAYMENTS_URL`, `CUSTOMER_ORDERING_URL`. There is no in-memory mode. Packaging: no Helm chart in the repo yet (`charts/` is absent on develop).
+- **Deployment:** not deployed. warehouse-infra `develop` has no `terraform/apps.yaml` entry and no `helm-values/checkout.yaml`, so no database, consumer group or gateway route is provisioned. The kind cluster was not checked in this refresh.
+- **Observability:** [service ADR 0006](https://github.com/IQVO/checkout/blob/develop/docs/adr/0006-fleet-observability-standard.md), *Adopt the fleet observability standard (logs, metrics, traces)*, Accepted (2026-10-26). Logs, metrics and traces leave over OTLP/gRPC (`OTEL_EXPORTER_OTLP_ENDPOINT`, code default `localhost:4317`; `OTEL_SERVICE_NAME`); a collector that is down only drops telemetry. The Tier-2 business counter is `checkout.sessions.confirmed` (unit `{session}`, in `internal/adapters/outbound/telemetry/session_metrics.go`), with attribute `outcome` = `completed`, `declined`, `requote-required`, `failed`, `in-doubt` or `refused` and `reason` on the outcomes that are not a success. No warehouse-infra dashboard queries it yet.
+- **MCP:** `cmd/mcp` is a read-only MCP server (service ADR 0005) on `MCP_ADDR` (default `:8090`) with one tool, `get_checkout_session`.
 
 ## Elsewhere
 
-- REST contract (proposed): `storefront/apis/checkout/openapi.yaml`,
+- REST contract: `storefront/apis/checkout/openapi.yaml` (a copy of the service\'s spec on develop),
   rendered under the [API reference](/storefront/api-reference).
 - The storefront-wide [Context Map](/storefront/strategic-design/context-map),
   [Subdomain Classification](/storefront/strategic-design/subdomain-classification)

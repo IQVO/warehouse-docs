@@ -17,8 +17,7 @@ Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-cre
 this page applies the canvas to the two **read models** the model does
 name, **ProductView** and **CategoryView**, and answers each canvas section
 honestly: most sections exist to protect invariants, and a projection
-protects none. Proposed Go packages: `internal/domain/productview` and
-`internal/domain/categoryview`.
+protects none. Go packages **as built**: `internal/domain/categoryview`, `internal/domain/productview`, `internal/domain/search` (plus `shared`).
 
 ## Why no aggregate (the canvas question zero)
 

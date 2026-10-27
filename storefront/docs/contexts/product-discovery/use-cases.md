@@ -2,7 +2,7 @@
 id: use-cases
 title: Use Cases
 sidebar_label: Use Cases
-description: Every proposed Product Discovery use case — the three read routes, the projector that folds eleven event types, and the ops-run bootstrap rebuild — with actor, adapter, preconditions, main flow, error mapping and idempotency.
+description: Every Product Discovery use case — the three read routes, the projector that folds eleven event types, and the ops-run bootstrap rebuild — with actor, adapter, preconditions, main flow, error mapping and idempotency.
 ---
 
 # Use Cases
@@ -16,11 +16,11 @@ use case** in this context. The application services are: the three
 **queries** of `.rest` (called by the experience layer), the **projector**
 that folds the eleven consumed events into `ProductView` and `CategoryView`,
 and the ops-run **bootstrap rebuild** of business decision 5. They are
-proposed application services in `internal/application/usecases`. The
+application services in `internal/application/usecases` (as built). The
 step-by-step diagrams are on
 [Sequence Diagrams](/storefront/contexts/product-discovery/sequence-diagrams);
 the payloads are on [Domain Events](/storefront/contexts/product-discovery/domain-events);
-the proposed REST contract is `apis/product-discovery/openapi.yaml`.
+the REST contract is `apis/product-discovery/openapi.yaml`.
 
 ## Triggers at a glance
 

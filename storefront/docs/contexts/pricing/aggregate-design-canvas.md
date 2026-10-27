@@ -14,9 +14,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/ma
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
 The model has four aggregate roots in this context, **ItemPrice**,
 **DeliveryChargeSchedule**, **TaxTable** and **PriceQuote**, and one read
-model, **CatalogItemView**. Proposed Go packages: `internal/domain/itemprice`,
-`internal/domain/schedule`, `internal/domain/tax` and `internal/domain/quote`
-(the packages the UL code identifiers name).
+model, **CatalogItemView**. Go packages **as built**: `internal/domain/itemprice`, `internal/domain/quote`, `internal/domain/schedule`, `internal/domain/tax` (plus `shared`).
 
 ## ItemPrice
 

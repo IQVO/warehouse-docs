@@ -30,7 +30,7 @@ Every Kafka message is a **CloudEvents 1.0 event in structured JSON mode**
 | `subject` | the aggregate root id (`sessionId`) |
 | `time` | the instant the fact happened, UTC |
 | `datacontenttype` | `application/json` |
-| `dataschema` | `urn:retailnetwork:checkout:events:<EventName>:v1` |
+| `dataschema` | `urn:retailnetwork:checkout:events:CheckoutCompleted:v1` for the integration event; **as built** the six analytics-only events carry `urn:retailnetwork:checkout:analytics:<EventName>:v1` (service ADR 0004, encoder goldens) |
 | Kafka topic | `retailnetwork.checkout.events` for `CheckoutCompleted`; `retailnetwork.checkout.analytics` for the six analytics-only events |
 | Kafka key | `sessionId`, so one session's events stay on one partition and in order |
 
@@ -71,7 +71,7 @@ integration event; the other six name their consumers as "analytics only"
 | Full type | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutOpened` |
 | Topic | `retailnetwork.checkout.analytics` |
 | Subject / key | `sessionId` |
-| Dataschema | `urn:retailnetwork:checkout:events:CheckoutOpened:v1` |
+| Dataschema | `urn:retailnetwork:checkout:analytics:CheckoutOpened:v1` |
 | Producing command / use case | `OpenSession` |
 | Consumers | analytics only |
 
@@ -90,7 +90,7 @@ integration event; the other six name their consumers as "analytics only"
 | Full type | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutDeclined` |
 | Topic | `retailnetwork.checkout.analytics` |
 | Subject / key | `sessionId` |
-| Dataschema | `urn:retailnetwork:checkout:events:CheckoutDeclined:v1` |
+| Dataschema | `urn:retailnetwork:checkout:analytics:CheckoutDeclined:v1` |
 | Producing command / use case | `RecordDecline` (`customer-payments` declined the authorization) |
 | Consumers | analytics only |
 
@@ -107,7 +107,7 @@ integration event; the other six name their consumers as "analytics only"
 | Full type | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutRequoteRequired` |
 | Topic | `retailnetwork.checkout.analytics` |
 | Subject / key | `sessionId` |
-| Dataschema | `urn:retailnetwork:checkout:events:CheckoutRequoteRequired:v1` |
+| Dataschema | `urn:retailnetwork:checkout:analytics:CheckoutRequoteRequired:v1` |
 | Producing command / use case | `RecordRequoteRequired` (a definitive `409` from the network, after the authorization was voided) |
 | Consumers | analytics only |
 
@@ -124,7 +124,7 @@ integration event; the other six name their consumers as "analytics only"
 | Full type | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutFailed` |
 | Topic | `retailnetwork.checkout.analytics` |
 | Subject / key | `sessionId` |
-| Dataschema | `urn:retailnetwork:checkout:events:CheckoutFailed:v1` |
+| Dataschema | `urn:retailnetwork:checkout:analytics:CheckoutFailed:v1` |
 | Producing command / use case | `RecordFailure` (a `422` from the network: a contract bug; the authorization is voided and an alert is raised) |
 | Consumers | analytics only |
 
@@ -141,16 +141,16 @@ integration event; the other six name their consumers as "analytics only"
 | Full type | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutSessionExpired` |
 | Topic | `retailnetwork.checkout.analytics` |
 | Subject / key | `sessionId` |
-| Dataschema | `urn:retailnetwork:checkout:events:CheckoutSessionExpired:v1` |
+| Dataschema | `urn:retailnetwork:checkout:analytics:CheckoutSessionExpired:v1` |
 | Producing command / use case | `ExpireSession` (policy `ExpireOnQuoteExpiry`, from `OPEN` or `DECLINED`) |
 | Consumers | analytics only |
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `sessionId` | string | The session that expired. |
-| `cartId` | string | The cart it was opened from. |
-| `quoteExpiresAt` | timestamp | When the binding price quote ran out. |
 | `at` | timestamp | When the expiry was recorded. |
+
+**As built** the payload is `{sessionId, at}` only (checkout ADR 0004 type catalogue, `CheckoutSessionExpired.golden.json`); the design's `cartId` and `quoteExpiresAt` were dropped and the model now says the same.
 
 ### CheckoutPlacementInDoubt
 
@@ -159,7 +159,7 @@ integration event; the other six name their consumers as "analytics only"
 | Full type | `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutPlacementInDoubt` |
 | Topic | `retailnetwork.checkout.analytics` |
 | Subject / key | `sessionId` |
-| Dataschema | `urn:retailnetwork:checkout:events:CheckoutPlacementInDoubt:v1` |
+| Dataschema | `urn:retailnetwork:checkout:analytics:CheckoutPlacementInDoubt:v1` |
 | Producing command / use case | `RecordPlacementInDoubt` (timeout or `503` from the network; the session stays `PLACING`) |
 | Consumers | analytics only |
 
@@ -176,9 +176,10 @@ facts, published analytics-only.
 ## Consumed
 
 None. The model lists no consumed event for this context. The session
-reacts to the synchronous answer of each call it makes. The proposed consumer
-groups of the two consumers of `CheckoutCompleted` are
-`shopping-cart.checkout` and `customer-payments.checkout`; both are
+reacts to the synchronous answer of each call it makes. The design names the consumer
+groups of the two consumers of `CheckoutCompleted`
+`shopping-cart.checkout` and `customer-payments.checkout` (as built each name comes from
+the consumer's `CHECKOUT_CONSUMER_GROUP`); both are
 idempotent on the CloudEvents `id` and dispatch on the full type string.
 
 ### What the consumers do with `CheckoutCompleted`

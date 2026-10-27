@@ -2,7 +2,7 @@
 id: sequence-diagrams
 title: Sequence Diagrams
 sidebar_label: Sequence Diagrams
-description: Proposed UML sequence diagrams for every Product Content command use case, from inbound adapter through aggregate, repository and outbox to Kafka, with error, concurrency and idempotency branches.
+description: UML sequence diagrams for every Product Content command use case, from inbound adapter through aggregate, repository and outbox to Kafka, with error, concurrency and idempotency branches.
 ---
 
 # Sequence Diagrams
@@ -13,7 +13,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/ma
 
 One UML sequence diagram per command use case on
 [Use Cases](/storefront/contexts/product-content/use-cases). Participant names are the
-proposed packages and ports from the
+packages and ports the model designs, from the
 [Class Diagram](/storefront/contexts/product-content/class-diagram):
 
 - `http` and `kafka` are the inbound adapters.
@@ -329,8 +329,8 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree]`
 (`CreateCategory`, invariants); `apis/product-content/openapi.yaml`.
 
-Omitted: the 404 for an unknown `parentId` (the proposed API lists no
-not-found on create; a missing parent fails validation).
+Omitted: the 404 for an unknown `parentId`: **as built** the API answers an
+unknown parent with 422 `unknown-category`, not a not-found.
 
 ## 7. MoveCategory (REST POST /categories/categoryId:move)
 

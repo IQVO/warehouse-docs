@@ -235,7 +235,7 @@ out-of-stock purchase is impossible in this network — gap S6 on the
   the indexed `categoryPath` of every item under a renamed category does
   not change until some other event touches the item.
 - **Two payload-declaration gaps.** The `ProductView` purpose and the
-  proposed API render bullets, media and the list price, yet the declared
+  API render bullets, media and the list price, yet the declared
   `consumes` fields name neither `bullets`/`media` (on
   `ProductContentPublished`) nor `listPriceMinor`/`currency` (on
   `ItemPriceChanged`); and `CategoryTreePublished` feeds `CategoryView`
@@ -247,8 +247,9 @@ out-of-stock purchase is impossible in this network — gap S6 on the
   it, but `policies` lists only `PurchasableRule` and
   `UnavailableNotBuyable` — no detection rule, thresholds or parameters.
 - **Price-band facet boundaries are unnamed.** Facets are "category, price
-  band and in-stock" (decision 2); no band edges exist anywhere in the
-  model or the proposed API schema.
+  band and in-stock" (decision 2); no band edges exist in the model.
+  **As built** they are configuration: `PRICE_BAND_EDGES` (ascending minor
+  units) in `cmd/api/config.go`.
 - **The typo-fallback trigger is unspecified.** The model says `pg_trgm`
   similarity "is the typo fallback"; when it fires (this pack's reading:
   when full-text search returns too little) is not modelled.
@@ -267,4 +268,4 @@ out-of-stock purchase is impossible in this network — gap S6 on the
   for v1, but the metrics table above then has no event source to feed a
   dashboard.
 - **The `sort` values** (`relevance`, `price-asc`, `price-desc`, `title`)
-  exist only in the proposed API, not in the model's `rest` row.
+  exist only in the API (as built too), not in the model's `rest` row.

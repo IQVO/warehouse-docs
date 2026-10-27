@@ -2,7 +2,7 @@
 id: use-cases
 title: Use Cases
 sidebar_label: Use Cases
-description: Every proposed Customer Payments command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency.
+description: Every Customer Payments command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency.
 ---
 
 # Use Cases
@@ -14,7 +14,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/ma
 One section per command of
 `contexts[customer-payments].aggregates[PaymentAuthorization].commands` and
 `aggregates[Refund].commands`, plus the policies that issue them. They are
-proposed application services in `internal/application/usecases`. The
+application services in `internal/application/usecases` (as built). The
 step-by-step diagrams are on
 [Sequence Diagrams](/storefront/contexts/customer-payments/sequence-diagrams);
 the payloads are on [Domain Events](/storefront/contexts/customer-payments/domain-events);
@@ -52,7 +52,7 @@ conflict is retried once inside the use case, then surfaces as 409
 (`outbox_events`) is written in the same transaction. A consumer-driven use
 case also inserts the CloudEvents `id` into `processed_events` in that
 transaction. A relay publishes outbox rows to
-`retailnetwork.customer-payments.analytics` after the commit.
+`retailnetwork.customer-payments.events` after the commit.
 
 **The provider call sits outside the transaction.** A use case that calls
 the provider (`AuthorizePayment`, `CaptureAllocation`, `VoidAuthorization`,
@@ -291,7 +291,7 @@ is still written, which is a proposed disposition the model does not state.
 - **Inbound adapter:** an internal scheduler scanning `expires_at`.
 - **Main flow:** per authorization, call the provider `Reauthorize` through
   the ACL port for the uncaptured allocations with the deterministic key.
-  On success `Reauthorize(newExpiresAt, providerRef)`: `AUTHORIZED →
+  On success `Reauthorize(providerAuthorizationId, newExpiresAt)`: `AUTHORIZED →
   AUTHORIZED` with the new `expiresAt` and provider reference. On a provider
   decline the authorization goes to `EXPIRED` (`ExpireAuthorization`) and
   `PaymentDeclined{reason: REAUTH_DECLINED}` is raised (H1, H2).

@@ -2,7 +2,7 @@
 id: use-cases
 title: Use Cases
 sidebar_label: Use Cases
-description: Every proposed Shopping Cart command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency.
+description: Every Shopping Cart command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency.
 ---
 
 # Use Cases
@@ -12,7 +12,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/ma
 :::
 
 One section per command of `contexts[shopping-cart].aggregates[Cart].commands`,
-plus the two policies and the view projector. They are proposed application
+plus the two policies and the view projector. They are application
 services in `internal/application/usecases`. The step-by-step diagrams are
 on [Sequence Diagrams](/storefront/contexts/shopping-cart/sequence-diagrams);
 the payloads are on [Domain Events](/storefront/contexts/shopping-cart/domain-events);

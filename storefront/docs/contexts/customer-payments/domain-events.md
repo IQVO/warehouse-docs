@@ -31,7 +31,7 @@ Every Kafka message is a **CloudEvents 1.0 event in structured JSON mode**
 | `time` | the instant the fact happened, UTC |
 | `datacontenttype` | `application/json` |
 | `dataschema` | `urn:retailnetwork:customer-payments:events:<EventName>:v1` |
-| Kafka topic | `retailnetwork.customer-payments.analytics` — **every** published event is analytics-only by design, so by `conventions.integration_rules` the `.events` topic carries nothing from this context until a network consumer exists |
+| Kafka topic | **as built** `retailnetwork.customer-payments.events` for every event (service ADR 0003, `TopicEvents` in `internal/adapters/outbound/kafka/payloads.go`); there is no `.analytics` topic. Every published event is still analytics-only (no integration consumer), so this departs from `conventions.integration_rules`, which routes analytics-only events to `.analytics` |
 | Kafka key | the subject: `authorizationId` for authorization events, `refundId` for refund events, so one aggregate's events stay on one partition and in order |
 
 No payment event carries a card number, a PSP token or any shopper data: the
@@ -51,7 +51,7 @@ storefront or network context subscribes to a payment fact
 | Item | Value |
 | --- | --- |
 | Full type | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentAuthorized` |
-| Topic | `retailnetwork.customer-payments.analytics` |
+| Topic | `retailnetwork.customer-payments.events` |
 | Subject / key | `authorizationId` |
 | Dataschema | `urn:retailnetwork:customer-payments:events:PaymentAuthorized:v1` |
 | Producing command / use case | `AuthorizePayment` (accepted by the provider) |
@@ -71,7 +71,7 @@ storefront or network context subscribes to a payment fact
 | Item | Value |
 | --- | --- |
 | Full type | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentReauthorized` |
-| Topic | `retailnetwork.customer-payments.analytics` |
+| Topic | `retailnetwork.customer-payments.events` |
 | Subject / key | `authorizationId` |
 | Dataschema | `urn:retailnetwork:customer-payments:events:PaymentReauthorized:v1` |
 | Producing command / use case | `ReauthorizePayment` (the `ReauthorizeBeforeExpiry` policy, 24 h before `expiresAt`); the state stays `AUTHORIZED` |
@@ -80,15 +80,16 @@ storefront or network context subscribes to a payment fact
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `authorizationId` | string | The authorization that was re-authorized. |
+| `orderId` | string | The order the authorization is bound to. |
 | `expiresAt` | timestamp | The new expiry of the provider's hold. |
-| `providerRef` | string | The provider's reference for the new hold. |
+| `providerAuthorizationId` | string | The provider's id of the new hold (the design called it `providerRef`). |
 
 ### PaymentCaptured
 
 | Item | Value |
 | --- | --- |
 | Full type | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentCaptured` |
-| Topic | `retailnetwork.customer-payments.analytics` |
+| Topic | `retailnetwork.customer-payments.events` |
 | Subject / key | `authorizationId` |
 | Dataschema | `urn:retailnetwork:customer-payments:events:PaymentCaptured:v1` |
 | Producing command / use case | `CaptureAllocation` (the `CaptureOnShipment` policy on `FulfillmentShipped`) |
@@ -106,7 +107,7 @@ storefront or network context subscribes to a payment fact
 | Item | Value |
 | --- | --- |
 | Full type | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentReleased` |
-| Topic | `retailnetwork.customer-payments.analytics` |
+| Topic | `retailnetwork.customer-payments.events` |
 | Subject / key | `authorizationId` |
 | Dataschema | `urn:retailnetwork:customer-payments:events:PaymentReleased:v1` |
 | Producing command / use case | `ReleaseAllocation` (`ReleaseOnCancellation` on `FulfillmentCancelled`, `ReleaseOnUnsourceable` on `FulfillmentUnsourceable`) or `VoidAuthorization` (reason `VOIDED`) |
@@ -125,7 +126,7 @@ storefront or network context subscribes to a payment fact
 | Item | Value |
 | --- | --- |
 | Full type | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentAuthorizationExpired` |
-| Topic | `retailnetwork.customer-payments.analytics` |
+| Topic | `retailnetwork.customer-payments.events` |
 | Subject / key | `authorizationId` |
 | Dataschema | `urn:retailnetwork:customer-payments:events:PaymentAuthorizationExpired:v1` |
 | Producing command / use case | `ExpireAuthorization` (raised when a provider decline on re-authorization moves the authorization to `EXPIRED`) |
@@ -142,7 +143,7 @@ storefront or network context subscribes to a payment fact
 | Item | Value |
 | --- | --- |
 | Full type | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentDeclined` |
-| Topic | `retailnetwork.customer-payments.analytics` |
+| Topic | `retailnetwork.customer-payments.events` |
 | Subject / key | `authorizationId` (the `DECLINED` record's root id, repeated in the payload) |
 | Dataschema | `urn:retailnetwork:customer-payments:events:PaymentDeclined:v1` |
 | Producing command / use case | `AuthorizePayment` (declined by the provider; the `DECLINED` record is saved), or `ReauthorizePayment` (reason `REAUTH_DECLINED`; the authorization moves to `EXPIRED`) |
@@ -160,7 +161,7 @@ storefront or network context subscribes to a payment fact
 | Item | Value |
 | --- | --- |
 | Full type | `com.retailnetwork.storefront.customer-payments.refund.RefundIssued` |
-| Topic | `retailnetwork.customer-payments.analytics` |
+| Topic | `retailnetwork.customer-payments.events` |
 | Subject / key | `refundId` |
 | Dataschema | `urn:retailnetwork:customer-payments:events:RefundIssued:v1` |
 | Producing command / use case | `RecordRefundOutcome` (`REQUESTED → SUCCEEDED`) |
@@ -180,7 +181,7 @@ storefront or network context subscribes to a payment fact
 | Item | Value |
 | --- | --- |
 | Full type | `com.retailnetwork.storefront.customer-payments.refund.RefundFailed` |
-| Topic | `retailnetwork.customer-payments.analytics` |
+| Topic | `retailnetwork.customer-payments.events` |
 | Subject / key | `refundId` |
 | Dataschema | `urn:retailnetwork:customer-payments:events:RefundFailed:v1` |
 | Producing command / use case | `RecordRefundOutcome` (`REQUESTED → FAILED`); the refund is then retryable by `RetryRefund`, max 5 attempts |
@@ -190,14 +191,18 @@ storefront or network context subscribes to a payment fact
 | --- | --- | --- |
 | `refundId` | string | The refund. |
 | `orderId` | string | The order whose refund failed. |
+| `authorizationId` | string | The authorization whose capture was being refunded. |
+| `groupNo` | integer | The shipment group of the refunded capture. |
 | `code` | string | The failure code, translated by the ACL. |
+| `attempts` | integer | How many provider attempts were made so far. |
+| `final` | boolean | `true` when the retries are exhausted and no further attempt follows. |
 
 ## Consumed
 
 Every consumer is idempotent on the CloudEvents `id`: the id is inserted
 into `processed_events` in the same transaction as the effect, and a
 duplicate is acknowledged without effect. Consumers dispatch on the **full
-type string**, never on a suffix. Proposed consumer groups:
+type string**, never on a suffix. Consumer group names come from mandatory environment variables (`CHECKOUT_CONSUMER_GROUP`, `ORDER_SOURCING_CONSUMER_GROUP`, `SHIPPING_AND_TRACKING_CONSUMER_GROUP`; the service refuses to start without them); the names the design suggests:
 `customer-payments.checkout`, `customer-payments.order-sourcing`,
 `customer-payments.shipping-and-tracking`.
 

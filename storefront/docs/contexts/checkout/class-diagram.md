@@ -2,7 +2,7 @@
 id: class-diagram
 title: Class Diagram
 sidebar_label: Class Diagram
-description: Proposed UML class diagrams of Checkout's domain model, events and policies, and the hexagonal ports-and-adapters layout a Go implementation would use, with the Anti-Corruption Layer as one outbound adapter.
+description: UML class diagrams of Checkout's domain model, events and policies, and the hexagonal ports-and-adapters layout, as the model designs them, with the as-built Go packages, with the Anti-Corruption Layer as one outbound adapter.
 ---
 
 # Class Diagram
@@ -11,12 +11,14 @@ description: Proposed UML class diagrams of Checkout's domain model, events and 
 Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `checkout` service is built on develop ([`IQVO/checkout`](https://github.com/IQVO/checkout) at `ab4f0e9`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/checkout#service-and-operations) section lists it.
 :::
 
-UML class diagrams of the **proposed** `internal/domain/**` packages, plus
+UML class diagrams of the `internal/domain/**` packages as the model designs them, plus
 the hexagonal ports and adapters. Type names come from the model's code
 identifiers (`checkoutsession.CheckoutSession`, `ports.OrderPlacer`,
 `checkoutsession.CheckoutSession.RecordPlacementInDoubt`, `checkoutsession.RequotedOffer`,
 `checkoutsession.Group.AmountMinor`) and value objects. Fields are unexported in Go
 and shown with `-`; methods are shown with `+`.
+
+**As built** (`IQVO/checkout` develop `ab4f0e9`): the domain packages are `internal/domain/checkoutsession`. Exported types per package: `checkoutsession`: `CheckoutSession`, `CheckoutOpened`, `CheckoutDeclined`, `CheckoutPlacementInDoubt`, `CheckoutCompleted`, `CheckoutRequoteRequired`, `CheckoutFailed`, `CheckoutSessionExpired`, `CartLine`, `CartGroup`, `CartSnapshot`, `OfferStatus`, `QuoteLine`, `QuoteCharge`, `PriceQuote`, `OpenInput`, `Snapshot`, `ID`, `State`, `Tier`, `Line`, `Group`, `RequotedOffer`, `StoredPlacement`, `VoidOwed`. Application packages: `internal/application/exchange`, `internal/application/idempotency`, `internal/application/outbox`, `internal/application/ports`, `internal/application/usecases`, `internal/application/views`; adapters: `internal/adapters/inbound/http`, `internal/adapters/inbound/mcp`, `internal/adapters/inbound/requestlog`, `internal/adapters/inbound/scheduler`, `internal/adapters/outbound/alerts`, `internal/adapters/outbound/clock`, `internal/adapters/outbound/customerordering`, `internal/adapters/outbound/customerpayments`, `internal/adapters/outbound/deliverypromise`, `internal/adapters/outbound/httpx`, `internal/adapters/outbound/ids`, `internal/adapters/outbound/kafka`, `internal/adapters/outbound/memory`, `internal/adapters/outbound/outbox`, `internal/adapters/outbound/postgres`, `internal/adapters/outbound/pricing`, `internal/adapters/outbound/repocontract`, `internal/adapters/outbound/shoppingcart`, `internal/adapters/outbound/telemetry`. Where a type name below differs (the UML keeps the design names), the [Ubiquitous Language](/storefront/contexts/checkout/ubiquitous-language) page carries the built identifier.
 
 ## 1. The CheckoutSession aggregate
 
@@ -100,7 +102,7 @@ not name as a type (hotspot H9 on
 [EventStorming](/storefront/contexts/checkout/eventstorming)); it is shown as
 bytes because it is replayed byte for byte. `Tier` (`SAME_DAY`, `NEXT_DAY`, `TWO_DAY`, `STANDARD`) is the network
 `delivery-promise` vocabulary, re-declared locally as a string enumeration: there is no shared kernel.
-The method signatures are proposed; the model names the commands, not their
+The method signatures are the design; the model names the commands, not their
 parameters.
 
 ## 2. Events and policies

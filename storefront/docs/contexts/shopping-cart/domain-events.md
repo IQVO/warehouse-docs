@@ -30,7 +30,7 @@ Every Kafka message is a **CloudEvents 1.0 event in structured JSON mode**
 | `subject` | the aggregate root id (`cartId`) |
 | `time` | the instant the fact happened, UTC |
 | `datacontenttype` | `application/json` |
-| `dataschema` | `urn:retailnetwork:shopping-cart:events:<EventName>:v1` |
+| `dataschema` | **as built** `urn:retailnetwork:shopping-cart:analytics:<EventName>:v1` (all four events are analytics-only; service ADR 0004, encoder goldens) |
 | Kafka topic | `retailnetwork.shopping-cart.analytics` — **every** published event is analytics-only, so by `conventions.integration_rules` the `.events` topic carries nothing from this context |
 | Kafka key | `cartId`, so one cart's events stay on one partition and in order |
 
@@ -49,7 +49,7 @@ storefront or network context subscribes to a cart fact
 | Full type | `com.retailnetwork.storefront.shopping-cart.cart.CartLineAdded` |
 | Topic | `retailnetwork.shopping-cart.analytics` |
 | Subject / key | `cartId` |
-| Dataschema | `urn:retailnetwork:shopping-cart:events:CartLineAdded:v1` |
+| Dataschema | `urn:retailnetwork:shopping-cart:analytics:CartLineAdded:v1` |
 | Producing command / use case | `AddLine` (adding an item already in the cart merges quantities; the event carries the merged line) |
 | Consumers | analytics only |
 
@@ -67,7 +67,7 @@ storefront or network context subscribes to a cart fact
 | Full type | `com.retailnetwork.storefront.shopping-cart.cart.CartDeliveryQuoted` |
 | Topic | `retailnetwork.shopping-cart.analytics` |
 | Subject / key | `cartId` |
-| Dataschema | `urn:retailnetwork:shopping-cart:events:CartDeliveryQuoted:v1` |
+| Dataschema | `urn:retailnetwork:shopping-cart:analytics:CartDeliveryQuoted:v1` |
 | Producing command / use case | `QuoteDelivery` (after the synchronous `QuoteDeliveryOffers` call to `delivery-promise`) |
 | Consumers | analytics only |
 
@@ -85,7 +85,7 @@ storefront or network context subscribes to a cart fact
 | Full type | `com.retailnetwork.storefront.shopping-cart.cart.CartAbandoned` |
 | Topic | `retailnetwork.shopping-cart.analytics` |
 | Subject / key | `cartId` |
-| Dataschema | `urn:retailnetwork:shopping-cart:events:CartAbandoned:v1` |
+| Dataschema | `urn:retailnetwork:shopping-cart:analytics:CartAbandoned:v1` |
 | Producing command / use case | `AbandonInactive` policy (an `OPEN` cart with no change for 30 days) |
 | Consumers | analytics only |
 
@@ -101,7 +101,7 @@ storefront or network context subscribes to a cart fact
 | Full type | `com.retailnetwork.storefront.shopping-cart.cart.CartCheckedOut` |
 | Topic | `retailnetwork.shopping-cart.analytics` |
 | Subject / key | `cartId` |
-| Dataschema | `urn:retailnetwork:shopping-cart:events:CartCheckedOut:v1` |
+| Dataschema | `urn:retailnetwork:shopping-cart:analytics:CartCheckedOut:v1` |
 | Producing command / use case | `CloseOnCheckoutCompleted` policy on `checkout`'s `CheckoutCompleted` |
 | Consumers | analytics only |
 
@@ -116,7 +116,7 @@ storefront or network context subscribes to a cart fact
 Every consumer is idempotent on the CloudEvents `id`: the id is inserted
 into `processed_events` in the same transaction as the effect, and a
 duplicate is acknowledged without effect. Consumers dispatch on the **full
-type string**, never on a suffix. Proposed consumer groups:
+type string**, never on a suffix. Consumer group names come from mandatory environment variables (`CHECKOUT_CONSUMER_GROUP`, `OFFER_AVAILABILITY_CONSUMER_GROUP`, `PRICING_CONSUMER_GROUP`; the service refuses to start without them); the names the design suggests:
 `shopping-cart.offer-availability`, `shopping-cart.pricing`,
 `shopping-cart.checkout`.
 
@@ -173,7 +173,7 @@ it moves the labelled estimate and the purchasability verdict.
   "subject": "cart-4f8b1c",
   "time": "2026-10-24T09:12:41Z",
   "datacontenttype": "application/json",
-  "dataschema": "urn:retailnetwork:shopping-cart:events:CartDeliveryQuoted:v1",
+  "dataschema": "urn:retailnetwork:shopping-cart:analytics:CartDeliveryQuoted:v1",
   "data": {
     "cartId": "cart-4f8b1c",
     "destinationPostalPrefix": "01310",

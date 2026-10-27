@@ -2,7 +2,7 @@
 id: use-cases
 title: Use Cases
 sidebar_label: Use Cases
-description: Every proposed Checkout command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency, including the in-doubt resolver policy.
+description: Every Checkout command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency, including the in-doubt resolver policy.
 ---
 
 # Use Cases
@@ -14,8 +14,8 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/ma
 One section per command of
 `contexts[checkout].aggregates[CheckoutSession].commands`, plus the
 `ResolveInDoubtPlacements`, `ResolveStuckAuthorizations` and `RetryOwedVoids`
-policies. They are proposed application services in
-`internal/application/usecases`. The step-by-step diagrams are on
+policies. They are application services in
+`internal/application/usecases` (as built). The step-by-step diagrams are on
 [Sequence Diagrams](/storefront/contexts/checkout/sequence-diagrams); the
 payloads are on [Domain Events](/storefront/contexts/checkout/domain-events);
 the REST contract is `storefront/apis/checkout/openapi.yaml`.

@@ -2,7 +2,7 @@
 id: use-cases
 title: Use Cases
 sidebar_label: Use Cases
-description: Every proposed Pricing command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency.
+description: Every Pricing command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency.
 ---
 
 # Use Cases
@@ -14,7 +14,7 @@ Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/ma
 One section per command of `contexts[pricing].aggregates[*].commands`, plus
 the two event-driven reactions (`WithdrawOnDiscontinue` and the
 `CatalogItemView` projector) and the two clock-driven policies. They are
-proposed application services in `internal/application/usecases`. The
+application services in `internal/application/usecases` (as built). The
 step-by-step diagrams are on [Sequence Diagrams](/storefront/contexts/pricing/sequence-diagrams);
 the payloads are on [Domain Events](/storefront/contexts/pricing/domain-events);
 the REST contract is `storefront/apis/pricing/openapi.yaml`.
