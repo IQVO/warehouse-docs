@@ -51,7 +51,7 @@ Three aggregates, each its own consistency boundary (decision 4):
 | 3 | Strategic classification **Supporting**: not generic (ASN, appointment and discrepancy rules differ per retailer), not the competitive core (the WES conductor stays Core). Those rules are replaceable policy objects. |
 | 5 | The handover to `inventory-storage` is **event-driven**: `inventory-storage` consumes `ReceiptLineReceived` (condition `Good`) and runs its existing `ReceiveStock` use case. No synchronous REST or MCP call in either direction. Stow stays an RF action (item scan plus location scan). Damaged units are **not** booked as receivable stock in v1: they are recorded on the receipt, and quarantine is a later ADR. |
 | 6 | Local copies, event-fed and convergent: `ProductRegistered` from `product-master` (does the SKU exist) and `LocationSlotRegistered` and `LocationSlotDecommissioned` from `facility-layout` (inbound dock doors). Each local-copy mode defaults to `permissive`; the cluster sets `kafka`. |
-| 9 | `DockAppointmentBooked` as inbound-labor demand for `warehouse-planning` is a documented **planned** edge. `warehouse-planning`'s `CapacityPlan` has no inbound process path, and adding one is its own ADR there. |
+| 9 | `DockAppointmentBooked` as inbound-labor demand for `warehouse-planning` was decided as a **planned** edge whose consumer needed its own ADR there. That ADR is `warehouse-planning` ADR 0017: the edge is built and wired (K28). |
 | 10 | No authentication (the fleet revert), no cross-context synchronous calls, a transactional outbox, `Idempotency-Key` on create `POST`s, optimistic concurrency (a version column), CloudEvents 1.0 through the repository's own helper, testcontainers only. |
 
 ## What it deliberately does not own
@@ -63,8 +63,10 @@ Three aggregates, each its own consistency boundary (decision 4):
   `inventory-storage`.
 - **Damaged and quarantined stock.** Damaged units are recorded on the
   receipt and never become receivable stock in v1. Quarantine is a later ADR.
-- **Inbound labor demand.** The event exists (`DockAppointmentBooked`), but
-  nothing consumes it. That edge is planned, not built.
+- **Inbound labor demand.** `DockAppointmentBooked` and
+  `DockAppointmentCancelled` are consumed by `warehouse-planning` (its ADR
+  0017), which turns them into inbound-labor demand; this context only
+  publishes the facts.
 
 ## No live cross-context lookup
 
@@ -86,13 +88,15 @@ Every event is CloudEvents 1.0 in structured mode with
 | --- | --- | --- |
 | `asn.ASNRegistered` | `asn_number` | none |
 | `asn.ASNCancelled` | `asn_number` | none |
-| `dockappointment.DockAppointmentBooked` | `appointment_id` | none; planned: `warehouse-planning` (not built) |
+| `dockappointment.DockAppointmentBooked` | `appointment_id` | `warehouse-planning` (its ADR 0017, inbound-labor demand) |
 | `dockappointment.DockAppointmentCheckedIn` | `appointment_id` | none |
-| `dockappointment.DockAppointmentCancelled` | `appointment_id` | none |
+| `dockappointment.DockAppointmentCancelled` | `appointment_id` | `warehouse-planning` (its ADR 0017) |
 | `dockappointment.DockAppointmentCompleted` | `appointment_id` | none |
 | `receipt.ReceiptOpened` | `asn_number` | none |
 | `receipt.ReceiptLineReceived` | `asn_number` | `inventory-storage` (its ADR 0037; opt-in by `INBOUND_RECEIPT_CONSUMER_GROUP`, set in the reference deployment) |
-| `receipt.ReceiptClosed` | `asn_number` | none |
+| `receipt.ReceiptCartonReceived` | see the spec | `inventory-storage` (identity only: links the carton's container, its ADR 0045/0046; same consumer group as `ReceiptLineReceived`), `network-fulfillment` (seller inbound loop, its ADR 0028) |
+| `receipt.CartonDiscrepancyRaised` | see the spec | `exception-management` (its ADR 0006), `network-fulfillment` (its ADR 0028) |
+| `receipt.ReceiptClosed` | `asn_number` | `network-fulfillment` (its ADR 0028) |
 
 REST, behind Kong at `/api/inbound-receiving` (problem type base
 `https://errors.inbound-receiving.warehouse-systems.dev/<slug>`):
@@ -120,5 +124,5 @@ REST, behind Kong at `/api/inbound-receiving` (problem type base
 - `warehouse-infra` documents one open issue: requests to
   `/api/inbound-receiving/reports/*` through Kong land on the OLTP route and
   return 404; the reports service works in-cluster.
-- `DockAppointmentBooked` as inbound-labor demand for `warehouse-planning`
-  remains planned, not built.
+- `DockAppointmentBooked` as inbound-labor demand is consumed by
+  `warehouse-planning` (its ADR 0017).

@@ -2,7 +2,7 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: Kafka integration for product-master — one published integration topic, four live local-copy consumers of ProductClassified, the migration-only legacy importer, the CloudEvents envelope and the version-guarded consumer rule.
+description: Kafka integration for product-master — one published integration topic with eight types, six local-copy consumers of ProductClassified, seven pack-level local views, the CloudEvents envelope and the version-guarded consumer rule.
 ---
 
 # Async API
@@ -11,9 +11,8 @@ description: Kafka integration for product-master — one published integration 
 
 | Topic | Direction | Messages | Status |
 | --- | --- | --- | --- |
-| `warehouse.product-master.events` | **Published** (this context is the exclusive publisher) | `ProductRegistered`, `ProductDescriptionChanged`, `ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured` | **Live** in the reference deployment. `inventory-storage` (its ADR 0034), `order-management` (ADR 0036), `wes-work-planning` (ADR 0035) and `fulfillment-execution` (ADR 0039) each keep a local copy of `ProductClassified`. The other four types have no consumer yet |
-| `warehouse.product-master.analytics` | **Published**, consumed only by this service's own `product-projector` | the same five types, same CloudEvents `id`, `dataschema` `urn:warehouse:product-master:analytics:<EventName>:v1` | **Live**. Written in the same outbox transaction as the integration topic; poison messages go to `warehouse.product-master.analytics.dlq` ([ADR 0006](https://github.com/IQVO/product-master/blob/develop/docs/adr/0006-analytics-read-side.md)) |
-| `warehouse.inventory.events` | **Consumed** (producer: `inventory-storage`) | `com.warehouse.wms.inventory-storage.product.ProductClassified` only (every other type is ignored) | **Migration only**. Opt-in via `LEGACY_IMPORT_CONSUMER_GROUP` (unset = importer not started; set to `product-master-legacy-import` in the reference deployment); removed at stage E of [ADR 0003](https://github.com/IQVO/product-master/blob/develop/docs/adr/0003-migration-from-inventory-storage.md) |
+| `warehouse.product-master.events` | **Published** (this context is the exclusive publisher) | `ProductRegistered`, `ProductDescriptionChanged`, `ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured`, `ProductPackLevelDeclared`, `ProductPackLevelMeasured`, `ProductPackLevelRetired` | **Live** (wired in `warehouse-infra` `develop`). `ProductClassified`: six local copies (`inventory-storage` ADR 0034, `order-management` ADR 0036, `wes-work-planning` ADR 0035, `fulfillment-execution` ADR 0039, `slotting-optimization`, `returns-processing`). Pack levels (ADR 0011): seven local views (`inbound-receiving`, `inventory-storage`, `pick-face-replenishment`, `slotting-optimization`, `wes-work-planning`, `fulfillment-execution`, `network-inventory-planning`; `ProductPackLevelMeasured` only `wes-work-planning` and `slotting-optimization`). `ProductRegistered`: `inbound-receiving`. `ProductDimensionsDeclared`, `ProductMeasured`: `slotting-optimization`. `ProductDescriptionChanged` has no consumer |
+| `warehouse.product-master.analytics` | **Published**, consumed only by this service's own `product-projector` | five types (the pack-level events are integration-only), same CloudEvents `id`, `dataschema` `urn:warehouse:product-master:analytics:<EventName>:v1` | **Live**. Written in the same outbox transaction as the integration topic; poison messages go to `warehouse.product-master.analytics.dlq` ([ADR 0006](https://github.com/IQVO/product-master/blob/develop/docs/adr/0006-analytics-read-side.md)) |
 
 The analytics topic is an internal data product of this context, like every
 sibling's `warehouse.<ctx>.analytics`: no other context reads it.
@@ -60,13 +59,16 @@ command that changes nothing raises no event.
 
 | Type suffix (after `com.warehouse.wms.product-master.product.`) | Raised by | Payload (`data`) |
 | --- | --- | --- |
-| `ProductRegistered` | `PUT /products/{sku}` for a new SKU; the legacy importer for an unknown SKU | `sku`, `description`, `version` (always 1) |
+| `ProductRegistered` | `PUT /products/{sku}` for a new SKU | `sku`, `description`, `version` (always 1) |
 | `ProductDescriptionChanged` | `PUT /products/{sku}` with a different description | `sku`, `description`, `version` |
-| `ProductClassified` | `PUT /products/{sku}/classification`; the legacy importer | `sku`, `handling_tags[]`, `temperature_class`?, `dot_hazard_class`?, `classification_source` (`native` or `legacy-import`), `version` |
+| `ProductClassified` | `PUT /products/{sku}/classification` | `sku`, `handling_tags[]`, `temperature_class`?, `dot_hazard_class`?, `classification_source`, `version` |
 | `ProductDimensionsDeclared` | `PUT /products/{sku}/dimensions/declared` | full physical profile: `sku`, `declared`?, `measured`?, `effective`?, `effective_source`, `discrepancy`, `version` |
 | `ProductMeasured` | `PUT /products/{sku}/dimensions/measured` | the same full physical profile |
+| `ProductPackLevelDeclared` | `PUT /products/{sku}/pack-levels/{level}` (ADR 0011) | the declared pack level with its GTIN; see the [generated reference](/api-reference/async/product-master) |
+| `ProductPackLevelMeasured` | `PUT /products/{sku}/pack-levels/{level}/measured` | the measured pack level; see the generated reference |
+| `ProductPackLevelRetired` | `POST /products/{sku}/pack-levels/{level}:retire` | the retired pack level; see the generated reference |
 
-`?` marks a field omitted when unset. `handling_tags` is in the stable order
+`GET /gtins/{gtin}` resolves a GTIN to its SKU and pack level without an event. `?` marks a field omitted when unset. `handling_tags` is in the stable order
 Hazmat, Fragile, TemperatureSensitive, Oversized, HighValue. There is no
 "unclassify" event in v1.
 
@@ -80,18 +82,16 @@ republishes the same id. The relay in `cmd/api` drains every
 `OUTBOX_RELAY_INTERVAL` (default `1s`), claims rows `FOR UPDATE SKIP LOCKED`,
 sends them one at a time in id order and stops at the first failure, so a
 later event of a SKU never overtakes an earlier one. `EVENT_PUBLISHER=kafka|log`
-selects the sink (default `log`, which only logs each message).
+selects the sink (default `log`, which only logs each message; `warehouse-infra` sets `kafka`).
 
 ## Who consumes `ProductClassified`
 
-All four consumers replaced their live `GET /products/{sku}/classification`
-calls to `inventory-storage` with a local copy fed by this topic. None of them
-calls `product-master` at request time. The reference deployment switches all
-four on (deployed 2026-10-07): the consumer-group values below are set in
-`warehouse-infra`'s `helm-values/inventory-storage.yaml` and
-`helm-values/order-management.yaml`, and `PRODUCT_CLASSIFICATION_MODE=kafka`
-for `wes-work-planning` and `fulfillment-execution` in `terraform/locals.tf`
-`sync_edge_env`.
+Six contexts keep a local copy fed by this topic; none of them calls
+`product-master` at request time. The first four replaced their former
+`GET /products/{sku}/classification` calls to `inventory-storage`
+(stages C and D of ADR 0003). Every consumer group below is set in
+`warehouse-infra` `develop` (`helm-values/<consumer>.yaml`, or the consumer
+chart's default).
 
 | Consumer | Consumer group env | Mode switch | What the local copy is for | Its ADR |
 | --- | --- | --- | --- | --- |
@@ -99,6 +99,8 @@ for `wes-work-planning` and `fulfillment-execution` in `terraform/locals.tf`
 | `order-management` | `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (`order-management-product-classification`) | `PRODUCT_CLASSIFICATION_MODE=kafka` or `permissive` (default); `http` is rejected at boot | intake enrichment: derived product attributes for path eligibility routing | 0036 |
 | `wes-work-planning` | `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (`wes-work-planning-product-classification`) | `PRODUCT_CLASSIFICATION_MODE=kafka` or `permissive` (default); `http` is rejected at boot | release-time capabilities and the fragile flag | 0035 |
 | `fulfillment-execution` | `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (`fulfillment-execution-product-classification`) | `PRODUCT_CLASSIFICATION_MODE=kafka` or `permissive` (default); `http` is rejected at boot | seal-time package segregation | 0039 |
+| `slotting-optimization` | `PRODUCT_CONSUMER_GROUP` (`slotting-optimization-product`) | `PRODUCT_MODE` (default `kafka`; also reads `ProductDimensionsDeclared` and `ProductMeasured`) | the `product_profiles` copy behind slot fit | its 0003 |
+| `returns-processing` | `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (`returns-processing-product-classification`, required) | none, always on | the disposition decision (`RESTOCK` never for a `DISPOSE`-classified SKU) | its 0003 |
 
 **Consumer rule.** Keep one row per SKU with the classification and its
 `version`; apply a message only when its `version` is greater than the stored
@@ -108,23 +110,24 @@ it never merges. The fleet consumer rules apply as everywhere: dispatch on
 the **full** `type`, ignore unknown types, dedupe on the CloudEvents `id` in
 the same transaction as the effect, commit the offset only after success.
 
-## Consuming: the legacy importer (migration only)
+## Who consumes the pack levels
 
-| Item | Value |
-| --- | --- |
-| Topic | `warehouse.inventory.events` |
-| Type | `com.warehouse.wms.inventory-storage.product.ProductClassified`, byte-identical to inventory-storage's AsyncAPI |
-| Consumer group | env `LEGACY_IMPORT_CONSUMER_GROUP`; unset = importer not started |
-| Effect | `ImportLegacyClassification`: register an unknown SKU and set its classification with source `legacy-import`; skip when the current classification is `native`; no change when identical |
-| Idempotency | claim of the CloudEvents `id` in `processed_events` (consumer `legacy-classification-importer`) in the same unit of work as the effect |
-| Invalid input | not a CloudEvent, another type, malformed payload, invalid SKU or classification: WARN and commit past |
-| Transient failure | retry the same message, 200 ms doubling to 5 s, until it succeeds; no dead-letter topic |
+ADR 0011's GS1 packaging hierarchy is read by seven contexts, each into its own
+local pack view (no live lookup): `inbound-receiving` (carton-level receiving),
+`inventory-storage` (sealed cases and break-case), `pick-face-replenishment`
+(the pack-derived replenishment multiple), `slotting-optimization` (case-pick
+faces), `wes-work-planning`, `fulfillment-execution` (case and each pick scans)
+and `network-inventory-planning`. `ProductPackLevelMeasured` is read only by
+`wes-work-planning` and `slotting-optimization`. Each consumer's group is set in
+`warehouse-infra` `develop` or comes from its chart's default (fleet edge K62).
 
-`FetchMessage`, handle, then `CommitMessages`. Every accepted import raises
-product-master's own `ProductRegistered` and/or `ProductClassified` through
-the outbox, so downstream copies fill from one topic only. On
-`inventory-storage`'s `develop` the legacy type is emitted only by its one-shot
-backfill command until stage E.
+## The retired legacy importer
+
+The migration-only importer of `inventory-storage`'s own `ProductClassified`
+(`warehouse.inventory.events`, `LEGACY_IMPORT_CONSUMER_GROUP`) was removed at
+stage E of ADR 0003, and `inventory-storage` no longer declares or emits that
+type (its PR #218). This context consumes no topic today (fleet edge K21,
+retired).
 
 ## Machine-generated reference
 
