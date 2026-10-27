@@ -194,7 +194,8 @@ contexts:
           - {rule: "the node's regionId names a defined Region", error: ErrUnknownRegion}
           - {rule: "subtype, when given, is one of the node type's subtypes in node_types", error: ErrSubtypeNotAllowed}
           - {rule: "sortDwellMinutes is declared only by SORTATION_CENTER and AIR_HUB nodes", error: ErrSortDwellNotAllowed}
-          - {rule: "inbound limits are declared only by nodes with the INBOUND capability, and maxCartonWeightG and every maxCartonDimsMm side are positive", error: ErrInboundLimitsNotAllowed}
+          # as built (node-topology ADR 0007): the limits are value-checked only and accepted on any node type; the INBOUND-capability restriction is not enforced and FULFILLMENT_CENTER has no INBOUND capability in the service (gap G64)
+          - {rule: "inbound limits, when declared, declare at least one field; every number set is a positive integer (at most 2147483647); the three maxCartonDimsMm edges are all-or-none. Not enforced as built: the restriction to nodes with the INBOUND capability (gap G64)", error: ErrValidation}
           - {rule: "RETIRED is terminal", error: ErrNodeRetired}
         commands: [RegisterNode, DeclareOperationalProfile, ActivateNode, SuspendNode, RetireNode]
         events: [NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired]
@@ -332,7 +333,7 @@ contexts:
           - {rule: "once a level is active its unitsPerPack never changes for that GTIN: a new content quantity is a new GTIN at that level and a re-declaration of every level above it, and the old level is retired (active = false)", error: ErrPackQuantityImmutable}
           - {rule: "a level's child level is lower than the level itself", error: ErrPackLevelOrder}
           - {rule: "unitsPerPack is at least 2 for every level other than EACH, and 1 for EACH", error: ErrInvalidPackQuantity}
-          - {rule: "variable-measure GTINs (indicator digit 9) are rejected", error: ErrVariableMeasureUnsupported}
+          - {rule: "variable-measure GTINs (indicator digit 9) are rejected", error: ErrInvalidGTIN}
         commands: [CreateCatalogItem, DiscontinueItem, DeclarePackaging, RetirePackLevel]
         events: [CatalogItemCreated, CatalogItemDiscontinued, CatalogItemPackagingDeclared, CatalogItemPackLevelRetired]
         throughput_estimate: "low"
@@ -1043,7 +1044,7 @@ contexts:
         invariants:
           - {rule: "outcome set once", error: ErrSubmissionAlreadyProcessed}
           - {rule: "processing never starts before notBefore = receivedAt + simulated processing delay", error: ErrSubmissionNotDue}
-          - {rule: "an INBOUND_RECEIPT names a shipment in InboundShipmentView addressed to a node of the submitting vendor", error: ErrUnknownInboundShipment}
+          - {rule: "an INBOUND_RECEIPT names a shipment in InboundShipmentView addressed to a node of the submitting vendor; an unknown vendor, shipment or node is not-found (404), a node of another vendor stays ErrNodeNotOwnedByVendor (vendor-connectivity ADR 0005)", error: ErrNotFound}
         commands: [ReceiveSubmission, ProcessSubmission, SubmitInboundReceipt]
         events: [SubmissionProcessed, InboundReceiptSubmitted]
         throughput_estimate: "medium-high"
@@ -1057,7 +1058,7 @@ contexts:
       - {name: IssueOnRelease, rule: "on FulfillmentReleasedToNode for a VENDOR node, issue a purchase order (poNumber is idempotent on assignmentId + releaseNo)"}
       - {name: CancelOnSourcingCancel, rule: "on FulfillmentCancelled cancel the purchase order of the assignment's highest releaseNo (CancelPurchaseOrder; no order is a no-op). If the vendor has already acknowledged it, CancelPurchaseOrder fails with ErrCancelAfterAcknowledgement, which is logged at INFO: nothing is published and the event is not retried, because order-sourcing decides the cancel and learns the order's fate from PurchaseOrderAccepted. Known residual: an acceptance that arrives after order-sourcing cancelled a RELEASED assignment is only logged there (order-sourcing policy AcceptanceAfterCancelOnlyLogged)"}
       - {name: ExpireUnacknowledged, rule: "sweep: ISSUED past ackBy -> EXPIRED"}
-      - {name: ReceiptRelay, rule: "when an INBOUND_RECEIPT submission succeeds publish InboundReceiptSubmitted; the receipt is not applied to the shipment here, seller-inbound owns that"}
+      - {name: ReceiptRelay, rule: "when an INBOUND_RECEIPT submission is accepted, append InboundReceiptSubmitted (subject and key shipmentId) to the outbox in the same unit of work, so a 202 always has its event (vendor-connectivity ADR 0005); SubmissionProcessed still reports the processing. The receipt is not applied to the shipment here, seller-inbound owns that"}
       - {name: SimulationKnobs, rule: "TX_PROCESSING_DELAY, TX_FAILURE_RATE, RATE_LIMIT_RPS, PO_REDELIVERY_RATE; all default to well-behaved"}
     inbound:
       - {from: "network-fulfillment (warehouse-systems, vendor V-WS)", type: cmd, channel: "Vendor API POST /vendor/nodes, PUT /vendor/nodes/{nodeId}/profile, POST /vendor/inventory, POST /vendor/acknowledgements, POST /vendor/shipping-labels, POST /vendor/shipment-confirmations, POST /vendor/inbound-receipts", routes: ["POST /vendor/nodes", "PUT /vendor/nodes/{nodeId}/profile", "POST /vendor/inventory", "POST /vendor/acknowledgements", "POST /vendor/shipping-labels", "POST /vendor/shipment-confirmations", "POST /vendor/inbound-receipts"], message: "RegisterVendorNode, DeclareNodeProfile, SubmitInventory, SubmitAcknowledgement, RequestLabel, SubmitShipmentConfirmation, SubmitInboundReceipt", relationship: "OHS + PL (downstream is Conformist + ACL)"}
@@ -1138,7 +1139,7 @@ contexts:
       - {term: Submission / Transaction, definition: "An asynchronous vendor write and its outcome, reconciled by transactionId.", code: "submission.Submission"}
       - {term: Label, definition: "labelRef + trackingNumber + carrier; never the address.", code: "po.Label"}
       - {term: Vendor API, definition: "The Open Host Service of this context; its JSON schemas are the Published Language.", code: "apis/vendor-connectivity/openapi.yaml"}
-      - {term: Inbound Receipt, definition: "A vendor's carton-level report of what arrived for one inbound shipment: per SSCC a status, the eaches received per GTIN and any compliance codes.", code: "submission.InboundReceipt"}
+      - {term: Inbound Receipt, definition: "A vendor's carton-level report of what arrived for one inbound shipment: per SSCC a status, the eaches received per GTIN and any compliance codes.", code: "inbound.Receipt"}
 
   # =========================================================================
   - id: linehaul-transportation

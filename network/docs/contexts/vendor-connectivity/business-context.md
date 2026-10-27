@@ -113,7 +113,7 @@ default to well-behaved:
 
 ## Inbound shipments and receipts
 
-> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+> **Built, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)** as realized by [`vendor-connectivity` ADR 0005](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0005-inbound-shipments-receipts-and-catalog-packaging.md) (inbound shipments, inbound receipts and catalogue packaging). This section is the delta the seller-inbound design added to this page; where the service decided differently, the text below says so.
 
 A seller's cartons reach a vendor node through this context, not directly.
 The vendor polls `GET /vendor/inbound-shipments` for a carton manifest

@@ -164,6 +164,6 @@ it. It is listed as an open question rather than invented here.
 
 ## Inbound observations
 
-> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+> **Built, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)** as realized by [`node-performance` ADR 0009](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0009-inbound-timeliness-and-accuracy-metrics.md) (inbound timeliness and accuracy, two informational scorecard metrics). This section is the delta the seller-inbound design added to this page; where the service decided differently, the text below says so.
 
 `Metrics` gains two informational fields, `inboundTimelinessP95Minutes` (receipt `receivedAt` minus the shipment's `shippedAt`, from `InboundShipmentShipped`) and `inboundAccuracyRate` (share of reported cartons with status `RECEIVED`), from the inputs `InboundShipmentShipped` and `InboundReceiptSubmitted` (policy `InboundObservations`; light, informational). They are shown on the scorecard and are **not** an input to `Grading`; they are not on `NodeScorecardUpdated`, so `delivery-promise` and `order-sourcing` are unaffected. A missing or damaged carton can be the seller's fault as much as the node's, so the accuracy rate mixes causes until they are separated (gap G52).

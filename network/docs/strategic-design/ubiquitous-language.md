@@ -52,7 +52,7 @@ are the proposed Go package and type names. Each context's own
 | **Hold Deadline** | `delivery-promise` | The instant from which a promise book accepts no new hold: the pickup cutoff minus the node's handling time. | `book.BookTimes.HoldDeadline` |
 | **Inbound Limits** | `node-topology` | A receiving node's declared carton weight and size limits, whether it accepts pallets and whether it requires an SSCC on every carton. | `node.OperationalProfile.Inbound` |
 | **Inbound Plan** | `seller-inbound` | A seller's declaration, in eaches, of what it will send to one node and with which packing option. | `inboundplan.Plan` |
-| **Inbound Receipt** | `vendor-connectivity` | A vendor's carton-level report of what arrived for one inbound shipment: per SSCC a status, the eaches received per GTIN and any compliance codes. | `submission.InboundReceipt` |
+| **Inbound Receipt** | `vendor-connectivity` | A vendor's carton-level report of what arrived for one inbound shipment: per SSCC a status, the eaches received per GTIN and any compliance codes. | `inbound.Receipt` |
 | **Inbound Shipment** | `seller-inbound` | One physical consignment of a plan to a node: its cartons, labels and receipt outcome. | `inboundshipment.Shipment` |
 | **Induction** | `last-mile-delivery` | Placing an arrived package into a wave. | `wave.InductPackage` |
 | **Inner Pack** | `seller-inbound` | An intermediate package of several eaches of one item. In the model but not used by any flow in the first version. | `catalog.PackLevel.INNER` |

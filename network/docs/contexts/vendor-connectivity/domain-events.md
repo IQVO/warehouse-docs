@@ -227,15 +227,15 @@ context no source for it. This is listed as an open question on the
 
 ## Inbound receipts
 
-> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+> **Built, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)** as realized by [`vendor-connectivity` ADR 0005](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0005-inbound-shipments-receipts-and-catalog-packaging.md) (inbound shipments, inbound receipts and catalogue packaging). This section is the delta the seller-inbound design added to this page; where the service decided differently, the text below says so.
 
 ### InboundReceiptSubmitted (published)
 
 | | |
 | --- | --- |
 | Type | `com.retailnetwork.partner.vendor-connectivity.inboundreceipt.InboundReceiptSubmitted` |
-| Subject / key | `transactionId` |
-| Produced by | `ProcessSubmission` of an `INBOUND_RECEIPT` submission that ends in `SUCCESS` (policy `ReceiptRelay`) |
+| Subject / key | `shipmentId` |
+| Produced by | `SubmitInboundReceipt`, in the same unit of work that accepts the `INBOUND_RECEIPT` submission (policy `ReceiptRelay`, service ADR 0005); `SubmissionProcessed` still reports the processing |
 | Consumers | `seller-inbound` (`RecordInboundReceipt`), `node-performance` (inbound timeliness and accuracy observations) |
 
 | Field | Type | Meaning |

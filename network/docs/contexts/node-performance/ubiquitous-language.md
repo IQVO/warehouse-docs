@@ -74,7 +74,7 @@ Vendor API; the canonical network ↔ fleet term table is on
 
 ## Inbound metrics
 
-> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+> **Built, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)** as realized by [`node-performance` ADR 0009](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0009-inbound-timeliness-and-accuracy-metrics.md) (inbound timeliness and accuracy, two informational scorecard metrics). This section is the delta the seller-inbound design added to this page; where the service decided differently, the text below says so.
 
 | Term | Definition | Code identifier | Not to be confused with |
 | --- | --- | --- | --- |

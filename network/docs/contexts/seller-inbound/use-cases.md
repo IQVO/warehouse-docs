@@ -138,11 +138,14 @@ informational scorecard from this service's own facts and changes nothing.
 - **Flow:** for each carton in the receipt, store its status and the received
   eaches per GTIN. Raise `InboundDiscrepancyRecorded` for each `MISSING`,
   `UNEXPECTED` or `DAMAGED` carton and each quantity difference, and
-  `SellerComplianceViolationRecorded` for each compliance code. When every
+  `SellerComplianceViolationRecorded` once per distinct compliance code on a
+  carton; an unexpected carton also raises the code `UNMANIFESTED_CARTON`
+  (service ADR 0002 A8). When every
   carton of the manifest has a final status the shipment closes: `CLOSED` if
   nothing differs, otherwise `CLOSED_WITH_DISCREPANCY`, and
   `InboundShipmentReceived` is raised. Otherwise it stays `RECEIVING`.
-- **Errors:** none returned. A receipt for an unknown shipment is logged and
-  dropped (the Vendor API refuses it first: `ErrUnknownInboundShipment`).
+- **Errors:** none returned. A receipt for a shipment that does not exist is
+  dead-lettered at once to `<topic>.dlq` (service ADR 0003); the Vendor API
+  normally refuses it first with 404 `not-found`.
 - **Idempotency:** the CloudEvents `id` in the inbox; a repeated carton status
   is not recounted.

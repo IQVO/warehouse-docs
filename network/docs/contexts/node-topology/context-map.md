@@ -112,7 +112,7 @@ which have no edge in the model.
 
 ## Seller inbound
 
-> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+> **Built, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)** as realized by [`node-topology` ADR 0007](https://github.com/IQVO/node-topology/blob/develop/docs/adr/0007-inbound-limits-on-the-operational-profile.md) (inbound limits on the operational profile). This section is the delta the seller-inbound design added to this page; where the service decided differently, the text below says so. Not built: the `INBOUND` capability of `FULFILLMENT_CENTER` and the capability gate `ErrInboundLimitsNotAllowed`; the service value-checks the limits (`ErrValidation`) on any node type (gap [G64](/network/strategic-design/model-gap-register#as-built-discrepancies-found-on-2026-10-26)).
 
 | Neighbour | Direction | Pattern | Channel | Messages | Why |
 | --- | --- | --- | --- | --- | --- |

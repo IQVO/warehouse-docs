@@ -247,7 +247,7 @@ line, kept 30 days; one event per applied feed.
 
 ## Packaging hierarchy and owner
 
-> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+> **Built, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)** as realized by [`offer-availability` ADR 0006](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0006-catalog-gtin-packaging-and-listing-owner.md) (catalogue GTIN and packaging hierarchy, and the optional owner of a listing). This section is the delta the seller-inbound design added to this page; where the service decided differently, the text below says so.
 
 **CatalogItem** gains optional `Identifiers{gtin}` (the each-level GTIN) and a
 `PackagingHierarchy` of `PackLevelDef{level, gtin, childGtin?, unitsPerPack, dimsMm?, grossWeightG?, active}`. New commands: `DeclarePackaging`, `RetirePackLevel`. New events: `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`.
@@ -259,7 +259,7 @@ line, kept 30 days; one event per applied feed.
 | Once a level is active its `unitsPerPack` never changes for that GTIN: a new quantity is a new GTIN at that level and a re-declaration of every level above, and the old level is retired | `ErrPackQuantityImmutable` |
 | A level's child level is lower than the level itself | `ErrPackLevelOrder` |
 | `unitsPerPack` is at least 2 for every level above `EACH` and 1 for `EACH` | `ErrInvalidPackQuantity` |
-| Variable-measure GTINs (indicator digit 9) are rejected | `ErrVariableMeasureUnsupported` |
+| Variable-measure GTINs (indicator digit 9) are rejected (as built, as an invalid GTIN) | `ErrInvalidGTIN` |
 
 **Listing** gains an optional `OwnerRef`. The invariant `ErrDuplicateListing`
 becomes "one listing per (`catalogItemId`, `nodeId`, `ownerRef`)"; an absent

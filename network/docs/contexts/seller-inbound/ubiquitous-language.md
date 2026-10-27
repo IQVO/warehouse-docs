@@ -45,7 +45,7 @@ GS1 term, the definition says what the *model* means by it.
 | **Pack Level** | One of `EACH`, `INNER`, `CASE`, `PALLET`. | `catalog.PackLevel` (`offer-availability`) |
 | **Owner Reference** | The `ownerRef` on a listing. | `listing.OwnerRef` (`offer-availability`) |
 | **Node**, **Operational Profile**, **Inbound Limits** | A building, its declared profile, and its carton weight and size limits. | `node.Node`, `node.OperationalProfile`, `node.OperationalProfile.Inbound` (`node-topology`) |
-| **Vendor**, **Vendor API**, **Inbound Receipt** | An organisation operating nodes, its Open Host Service, and its carton-level report of what arrived. | `vendor.VendorAccount`, `apis/vendor-connectivity/openapi.yaml`, `submission.InboundReceipt` (`vendor-connectivity`) |
+| **Vendor**, **Vendor API**, **Inbound Receipt** | An organisation operating nodes, its Open Host Service, and its carton-level report of what arrived. | `vendor.VendorAccount`, `apis/vendor-connectivity/openapi.yaml`, `inbound.Receipt` (`vendor-connectivity`) |
 
 ## Fleet translation
 
