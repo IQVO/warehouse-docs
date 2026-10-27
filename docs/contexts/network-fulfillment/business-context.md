@@ -53,13 +53,15 @@ advertisedQuantity = min(
 the 18:00 cutoff means advertising 400 sells a promise the floor cannot
 keep; advertising 120 sells capability honestly. [ADR 0001](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0001-network-fulfillment-bounded-context.md)
 names this **CapabilityOffer** and calls it "the feature". Its value is
-computed and persisted today (the `RecomputeCapabilityOffers` use case, opt-in
-with `CAPABILITY_OFFER_ENABLED=true`, default off) and served read-only on
-`/capability-offers`. The outward half is **not built**: the use case
-deliberately does not call `NetworkGateway.SubmitAvailability`, and the only
-gateway is a stub, so nothing advertises the quantity to a network. What runs
-for real today is the commitment half: receiving demand and answering it
-honestly.
+computed and persisted (the `RecomputeCapabilityOffers` use case, opt-in
+with `CAPABILITY_OFFER_ENABLED=true`, which `warehouse-infra` `develop` sets)
+and served read-only on `/capability-offers`. The outward half is built too
+([ADR 0027](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0027-supply-loop-node-profile-and-inventory-feed.md)):
+in live mode the offers of each recompute pass go to the network as ONE
+inventory feed per site (`SubmitInventoryFeed`, lines of SKU, quantity and
+basis mapped to the site's listings; partial, never full, when any offer is
+missing), after the site's node profile has been declared
+(`DeclareNodeProfile`).
 
 ## What is built: answering demand honestly
 
@@ -88,9 +90,10 @@ local order, if any. `SweepOrphanedHolds` (ADR 0024, on by default, grace
 `ORPHAN_HOLD_GRACE` = `1h`) is the backstop: it cancels an
 `order-management` hold that nobody decided or whose cancel was never
 confirmed, and reports each one as `OrphanedHoldCancelled` without changing
-the order's state. Today all of this runs against a **stub** network
-gateway seeded from `NETWORK_SEED_FILE`; no call to a real network is made
-anywhere.
+the order's state. In the reference deployment all of this runs against the
+study's own retail network in the same cluster (`NETWORK_MODE=live`, the
+`vendor-connectivity` Vendor API, ADR 0026); `stub`, seeded from
+`NETWORK_SEED_FILE`, stays the chart default and the test mode.
 
 ## Why this is its own context, not an adapter inside order-management
 
