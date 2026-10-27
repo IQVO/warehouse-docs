@@ -7,14 +7,14 @@ description: Proposed UML class diagrams of Product Content's domain model, even
 
 # Class Diagram
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model carries the proposed contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-content` service is built on develop ([`IQVO/product-content`](https://github.com/IQVO/product-content) at `2f09dc0`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-content#service-and-operations) section lists it.
 :::
 
 UML class diagrams of the **proposed** `internal/domain/**` packages, plus
 the hexagonal ports and adapters. Type names come from the model's code
 identifiers (`content.ProductContent`, `content.Media.RolePrimary`,
-`category.CategoryTree`, `category.Category`) and value objects. Fields are
+`category.Tree`, `category.Category`) and value objects. Fields are
 unexported in Go and shown with `-`; methods are shown with `+`.
 
 ## 1. ProductContent aggregate
@@ -211,7 +211,7 @@ flowchart TB
         KC["kafka<br/>consumer: offer-availability"]
     end
     APP["<b>internal/application/usecases</b><br/>CreateProductContent<br/>ReviseDraft, ReviseContent<br/>PublishContent, DiscardDraft<br/>RetireContent (REST and policy)<br/>CreateCategory, MoveCategory,<br/>RenameCategory<br/>PublishCategoryTree<br/>ProjectCatalogItems"]
-    DOM["<b>internal/domain</b><br/>content.ProductContent<br/>category.CategoryTree"]
+    DOM["<b>internal/domain</b><br/>content.ProductContent<br/>category.Tree"]
     PORTS["<b>internal/application/ports</b><br/>ProductContentRepository<br/>CategoryTreeRepository<br/>CatalogItemStore<br/>Outbox, Inbox<br/>IdempotencyStore<br/>UnitOfWork, Clock"]
     subgraph OUT["internal/adapters/outbound"]
         A1["postgres<br/>repositories, outbox, inbox,<br/>catalog item store,<br/>idempotency store, UoW"]

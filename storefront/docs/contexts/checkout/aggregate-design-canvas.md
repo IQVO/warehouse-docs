@@ -7,8 +7,8 @@ description: The ddd-crew Aggregate Design Canvas for Checkout's single aggregat
 
 # Aggregate Design Canvas
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `checkout` service is built on develop ([`IQVO/checkout`](https://github.com/IQVO/checkout) at `ab4f0e9`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/checkout#service-and-operations) section lists it.
 :::
 
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
@@ -20,7 +20,7 @@ read models (`read_models: []`). Proposed Go package: `internal/domain/session`
 
 ### 1. Name
 
-`CheckoutSession` (`session.CheckoutSession`), identified by `sessionId`.
+`CheckoutSession` (`checkoutsession.CheckoutSession`), identified by `sessionId`.
 
 ### 2. Description
 

@@ -7,15 +7,15 @@ description: Proposed UML class diagrams of Checkout's domain model, events and 
 
 # Class Diagram
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `checkout` service is built on develop ([`IQVO/checkout`](https://github.com/IQVO/checkout) at `ab4f0e9`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/checkout#service-and-operations) section lists it.
 :::
 
 UML class diagrams of the **proposed** `internal/domain/**` packages, plus
 the hexagonal ports and adapters. Type names come from the model's code
-identifiers (`session.CheckoutSession`, `session.PlaceOrder`,
-`session.PlacementInDoubt`, `session.RequotedOffer`,
-`session.SessionGroup.Amount`) and value objects. Fields are unexported in Go
+identifiers (`checkoutsession.CheckoutSession`, `ports.OrderPlacer`,
+`checkoutsession.CheckoutSession.RecordPlacementInDoubt`, `checkoutsession.RequotedOffer`,
+`checkoutsession.Group.AmountMinor`) and value objects. Fields are unexported in Go
 and shown with `-`; methods are shown with `+`.
 
 ## 1. The CheckoutSession aggregate
@@ -204,7 +204,7 @@ flowchart TB
         SCH["scheduler<br/>ExpireSession,<br/>ResolveInDoubtPlacements"]
     end
     APP["<b>internal/application/usecases</b><br/>OpenSession, ConfirmSession<br/>RecordAuthorization, RecordDecline<br/>RecordPlacementInDoubt, RecordPlaced<br/>RecordRequoteRequired, RecordFailure<br/>ExpireSession<br/>ResolveInDoubtPlacements"]
-    DOM["<b>internal/domain</b><br/>session.CheckoutSession<br/>session.SessionLine, session.SessionGroup<br/>session.RequotedOffer"]
+    DOM["<b>internal/domain</b><br/>checkoutsession.CheckoutSession<br/>checkoutsession.SessionLine, checkoutsession.SessionGroup<br/>checkoutsession.RequotedOffer"]
     PORTS["<b>internal/application/ports</b><br/>SessionRepository<br/>CartReader, OfferChecker, QuoteIssuer<br/>PaymentAuthorizer, OrderPlacer<br/>Outbox, IdempotencyStore<br/>UnitOfWork, Clock"]
     subgraph OUT["internal/adapters/outbound"]
         A1["postgres<br/>repository, outbox,<br/>idempotency store, UoW"]

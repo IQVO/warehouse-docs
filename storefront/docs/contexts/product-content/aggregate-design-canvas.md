@@ -7,8 +7,8 @@ description: The ddd-crew Aggregate Design Canvas for Product Content's two aggr
 
 # Aggregate Design Canvas
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model carries the proposed contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-content` service is built on develop ([`IQVO/product-content`](https://github.com/IQVO/product-content) at `2f09dc0`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-content#service-and-operations) section lists it.
 :::
 
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
@@ -106,7 +106,7 @@ attributes, media) are the named invariants `ErrTooManyBullets`,
 | Command | Trigger | Transition |
 | --- | --- | --- |
 | `CreateProductContent` | Content manager, REST `POST /product-contents` | `[*] → DRAFT` |
-| `ReviseDraft` | Content manager, REST `POST /product-contents/{catalogItemId}:revise-draft` | `DRAFT → DRAFT` |
+| `ReviseDraft` | Content manager, REST `POST /product-contents/{catalogItemId}:revise` (**As built:** one route for both revisions; the content state picks ReviseDraft or ReviseContent, product-content ADR 0002) | `DRAFT → DRAFT` |
 | `ReviseContent` | Content manager, REST `POST /product-contents/{catalogItemId}:revise` | `PUBLISHED → PUBLISHED` |
 | `PublishContent` | Content manager, REST `POST /product-contents/{catalogItemId}:publish` | `DRAFT → PUBLISHED`, `PUBLISHED → PUBLISHED` |
 | `DiscardDraft` | Content manager, REST `POST /product-contents/{catalogItemId}:discard` | `DRAFT → RETIRED` (reason `DISCARDED`) |
@@ -151,7 +151,7 @@ read shows).
 
 ### 1. Name
 
-`CategoryTree` (`category.CategoryTree`), identified by `categoryTreeId`.
+`CategoryTree` (`category.Tree`), identified by `categoryTreeId`.
 
 ### 2. Description
 

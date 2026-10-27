@@ -2,207 +2,101 @@
 id: entity-relationship
 title: Entity Relationship
 sidebar_label: Entity Relationship
-description: The proposed Postgres schema of Product Content, with aggregate tables, the catalog item read model, and the outbox, inbox and migration infrastructure tables.
+description: "The Postgres schema of Product Content as built: every table of its migration on develop, with keys, the design-time tables each one replaces, and the outbox, inbox and idempotency tables."
 ---
 
 # Entity Relationship
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model carries the proposed contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-content` service is built on develop ([`IQVO/product-content`](https://github.com/IQVO/product-content) at `2f09dc0`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-content#service-and-operations) section lists it.
 :::
 
-The **proposed** Postgres schema. Product Content owns its database and
-shares no table with any other context (`conventions.integration_rules`).
-Column names are the model's field names in `snake_case`. A relationship line
-is drawn **only** inside one aggregate. The schema holds no PII and no item
-master data: `catalog_item_id` is a reference by value.
+The schema **as built**: [`0001_product_content_schema.up.sql`](https://github.com/IQVO/product-content/blob/develop/internal/adapters/outbound/postgres/migrations/0001_product_content_schema.up.sql) on `develop` (`2f09dc0`), applied at boot with golang-migrate (which adds its own `schema_migrations` table). Product Content owns its database and shares no table with another context.
 
-## Aggregate tables
-
-### ProductContent
+6 tables. Key markers: PK primary key, FK foreign key, UK unique. Types are the column types of the migration; constraints (CHECK, defaults, partial indexes) are in the file.
 
 ```mermaid
 erDiagram
-    product_contents ||--o{ content_bullets : "FK catalog_item_id"
-    product_contents ||--o{ content_attributes : "FK catalog_item_id"
-    product_contents ||--o{ content_media : "FK catalog_item_id"
     product_contents {
-        TEXT catalog_item_id PK
-        TEXT status "DRAFT, PUBLISHED, RETIRED"
-        TEXT retired_reason "nullable: DISCARDED, DISCONTINUED, RETIRED_BY_HAND"
-        TEXT description "nullable in DRAFT"
-        TEXT primary_category_id "nullable in DRAFT"
-        BIGINT revision
-        TIMESTAMPTZ created_at
-        TIMESTAMPTZ published_at "nullable"
-        TIMESTAMPTZ retired_at "nullable"
-        BIGINT version
+        text catalog_item_id PK
+        text state
+        text retired_reason
+        text description
+        jsonb bullets
+        jsonb attributes
+        jsonb media
+        text primary_category_id
+        integer revision
+        integer published_revision
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz published_at
+        timestamptz retired_at
+        bigint version
     }
-    content_bullets {
-        TEXT catalog_item_id PK,FK
-        INTEGER bullet_no PK
-        TEXT text
-    }
-    content_attributes {
-        TEXT catalog_item_id PK,FK
-        TEXT name PK
-        TEXT value
-        TEXT unit "nullable"
-    }
-    content_media {
-        TEXT catalog_item_id PK,FK
-        TEXT media_id PK
-        TEXT url
-        TEXT alt_text
-        TEXT role "PRIMARY or GALLERY"
-    }
-```
-
-### CategoryTree
-
-```mermaid
-erDiagram
-    category_trees ||--|{ categories : "FK category_tree_id"
     category_trees {
-        TEXT category_tree_id PK
-        BIGINT tree_version
-        BIGINT version
+        text tree_id PK
+        bigint version
+        jsonb categories
+        timestamptz updated_at
     }
-    categories {
-        TEXT category_tree_id PK,FK
-        TEXT category_id PK
-        TEXT parent_id "nullable, root"
-        TEXT name
-        TEXT path
-    }
-```
-
-Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent].description`
-(description, bullets, attributes, media, `primaryCategoryId`, `revision`),
-`.states`; `.aggregates[CategoryTree].description`, `.value_objects`
-(`Category{categoryId, parentId?, name, path}`), `.states`;
-`apis/product-content/openapi.yaml` (`revision` minimum 1, media `role`
-enum).
-
-Column notes: `product_contents.status` holds the three `ProductContent`
-states and `retired_reason` says why a RETIRED content retired (a DRAFT retires
-with `DISCARDED` or `DISCONTINUED`); the tree row has no status column, since
-the tree is always published; `revision` is the published-shape counter `product-discovery`
-orders by; `version` on both roots is the optimistic-concurrency counter
-every save checks; `tree_version` is the tree version each tree command bumps and the
-`CategoryTreePublished` event carries; `categories.parent_id` points inside
-the same aggregate; `categories.path` is the materialized browse path,
-recomputed on move and rename. `content_attributes` is keyed by
-`name` per item: the model's value object has no own identity.
-
-Omitted: indexes (for example on `content_media.catalog_item_id` it is the
-PK prefix already) and `CHECK` constraints (for example
-`role IN ('PRIMARY','GALLERY')`, depth at most 4). The publication
-timestamps are this pack's reading of what the REST read returns; the model
-lists `revision` but no timestamps.
-
-## Read model tables
-
-```mermaid
-erDiagram
-    rm_catalog_items {
-        TEXT catalog_item_id PK
-        BOOLEAN discontinued
-        TIMESTAMPTZ first_seen_at
-    }
-```
-
-Derived from: `model.yaml → contexts[product-content].read_models[CatalogItemView]`
-and `.consumes` (fields declared: `catalogItemId`).
-
-`rm_catalog_items` is disposable. It can be truncated and rebuilt by
-replaying `retailnetwork.offer-availability.events` (or, past topic
-retention, by the network's paged catalogue read — gap S5's snapshot
-pattern). It keeps only what the invariants and the policy need: that the
-item exists, and whether it is discontinued. The title and dimensions the
-`CatalogItemCreated` event also carries are dropped at the projector.
-
-## Infrastructure tables
-
-```mermaid
-erDiagram
-    outbox_events {
-        BIGSERIAL id PK "infrastructure"
-        UUID event_id UK
-        TEXT topic
-        TEXT event_type
-        TEXT kafka_key
-        JSONB envelope
-        TIMESTAMPTZ created_at
-        TIMESTAMPTZ published_at "nullable"
-        INTEGER attempts
+    catalog_item_view {
+        text catalog_item_id PK
+        text state
+        timestamptz updated_at
     }
     processed_events {
-        UUID event_id PK "infrastructure"
-        TEXT event_type
-        TEXT source
-        TIMESTAMPTZ processed_at
+        text event_id PK
+        text event_type
+        timestamptz processed_at
     }
-```
-
-```mermaid
-erDiagram
     idempotency_keys {
-        TEXT idempotency_key PK "infrastructure"
-        TEXT route
-        TEXT request_hash
-        INTEGER response_status
-        JSONB response_body
-        TIMESTAMPTZ created_at
+        text route PK
+        text key PK
+        text request_hash
+        integer status
+        text content_type
+        bytea body
+        timestamptz created_at
     }
-    schema_migrations {
-        BIGINT version PK "infrastructure"
-        BOOLEAN dirty
+    outbox_events {
+        bigserial id PK
+        text event_id UK
+        text topic
+        text event_type
+        text subject
+        bytea key
+        text dataschema
+        bytea value
+        jsonb headers
+        timestamptz created_at
+        timestamptz published_at
+        integer attempts
+        text last_error
     }
 ```
 
-Derived from: `model.yaml → conventions.integration_rules` (transactional
-outbox, idempotent consumers, `Idempotency-Key` on every write route);
-`conventions.cloudevents` (topic, type, key).
+## Tables
 
-**All four tables are infrastructure, not domain tables.** `outbox_events`
-is the transactional outbox. It is written in the same transaction as the
-aggregate and drained by the relay to
-`retailnetwork.product-content.events`. `event_id` is the CloudEvents `id`,
-`event_type` the full type, and `kafka_key` the `catalogItemId` or
-`categoryTreeId`. `processed_events` is the inbox, one row per consumed
-CloudEvents `id`, written in the same transaction as the effect.
-`idempotency_keys` stores the response of every state-changing `POST` for
-replay. `schema_migrations` is the migration tool's bookkeeping.
+| Table | Columns | Primary key | Role |
+| --- | --- | --- | --- |
+| `product_contents` | 15 | `catalog_item_id` | aggregate or read-model state |
+| `category_trees` | 4 | `tree_id` | aggregate or read-model state |
+| `catalog_item_view` | 3 | `catalog_item_id` | aggregate or read-model state |
+| `processed_events` | 3 | `event_id` | inbox: one row per consumed CloudEvents id (dedupe) |
+| `idempotency_keys` | 7 | `route, key` | stored REST answers per `Idempotency-Key` and route |
+| `outbox_events` | 13 | `id` | transactional outbox the relay publishes to Kafka |
 
-## Why there are no foreign keys across aggregates or contexts
+## Design-time schema versus as built
 
-- `product_contents.primary_category_id` → `categories.category_id` is a
-  reference **by value**. `ProductContent` and `CategoryTree` are separate
-  aggregates with separate transactions; the `ErrUnknownCategory` check is
-  done in the use case, not by the database. An FK would lock the tree row
-  on every content write.
-- `product_contents.catalog_item_id` and `rm_catalog_items.catalog_item_id`
-  point into **another context's** model (`offer-availability`). No
-  database is shared, so these are values copied from messages. The FK
-  between `product_contents` and `rm_catalog_items` is also skipped on
-  purpose: content may be created the moment the projection row lands, and
-  the existence rule is the aggregate's, enforced through the view.
-- The read-model table has no FK at all. It is rebuilt from events and may
-  briefly lag the item master.
+The pack was first written with a proposed, fully normalised schema. The service kept the aggregate boundaries and changed the storage shape:
 
-## Table ≠ aggregate
+| Design-time table | As built |
+| --- | --- |
+| `content_bullets` | `product_contents.bullets` (jsonb column) |
+| `content_attributes` | `product_contents.attributes` (jsonb column) |
+| `content_media` | `product_contents.media` (jsonb column) |
+| `categories` | `category_trees.categories` (jsonb column; the whole tree is one row) |
+| `rm_catalog_items` | `catalog_item_view` (renamed; the CatalogItemView read model) |
 
-| Table | Aggregate / role | Notes |
-| --- | --- | --- |
-| `product_contents` | **ProductContent** (root) | One row per catalogue item, with `revision` for the consumer guard and `version` for optimistic concurrency. |
-| `content_bullets` | **ProductContent** (bullets) | Ordered by `bullet_no`; replaced wholesale by `ReviseDraft` or `ReviseContent`. |
-| `content_attributes` | **ProductContent** (`Attribute` value objects) | Keyed by `name` per item; replaced wholesale by `ReviseDraft` or `ReviseContent`. |
-| `content_media` | **ProductContent** (`Media` value objects) | Exactly one `PRIMARY` row when the gate passes; the check is the aggregate's. |
-| `category_trees` | **CategoryTree** (root) | One row; `tree_version` bumps on every tree command, including `PublishCategoryTree`. |
-| `categories` | **CategoryTree** (`Category` value objects) | Written by `CreateCategory`, `MoveCategory`, `RenameCategory`, always with the root's `version`. |
-| `rm_catalog_items` | none (read model `CatalogItemView`) | Serves `ErrUnknownCatalogItem`, `ErrItemDiscontinued` and `RetireOnDiscontinue`. |
-| `outbox_events` | none (infrastructure) | Transactional outbox. |
-| `processed_events` | none (infrastructure) | Inbox for idempotent consumers. |
-| `idempotency_keys` | none (infrastructure) | `Idempotency-Key` replay store. |
-| `schema_migrations` | none (infrastructure) | Migration bookkeeping. |
+Every other design-time table exists under the same name. The invariants are enforced by the aggregate in `internal/domain` before a row is written; the migration adds CHECK constraints on scalar columns and the indexes listed in the file.

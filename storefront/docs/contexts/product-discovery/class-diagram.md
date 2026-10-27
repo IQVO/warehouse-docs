@@ -7,14 +7,14 @@ description: Proposed UML class diagrams of Product Discovery's read-side domain
 
 # Class Diagram
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-discovery` service is built on develop ([`IQVO/product-discovery`](https://github.com/IQVO/product-discovery) at `9c2f945`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-discovery#service-and-operations) section lists it.
 :::
 
 UML class diagrams of the **proposed** `internal/domain/**` packages, plus
 the hexagonal ports and adapters. Type names come from the model's code
-identifiers (`productview.ProductView`, `productview.Purchasable`,
-`categoryview.CategoryView`, `search.Port` in the UL spellings). Fields are
+identifiers (`productview.View`, `productview.Purchasable`,
+`categoryview.View`, `ports.SearchPort` in the UL spellings). Fields are
 unexported in Go and shown with `-`; methods are shown with `+`. There is
 no aggregate and no `Err...` type in this context — nothing to refuse.
 
@@ -149,7 +149,7 @@ flowchart TB
         OPS["ops<br/>rebuild job (no REST route)"]
     end
     APP["<b>internal/application/usecases</b><br/>SearchProducts<br/>GetProduct<br/>ListCategories<br/>FoldEvent (11 handlers)<br/>RebuildProjections"]
-    DOM["<b>internal/domain</b><br/>productview.ProductView<br/>categoryview.CategoryView<br/>PurchasableRule, UnavailableNotBuyable"]
+    DOM["<b>internal/domain</b><br/>productview.View<br/>categoryview.View<br/>PurchasableRule, UnavailableNotBuyable"]
     PORTS["<b>internal/application/ports</b><br/>ProductViewStore<br/>CategoryViewStore<br/>SearchPort<br/>Inbox<br/>UnitOfWork, Clock"]
     subgraph OUT["internal/adapters/outbound"]
         A1["postgres<br/>projections + search index,<br/>inbox, UoW"]

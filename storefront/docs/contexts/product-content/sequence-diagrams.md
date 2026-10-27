@@ -7,8 +7,8 @@ description: Proposed UML sequence diagrams for every Product Content command us
 
 # Sequence Diagrams
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model carries the proposed contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-content` service is built on develop ([`IQVO/product-content`](https://github.com/IQVO/product-content) at `2f09dc0`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-content#service-and-operations) section lists it.
 :::
 
 One UML sequence diagram per command use case on
@@ -458,7 +458,7 @@ Omitted: nothing beyond the shared notes. `PublishCategoryTree` re-publishes
 the live tree unchanged so consumers can resync; the structural invariants need
 no re-check at publication: they hold for the live tree at all times.
 
-## 10. ReviseDraft and DiscardDraft (REST POST .../catalogItemId:revise-draft, :discard)
+## 10. ReviseDraft and DiscardDraft (REST POST .../catalogItemId:revise on a DRAFT, :discard)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
