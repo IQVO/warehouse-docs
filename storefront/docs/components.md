@@ -105,8 +105,8 @@ Lighthouse CI; Node >= 22.18.
   card number (ADR 0004).
 - **CI sensors** (`.github/workflows/ci.yml`): `web` (lint, typecheck, coverage,
   build), `no-network-url-in-bundle` (the client bundle holds only
-  `/api/storefront` URLs), `lighthouse-budgets` (LCP <= 2.5 s, TBT <= 200 ms,
-  CLS <= 0.1), `e2e` (Playwright journeys against the stub BFF), `guide-lint`,
+  `/api/storefront` URLs), `lighthouse-budgets` (LCP at most 2.5 s, TBT at most 200 ms,
+  CLS at most 0.1), `e2e` (Playwright journeys against the stub BFF), `guide-lint`,
   `docker-build`.
 
 ## payment-provider-simulator
