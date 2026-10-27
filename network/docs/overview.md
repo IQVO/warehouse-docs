@@ -26,8 +26,9 @@ context is the only fleet service that talks to the network, through the
 network's Vendor API.
 
 :::info[As built]
-Ten of the eleven contexts (all but `seller-inbound`, which stays proposed
-design) are built as services. Each ships a read-only MCP server (`cmd/mcp`,
+All eleven contexts are built as services (re-checked against each
+repository's `develop` on 2026-10-26) and wired in warehouse-infra `develop`;
+each has adopted the fleet observability standard. Each ships a read-only MCP server (`cmd/mcp`,
 Streamable HTTP on `:8090`, no auth, its own reads only) exposed by the
 gateway as `/api/mcp/` + the context id — for example
 `/api/mcp/delivery-promise` — and a console Module Federation remote
@@ -99,7 +100,7 @@ map with every relationship pattern is on
 | [`node-performance`](/network/contexts/node-performance) | Scorecards measured from facts, never from declarations; grades feed the promise. |
 | [`customer-ordering`](/network/contexts/customer-ordering) | Checkout and the customer order; the only holder of the (synthetic) ship-to address. Generic. |
 | [`shipping-and-tracking`](/network/contexts/shipping-and-tracking) | Labels and the package journey timeline. Generic. |
-| [`seller-inbound`](/network/contexts/seller-inbound) | Proposed. Sellers plan, pack, label and ship stock, including case-packed master cartons identified by SSCC, to vendor nodes; receipts close each shipment. |
+| [`seller-inbound`](/network/contexts/seller-inbound) | Sellers plan, pack, label and ship stock, including case-packed master cartons identified by SSCC, to vendor nodes; receipts close each shipment. |
 
 ## How to read this site
 
@@ -116,4 +117,4 @@ map with every relationship pattern is on
 5. [Bounded Contexts](/network/contexts): the same 14-page ddd-crew pack for each of
    the eleven contexts, and [API Reference](/network/api-reference) for their REST
    contracts.
-6. [ADRs](/network/adr): the nine proposed decisions.
+6. [ADRs](/network/adr): the nine domain decisions (Proposed) and an index of every service repository's own ADRs.
