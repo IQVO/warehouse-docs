@@ -51,18 +51,28 @@ consumes no other context's events. Its relationships, per its own
 [Context Map](/contexts/facility-layout/context-map), are:
 
 - **Kafka, `warehouse.facility.events`**: with `EVENT_PUBLISHER=kafka`, all
-  twelve domain events are published as CloudEvents 1.0 (structured mode,
+  fifteen domain event types are published as CloudEvents 1.0 (structured mode,
   `type` prefix `com.warehouse.wms.facility-layout.`), through a
   transactional outbox when a database is configured (ADR 0018). The
   contract is
   [`apis/asyncapi.yaml`](https://github.com/IQVO/facility-layout/blob/develop/apis/asyncapi.yaml).
-  There are two downstream consumers:
+  The consumers on `develop` (each repository's own consumer code):
   - `inventory-storage` feeds a local location-classification cache from
-    `ZoneRegistered`, `LocationSlotRegistered` and
-    `LocationSlotDecommissioned` (`LOCATION_LOOKUP_MODE=kafka`) for its
-    stow-time placement check.
+    `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned`
+    and `LocationSlotHandlingUnitDeclared` (`LOCATION_LOOKUP_MODE=kafka`) for
+    its stow-time placement check and, for the handling unit (`EACH`, `CASE`
+    or `PALLET`, declared with `PUT /locations/{locationCode}/handling-unit`,
+    [ADR 0040](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0040-slot-handling-unit.md)),
+    whether a sealed case may be stowed in a bin.
   - `warehouse-planning` folds `LocationSlotRegistered` and
     `LocationSlotDecommissioned` into a storage-position and station tally.
+  - `inbound-receiving`, `slotting-optimization`, `pick-face-replenishment`
+    and `task-interleaving` keep local slot (and, except `inbound-receiving`,
+    zone) copies from the same topic; `task-interleaving` also reads
+    `LocationGeometryUpdated`.
+  - `network-inventory-planning` consumes `SiteCapabilityChanged` (the site
+    capability heartbeat,
+    [ADR 0041](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0041-site-capability-heartbeat.md)).
 - **REST**: `wes-work-planning` calls `GET /distance` for travel distance
   (`TRAVEL_DISTANCE_MODE=http`). `fulfillment-execution` has an opt-in
   `GET /locations/{locationCode}` lookup for a slot's functional `role`

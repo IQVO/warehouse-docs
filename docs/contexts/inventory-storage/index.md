@@ -52,7 +52,7 @@ write access to any of its aggregates. `order-management`
 reserves and revokes stock over REST. `order-management`,
 `wes-work-planning` and `fulfillment-execution` no longer call its
 `GET /products/{sku}/classification`: each keeps its own local copy of
-`product-master`'s `ProductClassified`. `network-fulfillment` reads
+`product-master`'s classification facts. `network-fulfillment` reads
 `GET /inventory/{sku}/usable` (opt-in) to compute its capability offers.
 It consumes `facility-layout`'s `warehouse.facility.events` into a local
 location-classification cache
@@ -69,9 +69,17 @@ between two bins through `RelocateStock` (ADR 0039), and a `REPLENISH` completio
 the same with reason `REPLENISHMENT` (ADR 0041).
 It also publishes `BinStockLevelChanged` (ADR 0040), the absolute per-bin level
 feed that `pick-face-replenishment` reads.
-Its legacy `ProductClassified` is emitted only by the one-shot
-`republish-product-classifications` backfill, for `product-master`'s
-migration importer.
+The legacy `ProductClassified` and the one-shot
+`republish-product-classifications` backfill that re-emitted it were removed
+at `product-master` ADR 0003 stage E (2026-10-17): product classification is
+`product-master`'s alone (ADR-0034).
+
+Sealed cases are tracked as containers (LPNs, ADR-0045 and ADR-0046):
+`GET /containers/{lpn}`, `POST /containers/{lpn}:stow` into a case bin,
+`POST /containers/{lpn}:break` into loose eaches and
+`GET /bins/{binId}/containers`. They raise `ContainerRegistered`,
+`ContainerStowed`, `CaseBroken` and `ContainerEmptied` on
+`warehouse.inventory.events`, keyed by LPN, with no consumer yet.
 Every REST and MCP endpoint is unauthenticated by deliberate decision
 ([ADR-0015](https://github.com/IQVO/inventory-storage/blob/develop/docs/docs/adr/0015-remove-rest-identity-layer.md)). See the
 [Bounded Context Canvas](/contexts/inventory-storage/bounded-context-canvas) for the full picture of
@@ -97,9 +105,10 @@ stale. It is reached two ways, and both raise
   `relocation_ref`, the move reference `<plan_id>:<move_seq>`);
 - a completed `REPLENISH` task (ADR 0041), applied by the same consumer from the
   same fields plus the required `request_ref` (reason `REPLENISHMENT`, `source_ref`
-  = `request_ref`, the `pick-face-replenishment` request id). No `REPLENISH` task is
-  created in the reference deployment today: the planner's consumer in
-  `wes-work-planning` is off and `pick-face-replenishment` is not deployed (K44).
+  = `request_ref`, the `pick-face-replenishment` request id). `warehouse-infra`
+  `develop` wires the chain: `pick-face-replenishment` is deployed and
+  `wes-work-planning` runs its replenishment consumer with
+  `REPLENISHMENT_MODE=kafka` (K44).
 
 `slotting-optimization` consumes `StockRelocated` to show how far an approved
 slot plan has been executed. See [Business Context](/contexts/inventory-storage/business-context#relocation-slot-plans-reach-the-ledger)
@@ -128,9 +137,12 @@ and [Async API](/contexts/inventory-storage/async-api).
   `StockUnit` and `Reservation`, both aggregate roots.
 - [Domain Events](/contexts/inventory-storage/domain-events): all twelve
   past-tense events this context raises (the catalog on that page). Of
-  these, `StockReserved`, `ReservationRevoked`, `StockRelocated` and the legacy
-  `ProductClassified` cross the service boundary on the integration topic,
-  beside the four transfer replies and destination facts.
+  these, `StockReserved`, `ReservationRevoked`, `StockRelocated`,
+  `BinStockLevelChanged` and the promoted `ItemStowed`, `ItemUnlocated` and
+  `DiscrepancyDetected` cross the service boundary on the integration topic,
+  beside the transfer replies and destination facts and the four container
+  facts (see the [Async API](/contexts/inventory-storage/async-api) for the
+  per-topic list).
 - [Domain Message Flow](/contexts/inventory-storage/domain-message-flow)
   ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):
   key scenarios as commands, events and queries.
