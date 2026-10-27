@@ -27,19 +27,26 @@ Per this context's own [Context Map](/contexts/pick-face-replenishment/context-m
 and [integration page](https://iqvo.github.io/pick-face-replenishment/docs/ecosystem/integration),
 checked against `develop` (and, for deployment, `warehouse-infra` `develop`):
 
-**Built on `develop`:** the REST API (twelve operations), the transactional
-outbox and relay, and **three** Kafka consumers, always on since its ADR 0006
-(`DATABASE_URL`, `KAFKA_BROKERS` and the three consumer groups are mandatory
-and a missing one is a boot error; `permissive` is rejected), for bin levels and
-relocations from `inventory-storage`, the forward map from
-`slotting-optimization`, zones and locations from `facility-layout`). There is
-one binary, `cmd/api`, and **no MCP server**.
+**Built on `develop` (`cac857d`):** the REST API (fourteen path × method
+pairs in `apis/openapi.yaml`, including the two analytics report routes,
+`/healthz` and `/readyz`), the transactional outbox and relay, and **four**
+Kafka consumers, always on since its ADR 0006 (`DATABASE_URL`, `KAFKA_BROKERS`
+and every consumer group are mandatory and a missing one is a boot error): bin
+levels and relocations from `inventory-storage`, the forward map from
+`slotting-optimization`, zones and locations from `facility-layout`, and
+product-master's pack levels (its ADR 0009, the pack-derived replenishment
+multiple). It ships four binaries: `cmd/api`, a read-only MCP server
+(`cmd/mcp`, ADR 0007) and the analytics read side `cmd/pfr-projector` +
+`cmd/pfr-reports` (ADR 0008), plus a Dockerfile, a Helm chart and the console
+remote `replenishment_mfe`.
 
-**Not deployed.** `warehouse-infra` `develop` has no entry for it: no
-database, no Kong route, no ArgoCD application, no values file, no dashboard.
-The repository itself has no Dockerfile and no Helm chart on `develop` (its
-Runbook lists both as absent). So every edge to and from this context is built
-on `develop` (both ends) but **not wired in the reference cluster**.
+**Wired in `warehouse-infra` `develop`:** `terraform/apps.yaml` registers it
+(database, analytics database, `frontend_remote: replenishment_mfe`) and
+`helm-values/pick-face-replenishment.yaml` sets all four consumer groups
+(`inventory`, `slotting`, `layout`, `pack-levels`) and the analytics projector.
+`warehouse-ops-agent` has an MCP client for it
+(`internal/adapters/outbound/mcpclient/pick_face_replenishment.go`). The kind
+cluster was not checked.
 
 **What is built around it, checked on each sibling's `develop`:** the inputs
 from `slotting-optimization` (`SlotPlanApproved`) and `facility-layout` (zones
@@ -65,13 +72,13 @@ ADR 0041). The output side is built too, hop by hop (fleet edge K44):
    relocation that closes the request (K43), and `slotting-optimization` no
    longer mistakes a `REPLENISHMENT` move for a slot-plan move (its PR #35).
 
-So on `develop` a request can be raised, planned, executed and completed. Today
-nothing runs the loop: this service is not deployed, `warehouse-infra` does not
-set `REPLENISHMENT_MODE` for `wes-work-planning`, and the `REPLENISH` path
-reaches a cluster only when the catalogue seed next runs.
+So on `develop` a request can be raised, planned, executed and completed, and
+every hop is wired in `warehouse-infra` `develop` (this service's values file,
+`REPLENISHMENT_MODE=kafka` for `wes-work-planning`). The `REPLENISH` path
+reaches a cluster only through the catalogue seed (an operator step), and no
+request has been traced through all five hops on a cluster.
 
-**Planned, not built:** an analytics read side, a `warehouse-ops-agent` client
-and a console remote, and a demand-cover policy behind the same port as
+**Planned, not built:** a demand-cover policy behind the same port as
 `MIN_MAX`.
 :::
 
@@ -131,11 +138,12 @@ It owns two aggregates and one pure function:
   Its ADRs live under `docs/adr/`: 0001 (bounded context), 0002 (the two
   aggregates, their invariants and the detection policy), 0003 (event-fed
   local copies and the consumed contracts), 0004 (CloudEvents envelope and
-  type catalogue) and 0005 (evaluation semantics and persistence) are all
-  Accepted (2026-10-17).
-- **Fleet-level**: [Context Map](/strategic-design/context-map) (K39, K40 and
-  K42 to K44, all
-  wired-but-unused),
+  type catalogue), 0005 (evaluation semantics and persistence), 0006
+  (Postgres and Kafka are the only runtime), 0007 (MCP server), 0008
+  (analytics read side) and 0009 (pack-derived replenishment multiple).
+- **Fleet-level**: [Context Map](/strategic-design/context-map) (K39, K40,
+  K42 to K44 and the pack-level edge K62, all live: built on both ends and
+  wired in `warehouse-infra` `develop`),
   the [Event Standard](/strategic-design/event-standard-cloudevents)
   (subdomain table and type catalogue),
   [Subdomain Classification](/strategic-design/subdomain-classification) and
