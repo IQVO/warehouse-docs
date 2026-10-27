@@ -1,11 +1,11 @@
 ---
 id: readyz
 title: "Readiness probe"
-description: "200 when the service can serve traffic; 503 while starting or draining for shutdown."
+description: "200 when the service can serve traffic: Postgres answers a ping AND a"
 sidebar_label: "Readiness probe"
 hide_title: true
 hide_table_of_contents: true
-api: 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
+api: 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
 sidebar_class_name: "get api-method"
 info_path: api-reference/rest/inbound-receiving/inbound-receiving-api
 custom_edit_url: null
@@ -38,20 +38,26 @@ import Translate from "@docusaurus/Translate";
 
 
 
-200 when the service can serve traffic; 503 while starting or draining for shutdown.
+200 when the service can serve traffic: Postgres answers a ping AND a
+Kafka broker answers a metadata request (reachability only, never
+topics; the verdict is cached 3 seconds). 503 while draining for
+shutdown (`{"status":"not_ready"}`) or while a dependency is down
+(problem `dependency-unavailable`, naming `postgres` and/or `kafka`).
+`/healthz` stays liveness only.
+
 
 <ParamsDetails>
   
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./readyz.RequestSchema.json")}
+  title={"Body"}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./readyz.StatusCodes.json")}
+  responses={{"200":{"description":"Ready.","content":{"application/json":{"schema":{"type":"object","required":["status"],"properties":{"status":{"type":"string","example":"ok"}},"title":"Status"}}}},"503":{"description":"Draining (`not_ready`) or a dependency is unavailable (`dependency-unavailable`).","content":{"application/json":{"schema":{"type":"object","required":["status"],"properties":{"status":{"type":"string","example":"ok"}},"title":"Status"}},"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 problem document used for every non-2xx response.","required":["type","title","status","detail"],"properties":{"type":{"type":"string","format":"uri"},"title":{"type":"string"},"status":{"type":"integer","format":"int32"},"detail":{"type":"string"},"instance":{"type":"string"}},"title":"Problem"},"example":{"type":"https://errors.inbound-receiving.warehouse-systems.dev/dependency-unavailable","title":"A runtime dependency is unavailable","status":503,"detail":"not ready: kafka","instance":"/readyz"}}}}}}
 >
   
 </StatusCodes>

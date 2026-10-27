@@ -45,13 +45,13 @@ Returns 204 when the process is up. Carries no dependency state.
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./get-health.RequestSchema.json")}
+  title={"Body"}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./get-health.StatusCodes.json")}
+  responses={{"204":{"description":"The service is up."}}}
 >
   
 </StatusCodes>

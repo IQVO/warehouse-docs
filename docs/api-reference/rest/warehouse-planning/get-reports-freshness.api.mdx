@@ -46,13 +46,13 @@ The freshness lag of the projection all three reports read: `as_of` is the Cloud
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./get-reports-freshness.RequestSchema.json")}
+  title={"Body"}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./get-reports-freshness.StatusCodes.json")}
+  responses={{"200":{"description":"The freshness (null fields while nothing was projected).","content":{"application/json":{"schema":{"type":"object","required":["as_of","lag_seconds"],"properties":{"as_of":{"type":"string","format":"date-time","nullable":true,"description":"CloudEvents time of the newest event applied; null when none."},"lag_seconds":{"type":"number","format":"double","nullable":true,"minimum":0,"description":"now - as_of, in seconds; null when nothing was applied.","example":4.2}},"title":"ReportsFreshness"}}}},"500":{"description":"The analytical database query failed.","content":{"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 problem detail.","properties":{"type":{"type":"string","format":"uri"},"title":{"type":"string"},"status":{"type":"integer"},"detail":{"type":"string"},"instance":{"type":"string"}},"title":"ProblemDetail"}}}}}}
 >
   
 </StatusCodes>

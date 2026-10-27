@@ -45,13 +45,13 @@ import Translate from "@docusaurus/Translate";
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./healthz.RequestSchema.json")}
+  title={"Body"}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./healthz.StatusCodes.json")}
+  responses={{"200":{"description":"Alive.","content":{"application/json":{"schema":{"type":"object","required":["status"],"properties":{"status":{"type":"string","example":"ok"}},"title":"Status"}}}}}}
 >
   
 </StatusCodes>

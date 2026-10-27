@@ -34,6 +34,12 @@ const sidebar: SidebarsConfig = {
         },
         {
           type: "doc",
+          id: "api-reference/rest/inbound-receiving/get-asn-cartons",
+          label: "List the announced cartons of an ASN",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
           id: "api-reference/rest/inbound-receiving/cancel-asn",
           label: "Cancel an ASN",
           className: "api-method post",
@@ -110,6 +116,18 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/rest/inbound-receiving/receive-line",
           label: "Receive a quantity against a line",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/inbound-receiving/get-carton-label",
+          label: "Get the label data of an accepted carton",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/inbound-receiving/receive-scan",
+          label: "Receive by scan",
           className: "api-method post",
         },
         {

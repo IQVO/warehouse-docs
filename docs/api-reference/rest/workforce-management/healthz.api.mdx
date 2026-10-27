@@ -45,13 +45,13 @@ Returns 200 with a static status body if the process is up and serving. Does not
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./healthz.RequestSchema.json")}
+  title={"Body"}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./healthz.StatusCodes.json")}
+  responses={{"200":{"description":"Service is up.","content":{"application/json":{"schema":{"type":"object","required":["status"],"properties":{"status":{"type":"string","example":"ok"}},"title":"HealthzResponse"},"example":{"status":"ok"}}}}}}
 >
   
 </StatusCodes>

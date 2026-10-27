@@ -1,1 +1,0 @@
-{"responses":{"200":{"description":"Service is alive.","content":{"application/json":{"schema":{"type":"object","properties":{"status":{"type":"string","example":"ok"}}},"example":{"status":"ok"}}}}}}

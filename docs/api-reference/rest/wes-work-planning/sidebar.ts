@@ -50,7 +50,7 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/rest/wes-work-planning/enqueue-work-unit",
           label: "Enqueue a work unit onto a process path's work pool",
-          className: "api-method post",
+          className: "menu__list-item--deprecated api-method post",
         },
         {
           type: "doc",
@@ -68,7 +68,7 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/rest/wes-work-planning/record-completion",
           label: "Record completion of a released work unit",
-          className: "api-method post",
+          className: "menu__list-item--deprecated api-method post",
         },
       ],
     },
