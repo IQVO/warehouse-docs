@@ -2,18 +2,19 @@
 id: sequence-diagrams
 title: Sequence Diagrams
 sidebar_label: Sequence Diagrams
-description: "One proposed UML sequence per key Seller Inbound command use case, from inbound adapter through aggregate, repository and outbox."
+description: "One UML sequence per key Seller Inbound command use case, from inbound adapter through aggregate, repository and outbox."
 ---
 
 # Sequence Diagrams
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet, and unlike the other ten contexts it has no reference service: it is design only ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)). Identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built ([`IQVO/seller-inbound`](https://github.com/IQVO/seller-inbound), designed by [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)); the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. Where the model left a choice open, the service's own ADRs 0002 to 0005 record what it does.
 :::
 
 Shared conventions: `Repo` saves with `WHERE version = :expected`; `Outbox`
 rows are written in the same database transaction as the aggregate; a relay
-produces them to Kafka `retailnetwork.seller-inbound.events`. Consumers claim
+produces them to Kafka `retailnetwork.seller-inbound.events` (the six
+analytics-only events to `retailnetwork.seller-inbound.analytics`). Consumers claim
 the CloudEvents `id` in `processed_events` in the same transaction as their
 effect. Event names are short; the full types are on
 [Domain Events](/network/contexts/seller-inbound/domain-events).

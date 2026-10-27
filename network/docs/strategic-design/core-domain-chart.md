@@ -67,6 +67,6 @@ three future contexts.
 | `linehaul-transportation` | Custom-built | Could become Core with real optimization. |
 | `last-mile-delivery` | Custom-built | Routing could be bought behind a port. |
 | `node-performance` | Custom-built | Towards product. |
-| `seller-inbound` | Custom-built | Proposed. The carton and receipt rules are the network's own. |
+| `seller-inbound` | Custom-built | The carton and receipt rules are the network's own. |
 | `customer-ordering` | Commodity | Replaceable by a bought storefront behind the promise API. |
 | `shipping-and-tracking` | Commodity | Replaceable by a carrier platform. |

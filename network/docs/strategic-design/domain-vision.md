@@ -83,7 +83,7 @@ different reasons, under different owners.
   Layer (`network-fulfillment`). See [Context Map](/network/strategic-design/context-map).
 - **Not an inventory planner for vendors.** Which vendor node holds which
   item is the vendor's decision (the fleet's `network-inventory-planning`).
-  Sellers that send their own stock plan and ship it through the proposed
+  Sellers that send their own stock plan and ship it through the
   `seller-inbound` context, which picks no node for them: the seller names
   the destination ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)).
 
@@ -99,7 +99,7 @@ different reasons, under different owners.
 | `linehaul-transportation` | Supporting | Scheduled departures with capacity, pickups at vendor cutoffs, loads. |
 | `last-mile-delivery` | Supporting | Delivery waves, routes for delivery partners, delivery attempts. |
 | `node-performance` | Supporting | Scorecards and grades from observed facts. |
-| `seller-inbound` | Supporting | Proposed. Sellers plan, pack, label and ship stock in eaches or case-packed cartons identified by SSCC; receipts close each shipment. |
+| `seller-inbound` | Supporting | Sellers plan, pack, label and ship stock in eaches or case-packed cartons identified by SSCC; receipts close each shipment. |
 | `customer-ordering` | Generic | Checkout and the customer order; holds the ship-to address. |
 | `shipping-and-tracking` | Generic | Labels and the package journey. |
 

@@ -7,14 +7,16 @@ description: "The ddd-crew Aggregate Design Canvas for SellerAccount, InboundPla
 
 # Aggregate Design Canvas
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet, and unlike the other ten contexts it has no reference service: it is design only ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)). Identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built ([`IQVO/seller-inbound`](https://github.com/IQVO/seller-inbound), designed by [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)); the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. Where the model left a choice open, the service's own ADRs 0002 to 0005 record what it does.
 :::
 
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
 Three aggregate roots: **SellerAccount**, **InboundPlan** and
-**InboundShipment** (with the **Carton** entity). Proposed Go packages:
-`internal/domain/seller` and `internal/domain/inbound`.
+**InboundShipment** (with the **Carton** entity). Go packages (as built):
+`internal/domain/seller`, `internal/domain/inboundplan` and
+`internal/domain/inboundshipment`, with the read-model value types in
+`internal/domain/network` and the GS1 value objects in `internal/domain/shared/gs1`.
 
 ## SellerAccount
 
@@ -54,7 +56,7 @@ stateDiagram-v2
 | --- | --- |
 | Destination node is `ACTIVE` with the `INBOUND` capability (and accepts pallets when palletised) | `ErrNodeCannotReceive` |
 | The seller is `ACTIVE` when the plan is created and confirmed | `ErrSellerSuspended` |
-| Every line names a live catalogue item, a valid GTIN and `qtyEaches > 0` | `ErrValidation` |
+| 1 to 500 lines, one per catalogue item; every line names a `catalogItemId`, a valid GTIN and `qtyEaches > 0` (whether the item is live is not checked: no `CatalogItemCreated`/`CatalogItemDiscontinued` is consumed) | `ErrValidation` |
 
 **Commands:** `CreateInboundPlan`, `ConfirmInboundPlan`, `CancelInboundPlan`.
 **Events:** `InboundPlanConfirmed`. Cancelling raises no event.
@@ -82,13 +84,13 @@ stateDiagram-v2
 
 | Invariant | Error |
 | --- | --- |
-| In a `CASE_PACKED` plan every carton of one item holds the same `qtyEaches` and only that item | `ErrCasePackNotUniform` |
+| A `HOMOGENEOUS_CASE` carton holds exactly one item, one GTIN and one quantity | `ErrCasePackNotUniform` |
 | A `HOMOGENEOUS_CASE` carton's `qtyEaches` equals `unitsPerPack` of the item's declared, active CASE level | `ErrCaseQtyMismatchesGtin` |
 | Carton gross weight within the node's `maxCartonWeightG` | `ErrCartonOverweight` |
 | Carton dimensions within the node's `maxCartonDimsMm` | `ErrCartonOversize` |
 | An SSCC is unique network-wide | `ErrSsccNotUnique` |
 | An SSCC has 18 digits and a valid mod-10 check digit | `ErrInvalidSscc` |
-| Contents summed per item over the plan's shipments never exceed the plan line (and equal it for a single-shipment plan) | `ErrCartonContentsMismatchPlan` |
+| At labelling, the eaches per item and GTIN over this shipment's cartons equal the confirmed plan's lines (every line exactly, no extra item) | `ErrCartonContentsMismatchPlan` |
 | Node `ACTIVE` with `INBOUND` when created and when shipped | `ErrNodeCannotReceive` |
 | Seller `ACTIVE` when created, labelled and shipped | `ErrSellerSuspended` |
 | No ship without a label on every carton | `ErrShipmentNotLabelled` |
@@ -98,8 +100,8 @@ stateDiagram-v2
 **Events:** `InboundShipmentLabelled`, `InboundShipmentShipped`,
 `InboundShipmentReceived`, `InboundDiscrepancyRecorded`,
 `SellerComplianceViolationRecorded`.
-**Throughput:** medium; cartons dominate. **Size:** one row per shipment, one
-per carton plus contents, retained for audit.
+**Throughput:** medium; cartons dominate. **Size:** one row per shipment, its
+cartons and contents in a `JSONB` column (as built), retained for audit.
 
 An aggregate this size is a consistency choice: carton checks need the whole
 carton set (uniform quantity, plan totals), so the cartons are children, not
@@ -111,4 +113,5 @@ several shipments of one plan is the relief valve (gap G50).
 | Read model | Fed by |
 | --- | --- |
 | `NodeInboundView` | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` |
-| `CatalogPackagingView` | `CatalogItemCreated`, `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`, `CatalogItemDiscontinued` |
+| `CatalogPackagingView` | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` |
+| `SellerScorecard` | No event: this service's own facts (one row per closed shipment, one per discrepancy or violation), written with each applied receipt; read by `GET /sellers/{sellerId}/scorecard` (service ADR 0005) |

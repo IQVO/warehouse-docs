@@ -7,8 +7,9 @@ description: "The Open Host Service the warehouse-systems fleet conforms to: eve
 
 # The Vendor API (Published Language)
 
-:::info[Proposed design]
-Contract: [`apis/vendor-connectivity/openapi.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/apis/vendor-connectivity/openapi.yaml),
+:::info[As built]
+Contract: [`apis/openapi.yaml`](https://github.com/IQVO/vendor-connectivity/blob/develop/apis/openapi.yaml)
+of `vendor-connectivity` (copied here as `network/apis/vendor-connectivity/openapi.yaml`),
 rendered under [API Reference](/network/api-reference). Owner:
 [`vendor-connectivity`](/network/contexts/vendor-connectivity). The protocol keeps the
 shape of a direct-fulfillment vendor program (poll, acknowledge in full, label after
@@ -25,12 +26,23 @@ acceptance, confirm shipment) in this network's own vocabulary, as the fleet's
 | `PUT /vendor/nodes/{nodeId}/profile` | declare the operational profile (revisioned) | `202 {transactionId}` |
 | `GET /vendor/nodes/{nodeId}/scorecard` | the node's measured scorecard and grade | `200` |
 | `POST /vendor/inventory` | availability per listing, full or partial | `202 {transactionId}` |
-| `GET /vendor/purchase-orders?createdAfter=&nodeId=&nextToken=` | poll purchase orders, paged | `200 {purchaseOrders, nextToken}` |
+| `GET /vendor/purchase-orders?vendorId=&createdAfter=&nodeId=&nextToken=&limit=` | poll purchase orders, paged | `200 {purchaseOrders, nextToken}` |
 | `GET /vendor/purchase-orders/{poNumber}` | one purchase order | `200` |
 | `POST /vendor/acknowledgements` | accept or reject a purchase order in full | `202 {transactionId}` |
 | `POST /vendor/shipping-labels` | a label per package of an accepted order | `200 {labelRef, trackingNumber, carrier}` |
 | `POST /vendor/shipment-confirmations` | confirm shipment with the tracking numbers | `202 {transactionId}` |
 | `GET /vendor/transactions/{transactionId}` | outcome of any write | `200 {status: PROCESSING or SUCCESS or FAILURE, errors}` |
+| `GET /vendor/nodes?vendorId=` | the vendor's own nodes | `200` |
+| `GET /vendor/inbound-shipments?vendorId=&createdAfter=&nodeId=&nextToken=&limit=` | poll the `SHIPPED` seller shipments bound for the vendor's nodes (carton manifest, seller of record as `sellerId`) | `200` |
+| `GET /vendor/inbound-shipments/{shipmentId}` | one inbound shipment | `200` |
+| `POST /vendor/inbound-receipts` | a carton-level receipt for one inbound shipment | `202 {transactionId}` |
+
+Account administration, outside the vendor's own protocol: `POST /vendors`
+(onboard), `GET /vendors/{vendorId}`, `POST /vendors/{vendorId}:suspend` and
+`POST /vendors/{vendorId}:reinstate`. The inbound routes are the seller-inbound delta
+([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments),
+`vendor-connectivity` ADR 0005). Every read takes `vendorId` as a query
+parameter: ownership is checked against it (a consistency check, gap G32).
 
 ## Semantics a vendor must implement
 

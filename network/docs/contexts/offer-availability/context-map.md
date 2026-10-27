@@ -8,7 +8,7 @@ description: "Offer & Availability's neighbourhood on the context map: every ups
 # Context Map
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).
@@ -97,9 +97,9 @@ shopper / storefront actor, not as a `customer-ordering` edge),
 
 ## Seller inbound and vendor packaging view
 
-> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+> **Built, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)** as realized by [`offer-availability` ADR 0006](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0006-catalog-gtin-packaging-and-listing-owner.md) (catalogue GTIN and packaging hierarchy, and the optional owner of a listing). This section is the delta the seller-inbound design added to this page; where the service decided differently, the text below says so.
 
 | Neighbour | Direction | Pattern | Channel | Messages | Why |
 | --- | --- | --- | --- | --- | --- |
-| `seller-inbound` | U → D | Conformist | Kafka `retailnetwork.offer-availability.events` | `CatalogItemCreated`, `CatalogItemDiscontinued`, `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | The packaging hierarchy and its GTINs are this context's facts; `seller-inbound` keeps `CatalogPackagingView`. |
+| `seller-inbound` | U → D | Conformist | Kafka `retailnetwork.offer-availability.events` | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | The packaging hierarchy and its GTINs are this context's facts; `seller-inbound` keeps `CatalogPackagingView`. |
 | `vendor-connectivity` | U → D | Conformist | Kafka `retailnetwork.offer-availability.events` | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` (besides `ListingCreated`) | `vendor-connectivity` keeps `CatalogPackagingView` to describe cartons on the Vendor API. |

@@ -8,7 +8,7 @@ description: "Customer Ordering, a Generic subdomain of the retail network: stor
 # Customer Ordering
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-generic">Generic</span>
@@ -45,6 +45,24 @@ label.
 | [Class Diagram](/network/contexts/customer-ordering/class-diagram) | Proposed domain model and hexagonal ports and adapters | (UML, fleet convention) |
 | [Entity Relationship](/network/contexts/customer-ordering/entity-relationship) | Proposed Postgres schema | (fleet convention) |
 | [Sequence Diagrams](/network/contexts/customer-ordering/sequence-diagrams) | Adapter to Kafka for every command use case | (UML, fleet convention) |
+
+## Service and operations
+
+- **Service:** [`IQVO/customer-ordering`](https://github.com/IQVO/customer-ordering) on `develop` (`03a2d27`,
+  2026-10-26): binaries `cmd/api` (REST) and `cmd/mcp` (read-only MCP), and the console
+  remote in `web/`.
+- **Deployment:** wired in warehouse-infra develop: a `terraform/apps.yaml` entry
+  (`database: true`, `frontend_remote: customer_ordering_mfe`) and `helm-values/customer-ordering.yaml`
+  (MCP enabled, gateway path `/api/mcp/customer-ordering`). The cluster itself was not checked in this
+  refresh.
+- **Observability:** [service ADR 0007](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0007-fleet-observability-standard.md),
+  *Adopt the fleet observability standard*, Accepted 2026-10-25. Logs, metrics and traces leave
+  over OTLP to the otel-collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, chart default
+  `otel-collector.observability.svc.cluster.local:4317`; `OTEL_SERVICE_NAME`). The Tier-2
+  business counter is `ordering.orders.placed` (unit `{order}`, in
+  `internal/adapters/outbound/telemetry/order_metrics.go`), with attribute `outcome` = `placed` or `rejected` and
+  `reason` on the outcomes that are not a success. The dashboard queries it as `ordering_orders_placed_total` in warehouse-infra's
+  `terraform/dashboards/contexts/customer-ordering.json`, by `outcome`.
 
 ## Elsewhere
 

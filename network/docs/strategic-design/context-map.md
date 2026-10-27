@@ -8,7 +8,7 @@ description: "Every relationship between the eleven retail-network bounded conte
 # Context Map
 
 :::info[Generated from the model]
-This page is generated from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml) by `scripts/gen_pages.py`. Edit the model, then regenerate; CI fails when the page and the model disagree.
+This page is generated from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml) by `network/scripts/gen_pages.py`. Edit the model, then regenerate; CI fails when the page and the model disagree.
 :::
 
 
@@ -134,7 +134,7 @@ flowchart TB
     NT ==>|"CF 2e"| NP
     NT ==>|"? + C/S + CF 5e +REST"| VC
     NT ==>|"CF 5e"| SI
-    OA ==>|"CF 4e"| SI
+    OA ==>|"CF 2e"| SI
     OA ==>|"C/S + CF 3e +REST"| VC
     OA ==>|"CF 1e"| NP
     VC ==>|"CF 8e"| NP
@@ -217,7 +217,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `offer-availability` | `delivery-promise` | CF | `CatalogItemCreated`, `CatalogItemDiscontinued`, `ListingCreated`, `ListingAvailabilityChanged`, `ListingSuppressed`, `ListingRestored` | - |
 | `offer-availability` | `node-performance` | CF | `InventoryFeedApplied` | - |
 | `offer-availability` | `order-sourcing` | CF | `CatalogItemDiscontinued`, `ListingCreated`, `ListingAvailabilityChanged`, `ListingSuppressed`, `ListingRestored` | - |
-| `offer-availability` | `seller-inbound` | CF | `CatalogItemCreated`, `CatalogItemDiscontinued`, `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | - |
+| `offer-availability` | `seller-inbound` | CF | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | - |
 | `offer-availability` | `shipping-and-tracking` | CF | `CatalogItemCreated` | - |
 | `offer-availability` | `vendor-connectivity` | C/S + CF | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`, `ListingCreated` | cmd ApplyInventoryFeed (`REST POST /inventory-feeds`) |
 | `order-sourcing` | `customer-ordering` | ? + CF | `FulfillmentLocked`, `FulfillmentShipped`, `FulfillmentUnsourceable`, `FulfillmentCancelled`, `FulfillmentCancelRefused` | - |

@@ -8,7 +8,7 @@ description: The Supporting context that grades every node from observed facts o
 # Node Performance
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span class="badge-supporting">Supporting</span>
@@ -52,6 +52,24 @@ own scorecard only through `vendor-connectivity`
 The REST contract is `apis/node-performance/openapi.yaml` in the repository
 root: two read-only routes, `GET /scorecards/{nodeId}` and
 `GET /scorecards?grade=`.
+
+## Service and operations
+
+- **Service:** [`IQVO/node-performance`](https://github.com/IQVO/node-performance) on `develop` (`22497b7`,
+  2026-10-26): binaries `cmd/api` (REST) and `cmd/mcp` (read-only MCP), and the console
+  remote in `web/`.
+- **Deployment:** wired in warehouse-infra develop: a `terraform/apps.yaml` entry
+  (`database: true`, `frontend_remote: node_performance_mfe`) and `helm-values/node-performance.yaml`
+  (MCP enabled, gateway path `/api/mcp/node-performance`). The cluster itself was not checked in this
+  refresh.
+- **Observability:** [service ADR 0010](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0010-fleet-observability-standard.md),
+  *Adopt the fleet observability standard*, Accepted 2026-10-26. Logs, metrics and traces leave
+  over OTLP to the otel-collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, chart default
+  `otel-collector.observability.svc.cluster.local:4317`; `OTEL_SERVICE_NAME`). The Tier-2
+  business counter is `nodeperformance.scorecards.recomputed` (unit `{scorecard}`, in
+  `internal/adapters/outbound/telemetry/scorecard_metrics.go`), with attribute `outcome` = `recomputed` or `failed` and
+  `reason` on the outcomes that are not a success. The dashboard queries it as `nodeperformance_scorecards_recomputed_total` in warehouse-infra's
+  `terraform/dashboards/contexts/node-performance.json`, by `outcome`.
 
 ## Elsewhere
 
