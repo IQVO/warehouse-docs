@@ -21,11 +21,11 @@ C4Context
     Person(planner, "Workforce Planner", "Commits the shift plan: how many heads on which process path.")
     Person(configurator, "Operations Engineer", "Configures the facility layout and the process-path catalogue.")
 
-    System(wh, "warehouse-systems", "Warehouse fulfillment platform. Sixteen domain bounded contexts plus an operator agent, covering order intake, inventory, product master data, inbound receiving, slotting, pick-face replenishment, work planning and release, execution, task interleaving, workforce, facility layout, process paths, labor performance, capacity planning, network inventory planning, operator tooling, and the external-network edge.")
+    System(wh, "warehouse-systems", "Warehouse fulfillment platform. Eighteen domain bounded contexts plus an operator agent, covering order intake, inventory, product master data, inbound receiving, slotting, pick-face replenishment, work planning and release, execution, task interleaving, returns, exception handling, workforce, facility layout, process paths, labor performance, capacity planning, network inventory planning, operator tooling, and the external-network edge.")
 
     System_Ext(upstream, "Upstream order source", "Whatever places orders — a storefront, an ERP, or the e2e-tests harness. Calls POST /orders.")
     System_Ext(carrier, "Carrier / shipping", "Receives sealed, SLAM-labelled packages. Modelled as the downstream edge of fulfillment; not integrated in code.")
-    System_Ext(network, "External retail fulfillment network", "E.g. a vendor direct-fulfillment program. network-fulfillment polls it for demand; stub mode only today.")
+    System_Ext(network, "Retail fulfillment network", "The eleven retail-network services (the /network/ section), reached through vendor-connectivity's Vendor API. network-fulfillment polls demand and inbound shipments and submits acknowledgements, labels, shipment confirmations, node profiles, inventory feeds and receipts.")
     System_Ext(llm, "LLM provider", "Consulted by warehouse-ops-agent's reasoner behind a policy layer, with a deterministic fallback when unavailable.")
     System_Ext(observability, "Observability stack", "OpenTelemetry collector, Jaeger, Prometheus/Grafana, Loki. Receives traces, metrics and logs from every service.")
 
@@ -35,7 +35,7 @@ C4Context
     Rel(planner, wh, "Commits shift plans", "HTTPS")
     Rel(configurator, wh, "Defines sites, zones, slots and process paths", "HTTPS")
 
-    Rel(wh, network, "Polls for purchase orders", "stub gateway only")
+    Rel(wh, network, "Polls demand, answers it, feeds inventory", "HTTP, NETWORK_MODE=live")
     Rel(wh, llm, "Asks for a reasoned brief", "HTTPS, optional")
     Rel(wh, observability, "Emits traces, metrics, logs", "OTLP")
     Rel(wh, carrier, "Hands off sealed packages", "Out of scope — no code integration")
@@ -83,7 +83,7 @@ a wired integration**:
 | --- | --- |
 | Upstream order source | **Real.** Any HTTP client calling `POST /orders`; the `e2e-tests` repo drives exactly this in its godog suite. |
 | Observability stack | **Real.** Every service exports OTLP traces and metrics; `warehouse-infra` deploys the collector, Jaeger, Prometheus/Grafana and Loki. |
-| External retail fulfillment network | **Stub only.** `network-fulfillment` polls a network gateway on an interval, but only the stub gateway (`NETWORK_MODE=stub`, the default) is built; there is no sandbox or live vendor platform API call, and no acknowledgement or shipment-confirmation submission yet. |
+| Retail fulfillment network | **Live adapter, wired in `warehouse-infra` `develop`.** `network-fulfillment`'s live adapter (its ADRs 0026 to 0028) talks to the in-cluster [retail network](/network/), the eleven services of that section, through the vendor-connectivity Service as vendor `V-WS`: `warehouse-infra` `develop`'s `helm-values/network-fulfillment.yaml` sets `networkMode: live` and `networkBaseUrl` to that Service (since 2026-10-25), and `CAPABILITY_OFFER_ENABLED=true`. Three loops run over it: demand (`PollDemand`, `SubmitAcknowledgement`, `SubmissionStatus`, `RequestLabel`, `SubmitShipmentConfirmation`), supply (`DeclareNodeProfile`, `SubmitInventoryFeed`) and inbound (`PollInboundShipments`, `SubmitInboundReceipt`). The stub gateway stays the chart default and the test mode. Nothing leaves the cluster: it is a reference network, not a real operator's platform (its ADR 0009). |
 | LLM provider | **Real but optional.** `warehouse-ops-agent`'s reasoner (its ADR 0004) calls a real LLM behind a policy layer and falls back to a deterministic brief when it is unavailable or disabled. |
 | Carrier / shipping | **Not integrated.** `fulfillment-execution` produces a sealed, SLAM-labelled package and the platform's responsibility ends there. The carrier is drawn to show where the boundary is, not to imply a wire. |
 

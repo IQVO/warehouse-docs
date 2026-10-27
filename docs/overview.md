@@ -78,9 +78,9 @@ without ever moving stock itself. `product-master`, before them, is the single s
 truth for what a SKU is: its handling classification (taken over from
 `inventory-storage`) and its physical profile. `warehouse-planning` answers
 whether the warehouse can process the demand assigned to it. `network-fulfillment` is the
-anti-corruption layer to an external retail fulfillment network; in the
-reference deployment it runs `NETWORK_MODE=live` against the in-cluster
-[retail network](/network/) (its ADRs 0026 to 0028). The
+anti-corruption layer to an external retail fulfillment network;
+`warehouse-infra` `develop` wires it to run `NETWORK_MODE=live` against the
+in-cluster [retail network](/network/) (its ADRs 0026 to 0028). The
 [Subdomain Classification](/strategic-design/subdomain-classification) and
 [Core Domain Chart](/strategic-design/core-domain-chart) pages give the
 reasoning behind each classification.
