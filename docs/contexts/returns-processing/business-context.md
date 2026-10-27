@@ -37,10 +37,11 @@ the flow feeds, which is why the context is **Supporting**, not Core.
 | Subdomain class | **Supporting** (ADR 0001) |
 | Tier | **WMS** (CloudEvents subdomain segment `wms`, the seventh `wms` context) |
 | Aggregates | `ReturnAuthorization`, `ReturnReceipt`, `Disposition` and `DispositionPolicy` (ADR 0002) |
-| Binaries | two: `cmd/api` (REST, three Kafka consumers, the outbox relay) and `cmd/mcp` (read-only MCP server over the read use cases) |
-| Data store | one Postgres database (embedded migrations). `DATABASE_URL` and `KAFKA_BROKERS` are mandatory; real Postgres and real Kafka only, no in-memory runtime |
-| Kafka | publishes `warehouse.returns-processing.events` (the analytics mirror is planned, not built); consumes `warehouse.product-master.events`, `warehouse.order-management.events`, `warehouse.fulfillment.events` (ADR 0003) |
+| Binaries | four: `cmd/api` (REST, three Kafka consumers, the outbox relay), `cmd/mcp` (read-only MCP server over the read use cases), `cmd/returns-projector` and `cmd/returns-reports` (the analytics read side, ADR 0007) |
+| Data store | one OLTP Postgres database (embedded migrations) plus a separate analytics database written only by the projector. `DATABASE_URL` and `KAFKA_BROKERS` are mandatory; real Postgres and real Kafka only |
+| Kafka | publishes `warehouse.returns-processing.events` and its analytics mirror `warehouse.returns-processing.analytics` (ADR 0007); consumes `warehouse.product-master.events`, `warehouse.order-management.events`, `warehouse.fulfillment.events` (ADR 0003) |
 | Auth | none (fleet-wide decision) |
+| Deployment | registered in `warehouse-infra` `develop` (`terraform/apps.yaml`, `helm-values/returns-processing.yaml`): API, MCP, analytics projector and reports, console remote `returns_mfe` |
 
 ## The flow
 

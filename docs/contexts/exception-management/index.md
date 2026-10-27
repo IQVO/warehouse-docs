@@ -29,37 +29,45 @@ machine, an SLA clock and an audit trail of every transition) and the
 declarative auto-resolve rule). It never writes to a producer.
 
 :::info[What is built, what is deployed, and what is planned]
-Per this context's ADRs and `apis/asyncapi.yaml` on `develop`, checked
-2026-10-21:
+Per this context's ADRs, `apis/` and `cmd/` on `develop` (`2222e44`) and
+`warehouse-infra` `develop`, checked 2026-10-26:
 
-**Built on `develop`:** the REST API (eight operations plus a deliberate
-`405` stub on `POST /exceptions` — cases are never created over REST), a
-transactional outbox with relay (delete-on-publish, attempt cap, dead-letter
-topic, its ADR 0005), **six** Kafka consumers (the exception facts of six
-sibling contexts plus the `OrderRepromised` correlation consumer, always on,
-group ids from six mandatory env vars), an SLA sweep ticker
-(`SLA_SWEEP_INTERVAL`, default 1m), a read-only MCP server (`cmd/mcp`:
-`list_open_exceptions`, `get_exception`, `get_sla_report`,
-`get_exception_policies`), a Helm chart and a Dockerfile. Both service PRs
-are merged: `feature/service` (#2) and `feature/packaging-and-mcp` (#3).
+**Built on `develop`:** the REST API (eleven path × method pairs in
+`apis/openapi.yaml`, including `/healthz`, `/readyz` and `/metrics`, and a
+deliberate `405` on `POST /exceptions` — cases are never created over REST),
+a transactional outbox with relay (delete-on-publish, attempt cap,
+dead-letter topic, its ADR 0005), **seven** Kafka consumers (the exception
+facts of six sibling contexts — `inbound-receiving`'s
+`CartonDiscrepancyRaised` joined with ADR 0006 — plus the `OrderRepromised`
+correlation consumer, always on, group ids from seven mandatory env vars), an
+SLA sweep ticker (`SLA_SWEEP_INTERVAL`, default 1m), the analytics read side
+(`cmd/exceptions-projector`, `cmd/exceptions-reports`), a read-only MCP
+server (`cmd/mcp`: `list_open_exceptions`, `get_exception`, `get_sla_report`,
+`get_exception_policies`), the console remote `exceptions_mfe`, a Helm chart
+and a Dockerfile.
 
-**Not deployed.** `warehouse-infra` `develop` has no entry for it, so nothing
-runs in the reference cluster.
+**Wired in `warehouse-infra` `develop`:** `terraform/apps.yaml` registers it
+(database, analytics database, `frontend_remote: exceptions_mfe`), and
+`helm-values/exception-management.yaml` pins six of the seven consumer groups
+(the carton-discrepancy group comes from the chart default
+`exception-management-carton-discrepancy`), the SLA sweep interval, the
+analytics projector and the MCP server. `warehouse-ops-agent` has an MCP
+client for it (`internal/adapters/outbound/mcpclient/exception_management.go`).
+The kind cluster was not checked.
 
-**Built around it, checked on each sibling's `develop`:** every consumed type
-is published on an integration topic — `TaskCPTMissed` (K16), `OrderRepromised`
-(K16), `BacklogThresholdBreached` (the work-planning topic),
+**Around it, checked on each sibling's `develop`:** every consumed type
+is published on an integration topic — `TaskCPTMissed`, `PackageDiverted` and
+`WeightDiscrepancyDetected` (fulfillment-execution), `OrderRepromised`
+(order-management), `BacklogThresholdBreached` (the work-planning topic),
 `AcknowledgementDeadlineAtRisk` and `OrphanedHoldCancelled`
-(network-fulfillment), and, promoted on 2026-10-21,
-`PackageDiverted` and `WeightDiscrepancyDetected` (fulfillment-execution)
-plus `DiscrepancyDetected` and `ItemUnlocated` (inventory-storage).
-`returns-processing`, the sixth producer, merged the same day.
+(network-fulfillment), `DiscrepancyDetected` and `ItemUnlocated`
+(inventory-storage), `UnexpectedReturnReceived` (returns-processing) and
+`CartonDiscrepancyRaised` (inbound-receiving).
 
 **Planned, not built:** the `workforce-management` (`PathUnderstaffed`) and
 `network-inventory-planning` (`TransferStuckDetected`) fact sources — both are
-analytics-only on their producers today, so those edges are dashed planned in
-the fleet [Context Map](/strategic-design/context-map). Also planned: a
-`warehouse-ops-agent` client and the console `exceptions_mfe` remote.
+analytics-only on their producers today and no consumer exists, so those
+edges are dashed planned in the fleet [Context Map](/strategic-design/context-map).
 :::
 
 Its two aggregates:
@@ -79,26 +87,16 @@ report, root-cause frequency.
 
 ## This context's pages
 
-- [Business Context](/contexts/exception-management/business-context): the
-  gap, what it owns, the lifecycle, and what the context deliberately does
-  not do.
-- [Ubiquitous Language](/contexts/exception-management/ubiquitous-language):
-  problem solve, case, source fact, dedup key, occurrence, queue, SLA clock,
-  auto-resolve rule.
-- [Bounded Context Canvas](/contexts/exception-management/bounded-context-canvas):
-  purpose, classification, roles, communication, decisions.
-- [Aggregate Design Canvas](/contexts/exception-management/aggregate-design-canvas):
-  the two aggregates with their invariants.
-- [Domain Events](/contexts/exception-management/domain-events): the seven
-  published events and the eleven consumed types.
-- [Async API](/contexts/exception-management/async-api): the Kafka narrative,
-  with the generated reference.
-
-These pages are written for this site from the context's own ADRs (0001 to
-0005), `.claude/rules/domain-model.md` and `apis/asyncapi.yaml` /
-`apis/openapi.yaml` on its `develop`; the repository does not yet ship its own
-ddd-crew artifact pack, so there is nothing to sync. When it ships one, these
-pages are replaced by synced copies like every other context's.
+The [Business Context](/contexts/exception-management/business-context) and
+[Async API](/contexts/exception-management/async-api) pages are written for
+this site. Every other page in this context's sidebar is synced from the
+repository's own `docs/docs` on `develop`: the full ddd-crew pack (ubiquitous
+language, core domain chart, canvases, context map, domain events, message
+flow, EventStorming, class, entity-relationship and sequence diagrams), the
+use cases and the Operations group (configuration, runbook, observability,
+troubleshooting, testing). The REST reference is generated from its
+`apis/openapi.yaml`
+([REST](/api-reference/rest/exception-management/exception-management-api)).
 
 ## Elsewhere
 
@@ -106,11 +104,11 @@ pages are replaced by synced copies like every other context's.
   (Go module path `github.com/claudioed/exception-management`). Its ADRs live
   under `docs/adr/`: 0001 (bounded context), 0002 (aggregates and policy),
   0003 (local copies and consumed contracts), 0004 (CloudEvents envelope and
-  type catalogue) and 0005 (outbox relay attempt cap and DLQ), all Accepted
-  (2026-10-20/21).
-- **Fleet-level**: [Context Map](/strategic-design/context-map) (its six
-  producer edges K54 to K59, built on both ends, wired-but-unused, plus the
-  dashed planned workforce/NIP edges), the
+  type catalogue), 0005 (outbox relay attempt cap and DLQ) and 0006 (carton
+  discrepancy consumer and routing).
+- **Fleet-level**: [Context Map](/strategic-design/context-map) (its producer edges K54 to K59 and K66, built on both ends and wired in
+  `warehouse-infra` `develop`, so live, plus the dashed planned
+  workforce/NIP edges K60 and K61), the
   [Event Standard](/strategic-design/event-standard-cloudevents)
   (subdomain table and type catalogue),
   [Subdomain Classification](/strategic-design/subdomain-classification) and
