@@ -9,20 +9,20 @@ slug: /overview
 # warehouse-systems documentation
 
 This site is the fleet-wide reference for the **warehouse-systems**
-ecosystem. The ecosystem is seventeen independently deployable Go services
+ecosystem. The ecosystem is nineteen independently deployable Go services
 with hexagonal architecture that together implement a warehouse fulfillment
-platform: sixteen domain bounded contexts plus `warehouse-ops-agent`. Each
-service has its own REST surface and, except `slotting-optimization`,
-`pick-face-replenishment` and `task-interleaving`, an MCP
-surface. The sixteen domain contexts own a Postgres database and publish
-Kafka events. `warehouse-ops-agent` is the exception: a thin read-side agent
-with no database and no Kafka. This site documents all sixteen domain
-contexts and the agent, each with its synced artifact pack and, where it has
-specs, generated API references. `slotting-optimization` is registered in
-`warehouse-infra` `develop` (it runs once that is applied);
-`pick-face-replenishment` and `task-interleaving`, the newest two, are built
-on their `develop` but have no `warehouse-infra` entry, so neither is deployed
-in the reference cluster.
+platform: eighteen domain bounded contexts plus `warehouse-ops-agent`. Each
+domain context has its own REST surface and a read-only MCP server
+(`cmd/mcp`), owns a Postgres database plus a separate analytical database,
+and publishes Kafka events. `warehouse-ops-agent` is the exception: a thin
+read-side agent with no database and no Kafka, which serves its own MCP tools
+in-process. This site documents all eighteen domain contexts and the agent,
+each with its synced artifact pack and, where it has specs, generated API
+references. All nineteen have an entry in the application registry of
+`warehouse-infra` `develop` (`terraform/apps.yaml`), the two newest,
+`returns-processing` and `exception-management`, since 2026-10-22. That is
+the wiring in `warehouse-infra` `develop`; whether a given cluster has
+applied it is not something this site records.
 
 No single repository's docs site can show the **strategic** picture: the
 context map, the core-domain classification, the shared ubiquitous language,
@@ -34,7 +34,7 @@ artifacts, links them together, and adds the fleet-level strategic layer.
 All source repositories live in the [IQVO](https://github.com/IQVO) GitHub
 organization.
 
-## The seventeen contexts on this site
+## The nineteen contexts on this site
 
 | Context | Classification | CloudEvents subdomain |
 | --- | --- | --- |
@@ -55,9 +55,19 @@ organization.
 | [`network-inventory-planning`](/contexts/network-inventory-planning) | Core | `wes` |
 | [`pick-face-replenishment`](/contexts/pick-face-replenishment) | Supporting | `wms` |
 | [`task-interleaving`](/contexts/task-interleaving) | Supporting | `wes` |
+| [`returns-processing`](/contexts/returns-processing) | Supporting | `wms` |
+| [`exception-management`](/contexts/exception-management) | Supporting | `wes` |
 
-The newest contexts on this site, `inbound-receiving` and
-`slotting-optimization` (decided 2026-10-08, both built since), cover what
+The newest contexts on this site are `returns-processing` and
+`exception-management` (both decided 2026-10-20, built on `develop` since
+2026-10-21). `returns-processing` owns the reverse flow of goods: the RMA
+against a shipped order line, the return receipt and its inspection grade,
+and the disposition decision, handing restockable units to
+`inventory-storage` as staged lines. `exception-management` owns the Problem
+Solve lifecycle: every case is opened by an anomaly fact another context
+published, then deduplicated, triaged, assigned and timed against an SLA.
+Before them, `inbound-receiving` and
+`slotting-optimization` (decided 2026-10-08) cover what
 happens before the first stow (ASN, dock appointment, receipt, discrepancies)
 and which SKUs deserve a forward pick slot. `pick-face-replenishment`
 (2026-10-17) keeps those forward pick faces stocked from reserve bins, and
@@ -68,7 +78,9 @@ without ever moving stock itself. `product-master`, before them, is the single s
 truth for what a SKU is: its handling classification (taken over from
 `inventory-storage`) and its physical profile. `warehouse-planning` answers
 whether the warehouse can process the demand assigned to it. `network-fulfillment` is the
-anti-corruption layer to an external retail fulfillment network. The
+anti-corruption layer to an external retail fulfillment network; in the
+reference deployment it runs `NETWORK_MODE=live` against the in-cluster
+[retail network](/network/) (its ADRs 0026 to 0028). The
 [Subdomain Classification](/strategic-design/subdomain-classification) and
 [Core Domain Chart](/strategic-design/core-domain-chart) pages give the
 reasoning behind each classification.
@@ -148,9 +160,10 @@ published site as an error box.
 
 ## Scope
 
-This site documents the **seventeen backend contexts** listed above (sixteen
+This section documents the **nineteen backend contexts** listed above (eighteen
 domain bounded contexts and `warehouse-ops-agent`), which is every backend
-service in the fleet.
+service of the WMS and WES fleet. The retail network and the storefront have
+their own sections, at [/network/](/network/) and [/storefront/](/storefront/).
 The two frontend repositories (`warehouse-console`, `warehouse-ui-kit`) and
 the deployment repository (`warehouse-infra`) appear on context pages where
 relevant, for example as Module Federation remotes or in the Kafka topology.
