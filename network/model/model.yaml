@@ -5,11 +5,12 @@
 # ubiquitous-language term printed on the site must exist here first.
 # Pages derive from it; they never introduce a new message or edge.
 #
-# Status: AS BUILT for the ten services (every context except seller-inbound,
-# which stays proposed design). The events, fields, consumers, routes and
-# reason vocabularies below were checked against each service's
-# specification; identifiers (Go-style Err... names, REST paths, CloudEvents
-# types) are the names the services use.
+# Status: AS BUILT for all eleven services (seller-inbound included since its
+# develop branch carries cmd/api, cmd/mcp and apis/; re-checked 2026-10-26).
+# The events, fields, consumers, routes and reason vocabularies below were
+# checked against each service's specification and code on origin/develop;
+# identifiers (Go-style Err... names, REST paths, CloudEvents types) are the
+# names the services use.
 #
 # This file is the MODEL derived from public fulfillment-network
 # benchmarks plus the warehouse-systems estate; it makes no claim
@@ -376,8 +377,8 @@ contexts:
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /inventory-feeds (in-org)", routes: ["POST /inventory-feeds"], message: "ApplyInventoryFeed", relationship: Customer/Supplier}
       - {from: "network merchandising (human)", type: cmd, channel: "REST POST /catalog-items, POST /catalog-items/{catalogItemId}:discontinue, PUT /catalog-items/{catalogItemId}/packaging/{level}, POST /catalog-items/{catalogItemId}/packaging/{level}:retire, POST /listings", routes: ["POST /catalog-items", "POST /catalog-items/{catalogItemId}:discontinue", "PUT /catalog-items/{catalogItemId}/packaging/{level}", "POST /catalog-items/{catalogItemId}/packaging/{level}:retire", "POST /listings"], message: "CreateCatalogItem, DiscontinueItem, DeclarePackaging, RetirePackLevel, CreateListing", relationship: UI}
-      # caller inferred: ADR 0003 names no caller for these plain reads (merchandising; vendor-connectivity has no client for them). GetPackaging is the read side of DeclarePackaging (ADR 0009)
-      - {from: "network merchandising (human)", type: qry, channel: "REST GET /listings, GET /inventory-feeds/{feedId}, GET /catalog-items/{catalogItemId}/packaging", routes: ["GET /listings", "GET /inventory-feeds/{feedId}", "GET /catalog-items/{catalogItemId}/packaging"], message: "ListListings, GetInventoryFeed, GetPackaging", relationship: UI}
+      # caller inferred: ADR 0003 names no caller for these plain reads (merchandising; vendor-connectivity has no client for them). There is no separate packaging read: the packaging hierarchy is part of GET /catalog/{catalogItemId} (as built)
+      - {from: "network merchandising (human)", type: qry, channel: "REST GET /listings, GET /inventory-feeds/{feedId}", routes: ["GET /listings", "GET /inventory-feeds/{feedId}"], message: "ListListings, GetInventoryFeed", relationship: UI}
       - {from: shopper / storefront, type: qry, channel: "REST GET /catalog, GET /catalog/{catalogItemId}", routes: ["GET /catalog", "GET /catalog/{catalogItemId}"], message: "BrowseCatalog", relationship: OHS}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeActivated, NodeSuspended, NodeRetired", relationship: Conformist}
     rest:
@@ -385,7 +386,6 @@ contexts:
       - "POST /catalog-items/{catalogItemId}:discontinue"
       - "PUT /catalog-items/{catalogItemId}/packaging/{level}"
       - "POST /catalog-items/{catalogItemId}/packaging/{level}:retire"
-      - "GET /catalog-items/{catalogItemId}/packaging"
       - "GET /catalog"
       - "GET /catalog/{catalogItemId}"
       - "POST /listings"
@@ -393,8 +393,8 @@ contexts:
       - "POST /inventory-feeds"
       - "GET /inventory-feeds/{feedId}"
     publishes:
-      - {event: CatalogItemCreated, entity: catalogitem, data: [catalogItemId, title, lengthMm, widthMm, heightMm, weightG, hazmat, fragile, gtin (optional)], consumers: [delivery-promise, shipping-and-tracking, seller-inbound]}
-      - {event: CatalogItemDiscontinued, entity: catalogitem, data: [catalogItemId], consumers: [delivery-promise, order-sourcing, seller-inbound]}
+      - {event: CatalogItemCreated, entity: catalogitem, data: [catalogItemId, title, lengthMm, widthMm, heightMm, weightG, hazmat, fragile, gtin (optional)], consumers: [delivery-promise, shipping-and-tracking]}
+      - {event: CatalogItemDiscontinued, entity: catalogitem, data: [catalogItemId], consumers: [delivery-promise, order-sourcing]}
       - {event: CatalogItemPackagingDeclared, entity: catalogitem, data: [catalogItemId, level, gtin, childGtin (optional), unitsPerPack, declaredAt], consumers: [seller-inbound, vendor-connectivity]}
       - {event: CatalogItemPackLevelRetired, entity: catalogitem, data: [catalogItemId, level, gtin, retiredAt], consumers: [seller-inbound, vendor-connectivity]}
       - {event: ListingCreated, entity: listing, data: [listingId, catalogItemId, nodeId, ownerRef (optional)], consumers: [delivery-promise, order-sourcing, vendor-connectivity]}
@@ -1098,7 +1098,7 @@ contexts:
       - {event: PurchaseOrderCancelled, entity: purchaseorder, data: [poNumber, assignmentId, reason], consumers: [analytics only]}
       - {event: VendorShipmentConfirmed, entity: purchaseorder, data: [poNumber, assignmentId, nodeId, trackingNumbers, shippedAt, requiredShipBy], consumers: [order-sourcing, shipping-and-tracking, node-performance]}
       - {event: SubmissionProcessed, entity: submission, data: [transactionId, vendorId, kind, status, errorCount], consumers: [node-performance]}
-      - {event: InboundReceiptSubmitted, entity: submission, data: [transactionId, vendorId, nodeId, shipmentId, receivedAt, cartons(sscc, status, items(gtin, qtyEaches), complianceCodes)], consumers: [seller-inbound, node-performance]}
+      - {event: InboundReceiptSubmitted, entity: inboundreceipt, data: [transactionId, vendorId, nodeId, shipmentId, receivedAt, cartons(sscc, status, items(gtin, qtyEaches), complianceCodes)], consumers: [seller-inbound, node-performance]}
       - {event: VendorSuspended, entity: vendoraccount, data: [vendorId, suspendedAt, reason], consumers: [analytics only]}
       - {event: VendorReinstated, entity: vendoraccount, data: [vendorId, reinstatedAt], consumers: [analytics only]}
     reasons:
@@ -1626,7 +1626,7 @@ contexts:
     chart: {differentiation: 0.34, complexity: 0.48, evolution: Custom-built}
     business_model: Supply enabler (seller stock arrives planned, labelled, countable and attributable to its owner)
     purpose: >-
-      PROPOSED. The seller-facing front door for stock coming into the
+      The seller-facing front door for stock coming into the
       network: a seller is onboarded, plans an inbound shipment to a
       vendor node in eaches (loose or case-packed), packs it into cartons
       each identified by an SSCC and a printed label, and ships it. The
@@ -1673,7 +1673,7 @@ contexts:
         invariants:
           - {rule: "the destination node is ACTIVE and has the INBOUND capability (and accepts pallets when the shipment is palletised)", error: ErrNodeCannotReceive}
           - {rule: "the seller is ACTIVE when the plan is created and confirmed", error: ErrSellerSuspended}
-          - {rule: "every line names a live catalogue item, a valid GTIN (8, 12, 13 or 14 digits, mod-10 check digit) and qtyEaches > 0", error: ErrValidation}
+          - {rule: "1 to 500 lines, one per catalogue item; every line names a catalogItemId, a valid GTIN (8, 12, 13 or 14 digits, mod-10 check digit) and qtyEaches > 0. Whether the item is live is not checked: the context consumes no CatalogItemCreated or CatalogItemDiscontinued (seller-inbound ADR 0003)", error: ErrValidation}
         commands: [CreateInboundPlan, ConfirmInboundPlan, CancelInboundPlan]
         events: [InboundPlanConfirmed]
         throughput_estimate: "low-medium: one per seller replenishment"
@@ -1699,13 +1699,13 @@ contexts:
           - "CartonReceiptStatus(RECEIVED|MISSING|UNEXPECTED|DAMAGED)"
           - "Label{sscc, labelRef}"
         invariants:
-          - {rule: "in a CASE_PACKED plan every carton of one catalogItemId holds the same qtyEaches, and holds only that item", error: ErrCasePackNotUniform}
+          - {rule: "a HOMOGENEOUS_CASE carton holds exactly one item, one GTIN and one quantity", error: ErrCasePackNotUniform}
           - {rule: "a HOMOGENEOUS_CASE carton's qtyEaches equals unitsPerPack of the catalogue item's declared, active CASE level for the carton's gtin", error: ErrCaseQtyMismatchesGtin}
           - {rule: "carton gross weight is within the destination node's maxCartonWeightG", error: ErrCartonOverweight}
           - {rule: "carton dimensions are within the destination node's maxCartonDimsMm", error: ErrCartonOversize}
           - {rule: "an SSCC is unique network-wide", error: ErrSsccNotUnique}
           - {rule: "an SSCC has 18 digits and a valid mod-10 check digit", error: ErrInvalidSscc}
-          - {rule: "carton contents, summed per catalogItemId over the plan's shipments, never exceed the plan line and equal it for a single-shipment plan", error: ErrCartonContentsMismatchPlan}
+          - {rule: "at labelling, the eaches per item and GTIN over the cartons of this shipment equal the confirmed plan's lines (every line exactly, no extra item)", error: ErrCartonContentsMismatchPlan}
           - {rule: "the destination node is ACTIVE with the INBOUND capability when the shipment is created and when it ships", error: ErrNodeCannotReceive}
           - {rule: "the seller is ACTIVE when the shipment is created, labelled and shipped", error: ErrSellerSuspended}
           - {rule: "no ship without a label for every carton", error: ErrShipmentNotLabelled}
@@ -1715,7 +1715,8 @@ contexts:
         size_estimate: "one row per shipment + one per carton + contents; retained for audit"
     read_models:
       - {name: NodeInboundView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
-      - {name: CatalogPackagingView, source: "offer-availability CatalogItemCreated, CatalogItemPackagingDeclared, CatalogItemPackLevelRetired, CatalogItemDiscontinued"}
+      - {name: CatalogPackagingView, source: "offer-availability CatalogItemPackagingDeclared, CatalogItemPackLevelRetired"}
+      - {name: SellerScorecard, source: "own facts only (no consumer, no event): one row per closed shipment and one per InboundDiscrepancyRecorded or SellerComplianceViolationRecorded, written in the receipt's unit of work (seller-inbound ADR 0005)"}
     policies:
       - {name: SsccIssuance, rule: "a carton added with an sscc is accepted only if valid and unique network-wide; a carton added without one gets an SSCC issued from the network's GS1 company prefix; either way a Label is returned"}
       - {name: NodeMustBeAbleToReceive, rule: "the destination node, its INBOUND capability, acceptsPallets and carton limits are read from NodeInboundView; a node that is not ACTIVE receives nothing; a node whose profile declares no inbound limits is treated as accepting cartons with limits unchecked"}
@@ -1727,15 +1728,18 @@ contexts:
       - {from: network partner managers (human), type: cmd, channel: "REST POST /sellers/{sellerId}:suspend, POST /sellers/{sellerId}:reinstate", routes: ["POST /sellers/{sellerId}:suspend", "POST /sellers/{sellerId}:reinstate"], message: "SuspendSeller, ReinstateSeller", relationship: UI}
       - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans, POST /inbound-plans/{planId}:confirm, POST /inbound-plans/{planId}:cancel", routes: ["POST /inbound-plans", "POST /inbound-plans/{planId}:confirm", "POST /inbound-plans/{planId}:cancel"], message: "CreateInboundPlan, ConfirmInboundPlan, CancelInboundPlan", relationship: OHS}
       - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans/{planId}/shipments, POST /inbound-shipments/{shipmentId}/cartons, POST /inbound-shipments/{shipmentId}:label, POST /inbound-shipments/{shipmentId}:ship", routes: ["POST /inbound-plans/{planId}/shipments", "POST /inbound-shipments/{shipmentId}/cartons", "POST /inbound-shipments/{shipmentId}:label", "POST /inbound-shipments/{shipmentId}:ship"], message: "CreateInboundShipment, AddCarton, LabelShipment, ShipInboundShipment", relationship: OHS}
-      - {from: seller / seller portal, type: qry, channel: "REST GET /inbound-shipments/{shipmentId}, GET /inbound-shipments/{shipmentId}/labels", routes: ["GET /inbound-shipments/{shipmentId}", "GET /inbound-shipments/{shipmentId}/labels"], message: "GetInboundShipment, GetLabels", relationship: OHS}
+      - {from: seller / seller portal, type: qry, channel: "REST GET /inbound-plans/{planId}, GET /inbound-shipments/{shipmentId}, GET /inbound-shipments/{shipmentId}/labels", routes: ["GET /inbound-plans/{planId}", "GET /inbound-shipments/{shipmentId}", "GET /inbound-shipments/{shipmentId}/labels"], message: "GetInboundPlan, GetInboundShipment, GetLabels", relationship: OHS}
+      - {from: "seller / seller portal, network partner managers (human)", type: qry, channel: "REST GET /sellers/{sellerId}/scorecard?window=", routes: ["GET /sellers/{sellerId}/scorecard"], message: "GetSellerScorecard (informational, seller-inbound ADR 0005)", relationship: OHS}
       - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: InboundReceiptSubmitted, relationship: Customer/Supplier}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired", relationship: Conformist}
-      - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated, CatalogItemDiscontinued, CatalogItemPackagingDeclared, CatalogItemPackLevelRetired", relationship: Conformist}
+      - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemPackagingDeclared, CatalogItemPackLevelRetired", relationship: Conformist}
     rest:
       - "POST /sellers"
       - "POST /sellers/{sellerId}:suspend"
       - "POST /sellers/{sellerId}:reinstate"
+      - "GET /sellers/{sellerId}/scorecard?window="
       - "POST /inbound-plans"
+      - "GET /inbound-plans/{planId}"
       - "POST /inbound-plans/{planId}:confirm"
       - "POST /inbound-plans/{planId}:cancel"
       - "POST /inbound-plans/{planId}/shipments"
@@ -1772,6 +1776,13 @@ contexts:
           - {value: MISSING, meaning: "A manifest carton was not received."}
           - {value: UNEXPECTED, meaning: "A carton was received that the manifest does not list."}
           - {value: DAMAGED, meaning: "A carton was received damaged."}
+      - name: ComplianceTier
+        fields: ["rest:SellerScorecard.complianceTier"]
+        about: "The informational tier of a seller's compliance scorecard: the worst of three signals over the window (seller-inbound ADR 0005 A3). Nothing acts on it."
+        values:
+          - {value: GOOD, meaning: "No signal reaches WATCH, or nothing was observed in the window."}
+          - {value: WATCH, meaning: "Receipt accuracy below 0.98, or at least 0.5 discrepancies per shipment, or at least one compliance violation."}
+          - {value: AT_RISK, meaning: "Receipt accuracy below 0.90, or at least 2.0 discrepancies per shipment, or at least five compliance violations."}
     consumes:
       - {event: InboundReceiptSubmitted, from: vendor-connectivity}
       - {event: NodeRegistered, from: node-topology}
@@ -1779,8 +1790,6 @@ contexts:
       - {event: NodeActivated, from: node-topology}
       - {event: NodeSuspended, from: node-topology}
       - {event: NodeRetired, from: node-topology}
-      - {event: CatalogItemCreated, from: offer-availability}
-      - {event: CatalogItemDiscontinued, from: offer-availability}
       - {event: CatalogItemPackagingDeclared, from: offer-availability}
       - {event: CatalogItemPackLevelRetired, from: offer-availability}
     sync_calls: []

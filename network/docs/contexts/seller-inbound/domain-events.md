@@ -120,7 +120,7 @@ CloudEvents `id` (`processed_events` inbox).
 
 | Producer | Full `type` | What this context does |
 | --- | --- | --- |
-| `vendor-connectivity` | `com.retailnetwork.partner.vendor-connectivity.submission.InboundReceiptSubmitted` | `RecordInboundReceipt` on the named shipment (`ReceiveOnVendorReceipt`). |
+| `vendor-connectivity` | `com.retailnetwork.partner.vendor-connectivity.inboundreceipt.InboundReceiptSubmitted` | `RecordInboundReceipt` on the named shipment (`ReceiveOnVendorReceipt`). |
 | `node-topology` | `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | Creates the node in `NodeInboundView`. |
 | `node-topology` | `com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared` | Updates `inbound` limits in `NodeInboundView`. |
 | `node-topology` | `com.retailnetwork.logistics.node-topology.node.NodeActivated` | Marks the node receivable. |

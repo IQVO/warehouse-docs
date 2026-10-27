@@ -158,7 +158,7 @@ the node's vendor through `vendor-connectivity`.
 | `vendor-connectivity` | `PurchaseOrderExpired` | Event | Kafka `retailnetwork.vendor-connectivity.events`, `com.retailnetwork.partner.vendor-connectivity.purchaseorder.PurchaseOrderExpired` | Conformist |
 | `vendor-connectivity` | `VendorShipmentConfirmed` | Event | Kafka `retailnetwork.vendor-connectivity.events`, `com.retailnetwork.partner.vendor-connectivity.purchaseorder.VendorShipmentConfirmed` | Conformist |
 | `vendor-connectivity` | `SubmissionProcessed` | Event | Kafka `retailnetwork.vendor-connectivity.events`, `com.retailnetwork.partner.vendor-connectivity.submission.SubmissionProcessed` | Conformist |
-| `vendor-connectivity` | `InboundReceiptSubmitted` | Event | Kafka `retailnetwork.vendor-connectivity.events`, `com.retailnetwork.partner.vendor-connectivity.submission.InboundReceiptSubmitted` | Conformist |
+| `vendor-connectivity` | `InboundReceiptSubmitted` | Event | Kafka `retailnetwork.vendor-connectivity.events`, `com.retailnetwork.partner.vendor-connectivity.inboundreceipt.InboundReceiptSubmitted` | Conformist |
 | `seller-inbound` | `InboundShipmentShipped` | Event | Kafka `retailnetwork.seller-inbound.events`, `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentShipped` | Conformist |
 | `vendor-connectivity` | `GetScorecard` | Query | REST `GET /scorecards/{nodeId}` (in-org), serving the Vendor API's `GET /vendor/nodes/{nodeId}/scorecard` | Customer/Supplier (this context is the Supplier) |
 | `shipping-and-tracking` | `PackageHandedOver` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageHandedOver` | Conformist |

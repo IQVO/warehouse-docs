@@ -24,7 +24,7 @@ and [ADR 0007](/network/adr/0007-cloudevents-namespace).
 | `specversion` | `1.0` |
 | `id` | a UUID minted once per event and stored in the outbox row, so a redelivery carries the same `id` |
 | `source` | `/retailnetwork/vendor-connectivity` |
-| `type` | `com.retailnetwork.partner.vendor-connectivity.<entity>.<EventName>`; entity is `vendoraccount`, `purchaseorder` or `submission` |
+| `type` | `com.retailnetwork.partner.vendor-connectivity.<entity>.<EventName>`; entity is `vendoraccount`, `purchaseorder`, `submission` or `inboundreceipt` (`InboundReceiptSubmitted` only) |
 | `subject` | the aggregate root id: `vendorId`, `poNumber` or `transactionId` |
 | `time` | the instant of the fact, UTC |
 | `datacontenttype` | `application/json` |
@@ -233,7 +233,7 @@ context no source for it. This is listed as an open question on the
 
 | | |
 | --- | --- |
-| Type | `com.retailnetwork.partner.vendor-connectivity.submission.InboundReceiptSubmitted` |
+| Type | `com.retailnetwork.partner.vendor-connectivity.inboundreceipt.InboundReceiptSubmitted` |
 | Subject / key | `transactionId` |
 | Produced by | `ProcessSubmission` of an `INBOUND_RECEIPT` submission that ends in `SUCCESS` (policy `ReceiptRelay`) |
 | Consumers | `seller-inbound` (`RecordInboundReceipt`), `node-performance` (inbound timeliness and accuracy observations) |

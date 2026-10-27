@@ -98,8 +98,8 @@ Topic `retailnetwork.offer-availability.events`.
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
-| `CatalogItemCreated` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | `delivery-promise`, `shipping-and-tracking`, `seller-inbound` |
-| `CatalogItemDiscontinued` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued` | `delivery-promise`, `order-sourcing`, `seller-inbound` |
+| `CatalogItemCreated` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | `delivery-promise`, `shipping-and-tracking` |
+| `CatalogItemDiscontinued` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued` | `delivery-promise`, `order-sourcing` |
 | `CatalogItemPackagingDeclared` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackagingDeclared` | `seller-inbound`, `vendor-connectivity` |
 | `CatalogItemPackLevelRetired` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackLevelRetired` | `seller-inbound`, `vendor-connectivity` |
 | `ListingCreated` | `com.retailnetwork.commerce.offer-availability.listing.ListingCreated` | `delivery-promise`, `order-sourcing`, `vendor-connectivity` |
@@ -167,7 +167,7 @@ Topic `retailnetwork.vendor-connectivity.events`.
 | `PurchaseOrderCancelled` | `com.retailnetwork.partner.vendor-connectivity.purchaseorder.PurchaseOrderCancelled` | analytics only |
 | `VendorShipmentConfirmed` | `com.retailnetwork.partner.vendor-connectivity.purchaseorder.VendorShipmentConfirmed` | `order-sourcing`, `shipping-and-tracking`, `node-performance` |
 | `SubmissionProcessed` | `com.retailnetwork.partner.vendor-connectivity.submission.SubmissionProcessed` | `node-performance` |
-| `InboundReceiptSubmitted` | `com.retailnetwork.partner.vendor-connectivity.submission.InboundReceiptSubmitted` | `seller-inbound`, `node-performance` |
+| `InboundReceiptSubmitted` | `com.retailnetwork.partner.vendor-connectivity.inboundreceipt.InboundReceiptSubmitted` | `seller-inbound`, `node-performance` |
 | `VendorSuspended` | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorSuspended` | analytics only |
 | `VendorReinstated` | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorReinstated` | analytics only |
 
@@ -451,6 +451,16 @@ Appears in: `InboundShipmentReceived.cartons(sscc, status)`.
 | `MISSING` | A manifest carton was not received. |
 | `UNEXPECTED` | A carton was received that the manifest does not list. |
 | `DAMAGED` | A carton was received damaged. |
+
+**`ComplianceTier`**: The informational tier of a seller's compliance scorecard: the worst of three signals over the window (seller-inbound ADR 0005 A3). Nothing acts on it.
+
+Appears in: REST `SellerScorecard.complianceTier`.
+
+| Value | Meaning |
+| --- | --- |
+| `GOOD` | No signal reaches WATCH, or nothing was observed in the window. |
+| `WATCH` | Receipt accuracy below 0.98, or at least 0.5 discrepancies per shipment, or at least one compliance violation. |
+| `AT_RISK` | Receipt accuracy below 0.90, or at least 2.0 discrepancies per shipment, or at least five compliance violations. |
 
 Contexts that own no closed reason vocabulary (their reason fields, if any, are free text): `node-topology`, `customer-ordering`.
 
