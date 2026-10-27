@@ -111,7 +111,7 @@ unauthenticated by deliberate decision (ADR 0015).
   ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
   `LocationSlot`, the leaf aggregate, and its place in the Site, Zone and
   Aisle hierarchy.
-- [Domain Events](/contexts/facility-layout/domain-events): the twelve
+- [Domain Events](/contexts/facility-layout/domain-events): the fifteen
   past-tense events published to `warehouse.facility.events`, and who
   consumes them.
 - [Domain Message Flow](/contexts/facility-layout/domain-message-flow)
