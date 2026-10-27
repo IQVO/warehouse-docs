@@ -44,7 +44,7 @@ Markdown under [`docs/`](https://github.com/IQVO/warehouse-ui-kit/tree/develop/d
 Scores are from the same audit run on two commits per repository: the first
 parent of the merge of the campaign PR (**before**) and `develop` after the
 last campaign PR merged (**after**). "Pages" counts hand-written pages
-(README and `docs/**`, excluding ADRs and generated API reference).
+(README and `docs/**`, excluding ADRs and generated API reference). The README itself follows the fleet README skeleton — see [README standard](./readme-standard.md).
 
 | Repository | Before | After | Pages | Missing before | PRs |
 |---|---:|---:|---|---|---|

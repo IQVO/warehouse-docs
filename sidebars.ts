@@ -188,7 +188,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Fleet health',
-      items: ['fleet-health/docs-coverage', 'fleet-health/ecosystem-gaps'],
+      items: ['fleet-health/docs-coverage', 'fleet-health/ecosystem-gaps', 'fleet-health/readme-standard'],
     },
     {
       type: 'category',
