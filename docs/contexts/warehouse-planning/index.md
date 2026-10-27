@@ -36,10 +36,14 @@ Per this context's own [Context Map](/contexts/warehouse-planning/context-map):
 (`ShiftPlanCommitted` on `warehouse.workforce.events`) and
 `facility-layout` to `warehouse-planning` (`LocationSlotRegistered` and
 `LocationSlotDecommissioned` on `warehouse.facility.events`) are real Kafka
-consumers. The context publishes four `capacityplan` CloudEvents types on
-`warehouse.warehouse-planning.events` through a transactional outbox, with
-an analytics copy of each on `warehouse.warehouse-planning.analytics` for
-its own projector and reports (ADR 0005). It serves REST (Kong route
+consumers. The context publishes six CloudEvents types on
+`warehouse.warehouse-planning.events` through a transactional outbox: four
+`capacityplan` types, with an analytics copy of each on
+`warehouse.warehouse-planning.analytics` for its own projector and reports
+(ADR 0005), and the integration-only `processcapacity` types
+`ProcessCapacityRegistered` and `ProcessCapacityChanged`, raised when a
+registration brings a ProcessCapacity into being or moves its effective rate
+(no consumer yet). It serves REST (Kong route
 `/api/warehouse-planning`) and MCP. `warehouse-ops-agent` reads
 `get_process_path_capacity` for its daily-brief capacity outlook, and the
 console hosts this context's own `capacity_mfe` remote.
@@ -50,9 +54,19 @@ console hosts this context's own `capacity_mfe` remote.
 consuming this context's capacity-plan events (its ADR 0031, off unless
 `PLANNED_CAPACITY_CONSUMER_GROUP` is set).
 
-**Planned, not implemented:** published-language feeds from
-`fulfillment-execution` and `wes-work-planning` (observed capacity) and
-from `network-fulfillment` (demand), as drawn in ADR 0001's context map.
+**Built by [ADR 0017](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0017-inbound-labour-demand-and-observed-capacity-feedback.md),
+consumer groups pinned in `warehouse-infra` `develop`:** inbound labour
+demand from `inbound-receiving`'s `DockAppointmentBooked` and
+`DockAppointmentCancelled` (local `inbound_appointments` read model, labour
+composed at read time from an operator-declared `InboundLabourStandard`,
+`PUT /inbound-labour-standards/{location}/{path_id}`, `GET /inbound-demand`),
+and observed-capacity feedback from `fulfillment-execution`'s
+`TaskCompleted`, compared with the plan by
+`GET /capacity-plans/{id}/variance`. Both attribute to the configured
+`DEMAND_SITE_ID` because neither event carries a site.
+
+**Planned, not implemented:** observed capacity from `wes-work-planning`
+and demand from `network-fulfillment`, as drawn in ADR 0001's context map.
 :::
 
 :::note[Deliberately not consumed]
