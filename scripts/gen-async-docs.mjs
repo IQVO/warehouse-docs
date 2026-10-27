@@ -6,7 +6,9 @@
  * is embedded into docs/api-reference/async/<context>.md via an iframe, so
  * it survives a Docusaurus build unmodified as a static asset.
  *
- * Run: npm run gen-async-docs:all  (wired into `npm run build`)
+ * Run: npm run gen-async-docs:all  (wired into `npm run build`); pass context
+ * names to regenerate only those (node scripts/gen-async-docs.mjs facility-layout).
+ * Any failure exits 1.
  */
 import {execFileSync} from 'node:child_process';
 import {existsSync, mkdirSync, rmSync} from 'node:fs';
@@ -42,7 +44,8 @@ const asyncapiBin = path.join(root, 'tools', 'asyncapi-gen', 'node_modules', '.b
 const asyncapiGenCwd = path.join(root, 'tools', 'asyncapi-gen');
 const failures = [];
 
-for (const ctx of CONTEXTS) {
+const only = process.argv.slice(2);
+for (const ctx of only.length ? CONTEXTS.filter((c) => only.includes(c)) : CONTEXTS) {
   const specPath = path.join(root, 'apis', ctx, 'asyncapi.yaml');
   if (!existsSync(specPath)) {
     console.log(`[gen-async-docs] skip ${ctx}: no asyncapi.yaml`);
@@ -77,15 +80,12 @@ if (failures.length > 0) {
     `[gen-async-docs] done with ${failures.length} failure(s): ${failures.join(', ')}`,
   );
   console.error(
-    '[gen-async-docs] known upstream issue: @asyncapi/html-template can throw ' +
-      '"Objects are not valid as a React child" on certain schema shapes ' +
-      '(e.g. anyOf/oneOf without a discriminating title). See ' +
-      'https://github.com/asyncapi/generator/issues for tracking. The build ' +
-      'still succeeds; affected contexts keep only their narrative ' +
-      'contexts/<ctx>/async-api page and raw apis/<ctx>/asyncapi.yaml link ' +
-      'until the upstream issue is resolved.',
+    '[gen-async-docs] the output dir of a failed context was deleted before ' +
+      'generation, so its embedded AsyncAPI page would ship empty. Run ' +
+      '`tools/asyncapi-gen/node_modules/.bin/asyncapi validate apis/<ctx>/asyncapi.yaml` ' +
+      'for the real diagnostics and fix the spec in the context repository.',
   );
-  process.exitCode = 0; // non-fatal: do not fail the whole docs build
+  process.exitCode = 1; // fatal: a failed context must not reach Pages with a broken embed
 } else {
   console.log('[gen-async-docs] done.');
 }

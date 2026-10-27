@@ -2,7 +2,7 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: Kafka integration for slotting-optimization — one published integration topic with three SlotPlan events and its analytics mirror, four consumed sibling topics (five consumers: four feeding local copies, one feeding the plan execution progress), dead-lettering and the CloudEvents envelope.
+description: "Kafka integration for slotting-optimization — one published integration topic with three SlotPlan events and its analytics mirror, four consumed sibling topics (five consumers: four feeding local copies, one feeding the plan execution progress), dead-lettering and the CloudEvents envelope."
 ---
 
 # Async API
