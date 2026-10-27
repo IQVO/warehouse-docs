@@ -58,7 +58,7 @@ const SECTIONS = [
     name: 'WMS / WES',
     tagline: 'The warehouse execution fleet',
     description:
-      'Seventeen backend contexts — receiving, storage, slotting, picking, packing, shipping and the planning around them — one shared ubiquitous language and a single documented context map. Generated from each context\u2019s own OpenAPI and AsyncAPI specifications, ADRs and domain source.',
+      'Nineteen backend contexts — receiving, storage, slotting, picking, packing, shipping and the planning around them — one shared ubiquitous language and a single documented context map. Generated from each context\u2019s own OpenAPI and AsyncAPI specifications, ADRs and domain source.',
     links: [
       {label: 'Overview', to: '/overview'},
       {label: 'Strategic Design', to: '/strategic-design/domain-vision'},
@@ -71,7 +71,7 @@ const SECTIONS = [
     name: 'Retail Network',
     tagline: 'The large-scale retail & logistics network',
     description:
-      'Ten bounded contexts modelling catalogue, delivery promise, order sourcing, vendor connectivity, middle and last mile, tracking and node performance — the seam through which the network connects to the WMS/WES fleet. Source of truth: the retail-network domain model.',
+      'Eleven bounded contexts modelling catalogue, delivery promise, order sourcing, vendor connectivity, seller inbound, middle and last mile, tracking and node performance — the seam through which the network connects to the WMS/WES fleet. Source of truth: the retail-network domain model.',
     links: [
       {label: 'Network Overview', to: '/network'},
       {label: 'Domain Vision', to: '/network/strategic-design/domain-vision'},
