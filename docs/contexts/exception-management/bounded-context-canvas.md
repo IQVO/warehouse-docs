@@ -2,62 +2,51 @@
 id: bounded-context-canvas
 title: Bounded context canvas
 sidebar_label: Bounded context canvas
-description: ddd-crew Bounded Context Canvas for exception-management — purpose, strategic classification, domain roles, inbound and outbound communication, business decisions, assumptions and verification.
+description: The ddd-crew Bounded Context Canvas for exception-management — purpose, strategic classification, domain roles, every inbound and outbound message with its real channel, business decisions, assumptions, verification metrics and open questions.
 ---
 
 # Bounded context canvas
 
-ddd-crew [Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas),
-filled from the canvas in the context's own
-[ADR 0001](https://github.com/IQVO/exception-management/blob/develop/docs/adr/0001-exception-management-bounded-context.md)
-and its code on `develop` (the repository does not ship its own ddd-crew pack
-yet; this page is written for this site from those sources).
+:::info[Synced from exception-management]
+This page is a copy of [`docs/docs/ddd/bounded-context-canvas.md`](https://github.com/IQVO/exception-management/blob/develop/docs/docs/ddd/bounded-context-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
+
+
+Following the [ddd-crew Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas).
+Every message row maps to a real REST route, MCP tool or Kafka topic and
+CloudEvents `type` in the code on `develop`; the relationship vocabulary is
+the [Context map](/contexts/exception-management/context-map). ADR 0001 carries the frozen
+first version of this canvas; this page is the living copy.
 
 ## Canvas at a glance
 
+### Inbound
+
 ```mermaid
 flowchart LR
-    classDef ctx fill:#e7f5ff,stroke:#1c7ed6,color:#000
-    classDef actor fill:#fff4e6,stroke:#e8590c,color:#000
-    classDef planned fill:#f8f9fa,stroke:#adb5bd,stroke-dasharray:5 5,color:#495057
-    classDef bc fill:#fff3bf,stroke:#e67700,stroke-width:1.5px,color:#000
-    subgraph IN["Inbound (facts from six producers)"]
-        ops(["Operator, console"]):::actor
-        fe["fulfillment-execution"]:::ctx
-        wp["wes-work-planning"]:::ctx
-        nf["network-fulfillment"]:::ctx
-        om["order-management<br/>(correlation only)"]:::ctx
-        inv["inventory-storage"]:::ctx
-        rp["returns-processing"]:::ctx
-        wfm["workforce-management"]:::planned
-        nip["network-inventory-planning"]:::planned
-    end
-    subgraph BC["exception-management - Supporting - WES tier"]
-        core["ExceptionCase, ExceptionPolicy<br/>dedup, SLA sweeper, auto-resolve"]:::bc
-    end
-    subgraph OUT["Outbound"]
-        readers["ops agent (read-only MCP), console exceptions_mfe<br/>(both planned)"]:::planned
-    end
-    ops -->|"REST: triage, assign, resolve, policy"| core
-    fe -->|"Kafka: TaskCPTMissed, PackageDiverted,<br/>WeightDiscrepancyDetected"| core
-    wp -->|"Kafka: BacklogThresholdBreached"| core
-    nf -->|"Kafka: AcknowledgementDeadlineAtRisk,<br/>OrphanedHoldCancelled"| core
-    om -->|"Kafka: OrderRepromised (auto-resolve rule)"| core
-    inv -->|"Kafka: DiscrepancyDetected, ItemUnlocated"| core
-    rp -->|"Kafka: UnexpectedReturnReceived"| core
-    wfm -.->|"PathUnderstaffed (planned, not built)"| core
-    nip -.->|"TransferStuckDetected (planned, not built)"| core
-    core -->|"Kafka: seven event types + analytics"| readers
+    FE["fulfillment-execution"] -->|warehouse.fulfillment.events| EM
+    WP["work-planning"] -->|warehouse.work-planning.events| EM
+    NF["network-fulfillment"] -->|warehouse.network-fulfillment.events| EM
+    OM["order-management"] -->|warehouse.order-management.events| EM
+    RP["returns-processing"] -->|warehouse.returns-processing.events| EM
+    IS["inventory-storage"] -->|warehouse.inventory.events| EM
+    OP(["Operators, console"]) -->|"REST /exceptions"| EM
+    EM["exception-management"]
 ```
 
-Solid boxes are built on `develop`; the context is not deployed
-(`warehouse-infra` has no entry for it), so every edge is
-wired-but-unused. Dashed boxes are the two analytics-only producers whose
-facts are not consumable yet.
+### Outbound
+
+```mermaid
+flowchart LR
+    EM["exception-management"] -->|warehouse.exception-management.events| ANY["Any consumer<br/>(analytics: roadmap)"]
+    EM -->|"REST reads"| OP(["Operators, console"])
+    EM -->|"MCP read-only tools"| AG(["warehouse-ops-agent"])
+    EM -->|"poison rows"| DLQ["warehouse.exception-management.events.dlq"]
+```
 
 ## Name
 
-exception-management
+`exception-management` — the owner of the **Problem Solve** lifecycle.
 
 ## Purpose
 
@@ -67,84 +56,98 @@ ops-agent work cases instead of raw events.
 
 ## Strategic classification
 
-**Supporting subdomain** today; candidate Core once auto-resolution policies
-and agent recommendations run against it (operational accuracy at scale)
-(ADR 0001).
-
-## Tier / CloudEvents subdomain
-
-**WES**, subdomain segment `wes` (it shapes operator flow; it holds no stock,
-layout or master data). Type prefix
-`com.warehouse.wes.exception-management.`, source
-`/warehouse/exception-management`. Entity segments: `exceptioncase`,
-`exceptionpolicy`.
+- **Supporting subdomain** today; candidate **Core** once auto-resolution
+  policies and agent recommendations run against it (operational accuracy
+  at scale) — ADR 0001.
+- **WES tier**, CloudEvents subdomain `wes`; type prefix
+  `com.warehouse.wes.exception-management.`; source
+  `/warehouse/exception-management`.
 
 ## Domain roles
 
-System of record for cases and policies. Conformist to every producer (frozen
-local copies of the source payload). Open Host Service for case facts.
+- **System of record** for exception cases and handling policies.
+- **Conformist** to every producer: frozen local copies of the source
+  payload, never a live lookup (ADR 0003).
+- **Open Host Service** for case facts: the integration topic plus REST
+  reads and read-only MCP tools.
 
 ## Inbound communication
 
-Six sibling topics on `develop`: fulfillment-execution (`TaskCPTMissed`,
-`PackageDiverted`, `WeightDiscrepancyDetected`), wes-work-planning
-(`BacklogThresholdBreached`), network-fulfillment
-(`AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled`),
-order-management (`OrderRepromised`, correlation for auto-resolve only),
-returns-processing (`UnexpectedReturnReceived`) and inventory-storage
-(`DiscrepancyDetected`, `ItemUnlocated`). Planned, not built:
-workforce-management `PathUnderstaffed` and network-inventory-planning
-`TransferStuckDetected` (analytics-topic sources, promotion pending). REST
-commands from operators and the console. No live REST/MCP call to a sibling,
-ever.
+| Channel | Message / route | Relationship |
+| --- | --- | --- |
+| `warehouse.fulfillment.events` | `...task.TaskCPTMissed`, `...package.PackageDiverted`, `...package.WeightDiscrepancyDetected` — group env `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP` | Conformist, upstream → us |
+| `warehouse.work-planning.events` | `...workpool.BacklogThresholdBreached` — `WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
+| `warehouse.network-fulfillment.events` | `...networkorder.AcknowledgementDeadlineAtRisk`, `...networkorder.OrphanedHoldCancelled` — `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
+| `warehouse.order-management.events` | `...order.OrderRepromised` — `ORDER_CORRELATION_CONSUMER_GROUP`; **correlation only, never a case source** | Conformist |
+| `warehouse.returns-processing.events` | `...returnreceipt.UnexpectedReturnReceived` — `RETURNS_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
+| `warehouse.inbound-receiving.events` | `...receipt.CartonDiscrepancyRaised` — `CARTON_DISCREPANCY_CONSUMER_GROUP` | Conformist |
+| `warehouse.inventory.events` | `...bin.DiscrepancyDetected`, `...stock.ItemUnlocated` — `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` | Conformist |
+| REST | `GET/POST /exceptions*` (list, triage, assign, resolve), `GET/PUT /exception-policies*` | Operator commands; deliberately no `POST /exceptions` |
+| Roadmap | workforce-management `PathUnderstaffed`, network-inventory-planning `TransferStuckDetected` (analytics-topic sources, promotion pending) | planned / not built |
 
 ## Outbound communication
 
-`ExceptionOpened`, `ExceptionTriaged`, `ExceptionAssigned`,
-`ExceptionEscalated`, `ExceptionResolved`, `ExceptionAutoResolved` and
-`ExceptionPolicyDeclared` on `warehouse.exception-management.events` (ADR 0004
-catalogue) plus their analytics copies; REST reads; read-only MCP tools for
-warehouse-ops-agent (the client itself is planned).
+| Channel | Message | Notes |
+| --- | --- | --- |
+| `warehouse.exception-management.events` | `exceptioncase.ExceptionOpened`, `ExceptionTriaged`, `ExceptionAssigned`, `ExceptionEscalated`, `ExceptionResolved`, `ExceptionAutoResolved`, `exceptionpolicy.ExceptionPolicyDeclared` | CloudEvents 1.0, key = case id (source type for the policy event), through the transactional outbox |
+| `warehouse.exception-management.events.dlq` | poison outbox rows, raw | ADR 0005 |
+| REST reads | `GET /exceptions`, `GET /exceptions/{caseId}`, `GET /exception-policies` | |
+| MCP (`cmd/mcp`, `:8090`) | `list_open_exceptions`, `get_exception`, `get_exception_policies`, `get_sla_report` | read-only for warehouse-ops-agent |
+| Roadmap | `warehouse.exception-management.analytics` mirror + projector | declared in ADR 0004, not built |
 
 ## Ubiquitous language
 
-Problem solve, case, source fact, dedup key, occurrence, queue, severity, SLA
-clock, escalation, resolution code, root cause, auto-resolve rule. See
-[Ubiquitous Language](/contexts/exception-management/ubiquitous-language).
+Problem solve, case, source fact, dedup key, occurrence, queue, severity,
+SLA clock, escalation, resolution code, root cause, auto-resolve rule,
+correlated fact, work unit ref, policy version — each defined on
+[Ubiquitous language](/contexts/exception-management/ubiquitous-language).
 
 ## Business decisions
 
-Exactly one open case per dedup key (source type, source subject, site): a
-repeated fact touches the open case instead of opening another; status
-machine `OPEN -> TRIAGED -> ASSIGNED -> RESOLVED`, `ESCALATED` is a flag;
-`RESOLVED` needs a resolution code and is terminal; every transition records
-its actor; the case holds a frozen copy of the source payload; auto-resolve
-is a declarative policy rule, never agent-initiated. A source fact after
-resolution touches the case and never reopens it.
+- Exactly one open case per dedup key (source type, source subject, site):
+  a repeated fact touches the open case (occurrence count, last seen)
+  instead of opening another.
+- Status machine `OPEN -> TRIAGED -> ASSIGNED -> RESOLVED`, one direction
+  only; `ESCALATED` is a flag, not a state; `RESOLVED` needs a resolution
+  code and is terminal; a fact after resolution touches, never reopens.
+- Every transition records its actor (operator, policy id or `system`).
+- The case holds a frozen copy of the source payload, never a reference to
+  re-fetch.
+- Auto-resolve is a declarative policy rule ("close when `<type>` arrives
+  with the same subject within N minutes"), never agent-initiated; the
+  ops-agent stays zero-write.
+- No manual case creation: every case is a fact another context published.
 
 ## Assumptions
 
-`TaskCPTMissed.order_ref` and `PackageManifested.order_ref` carry WES's
-per-line work unit id `{order_id}-line-{line_no}` (order-management ADR 0018):
-the CPT `<->` `OrderRepromised` correlation reverses that frozen formula,
-matches at ORDER level (line number ignored — `OrderRepromised` carries no
-line), applies the inclusive window edge `now <= lastSeenAt +
-within_minutes`, and fails soft (case stays open) on no match. The SLA
-sweeper is a bounded ticker that reports facts and sets the flag; it never
-blocks work.
+- `TaskCPTMissed.order_ref` and `PackageManifested.order_ref` carry WES's
+  per-line work unit id `{order_id}-line-{line_no}` (order-management ADR
+  0018); the CPT ↔ `OrderRepromised` correlation reverses that frozen
+  formula, matches at ORDER level, and fails soft (case stays open) on no
+  match.
+- The SLA sweeper is a bounded ticker that reports facts and sets the flag;
+  it never blocks work.
+- Re-firing sources (`TaskCPTMissed` every sweep tick, the
+  network-fulfillment sweeps while their condition holds) are by design:
+  every repeat touches.
 
-## Verification
+## Verification metrics
 
-Mutation gate over every domain package; golden exact-JSON test per published
-type; godog scenarios (fact -> open, repeated fact -> touch,
-triage/assign/resolve, SLA breach -> escalated, `OrderRepromised` ->
-auto-resolved); an end-to-end test on real Postgres + Kafka driven only
-through Kafka and REST.
+- Mutation gate over every domain package (`make mutation`, measured
+  100/100, thresholds 95/95).
+- Golden exact-JSON test per published type; `TestEventCatalogueMatchesContract`
+  checks ADR 0004's catalogue against `apis/asyncapi.yaml`.
+- godog scenarios: fact → open, repeated fact → touch,
+  triage/assign/resolve, SLA breach → escalated, `OrderRepromised` →
+  auto-resolved (`features/`).
+- End-to-end on real Postgres + Kafka driven only through Kafka and REST
+  (`cmd/api/e2e_integration_test.go`, `make integration`).
 
 ## Open questions
 
-- Promotion of `PathUnderstaffed` and `TransferStuckDetected` off their
-  producers' analytics topics (each producer's own PR; until then those edges
-  stay dashed planned / not built, never faked).
-- The `exceptions_mfe` console remote and the ops-agent's MCP client (named
-  by ADR 0001, not built).
+- When does the Supporting → Core flip happen? (ADR 0001's condition:
+  auto-resolution policies and agent recommendations at scale.)
+- The analytics mirror (ADR 0004) and its projector: build step, consumer
+  set still zero — timing open.
+- v2 candidates deliberately parked in ADR 0001: manual case creation,
+  associate paging, labor-cost correlation.

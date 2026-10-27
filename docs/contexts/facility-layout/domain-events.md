@@ -2,7 +2,7 @@
 id: domain-events
 title: Domain events
 sidebar_label: Domain events
-description: The fourteen past-tense facts this context publishes, their CloudEvents type convention, their payload shapes, and who consumes them.
+description: The fifteen past-tense facts this context publishes, their CloudEvents type convention, their payload shapes, and who consumes them.
 ---
 
 # Domain events
@@ -12,28 +12,27 @@ This page is a copy of [`docs/docs/ddd/domain-events.md`](https://github.com/IQV
 :::
 
 
-This bounded context emits fourteen past-tense domain events. Together they are
+This bounded context emits fifteen past-tense domain events. Together they are
 its **Published Language** — the vocabulary downstream Conformists key off.
 
 :::info[Published to Kafka, specified in AsyncAPI]
-With `EVENT_PUBLISHER=kafka`, every domain event is published to the
+Every domain event is published to the
 `warehouse.facility.events` integration topic
 ([ADR 0009](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0009-kafka-integration-publisher.md)) and, in the same
 call, to the separate `warehouse.facility.analytics` topic that feeds the
 [analytical data product](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/analytics/catalog-growth-report.md)
 ([ADR 0010](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0010-analytical-data-product.md)). The integration topic,
 its CloudEvents 1.0 envelope
-([ADR 0024](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0024-cloudevents-mandatory-envelope.md)) and all fourteen messages are specified in
+([ADR 0024](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0024-cloudevents-mandatory-envelope.md)) and all fifteen messages are specified in
 [`apis/asyncapi.yaml`](https://github.com/IQVO/facility-layout/blob/main/apis/asyncapi.yaml)
 (AsyncAPI 2.6.0).
 
-With `DATABASE_URL` **and** `EVENT_PUBLISHER=kafka` set, publishing goes
+Publishing always goes
 through the transactional outbox (`outbox_events`,
 [ADR 0018](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0018-transactional-outbox.md)): the use case writes the
 aggregate row and one outbox row per topic in one transaction, and the
-in-process relay drains them onto Kafka. Without `EVENT_PUBLISHER=kafka`,
-events go to the service log only — whether or not `DATABASE_URL` is set
-(the old `events` table was dropped by migration `0005_outbox`). See
+in-process relay drains them onto Kafka. There is no log-only mode
+([ADR 0039](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0039-postgres-and-kafka-are-the-only-runtime.md)). The old `events` table was dropped by migration `0005_outbox`. See
 [Publishers](#publishers) and the [Context map](/contexts/facility-layout/context-map)
 for who consumes what.
 :::
@@ -66,6 +65,7 @@ com.warehouse.wms.facility-layout.placementrule.PlacementRuleDefined
 com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered
 com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned
 com.warehouse.wms.facility-layout.locationslot.FacilityLayoutImported
+com.warehouse.wms.facility-layout.locationslot.LocationSlotHandlingUnitDeclared
 com.warehouse.wms.facility-layout.locationslot.LocationGeometryUpdated
 com.warehouse.wms.facility-layout.aisle.AisleGeometryUpdated
 com.warehouse.wms.facility-layout.structure.FixedStructureRegistered
@@ -103,7 +103,7 @@ Every event embeds the same base, serialized as:
 `time.Now()` inside the domain — which is what makes event timestamps
 deterministic in tests.
 
-## The fourteen events
+## The fifteen events
 
 ### SiteRegistered
 
@@ -134,7 +134,12 @@ publishes none.
 A site's transfer capability changed
 ([ADR 0035](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0035-site-transfer-capability-command.md)). A full
 last-write-wins snapshot raised by `PUT /sites/{siteCode}/transfer-capability`
-(use case `ChangeSiteTransferCapability`) once per real change. Its fields are
+(use case `ChangeSiteTransferCapability`) once per real change, and re-emitted
+by the periodic freshness heartbeat
+([ADR 0041](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0041-site-capability-heartbeat.md), use case
+`PublishSiteCapabilityHeartbeats`) with the current values, a new CloudEvents
+`id`, a fresh `time` (the consumers' `as_of`) and the revision advanced by one.
+Its fields are
 **snake_case**, unlike every other payload here: recasing them would be a
 breaking `.v2` for network-inventory-planning, so ADR 0035 keeps them.
 
@@ -143,7 +148,7 @@ breaking `.v2` for network-inventory-planning, so ADR 0035 keeps them.
 | `site_code` | string |
 | `transfer_origin_enabled` | boolean — the site may donate stock |
 | `transfer_destination_enabled` | boolean — the site may receive stock |
-| `capability_revision` | integer — 1 on the first change, +1 per later change of the same site; keep the highest |
+| `capability_revision` | integer — 1 on the first change, +1 per later event of the same site, change or heartbeat (ADR 0041); keep the highest |
 
 ### ZoneRegistered
 
@@ -248,6 +253,18 @@ The summary event exists so that a consumer can distinguish "the building was
 loaded" from a burst of unrelated single registrations, without having to
 infer it from event volume.
 
+### LocationSlotHandlingUnitDeclared
+
+A slot's handling unit was set or changed
+([ADR 0040](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0040-slot-handling-unit.md)). `LocationSlotRegistered`
+also carries `handlingUnit`, omitted when none was recorded.
+
+| Field | Type |
+|---|---|
+| `locationCode` | string — same identifier as in `LocationSlotRegistered` |
+| `handlingUnit` | string — `EACH`, `CASE` or `PALLET` |
+| `declaredAt` | string — RFC 3339 instant, equals `occurredAt` |
+
 ### LocationGeometryUpdated
 
 A slot's physical position and size were set
@@ -296,7 +313,7 @@ A walkable connection between two aisles of the same zone was declared.
 
 ## Catalogue at a glance
 
-Every event is published to **both** topics when `EVENT_PUBLISHER=kafka`:
+Every event is published to **both** topics:
 `warehouse.facility.events` (integration, `dataschema`
 `urn:warehouse:facility-layout:events:<EventName>:v1`) and
 `warehouse.facility.analytics` (analytics, `dataschema`
@@ -323,6 +340,7 @@ site would need an additive `siteCode` (a contract change) for no benefit
 | `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | `locationCode` | `locationCode` | `RegisterLocationSlot`, `ImportFacilityLayout` | `inventory-storage`, `warehouse-planning`, own projector |
 | `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | `locationCode` | `locationCode` | `DecommissionLocationSlot` | `inventory-storage`, `warehouse-planning`, own projector |
 | `com.warehouse.wms.facility-layout.locationslot.FacilityLayoutImported` | event `id` (batch outcome, no aggregate) | `layout-import` | `ImportFacilityLayout` | own projector |
+| `com.warehouse.wms.facility-layout.locationslot.LocationSlotHandlingUnitDeclared` | `locationCode` | `locationCode` | `DeclareLocationHandlingUnit` | `inventory-storage` |
 | `com.warehouse.wms.facility-layout.locationslot.LocationGeometryUpdated` | `locationCode` | `locationCode` | `SetLocationGeometry`, `ImportFacilityLayout` | none |
 | `com.warehouse.wms.facility-layout.aisle.AisleGeometryUpdated` | `aisleId` | `aisleId` | `SetAisleGeometry` | none |
 | `com.warehouse.wms.facility-layout.structure.FixedStructureRegistered` | `structureId` | `structureId` | `RegisterFixedStructure` | none |
@@ -338,6 +356,7 @@ Source: `internal/domain/shared/events.go`,
 |---|---|
 | `RegisterSite` | `SiteRegistered` |
 | `ChangeSiteTransferCapability` | `SiteCapabilityChanged` (only when the snapshot changed or was never published) |
+| `PublishSiteCapabilityHeartbeats` (timer, not a route) | `SiteCapabilityChanged` heartbeat per active declared site every `SITE_CAPABILITY_HEARTBEAT_INTERVAL` ([ADR 0041](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0041-site-capability-heartbeat.md)) |
 | `ChangeSiteRole` | `SiteRoleChanged` (only when the role changed) |
 | `RegisterZone` | `ZoneRegistered` |
 | `RegisterAisle` | `AisleRegistered` |
@@ -347,6 +366,7 @@ Source: `internal/domain/shared/events.go`,
 | `DecommissionLocationSlot` | `LocationSlotDecommissioned` |
 | `ImportFacilityLayout` | per row: `SiteRegistered` / `ZoneRegistered` / `AisleRegistered` for each parent it creates on first sight, `LocationSlotRegistered` for each successful slot, `LocationGeometryUpdated` when the row carries geometry; then exactly one `FacilityLayoutImported` for the whole call |
 | `SetLocationGeometry` | `LocationGeometryUpdated` |
+| `DeclareLocationHandlingUnit` | `LocationSlotHandlingUnitDeclared` |
 | `SetAisleGeometry` | `AisleGeometryUpdated` |
 | `RegisterFixedStructure` | `FixedStructureRegistered` |
 | `RegisterCrossAisle` | `CrossAisleRegistered` |
@@ -354,23 +374,19 @@ Source: `internal/domain/shared/events.go`,
 
 ## Publishers
 
-Which publisher the composition root (`cmd/facility/main.go`,
-`buildAdapters`) wires depends on two switches:
-
-| `DATABASE_URL` | `EVENT_PUBLISHER` | Publisher wired | Outbox relay |
-|---|---|---|---|
-| unset | unset | `outbound/events` log publisher | no |
-| unset | `kafka` | `outbound/kafka` `FanOut` — direct publish to both topics, no outbox | no |
-| set | unset | `outbound/events` log publisher | no |
-| set | `kafka` | `outbound/postgres` `OutboxPublisher` — one `outbox_events` row per topic, in the use case's transaction | yes |
+Only one publisher is wired by the composition root (`cmd/facility/main.go`,
+`buildAdapters`): `outbound/postgres` `OutboxPublisher` — one `outbox_events`
+row per topic, in the use case's transaction — drained by the outbox relay.
+`DATABASE_URL` and `KAFKA_BROKERS` are mandatory ([ADR 0039](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0039-postgres-and-kafka-are-the-only-runtime.md));
+`EVENT_PUBLISHER` accepts only `kafka`.
 
 | Adapter | Use |
 |---|---|
 | `outbound/kafka` — `Publisher` | Encodes each event as a CloudEvents 1.0 event (structured mode, `source=/warehouse/facility-layout`, `type` = the event type, `subject` = aggregate id, `dataschema=urn:warehouse:facility-layout:events:<EventName>:v1`, `data` = the event's JSON wire DTO (`cloudevents.WireData`; domain events carry no struct tags); [ADR-0024](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0024-cloudevents-mandatory-envelope.md)) for `warehouse.facility.events`. Writer: `kafkago.Hash` balancer ([ADR 0021](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0021-kafka-writer-balancer-hash.md)), `RequireAll` acks with a 10 ms batch timeout ([ADR 0031](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0031-kafka-writer-durability.md)); the W3C trace context of the publishing request is injected into the message headers. |
 | `outbound/kafka` — `AnalyticsPublisher` | The same occurrence (same `type` and `id`) with `dataschema=urn:warehouse:facility-layout:analytics:<EventName>:v1`, for `warehouse.facility.analytics`. |
-| `outbound/kafka` — `FanOut` | No-database + `kafka` mode: mints one id and sends the event through both publishers above. |
-| `outbound/postgres` — `OutboxPublisher` + `OutboxRelay` | Database + `kafka` mode: enqueues both encodings into `outbox_events` inside the use case's `UnitOfWork`; the relay (`OUTBOX_RELAY_INTERVAL`, default 1s, batches of 100, `FOR UPDATE SKIP LOCKED`) sends them through `RelaySink` ([ADR-0018](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0018-transactional-outbox.md)). A row that fails `OUTBOX_MAX_ATTEMPTS` sends (default 20) is excluded and later rows with the same key overtake it ([ADR 0036](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0036-outbox-relay-attempt-cap.md)). Published rows are deleted after `OUTBOX_RETENTION` by the housekeeping sweeper ([ADR 0026](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0026-housekeeping-sweeper.md)). |
-| `outbound/events` — log publisher | Default whenever `EVENT_PUBLISHER` is not `kafka`. Writes each event to the service log. |
+| `outbound/kafka` — `FanOut` | Test double / library only: mints one id and sends the event through both publishers above. Not wired by any binary (ADR 0039). |
+| `outbound/postgres` — `OutboxPublisher` + `OutboxRelay` | The only runtime path: enqueues both encodings into `outbox_events` inside the use case's `UnitOfWork`; the relay (`OUTBOX_RELAY_INTERVAL`, default 1s, batches of 100, `FOR UPDATE SKIP LOCKED`) sends them through `RelaySink` ([ADR-0018](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0018-transactional-outbox.md)). A row that fails `OUTBOX_MAX_ATTEMPTS` sends (default 20) is excluded and later rows with the same key overtake it ([ADR 0036](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0036-outbox-relay-attempt-cap.md)). Published rows are deleted after `OUTBOX_RETENTION` by the housekeeping sweeper ([ADR 0026](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0026-housekeeping-sweeper.md)). |
+| `outbound/events` — log publisher | Test double (and a library for local experiments): writes each event to a log. Not wired by any binary (ADR 0039). |
 | `outbound/events` — buffered publisher | Tests. Collects events in memory for assertion. |
 
 The `EventPublisher` port is one method —
@@ -383,8 +399,13 @@ the Kafka adapters were a purely additive change.
 |---|---|---|---|
 | `inventory-storage` (`internal/adapters/outbound/facilitycache`, with `LOCATION_LOOKUP_MODE=kafka`) | `warehouse.facility.events` | process-unique group, replays from the first offset | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` — the rest are ignored ([ADR 0013](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0013-first-published-language-consumer.md)) |
 | `warehouse-planning` (`internal/adapters/inbound/kafka/storage_capacity_consumer.go`, started when `KAFKA_BROKERS` is set) | `warehouse.facility.events` | `STORAGE_CAPACITY_CONSUMER_GROUP` (default `warehouse-planning-storage-capacity`) | `LocationSlotRegistered` (Storage and WorkCenter roles), `LocationSlotDecommissioned` — folded into a storage-position / station tally |
-| `network-inventory-planning` (`internal/adapters/inbound/kafka/consumers.go`, `SiteCapabilityConsumer`) | `warehouse.facility.events` | env-configured | `SiteCapabilityChanged` — upserted into its `site_capability` read model, last-write-wins on `capability_revision` |
+| `network-inventory-planning` (`internal/adapters/inbound/kafka/consumers.go`, `SiteCapabilityConsumer`) | `warehouse.facility.events` | env-configured (`SITE_CAPABILITY_CONSUMER_GROUP`) | `SiteCapabilityChanged` — upserted into its `site_capability` read model, last-write-wins on `capability_revision` |
+| `inbound-receiving` (`internal/adapters/inbound/kafka/dock_door_consumer.go`) | `warehouse.facility.events` | `DOCK_DOOR_CONSUMER_GROUP` (required; `inbound-receiving-dock-doors`) | `LocationSlotRegistered` (only `role=Dock` with `dockFlow` `Inbound` or `Both`), `LocationSlotDecommissioned` — kept in its `dock_doors` table |
+| `slotting-optimization`, `pick-face-replenishment` (`internal/adapters/inbound/kafka/layout_consumer.go`) | `warehouse.facility.events` | `slotting-optimization-layout`, `pick-face-replenishment-layout` | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` — local layout copies |
+| `task-interleaving` (`internal/adapters/inbound/kafka/layout_consumer.go`) | `warehouse.facility.events` | `task-interleaving-layout` | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned`, `LocationGeometryUpdated` — local layout copy with positions |
 | this repository's `cmd/facility-projector` | `warehouse.facility.analytics` | `facility-analytics` (DLQ `warehouse.facility.analytics.dlq`) | The original eight events (`SiteRegistered` … `FacilityLayoutImported`); the geometry events and `SiteCapabilityChanged` are ignored |
 
-No other service consumes either topic today. The geometry, fixed-structure
-and cross-aisle events are Published Language with no consumer yet.
+No other service consumes either topic today. `AisleGeometryUpdated`,
+`FixedStructureRegistered` and `CrossAisleRegistered` are Published Language
+with no consumer yet (`LocationGeometryUpdated` is applied by
+`task-interleaving` only).

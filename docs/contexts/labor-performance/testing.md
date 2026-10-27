@@ -31,7 +31,7 @@ flowchart TB
   B["BDD / Gherkin<br/>10 feature files, 74 scenarios"]
   E["MCP evals E1-E3<br/>schemas, wire conformance, 15 behavioral scenarios"]
   C["Contract<br/>Schemathesis over apis/openapi.yaml"]
-  I["Integration<br/>-tags=integration, 16 files, testcontainers Postgres and Kafka"]
+  I["Integration<br/>-tags=integration, 23 files, testcontainers Postgres and Kafka"]
   U --> B --> C --> I
   A -.-> U
   M -.-> U
@@ -72,10 +72,11 @@ harness `repo_lint` rule R11 (coverage-scope) forbids a workflow passing
   real chi router (`httptest.NewServer(inboundhttp.NewRouter(...))`)
   over the in-memory adapters. Kafka-driven steps call
   `RecordTaskPerformance` directly.
-- **Features:** 10 files under `features/`, 74 scenarios:
+- **Features:** 11 files under `features/`, 87 scenarios:
 
 | File | Scenarios | Feature |
 | --- | --- | --- |
+| `features/handling_unit_standards.feature` | 13 | Engineered standards per handling unit and the declared team lift (ADR 0035) |
 | `features/performance_scoring.feature` | 13 | Scoring completed tasks and reading the scorecard |
 | `features/scorecard.feature` | 1 | Reading an associate's performance scorecard |
 | `features/standards.feature` | 5 | Defining and reading engineered labor standards |
@@ -99,12 +100,13 @@ A separate feature file,
 - **Narrow target:** `make integration-kafka-testcontainers` runs
   `TestConsumer_ProjectsRealBrokerMessages` against an isolated Kafka
   container.
-- **Files** (all `//go:build integration`, 19 in total; besides the ones
+- **Files** (all `//go:build integration`, 23 in total; besides the ones
   below, `internal/application/usecases/usecases_wiring_integration_test.go`
   and `internal/adapters/inbound/mcp/streamable_http_integration_test.go`):
   - Postgres repos: `internal/adapters/outbound/postgres/{integration,standard_repo,performance_repo,idle_period_repo}_integration_test.go`
   - outbox and relay: `outbox_integration_test.go` (including the attempt cap of [ADR 0032](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0032-outbox-relay-attempt-cap.md): `TestOutboxRelay_MaxAttempts_PoisonRowIsExcludedAndTheNextRowPublishes`, `TestOutboxRelay_WithoutMaxAttempts_RetriesWithoutBound`), `outbox_lag_integration_test.go`, and trace continuity across the outbox to a real broker (`outbox_trace_kafka_integration_test.go`: `TestOutboxTrace_TraceparentCrossesTheOutboxToKafka`, `TestOutboxTrace_RowWithoutTraceHeadersRelaysUnchanged`)
   - sweeper: `sweeper_integration_test.go`
+  - handling-unit standards and team lift ([ADR 0035](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0035-handling-unit-standards-and-team-lift.md)): `internal/adapters/outbound/postgres/handling_unit_integration_test.go` (round trip, the widened one-open index, the CHECK constraints, migration 0007 up and down with data, the outbox payloads) and `internal/adapters/inbound/kafka/handling_integration_test.go` (a real broker into real Postgres)
   - pool limits (`statement_timeout` really applied): `pool_limits_integration_test.go`
   - analytics store: `internal/adapters/outbound/analyticsstore/postgres_integration_test.go`
   - idempotency middleware, including concurrent same-key requests:
@@ -115,6 +117,17 @@ A separate feature file,
     `consumer_dlq_integration_test.go`, `consumer_dlq_autocreate_integration_test.go`,
     `analytics_consumer_integration_test.go`
   - integration publisher: `internal/adapters/outbound/kafka/integration_publisher_integration_test.go`
+  - the real runtime end to end ([ADR 0034](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0034-postgres-and-kafka-are-the-only-runtime.md)):
+    `cmd/labor/e2e_integration_test.go` (`TestRunOnRealPostgresAndKafka`) boots
+    `run()` on a Postgres and a Kafka container with only the deployment's
+    environment and drives REST and Kafka only; the NUL guard is pinned on real
+    Postgres by `TestNUL_IsAClientErrorAndDoesNotConsumeTheKey`
+- **Boot-config and sensor tests** (no containers, run in `make test`/`make arch-test`):
+  `cmd/labor/bootconfig_test.go`, `cmd/labor-projector/config_test.go`,
+  `cmd/mcp/wiring_test.go` (every mandatory variable is a boot error that names
+  it); `TestRuntimeBinaryHasNoInMemoryAdapters` and its
+  `TestRuntimeBinarySensorBites` in `internal/architecture` (no non-test file
+  under `cmd/**` imports `internal/adapters/outbound/memory`).
 - **Guard rails:** the fitness tests `TestPostgresIntegrationTestsUseTestcontainers`
   and `TestKafkaIntegrationTestsUseTestcontainers` fail the build if an
   integration test skips on `DATABASE_URL` or `KAFKA_BROKERS`, or
@@ -125,8 +138,11 @@ A separate feature file,
 
 - **Command:** `make contract` (`scripts/contract-test.sh`). CI job:
   `contract`. Needs `st`: `python3 -m pip install 'schemathesis==4.28.0'`.
-- **How:** builds `cmd/labor`, starts it in memory on `127.0.0.1:18083`
-  (`CONTRACT_PORT`), waits for `/healthz`, then runs
+- **How:** builds `cmd/labor`, starts it on `127.0.0.1:18083`
+  (`CONTRACT_PORT`) against a real Postgres and Kafka (`DATABASE_URL` and
+  `KAFKA_BROKERS` are required; CI provides `postgres:16` and
+  `confluent-local` service containers, locally `docker compose up -d --wait
+  postgres kafka`), waits for `/readyz`, then runs
   `st run apis/openapi.yaml --max-examples 100 --workers 4`
   (`CONTRACT_MAX_EXAMPLES` overrides the example count).
 - **Excluded operations:** `defineStandard` (the cross-field rule

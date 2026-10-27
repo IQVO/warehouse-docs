@@ -59,9 +59,9 @@ capacity, promises) is owned elsewhere.
   one genuinely new domain concept": advertise
   `min(physicalAvailable, throughputFeasible)` rather than raw stock.
   That is why it is plotted highest. It is still computed from other
-  contexts' facts and is **not yet submitted outward**
-  (`RecomputeCapabilityOffers` never calls `SubmitAvailability`), so it
-  stays below the Core line.
+  contexts' facts and is submitted outward only by a separate worker in live mode
+  (`FeedInventory`, ADR 0027 part 2; `RecomputeCapabilityOffers` itself calls no
+  gateway), so it stays below the Core line.
 
 **Model complexity is low to moderate (x ≈ 0.30–0.40).**
 
@@ -88,7 +88,7 @@ capacity, promises) is owned elsewhere.
 | Part | Evolution stage | Why |
 | --- | --- | --- |
 | ACL and acknowledgement protocol | **Custom-built** | Translation (`ProductTranslation`), the hold/answer sequence and the 24h clock are specific to this fleet. The pattern itself is well known. |
-| `CapabilityOffer` | **Genesis → Custom** | New to this fleet (ADR 0001 §8). It is opt-in (`CAPABILITY_OFFER_ENABLED`), not yet published outward, and single-site (`SITE_ID`). |
+| `CapabilityOffer` | **Genesis → Custom** | New to this fleet (ADR 0001 §8). It is always on (`CAPABILITY_OFFER_ENABLED` is only a boot guard, ADR 0025), not yet published outward, and single-site (`SITE_ID`). |
 | The counterpart's API | **Product** | The network's protocol is a given that this context conforms to. `retail-network` stands in for it (ADR 0009). |
 | Plumbing (outbox, CloudEvents, breaker, MCP) | **Commodity** | Fleet-wide standard building blocks, copied from sibling contexts. |
 

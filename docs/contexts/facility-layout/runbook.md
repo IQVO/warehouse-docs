@@ -70,16 +70,30 @@ Source: `cmd/facility/main.go`, `cmd/facility-projector/main.go`, `cmd/facility-
 
 ### Readiness: what `/readyz` waits for
 
-`/readyz` does **not** check Postgres or Kafka. In `facility` and
-`facility-reports` it is backed by `inboundhttp.Readiness`. In
-`facility-projector` it is backed by an `atomic.Bool`. It returns
-`200 {"status":"ready"}` from the moment the listener is up until
-SIGTERM, and then `503 {"status":"not_ready"}` (ADR-0020).
-Dependency checks happen **before** the listener starts: migrations and a
+`/readyz` is the drain gate **and** a dependency check (ADR-0020, ADR 0039):
+
+| Binary | `/readyz` returns 200 while |
+|---|---|
+| `facility` | the process is not draining, Postgres answers a ping and a Kafka broker answers a topic-less metadata request (`cmd/facility/main.go:23`) |
+| `facility-projector` (on `admin`) | not draining, Postgres (analytical database) pings and a Kafka broker answers (`newReadiness`) |
+| `facility-reports` | not draining and the analytical Postgres pings (`cmd/facility-reports/main.go:94-99`) |
+| `mcp` | serves `/healthz` only, no `/readyz` |
+
+After SIGTERM it answers `503 {"status":"not_ready"}`; while a dependency is
+down it answers `503` `application/problem+json` of type
+`dependency-unavailable` whose `detail` names the failing dependencies
+(`internal/adapters/inbound/http/readiness.go`). The verdict is cached for a
+short TTL, and topics are never checked (a broker with no topic is Ready).
+`warehouse-infra` `helm-values/facility-layout.yaml` carries no
+`readinessProbe` override on `develop` (the old `/healthz` override went away
+with #123), so the chart default applies and the pod is routed traffic only
+while `/readyz` is 200.
+
+Dependency checks also run **before** the listener starts: migrations and a
 pool ping each run under boot retry (5 attempts with 1s, 2s, 4s and 8s
 backoff, 15s of waiting in total). The process exits non-zero if they still
-fail. So "the pod never becomes Ready" almost always means "the process is
-crash-looping on boot". Read the logs, not the probe.
+fail. So "the pod never becomes Ready" is either a crash-looping boot or a
+dependency that `/readyz` names: read the logs and `curl /readyz`.
 
 The startup probe allows 60s (2s × 30) before liveness takes over, well past
 the boot retry budget: 15s of backoff (1+2+4+8) plus the duration of each of
@@ -104,7 +118,7 @@ HTTP. MCP drains HTTP with a 10s budget.
 
 | Schema | Files | Run by | DSN |
 |---|---|---|---|
-| OLTP | `migrations/0001_init` … `0010_outbox_trace_headers` (tables `sites`, `zones`, `aisles`, `location_types`, `placement_rules`, `location_slots`, `fixed_structures`, `cross_aisles`, `outbox_events`, `idempotency_keys`; `0005` drops the legacy `events` table; `0008` adds the additive `sites` columns `transfer_origin_enabled`, `transfer_destination_enabled`, `capability_revision` and `version`, ADR-0035; `0009` adds `sites.site_role` (default `UNSPECIFIED`, CHECK of the 16 values) and runs the ONE-TIME backfill that maps the seeded names `<CODE> - <Role words> (<city>)` to a role, ADR-0037; `0010` adds the nullable `outbox_events.headers` holding the writing transaction's W3C trace context, ADR-0038) | **both** `facility` and `mcp`, at every boot, before the pool opens | `MIGRATIONS_DATABASE_URL`, falling back to `DATABASE_URL` |
+| OLTP | `migrations/0001_init` … `0012_site_capability_heartbeat` (tables `sites`, `zones`, `aisles`, `location_types`, `placement_rules`, `location_slots`, `fixed_structures`, `cross_aisles`, `outbox_events`, `idempotency_keys`; `0005` drops the legacy `events` table; `0008` adds the additive `sites` columns `transfer_origin_enabled`, `transfer_destination_enabled`, `capability_revision` and `version`, ADR-0035; `0009` adds `sites.site_role` (default `UNSPECIFIED`, CHECK of the 16 values) and runs the ONE-TIME backfill that maps the seeded names `<CODE> - <Role words> (<city>)` to a role, ADR-0037; `0010` adds the nullable `outbox_events.headers` holding the writing transaction's W3C trace context, ADR-0038; `0011` adds the nullable `location_slots.handling_unit`, ADR-0040; `0012` adds the nullable `sites.capability_heartbeat_at`, ADR-0041) | **both** `facility` and `mcp`, at every boot, before the pool opens | `MIGRATIONS_DATABASE_URL`, falling back to `DATABASE_URL` |
 | Analytical | `migrations/analytics/0001_report` (tables `analytics_processed_events`, `analytics_consumed_events`, `catalog_growth_rollup`) | `facility-projector` only, at every boot | `ANALYTICS_DATABASE_URL` |
 
 Migrations use golang-migrate (`internal/adapters/outbound/postgres/migrate.go`).
@@ -122,7 +136,8 @@ A failing migration therefore shows up as a crash-looping pod (see
 ## Kafka
 
 There is one platform broker, reached in-cluster through
-`kafka.brokers` (chart default `kafka:9092`) or locally at `localhost:9092`.
+`kafka.brokers` (mandatory, no default; ADR 0039) or locally at `localhost:9092`
+(`docker compose up -d --wait`).
 Every message is a CloudEvents 1.0 event in **structured** content mode
 (ADR-0024, `internal/adapters/kafka/cloudevents`), with W3C trace context in
 the message headers. On the outbox path that context is the one stored with
@@ -142,7 +157,8 @@ every domain event the use cases raise. All writers use the `Hash` balancer
 
 ### Outbox relay (ADR-0018)
 
-The relay runs only when `DATABASE_URL` is set **and** `EVENT_PUBLISHER=kafka`.
+The relay always runs in `facility` (`DATABASE_URL` and `KAFKA_BROKERS` are
+mandatory, ADR 0039; there is no mode that turns it off).
 Each use case writes its aggregate and up to two `outbox_events` rows (one
 per topic) in a single transaction. A goroutine in `facility` then drains
 the table:
@@ -180,9 +196,9 @@ the table:
 4. Do not delete the row unless you accept that downstream contexts never
    receive that event.
 
-The chart's default is `config.eventPublisher: "log"`. With that default,
-**no outbox rows are written and nothing reaches Kafka**. Set
-`config.eventPublisher=kafka` and `kafka.enabled=true` together.
+The chart's `config.eventPublisher` is `kafka`; `log` is refused at render time
+and by the binary at boot (ADR 0039), so a deployment can no longer end up
+writing no outbox rows and publishing nothing.
 
 ### Analytics consumer and DLQ (ADR-0020, ADR-0030)
 
@@ -206,6 +222,30 @@ read model replays the full topic. Each message works like this:
   error `analytics consumer stopped` is logged. The process keeps serving
   `/healthz`, but it no longer consumes until the pod restarts.
 
+## Site capability heartbeat (ADR-0041)
+
+network-inventory-planning treats a site-capability fact older than 10
+minutes as stale, and `SiteCapabilityChanged` is raised only when a capability
+changes. So `facility` runs a heartbeat loop: at start and then every
+`interval/5` it re-publishes, through the outbox, the current capability of
+every **active** site with a **declared** capability (`capability_revision >
+0`) that was not heartbeated in the last `SITE_CAPABILITY_HEARTBEAT_INTERVAL`
+(default 5m, chart `config.siteCapabilityHeartbeatInterval`; `0s` disables).
+Each heartbeat is a `SiteCapabilityChanged` with a new CloudEvents `id`, a fresh
+`time` and `capability_revision` + 1; the values are the current ones.
+
+- Replicas all run it; `sites.capability_heartbeat_at` plus the site version
+  guard keep it to one heartbeat per site per interval. A lost race is not an
+  error: the site is simply skipped.
+- Logs: `site capability heartbeat` (`published`, `skipped`) when it published,
+  `site capability heartbeat failed` on error, `site capability heartbeat
+  disabled` once at boot when the interval is `0`.
+- A site NIP calls stale although the loop runs: check `SELECT code,
+  capability_revision, capability_heartbeat_at FROM sites WHERE
+  capability_revision > 0;` (a NULL or old `capability_heartbeat_at` on an
+  active site means the loop is not publishing) and the outbox relay backlog.
+  A decommissioned site is not heartbeated and ages out by design.
+
 ## Housekeeping sweeper (ADR-0026)
 
 The sweeper runs inside `facility` whenever Postgres is configured. It sweeps
@@ -223,10 +263,11 @@ on error. It never crashes the process.
 
 > **Chart wiring:** `templates/configmap.yaml` renders `HTTP_ADDR`,
 > `MIGRATIONS_PATH`, `EVENT_PUBLISHER`, `OUTBOX_RELAY_INTERVAL`,
-> `OUTBOX_MAX_ATTEMPTS`, `HOUSEKEEPING_INTERVAL`, `IDEMPOTENCY_KEY_TTL`, `OUTBOX_RETENTION` and (with
-> `kafka.enabled`) `KAFKA_BROKERS` from `config.*`, and the api Deployment
+> `OUTBOX_MAX_ATTEMPTS`, `HOUSEKEEPING_INTERVAL`, `IDEMPOTENCY_KEY_TTL`, `OUTBOX_RETENTION`,
+> `SITE_CAPABILITY_HEARTBEAT_INTERVAL` and
+> `KAFKA_BROKERS` (from `kafka.brokers`, mandatory) from `config.*`, and the api Deployment
 > mounts it with `envFrom` (gap fix D14, 2026-10-12). Changing
-> `config.outboxRelayInterval`, `config.outboxMaxAttempts` or the housekeeping values in `values.yaml`
+> `config.outboxRelayInterval`, `config.outboxMaxAttempts`, `config.siteCapabilityHeartbeatInterval` or the housekeeping values in `values.yaml`
 > takes effect on the next rollout (the `checksum/config` annotation rolls the
 > pods). Explicit `env`/`extraEnv` entries win over the ConfigMap for the same
 > key. The projector, reports and MCP Deployments do not mount it: they set
@@ -279,7 +320,7 @@ the numbers mean.
 | Replay a dead-lettered message | Inspect it on `warehouse.facility.analytics.dlq` (the body is byte-identical to the original; the headers say why it failed), fix the cause, then produce the same value and key back onto `warehouse.facility.analytics`. Idempotency on the CloudEvents id makes a double replay harmless. |
 | Rotate database credentials | Update the Secret keys `DATABASE_URL` and `MIGRATIONS_DATABASE_URL` (or the analytics Secret's `ANALYTICS_DATABASE_URL` and `ANALYTICS_READER_DATABASE_URL`), then `kubectl rollout restart` the affected Deployments. DSNs are only read at boot. |
 | Purge idempotency keys right away | Restart the api pod: the sweeper runs once at start. You can also run the sweeper's `DELETE` by hand. |
-| Enable a site for inter-warehouse transfers | `PUT /sites/{siteCode}/transfer-capability` with `{"transferOriginEnabled": true, "transferDestinationEnabled": true}` (either flag may be false). The response's `capabilityRevision` is the revision published in `SiteCapabilityChanged`; network-inventory-planning applies it once the outbox relay has sent it (ADR-0035). A repeat publishes nothing; a `409 concurrent-modification` means another change won the race: re-read and PUT again. Existing sites start capable of nothing at revision 0. |
+| Enable a site for inter-warehouse transfers | `PUT /sites/{siteCode}/transfer-capability` with `{"transferOriginEnabled": true, "transferDestinationEnabled": true}` (either flag may be false). The response's `capabilityRevision` is the revision published in `SiteCapabilityChanged`; network-inventory-planning applies it once the outbox relay has sent it (ADR-0035). A repeat publishes nothing (the periodic heartbeat, ADR-0041, keeps the fact fresh for consumers); a `409 concurrent-modification` means another change won the race: re-read and PUT again. Existing sites start capable of nothing at revision 0. |
 | Classify a site (set its network role) | `PUT /sites/{siteCode}/role` with `{"siteRole": "NON_SORTABLE_FC"}` (one of the 15 roles of `GET /site-roles/transfer-defaults`; `UNSPECIFIED` is rejected). Publishes `SiteRoleChanged`; a repeat publishes nothing. It does NOT change the transfer capability (ADR-0037). |
 | Apply the per-role transfer defaults | Read `GET /site-roles/transfer-defaults` (the one source of truth) and `GET /sites`; for every Active site whose `siteRole` has a row, `PUT /sites/{siteCode}/transfer-capability` with that row's flags. Sites still `UNSPECIFIED` have no default: classify them first. warehouse-infra's seed script does exactly this. |
 | Check the role backfill after migration `0009` | `SELECT site_role, count(*) FROM sites GROUP BY site_role ORDER BY 1;` Sites left `UNSPECIFIED` had a name outside the 15 role phrases (ADR-0037 lists them); classify them with `PUT /sites/{siteCode}/role`. |

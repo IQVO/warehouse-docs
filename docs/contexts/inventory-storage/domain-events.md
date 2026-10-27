@@ -44,7 +44,6 @@ table, Kafka) is a composition-root decision.
 | `DiscrepancyDetected` | Bin | A cycle count finds counted ≠ system | `binId`, `countedQty`, `systemQty` |
 | `StockRelocated` | Relocation | `RelocateStock` moves a quantity of one SKU between two bins of one site — from `POST /relocations` or, for a completed `RELOCATE` task, from `ApplyRelocationTask` ([ADR 0039](https://iqvo.github.io/inventory-storage/docs/adr/0039)), and for a completed `REPLENISH` task (reason `REPLENISHMENT`, `sourceRef` = the replenishment request id), from `ApplyReplenishTask` ([ADR 0041](https://iqvo.github.io/inventory-storage/docs/adr/0041)) | `relocationId`, `siteId`, `sku`, `fromBin`, `toBin`, `quantity`, `reason`, `sourceRef` |
 | `BinStockLevelChanged` | StockUnit ledger *(per bin and SKU)* | Any use case that moves a (bin, SKU) level, from the same transaction: stow, pick, relocate (source then destination), cycle-count shortfall, reserve, revoke / expiry ([ADR 0040](https://iqvo.github.io/inventory-storage/docs/adr/0040)) | `siteId`, `binId`, `sku`, `onHand`, `reserved` (absolute levels), `version` (per bin and SKU), `reason` |
-| `ProductClassified` | ProductClassification | Legacy since [ADR 0034](https://iqvo.github.io/inventory-storage/docs/adr/0034): raised by no write path; re-emitted only by the one-shot `republish-product-classifications` backfill | `sku`, `handlingTags`, `temperatureClass`, `dotHazardClass`; wire fields below |
 
 ## Which events flow where
 
@@ -61,29 +60,28 @@ flowchart LR
   CC --> E8["DiscrepancyDetected"]
   CC --> E9["ItemUnlocated"]
   EXP["lazy read"] --> E10["ReservationExpired"]
-  BF["republish-product-classifications<br/>(backfill, ADR 0034)"] --> E11["ProductClassified"]
   TCR["TaskCompleted (consumed)<br/>RELOCATE (ADR 0039)"] --> ART["ApplyRelocationTask"] --> RLS["RelocateStock"]
   TCP["TaskCompleted (consumed)<br/>REPLENISH (ADR 0041)"] --> APT["ApplyReplenishTask"] --> RLS
   RLS --> E12["StockRelocated"]
   LVL["every stock-moving use case<br/>(stow, pick, relocate, count, reserve, revoke)"] --> E13["BinStockLevelChanged"]
 
-  E4 & E5 & E11 & E12 & E13 --> KAF["warehouse.inventory.events<br/>integration topic"]
+  E4 & E5 & E12 & E13 --> KAF["warehouse.inventory.events<br/>integration topic"]
   E1 & E2 & E4 & E5 & E6 & E7 & E8 & E9 & E10 --> ANA["warehouse.inventory.analytics<br/>internal analytics topic"]
   E3 --> LOG["in-process only<br/>never leaves the service<br/>no consumer, decided 2026-10-06"]
 
   classDef wired fill:#0f766e,stroke:#134e4a,color:#fff;
   classDef local fill:#94a3b8,stroke:#475569,color:#0f172a;
-  class E4,E5,E11,E12,E13,KAF wired;
+  class E4,E5,E12,E13,KAF wired;
   class LOG local;
 ```
 
-**`StockReserved`, `ReservationRevoked` and the legacy `ProductClassified`
-are the integration events on the reservation and master-data paths** (plus
+**`StockReserved` and `ReservationRevoked` are the integration events on the
+reservation path** (plus
 the two transfer replies, [ADR 0030](https://iqvo.github.io/inventory-storage/docs/adr/0030), `StockRelocated` on
 the relocation path, [ADR 0039](https://iqvo.github.io/inventory-storage/docs/adr/0039), and `BinStockLevelChanged`,
-the per-bin absolute level feed, [ADR 0040](https://iqvo.github.io/inventory-storage/docs/adr/0040)); since
-[ADR 0034](https://iqvo.github.io/inventory-storage/docs/adr/0034) `ProductClassified` comes only from the one-shot
-backfill command, for product-master's legacy importer. The integration
+the per-bin absolute level feed, [ADR 0040](https://iqvo.github.io/inventory-storage/docs/adr/0040)). The legacy
+`ProductClassified` (ADR 0034, product-master ADR 0003) was removed at stage
+E (2026-10-17), together with its republish command. The integration
 publisher's `Encode` returns nothing for every other event — deliberate, not
 an oversight: those are the published integration contract. Nine of the
 thirteen events go to the internal analytics topic (`StockRelocated` and
@@ -99,7 +97,7 @@ Every published event, from the publishers' `Encode` methods
 (`internal/adapters/outbound/kafka/publisher.go`,
 `analytics_publisher.go`). All messages are CloudEvents 1.0 structured mode,
 `source=/warehouse/inventory-storage`, routed with the `Hash` balancer on the
-Kafka key (ADR 0021), and — with Postgres and `EVENT_PUBLISHER=kafka` —
+Kafka key (ADR 0021), and — always, since Postgres is the only runtime —
 enqueued in `outbox_events` by the producing use case's transaction and
 relayed by `cmd/inventory`.
 
@@ -113,15 +111,17 @@ relayed by `cmd/inventory`.
 | StockPicked | `com.warehouse.wms.inventory-storage.reservation.StockPicked` | `warehouse.inventory.analytics` | reservation id / reservation id | `sku`, `reservation_id`, `quantity` | `ConfirmPick` (REST, and per reservation from `ConfirmPicksForOrder`, ADR 0035) | `cmd/inventory-projector` |
 | StockReceived | `com.warehouse.wms.inventory-storage.stock.StockReceived` | `warehouse.inventory.analytics` | SKU / SKU | `sku`, `quantity` | `ReceiveStock` | `cmd/inventory-projector` |
 | ItemStowed | `com.warehouse.wms.inventory-storage.stock.ItemStowed` | `warehouse.inventory.analytics` | SKU / SKU | `sku`, `bin_id`, `quantity` | `StowStock` | `cmd/inventory-projector` |
+| ItemStowed | same `type` | `warehouse.inventory.events` | SKU / SKU | `sku`, `bin_id`, `quantity` (byte-identical to the analytics copy, [ADR 0043](https://iqvo.github.io/inventory-storage/docs/adr/0043)) | `StowStock` | returns-processing (closes its restock loop) |
 | ItemUnlocated | `com.warehouse.wms.inventory-storage.stock.ItemUnlocated` | `warehouse.inventory.analytics` | SKU / stock unit id | `sku`, `bin_id`, `stock_unit_id`, `quantity` | `RunCycleCount` | `cmd/inventory-projector` |
+| ItemUnlocated | same `type` | `warehouse.inventory.events` | SKU / stock unit id | `sku`, `bin_id`, `stock_unit_id`, `quantity` (byte-identical to the analytics copy, [ADR 0043](https://iqvo.github.io/inventory-storage/docs/adr/0043)) | `RunCycleCount` | exception-management (opens cases from short counts) |
 | CycleCountCompleted | `com.warehouse.wms.inventory-storage.bin.CycleCountCompleted` | `warehouse.inventory.analytics` | bin id / bin id | `bin_id`, `counted`, `system`, `discrepancy` | `RunCycleCount` | `cmd/inventory-projector` |
 | DiscrepancyDetected | `com.warehouse.wms.inventory-storage.bin.DiscrepancyDetected` | `warehouse.inventory.analytics` | bin id / bin id | `bin_id`, `counted`, `system` | `RunCycleCount` | `cmd/inventory-projector` |
+| DiscrepancyDetected | same `type` | `warehouse.inventory.events` | bin id / bin id | `bin_id`, `counted`, `system` (byte-identical to the analytics copy, [ADR 0043](https://iqvo.github.io/inventory-storage/docs/adr/0043)) | `RunCycleCount` | exception-management (opens cases from short counts) |
 | TransferReceiptStaged | `com.warehouse.wms.inventory-storage.stock.TransferReceiptStaged` | `warehouse.inventory.events` | transfer line id / transfer line id | `transfer_id`, `transfer_line_id`, `destination_site_id`, `sku`, `expected_quantity`, `received_quantity`, `variance` (signed, ADR 0033) | `StageTransferReceipt` | planning reconciliation (over/short is explicit, never absorbed) |
 | TransferStockStowed | `com.warehouse.wms.inventory-storage.stock.TransferStockStowed` | `warehouse.inventory.events` | transfer line id / transfer line id | `transfer_id`, `transfer_line_id`, `destination_site_id`, `sku`, `received_quantity`, `stowed_quantity`, `allocations[]` (ADR 0033) | `StowTransferStock` | the only event that raises destination usable; `wes-work-planning` may project it |
 | StockRelocated | `com.warehouse.wms.inventory-storage.stock.StockRelocated` | `warehouse.inventory.events` | relocation id / relocation id | `relocation_id`, `site_code`, `sku`, `from_bin`, `to_bin`, `quantity`, `reason` (`SLOTTING`/`CONSOLIDATION`/`MANUAL`/`REPLENISHMENT`), `source_ref` (always present, `""` when none), `occurred_at` ([ADR 0039](https://iqvo.github.io/inventory-storage/docs/adr/0039), `REPLENISHMENT` by [ADR 0041](https://iqvo.github.io/inventory-storage/docs/adr/0041)) | `RelocateStock` (`POST /relocations`, and `ApplyRelocationTask` on a RELOCATE `TaskCompleted`, and `ApplyReplenishTask` on a REPLENISH one) | slotting-optimization (slot-plan execution progress, its ADR 0010; must act only on `SLOTTING`), pick-face-replenishment (closes a request when `reason=REPLENISHMENT` and `source_ref` = the request id) |
 | BinStockLevelChanged | `com.warehouse.wms.inventory-storage.stock.BinStockLevelChanged` | `warehouse.inventory.events` | `<bin>:<sku>` / `<bin>:<sku>` | `site_code`, `bin`, `sku`, `on_hand`, `reserved` (absolute levels after the change), `version` (per bin and SKU, strictly increasing), `reason` (`STOW`/`PICK`/`RELOCATE`/`REPLENISHMENT`/`COUNT`/`RESERVE`/`REVOKE`/`UNLOCATED`), `occurred_at` ([ADR 0040](https://iqvo.github.io/inventory-storage/docs/adr/0040)) | every stock-moving use case, from its own transaction: `StowStock`, `StowTransferStock`, `ConfirmPick`/`ConfirmPicksForOrder`, `RelocateStock`, `RunCycleCount` (shortfall), `ReserveStock`, `AllocateTransferStock`, `RevokeReservation` and lazy expiry | pick-face-replenishment (forward-slot minimum detection) |
 | LocationRecorded | — (not published; **decided 2026-10-06: stays in-process**, no consumer) | — | — | — | `StowStock` | none |
-| ProductClassified | `com.warehouse.wms.inventory-storage.product.ProductClassified` | `warehouse.inventory.events` | SKU / SKU | `sku`, `handling_tags`, `temperature_class?`, `dot_hazard_class?` (full-state replacement) | `RepublishProductClassifications` (one-shot backfill via the outbox, [ADR 0034](https://iqvo.github.io/inventory-storage/docs/adr/0034)) | product-master's legacy importer |
 
 Consumed (not produced): `com.warehouse.wms.product-master.product.ProductClassified`
 on `warehouse.product-master.events` feeds the local classification copy via
@@ -132,7 +132,8 @@ on `warehouse.product-master.events` feeds the local classification copy via
 carries `line_no` ([ADR 0036](https://iqvo.github.io/inventory-storage/docs/adr/0036)), the order's on its last pick
 otherwise ([ADR 0035](https://iqvo.github.io/inventory-storage/docs/adr/0035)) — and, for `task_type=RELOCATE`,
 applies the move via `ApplyRelocationTask` → `RelocateStock`
-([ADR 0039](https://iqvo.github.io/inventory-storage/docs/adr/0039)) — and
+([ADR 0039](https://iqvo.github.io/inventory-storage/docs/adr/0039)), and for `task_type=REPLENISH` via
+`ApplyReplenishTask` ([ADR 0041](https://iqvo.github.io/inventory-storage/docs/adr/0041)) — and
 `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` on
 `warehouse.inbound-receiving.events` books a received `Good` line as staged
 stock via `BookInboundReceiptLine` → `ReceiveStock` (the same `StockReceived`
@@ -149,9 +150,10 @@ on the analytics topic.
 | --- | --- | --- | --- | --- |
 | ZoneRegistered | `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | `warehouse.facility.events` | `facilitycache.Consumer` (per-process group `inventory-storage-facility-location-cache-<host>-<pid>-<ns>`, FirstOffset replay) | caches zone `hazmat` + `temperatureClass` by `zoneId` |
 | LocationSlotRegistered | `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | `warehouse.facility.events` | same | maps `locationCode` → `zoneId` (derived from the code when absent) |
+| LocationSlotHandlingUnitDeclared | `com.warehouse.wms.facility-layout.locationslot.LocationSlotHandlingUnitDeclared` | `warehouse.facility.events` | same | sets the bin handling unit (`EACH`/`CASE`/`PALLET`) in the event-fed copy, last write wins per `locationCode` (ADR 0047); `LocationSlotRegistered` carries the same optional `handlingUnit` |
 | LocationSlotDecommissioned | `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | `warehouse.facility.events` | same | drops the slot, so it answers `Known=false` |
-| TaskCompleted | `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` | `warehouse.fulfillment.events` | `TaskCompletedConsumer` (fixed group `inventory-storage-confirm-pick`, FirstOffset, `TASK_COMPLETED_CONSUMER_MODE=kafka`, default off) | for `task_type=PICK` with `order_ref`: with the additive optional `line_no` ([ADR 0036](https://iqvo.github.io/inventory-storage/docs/adr/0036)) confirms exactly the ACTIVE reservation of (`order_ref`, `line_no`) (`StockPicked`), skipping CONFIRMED/REVOKED/EXPIRED (expired counted) and leaving the order's other lines ACTIVE; nothing is counted. Without `line_no`, or for reservations with no `line_no`, the ADR 0035 fallback counts the pick for the order (`order_pick_progress`, one PICK task per order line) and, only on the LAST pick (count reaches the ACTIVE + CONFIRMED reservations), confirms every ACTIVE one. Claim, counter (fallback only) and confirmations in one transaction; no `order_ref` or no reservations is a no-op; a `line_no` outside 1..2147483647 is dead-lettered ([ADR 0036](https://iqvo.github.io/inventory-storage/docs/adr/0036)). For `task_type=RELOCATE` ([ADR 0039](https://iqvo.github.io/inventory-storage/docs/adr/0039)): `ApplyRelocationTask` reads the additive `sku`, `from_bin`, `to_bin`, `quantity`, `relocation_ref`, claims the CloudEvents `id` (consumer `task-completed-relocate`) and runs `RelocateStock` in one transaction (`StockRelocated`); a completion that can never apply (missing field, unknown bin, other site, same bin, insufficient usable, destination full) is dead-lettered at once. For `task_type=REPLENISH` ([ADR 0041](https://iqvo.github.io/inventory-storage/docs/adr/0041)): `ApplyReplenishTask` reads the same additive fields plus the required `request_ref` (the replenishment request id), claims the `id` under consumer `task-completed-replenish` and runs `RelocateStock` with reason `REPLENISHMENT` and `source_ref` = `request_ref` in one transaction (`StockRelocated`, two `BinStockLevelChanged`); a missing `request_ref` is dead-lettered at once |
-| ReceiptLineReceived | `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` | `warehouse.inbound-receiving.events` | `InboundReceiptConsumer` (stable group from `INBOUND_RECEIPT_CONSUMER_GROUP`, unset = consumer off, FirstOffset) | for `condition=Good`: `BookInboundReceiptLine` claims the CloudEvents `id` (`processed_events`) and runs `ReceiveStock` in one transaction, so one `StockReceived` (analytics topic) per id, staged and not yet usable ([ADR 0037](https://iqvo.github.io/inventory-storage/docs/adr/0037)); `Damaged` is claimed, logged and counted, not booked; an empty `sku`, a non-positive `quantity` or an unknown `condition` is logged and committed past |
+| TaskCompleted | `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` | `warehouse.fulfillment.events` | `TaskCompletedConsumer` (stable group from the mandatory `TASK_COMPLETED_CONSUMER_GROUP`, chart default `inventory-storage-confirm-pick`, FirstOffset, always on) | for `task_type=PICK` with `order_ref`: with the additive optional `line_no` ([ADR 0036](https://iqvo.github.io/inventory-storage/docs/adr/0036)) confirms exactly the ACTIVE reservation of (`order_ref`, `line_no`) (`StockPicked`), skipping CONFIRMED/REVOKED/EXPIRED (expired counted) and leaving the order's other lines ACTIVE; nothing is counted. Without `line_no`, or for reservations with no `line_no`, the ADR 0035 fallback counts the pick for the order (`order_pick_progress`, one PICK task per order line) and, only on the LAST pick (count reaches the ACTIVE + CONFIRMED reservations), confirms every ACTIVE one. Claim, counter (fallback only) and confirmations in one transaction; no `order_ref` or no reservations is a no-op; a `line_no` outside 1..2147483647 is dead-lettered ([ADR 0036](https://iqvo.github.io/inventory-storage/docs/adr/0036)). For `task_type=RELOCATE` ([ADR 0039](https://iqvo.github.io/inventory-storage/docs/adr/0039)): `ApplyRelocationTask` reads the additive `sku`, `from_bin`, `to_bin`, `quantity`, `relocation_ref`, claims the CloudEvents `id` (consumer `task-completed-relocate`) and runs `RelocateStock` in one transaction (`StockRelocated`); a completion that can never apply (missing field, unknown bin, other site, same bin, insufficient usable, destination full) is dead-lettered at once. For `task_type=REPLENISH` ([ADR 0041](https://iqvo.github.io/inventory-storage/docs/adr/0041)): `ApplyReplenishTask` reads the same additive fields plus the required `request_ref` (the replenishment request id), claims the `id` under consumer `task-completed-replenish` and runs `RelocateStock` with reason `REPLENISHMENT` and `source_ref` = `request_ref` in one transaction (`StockRelocated`, two `BinStockLevelChanged`); a missing `request_ref` is dead-lettered at once |
+| ReceiptLineReceived | `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` | `warehouse.inbound-receiving.events` | `InboundReceiptConsumer` (stable group from the mandatory `INBOUND_RECEIPT_CONSUMER_GROUP`, always on, FirstOffset) | for `condition=Good`: `BookInboundReceiptLine` claims the CloudEvents `id` (`processed_events`) and runs `ReceiveStock` in one transaction, so one `StockReceived` (analytics topic) per id, staged and not yet usable ([ADR 0037](https://iqvo.github.io/inventory-storage/docs/adr/0037)); `Damaged` is claimed, logged and counted, not booked; an empty `sku`, a non-positive `quantity` or an unknown `condition` is logged and committed past |
 | all nine analytics types above | `com.warehouse.wms.inventory-storage.*` | `warehouse.inventory.analytics` | `cmd/inventory-projector` (group `inventory-analytics`, FirstOffset) | upserts `flow_accuracy_rollup`, dedupes on the CloudEvents `id`; a `ProductClassified` on the same topic would be acknowledged and ignored (none is published there since ADR 0034) |
 
 Any other `type` on `warehouse.facility.events` is ignored; a message that

@@ -13,14 +13,10 @@ This page is a copy of [`docs/ddd/sequence-diagrams.md`](https://github.com/IQVO
 
 UML sequence diagrams for every command use case, derived from the use-case
 function bodies in `internal/application/usecases/`. `UoW` is
-`ports.UnitOfWork`, which is `postgres.UnitOfWork` when `DATABASE_URL` is
-set. Without Postgres, `atomically` calls the function directly and there
-is no transaction. `Publisher` is the wired `ports.EventPublisher`:
-
-- the outbox publisher, which writes `outbox_events` rows for both topics
-  inside the transaction;
-- the direct Kafka fan-out, when there is no database;
-- the log publisher, when `EVENT_PUBLISHER` is unset.
+`ports.UnitOfWork`, which is `postgres.UnitOfWork` (ADR 0025: Postgres is the only runtime;
+unit tests substitute a fake). `Publisher` is the wired
+`ports.EventPublisher`, the outbox publisher, which writes `outbox_events`
+rows for both topics inside the transaction.
 
 There is no idempotency-key middleware on this context's own routes and no
 optimistic-concurrency
@@ -142,7 +138,7 @@ sequenceDiagram
 
 Source: `internal/application/usecases/reconcile_submitted_orders.go`,
 `cmd/netfulfil/main.go` (`runReconcile`),
-`internal/adapters/outbound/network/gateway.go` (`StubGateway.SubmissionStatus`).
+`internal/adapters/outbound/retailnetwork/stub.go` (`StubGateway.SubmissionStatus`).
 
 Omitted: release and cancel run only when a `localOrderId` is linked, which
 is always the case on this path. The stub reconciles any acknowledged
@@ -304,8 +300,8 @@ Source: `internal/application/usecases/recompute_capability_offers.go`,
 `internal/domain/capabilityoffer/capability_offer.go`,
 `cmd/netfulfil/main.go` (`wireCapabilityOffer`, `runRecompute`).
 
-Omitted: there is no UoW and no event. The whole use case is wired only
-with `CAPABILITY_OFFER_ENABLED=true`, after both caches pass `WaitReady`.
+Omitted: there is no UoW and no event. The whole use case is always wired
+at boot, after both caches pass `WaitReady`.
 When `NextCutoff` reports no schedule, the capacity loop is skipped and
 `known=false`.
 
@@ -354,7 +350,6 @@ Source: `internal/adapters/outbound/postgres/outbox_relay.go`,
 `outbox_publisher.go`, `internal/adapters/inbound/kafka/analytics_consumer.go`,
 `internal/adapters/outbound/analyticsstore/`.
 
-Omitted: the relay runs only with both `DATABASE_URL` and
-`EVENT_PUBLISHER=kafka`. Phase retries (up to 3, with exponential backoff)
+Omitted: the relay, which is always on. Phase retries (up to 3, with exponential backoff)
 precede a DLQ on infrastructure errors. `cmd/netfulfil-reports` reads
 `acknowledgement_rollup` over a read-only pool.

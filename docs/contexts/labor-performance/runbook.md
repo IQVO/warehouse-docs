@@ -131,8 +131,8 @@ Tables created by the migrations:
 
 | Database | Table | Purpose |
 | --- | --- | --- |
-| OLTP | `labor_standards` | Append-only standard history. `travel_component_seconds` was added in 0004. `version` and a unique partial index allowing one open standard per `task_type` came in 0006 ([ADR 0022](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0022-optimistic-concurrency-one-open-standard.md)). |
-| OLTP | `task_performances` | One scored completion per CloudEvents `id` (`event_id` primary key). |
+| OLTP | `labor_standards` | Append-only standard history. `travel_component_seconds` was added in 0004. `version` and a unique partial index allowing one open standard per `task_type` came in 0006 ([ADR 0022](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0022-optimistic-concurrency-one-open-standard.md)). 0007 added `handling_unit`, `team_lift_threshold_g` and `team_lift_expected_seconds` and widened that index to `(task_type, handling_unit)` ([ADR 0035](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0035-handling-unit-standards-and-team-lift.md)). |
+| OLTP | `task_performances` | One scored completion per CloudEvents `id` (`event_id` primary key). `handling_unit` and `team_lift` came in 0007. |
 | OLTP | `processed_events` | Consumer idempotency set: CloudEvents ids already applied. |
 | OLTP | `idle_periods` | Derived between-task idle gaps (`capped` flag, [ADR 0014](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0014-labor-utilization-idleness.md)). |
 | OLTP | `outbox_events` | Transactional outbox rows (`published_at`, `attempts`, `last_error`). |
@@ -215,11 +215,10 @@ CloudEvents `id`, so a resend carries the same id and consumers dedupe
 on it. Outbox lag is exported as
 `labor_performance.outbox.lag_seconds` (see [Observability](/contexts/labor-performance/observability)).
 
-With `EVENT_PUBLISHER=kafka` but **no** database, the publishers write
-straight to Kafka and a broker error fails the request. With
-`EVENT_PUBLISHER=log`, which is the chart default, nothing reaches Kafka
-at all. That means neither the projector nor `workforce-management`
-receives events.
+There is no direct-to-Kafka path and no log-only mode
+([ADR 0034](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0034-postgres-and-kafka-are-the-only-runtime.md)): every
+event goes through the outbox, so a broker outage delays events (and turns
+`/readyz` into 503) but never loses or fails an accepted write.
 
 ### Housekeeping sweeper
 

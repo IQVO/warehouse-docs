@@ -91,14 +91,14 @@ flowchart LR
     subgraph OUT["Outbound - whom it calls or notifies"]
         direction TB
         out0["inventory-storage"]:::ctx
-        out1["warehouse-planning<br/>(planned, not built)"]:::none
+        out1["warehouse-planning"]:::ctx
         out2["no consumer today"]:::none
         out3["own inbound-projector"]:::self
     end
     BC ==>|"evt - Kafka<br/>warehouse.inbound-receiving.events<br/>ReceiptLineReceived"| out0
-    BC ==>|"evt - Kafka<br/>warehouse.inbound-receiving.events<br/>DockAppointmentBooked"| out1
-    BC ==>|"evt - Kafka<br/>warehouse.inbound-receiving.events<br/>ASNRegistered, ASNCancelled,<br/>DockAppointmentCheckedIn,<br/>DockAppointmentCancelled,<br/>DockAppointmentCompleted,<br/>ReceiptOpened, ReceiptClosed"| out2
-    BC ==>|"evt - Kafka<br/>warehouse.inbound-receiving.analytics<br/>all nine events (analytics<br/>copy)"| out3
+    BC ==>|"evt - Kafka<br/>warehouse.inbound-receiving.events<br/>DockAppointmentBooked,<br/>DockAppointmentCancelled"| out1
+    BC ==>|"evt - Kafka<br/>warehouse.inbound-receiving.events<br/>ASNRegistered, ASNCancelled,<br/>DockAppointmentCheckedIn,<br/>DockAppointmentCompleted,<br/>ReceiptOpened, ReceiptClosed"| out2
+    BC ==>|"evt - Kafka<br/>warehouse.inbound-receiving.analytics<br/>all eleven events (analytics<br/>copy)"| out3
     linkStyle 0 stroke:#e8590c,stroke-width:2.5px
     linkStyle 1 stroke:#e8590c,stroke-width:2.5px
     linkStyle 2 stroke:#e8590c,stroke-width:2.5px
@@ -177,10 +177,10 @@ outbox and the relay in `cmd/api`.
 | --- | --- | --- | --- | --- |
 | `inventory-storage` | `ReceiptLineReceived` | Event | Kafka `warehouse.inbound-receiving.events`, `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` | This context upstream, OHS + Published Language; inventory-storage books `condition=Good` only (its ADR 0037) |
 | none today | `ASNRegistered`, `ASNCancelled` | Event | same topic, `...asn.*` | OHS + PL |
-| `warehouse-planning` (**planned, not built**) | `DockAppointmentBooked` | Event | same topic, `...dockappointment.DockAppointmentBooked` | OHS + PL; would be inbound-labor demand, needs an inbound process path in its CapacityPlan first |
-| none today | `DockAppointmentCheckedIn`, `DockAppointmentCancelled`, `DockAppointmentCompleted` | Event | same topic, `...dockappointment.*` | OHS + PL |
+| `warehouse-planning` | `DockAppointmentBooked`, `DockAppointmentCancelled` | Event | same topic, `...dockappointment.DockAppointmentBooked` and `...DockAppointmentCancelled` | OHS + PL; consumed as inbound-labour demand by warehouse-planning's `InboundDemandConsumer` (its ADR 0017), group `warehouse-planning-inbound-demand` |
+| none today | `DockAppointmentCheckedIn`, `DockAppointmentCompleted` | Event | same topic, `...dockappointment.*` | OHS + PL |
 | none today | `ReceiptOpened`, `ReceiptClosed` | Event | same topic, `...receipt.*` | OHS + PL |
-| this context's own `inbound-projector` | all nine events, same `type` and `id` | Event | Kafka `warehouse.inbound-receiving.analytics` (DLQ `.dlq`), `dataschema=urn:warehouse:inbound-receiving:analytics:<EventName>:v1` | internal data stream, not an integration contract (ADR 0006) |
+| this context's own `inbound-projector` | all eleven events, same `type` and `id` | Event | Kafka `warehouse.inbound-receiving.analytics` (DLQ `.dlq`), `dataschema=urn:warehouse:inbound-receiving:analytics:<EventName>:v1` | internal data stream, not an integration contract (ADR 0006) |
 
 ## Ubiquitous Language
 
@@ -206,8 +206,8 @@ Over / Damaged), **Walk-in**, **Snapshot**, **Local copy**, **Version**.
    recorded and counted in the discrepancies but not booked, and stow stays an
    RF action there (ADR 0003).
 8. Every difference is reported; there is no tolerance policy in v1 (ADR 0002).
-9. SKU and door checks read local copies and fail open until the cluster flips
-   `PRODUCT_MODE` / `DOCK_DOOR_MODE` to `kafka` (ADR 0003).
+9. SKU and door checks always read the local copies (`PRODUCT_MODE` /
+   `DOCK_DOOR_MODE` are `kafka`, the only mode; ADR 0003, ADR 0011).
 
 ## Assumptions
 
@@ -242,7 +242,10 @@ Over / Damaged), **Walk-in**, **Snapshot**, **Local copy**, **Version**.
 
 ## Open Questions
 
-- When does `warehouse-planning` get an inbound process path so
-  `DockAppointmentBooked` can become labor demand (planned, its own ADR there)?
+- None about the `warehouse-planning` edge: it is built (warehouse-planning ADR
+  0017). The one limit that remains on the Kafka side is the kafka-go behaviour
+  of [ADR 0011](https://iqvo.github.io/inbound-receiving/docs/adr/0011-postgres-and-kafka-are-the-only-runtime): a group
+  consumer started before its topic exists does not pick the topic up later (see
+  [Troubleshooting](/contexts/inbound-receiving/troubleshooting)).
 - A tolerance policy for over-receipt, and a quarantine flow for Damaged units,
   are later, separately decided changes (ADR 0002, ADR 0001).

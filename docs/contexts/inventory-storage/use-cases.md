@@ -20,14 +20,14 @@ Dependencies are plain struct fields, wired once per binary in
 
 | # | Use case | HTTP | MCP tool | Emits |
 | --- | --- | --- | --- | --- |
-| 1 | `ReceiveStock` | `POST /stock/receive` | — | `StockReceived` |
+| 1 | `ReceiveStock` | `POST /stock/receive` (deprecated in the spec; the production trigger is `ReceiptLineReceived`, #13) | — | `StockReceived` |
 | 2 | `StowStock` | `POST /stock/stow` | — | `ItemStowed`, `LocationRecorded` |
 | 3 | `ReserveStock` | `POST /reservations` | — | `StockReserved` (+ `ReservationExpired` via lazy expiry) |
 | 4 | `RevokeReservation` | `DELETE /reservations/{id}` | `revoke_reservation` | `ReservationRevoked` (+ `ReservationExpired` via lazy expiry) |
-| 5 | `ConfirmPick` | `POST /reservations/{id}/confirm-pick` | — | `StockPicked` (+ `ReservationExpired` via lazy expiry) |
+| 5 | `ConfirmPick` | `POST /reservations/{id}/confirm-pick` (deprecated in the spec; the production trigger is `TaskCompleted`, #12) | — | `StockPicked` (+ `ReservationExpired` via lazy expiry) |
 | 6 | `GetUsable` | `GET /inventory/{sku}/usable` | `check_availability`, resource `inventory://{sku}/usable` | — (read model) |
 | 7 | `RunCycleCount` | `POST /bins/{binId}/cycle-count` | — | `CycleCountCompleted`, `DiscrepancyDetected`, `ItemUnlocated` |
-| 8 | `ApplyProductClassification` | — (Kafka: `warehouse.product-master.events`, ADR 0034; `PUT /products/{sku}/classification` is 410) | — | — (local copy; `ProductClassified` only from the backfill command) |
+| 8 | `ApplyProductClassification` | — (Kafka: `warehouse.product-master.events`, ADR 0034) | — | — (local copy) |
 | 9 | `GetReservationsByDemandRef` | `GET /reservations?demandRef=` | — | `ReservationExpired` via lazy expiry only |
 | 10 | `RegisterBin` | `PUT /bins/{binId}` | — | — (local topology master data, ADR 0025) |
 | 11 | `GetBin` | `GET /bins/{binId}` | — | — (read) |
@@ -41,14 +41,12 @@ Dependencies are plain struct fields, wired once per binary in
 | 19 | `GetRelocation` | `GET /relocations/{id}` | `get_relocation` | — (read) |
 | 20 | `ApplyReplenishTask` | — (Kafka: `warehouse.fulfillment.events` `TaskCompleted` with `task_type=REPLENISH`, ADR 0041) | — | `StockRelocated` (reason `REPLENISHMENT`, `source_ref` = `request_ref`) and two `BinStockLevelChanged` through `RelocateStock` |
 
-(`RepublishProductClassifications`, the one-shot `republish-product-classifications`
-backfill subcommand, is covered under #8 rather than tabulated: it is a maintenance
-command, not an operation trigger.)
+(`RepublishProductClassifications`, the one-shot backfill, was removed at stage E
+(2026-10-17); see #8.)
 
-`GET /products/{sku}/classification` (deprecated, ADR 0034) has no use case
-of its own: the HTTP adapter reads `ProductClassificationRepo` (the local
-copy) directly for that single lookup.
-The MCP `get_bin_occupancy` tool likewise reads `StockRepo.FindByBin`
+`PUT` and `GET /products/{sku}/classification` no longer exist (stage E,
+ADR 0034), so no use case or adapter reads the local copy for REST.
+The MCP `get_bin_occupancy` tool reads `StockRepo.FindByBin`
 directly, without a use case.
 
 ## 1. ReceiveStock(sku, qty)
@@ -129,7 +127,8 @@ before persisting. Which adapter answers is chosen by
 `LOCATION_LOOKUP_MODE`: `kafka` reads a local, in-memory cache fed by
 facility-layout's `warehouse.facility.events` (ADR 0013 — no network call on
 the stow path); `http` makes the original synchronous call to facility-layout
-(ADR 0009); `permissive` (the default) always answers `Known=false`.
+(ADR 0009). The mode is mandatory: the former `permissive` default (always
+`Known=false`) was removed by [ADR 0042](https://iqvo.github.io/inventory-storage/docs/adr/0042).
 
 - A `Hazmat` SKU stowed into a bin whose zone is not hazmat-rated is rejected
   with `ErrHazmatZoneRequired` (409).
@@ -146,8 +145,9 @@ the stow path); `http` makes the original synchronous call to facility-layout
   never blocked by lookup unavailability.
 - **Nil-safe by construction:** `Classifications`/`LocationLookup` are
   optional struct fields. A `StowStock` built without them (every
-  pre-existing test in this package, and the default `permissive` deploy
-  mode) behaves exactly as before this feature existed.
+  pre-existing unit test in this package; no deployed binary does, since
+  `LOCATION_LOOKUP_MODE` is mandatory) behaves exactly as before this feature
+  existed.
 
 **Same-bin DOT segregation check (ADR 0010):** AFTER the placement check
 above passes, and only when `Classifications` is wired, `StowStock` checks
@@ -300,7 +300,7 @@ cannot lose the same stock twice.
 
 product-master owns product classification since
 [ADR 0034](https://iqvo.github.io/inventory-storage/docs/adr/0034); `ClassifyProduct` is removed and
-`PUT /products/{sku}/classification` answers `410 classification-moved`.
+`PUT /products/{sku}/classification` is gone with it (stage E, 2026-10-17).
 `ApplyProductClassification` is the use case behind the
 `warehouse.product-master.events` consumer: it keeps this service's local
 copy of a SKU's `ProductClassification`, the copy `StowStock` reads.
@@ -319,18 +319,16 @@ the aggregate constructor `product.New`, as before) or carries no id or a
 version below 1 — `ErrMalformedProductClassification`, which the consumer
 logs and commits past; a database error is transient and retried.
 
-`RepublishProductClassifications` (stage B backfill, the
-`republish-product-classifications` subcommand) re-emits every stored row as
-the legacy `ProductClassified` through the outbox, in batches.
+`RepublishProductClassifications` and the `republish-product-classifications`
+subcommand (the one-shot backfill of the legacy `ProductClassified`) were
+removed at stage E (2026-10-17); no use case or `cmd/` subcommand remains.
 
 `StowStock` (#2 above) is the consumer of this master data at stow time.
 
-**Publishes** nothing on the normal path. Only `RepublishProductClassifications`
-puts the legacy `ProductClassified` into the outbox, for
-`warehouse.inventory.events` (subject and key = SKU; a full-state
-replacement); the per-write publication of [ADR 0031](https://iqvo.github.io/inventory-storage/docs/adr/0031) ended
-with [ADR 0034](https://iqvo.github.io/inventory-storage/docs/adr/0034), and siblings read product-master's
-`ProductClassified` instead of this service.
+**Publishes** nothing: the per-write publication of
+[ADR 0031](https://iqvo.github.io/inventory-storage/docs/adr/0031) ended with [ADR 0034](https://iqvo.github.io/inventory-storage/docs/adr/0034), the backfill
+went with stage E, and siblings read product-master's `ProductClassified`
+instead of this service.
 
 ## 9. GetReservationsByDemandRef(demandRef)
 
@@ -682,9 +680,11 @@ status codes. See [ADR 0005](https://iqvo.github.io/inventory-storage/docs/adr/0
 
 **State change and events commit together.** Every writing use case brackets
 its `Save`(s) and `Publish`(es) in `ports.UnitOfWork` via the `atomically`
-helper (ADR 0017). With Postgres and `EVENT_PUBLISHER=kafka`, `Publish`
-inserts `outbox_events` rows in that same transaction; a relay delivers them
-later. A nil `UnitOfWork` (in-memory mode) simply runs the function.
+helper (ADR 0017). In every binary `Publish`
+inserts `outbox_events` rows in that same transaction (Postgres is the only
+runtime, [ADR 0042](https://iqvo.github.io/inventory-storage/docs/adr/0042)); a relay delivers them
+later. A nil `UnitOfWork` exists only in unit tests, where it simply runs the
+function.
 
 **Writes are version-guarded.** `StockRepo`, `LocationRepo` and
 `ReservationRepo` `Save` only when the row's `version` still matches what was

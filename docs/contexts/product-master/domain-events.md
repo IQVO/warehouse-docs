@@ -11,7 +11,7 @@ This page is a copy of [`docs/docs/ddd/domain-events.md`](https://github.com/IQV
 :::
 
 
-Every event this context publishes or consumes. All are CloudEvents 1.0 in
+Every event this context publishes. All are CloudEvents 1.0 in
 **structured** content mode (`internal/adapters/kafka/cloudevents`: the whole
 event is the JSON message value, Kafka header
 `content-type: application/cloudevents+json; charset=UTF-8`). Payload fields
@@ -34,20 +34,34 @@ balancer), `time` = domain occurred-at (UTC),
 
 | Full CloudEvents type | Topic | Producer use case | Payload (`data`) | Known consumers |
 | --- | --- | --- | --- | --- |
-| `com.warehouse.wms.product-master.product.ProductRegistered` | `warehouse.product-master.events` | `RegisterProduct` (new SKU), `ImportLegacyClassification` (unknown SKU) | `sku`, `description`, `version` (1) | none |
+| `com.warehouse.wms.product-master.product.ProductRegistered` | `warehouse.product-master.events` | `RegisterProduct` (new SKU) | `sku`, `description`, `version` (1) | `inbound-receiving` (`known_skus` copy, `PRODUCT_CONSUMER_GROUP`) |
 | `com.warehouse.wms.product-master.product.ProductDescriptionChanged` | `warehouse.product-master.events` | `RegisterProduct` (existing SKU, different description) | `sku`, `description`, `version` | none |
-| `com.warehouse.wms.product-master.product.ProductClassified` | `warehouse.product-master.events` | `ClassifyProduct`, `ImportLegacyClassification` | `sku`, `handling_tags[]`, `temperature_class` (omitted when unset), `dot_hazard_class` (omitted when unset), `classification_source`, `version` | `inventory-storage` (`PRODUCT_MASTER_CONSUMER_GROUP`), `order-management`, `wes-work-planning`, `fulfillment-execution` (each `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`) |
-| `com.warehouse.wms.product-master.product.ProductDimensionsDeclared` | `warehouse.product-master.events` | `DeclareDimensions` | full physical profile: `sku`, `declared`, `measured`, `effective` (each omitted when absent), `effective_source`, `discrepancy`, `version` | none (ADR 0002 names later uses) |
-| `com.warehouse.wms.product-master.product.ProductMeasured` | `warehouse.product-master.events` | `RecordMeasurement` | the same full physical profile | none (ADR 0002 names later uses) |
+| `com.warehouse.wms.product-master.product.ProductClassified` | `warehouse.product-master.events` | `ClassifyProduct` | `sku`, `handling_tags[]`, `temperature_class` (omitted when unset), `dot_hazard_class` (omitted when unset), `classification_source`, `version` | `inventory-storage` (`PRODUCT_MASTER_CONSUMER_GROUP`), `order-management`, `wes-work-planning`, `fulfillment-execution` (each `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`), `slotting-optimization` (`PRODUCT_CONSUMER_GROUP`) |
+| `com.warehouse.wms.product-master.product.ProductDimensionsDeclared` | `warehouse.product-master.events` | `DeclareDimensions` | full physical profile: `sku`, `declared`, `measured`, `effective` (each omitted when absent), `effective_source`, `discrepancy`, `version` | `slotting-optimization` (`PRODUCT_CONSUMER_GROUP`); the other uses ADR 0002 names are not built |
+| `com.warehouse.wms.product-master.product.ProductMeasured` | `warehouse.product-master.events` | `RecordMeasurement` | the same full physical profile | `slotting-optimization` (`PRODUCT_CONSUMER_GROUP`) |
+| `com.warehouse.wms.product-master.product.ProductPackLevelDeclared` | `warehouse.product-master.events` | `DeclarePackLevel` | the full level: `sku`, `level`, `gtin`, `child_gtin`?, `qty_of_child`?, `units_per_pack`, `dims`?, `is_orderable`, `is_despatch_unit`, `effective_from`, `version` | none yet (ADR 0011 specifies inbound-receiving, inventory-storage, slotting-optimization, pick-face-replenishment, fulfillment-execution, wes-work-planning, process-path-management, labor-performance and network-fulfillment; each builds its own projection) |
+| `com.warehouse.wms.product-master.product.ProductPackLevelRetired` | `warehouse.product-master.events` | `RetirePackLevel`, `DeclarePackLevel` (a new GTIN at an active level, reason `superseded`) | `sku`, `level`, `gtin`, `effective_to`, `reason`, `version` | the same list |
+| `com.warehouse.wms.product-master.product.ProductPackLevelMeasured` | `warehouse.product-master.events` | `RecordPackLevelMeasurement` | `sku`, `level`, `gtin`, `dims`, `measured_at`, `device_id`?, `version` | the same list |
+
+The pack level events use the snake_case of the others; every `gtin` is the
+14-digit zero-left-padded string, `level` is `EACH | INNER | CASE | PALLET`,
+`dims` is `{length_mm, width_mm, height_mm, weight_g}` and `units_per_pack` is the
+direct factor to eaches. A new GTIN at an active level raises Retired (`superseded`)
+and then Declared, one `version` apart. A consumer must keep retired levels: an
+in-flight ASN may still name the old GTIN.
 
 `declared` and `effective` are
 `{length_mm, width_mm, height_mm, weight_g, volume_mm3}` (integers); `measured`
 adds `measured_at` (RFC 3339, UTC) and
 `device_id` (omitted when empty). `handling_tags` is in the stable order
 Hazmat, Fragile, TemperatureSensitive, Oversized, HighValue. The first four
-`ProductClassified` field names are identical to inventory-storage's legacy v1
-payload, on purpose, so consumers migrating from it keep their field mapping
-(ADR 0004).
+`ProductClassified` field names were kept identical to inventory-storage's
+former v1 payload, on purpose, so consumers that migrated from it kept their
+field mapping (ADR 0004); that type was retired at stage E and nothing
+publishes it any more. `classification_source` is `native` for every
+classification written since stage E; `legacy-import` appears only for a SKU
+whose stored classification the ADR 0003 importer wrote and nobody has
+re-classified since.
 
 **Ordering and replay.** Events of one SKU share a partition, so they arrive
 in order; the outbox relay stops a pass at the first failure so a later event
@@ -57,12 +71,9 @@ change: a consumer applies a message only when its `version` is greater than
 the stored one, which makes redelivery and replay harmless. A change that
 alters nothing raises no event.
 
-Event order for a legacy import of an unknown SKU: `ProductRegistered`
-(version 1) then `ProductClassified` (version 2), in one transaction.
-
 ### Analytics copy
 
-Every event above is ALSO written, in the same outbox transaction and under
+Every unit event above (not the three pack level events) is ALSO written, in the same outbox transaction and under
 the same CloudEvents `id`, to `warehouse.product-master.analytics`
 (dataschema `urn:warehouse:product-master:analytics:<EventName>:v1`, same
 payload), consumed only by this service's `product-projector` for the master
@@ -74,18 +85,16 @@ No "unclassify" event exists.
 
 ## Consumed
 
-| Full CloudEvents type | Topic | Producer | Fields used | Effect | Consumer, group env, DLQ |
-| --- | --- | --- | --- | --- | --- |
-| `com.warehouse.wms.inventory-storage.product.ProductClassified` | `warehouse.inventory.events` | `inventory-storage` (since its ADR 0034 only the one-shot backfill command emits it) | `sku`, `handling_tags`, `temperature_class`, `dot_hazard_class`; CloudEvents `id` | `ImportLegacyClassification`: register an unknown SKU, set the classification with source `legacy-import` unless the current one is `native` | `LegacyImporter`, `LEGACY_IMPORT_CONSUMER_GROUP` (unset = off), no DLQ: deterministic failures are skipped, transient ones retried in place |
-
-The consumer decodes with `cloudevents.Decode`, dispatches on the full `type`,
-ignores every other type on the topic, and dedupes on the CloudEvents `id` in
-`processed_events` inside the same unit of work as the effect. It is removed at
-ADR 0003 stage E.
+None from another context. The ADR 0003 legacy importer, which consumed
+`com.warehouse.wms.inventory-storage.product.ProductClassified` from
+`warehouse.inventory.events`, was removed at stage E (2026-10-17) together
+with `LEGACY_IMPORT_CONSUMER_GROUP`, and inventory-storage no longer publishes
+that type. The only consumer in this repository is `cmd/product-projector`,
+which reads this context's own `warehouse.product-master.analytics` topic
+(see [Runtime](https://iqvo.github.io/product-master/docs/overview/runtime)).
 
 Source: `internal/domain/product/events.go`,
 `internal/adapters/outbound/kafka/encoder.go`,
-`internal/adapters/inbound/kafka/legacy_importer.go`, `kafka.go`,
-`internal/application/usecases/import_legacy_classification.go`,
+`internal/adapters/inbound/kafka/kafka.go`,
 `cmd/api/main.go`, `apis/asyncapi.yaml`; the consumers' code on their
 `develop` branches (see [Downstream consumers](https://iqvo.github.io/product-master/docs/ecosystem/downstream-consumers)).
