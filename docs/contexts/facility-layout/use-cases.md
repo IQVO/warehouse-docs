@@ -18,10 +18,11 @@ scheduled use cases: facility-layout consumes no topic in its OLTP path. The
 only background work (outbox relay, housekeeping sweeper, analytics
 projection) lives in adapters, not in use cases.
 
-Writes run inside `atomically(ctx, UnitOfWork, …)`. With Postgres plus
-Kafka, each write saves the aggregate and enqueues its event(s) into
-`outbox_events` in one transaction (ADR-0018). Without a unit of work
-(in-memory mode) the two steps run back to back. Every event below is
+Writes run inside `atomically(ctx, UnitOfWork, …)`. Each write saves the
+aggregate and enqueues its event(s) into `outbox_events` in one transaction
+(ADR-0018). The `UnitOfWork` field is nil only in unit tests on in-memory test
+doubles, where the two steps run back to back; no binary builds a use case that
+way (Postgres and Kafka are the only runtime, ADR 0039). Every event below is
 published to **both** `warehouse.facility.events` and
 `warehouse.facility.analytics` with the CloudEvents type
 `com.warehouse.wms.facility-layout.<entity>.<EventName>` (ADR-0024).
@@ -59,6 +60,12 @@ The site aggregate owns the revision: the first change publishes revision 1
 and every later real change adds exactly one. The `sites.version` guard makes
 two concurrent changes of one site serialise, so two published snapshots
 never share a revision. Consumers keep the highest `capability_revision`.
+A periodic heartbeat ([ADR-0041](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0041-site-capability-heartbeat.md),
+use case `PublishSiteCapabilityHeartbeats`, every
+`SITE_CAPABILITY_HEARTBEAT_INTERVAL`, default 5m) re-publishes the current
+values of every active site with a declared capability with a fresh `time`
+and `capability_revision` + 1, so a consumer's freshness window holds while
+nothing changes; a `PUT` of the value a site already holds is still a no-op.
 The event is keyed and subjected by the site code and travels through the
 outbox like every other event; the analytics projector ignores it.
 

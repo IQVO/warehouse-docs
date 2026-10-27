@@ -1,1 +1,0 @@
-{"parameters":[{"name":"pathId","in":"path","required":true,"schema":{"type":"string","minLength":1},"example":"PICK"}]}

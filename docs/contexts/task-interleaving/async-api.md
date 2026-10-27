@@ -14,22 +14,24 @@ machine-generated reference is at the bottom. For per-event payloads and the
 producing use cases, see
 [Domain Events](/contexts/task-interleaving/domain-events).
 
-:::caution[Nothing of this runs in the reference cluster yet]
-`warehouse-infra` `develop` has no entry for this context, so no instance
-publishes or consumes any topic below in the reference deployment. Both consumed
-sides are built and match their producers; the published `InterleavingHintIssued`
-has **no consumer**: `fulfillment-execution` does not read it. The tables state
-what the code does and what each producer or consumer does today.
+:::info[Wired in warehouse-infra develop]
+`warehouse-infra` `develop` registers this context (`terraform/apps.yaml`,
+`helm-values/task-interleaving.yaml` with both consumer groups and the
+analytics projector). Both consumed sides are built and match their
+producers, and `fulfillment-execution` consumes the published
+`InterleavingHintIssued` (its ADR 0051, `TASK_INTERLEAVING_MODE=kafka` in
+`warehouse-infra`). The kind cluster was not checked for this page. The tables
+state what the code does.
 :::
 
 ## Topics
 
 | Topic | Direction | Notes |
 | --- | --- | --- |
-| `warehouse.task-interleaving.events` | **Published** | Only `InterleavingHintIssued`, from the `StationTrip` aggregate, written by the transactional outbox relay. Key = the station id. No consumer exists in any repository checked: `fulfillment-execution` is the intended one (not built). |
-| `warehouse.task-interleaving.analytics` | **Published** | `InterleavingHintIssued` again (same `type`, same CloudEvents `id`, dataschema `...:analytics:<EventName>:v1`), the hint outcomes `InterleavingHintConsumed` and `InterleavingHintExpired` (key = station id), and `InterleavingPolicyDeclared` (key = site id). No reader exists yet. |
-| `warehouse.fulfillment.events` | Consumed | Only `TaskAvailable`, `TaskClaimed` and `TaskCompleted` (key = task id). Started only when `FULFILLMENT_MODE=kafka`, group from `FULFILLMENT_CONSUMER_GROUP`. |
-| `warehouse.facility.events` | Consumed | Only `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` and `LocationGeometryUpdated`. Started only when `LAYOUT_MODE=kafka`, group from `LAYOUT_CONSUMER_GROUP`. |
+| `warehouse.task-interleaving.events` | **Published** | Only `InterleavingHintIssued`, from the `StationTrip` aggregate, written by the transactional outbox relay. Key = the station id. Consumed by `fulfillment-execution` (its ADR 0051) as an advisory `claimNext` tie-break. |
+| `warehouse.task-interleaving.analytics` | **Published** | `InterleavingHintIssued` again (same `type`, same CloudEvents `id`, dataschema `...:analytics:<EventName>:v1`), the hint outcomes `InterleavingHintConsumed` and `InterleavingHintExpired` (key = station id), and `InterleavingPolicyDeclared` (key = site id). Read only by this context's own `ti-projector` (ADR 0008). |
+| `warehouse.fulfillment.events` | Consumed | Only `TaskAvailable`, `TaskClaimed` and `TaskCompleted` (key = task id). `FULFILLMENT_MODE` must be `kafka` (ADR 0006), group from the required `FULFILLMENT_CONSUMER_GROUP`. |
+| `warehouse.facility.events` | Consumed | Only `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` and `LocationGeometryUpdated`. `LAYOUT_MODE` must be `kafka` (ADR 0006), group from the required `LAYOUT_CONSUMER_GROUP`. |
 | `<consumed topic>.dlq` | Published (dead letters) | One per consumed topic, written after a transient failure exhausts its retries, or at once for a payload of a handled type that can never be applied (see below). |
 
 ## The envelope
@@ -106,23 +108,19 @@ event rows commit in one Postgres transaction, and the relay (default every
 Kafka writer waits for all in-sync replicas (acks=all) and hashes on the key. A
 row that fails `OUTBOX_MAX_ATTEMPTS` times (default 20; `0` is unlimited) is
 excluded from future claims until it is re-armed by hand. Delivery is
-at-least-once with the same `id` on a retry, so consumers dedupe on it. The
-relay runs only when `DATABASE_URL` and `KAFKA_BROKERS` are both set; in memory
-mode nothing is published.
+at-least-once with the same `id` on a retry, so consumers dedupe on it. `DATABASE_URL` and `KAFKA_BROKERS` are required at boot (ADR 0006), so the relay
+always runs.
 
 ## Who consumes these events
 
-**Nobody does today.** The intended consumer of `InterleavingHintIssued` is
-`fulfillment-execution`, which would store it locally and use it only as a
+`fulfillment-execution` consumes `InterleavingHintIssued` (its ADR 0051,
+`TASK_INTERLEAVING_MODE=kafka` with its own consumer group, both set in
+`warehouse-infra` `develop`). It stores the hint locally and uses it only as a
 tie-break inside one priority band, never across a CPT or priority boundary,
-ignoring it once `expires_at` has passed and failing open when it is absent or
-unknown (consumer change P3, owned by that context). Its `develop` has no code
-that reads the topic or the type, no hint table and no tie-break in
-`claimNext`, and its ADR 0049 and ADR 0050 list consuming the hint as out of
-scope. `InterleavingHintConsumed`, `InterleavingHintExpired`,
-`InterleavingPolicyDeclared` and the analytics copy of the hint have no
-consumer either (this context's ADR 0004: "a later phase"). This is the
-fleet's edge K47 (absent-planned); see the
+and ignores it once `expires_at` has passed. `InterleavingHintConsumed`,
+`InterleavingHintExpired`, `InterleavingPolicyDeclared` and the analytics copy
+of the hint are read only by this context's own projector. This is the
+fleet's edge K47 (live); see the
 [context map](/contexts/task-interleaving/context-map).
 
 ## Consuming: local copies
@@ -130,8 +128,8 @@ fleet's edge K47 (absent-planned); see the
 Both consumers dispatch on the full `type` and ignore every other type on their
 topic. The CloudEvents `id` claim (`processed_events`) and the effect run in one
 transaction, and the offset is committed only afterwards, so a redelivery is a
-no-op (`duplicate`). Each mode defaults to `permissive` (no consumer started;
-the copies are whatever the database already holds).
+no-op (`duplicate`). Both consumers always run: a mode other than `kafka` or a
+missing group variable is a boot error (ADR 0006).
 
 | Type | Effect | Producer today |
 | --- | --- | --- |

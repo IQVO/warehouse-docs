@@ -36,9 +36,9 @@ balancer on the Kafka key.
 | --- | --- | --- | --- | --- |
 | `com.warehouse.wms.inbound-receiving.asn.ASNRegistered` | `asn_number` / `asn_number` | `RegisterAsn` | `asn_number`, `supplier_ref`, `expected_arrival?`, `lines[]` = `{line_no, sku, expected_qty}` | none |
 | `com.warehouse.wms.inbound-receiving.asn.ASNCancelled` | `asn_number` / `asn_number` | `CancelAsn` | `asn_number`, `reason?` | none |
-| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked` | `appointment_id` / `appointment_id` | `BookAppointment` | `appointment_id`, `door_code`, `carrier`, `window_start`, `window_end`, `asn_numbers[]` | none (`warehouse-planning` is **planned**) |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked` | `appointment_id` / `appointment_id` | `BookAppointment` | `appointment_id`, `door_code`, `carrier`, `window_start`, `window_end`, `asn_numbers[]` | `warehouse-planning` (`INBOUND_DEMAND_CONSUMER_GROUP` there, `warehouse-planning-inbound-demand` in warehouse-infra; ADR 0017) |
 | `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCheckedIn` | `appointment_id` / `appointment_id` | `CheckInAppointment` | `appointment_id`, `door_code`, `checked_in_at` | none |
-| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled` | `appointment_id` / `appointment_id` | `CancelAppointment` | `appointment_id`, `door_code`, `reason?` | none |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled` | `appointment_id` / `appointment_id` | `CancelAppointment` | `appointment_id`, `door_code`, `reason?` | `warehouse-planning` (same consumer; `door_code` and `reason` are ignored there) |
 | `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCompleted` | `appointment_id` / `appointment_id` | `CloseReceipt` (receipt opened from an appointment) | `appointment_id`, `door_code`, `completed_at` | none |
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptOpened` | `receipt_id` / `asn_number` | `OpenReceipt` | `receipt_id`, `asn_number`, `appointment_id?`, `door_code?`, `opened_at` | none |
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` | `receipt_id` / `asn_number` | `ReceiveLine` | `receipt_id`, `asn_number`, `line_no`, `sku`, `quantity`, `condition` (`Good` or `Damaged`), `received_at` | `inventory-storage` (`INBOUND_RECEIPT_CONSUMER_GROUP`, books `Good` only) |
@@ -63,8 +63,8 @@ Example (the handover message):
 
 | Full CloudEvents type | Topic | Consumer | Group env | Effect |
 | --- | --- | --- | --- | --- |
-| `com.warehouse.wms.product-master.product.ProductRegistered` | `warehouse.product-master.events` | `ProductConsumer` → `ApplyProductRegistered` | `PRODUCT_CONSUMER_GROUP` (only when `PRODUCT_MODE=kafka`) | upsert the SKU into `known_skus` (uses `data.sku` only) |
-| `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | `warehouse.facility.events` | `DockDoorConsumer` → `ApplyLocationSlotRegistered` | `DOCK_DOOR_CONSUMER_GROUP` (only when `DOCK_DOOR_MODE=kafka`) | upsert into `dock_doors` when `role=Dock` and `dockFlow` is `Inbound` or `Both`; ignore otherwise |
+| `com.warehouse.wms.product-master.product.ProductRegistered` | `warehouse.product-master.events` | `ProductConsumer` → `ApplyProductRegistered` | `PRODUCT_CONSUMER_GROUP` (required) | upsert the SKU into `known_skus` (uses `data.sku` only) |
+| `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | `warehouse.facility.events` | `DockDoorConsumer` → `ApplyLocationSlotRegistered` | `DOCK_DOOR_CONSUMER_GROUP` (required) | upsert into `dock_doors` when `role=Dock` and `dockFlow` is `Inbound` or `Both`; ignore otherwise |
 | `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | `warehouse.facility.events` | `DockDoorConsumer` → `ApplyLocationSlotDecommissioned` | `DOCK_DOOR_CONSUMER_GROUP` | delete the row for `locationCode`; a code that is not a door is a no-op |
 
 Facility-layout payloads are camelCase (`locationCode`, `role`, `dockFlow`);

@@ -15,11 +15,9 @@ This page is a copy of [`docs/docs/ddd/sequence-diagrams.md`](https://github.com
 UML sequence diagrams of every command use case, following the code
 paths in `internal/application/usecases` and the adapters around them.
 Part of the [DDD artifact pack](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/ddd/ddd-artifacts.md). The diagrams show
-the production wiring: `DATABASE_URL` set (Postgres repositories,
-`postgres.UnitOfWork`, `postgres.OutboxPublisher`) and
-`EVENT_PUBLISHER=kafka`. Without `DATABASE_URL` the in-memory
-repositories are used, there is no transaction and no idempotency
-middleware, and events go straight to Kafka (or to the log publisher).
+the production wiring, which is the only one: Postgres repositories,
+`postgres.UnitOfWork` and `postgres.OutboxPublisher`, with the relay always
+on ([ADR 0037](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0037-postgres-and-kafka-are-the-only-runtime.md)).
 Read queries (`GetPath`, `ListPaths`, `GetCPTSchedule`, the MCP tools)
 are single repository reads and are not drawn.
 

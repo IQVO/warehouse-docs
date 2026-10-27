@@ -26,26 +26,32 @@ measured and effective values, with a discrepancy flag,
 [ADR 0002](https://github.com/IQVO/product-master/blob/develop/docs/adr/0002-physical-profile-declared-vs-measured.md))
 and a `version` carried on every published event.
 
-:::info[What is live, what is migration-only, and what has no consumer]
+:::info[What is live, what is retired, and what has no consumer]
 Per this context's own [Context Map](/contexts/product-master/context-map),
 checked against the reference deployment (`warehouse-infra` `develop`):
 
-**Live:** `inventory-storage` (its ADR 0034), `order-management`
-(ADR 0036), `wes-work-planning` (ADR 0035) and `fulfillment-execution`
-(ADR 0039) each keep a local copy of `ProductClassified` from
-`warehouse.product-master.events`, version-guarded, one row per SKU. For
-`order-management`, `wes-work-planning` and `fulfillment-execution` that
-replaces their former `GET /products/{sku}/classification` calls to
-`inventory-storage`; all three now reject `PRODUCT_CLASSIFICATION_MODE=http`
-at boot, and `inventory-storage` answers its old classification write with
-`410 Gone`
+**Live (wired in `warehouse-infra` `develop`):** six contexts keep a
+version-guarded local copy of `ProductClassified` from
+`warehouse.product-master.events`, one row per SKU: `inventory-storage` (its
+ADR 0034), `order-management` (ADR 0036), `wes-work-planning` (ADR 0035),
+`fulfillment-execution` (ADR 0039), `slotting-optimization` and
+`returns-processing`. For `order-management`, `wes-work-planning` and
+`fulfillment-execution` that replaced their former
+`GET /products/{sku}/classification` calls to `inventory-storage`
 ([ADR 0003](https://github.com/IQVO/product-master/blob/develop/docs/adr/0003-migration-from-inventory-storage.md),
-stages C and D). Events leave through a transactional outbox. The reference
-deployment runs `product-master` and switches every consumer on:
-`productMasterConsumerGroup` in `helm-values/inventory-storage.yaml`,
-`productClassification.mode: kafka` in `helm-values/order-management.yaml`,
-and `PRODUCT_CLASSIFICATION_MODE=kafka` in `terraform/locals.tf`
-`sync_edge_env` for `wes-work-planning` and `fulfillment-execution`.
+stages C and D); `inventory-storage` has since removed its own classification
+surface (stage E, its PR #218). The GS1 packaging hierarchy
+([ADR 0011](https://github.com/IQVO/product-master/blob/develop/docs/adr/0011-packaging-hierarchy-with-gs1-gtin.md):
+pack levels with a GTIN, `ProductPackLevelDeclared`, `ProductPackLevelMeasured`,
+`ProductPackLevelRetired`, `GET /gtins/{gtin}`) feeds seven local pack views:
+`inbound-receiving`, `inventory-storage`, `pick-face-replenishment`,
+`slotting-optimization`, `wes-work-planning`, `fulfillment-execution` and
+`network-inventory-planning` (`ProductPackLevelMeasured` is read only by
+`wes-work-planning` and `slotting-optimization`). `inbound-receiving` reads
+`ProductRegistered`, and `slotting-optimization` reads
+`ProductDimensionsDeclared` and `ProductMeasured`. Events leave through a
+transactional outbox. Every consumer group is set in `warehouse-infra`
+`develop` (`helm-values/<consumer>.yaml` or the consumer chart's default).
 
 **Read surfaces (no service-to-service reads):** REST behind Kong at
 `/api/product-master`, a read-only MCP server (`cmd/mcp`, four tools,
@@ -56,16 +62,11 @@ Master tile in `warehouse-console`), and the master data quality report of the
 analytics read side (`cmd/product-projector` and `cmd/product-reports`,
 [ADR 0006](https://github.com/IQVO/product-master/blob/develop/docs/adr/0006-analytics-read-side.md)).
 
-**Migration only:** a legacy importer reads `inventory-storage`'s own
-`ProductClassified` (`LEGACY_IMPORT_CONSUMER_GROUP`, set in the reference
-deployment) until the decommission stage (stage E) removes it.
-`inventory-storage` now emits that legacy type only from its one-shot
-`republish-product-classifications` backfill, which was run once on
-2026-10-07.
+**Retired:** the legacy importer of `inventory-storage`'s own
+`ProductClassified` (stage E of ADR 0003): neither the importer nor the
+legacy type exists on either `develop` (fleet edge K21, retired).
 
-**Published contract, no consumer yet:** `ProductRegistered`,
-`ProductDescriptionChanged`, `ProductDimensionsDeclared` and
-`ProductMeasured`.
+**Published contract, no consumer yet:** `ProductDescriptionChanged`.
 :::
 
 ## This context's pages
@@ -86,13 +87,12 @@ deployment) until the decommission stage (stage E) removes it.
   business decisions and open questions.
 - [Context Map](/contexts/product-master/context-map)
   ([ddd-crew context-mapping](https://github.com/ddd-crew/context-mapping)):
-  every relationship with its pattern, technology and status, including the
-  migration-only legacy edge.
+  every relationship with its pattern, technology and status.
 - [Aggregate Design Canvas](/contexts/product-master/aggregate-design-canvas)
   ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
   the `Product` aggregate.
-- [Domain Events](/contexts/product-master/domain-events): the five
-  `product.*` events it publishes and the legacy event it consumes.
+- [Domain Events](/contexts/product-master/domain-events): the eight
+  `product.*` events it publishes and who consumes each.
 - [Domain Message Flow](/contexts/product-master/domain-message-flow)
   ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):
   key scenarios as commands, events and queries.
@@ -104,7 +104,7 @@ deployment) until the decommission stage (stage E) removes it.
 - [Entity Relationship](/contexts/product-master/entity-relationship):
   the persisted tables.
 - [Sequence Diagrams](/contexts/product-master/sequence-diagrams): register,
-  classify, declare and measure, the legacy import and the outbox relay.
+  classify, declare and measure, and the outbox relay.
 - [Use Cases](/contexts/product-master/use-cases): the application use
   cases and the endpoint or consumer that drives each.
 - [Async API](/contexts/product-master/async-api): the Kafka integration

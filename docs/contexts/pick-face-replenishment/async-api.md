@@ -2,7 +2,7 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: Kafka integration for pick-face-replenishment — two published topics (three request events plus an analytics-only policy event), three consumed sibling topics feeding local copies and closing requests, dead-lettering and the CloudEvents envelope.
+description: Kafka integration for pick-face-replenishment — two published topics (three request events plus an analytics-only policy event), four consumed sibling topics feeding local copies and closing requests, dead-lettering and the CloudEvents envelope.
 ---
 
 # Async API
@@ -14,25 +14,25 @@ The machine-generated reference is at the bottom. For per-event payloads and
 the producing use cases, see
 [Domain Events](/contexts/pick-face-replenishment/domain-events).
 
-:::caution[Nothing of this runs in the reference cluster yet]
-`warehouse-infra` `develop` has no entry for this context, so no instance
-publishes or consumes any topic below in the reference deployment. Every
-consumed type now has a producer on `develop` (`inventory-storage` publishes
-`BinStockLevelChanged` and records a completed `REPLENISH` task as a
-`StockRelocated` with the reason `REPLENISHMENT`), but nothing consumes
-`ReplenishmentRequested`. The tables state what the code does and what each
-producer or consumer publishes today.
+:::info[Wired in warehouse-infra develop]
+`warehouse-infra` `develop` registers this context (`terraform/apps.yaml`,
+`helm-values/pick-face-replenishment.yaml` with all four consumer groups and
+the analytics projector), and `wes-work-planning`'s request consumer is
+switched on there (`REPLENISHMENT_MODE=kafka`). Every consumed type has a
+producer on `develop`. The kind cluster was not checked for this page. The
+tables state what the code does.
 :::
 
 ## Topics
 
 | Topic | Direction | Notes |
 | --- | --- | --- |
-| `warehouse.pick-face-replenishment.events` | **Published** | `ReplenishmentRequested`, `ReplenishmentCompleted` and `ReplenishmentCancelled` from the `ReplenishmentRequest` aggregate, written by the transactional outbox relay. Key = the request id. `wes-work-planning` consumes `ReplenishmentRequested` and `ReplenishmentCancelled` (its ADR 0042, opt-in and off in the reference deployment); `ReplenishmentCompleted` has no consumer. |
-| `warehouse.pick-face-replenishment.analytics` | **Published** | The same three request events again (same `type`, same CloudEvents `id`, dataschema `...:analytics:<EventName>:v1`) plus the analytics-only `ReplenishmentPolicyDeclared` (key and subject `<site_id>/<sku>`). No reader exists yet. |
+| `warehouse.pick-face-replenishment.events` | **Published** | `ReplenishmentRequested`, `ReplenishmentCompleted` and `ReplenishmentCancelled` from the `ReplenishmentRequest` aggregate, written by the transactional outbox relay. Key = the request id. `wes-work-planning` consumes `ReplenishmentRequested` and `ReplenishmentCancelled` (its ADR 0042, opt-in, switched on in `warehouse-infra` `develop`); `ReplenishmentCompleted` is read and ignored there and has no other consumer. |
+| `warehouse.pick-face-replenishment.analytics` | **Published** | The same three request events again (same `type`, same CloudEvents `id`, dataschema `...:analytics:<EventName>:v1`) plus the analytics-only `ReplenishmentPolicyDeclared` (key and subject `<site_id>/<sku>`). Read only by this context's own `pfr-projector` (ADR 0008). |
 | `warehouse.inventory.events` | Consumed | Only `BinStockLevelChanged` (key `<bin>:<sku>`) and `StockRelocated` (key `relocation_id`). Always on (`INVENTORY_MODE` defaults to `kafka`; `permissive` is a boot error), group from the required `INVENTORY_CONSUMER_GROUP`. |
 | `warehouse.slotting-optimization.events` | Consumed | Only `SlotPlanApproved`. Always on (`SLOTTING_MODE` defaults to `kafka`), group from the required `SLOTTING_CONSUMER_GROUP`. |
 | `warehouse.facility.events` | Consumed | Only `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned`. Always on (`LAYOUT_MODE` defaults to `kafka`), group from the required `LAYOUT_CONSUMER_GROUP`. |
+| `warehouse.product-master.events` | Consumed | Only `ProductPackLevelDeclared` and `ProductPackLevelRetired` (ADR 0009: a local pack view, so a replenishment quantity rounds to whole cases). Always on, group from the required `PACK_LEVEL_CONSUMER_GROUP`. |
 | `<consumed topic>.dlq` | Published (dead letters) | One per consumed topic, written after a transient failure exhausts its retries, or at once for an undecodable payload of a handled type (see below). |
 
 ## The envelope
@@ -136,16 +136,15 @@ The rest of the chain is built on `develop`: `fulfillment-execution` creates a
 `REPLENISHMENT` and `source_ref` = the request id (its ADR 0041), closing the loop
 with a `StockRelocated`. `ReplenishmentCompleted` is read and ignored by
 `wes-work-planning`, and it and the analytics topic have no other consumer in any
-repository checked. This is the fleet's edge K44 (**wired-but-unused**): the
-consumer is opt-in (`REPLENISHMENT_MODE=kafka`; the default `permissive` consumes
-nothing), `warehouse-infra` does not set it, and this service is not deployed
-there. A request whose `REPLENISH` path is missing from the catalogue is
+repository checked. This is the fleet's edge K44 (**live**): the consumer is
+opt-in (`REPLENISHMENT_MODE=kafka`; the default `permissive` consumes nothing),
+and `warehouse-infra` `develop` sets it and registers this service. A request whose `REPLENISH` path is missing from the catalogue is
 dead-lettered until the path exists. See the
 [context map](/contexts/pick-face-replenishment/context-map).
 
 ## Consuming: local copies and closing requests
 
-All three consumers dispatch on the full `type` and ignore every other type on
+All four consumers dispatch on the full `type` and ignore every other type on
 their topic. The CloudEvents `id` claim (`processed_events`) and the effect run
 in one transaction, and the offset is committed only afterwards, so a
 redelivery is a no-op (`duplicate`). The shipped binary has no `permissive` mode any more (its ADR 0006): each `*_MODE` defaults to `kafka` and `permissive` is rejected at boot.

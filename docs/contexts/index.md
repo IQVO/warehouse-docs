@@ -88,20 +88,23 @@ pyramid, `make` targets and CI jobs).
 | [warehouse-ops-agent](/contexts/warehouse-ops-agent) | Supporting | `wes` | Operator tooling, no aggregate |
 | [network-fulfillment](/contexts/network-fulfillment) | Supporting | `wes` | External network edge (anti-corruption layer) |
 | [warehouse-planning](/contexts/warehouse-planning) | Core | `wes` | WES — capacity planning |
-| [product-master](/contexts/product-master) | Supporting | `wms` | WMS — product master data (classification and physical profile; four live `ProductClassified` local-copy consumers) |
+| [product-master](/contexts/product-master) | Supporting | `wms` | WMS — product master data (classification, physical profile and GS1 pack levels; six `ProductClassified` local-copy consumers and seven pack-level consumers, all wired in `warehouse-infra` `develop`) |
 | [inbound-receiving](/contexts/inbound-receiving) | Supporting | `wms` | WMS — everything before the first stow: ASN, dock appointment, receipt, discrepancies; hands good units to `inventory-storage` as events. Deployed |
-| [slotting-optimization](/contexts/slotting-optimization) | Supporting | `wms` | WMS — which SKUs deserve a forward pick slot: velocity-ranked slot plans a human approves. Registered in `warehouse-infra` `develop` (database, Kong route, ArgoCD application, Dockerfile and chart in its repository); it runs once that is applied |
+| [slotting-optimization](/contexts/slotting-optimization) | Supporting | `wms` | WMS — which SKUs deserve a forward pick slot: velocity-ranked slot plans a human approves. Registered in `warehouse-infra` `develop` (`terraform/apps.yaml`: database, analytics, web remote; Kong route, MCP) |
 | [network-inventory-planning](/contexts/network-inventory-planning) | Core | `wes` | WES — inter-warehouse transfer planning (advisory proposals, operator-approved transfer saga) |
 | [pick-face-replenishment](/contexts/pick-face-replenishment) | Supporting | `wms` | WMS — keeps forward pick faces stocked from reserve bins (min/max policy, fullest reserve bin). Built and deployed in the reference cluster since 2026-10-20/21 (API, MCP, analytics and web remote). The whole `REPLENISH` chain is built (`inventory-storage`, `fulfillment-execution`, `wes-work-planning` ADR 0042, `process-path-management` ADR 0036); the path is seeded by an operator step, and no request has been traced through it yet |
 | [task-interleaving](/contexts/task-interleaving) | Supporting | `wes` | WES — after each completed task, an advisory, expiring hint of nearby open tasks. Built and deployed in the reference cluster since 2026-10-20/21 (API, MCP, analytics and web remote); `fulfillment-execution` consumes the hint as a tie-break (its ADR 0051) |
-| [returns-processing](/contexts/returns-processing) | Supporting | `wms` | WMS — the reverse flow of goods: RMA authorization against a shipped line, return receipt and grading, the disposition decision, and the staged handover of restockable units to `inventory-storage`. Built on `develop` 2026-10-20/21 (service PR #2, packaging and read-only MCP PR #3), not deployed; both output edges are built (`inventory-storage` ADR 0044, `exception-management`) |
-| [exception-management](/contexts/exception-management) | Supporting | `wes` | WES — the Problem Solve lifecycle: every case opened by a fact another context published (six producers live or promoted), with dedup, triage, assignment, an SLA clock and declarative auto-resolve. Built on `develop` 2026-10-20/21 (service PR #2, packaging and read-only MCP PR #3), not deployed; workforce-management and network-inventory-planning fact sources are planned, not built |
+| [returns-processing](/contexts/returns-processing) | Supporting | `wms` | WMS — the reverse flow of goods: RMA authorization against a shipped line, return receipt and grading, the disposition decision, and the staged handover of restockable units to `inventory-storage`. Built on `develop` (API, outbox, three consumers, read-only MCP, analytics read side, web remote) and registered in `warehouse-infra` `develop`; both output edges are built and wired (`inventory-storage` ADR 0044, `exception-management`). Its repository ships part of the synced page set (see below) |
+| [exception-management](/contexts/exception-management) | Supporting | `wes` | WES — the Problem Solve lifecycle: every case opened by a fact another context published (six producer contexts plus the `OrderRepromised` correlation feed), with dedup, triage, assignment, an SLA clock and declarative auto-resolve. Built on `develop` and registered in `warehouse-infra` `develop` (API, MCP, analytics read side, web remote); the workforce-management and network-inventory-planning fact sources are planned, not built |
 
-These two newest contexts do not yet ship their repositories' ddd-crew
-artifact pack, so their directories hold the seven pages written for this
-site (business context, ubiquitous language, bounded-context and
-aggregate-design canvases, domain events, the async narrative and this
-index) instead of the synced set, and no Operations group.
+`exception-management` now ships the full synced set like every other
+context. `returns-processing` ships only part of it: its directory holds the
+synced ubiquitous language, bounded-context and aggregate-design canvases,
+domain events and four of the five Operations pages (no Testing page), plus
+the business context, the async narrative and this index written for this
+site. Its repository has no core domain chart, context map, domain message
+flow, EventStorming, class, entity-relationship, sequence-diagram or use-case
+page on `develop` yet.
 
 See [Strategic Design](/strategic-design) for how these nineteen contexts relate to
 each other at the fleet level, and the

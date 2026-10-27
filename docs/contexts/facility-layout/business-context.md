@@ -120,15 +120,16 @@ extracted into one service, and everyone else references it.
 
 This service has **no outbound dependency** on any other warehouse-systems
 service — it calls no one and consumes no other context's events — and never
-will. Everything it publishes is its **Published Language**: twelve
+will. Everything it publishes is its **Published Language**: fifteen
 past-tense domain events plus a stable REST surface. The other contexts are
 downstream **Conformists** to whatever shape this service publishes — a
 relationship that is **live**: `inventory-storage` consumes
 `warehouse.facility.events` into a local location-classification cache (its
-ADR-0013) and `wes-work-planning` calls `GET /distance` for travel distance.
-`fulfillment-execution` can also call `GET /locations/{locationCode}` for a
-slot's functional role, but that lookup is opt-in and not enabled in the kind
-cluster yet. See [Bounded Context Canvas](./bounded-context-canvas.md)
+ADR-0013), six more contexts keep local copies from the same topic (see the
+[index](/contexts/facility-layout) for the list) and `wes-work-planning` calls
+`GET /distance` for travel distance. `fulfillment-execution` can also call
+`GET /locations/{locationCode}` for a slot's functional role
+(`LOCATION_ROLE_MODE=http`, set in `warehouse-infra` `develop`). See [Bounded Context Canvas](./bounded-context-canvas.md)
 for every edge's exact status.
 
 ## PlacementRules: the enforcement point

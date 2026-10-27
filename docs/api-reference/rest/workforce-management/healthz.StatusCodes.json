@@ -1,1 +1,0 @@
-{"responses":{"200":{"description":"Service is up.","content":{"application/json":{"schema":{"type":"object","required":["status"],"properties":{"status":{"type":"string","example":"ok"}},"title":"HealthzResponse"},"example":{"status":"ok"}}}}}}

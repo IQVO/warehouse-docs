@@ -1,11 +1,11 @@
 ---
 id: readyz
 title: "Readiness probe"
-description: "200 when the service can serve traffic. 503 while draining for shutdown (`{'status':'not_ready'}`) or while Postgres or the Kafka brokers/topics are unreachable (problem `dependency-unavailable`). The dependency verdict is cached for a few seconds."
+description: "200 when the service can serve traffic. 503 while draining for shutdown (`{'status':'not_ready'}`) or while Postgres or the Kafka broker is unreachable (problem `dependency-unavailable`). Kafka readiness is reachability only (a broker answers a metadata request); a missing topic never makes the service unready, the broker auto-creates topics on first write. The dependency verdict is cached for a few seconds."
 sidebar_label: "Readiness probe"
 hide_title: true
 hide_table_of_contents: true
-api: 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
+api: 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
 sidebar_class_name: "get api-method"
 info_path: api-reference/rest/pick-face-replenishment/pick-face-replenishment-api
 custom_edit_url: null
@@ -38,20 +38,20 @@ import Translate from "@docusaurus/Translate";
 
 
 
-200 when the service can serve traffic. 503 while draining for shutdown (`{"status":"not_ready"}`) or while Postgres or the Kafka brokers/topics are unreachable (problem `dependency-unavailable`). The dependency verdict is cached for a few seconds.
+200 when the service can serve traffic. 503 while draining for shutdown (`{"status":"not_ready"}`) or while Postgres or the Kafka broker is unreachable (problem `dependency-unavailable`). Kafka readiness is reachability only (a broker answers a metadata request); a missing topic never makes the service unready, the broker auto-creates topics on first write. The dependency verdict is cached for a few seconds.
 
 <ParamsDetails>
   
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./readyz.RequestSchema.json")}
+  title={"Body"}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./readyz.StatusCodes.json")}
+  responses={{"200":{"description":"Ready.","content":{"application/json":{"schema":{"type":"object","required":["status"],"properties":{"status":{"type":"string","example":"ok"}},"title":"Status"}}}},"503":{"description":"Not ready.","content":{"application/json":{"schema":{"type":"object","required":["status"],"properties":{"status":{"type":"string","example":"ok"}},"title":"Status"}},"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 problem document used for every non-2xx response.","required":["type","title","status","detail"],"properties":{"type":{"type":"string","format":"uri"},"title":{"type":"string"},"status":{"type":"integer","format":"int32"},"detail":{"type":"string"},"instance":{"type":"string"}},"title":"Problem"},"example":{"type":"https://errors.pick-face-replenishment.warehouse-systems.dev/dependency-unavailable","title":"A runtime dependency is unavailable","status":503,"detail":"not ready: kafka","instance":"/readyz"}}}}}}
 >
   
 </StatusCodes>

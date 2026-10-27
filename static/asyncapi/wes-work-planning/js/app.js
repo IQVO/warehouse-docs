@@ -60,6 +60,7 @@
         "message": {
           "oneOf": [
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "ChargeForecastReceived",
               "title": "Charge Forecast Received",
               "summary": "A shift's charge forecast was recorded for a process path.",
@@ -207,6 +208,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "ShiftPlanCommitted",
               "title": "Shift Plan Committed",
               "summary": "A path's headcount, rate and hours split was committed.",
@@ -748,6 +750,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "WorkUnitCompleted",
               "title": "Work Unit Completed",
               "summary": "A released work unit finished.",
@@ -909,6 +912,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "RateDeviationDetected",
               "title": "Rate Deviation Detected",
               "summary": "A path's actual throughput deviated materially from plan.",
@@ -986,6 +990,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "PathThrottled",
               "title": "Path Throttled",
               "summary": "Flow balancing decided to throttle upstream release into a path.",
@@ -1063,6 +1068,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "LaborReassignmentFlagged",
               "title": "Labor Reassignment Flagged",
               "summary": "Flow balancing recommended moving labor to relieve a path.",
@@ -1260,6 +1266,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "PathPlanDriftDetected",
               "title": "Path Plan Drift Detected",
               "summary": "This service's committed PathPlan and the labor plan Workforce Management committed for the same path disagree on planned heads.",
@@ -2746,6 +2753,196 @@
           ]
         }
       }
+    },
+    "warehouse.inventory.events": {
+      "description": "inventory-storage's integration topic, CONSUMED by this service (owned by that bounded context; listed here read-only for orientation, mirroring its own apis/asyncapi.yaml). Key = the reservation id. This service consumes only StockReserved and ReservationRevoked (the integration payloads; both share one identical `data` shape) and ignores every other type on the topic.",
+      "publish": {
+        "operationId": "consumeInventoryReservationEvents",
+        "summary": "Keep the SKU-keyed usable-inventory projection current.",
+        "description": "The shared inbound consumer applies each event to the SKU-keyed UsableInventoryObserved projection: StockReserved decrements the SKU's usable quantity by `quantity`, ReservationRevoked increments it back. Messages are CloudEvents 1.0 structured-mode JSON (dataschema `urn:warehouse:inventory-storage:events:<EventName>:v1`). Every other CloudEvents `type` on the topic is ignored; a message that is not a valid CloudEvent is logged at WARN and skipped.",
+        "message": {
+          "oneOf": [
+            {
+              "name": "StockReserved",
+              "title": "Stock Reserved (consumed)",
+              "summary": "inventory-storage bound a SKU's quantity to a demand.",
+              "description": "CONSUMED from `warehouse.inventory.events` — this entry mirrors the producer's own contract (StockReservedEvent) read-only and is NOT published by this service. `sku`, `quantity` and `demand_ref` are read; the projection decrements usable inventory for the SKU by `quantity`.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "work-planning"
+                }
+              ],
+              "payload": {
+                "title": "StockReserved CloudEvent (consumed)",
+                "description": "Mirror of inventory-storage's StockReservedEvent, the integration-payload variant (read-only).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wms.inventory-storage.reservation.StockReserved",
+                        "x-parser-schema-id": "<anonymous-schema-230>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:inventory-storage:events:StockReserved:v1",
+                        "x-parser-schema-id": "<anonymous-schema-231>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Identical in shape to ReservationRevoked's payload.",
+                        "required": [
+                          "sku",
+                          "quantity",
+                          "demand_ref"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "description": "The stock keeping unit the quantity was reserved against.",
+                            "x-parser-schema-id": "<anonymous-schema-233>"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Quantity bound to the demand; decrements usable inventory.",
+                            "x-parser-schema-id": "<anonymous-schema-234>"
+                          },
+                          "demand_ref": {
+                            "type": "string",
+                            "description": "Opaque reference to the demand the reservation serves.",
+                            "x-parser-schema-id": "<anonymous-schema-235>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-232>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-229>"
+                  }
+                ],
+                "x-parser-schema-id": "StockReservedEvent"
+              },
+              "examples": [
+                {
+                  "name": "stockReserved",
+                  "summary": "12 units of SKU-1 reserved against an order.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+                    "source": "/warehouse/inventory-storage",
+                    "type": "com.warehouse.wms.inventory-storage.reservation.StockReserved",
+                    "subject": "resv-9f8e7d6c-5b4a-4c3d-2e1f-0a9b8c7d6e5f",
+                    "time": "2026-10-17T09:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inventory-storage:events:StockReserved:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "quantity": 12,
+                      "demand_ref": "order-88421"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ReservationRevoked",
+              "title": "Reservation Revoked (consumed)",
+              "summary": "inventory-storage released a reservation's quantity back to usable.",
+              "description": "CONSUMED from `warehouse.inventory.events` — this entry mirrors the producer's own contract (ReservationRevokedEvent) read-only and is NOT published by this service. `sku`, `quantity` and `demand_ref` are read; the projection increments usable inventory for the SKU back by `quantity`. The payload shape is identical to StockReserved's, so one handler applies both.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "work-planning"
+                }
+              ],
+              "payload": {
+                "title": "ReservationRevoked CloudEvent (consumed)",
+                "description": "Mirror of inventory-storage's ReservationRevokedEvent, the integration-payload variant (read-only).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wms.inventory-storage.reservation.ReservationRevoked",
+                        "x-parser-schema-id": "<anonymous-schema-237>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:inventory-storage:events:ReservationRevoked:v1",
+                        "x-parser-schema-id": "<anonymous-schema-238>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Identical in shape to StockReserved's payload.",
+                        "required": [
+                          "sku",
+                          "quantity",
+                          "demand_ref"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "description": "The stock keeping unit whose quantity returns to usable.",
+                            "x-parser-schema-id": "<anonymous-schema-240>"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Quantity released back into usable inventory.",
+                            "x-parser-schema-id": "<anonymous-schema-241>"
+                          },
+                          "demand_ref": {
+                            "type": "string",
+                            "description": "The demand reference the revoked reservation was serving.",
+                            "x-parser-schema-id": "<anonymous-schema-242>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-239>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-236>"
+                  }
+                ],
+                "x-parser-schema-id": "ReservationRevokedEvent"
+              },
+              "examples": [
+                {
+                  "name": "reservationRevoked",
+                  "summary": "The same 12 units return to usable after a cancellation.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+                    "source": "/warehouse/inventory-storage",
+                    "type": "com.warehouse.wms.inventory-storage.reservation.ReservationRevoked",
+                    "subject": "resv-9f8e7d6c-5b4a-4c3d-2e1f-0a9b8c7d6e5f",
+                    "time": "2026-10-17T09:45:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inventory-storage:events:ReservationRevoked:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "quantity": 12,
+                      "demand_ref": "order-88421"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
     }
   },
   "components": {
@@ -2755,6 +2952,8 @@
       "WorkUnitCreated": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[2]",
       "WorkDemandReleased": "$ref:$.channels.warehouse.network-inventory-planning.events.publish.message",
       "SlotPlanApproved": "$ref:$.channels.warehouse.slotting-optimization.events.publish.message",
+      "StockReserved": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0]",
+      "ReservationRevoked": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1]",
       "ReplenishmentRequested": "$ref:$.channels.warehouse.pick-face-replenishment.events.publish.message.oneOf[0]",
       "ReplenishmentCancelled": "$ref:$.channels.warehouse.pick-face-replenishment.events.publish.message.oneOf[1]",
       "ProductClassified": "$ref:$.channels.warehouse.product-master.events.publish.message",
@@ -2785,6 +2984,8 @@
       "WorkUnitCreatedEvent": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[2].payload",
       "WorkDemandReleasedEvent": "$ref:$.channels.warehouse.network-inventory-planning.events.publish.message.payload",
       "SlotPlanApprovedEvent": "$ref:$.channels.warehouse.slotting-optimization.events.publish.message.payload",
+      "StockReservedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0].payload",
+      "ReservationRevokedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1].payload",
       "ReplenishmentRequestedEvent": "$ref:$.channels.warehouse.pick-face-replenishment.events.publish.message.oneOf[0].payload",
       "ReplenishmentCancelledEvent": "$ref:$.channels.warehouse.pick-face-replenishment.events.publish.message.oneOf[1].payload",
       "ProductClassifiedEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.payload",

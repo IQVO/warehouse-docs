@@ -2,58 +2,55 @@
 id: aggregate-design-canvas
 title: Aggregate design canvas
 sidebar_label: Aggregate design canvas
-description: ddd-crew Aggregate Design Canvas for exception-management — ExceptionCase and ExceptionPolicy, their state machine, invariants, commands and events.
+description: The ddd-crew Aggregate Design Canvas applied to the ExceptionCase and ExceptionPolicy aggregates — invariants, boundaries, consistency rules and lifecycle.
 ---
 
 # Aggregate design canvas
 
-ddd-crew [Aggregate Design Canvas](https://github.com/ddd-crew/aggregate-design-canvas),
-for the two aggregates, from the context's `.claude/rules/domain-model.md`
-and ADR 0002 on `develop` (written for this site; the repository does not
-ship its own pack yet).
+:::info[Synced from exception-management]
+This page is a copy of [`docs/docs/ddd/aggregate-design-canvas.md`](https://github.com/IQVO/exception-management/blob/develop/docs/docs/ddd/aggregate-design-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+:::
 
-## ExceptionCase (`internal/domain/exceptioncase`, the richest aggregate and the mutation-gate package)
 
-| Section | Content |
+Two aggregates, both pure Go under `internal/domain` (no I/O, no clock
+reads; they import nothing outside `internal/domain`). ADR 0002 is the
+decision record.
+
+## ExceptionCase (`internal/domain/exceptioncase`)
+
+**Aggregate root.** One owned anomaly.
+
+| Canvas section | Value |
 | --- | --- |
-| Description | One owned anomaly with a lifecycle; exactly one open case per dedup key |
-| State transitions | `OPEN -> TRIAGED -> ASSIGNED -> RESOLVED`; `ESCALATED` is a flag, not a state; `RESOLVED` is terminal |
-| Commands | `OpenOrTouchException` (consumer-driven, idempotent on the CloudEvents `id`), `TriageException`, `AssignException`, `ResolveException` (operator, REST), `AutoResolveOnCorrelation` (consumer-driven), the SLA sweeper's escalation |
-| Events | `ExceptionOpened`, `ExceptionTriaged`, `ExceptionAssigned`, `ExceptionEscalated`, `ExceptionResolved`, `ExceptionAutoResolved` |
-| Invariants | one open case per (source type, source subject, site); every transition records its actor (operator id, policy id or `system`); the case holds a frozen copy of the source payload; `RESOLVED` requires a resolution code; a source fact after resolution touches (occurrence, `lastSeenAt`) and never reopens |
-| Corrective policies | the SLA sweeper escalates on breach (flag + event, work continues); the policy's auto-resolve rule closes matching cases on a correlated fact |
-| Throughput | moderate: one case per anomaly, touched on every re-fire of the fact |
-| Size | small: the frozen payload is the largest part |
-| Concurrency | the dedup-key claim and the effect commit in one transaction; the CloudEvents `id` claim makes a redelivery a no-op |
-| Repository | Postgres, key the case id (`case-<uuid>`), subject and Kafka key of every event |
+| **Identity** | `case_id` (`case-<uuid>`, minted by `system.CaseIDs` at open — the real IDGen, never a test double in `cmd/`). |
+| **Natural key (dedup)** | (source type, source subject, site) — the dedup key; at most one OPEN case per key (partial unique index `uq_exception_cases_one_open_per_key` backs the rule across cases). |
+| **Contains** | The frozen source payload (deep copy, JSONB), the dedup key parts, status, severity, queue, assignee, escalated flag, occurrence count, `openedAt`/`lastSeenAt`, the SLA clock (`slaMinutes`, `slaDueAt`), the resolution (code, root cause, note) or the auto-resolution evidence (rule id, correlated type + event id), and the audit trail (exactly one entry per accepted transition). |
+| **Does not contain** | Any producer state (no order copy, no task copy, no stock level — ADR 0003), any reference to re-fetch, any clock or randomness. |
+| **Invariants** | One direction only `OPEN -> TRIAGED -> ASSIGNED -> RESOLVED`; `ESCALATED` is a flag; `RESOLVED` requires resolution code + root cause and is terminal (`ErrCaseClosed`, 409 at the edge, the aggregate raises nothing); occurrence >= 1 and `lastSeenAt >= openedAt`; the frozen payload never changes after open; the aggregate refuses to open a second case for a key it holds open. |
+| **Consistency** | Invariants enforced immediately inside the aggregate; the cross-case one-open-per-key rule enforced by the use case plus the partial unique index (the loser of a race gets `ErrOpenCaseExists`); persistence guarded by optimistic concurrency (`version`, +1 per accepted transition, `WHERE version = excluded.version - 1`). |
+| **Lifecycle** | Open (from a consumed fact) → maybe Touch many times → Triage / Assign / reassign in any order while unresolved → Resolve (operator) or AutoResolve (policy rule) terminal. A Touch after resolution counts the occurrence and never reopens. |
+| **Commands** | `Open`, `Touch`, `Triage`, `Assign`, `Reassign`, `Resolve`, `AutoResolve`, `BreachesAt(now)` (pure query). |
+| **Events raised** | `ExceptionOpened`, `ExceptionTriaged`, `ExceptionAssigned`, `ExceptionEscalated`, `ExceptionResolved`, `ExceptionAutoResolved` — plain structs with `OccurredAt()`, no CloudEvents knowledge; `Touch` raises nothing on the wire. |
+| **Cross-aggregate rule** | None at the aggregate level by design: policies are read at open (use case), so a case never holds a policy reference; a new policy version governs cases opened after its declaration. |
 
 ## ExceptionPolicy (`internal/domain/exceptionpolicy`)
 
-| Section | Content |
+**Aggregate root.** The handling policy of ONE source type.
+
+| Canvas section | Value |
 | --- | --- |
-| Description | Per source type: default severity, queue, SLA minutes, auto-resolve rule |
-| State | versioned, append-only; the auto-resolve rule is data, not code |
-| Commands | `DeclareExceptionPolicy` (REST `PUT /exception-policies/{sourceType}`) |
-| Events | `ExceptionPolicyDeclared` (subject and key = the source type) |
-| Invariants | a complete row per (source type, version); `auto_resolve` is null or `{on_type, within_minutes}`; `rule_id` is the derived deterministic form `<sourceType>-><onType>` |
+| **Identity** | (source type, version) — versioned, append-only: `Declare` creates version 1, `Redeclare` returns the NEXT version as a new value, the receiver is never mutated, history is never rewritten. |
+| **Contains** | Severity, queue, `slaMinutes`, the optional `AutoResolveRule{OnType, WithinMinutes}` (data, never code), `declaredAt`. |
+| **Invariants** | Source type is a full CloudEvents type and non-blank; severity valid; queue non-blank; `SLAMinutes >= 1`; `Version >= 1`; `WithinMinutes >= 1` when the rule exists. |
+| **Consistency** | The version is part of the primary key; two writers racing the same next version collide into `ErrConcurrentModification` (409 at the edge). |
+| **Lifecycle** | Append-only version chain; no update in place, no delete. |
+| **Commands** | `Declare`, `Redeclare`; the pure matcher `Matches(correlatedType, subject, case, now)` evaluates the rule (same subject, inclusive window `now <= lastSeenAt + withinMinutes`). |
+| **Events raised** | `ExceptionPolicyDeclared` (subject and Kafka key = the source type). |
+| **Why the rule is data** | An operator declares it through `PUT /exception-policies/{sourceType}` without a deploy, every version is auditable, and the ops-agent may READ it and recommend but never execute it (ADR 0002). The rule id carries the derived deterministic form `<sourceType>-><onType>`. |
 
-Read models (projections, never aggregates): open cases by queue, the SLA
-report, root-cause frequency.
+## Shared kernel (`internal/domain/shared`)
 
-```mermaid
-stateDiagram-v2
-    [*] --> OPEN: first occurrence of the dedup key<br/>raises ExceptionOpened (frozen payload)
-    OPEN --> OPEN: repeated fact touches<br/>(occurrence + 1, lastSeenAt)
-    OPEN --> TRIAGED: TriageException<br/>raises ExceptionTriaged
-    OPEN --> ASSIGNED: AssignException<br/>raises ExceptionAssigned
-    TRIAGED --> ASSIGNED: AssignException<br/>raises ExceptionAssigned
-    ASSIGNED --> RESOLVED: ResolveException (code + root cause)<br/>raises ExceptionResolved
-    OPEN --> RESOLVED: AutoResolveOnCorrelation<br/>raises ExceptionAutoResolved
-    TRIAGED --> RESOLVED: resolve or auto-resolve
-    OPEN --> OPEN: SLA breach sets ESCALATED<br/>raises ExceptionEscalated
-    RESOLVED --> RESOLVED: a late fact touches, never reopens
-    RESOLVED --> [*]
-```
-
-Source: `internal/domain/exceptioncase`, `internal/domain/exceptionpolicy`,
-ADR 0002, and `features/*.feature`.
+Value objects only: `DedupKey`, `Actor`, severity, `CaseID`/`PolicyID`
+types, and `ParseWorkUnitRef` — the reversal of WES's frozen work-unit
+formula `{order_id}-line-{line_no}` (order-management ADR 0018) used by
+the correlation.

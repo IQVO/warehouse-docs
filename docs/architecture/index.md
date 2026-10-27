@@ -37,17 +37,18 @@ A single bounded context appears in all of them, at different zoom levels. For
 
 - In [System Context](/architecture/system-context) it is invisible — one part
   of a single box.
-- In [Containers](/architecture/containers) it is four Go processes
-  (`cmd/execution`, `cmd/mcp`, `cmd/fulfillment-projector`,
-  `cmd/fulfillment-reports`) and two Postgres databases.
+- In [Containers](/architecture/containers) it is four long-running Go
+  processes (`cmd/execution`, `cmd/mcp`, `cmd/fulfillment-projector`,
+  `cmd/fulfillment-reports`), a `cmd/sweep` CronJob entrypoint and two
+  Postgres databases.
 - In [Components](/architecture/components) it is a hexagon: three inbound
   adapters, a use-case layer, a pure domain, and outbound adapters implementing
   ports.
 - In [Domain Model](/architecture/domain-model) it is four aggregate roots —
   `Task`, `Station`, `Package`, `OrderConsolidation` — and the capability and
   lease rules they enforce.
-- In [Data Models](/architecture/data-models) it is eight OLTP tables (four
-  aggregate tables plus infrastructure) with **no foreign keys at all**,
+- In [Data Models](/architecture/data-models) it is ten OLTP tables (four
+  aggregate tables plus local copies and infrastructure) with **no foreign keys at all**,
   which is the previous point expressed in SQL. A further four tables sit in
   its analytical database.
 - In [Runtime Flows](/architecture/runtime-flows) it is a participant in the
@@ -57,14 +58,14 @@ Reading them in that order is the fastest way to understand any one context.
 
 ## Three things worth knowing up front
 
-**The fleet is bigger than "seventeen services".** Thirteen of the seventeen
-contexts on this site ship four binaries and two databases each, because the analytical
-read side is a separate process family from the operational one.
-`warehouse-ops-agent` is one binary with no database, `slotting-optimization`
-is two binaries (api and MCP) and one database, deployed in the reference
-cluster with no analytical read side, and the two newest,
-`pick-face-replenishment` and `task-interleaving`, are each one binary (`cmd/api`) with one database schema
-and are not deployed in the reference cluster. That is
+**The fleet is bigger than "nineteen services".** All eighteen domain
+contexts on this site ship four binaries (OLTP, MCP, projector, reports) and
+two databases each, because the analytical read side is a separate process
+family from the operational one; `fulfillment-execution` adds a fifth,
+`cmd/sweep`, the entrypoint of its two sweep CronJobs.
+`warehouse-ops-agent` is one binary with no database. All nineteen are
+registered in `warehouse-infra` `develop`, the newest two,
+`returns-processing` and `exception-management`, since 2026-10-22. That is
 [Containers](/architecture/containers).
 
 **The domain layer depends on nothing, and CI proves it.** Every context has an

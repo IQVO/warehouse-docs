@@ -31,14 +31,19 @@ classDiagram
     -classification Classification
     -source ClassificationSource
     -profile PhysicalProfile
+    -packaging PackagingHierarchy
     -version int64
     +Register(sku, description, now)$ Product, Event[], error
     +Rehydrate(sku, description, classification, source, profile, version)$ Product
+    +RehydrateWithPackaging(sku, description, classification, source, profile, packaging, version)$ Product
     +ChangeDescription(description, now) Event[], error
     +Classify(c, now) Event[], error
-    +ImportLegacyClassification(c, now) Event[]
     +DeclareDimensions(d, now) Event[]
     +RecordMeasurement(m, now) Event[], error
+    +DeclarePackLevel(spec, now) Event[], error
+    +RetirePackLevel(level, reason, now) Event[], error
+    +RecordPackLevelMeasurement(level, m, now) Event[], error
+    +PackLevels() PackagingHierarchy
     +Classification() Classification, ClassificationSource, error
     +IsClassified() bool
     +Version() int64
@@ -96,7 +101,7 @@ classDiagram
   class ClassificationSource {
     <<Enumeration>>
     native
-    legacy-import
+    legacy-import (stored rows only)
   }
   class EffectiveSource {
     <<Enumeration>>
@@ -113,11 +118,48 @@ classDiagram
     string 1..64, no whitespace or slash
     +NewSKU(value)$ SKU, error
   }
+  class PackagingHierarchy {
+    <<ValueObject>>
+    every pack level ever declared, retired ones kept
+    +Levels() PackLevelDef[]
+    +Active(level) PackLevelDef, bool
+    +ByGTIN(gtin) PackLevelDef, bool
+  }
+  class PackLevelDef {
+    <<ValueObject>>
+    -level PackLevel
+    -gtin GTIN
+    -childGTIN GTIN
+    -qtyOfChild int
+    -unitsPerPack int
+    -isOrderable bool
+    -isDespatchUnit bool
+    -effectiveFrom Time
+    -effectiveTo Time
+    +Active() bool
+    +EffectiveDimensions() UnitDimensions, bool
+  }
+  class PackLevel {
+    <<ValueObject>>
+    EACH, INNER, CASE, PALLET
+    +ParsePackLevel(s)$ PackLevel, error
+  }
+  class GTIN {
+    <<ValueObject, shared/gs1>>
+    14-digit, mod-10 checked
+    +ParseGTIN(s)$ GTIN, error
+  }
 
   Product *-- SKU
   Product *-- "0..1" Classification
   Product --> ClassificationSource
   Product *-- PhysicalProfile
+  Product *-- PackagingHierarchy
+  PackagingHierarchy *-- "0..*" PackLevelDef
+  PackLevelDef --> PackLevel
+  PackLevelDef --> GTIN
+  PackLevelDef *-- "0..1" UnitDimensions : declared
+  PackLevelDef *-- "0..1" Measurement : latest
   Classification --> "1..5" HandlingTag
   Classification --> TemperatureClass
   Classification --> DOTHazardClass
@@ -128,7 +170,10 @@ classDiagram
 ```
 
 Source: `internal/domain/product/product.go`, `classification.go`,
-`physical.go`, `sku.go`.
+`physical.go`, `packaging.go` (ADR 0011), `sku.go`, and `internal/domain/shared/gs1` (the shared GS1 package installed from the harness template). `legacy-import` is still a valid
+`ClassificationSource` (`SourceLegacyImport`) because rows written by the
+ADR 0003 importer keep it, but no method sets it since the importer was removed
+at stage E: `Classify` always sets `native`.
 Omits: the getters (`SKU()`, `Description()`, `LengthMm()` and so on), the
 `Rehydrate*` helpers for persisted value objects, the parse functions
 (`ParseHandlingTag`, `ParseTemperatureClass`, `ParseClassificationSource`) and
@@ -174,16 +219,39 @@ classDiagram
     <<DomainEvent>>
     +Profile PhysicalProfile
   }
+  class ProductPackLevelDeclared {
+    <<DomainEvent>>
+    +Def PackLevelDef
+  }
+  class ProductPackLevelRetired {
+    <<DomainEvent>>
+    +Level PackLevel
+    +GTIN GTIN
+    +EffectiveTo Time
+    +Reason string
+  }
+  class ProductPackLevelMeasured {
+    <<DomainEvent>>
+    +Level PackLevel
+    +GTIN GTIN
+    +Measurement Measurement
+  }
   Event <|.. ProductRegistered
   Event <|.. ProductDescriptionChanged
   Event <|.. ProductClassified
   Event <|.. ProductDimensionsDeclared
   Event <|.. ProductMeasured
+  Event <|.. ProductPackLevelDeclared
+  Event <|.. ProductPackLevelRetired
+  Event <|.. ProductPackLevelMeasured
   ProductRegistered *-- Header
   ProductDescriptionChanged *-- Header
   ProductClassified *-- Header
   ProductDimensionsDeclared *-- Header
   ProductMeasured *-- Header
+  ProductPackLevelDeclared *-- Header
+  ProductPackLevelRetired *-- Header
+  ProductPackLevelMeasured *-- Header
 ```
 
 Source: `internal/domain/product/events.go`.
@@ -232,12 +300,13 @@ classDiagram
   class PgOutboxRepo["postgres.OutboxRepo"]
   class PgProcessed["postgres.ProcessedEventRepo"]
   class PgUoW["postgres.UnitOfWork"]
-  class MemProductRepo["memory.ProductRepo"]
+  class MemProductRepo["memory.ProductRepo (test double)"]
+  class FanoutEncoder["kafka.FanoutEncoder"]
   class KafkaEncoder["kafka.Encoder"]
+  class AnalyticsEncoder["kafka.AnalyticsEncoder"]
   class SystemClock["clock.System"]
   class Relay["outbox.Relay"]
   class RelaySink["kafka.RelaySink"]
-  class LogSink["outbox.LogSink"]
 
   Writer --> ProductRepository
   Writer --> OutboxRepository
@@ -249,21 +318,25 @@ classDiagram
   OutboxRepository <|.. PgOutboxRepo
   ProcessedEvents <|.. PgProcessed
   UnitOfWork <|.. PgUoW
-  EventEncoder <|.. KafkaEncoder
+  EventEncoder <|.. FanoutEncoder
+  FanoutEncoder --> KafkaEncoder : integration topic
+  FanoutEncoder --> AnalyticsEncoder : analytics topic
   Clock <|.. SystemClock
   Relay --> PgOutboxRepo : Drain
-  Relay --> RelaySink : EVENT_PUBLISHER kafka
-  Relay --> LogSink : EVENT_PUBLISHER log
+  Relay --> RelaySink : always (Kafka, ADR 0010)
 ```
 
 Source: `internal/application/ports/*.go`, `internal/application/usecases/writer.go`,
 `internal/adapters/outbound/postgres/*.go`, `internal/adapters/outbound/memory/*.go`,
-`internal/adapters/outbound/kafka/encoder.go`, `relay_sink.go`,
+`internal/adapters/outbound/kafka/encoder.go`, `analytics_encoder.go`, `relay_sink.go`,
 `internal/adapters/outbound/outbox/relay.go`, `internal/adapters/outbound/clock/clock.go`.
 Omits: the in-memory `OutboxRepo`, `ProcessedEventRepo` and `UnitOfWork`
-(same ports as their Postgres twins, used when `DATABASE_URL` is unset), and
-the relay's `Store` / `Sink` interfaces, which `OutboxRepo` and the two sinks
-implement.
+(same ports as their Postgres twins; test doubles only: no file under `cmd/`
+imports `internal/adapters/outbound/memory`, enforced by
+`TestRuntimeBinaryHasNoInMemoryAdapters`, ADR 0010), and the relay's `Store` /
+`Sink` interfaces, which `postgres.OutboxRepo` and `kafka.RelaySink` (the only
+sink) implement. `cmd/api` constructs `postgres.ProcessedEventRepo` but no use
+case calls it since the legacy importer was removed (`cmd/api/adapters.go`).
 
 ## Hexagonal view
 
@@ -271,10 +344,9 @@ implement.
 flowchart LR
   subgraph inbound[Inbound adapters]
     HTTP[http.Server, chi router]
-    LEG[kafka.LegacyImporter]
   end
   subgraph app[Application]
-    UC[usecases: RegisterProduct, ClassifyProduct, DeclareDimensions, RecordMeasurement, ImportLegacyClassification, GetProduct, ListProducts]
+    UC[usecases: RegisterProduct, ClassifyProduct, DeclareDimensions, RecordMeasurement, GetProduct, ListProducts]
     PORTS[ports: ProductRepository, OutboxRepository, EventEncoder, ProcessedEvents, UnitOfWork, Clock]
   end
   subgraph domain[Domain]
@@ -282,12 +354,11 @@ flowchart LR
   end
   subgraph outbound[Outbound adapters]
     PG[postgres]
-    MEM[memory]
-    ENC[kafka.Encoder]
-    REL[outbox.Relay with kafka.RelaySink or LogSink]
+    MEM[memory, test doubles only]
+    ENC[kafka.FanoutEncoder]
+    REL[outbox.Relay with kafka.RelaySink]
   end
   HTTP --> UC
-  LEG --> UC
   UC --> PROD
   UC --> PORTS
   PG -. implements .-> PORTS
@@ -296,6 +367,9 @@ flowchart LR
   REL --> PG
 ```
 
-Source: `cmd/api/main.go` (`buildAdapters`, `buildServer`,
-`startLegacyImporter`, `startOutboxRelay`), `internal/architecture/architecture_test.go`.
-Omits: telemetry, readiness and the CloudEvents helper package.
+Source: `cmd/api/adapters.go` (`buildAdapters`, `buildServer`),
+`cmd/api/relay.go` (`startOutboxRelay`), `internal/architecture/architecture_test.go`.
+Omits: telemetry, readiness, the CloudEvents helper package and the other
+binaries (`cmd/mcp` serves the read use cases over MCP; `cmd/product-projector`
+and `cmd/product-reports` are the analytics read side, see
+[Runtime](https://iqvo.github.io/product-master/docs/overview/runtime)).

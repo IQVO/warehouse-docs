@@ -114,10 +114,23 @@ and <code>id</code> per occurrence and <code>dataschema</code> =
 <code>urn:warehouse:task-interleaving:analytics:&lt;EventName&gt;:v1</code>; key = station id
 (hint events) or site id (policy event). <code>InterleavingHintConsumed</code>,
 <code>InterleavingHintExpired</code> and <code>InterleavingPolicyDeclared</code> exist ONLY here.
-Not an integration contract: other contexts consume the integration topic.</p>
+Not an integration contract: other contexts consume the integration topic.
+The only consumer is this service's own <code>cmd/ti-projector</code> (ADR 0008),
+under a fixed consumer group read from env <code>ANALYTICS_CONSUMER_GROUP</code>
+(default <code>task-interleaving-analytics</code>), which folds the events into the
+separate analytical database that <code>cmd/ti-reports</code> serves
+(<code>GET /reports/hint-adoption</code>, <code>GET /reports/freshness</code>). A message the
+projector can never apply (a known <code>type</code> whose payload contradicts its
+envelope or fails validation) is dead-lettered at once, byte for byte, to
+<code>warehouse.task-interleaving.analytics.dlq</code>; a transient failure retries the
+same message and never dead-letters it.</p>
 </div></div><p class="text-gray-600 text-sm mt-2">Receive the interleaving analytics events.</p><div class="mt-2"><div class="prose max-w-none text-sm"><p>Route on the full <code>type</code>; the payloads are the integration payloads for
 <code>InterleavingHintIssued</code> and the documented analytics-only payloads for the
-other three types.</p>
+other three types. The projector keeps, per hint, the earliest
+CloudEvents <code>time</code> of each of <code>InterleavingHintIssued</code>,
+<code>InterleavingHintConsumed</code> and <code>InterleavingHintExpired</code> (arrival order
+never matters) and records <code>InterleavingPolicyDeclared</code> only as an applied
+id (freshness). A redelivered <code>id</code> is applied once.</p>
 </div></div><div class="border bg-gray-100 rounded px-4 py-2 mt-2"><div class="text-sm text-gray-700">Operation ID<span class="bg-orange-600 text-white rounded text-xs ml-2 py-0 px-2">receiveInterleavingAnalyticsEvents</span></div></div><div class="mt-2 text-sm"><p>Available only on servers:</p><ul class="flex flex-wrap leading-normal"><li class="inline-block mt-2 mr-2"><a href="#server-production" class="border border-solid border-blue-300 hover:bg-blue-300 hover:text-blue-600 text-blue-500 font-bold no-underline text-xs rounded px-3 py-1 cursor-pointer"><span class="underline">production</span></a></li></ul></div><div class="mt-2" id="operation-send-warehouse.task-interleaving.analytics-security"></div><div class="mt-2"></div><div class="mt-2"></div><div class="mt-2"><ul class="flex flex-wrap leading-normal"><li class="inline-block mt-2 mr-2"><div title="" class="border border-solid border-blue-300 hover:bg-blue-300 hover:text-blue-600 text-blue-500 font-bold no-underline text-xs rounded px-3 py-1"><span class="">#analytics</span></div></li></ul></div></div><div class="w-full mt-4" id="operation-send-warehouse.task-interleaving.analytics-message"><div class="mt-2"><p class="px-8">Accepts <strong>one of</strong> the following messages:</p><ul><li class="mt-4"><div class="panel-item"><div class="panel-item--center px-8"><div class="shadow rounded bg-gray-200 p-4 border"><div><strong class="text-gray-700 mr-2">#<!-- -->0</strong><span class="text-gray-700 mr-2">Interleaving hint issued (analytics stream)</span></div><p class="text-gray-600 text-sm">The analytics copy of InterleavingHintIssued.</p><ul class="leading-normal mt-2 mb-4 space-x-2 space-y-2"><li class="inline-block"><a href="https://www.iana.org/assignments/media-types/application/cloudevents+json" title="Opens in new window" class="border border-solid border-orange-300 hover:bg-orange-300 hover:text-orange-600 text-orange-500 font-bold no-underline text-xs uppercase rounded px-3 py-1" target="_blank" rel="nofollow noopener noreferrer"><span>application/cloudevents+json</span></a></li></ul><div class="mt-2"><div class="prose max-w-none text-sm"><p>Same <code>type</code>, same <code>id</code>, same payload as the integration
 InterleavingHintIssued; only <code>dataschema</code> differs
 (<code>urn:warehouse:task-interleaving:analytics:InterleavingHintIssued:v1</code>).</p>

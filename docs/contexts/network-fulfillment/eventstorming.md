@@ -230,7 +230,7 @@ flowchart LR
     POL2["Policy: path eligible only if CycleTimeP95<br/>≤ cutoff − now; no data stays eligible<br/>(decided 2026-10-06, ADR 0017)"]:::policy
     G1["CapabilityOffer"]:::aggregate
     RM3["Capability offers<br/>GET /capability-offers"]:::readmodel
-    H1["Hotspot: offer never submitted<br/>outward, SubmitAvailability unused"]:::hotspot
+    H1["Hotspot: offer reaches the network only<br/>in live mode, via FeedInventory (ADR 0027 part 2)"]:::hotspot
     H3["Hotspot: single SITE_ID only"]:::hotspot
 
     PPM --> RM1
@@ -261,8 +261,8 @@ Source: `internal/application/usecases/recompute_capability_offers.go`,
 `internal/adapters/outbound/{processpathcache,pathcapacitycache,inventoryclient}/`,
 `cmd/netfulfil/main.go` (`wireCapabilityOffer`, `siteId`).
 
-Omitted: the boot-time `WaitReady` gate and the
-`CAPABILITY_OFFER_ENABLED` switch. `CapabilityOffer` raises no domain
+Omitted: the boot-time `WaitReady` gate, which the always-on capability-offer
+pipeline blocks on. `CapabilityOffer` raises no domain
 event, so there is no orange sticky.
 
 ## Sticky inventory

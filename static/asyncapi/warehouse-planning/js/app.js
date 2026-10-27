@@ -3,7 +3,7 @@
   "asyncapi": "2.6.0",
   "info": {
     "title": "warehouse-planning Domain Events",
-    "version": "0.5.0",
+    "version": "0.7.0",
     "contact": {
       "name": "warehouse-planning maintainers",
       "url": "https://github.com/IQVO/warehouse-planning",
@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **warehouse-planning** bounded context (WES\nsubdomain): *can this warehouse process the demand assigned to it?*\n\n**Published (Phase 4).** The `CapacityPlan` aggregate raises four events,\npublished to `warehouse.warehouse-planning.events` through a\n**transactional outbox**: the plan and its already-encoded events are\nwritten in ONE database transaction, and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is persisted with the outbox row, so\na retry republishes the same `id` -- consumers dedupe on it). Per plan:\n`CapacityPlanCreated` on creation; on publication\n`CapacityPlanPublished`, plus `CapacityShortageDetected` and\n`BottleneckDetected` only when the plan has a shortage.\n`ProcessCapacityRegistered`/`ProcessCapacityChanged` are NOT published yet.\n\n**Consumed (Phase 3).** `ShiftPlanCommitted` (workforce-management) and\n`LocationSlotRegistered`/`LocationSlotDecommissioned` (facility-layout) keep\nlocal ProcessCapacity read models current; this context never makes a\nlive cross-context call.\n\n**Consumed (ADR 0004, opt-in).** `OrderAllocated` and\n`OrderPartiallyAllocated` (order-management, topic\n`warehouse.order-management.events`) keep a local expected-demand read\nmodel current when `DEMAND_CONSUMER_GROUP` is set (unset = no consumer).\nEach order is counted once, at its latest promise cutoff, and attributed to\nthe ONE configured site (`DEMAND_SITE_ID`): order-management's events carry\nno fulfillment site. `OrderRepromised` and every other type are ignored.\n\n**Analytics stream (ADR 0005).** The same four events are ALSO written to\n`warehouse.warehouse-planning.analytics` in the SAME outbox transaction\n(two outbox rows per event, one per topic), as CloudEvents 1.0 with the\nSAME `type` and the SAME `id` per occurrence but\n`dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`.\nThe integration messages are byte-identical to what they were before the\nstream existed. The analytics payloads are the integration payloads plus\nadditive, analytics-only fields: today `binding_constraint` on\n`CapacityPlanPublished` (the constraint type -- LABOR, STATION, ... --\nbinding the bottleneck step; `\"\"` for a plan created before it was\nrecorded). Only this service's own `planning-projector` consumes it (fixed\nconsumer group, at-least-once, offsets committed after the projection\ncommitted), into a SEPARATE analytical database that\n`planning-reports` serves read-only. Poison messages go to\n`warehouse.warehouse-planning.analytics.dlq`.\n\n**Envelope (mandatory).** Every message is a CloudEvents 1.0 event in\n*structured content mode* (Kafka value = JSON event format) with the Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0014); consumers may extract them, and must not require\nthem. All of\n`specversion` (`1.0`), `id`, `source` (`/warehouse/warehouse-planning`),\n`type`, `subject`, `time`, `datacontenttype` (`application/json`) and\n`dataschema` are required; the payload sits under `data`. No flat\nenvelope, no toggle.\n\n**Type naming.** `com.warehouse.wes.warehouse-planning.<entity>.<EventName>`\nwhere `<entity>` is the aggregate that raised the event, lowercase, no\nseparators -- here `capacityplan`. **dataschema** =\n`urn:warehouse:warehouse-planning:events:<EventName>:v1`. **subject** and\nthe Kafka message key = the capacity plan id (one plan's events stay\nordered on one partition). A breaking payload change gets a new `.v2`\ntype and dataschema, never a mutation.\n"
+    "description": "Event catalog for the **warehouse-planning** bounded context (WES\nsubdomain): *can this warehouse process the demand assigned to it?*\n\n**Published (Phase 4).** The `CapacityPlan` aggregate raises four events,\npublished to `warehouse.warehouse-planning.events` through a\n**transactional outbox**: the plan and its already-encoded events are\nwritten in ONE database transaction, and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is persisted with the outbox row, so\na retry republishes the same `id` -- consumers dedupe on it). Per plan:\n`CapacityPlanCreated` on creation; on publication\n`CapacityPlanPublished`, plus `CapacityShortageDetected` and\n`BottleneckDetected` only when the plan has a shortage.\nThe `ProcessCapacity` aggregate publishes on the same topic and the same\noutbox: `ProcessCapacityRegistered` when its first (native) constraint\nbrings it into being, `ProcessCapacityChanged` when a registration\nmoves the effective rate (the minimum rate value, the binding\nconstraint, or both); a registration the effective rate does not notice\nraises nothing. ProcessCapacity events are integration-stream only: the\nanalytics fanout carries plan facts only (ADR 0005).\n\n**Consumed (Phase 3).** `ShiftPlanCommitted` (workforce-management) and\n`LocationSlotRegistered`/`LocationSlotDecommissioned` (facility-layout) keep\nlocal ProcessCapacity read models current; this context never makes a\nlive cross-context call.\n\n**Consumed (ADR 0004).** `OrderAllocated` and\n`OrderPartiallyAllocated` (order-management, topic\n`warehouse.order-management.events`) keep a local expected-demand read\nmodel current under the REQUIRED consumer group `DEMAND_CONSUMER_GROUP`.\nEach order is counted once, at its latest promise cutoff, and attributed to\nthe ONE configured site (`DEMAND_SITE_ID`): order-management's events carry\nno fulfillment site. `OrderRepromised` and every other type are ignored.\n\n**Consumed (ADR 0017).** `DockAppointmentBooked` and\n`DockAppointmentCancelled` (inbound-receiving, topic\n`warehouse.inbound-receiving.events`, group `INBOUND_DEMAND_CONSUMER_GROUP`)\nkeep a local inbound-demand read model current: a capacity plan carries the\ndock appointments of its window and the labour the operator-declared inbound\nstandard attributes to them (a Cancelled that arrives before its Booked\nwins). `TaskCompleted` (fulfillment-execution, topic\n`warehouse.fulfillment.events`, group `OBSERVED_CAPACITY_CONSUMER_GROUP`)\nkeeps a local observed-capacity read model current that feeds an ADVISORY\nplanned-versus-observed variance; it never changes a planned capacity. Both\nattribute to the same configured site and dead-letter unusable payloads to\n`<topic>.dlq`.\n\n**Analytics stream (ADR 0005).** The same four events are ALSO written to\n`warehouse.warehouse-planning.analytics` in the SAME outbox transaction\n(two outbox rows per event, one per topic), as CloudEvents 1.0 with the\nSAME `type` and the SAME `id` per occurrence but\n`dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`.\nThe integration messages are byte-identical to what they were before the\nstream existed. The analytics payloads are the integration payloads plus\nadditive, analytics-only fields: today `binding_constraint` on\n`CapacityPlanPublished` (the constraint type -- LABOR, STATION, ... --\nbinding the bottleneck step; `\"\"` for a plan created before it was\nrecorded). Only this service's own `planning-projector` consumes it (fixed\nconsumer group, at-least-once, offsets committed after the projection\ncommitted), into a SEPARATE analytical database that\n`planning-reports` serves read-only. Poison messages go to\n`warehouse.warehouse-planning.analytics.dlq`.\n\n**Envelope (mandatory).** Every message is a CloudEvents 1.0 event in\n*structured content mode* (Kafka value = JSON event format) with the Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0014); consumers may extract them, and must not require\nthem. All of\n`specversion` (`1.0`), `id`, `source` (`/warehouse/warehouse-planning`),\n`type`, `subject`, `time`, `datacontenttype` (`application/json`) and\n`dataschema` are required; the payload sits under `data`. No flat\nenvelope, no toggle.\n\n**Type naming.** `com.warehouse.wes.warehouse-planning.<entity>.<EventName>`\nwhere `<entity>` is the aggregate that raised the event, lowercase, no\nseparators -- `capacityplan` or `processcapacity`. **dataschema** =\n`urn:warehouse:warehouse-planning:events:<EventName>:v1`. **subject** and\nthe Kafka message key = the aggregate's id: the capacity plan id, or\n`<processType>/<location>/<windowStart>/<windowEnd>` for a\nProcessCapacity (one aggregate's events stay ordered on one partition).\nA breaking payload change gets a new `.v2` type and dataschema, never a\nmutation.\n"
   },
   "servers": {
     "production": {
@@ -37,6 +37,10 @@
       "description": "Events raised by the CapacityPlan aggregate (published, Phase 4)."
     },
     {
+      "name": "process-capacity",
+      "description": "Events raised by the ProcessCapacity aggregate on constraint registration (published)."
+    },
+    {
       "name": "consumed",
       "description": "Events produced by sibling contexts that this service consumes (Phase 3)."
     },
@@ -47,14 +51,17 @@
   ],
   "channels": {
     "warehouse.warehouse-planning.events": {
-      "description": "This service's integration topic (`Topic` in\n`internal/adapters/outbound/kafka/encoder.go`). Written by the outbox\nrelay; key = capacity plan id; every message carries the\n`content-type: application/cloudevents+json; charset=UTF-8` header\n(plus the optional W3C `traceparent` of the writing request, ADR 0014).\nDispatch on the full `type`, ignore unknown types, dedupe on `id`.\n",
+      "description": "This service's integration topic (`Topic` in\n`internal/adapters/outbound/kafka/encoder.go`). Written by the outbox\nrelay; key = the raising aggregate's id (plan id, or\nprocessType/location/window for a ProcessCapacity); every message\ncarries the `content-type: application/cloudevents+json; charset=UTF-8`\nheader (plus the optional W3C `traceparent` of the writing request,\nADR 0014). Dispatch on the full `type`, ignore unknown types, dedupe\non `id`.\n",
       "subscribe": {
-        "operationId": "receiveCapacityPlanEvents",
-        "summary": "Receive CapacityPlan events.",
-        "description": "Subscribe to the CapacityPlan event stream. Route on the full `type`\n(`com.warehouse.wes.warehouse-planning.capacityplan.<EventName>`).\n",
+        "operationId": "receiveWarehousePlanningEvents",
+        "summary": "Receive CapacityPlan and ProcessCapacity events.",
+        "description": "Subscribe to this service's event stream. Route on the full `type`:\n`com.warehouse.wes.warehouse-planning.capacityplan.<EventName>` for\nCapacityPlan events,\n`com.warehouse.wes.warehouse-planning.processcapacity.<EventName>`\nfor ProcessCapacity events.\n",
         "tags": [
           {
             "name": "capacity-plan"
+          },
+          {
+            "name": "process-capacity"
           }
         ],
         "message": {
@@ -219,35 +226,6 @@
                             "description": "Normalized path capacity, ORDER per HOUR.",
                             "example": 1000,
                             "x-parser-schema-id": "<anonymous-schema-20>"
-                          },
-                          "capacity_over_window": {
-                            "type": "number",
-                            "format": "double",
-                            "description": "path_capacity x window hours, in orders.",
-                            "example": 8000,
-                            "x-parser-schema-id": "<anonymous-schema-21>"
-                          },
-                          "shortage": {
-                            "type": "number",
-                            "format": "double",
-                            "description": "max(0, assigned_demand - capacity_over_window), in orders. Never negative.",
-                            "example": 4000,
-                            "x-parser-schema-id": "<anonymous-schema-22>"
-                          },
-                          "bottleneck_step": {
-                            "type": "string",
-                            "description": "The ProcessPath step limiting end-to-end flow.",
-                            "example": "REBIN",
-                            "x-parser-schema-id": "<anonymous-schema-23>"
-                          },
-                          "status": {
-                            "type": "string",
-                            "enum": [
-                              "DRAFT"
-                            ],
-                            "description": "Always DRAFT at creation.",
-                            "example": "DRAFT",
-                            "x-parser-schema-id": "<anonymous-schema-24>"
                           }
                         },
                         "x-parser-schema-id": "CapacityPlanCreatedData"
@@ -312,11 +290,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanPublished",
-                        "x-parser-schema-id": "<anonymous-schema-26>"
+                        "x-parser-schema-id": "<anonymous-schema-22>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:warehouse-planning:events:CapacityPlanPublished:v1",
-                        "x-parser-schema-id": "<anonymous-schema-27>"
+                        "x-parser-schema-id": "<anonymous-schema-23>"
                       },
                       "data": {
                         "type": "object",
@@ -340,92 +318,92 @@
                             "type": "string",
                             "description": "The CapacityPlan id (UUID); equals the CloudEvents subject.",
                             "example": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
-                            "x-parser-schema-id": "<anonymous-schema-28>"
+                            "x-parser-schema-id": "<anonymous-schema-24>"
                           },
                           "warehouse_id": {
                             "type": "string",
                             "description": "Warehouse the plan is for.",
                             "example": "WH-1",
-                            "x-parser-schema-id": "<anonymous-schema-29>"
+                            "x-parser-schema-id": "<anonymous-schema-25>"
                           },
                           "site_id": {
                             "type": "string",
                             "description": "Additive, optional. Canonical site the plan is scoped to (a facility-layout Site site_code, the same identifier its SiteCapabilityChanged event publishes). Omitted for plans stored before migration 0008.",
                             "example": "SIM1",
-                            "x-parser-schema-id": "<anonymous-schema-30>"
+                            "x-parser-schema-id": "<anonymous-schema-26>"
                           },
                           "location": {
                             "type": "string",
                             "description": "ProcessCapacity location the plan evaluates.",
                             "example": "PATH-ZONE-A",
-                            "x-parser-schema-id": "<anonymous-schema-31>"
+                            "x-parser-schema-id": "<anonymous-schema-27>"
                           },
                           "path_id": {
                             "type": "string",
                             "description": "ProcessPath evaluated.",
                             "example": "pick-rebin-pack",
-                            "x-parser-schema-id": "<anonymous-schema-32>"
+                            "x-parser-schema-id": "<anonymous-schema-28>"
                           },
                           "window_start": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Planning window start (RFC 3339, UTC).",
                             "example": "2026-10-05T08:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-33>"
+                            "x-parser-schema-id": "<anonymous-schema-29>"
                           },
                           "window_end": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Planning window end, exclusive (RFC 3339, UTC).",
                             "example": "2026-10-05T16:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-34>"
+                            "x-parser-schema-id": "<anonymous-schema-30>"
                           },
                           "assigned_demand": {
                             "type": "number",
                             "format": "double",
                             "description": "Orders assigned to the window.",
                             "example": 12000,
-                            "x-parser-schema-id": "<anonymous-schema-35>"
+                            "x-parser-schema-id": "<anonymous-schema-31>"
                           },
                           "path_capacity": {
                             "type": "number",
                             "format": "double",
                             "description": "Normalized path capacity, ORDER per HOUR.",
                             "example": 1000,
-                            "x-parser-schema-id": "<anonymous-schema-36>"
+                            "x-parser-schema-id": "<anonymous-schema-32>"
                           },
                           "capacity_over_window": {
                             "type": "number",
                             "format": "double",
                             "description": "path_capacity x window hours, in orders.",
                             "example": 8000,
-                            "x-parser-schema-id": "<anonymous-schema-37>"
+                            "x-parser-schema-id": "<anonymous-schema-33>"
                           },
                           "shortage": {
                             "type": "number",
                             "format": "double",
                             "description": "max(0, assigned_demand - capacity_over_window), in orders. Never negative.",
                             "example": 4000,
-                            "x-parser-schema-id": "<anonymous-schema-38>"
+                            "x-parser-schema-id": "<anonymous-schema-34>"
                           },
                           "bottleneck_step": {
                             "type": "string",
                             "description": "The ProcessPath step limiting end-to-end flow.",
                             "example": "REBIN",
-                            "x-parser-schema-id": "<anonymous-schema-39>"
+                            "x-parser-schema-id": "<anonymous-schema-35>"
                           },
                           "published_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the plan was published (RFC 3339, UTC).",
                             "example": "2026-10-04T21:45:10Z",
-                            "x-parser-schema-id": "<anonymous-schema-40>"
+                            "x-parser-schema-id": "<anonymous-schema-36>"
                           }
                         },
                         "x-parser-schema-id": "CapacityPlanPublishedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-25>"
+                    "x-parser-schema-id": "<anonymous-schema-21>"
                   }
                 ],
                 "x-parser-schema-id": "CapacityPlanPublishedEvent"
@@ -485,11 +463,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityShortageDetected",
-                        "x-parser-schema-id": "<anonymous-schema-42>"
+                        "x-parser-schema-id": "<anonymous-schema-38>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:warehouse-planning:events:CapacityShortageDetected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-43>"
+                        "x-parser-schema-id": "<anonymous-schema-39>"
                       },
                       "data": {
                         "type": "object",
@@ -511,72 +489,72 @@
                             "type": "string",
                             "description": "The CapacityPlan id (UUID); equals the CloudEvents subject.",
                             "example": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
-                            "x-parser-schema-id": "<anonymous-schema-44>"
+                            "x-parser-schema-id": "<anonymous-schema-40>"
                           },
                           "warehouse_id": {
                             "type": "string",
                             "description": "Warehouse the plan is for.",
                             "example": "WH-1",
-                            "x-parser-schema-id": "<anonymous-schema-45>"
+                            "x-parser-schema-id": "<anonymous-schema-41>"
                           },
                           "location": {
                             "type": "string",
                             "description": "ProcessCapacity location the plan evaluates.",
                             "example": "PATH-ZONE-A",
-                            "x-parser-schema-id": "<anonymous-schema-46>"
+                            "x-parser-schema-id": "<anonymous-schema-42>"
                           },
                           "path_id": {
                             "type": "string",
                             "description": "ProcessPath evaluated.",
                             "example": "pick-rebin-pack",
-                            "x-parser-schema-id": "<anonymous-schema-47>"
+                            "x-parser-schema-id": "<anonymous-schema-43>"
                           },
                           "window_start": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Planning window start (RFC 3339, UTC).",
                             "example": "2026-10-05T08:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-48>"
+                            "x-parser-schema-id": "<anonymous-schema-44>"
                           },
                           "window_end": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Planning window end, exclusive (RFC 3339, UTC).",
                             "example": "2026-10-05T16:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-49>"
+                            "x-parser-schema-id": "<anonymous-schema-45>"
                           },
                           "assigned_demand": {
                             "type": "number",
                             "format": "double",
                             "description": "Orders assigned to the window.",
                             "example": 12000,
-                            "x-parser-schema-id": "<anonymous-schema-50>"
+                            "x-parser-schema-id": "<anonymous-schema-46>"
                           },
                           "capacity_over_window": {
                             "type": "number",
                             "format": "double",
                             "description": "path_capacity x window hours, in orders.",
                             "example": 8000,
-                            "x-parser-schema-id": "<anonymous-schema-51>"
+                            "x-parser-schema-id": "<anonymous-schema-47>"
                           },
                           "shortage": {
                             "type": "number",
                             "format": "double",
                             "description": "max(0, assigned_demand - capacity_over_window), in orders. Never negative.",
                             "example": 4000,
-                            "x-parser-schema-id": "<anonymous-schema-52>"
+                            "x-parser-schema-id": "<anonymous-schema-48>"
                           },
                           "bottleneck_step": {
                             "type": "string",
                             "description": "The ProcessPath step limiting end-to-end flow.",
                             "example": "REBIN",
-                            "x-parser-schema-id": "<anonymous-schema-53>"
+                            "x-parser-schema-id": "<anonymous-schema-49>"
                           }
                         },
                         "x-parser-schema-id": "CapacityShortageDetectedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-41>"
+                    "x-parser-schema-id": "<anonymous-schema-37>"
                   }
                 ],
                 "x-parser-schema-id": "CapacityShortageDetectedEvent"
@@ -633,11 +611,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.warehouse-planning.capacityplan.BottleneckDetected",
-                        "x-parser-schema-id": "<anonymous-schema-55>"
+                        "x-parser-schema-id": "<anonymous-schema-51>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:warehouse-planning:events:BottleneckDetected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-56>"
+                        "x-parser-schema-id": "<anonymous-schema-52>"
                       },
                       "data": {
                         "type": "object",
@@ -657,58 +635,58 @@
                             "type": "string",
                             "description": "The CapacityPlan id (UUID); equals the CloudEvents subject.",
                             "example": "0b7a4c1e-5d52-4f0e-9a39-6c1f2f3a8b10",
-                            "x-parser-schema-id": "<anonymous-schema-57>"
+                            "x-parser-schema-id": "<anonymous-schema-53>"
                           },
                           "warehouse_id": {
                             "type": "string",
                             "description": "Warehouse the plan is for.",
                             "example": "WH-1",
-                            "x-parser-schema-id": "<anonymous-schema-58>"
+                            "x-parser-schema-id": "<anonymous-schema-54>"
                           },
                           "location": {
                             "type": "string",
                             "description": "ProcessCapacity location the plan evaluates.",
                             "example": "PATH-ZONE-A",
-                            "x-parser-schema-id": "<anonymous-schema-59>"
+                            "x-parser-schema-id": "<anonymous-schema-55>"
                           },
                           "path_id": {
                             "type": "string",
                             "description": "ProcessPath evaluated.",
                             "example": "pick-rebin-pack",
-                            "x-parser-schema-id": "<anonymous-schema-60>"
+                            "x-parser-schema-id": "<anonymous-schema-56>"
                           },
                           "window_start": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Planning window start (RFC 3339, UTC).",
                             "example": "2026-10-05T08:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-61>"
+                            "x-parser-schema-id": "<anonymous-schema-57>"
                           },
                           "window_end": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Planning window end, exclusive (RFC 3339, UTC).",
                             "example": "2026-10-05T16:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-62>"
+                            "x-parser-schema-id": "<anonymous-schema-58>"
                           },
                           "bottleneck_step": {
                             "type": "string",
                             "description": "The ProcessPath step limiting end-to-end flow.",
                             "example": "REBIN",
-                            "x-parser-schema-id": "<anonymous-schema-63>"
+                            "x-parser-schema-id": "<anonymous-schema-59>"
                           },
                           "path_capacity": {
                             "type": "number",
                             "format": "double",
                             "description": "Normalized path capacity, ORDER per HOUR.",
                             "example": 1000,
-                            "x-parser-schema-id": "<anonymous-schema-64>"
+                            "x-parser-schema-id": "<anonymous-schema-60>"
                           }
                         },
                         "x-parser-schema-id": "BottleneckDetectedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-54>"
+                    "x-parser-schema-id": "<anonymous-schema-50>"
                   }
                 ],
                 "x-parser-schema-id": "BottleneckDetectedEvent"
@@ -735,6 +713,341 @@
                       "window_end": "2026-10-05T16:00:00Z",
                       "bottleneck_step": "REBIN",
                       "path_capacity": 1000
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "x-no-consumer-reason": "pending: new capacity fact (WPL #70); consumer not built yet",
+              "name": "ProcessCapacityRegistered",
+              "title": "Process capacity registered",
+              "summary": "The first constraint brought a ProcessCapacity into being.",
+              "description": "Raised by `ProcessCapacity.AddConstraint` when the FIRST constraint of\n(processType, location, window) is registered -- the one that\nestablishes the native unit; its rate is the effective rate at that\nmoment. Raised on `POST /process-capacities` and by the labor-capacity\nconsumer, queued in the transactional outbox in the same transaction\nas the aggregate. `type` =\n`com.warehouse.wes.warehouse-planning.processcapacity.ProcessCapacityRegistered`;\n`subject` and Kafka key =\n`<processType>/<location>/<windowStart>/<windowEnd>`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "process-capacity"
+                },
+                {
+                  "name": "warehouse-planning"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of ProcessCapacityRegistered.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.warehouse-planning.processcapacity.ProcessCapacityRegistered",
+                        "x-parser-schema-id": "<anonymous-schema-62>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:warehouse-planning:events:ProcessCapacityRegistered:v1",
+                        "x-parser-schema-id": "<anonymous-schema-63>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Payload of ProcessCapacityRegistered -- the native constraint that created the aggregate.",
+                        "required": [
+                          "process_type",
+                          "location",
+                          "window_start",
+                          "window_end",
+                          "constraint_type",
+                          "quantity",
+                          "unit",
+                          "period_seconds"
+                        ],
+                        "properties": {
+                          "process_type": {
+                            "type": "string",
+                            "description": "The warehouse process (PICK, PACK, REBIN, ...).",
+                            "example": "PICK",
+                            "x-parser-schema-id": "<anonymous-schema-64>"
+                          },
+                          "location": {
+                            "type": "string",
+                            "description": "ProcessCapacity location.",
+                            "example": "PATH-ZONE-A",
+                            "x-parser-schema-id": "<anonymous-schema-65>"
+                          },
+                          "window_start": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Capacity window start (RFC 3339, UTC).",
+                            "example": "2026-10-05T08:00:00Z",
+                            "x-parser-schema-id": "<anonymous-schema-66>"
+                          },
+                          "window_end": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Capacity window end, exclusive (RFC 3339, UTC).",
+                            "example": "2026-10-05T09:00:00Z",
+                            "x-parser-schema-id": "<anonymous-schema-67>"
+                          },
+                          "constraint_type": {
+                            "type": "string",
+                            "description": "The native constraint type (LABOR, LOCATION, EQUIPMENT, STATION, CONVEYOR, BUFFER, REPLENISHMENT).",
+                            "example": "LABOR",
+                            "x-parser-schema-id": "<anonymous-schema-68>"
+                          },
+                          "quantity": {
+                            "type": "number",
+                            "format": "double",
+                            "description": "The constraint's rate quantity; also the effective rate at registration.",
+                            "example": 4000,
+                            "x-parser-schema-id": "<anonymous-schema-69>"
+                          },
+                          "unit": {
+                            "type": "string",
+                            "description": "The aggregate's native unit (UNIT, LINE, ORDER, PACKAGE).",
+                            "example": "UNIT",
+                            "x-parser-schema-id": "<anonymous-schema-70>"
+                          },
+                          "period_seconds": {
+                            "type": "number",
+                            "format": "double",
+                            "description": "The rate's time base in seconds.",
+                            "example": 3600,
+                            "x-parser-schema-id": "<anonymous-schema-71>"
+                          }
+                        },
+                        "x-parser-schema-id": "ProcessCapacityRegisteredData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-61>"
+                  }
+                ],
+                "x-parser-schema-id": "ProcessCapacityRegisteredEvent"
+              },
+              "examples": [
+                {
+                  "name": "pickLabor",
+                  "summary": "PICK at PATH-ZONE-A for one hour, native LABOR constraint 4000 UNIT/h.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "5d4c3b2a-1f2e-4a3b-9c8d-7e6f5a4b3c2d",
+                    "source": "/warehouse/warehouse-planning",
+                    "type": "com.warehouse.wes.warehouse-planning.processcapacity.ProcessCapacityRegistered",
+                    "subject": "PICK/PATH-ZONE-A/2026-10-05T08:00:00Z/2026-10-05T09:00:00Z",
+                    "time": "2026-10-04T21:45:10Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:warehouse-planning:events:ProcessCapacityRegistered:v1",
+                    "data": {
+                      "process_type": "PICK",
+                      "location": "PATH-ZONE-A",
+                      "window_start": "2026-10-05T08:00:00Z",
+                      "window_end": "2026-10-05T09:00:00Z",
+                      "constraint_type": "LABOR",
+                      "quantity": 4000,
+                      "unit": "UNIT",
+                      "period_seconds": 3600
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "x-no-consumer-reason": "pending: new capacity fact (WPL #70); consumer not built yet",
+              "name": "ProcessCapacityChanged",
+              "title": "Process capacity changed",
+              "summary": "A registration moved a ProcessCapacity's effective rate.",
+              "description": "Raised by `ProcessCapacity.AddConstraint` when a registration (new or\nre-registered) changes the effective rate: the minimum rate value,\nthe binding constraint, or both. A registration that leaves the\neffective rate untouched raises nothing. `type` =\n`com.warehouse.wes.warehouse-planning.processcapacity.ProcessCapacityChanged`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "process-capacity"
+                },
+                {
+                  "name": "warehouse-planning"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of ProcessCapacityChanged.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.warehouse-planning.processcapacity.ProcessCapacityChanged",
+                        "x-parser-schema-id": "<anonymous-schema-73>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:warehouse-planning:events:ProcessCapacityChanged:v1",
+                        "x-parser-schema-id": "<anonymous-schema-74>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Payload of ProcessCapacityChanged -- the effective rate before and after the causing registration.",
+                        "required": [
+                          "process_type",
+                          "location",
+                          "window_start",
+                          "window_end",
+                          "constraint_type",
+                          "previous_quantity",
+                          "previous_unit",
+                          "previous_period_seconds",
+                          "previous_binding_constraint",
+                          "effective_quantity",
+                          "effective_unit",
+                          "effective_period_seconds",
+                          "effective_binding_constraint"
+                        ],
+                        "properties": {
+                          "process_type": {
+                            "type": "string",
+                            "description": "The warehouse process (PICK, PACK, REBIN, ...).",
+                            "example": "PICK",
+                            "x-parser-schema-id": "<anonymous-schema-75>"
+                          },
+                          "location": {
+                            "type": "string",
+                            "description": "ProcessCapacity location.",
+                            "example": "PATH-ZONE-A",
+                            "x-parser-schema-id": "<anonymous-schema-76>"
+                          },
+                          "window_start": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Capacity window start (RFC 3339, UTC).",
+                            "example": "2026-10-05T08:00:00Z",
+                            "x-parser-schema-id": "<anonymous-schema-77>"
+                          },
+                          "window_end": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Capacity window end, exclusive (RFC 3339, UTC).",
+                            "example": "2026-10-05T09:00:00Z",
+                            "x-parser-schema-id": "<anonymous-schema-78>"
+                          },
+                          "constraint_type": {
+                            "type": "string",
+                            "description": "The constraint whose registration caused the change.",
+                            "example": "LOCATION",
+                            "x-parser-schema-id": "<anonymous-schema-79>"
+                          },
+                          "previous_quantity": {
+                            "type": "number",
+                            "format": "double",
+                            "description": "Effective rate quantity before the registration.",
+                            "example": 4000,
+                            "x-parser-schema-id": "<anonymous-schema-80>"
+                          },
+                          "previous_unit": {
+                            "type": "string",
+                            "description": "Native unit (identical across constraints of one aggregate).",
+                            "example": "UNIT",
+                            "x-parser-schema-id": "<anonymous-schema-81>"
+                          },
+                          "previous_period_seconds": {
+                            "type": "number",
+                            "format": "double",
+                            "description": "Effective rate time base before the registration, in seconds.",
+                            "example": 3600,
+                            "x-parser-schema-id": "<anonymous-schema-82>"
+                          },
+                          "previous_binding_constraint": {
+                            "type": "string",
+                            "description": "The binding constraint before the registration.",
+                            "example": "LABOR",
+                            "x-parser-schema-id": "<anonymous-schema-83>"
+                          },
+                          "effective_quantity": {
+                            "type": "number",
+                            "format": "double",
+                            "description": "Effective rate quantity after the registration.",
+                            "example": 3500,
+                            "x-parser-schema-id": "<anonymous-schema-84>"
+                          },
+                          "effective_unit": {
+                            "type": "string",
+                            "description": "Native unit (identical across constraints of one aggregate).",
+                            "example": "UNIT",
+                            "x-parser-schema-id": "<anonymous-schema-85>"
+                          },
+                          "effective_period_seconds": {
+                            "type": "number",
+                            "format": "double",
+                            "description": "Effective rate time base after the registration, in seconds.",
+                            "example": 3600,
+                            "x-parser-schema-id": "<anonymous-schema-86>"
+                          },
+                          "effective_binding_constraint": {
+                            "type": "string",
+                            "description": "The binding constraint after the registration.",
+                            "example": "LOCATION",
+                            "x-parser-schema-id": "<anonymous-schema-87>"
+                          },
+                          "capacity_over_window": {
+                            "type": "number",
+                            "format": "double",
+                            "description": "path_capacity x window hours, in orders.",
+                            "example": 8000,
+                            "x-parser-schema-id": "<anonymous-schema-88>"
+                          },
+                          "shortage": {
+                            "type": "number",
+                            "format": "double",
+                            "description": "max(0, assigned_demand - capacity_over_window), in orders. Never negative.",
+                            "example": 4000,
+                            "x-parser-schema-id": "<anonymous-schema-89>"
+                          },
+                          "bottleneck_step": {
+                            "type": "string",
+                            "description": "The ProcessPath step limiting end-to-end flow.",
+                            "example": "REBIN",
+                            "x-parser-schema-id": "<anonymous-schema-90>"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "DRAFT"
+                            ],
+                            "description": "Always DRAFT at creation.",
+                            "example": "DRAFT",
+                            "x-parser-schema-id": "<anonymous-schema-91>"
+                          }
+                        },
+                        "x-parser-schema-id": "ProcessCapacityChangedData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-72>"
+                  }
+                ],
+                "x-parser-schema-id": "ProcessCapacityChangedEvent"
+              },
+              "examples": [
+                {
+                  "name": "locationTakesOver",
+                  "summary": "LOCATION 3500 UNIT/h drops below LABOR 4000 UNIT/h and binds.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "4c3b2a19-0e1d-4f2a-8b7c-6d5e4f3a2b1c",
+                    "source": "/warehouse/warehouse-planning",
+                    "type": "com.warehouse.wes.warehouse-planning.processcapacity.ProcessCapacityChanged",
+                    "subject": "PICK/PATH-ZONE-A/2026-10-05T08:00:00Z/2026-10-05T09:00:00Z",
+                    "time": "2026-10-04T21:46:10Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:warehouse-planning:events:ProcessCapacityChanged:v1",
+                    "data": {
+                      "process_type": "PICK",
+                      "location": "PATH-ZONE-A",
+                      "window_start": "2026-10-05T08:00:00Z",
+                      "window_end": "2026-10-05T09:00:00Z",
+                      "constraint_type": "LOCATION",
+                      "previous_quantity": 4000,
+                      "previous_unit": "UNIT",
+                      "previous_period_seconds": 3600,
+                      "previous_binding_constraint": "LABOR",
+                      "effective_quantity": 3500,
+                      "effective_unit": "UNIT",
+                      "effective_period_seconds": 3600,
+                      "effective_binding_constraint": "LOCATION"
                     }
                   }
                 }
@@ -777,15 +1090,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanCreated",
-                        "x-parser-schema-id": "<anonymous-schema-66>"
+                        "x-parser-schema-id": "<anonymous-schema-93>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:warehouse-planning:analytics:CapacityPlanCreated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-67>"
+                        "x-parser-schema-id": "<anonymous-schema-94>"
                       },
                       "data": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-65>"
+                    "x-parser-schema-id": "<anonymous-schema-92>"
                   }
                 ],
                 "x-parser-schema-id": "CapacityPlanCreatedAnalyticsEvent"
@@ -841,11 +1154,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanPublished",
-                        "x-parser-schema-id": "<anonymous-schema-69>"
+                        "x-parser-schema-id": "<anonymous-schema-96>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:warehouse-planning:analytics:CapacityPlanPublished:v1",
-                        "x-parser-schema-id": "<anonymous-schema-70>"
+                        "x-parser-schema-id": "<anonymous-schema-97>"
                       },
                       "data": {
                         "description": "Payload of CapacityPlanPublished on the analytics topic -- the integration payload plus binding_constraint.",
@@ -861,16 +1174,16 @@
                                 "type": "string",
                                 "description": "Additive, analytics-only. The constraint type binding the bottleneck step (LABOR, STATION, ...); empty for a plan created before it was recorded.\n",
                                 "example": "STATION",
-                                "x-parser-schema-id": "<anonymous-schema-72>"
+                                "x-parser-schema-id": "<anonymous-schema-99>"
                               }
                             },
-                            "x-parser-schema-id": "<anonymous-schema-71>"
+                            "x-parser-schema-id": "<anonymous-schema-98>"
                           }
                         ],
                         "x-parser-schema-id": "CapacityPlanPublishedAnalyticsData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-68>"
+                    "x-parser-schema-id": "<anonymous-schema-95>"
                   }
                 ],
                 "x-parser-schema-id": "CapacityPlanPublishedAnalyticsEvent"
@@ -928,15 +1241,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityShortageDetected",
-                        "x-parser-schema-id": "<anonymous-schema-74>"
+                        "x-parser-schema-id": "<anonymous-schema-101>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:warehouse-planning:analytics:CapacityShortageDetected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-75>"
+                        "x-parser-schema-id": "<anonymous-schema-102>"
                       },
                       "data": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[2].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-73>"
+                    "x-parser-schema-id": "<anonymous-schema-100>"
                   }
                 ],
                 "x-parser-schema-id": "CapacityShortageDetectedAnalyticsEvent"
@@ -990,15 +1303,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.warehouse-planning.capacityplan.BottleneckDetected",
-                        "x-parser-schema-id": "<anonymous-schema-77>"
+                        "x-parser-schema-id": "<anonymous-schema-104>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:warehouse-planning:analytics:BottleneckDetected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-78>"
+                        "x-parser-schema-id": "<anonymous-schema-105>"
                       },
                       "data": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[3].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-76>"
+                    "x-parser-schema-id": "<anonymous-schema-103>"
                   }
                 ],
                 "x-parser-schema-id": "BottleneckDetectedAnalyticsEvent"
@@ -1068,11 +1381,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted",
-                    "x-parser-schema-id": "<anonymous-schema-80>"
+                    "x-parser-schema-id": "<anonymous-schema-107>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:workforce-management:events:ShiftPlanCommitted:v1",
-                    "x-parser-schema-id": "<anonymous-schema-81>"
+                    "x-parser-schema-id": "<anonymous-schema-108>"
                   },
                   "data": {
                     "type": "object",
@@ -1087,41 +1400,41 @@
                       "building_id": {
                         "type": "string",
                         "example": "BLD1",
-                        "x-parser-schema-id": "<anonymous-schema-82>"
+                        "x-parser-schema-id": "<anonymous-schema-109>"
                       },
                       "shift_id": {
                         "type": "string",
                         "example": "SHIFT1",
-                        "x-parser-schema-id": "<anonymous-schema-83>"
+                        "x-parser-schema-id": "<anonymous-schema-110>"
                       },
                       "path_id": {
                         "type": "string",
                         "description": "Becomes the ProcessType (upper-cased) of the LABOR constraint.",
                         "example": "pack",
-                        "x-parser-schema-id": "<anonymous-schema-84>"
+                        "x-parser-schema-id": "<anonymous-schema-111>"
                       },
                       "planned_heads": {
                         "type": "integer",
                         "example": 3,
-                        "x-parser-schema-id": "<anonymous-schema-85>"
+                        "x-parser-schema-id": "<anonymous-schema-112>"
                       },
                       "planned_rate": {
                         "type": "number",
                         "format": "double",
                         "example": 50,
-                        "x-parser-schema-id": "<anonymous-schema-86>"
+                        "x-parser-schema-id": "<anonymous-schema-113>"
                       },
                       "planned_hours": {
                         "type": "number",
                         "format": "double",
                         "example": 8,
-                        "x-parser-schema-id": "<anonymous-schema-87>"
+                        "x-parser-schema-id": "<anonymous-schema-114>"
                       }
                     },
                     "x-parser-schema-id": "ShiftPlanCommittedData"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-79>"
+                "x-parser-schema-id": "<anonymous-schema-106>"
               }
             ],
             "x-parser-schema-id": "ShiftPlanCommittedEvent"
@@ -1189,11 +1502,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered",
-                        "x-parser-schema-id": "<anonymous-schema-89>"
+                        "x-parser-schema-id": "<anonymous-schema-116>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:LocationSlotRegistered:v1",
-                        "x-parser-schema-id": "<anonymous-schema-90>"
+                        "x-parser-schema-id": "<anonymous-schema-117>"
                       },
                       "data": {
                         "type": "object",
@@ -1207,38 +1520,38 @@
                           "locationCode": {
                             "type": "string",
                             "example": "A-01-01",
-                            "x-parser-schema-id": "<anonymous-schema-91>"
+                            "x-parser-schema-id": "<anonymous-schema-118>"
                           },
                           "zoneId": {
                             "type": "string",
                             "example": "ZONE-A",
-                            "x-parser-schema-id": "<anonymous-schema-92>"
+                            "x-parser-schema-id": "<anonymous-schema-119>"
                           },
                           "locationType": {
                             "type": "string",
                             "example": "BULK",
-                            "x-parser-schema-id": "<anonymous-schema-93>"
+                            "x-parser-schema-id": "<anonymous-schema-120>"
                           },
                           "role": {
                             "type": "string",
                             "description": "Storage (default) tallies storage positions per locationType; WorkCenter tallies stations per activity.",
                             "example": "Storage",
-                            "x-parser-schema-id": "<anonymous-schema-94>"
+                            "x-parser-schema-id": "<anonymous-schema-121>"
                           },
                           "activities": {
                             "type": "array",
                             "description": "Present only when role is WorkCenter.",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-96>"
+                              "x-parser-schema-id": "<anonymous-schema-123>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-95>"
+                            "x-parser-schema-id": "<anonymous-schema-122>"
                           }
                         },
                         "x-parser-schema-id": "LocationSlotRegisteredData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-88>"
+                    "x-parser-schema-id": "<anonymous-schema-115>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotRegisteredEvent"
@@ -1289,11 +1602,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned",
-                        "x-parser-schema-id": "<anonymous-schema-98>"
+                        "x-parser-schema-id": "<anonymous-schema-125>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:LocationSlotDecommissioned:v1",
-                        "x-parser-schema-id": "<anonymous-schema-99>"
+                        "x-parser-schema-id": "<anonymous-schema-126>"
                       },
                       "data": {
                         "type": "object",
@@ -1305,13 +1618,13 @@
                           "locationCode": {
                             "type": "string",
                             "example": "A-01-01",
-                            "x-parser-schema-id": "<anonymous-schema-100>"
+                            "x-parser-schema-id": "<anonymous-schema-127>"
                           }
                         },
                         "x-parser-schema-id": "LocationSlotDecommissionedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-97>"
+                    "x-parser-schema-id": "<anonymous-schema-124>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotDecommissionedEvent"
@@ -1341,7 +1654,7 @@
       }
     },
     "warehouse.order-management.events": {
-      "description": "order-management's integration topic (`OrderTopic`). This service consumes\nit with a STABLE consumer group read from env `DEMAND_CONSUMER_GROUP` (no\ndefault; unset means the consumer is not started). Only\n`OrderAllocated` and `OrderPartiallyAllocated` are acted on; every other\nCloudEvents `type` -- `OrderRepromised` included -- is ignored, and a\nmessage that is not a valid CloudEvent is skipped (WARN), never blocking\nthe partition.\n",
+      "description": "order-management's integration topic (`OrderTopic`). This service consumes\nit with a STABLE consumer group read from env `DEMAND_CONSUMER_GROUP` (REQUIRED,\nno default; ADR 0016). Only\n`OrderAllocated` and `OrderPartiallyAllocated` are acted on; every other\nCloudEvents `type` -- `OrderRepromised` included -- is ignored, and a\nmessage that is not a valid CloudEvent is skipped (WARN), never blocking\nthe partition.\n",
       "publish": {
         "operationId": "consumeOrderAllocationEvents",
         "summary": "Consume order-management's order allocation events.",
@@ -1376,11 +1689,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderAllocated",
-                        "x-parser-schema-id": "<anonymous-schema-102>"
+                        "x-parser-schema-id": "<anonymous-schema-129>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:events:OrderAllocated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-103>"
+                        "x-parser-schema-id": "<anonymous-schema-130>"
                       },
                       "data": {
                         "type": "object",
@@ -1394,14 +1707,14 @@
                             "type": "string",
                             "description": "Must equal the CloudEvents `subject`.",
                             "example": "ord-7c9e6679-7d5a-4b37-b2f1-93b0c4a1d8f2",
-                            "x-parser-schema-id": "<anonymous-schema-104>"
+                            "x-parser-schema-id": "<anonymous-schema-131>"
                           },
                           "promise_date": {
                             "type": "string",
                             "format": "date-time",
                             "description": "The order's promise cutoff instant. The window predicate is applied to it.",
                             "example": "2026-10-05T10:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-105>"
+                            "x-parser-schema-id": "<anonymous-schema-132>"
                           },
                           "lines": {
                             "type": "array",
@@ -1411,18 +1724,18 @@
                               "properties": {
                                 "line_no": {
                                   "type": "integer",
-                                  "x-parser-schema-id": "<anonymous-schema-108>"
+                                  "x-parser-schema-id": "<anonymous-schema-135>"
                                 }
                               },
-                              "x-parser-schema-id": "<anonymous-schema-107>"
+                              "x-parser-schema-id": "<anonymous-schema-134>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-106>"
+                            "x-parser-schema-id": "<anonymous-schema-133>"
                           }
                         },
                         "x-parser-schema-id": "OrderAllocationData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-101>"
+                    "x-parser-schema-id": "<anonymous-schema-128>"
                   }
                 ],
                 "x-parser-schema-id": "OrderAllocatedEvent"
@@ -1487,18 +1800,307 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderPartiallyAllocated",
-                        "x-parser-schema-id": "<anonymous-schema-110>"
+                        "x-parser-schema-id": "<anonymous-schema-137>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:events:OrderPartiallyAllocated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-111>"
+                        "x-parser-schema-id": "<anonymous-schema-138>"
                       },
                       "data": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-109>"
+                    "x-parser-schema-id": "<anonymous-schema-136>"
                   }
                 ],
                 "x-parser-schema-id": "OrderPartiallyAllocatedEvent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.inbound-receiving.events": {
+      "description": "inbound-receiving's integration topic (`InboundTopic`, key = appointment id for\nappointment events). This service consumes it with a STABLE consumer group read from\nenv `INBOUND_DEMAND_CONSUMER_GROUP` (REQUIRED, no default; ADR 0016/0017). Only\n`DockAppointmentBooked` and `DockAppointmentCancelled` are acted on; every other\n`type` on the topic (ASN, check-in, completion, receipt events) is ignored. A message\nthat is not CloudEvents 1.0, or a known type with an unusable payload, is published to\n`warehouse.inbound-receiving.events.dlq` (raw bytes plus `x-dlq-*` headers).\n",
+      "publish": {
+        "operationId": "consumeDockAppointmentEvents",
+        "summary": "Consume inbound-receiving's dock appointment events.",
+        "description": "Consumed by this service into a LOCAL inbound-demand read model\n(`inbound_appointments`, one row per appointment id; `GET /inbound-demand`,\n`get_inbound_demand`, the inbound figures on a capacity plan). An appointment is\ndemand in a window [start, end) when its door window STARTS at or after start and\nstrictly before end. Last writer wins per appointment on the CloudEvents `time`; a\nCancelled wins a tie and is stored as a tombstone if it arrives before its Booked.\nThe idempotency claim on the CloudEvents `id` and the upsert commit in ONE database\ntransaction; the offset is committed only afterwards. The labour minutes are NOT in\nthe event: they come from the operator-declared inbound labour standard. See\ndocs/adr/0017-inbound-labour-demand-and-observed-capacity-feedback.md.\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "DockAppointmentBooked",
+              "title": "Dock appointment booked (consumed)",
+              "summary": "inbound-receiving booked a door window for a carrier.",
+              "description": "CONSUMED from `warehouse.inbound-receiving.events` (producer: inbound-receiving, its own\n`apis/asyncapi.yaml`). Stores the appointment in the local inbound-demand read model\n(`inbound_appointments`, one row per `data.appointment_id`): door window start/end and\nASN count = `len(data.asn_numbers)`, site = the configured `DEMAND_SITE_ID` (the event\ncarries none). `subject` must equal `data.appointment_id`. Ordering guard: last writer\nwins per appointment on the CloudEvents `time`, and a Cancelled wins a tie, so a Booked\nthat arrives after the Cancelled that supersedes it changes nothing. Deduped on the\nCloudEvents `id`. `type` =\n`com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                },
+                {
+                  "name": "warehouse-planning"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of inbound-receiving's DockAppointmentBooked (consumed).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked",
+                        "x-parser-schema-id": "<anonymous-schema-140>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:inbound-receiving:events:DockAppointmentBooked:v1",
+                        "x-parser-schema-id": "<anonymous-schema-141>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Fields this service reads from inbound-receiving's DockAppointmentBooked `data` (hand-mirrored, never imported). door_code and carrier are ignored.",
+                        "required": [
+                          "appointment_id",
+                          "window_start",
+                          "window_end",
+                          "asn_numbers"
+                        ],
+                        "properties": {
+                          "appointment_id": {
+                            "type": "string",
+                            "description": "Must equal the CloudEvents `subject`.",
+                            "x-parser-schema-id": "<anonymous-schema-142>"
+                          },
+                          "window_start": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Door window start; the window predicate (ADR 0003) is applied to it.",
+                            "x-parser-schema-id": "<anonymous-schema-143>"
+                          },
+                          "window_end": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Must be after window_start.",
+                            "x-parser-schema-id": "<anonymous-schema-144>"
+                          },
+                          "asn_numbers": {
+                            "type": "array",
+                            "minItems": 1,
+                            "description": "Only its length is read (the ASN count that `minutes_per_asn` multiplies).",
+                            "items": {
+                              "type": "string",
+                              "x-parser-schema-id": "<anonymous-schema-146>"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-145>"
+                          }
+                        },
+                        "x-parser-schema-id": "DockAppointmentBookedData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-139>"
+                  }
+                ],
+                "x-parser-schema-id": "DockAppointmentBookedEvent"
+              },
+              "examples": [
+                {
+                  "name": "booked",
+                  "summary": "A two-hour window at an inbound door covering one ASN.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "4a8c2e91-5b3d-4c7f-a012-9e6d1b8f3c25",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked",
+                    "subject": "appt-123e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-08T12:05:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:events:DockAppointmentBooked:v1",
+                    "data": {
+                      "appointment_id": "appt-123e4567-e89b-12d3-a456-426614174000",
+                      "door_code": "WH1-DOCK-IN-01",
+                      "carrier": "ACME Freight",
+                      "window_start": "2026-10-09T08:00:00Z",
+                      "window_end": "2026-10-09T10:00:00Z",
+                      "asn_numbers": [
+                        "ASN-1001"
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DockAppointmentCancelled",
+              "title": "Dock appointment cancelled (consumed)",
+              "summary": "inbound-receiving cancelled a Booked appointment.",
+              "description": "CONSUMED from `warehouse.inbound-receiving.events`. Removes the appointment's demand:\nthe row flips to CANCELLED and stops counting. A Cancelled that arrives BEFORE its\nBooked is stored as a tombstone (no window) and wins over any Booked with an older or\nequal `time`. Idempotent: a redelivered `id` is a no-op. `type` =\n`com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                },
+                {
+                  "name": "warehouse-planning"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of inbound-receiving's DockAppointmentCancelled (consumed).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled",
+                        "x-parser-schema-id": "<anonymous-schema-148>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:inbound-receiving:events:DockAppointmentCancelled:v1",
+                        "x-parser-schema-id": "<anonymous-schema-149>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Fields this service reads from inbound-receiving's DockAppointmentCancelled `data`. door_code and reason are ignored.",
+                        "required": [
+                          "appointment_id"
+                        ],
+                        "properties": {
+                          "appointment_id": {
+                            "type": "string",
+                            "description": "Must equal the CloudEvents `subject`.",
+                            "x-parser-schema-id": "<anonymous-schema-150>"
+                          }
+                        },
+                        "x-parser-schema-id": "DockAppointmentCancelledData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-147>"
+                  }
+                ],
+                "x-parser-schema-id": "DockAppointmentCancelledEvent"
+              },
+              "examples": [
+                {
+                  "name": "cancelled",
+                  "summary": "Cancelled because the carrier was delayed.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "b2c4d6e8-1f3a-4b5c-9d7e-8f0a1b2c3d4e",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled",
+                    "subject": "appt-123e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-08T18:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:events:DockAppointmentCancelled:v1",
+                    "data": {
+                      "appointment_id": "appt-123e4567-e89b-12d3-a456-426614174000",
+                      "door_code": "WH1-DOCK-IN-01",
+                      "reason": "Carrier delayed"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.fulfillment.events": {
+      "description": "fulfillment-execution's integration topic (`FulfillmentTopic`, key = task id). This\nservice consumes it with a STABLE consumer group read from env\n`OBSERVED_CAPACITY_CONSUMER_GROUP` (REQUIRED, no default; ADR 0016/0017). Only\n`TaskCompleted` is acted on; every other `type` is ignored. A message that is not\nCloudEvents 1.0, or a TaskCompleted without `task_id`/`task_type`, is published to\n`warehouse.fulfillment.events.dlq` (raw bytes plus `x-dlq-*` headers).\n",
+      "publish": {
+        "operationId": "consumeTaskCompletedEvents",
+        "summary": "Consume fulfillment-execution's TaskCompleted.",
+        "description": "Consumed by this service into a LOCAL observed-capacity read model\n(`observed_capacity`, one row per location + process type + minute; additive).\nIt feeds the ADVISORY planned-versus-observed variance\n(`GET /capacity-plans/{id}/variance`, `get_capacity_plan_variance`); it never\nchanges a planned capacity and never republishes a plan. The idempotency claim on\nthe CloudEvents `id` and the upsert commit in ONE transaction, so a redelivered\nevent adds nothing. See\ndocs/adr/0017-inbound-labour-demand-and-observed-capacity-feedback.md.\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "name": "TaskCompleted",
+          "title": "Task completed (consumed)",
+          "summary": "fulfillment-execution reports that a station completed a task.",
+          "description": "CONSUMED from `warehouse.fulfillment.events` (producer: fulfillment-execution, its own\n`apis/asyncapi.yaml`). Adds the completion to the local `observed_capacity` read model:\none row per (location, process_type = upper-cased `data.task_type`, minute of the\nCloudEvents `time`) with the task count and the duration total. Site = the configured\n`DEMAND_SITE_ID`. The idempotency claim on the CloudEvents `id` and the additive upsert\ncommit in ONE transaction, so a redelivered `id` adds nothing. A completion without\n`task_type` or `task_id` is dead-lettered. Only the fields below are read; the\nenrichment fields fulfillment-execution adds (`work_unit_id`, `associate_id`,\nrelocation fields) are ignored. `type` =\n`com.warehouse.wes.fulfillment-execution.task.TaskCompleted`.\n",
+          "contentType": "application/cloudevents+json",
+          "tags": [
+            {
+              "name": "consumed"
+            },
+            {
+              "name": "warehouse-planning"
+            }
+          ],
+          "payload": {
+            "description": "CloudEvents 1.0 envelope of fulfillment-execution's TaskCompleted (consumed).",
+            "allOf": [
+              "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+                    "x-parser-schema-id": "<anonymous-schema-152>"
+                  },
+                  "dataschema": {
+                    "const": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
+                    "x-parser-schema-id": "<anonymous-schema-153>"
+                  },
+                  "data": {
+                    "type": "object",
+                    "description": "Fields this service reads from fulfillment-execution's TaskCompleted `data` (hand-mirrored, never imported). Everything else is ignored.",
+                    "required": [
+                      "task_id",
+                      "task_type"
+                    ],
+                    "properties": {
+                      "task_id": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-154>"
+                      },
+                      "task_type": {
+                        "type": "string",
+                        "description": "The process step (PICK, PACK, ...); upper-cased to form the read model's process_type.",
+                        "example": "PICK",
+                        "x-parser-schema-id": "<anonymous-schema-155>"
+                      },
+                      "duration_seconds": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 0,
+                        "description": "Optional; completions without it count as tasks but do not contribute to the mean duration.",
+                        "x-parser-schema-id": "<anonymous-schema-156>"
+                      }
+                    },
+                    "x-parser-schema-id": "TaskCompletedData"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-151>"
+              }
+            ],
+            "x-parser-schema-id": "TaskCompletedEvent"
+          },
+          "examples": [
+            {
+              "name": "pickCompleted",
+              "summary": "A PICK task completed after 245 s.",
+              "payload": {
+                "specversion": "1.0",
+                "id": "a1b2c3d4-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+                "source": "/warehouse/fulfillment-execution",
+                "type": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+                "subject": "task-7c9e6679",
+                "time": "2026-10-05T09:14:30Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
+                "data": {
+                  "task_id": "task-7c9e6679",
+                  "task_type": "PICK",
+                  "duration_seconds": 245
+                }
               }
             }
           ]
@@ -1512,6 +2114,8 @@
       "CapacityPlanPublished": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[1]",
       "CapacityShortageDetected": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[2]",
       "BottleneckDetected": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[3]",
+      "ProcessCapacityRegistered": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[4]",
+      "ProcessCapacityChanged": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[5]",
       "CapacityPlanCreatedAnalytics": "$ref:$.channels.warehouse.warehouse-planning.analytics.subscribe.message.oneOf[0]",
       "CapacityPlanPublishedAnalytics": "$ref:$.channels.warehouse.warehouse-planning.analytics.subscribe.message.oneOf[1]",
       "CapacityShortageDetectedAnalytics": "$ref:$.channels.warehouse.warehouse-planning.analytics.subscribe.message.oneOf[2]",
@@ -1520,11 +2124,18 @@
       "OrderAllocated": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[0]",
       "OrderPartiallyAllocated": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[1]",
       "LocationSlotRegistered": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[0]",
-      "LocationSlotDecommissioned": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1]"
+      "LocationSlotDecommissioned": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1]",
+      "DockAppointmentBooked": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.oneOf[0]",
+      "DockAppointmentCancelled": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.oneOf[1]",
+      "TaskCompleted": "$ref:$.channels.warehouse.fulfillment.events.publish.message"
     },
     "schemas": {
       "CloudEventEnvelope": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
       "CapacityPlanCreatedData": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[1].properties.data",
+      "ProcessCapacityRegisteredEvent": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[4].payload",
+      "ProcessCapacityRegisteredData": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[4].payload.allOf[1].properties.data",
+      "ProcessCapacityChangedEvent": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[5].payload",
+      "ProcessCapacityChangedData": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data",
       "CapacityPlanPublishedData": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[1].payload.allOf[1].properties.data",
       "CapacityShortageDetectedData": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[2].payload.allOf[1].properties.data",
       "BottleneckDetectedData": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[3].payload.allOf[1].properties.data",
@@ -1545,7 +2156,13 @@
       "LocationSlotDecommissionedEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1].payload",
       "OrderAllocationData": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data",
       "OrderAllocatedEvent": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[0].payload",
-      "OrderPartiallyAllocatedEvent": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[1].payload"
+      "OrderPartiallyAllocatedEvent": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[1].payload",
+      "DockAppointmentBookedData": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.oneOf[0].payload.allOf[1].properties.data",
+      "DockAppointmentBookedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.oneOf[0].payload",
+      "DockAppointmentCancelledData": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.oneOf[1].payload.allOf[1].properties.data",
+      "DockAppointmentCancelledEvent": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.oneOf[1].payload",
+      "TaskCompletedData": "$ref:$.channels.warehouse.fulfillment.events.publish.message.payload.allOf[1].properties.data",
+      "TaskCompletedEvent": "$ref:$.channels.warehouse.fulfillment.events.publish.message.payload"
     }
   },
   "x-parser-spec-parsed": true,

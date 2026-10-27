@@ -2,7 +2,7 @@
 id: index
 title: Network Fulfillment
 sidebar_label: Network Fulfillment
-description: The Anti-Corruption Layer between the fleet and an external retail fulfillment network — a Supporting subdomain that owns NetworkOrder and CapabilityOffer, polls network demand (stub only), asks order-management whether each deadline is feasible, and publishes seven CloudEvents types.
+description: The Anti-Corruption Layer between the fleet and an external retail fulfillment network — a Supporting subdomain that owns NetworkOrder and CapabilityOffer, polls network demand from the retail network (live mode in the reference deployment), asks order-management whether each deadline is feasible, and publishes seven CloudEvents types.
 slug: /contexts/network-fulfillment
 ---
 
@@ -29,11 +29,18 @@ upstream and an **Anti-Corruption Layer** for the fleet. It is also a
 **Customer** of `order-management`, which it asks over REST whether each
 deadline is feasible.
 
-:::warning[Study project, stub network only]
+:::warning[Study project, in-cluster network]
 This context is part of a DDD learning exercise. It is **not affiliated
-with, endorsed by, or representative of** any real retailer. The network
-gateway runs only against a stub: `NETWORK_MODE` defaults to `stub`, and
-`live` refuses to boot until a real adapter exists.
+with, endorsed by, or representative of** any real retailer. The network it
+talks to is the study's own retail network (the
+[retail network section](https://iqvo.github.io/warehouse-docs/network/)):
+`NETWORK_MODE=live` is built (ADRs
+[0026](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0026-live-retail-network-adapter-demand-loop.md),
+[0027](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0027-supply-loop-node-profile-and-inventory-feed.md),
+[0028](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0028-inbound-loop-seller-shipments-and-receipts.md))
+and `warehouse-infra` `develop` runs it against the in-cluster
+`vendor-connectivity` Service as vendor `V-WS` (`helm-values/network-fulfillment.yaml`,
+since 2026-10-25). `stub` stays the chart default and the test mode.
 :::
 
 :::info[What its own pages describe]
@@ -44,16 +51,23 @@ gateway runs only against a stub: `NETWORK_MODE` defaults to `stub`, and
   read-only MCP tools, and a `web/` remote in `warehouse-console`
   (ADR 0010).
 - **Outbound:** REST to `order-management` (raise, release and cancel a
-  held order; live), and an opt-in REST read of `inventory-storage` usable
-  stock.
+  held order; live), a REST read of `inventory-storage` usable stock for the
+  capability offers (`CAPABILITY_OFFER_ENABLED=true` in `warehouse-infra`
+  `develop`), and, in live mode, the retail network's Vendor API: the demand
+  loop (purchase orders, acknowledgements, labels, shipment confirmations),
+  the supply loop (node profile and inventory feed) and the inbound loop
+  (seller shipments and receipts).
 - **Events:** with `EVENT_PUBLISHER=kafka`, seven CloudEvents types
   (`com.warehouse.wes.network-fulfillment.networkorder.*`) go to
   `warehouse.network-fulfillment.events` and to
   `warehouse.network-fulfillment.analytics`, through a transactional outbox
-  when a database is configured. No other fleet context consumes the
-  integration topic yet. The context consumes
-  `process-path-management`'s catalogue and CPT schedule and
-  `wes-work-planning`'s `PathCapacityChanged` into opt-in caches.
+  when a database is configured. `exception-management` consumes the two
+  alarm types `AcknowledgementDeadlineAtRisk` and `OrphanedHoldCancelled`
+  (context map K57); the five `NetworkOrder*` types have no consumer by
+  decision. The context consumes `process-path-management`'s catalogue and
+  CPT schedule and `wes-work-planning`'s `PathCapacityChanged` into caches,
+  and `inbound-receiving`'s `ReceiptCartonReceived` for the inbound loop
+  (ADR 0028, group `network-fulfillment-inbound-receiving`).
 
 See the [Bounded Context Canvas](/contexts/network-fulfillment/bounded-context-canvas)
 and [Context Map](/contexts/network-fulfillment/context-map) for every

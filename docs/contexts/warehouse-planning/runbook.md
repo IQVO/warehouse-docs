@@ -56,18 +56,25 @@ boundary.
 
 ### Render guards
 
-The chart fails `helm template` instead of rendering a pod that would crash or
-run in a degraded mode:
+The chart fails `helm template` instead of rendering a pod that would crash at
+boot or run in a degraded mode (`requireRealRuntime` in `_helpers.tpl`; Postgres
+and Kafka are the only runtime, [ADR 0016](https://iqvo.github.io/warehouse-planning/docs/adr/0016-postgres-and-kafka-are-the-only-runtime)):
 
-- no `database.url` and no `database.existingSecret` (`requireDatabase`; the binary would fall back to in-memory adapters);
-- `config.eventPublisher=kafka` with `kafka.enabled=false` (`requireKafkaForPublisher`);
-- `demand.consumerGroup` set without `demand.siteId`, or without `kafka.enabled` (`requireDemandConfig`);
-- `analytics.enabled` without an analytical DSN source or without `kafka.enabled` (`requireAnalyticsConfig`).
+- no `database.url` and no `database.existingSecret` (`requireDatabase`);
+- no `kafka.brokers`, `kafka.enabled=false`, or a `config.eventPublisher` other than `kafka` (`requireKafka`; a legacy `kafka.enabled: true` still renders);
+- an empty `config.laborCapacityConsumerGroup`, `config.storageCapacityConsumerGroup`, `demand.consumerGroup` or `demand.siteId` (`requireConsumerGroups`);
+- `EVENT_PUBLISHER` other than `kafka` in `extraEnv` / `mcp.extraEnv` (`requireNoInMemoryEnv`);
+- `terminationGracePeriodSeconds` under 20 (`requireGracePeriod`);
+- `analytics.enabled` without an analytical DSN source or without `analytics.projector.consumerGroup` (`requireAnalyticsConfig`).
 
 Check a values change locally with
-`helm lint charts/warehouse-planning --set database.url=postgres://u@example.invalid:5432/db`
-and `python3 charts/warehouse-planning/tests/test_service_selectors.py`. The
-second check proves that each Service selects exactly one Deployment.
+`helm lint charts/warehouse-planning -f charts/warehouse-planning/ci/default-values.yaml`,
+`bash charts/warehouse-planning/tests/render_test.sh` and
+`python3 charts/warehouse-planning/tests/test_service_selectors.py`. The first
+renders warehouse-infra's current values (verbatim copies under
+`charts/warehouse-planning/tests/warehouse-infra-*-values.yaml`, refreshed from
+its `origin/develop`) and asserts that every mandatory variable is provided; the
+last proves that each Service selects exactly one Deployment.
 
 ### Probes and what readiness waits for
 
@@ -76,14 +83,14 @@ second check proves that each Service selects exactly one Deployment.
 | `api` | `GET /healthz`, every 2 s, 30 failures allowed (60 s) | `GET /healthz`, every 10 s after 5 s | `GET /readyz`, every 5 s after 3 s | 40 |
 | `mcp` | `GET /healthz` (same timing) | `GET /healthz` | `GET /healthz` | Kubernetes default (30) |
 | `analytics-projector` | `GET /healthz` on `admin` | `GET /healthz` | `GET /readyz` | 40 |
-| `analytics-reports` | `GET /healthz` | `GET /healthz` | `GET /healthz` | 40 |
+| `analytics-reports` | `GET /healthz` | `GET /healthz` | `GET /readyz` | 40 |
 
 What readiness actually covers:
 
-- **`api`**: the listener opens only after the boot sequence: migrations (5 attempts, backoff 1 to 8 s), pool creation and a ping (also retried), then the consumers and the outbox relay start. `/healthz` and `/readyz` therefore cannot answer until Postgres is reachable and migrated. Kafka is **not** waited for: readers and the relay writer dial lazily, so a broker outage never blocks readiness. `/readyz` returns 200 `{"status":"ready"}` from the start and flips to 503 `{"status":"not_ready"}` only as the first step of shutdown.
-- **`mcp`**: same boot order, without Kafka. There is no `/readyz`. Readiness uses `/healthz`, which never flips.
-- **`analytics-projector`**: the admin server starts after the analytical migrations and a ping. `/readyz` flips to 503 only at shutdown. Consumer lag does not affect it.
-- **`analytics-reports`**: the listener starts after a ping of the analytical database. It runs no migrations, so if it starts before the projector has created the tables, its queries fail with 500 `report-store-error` until they exist.
+- **`api`**: the listener opens only after the boot sequence: the environment is validated (a missing variable is a boot error that names it), then migrations (5 attempts, backoff 1 to 8 s), pool creation and a ping (also retried), then the consumers and the outbox relay start. Kafka is **not** dialled at boot: readers and the relay writer dial lazily. `/readyz` is real: 200 `{"status":"ready"}` only while Postgres answers a ping **and** a Kafka broker answers a topic-less metadata request (a broker that answers with no topics at all is ready: the service never requires topics, the broker auto-creates them on first write). Otherwise it is 503 `application/problem+json` of type `dependency-unavailable` whose `detail` names the failing dependency (`not ready: postgres`, `not ready: kafka`). The verdict is cached 3 s and bounded at 2 s, so probes cannot hammer either dependency. It flips to 503 `{"status":"not_ready"}` as the first step of shutdown. `/healthz` stays liveness and never depends on a dependency.
+- **`mcp`**: same boot order, without Kafka; `DATABASE_URL` is required. There is no `/readyz`. Readiness uses `/healthz`, which never flips.
+- **`analytics-projector`**: the admin server starts after the analytical migrations and a ping. `/readyz` is 200 only while the analytical Postgres answers a ping and a Kafka broker answers metadata (`not ready: analytics-postgres, kafka` otherwise), and flips to 503 at shutdown. Consumer lag does not affect it.
+- **`analytics-reports`**: the listener starts after a ping of the analytical database; `/readyz` is 200 only while that ping succeeds. It runs no migrations, so if it starts before the projector has created the tables, its queries fail with 500 `report-store-error` until they exist.
 
 ### Graceful shutdown (`cmd/api`)
 
@@ -95,6 +102,8 @@ On SIGTERM, `serveUntilSignal` in `cmd/api/main.go` does this, in order:
 4. It stops the Kafka consumers and waits up to 10 s each.
 5. It stops the outbox relay **last** and waits up to 10 s, so that an event committed by the final HTTP request or consumer message is still sent.
 6. It closes the pool.
+
+The process also exits non-zero, naming the worker, when the relay or a consumer returns on its own (a lost broker, a failed reader): the pod restarts instead of staying alive with a dead consumer.
 
 The worst case is about 35 s, which `terminationGracePeriodSeconds: 40` covers.
 If you raise `SHUTDOWN_DRAIN_DELAY`, raise the grace period too.
@@ -128,6 +137,8 @@ OLTP migrations (`internal/adapters/outbound/postgres/migrations`):
 | `0006_order_demand` | `order_demand`; adds `capacity_plans.demand_source` |
 | `0007_outbox_event_id_per_topic` | replaces the `outbox_events.event_id` unique key with `UNIQUE (event_id, topic)`, so one CloudEvents id can go to both topics |
 | `0008_capacity_plan_site_id` | adds `capacity_plans.site_id`, which defaults to `''` for older rows |
+| `0009_inbound_labour_demand` | `inbound_appointments` (one row per appointment id, ordering-guarded), `inbound_labour_standards`; adds the `inbound_*` columns to `capacity_plans` (defaulted, so older plans read as no inbound demand) |
+| `0010_observed_capacity` | `observed_capacity` (one row per location, process type and minute; additive counters) |
 
 Analytical migration (`analytics/migrations`): `0001_plan_facts` creates
 `analytics_processed_events` and `plan_facts`.
@@ -148,15 +159,17 @@ structured mode (`content-type: application/cloudevents+json; charset=UTF-8`).
 | --- | --- | --- | --- | --- |
 | consume | `warehouse.workforce.events` | `cmd/api` | `LABOR_CAPACITY_CONSUMER_GROUP`, `warehouse-planning-labor-capacity` | `com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted` |
 | consume | `warehouse.facility.events` | `cmd/api` | `STORAGE_CAPACITY_CONSUMER_GROUP`, `warehouse-planning-storage-capacity` | `...facility-layout.locationslot.LocationSlotRegistered`, `...LocationSlotDecommissioned` |
-| consume | `warehouse.order-management.events` | `cmd/api` | `DEMAND_CONSUMER_GROUP`, no default (off when unset; `warehouse-planning-demand` in the cluster) | `...order-management.order.OrderAllocated`, `...OrderPartiallyAllocated` |
+| consume | `warehouse.order-management.events` | `cmd/api` | `DEMAND_CONSUMER_GROUP`, no default (required; `warehouse-planning-demand` in the cluster) | `...order-management.order.OrderAllocated`, `...OrderPartiallyAllocated` |
+| consume | `warehouse.inbound-receiving.events` | `cmd/api` | `INBOUND_DEMAND_CONSUMER_GROUP`, no default (required; `warehouse-planning-inbound-demand` in the cluster) | `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked`, `...DockAppointmentCancelled` |
+| consume | `warehouse.fulfillment.events` | `cmd/api` | `OBSERVED_CAPACITY_CONSUMER_GROUP`, no default (required; `warehouse-planning-observed-capacity` in the cluster) | `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` |
 | produce | `warehouse.warehouse-planning.events` | `cmd/api` relay | n/a | `com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected`, `BottleneckDetected` |
 | produce | `warehouse.warehouse-planning.analytics` | `cmd/api` relay | n/a | the same four types (ADR 0005) |
 | consume | `warehouse.warehouse-planning.analytics` | `cmd/planning-projector` | `ANALYTICS_CONSUMER_GROUP`, `warehouse-planning-analytics` | the same four types |
-| produce (DLQ) | `warehouse.workforce.events.dlq`, `warehouse.facility.events.dlq`, `warehouse.order-management.events.dlq` | `cmd/api` | n/a | the original message plus `x-dlq-*` headers |
+| produce (DLQ) | `warehouse.workforce.events.dlq`, `warehouse.facility.events.dlq`, `warehouse.order-management.events.dlq`, `warehouse.inbound-receiving.events.dlq`, `warehouse.fulfillment.events.dlq` | `cmd/api` | n/a | the original message plus `x-dlq-*` headers |
 | produce (DLQ) | `warehouse.warehouse-planning.analytics.dlq` | `cmd/planning-projector` | n/a | the original message plus `x-dlq-*` headers |
 
 The `processed_events` claim uses these consumer names: `labor-capacity-consumer`,
-`storage-capacity-consumer` and `order-demand-consumer`.
+`storage-capacity-consumer`, `order-demand-consumer`, `inbound-demand-consumer` and `observed-capacity-consumer`.
 
 ### Outbox relay
 
@@ -164,8 +177,8 @@ The `processed_events` claim uses these consumer names: `labor-capacity-consumer
 already-encoded events into `outbox_events` in one transaction. That is two rows
 per event, one for each produced topic, with the same CloudEvents id. `cmd/mcp`
 writes the same rows but never relays them. **Only `cmd/api` runs the relay**,
-so MCP-created plans reach Kafka only while an `api` pod is up with
-`EVENT_PUBLISHER=kafka`.
+so MCP-created plans reach Kafka only while an `api` pod is up (its relay
+always publishes to Kafka; `EVENT_PUBLISHER=log` is refused).
 
 Each pass claims up to 100 unpublished rows in `id` order with
 `FOR UPDATE SKIP LOCKED` and sends them one by one. It marks a row
@@ -207,7 +220,8 @@ A re-armed row is a late delivery under its original CloudEvents `id`.
 
 ### Dead-letter behaviour
 
-- **Domain consumers (`cmd/api`)**: deterministic problems are logged and skipped, never dead-lettered: not a CloudEvent, an unknown type, a malformed payload, missing fields, or a domain-validation rejection. A transient failure (database begin, claim, upsert or commit) is retried on the same message up to 5 times with backoff, then published to `<topic>.dlq` with the headers `x-dlq-source-topic`, `x-dlq-source-partition`, `x-dlq-source-offset`, `x-dlq-error` and `x-dlq-failed-at`, and committed past. The DLQ publish itself is retried until it succeeds.
+- **Dock-appointment and task-completion consumers (`cmd/api`, [ADR 0017](https://iqvo.github.io/warehouse-planning/docs/adr/0017-inbound-labour-demand-and-observed-capacity-feedback))**: a deterministic failure (not CloudEvents 1.0, malformed `data`, a blank id, a `subject` that is not the appointment or task id, a window whose end is not after its start, no ASN, no event time, no `task_type`) is published at once to `warehouse.inbound-receiving.events.dlq` / `warehouse.fulfillment.events.dlq` and committed past; a transient failure is retried 5 times first. Other types on those shared topics are ignored.
+- **The other domain consumers (`cmd/api`)**: deterministic problems are logged and skipped, never dead-lettered: not a CloudEvent, an unknown type, a malformed payload, missing fields, or a domain-validation rejection. A transient failure (database begin, claim, upsert or commit) is retried on the same message up to 5 times with backoff, then published to `<topic>.dlq` with the headers `x-dlq-source-topic`, `x-dlq-source-partition`, `x-dlq-source-offset`, `x-dlq-error` and `x-dlq-failed-at`, and committed past. The DLQ publish itself is retried until it succeeds.
 - **Projector**: a known type with an unusable payload, or a deterministic store rejection, is dead-lettered at once to `warehouse.warehouse-planning.analytics.dlq` with `x-dlq-source-topic`, `x-dlq-error` and `x-dlq-failed-at`. A transient failure is retried **forever** and never dead-lettered ([ADR 0005](https://iqvo.github.io/warehouse-planning/docs/adr/0005-analytics-read-side)). A non-CloudEvents message is skipped, with a WARN at most once a minute.
 
 Nothing in this repo consumes or replays a DLQ topic. See
@@ -220,7 +234,9 @@ only grow:
 
 - `outbox_events`: published rows keep `published_at` set and are never deleted;
 - `processed_events` and `analytics_processed_events`: one row per consumed event, forever;
-- `order_demand`: one row per order id, with no expiry.
+- `order_demand`: one row per order id, with no expiry;
+- `inbound_appointments`: one row per dock appointment id, with no expiry;
+- `observed_capacity`: one row per location, process type and minute, with no expiry.
 
 None of these sizes is a correctness problem: every read is indexed, and the
 relay only scans `published_at IS NULL` through a partial index. Pruning

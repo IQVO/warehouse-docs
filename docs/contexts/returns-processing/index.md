@@ -35,35 +35,39 @@ stow stays an RF action there. An `UNEXPECTED` receipt line is published as
 problem-solve case.
 
 :::info[What is built, what is deployed, and what is planned]
-Per this context's ADRs and `apis/asyncapi.yaml` on `develop`, checked
-2026-10-21:
+Per this context's ADRs, `apis/` and `cmd/` on `develop` (`7a19885`) and
+`warehouse-infra` `develop`, checked 2026-10-26:
 
-**Built on `develop`:** the REST API (ten operations), a transactional outbox
-with relay, **three** Kafka consumers (product classifications, allocated
-order lines, manifested work units — always on, each group id from a mandatory
-env var), a read-only MCP server (`cmd/mcp`: `get_return`,
-`list_returns_by_order`, `get_disposition_policy`), a Helm chart and a
-Dockerfile. Both service PRs are merged: `feature/service` (#2) and
-`feature/packaging-and-mcp` (#3).
+**Built on `develop`:** the REST API (eleven path × method pairs, including
+`/healthz`, `/readyz` and `/metrics`), a transactional outbox with relay,
+**three** Kafka consumers (product classifications, allocated order lines,
+manifested work units — always on, each group id from a mandatory env var),
+the analytics read side of ADR 0007 (`warehouse.returns-processing.analytics`,
+`cmd/returns-projector`, `cmd/returns-reports`), a read-only MCP server
+(`cmd/mcp`: `get_return`, `list_returns_by_order`, `get_disposition_policy`),
+the console remote `returns_mfe` (ADR 0006), a Helm chart and a Dockerfile.
 
-**Not deployed.** `warehouse-infra` `develop` has no entry for it (no values
-file, Kong route or ArgoCD application), so nothing runs in the reference
-cluster and no edge to or from it is exercised.
+**Wired in `warehouse-infra` `develop`:** `terraform/apps.yaml` registers it
+(database, analytics database, `frontend_remote: returns_mfe`) and
+`helm-values/returns-processing.yaml` sets the three consumer groups, the
+analytics projector, the MCP server with its Kong route
+(`/api/mcp/returns-processing`) and the Kong route of the API
+(`/api/returns-processing`). `warehouse-ops-agent` has an MCP client for it
+(`internal/adapters/outbound/mcpclient/returns_processing.go`, endpoint set
+in `helm-values/warehouse-ops-agent.yaml`). The kind cluster was not checked.
 
-**Built around it, checked on each sibling's `develop`:** all three consumed
+**Around it, checked on each sibling's `develop`:** all three consumed
 types are published by live producers (`ProductClassified` is K20,
 `OrderAllocated`/`OrderPartiallyAllocated` is K1, `PackageManifested` is K16),
-and the two output edges are built on both ends: `inventory-storage` ADR 0044
-consumes `ReturnLineStaged` into the same staged-receipt seam as inbound
-receipts (`BookReturnLine` in front of `ReceiveStock`), and
-`exception-management` (merged the same day) consumes
-`UnexpectedReturnReceived` as a problem-solve fact.
+and both output edges are built and wired on both ends: `inventory-storage`
+ADR 0044 consumes `ReturnLineStaged` into the same staged-receipt seam as
+inbound receipts (`BookReturnLine` in front of `ReceiveStock`), and
+`exception-management` consumes `UnexpectedReturnReceived` as a problem-solve
+fact.
 
-**Planned, not built:** the analytics mirror
-(`warehouse.returns-processing.analytics`, declared planned in its ADR 0004),
-the shipped-quantity check (order-management released lines carry no
-`quantity`; v1 caps by `DispositionPolicy.max_units_per_line`), a
-`warehouse-ops-agent` client, and a console remote.
+**Planned, not built:** the shipped-quantity check (order-management
+released lines carry no `quantity`; v1 caps by
+`DispositionPolicy.max_units_per_line`, ADR 0003).
 :::
 
 It owns four aggregates:
@@ -90,34 +94,42 @@ manifested work units, product classifications.
 ## This context's pages
 
 - [Business Context](/contexts/returns-processing/business-context): the gap,
-  what it owns, the v1 policy, and what the context deliberately does not do.
+  what it owns, the v1 policy, and what the context deliberately does not do
+  (written for this site).
 - [Ubiquitous Language](/contexts/returns-processing/ubiquitous-language):
   RMA, return receipt, grade, disposition, staged line, unexpected return.
 - [Bounded Context Canvas](/contexts/returns-processing/bounded-context-canvas):
   purpose, classification, roles, communication, decisions.
 - [Aggregate Design Canvas](/contexts/returns-processing/aggregate-design-canvas):
-  the four aggregates with their invariants.
+  the aggregates with their invariants.
 - [Domain Events](/contexts/returns-processing/domain-events): the seven
   published events and the four consumed types.
 - [Async API](/contexts/returns-processing/async-api): the Kafka narrative,
-  with the generated reference.
+  with the generated reference (written for this site).
+- Operations: [Configuration](/contexts/returns-processing/configuration),
+  [Runbook](/contexts/returns-processing/runbook),
+  [Observability](/contexts/returns-processing/observability) and
+  [Troubleshooting](/contexts/returns-processing/troubleshooting).
 
-These pages are written for this site from the context's own ADRs (0001 to
-0004), `.claude/rules/domain-model.md` and `apis/asyncapi.yaml` /
-`apis/openapi.yaml` on its `develop`; the repository does not yet ship its own
-ddd-crew artifact pack, so there is nothing to sync. When it ships one, these
-pages are replaced by synced copies like every other context's.
+The language, canvases, domain events and the four operations pages are
+synced from the repository's own `docs/docs` on `develop`. The repository
+ships only four of the eleven ddd-crew pack pages, so this context has no
+core domain chart, context map, domain message flow, EventStorming, class
+diagram, entity-relationship, sequence diagram, use-case or testing page
+here yet. The REST reference is generated from its `apis/openapi.yaml`
+([REST](/api-reference/rest/returns-processing/returns-processing-api)).
 
 ## Elsewhere
 
 - **Repository**: [github.com/IQVO/returns-processing](https://github.com/IQVO/returns-processing)
   (Go module path `github.com/claudioed/returns-processing`). Its ADRs live
   under `docs/adr/`: 0001 (bounded context), 0002 (aggregates and policy),
-  0003 (local copies and consumed contracts) and 0004 (CloudEvents envelope
-  and type catalogue), all Accepted (2026-10-20/21).
+  0003 (local copies and consumed contracts), 0004 (CloudEvents envelope
+  and type catalogue), 0005 (transactional outbox and relay), 0006 (console
+  remote) and 0007 (analytics read side).
 - **Fleet-level**: [Context Map](/strategic-design/context-map) (its inbound
-  edges K50 to K52 and outbound edges K53 and K54, all built on both ends,
-  wired-but-unused), the
+  edges K50 to K52 and outbound edges K53 and K54, all live: built on both
+  ends and wired in `warehouse-infra` `develop`), the
   [Event Standard](/strategic-design/event-standard-cloudevents)
   (subdomain table and type catalogue),
   [Subdomain Classification](/strategic-design/subdomain-classification) and

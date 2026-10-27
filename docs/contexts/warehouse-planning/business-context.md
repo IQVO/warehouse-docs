@@ -75,12 +75,13 @@ and `labor-performance` (ADR 0001).
 
 ## Honest scope today
 
-- **Demand is supplied in the request.** `assigned_demand` and the
-  `WorkloadProfile` factors travel in the `POST /capacity-plans` body. The
-  final demand-ingestion shape from `order-management` / `network-fulfillment`
-  is a documented later decision (ADR 0001), not a wired integration.
-- **Downstream consumption is planned.** `order-management` consuming this
-  context's events is a separate, in-progress change; see the
+- **Demand.** Order demand arrives from `order-management`'s allocation
+  events (ADR 0004) and inbound labour demand from `inbound-receiving`'s dock
+  appointments (ADR 0017); `assigned_demand` and the `WorkloadProfile`
+  factors can still travel in the `POST /capacity-plans` body. Demand from
+  `network-fulfillment` remains a documented later decision (ADR 0001).
+- **Downstream consumption.** `order-management` consumes the capacity-plan
+  events into a local read model (its ADR 0031); see the
   [Context Map](/strategic-design/context-map).
-- **No analytics stream and no frontend remote yet** (README, tracked
-  deferrals).
+- **Read side.** The analytics stream and `planning-projector` (ADR 0005)
+  and the console's `capacity_mfe` remote are built.

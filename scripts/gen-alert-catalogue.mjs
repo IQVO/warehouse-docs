@@ -40,13 +40,21 @@ function sync() {
   writeFileSync(META, `warehouse-infra@${sha} ${RULES_PATH}\n`);
 }
 
-// A context's alerts point at its own runbook on its own site; the synced copy
-// of that runbook lives on this site too.
+// A context's alerts point at its own runbook on its own site. The synced copy
+// of that runbook lives on this site only for the WMS/WES contexts
+// (docs/contexts/<ctx>/runbook.md); the retail-network and storefront contexts
+// have none here, so their rows link the source only (a site-local link would
+// be broken and fail the build).
+function hasSyncedRunbook(ctx) {
+  return existsSync(join(ROOT, 'docs', 'contexts', ctx, 'runbook.md'));
+}
 function runbookLink(url) {
   const site = /^https:\/\/iqvo\.github\.io\/([a-z-]+)\/docs\/operations\/runbook$/.exec(url);
-  if (site) return `[${site[1]} runbook](/contexts/${site[1]}/runbook) ([own site](${url}))`;
+  if (site && hasSyncedRunbook(site[1])) return `[${site[1]} runbook](/contexts/${site[1]}/runbook) ([own site](${url}))`;
+  if (site) return `[${site[1]} runbook](${url})`;
   const repo = /^https:\/\/github\.com\/IQVO\/([a-z-]+)\/blob\/[^/]+\/.*runbook\.md$/.exec(url);
-  if (repo) return `[${repo[1]} runbook](/contexts/${repo[1]}/runbook) ([source](${url}))`;
+  if (repo && hasSyncedRunbook(repo[1])) return `[${repo[1]} runbook](/contexts/${repo[1]}/runbook) ([source](${url}))`;
+  if (repo) return `[${repo[1]} runbook](${url})`;
   return `[runbook](${url})`;
 }
 
@@ -84,10 +92,11 @@ function render(doc, source) {
     `The fleet provisions **${total} alert rules** in **${groups.length} rule groups** (two per`,
     'bounded context: the coarse rules and the SLO burn-rate rules). warehouse-infra loads them into the',
     '`prometheus-community/prometheus` chart as `serverFiles."alerting_rules.yml"`',
-    '(`terraform/observability.tf`). This cluster runs the plain chart without the',
+    '(`terraform/10-platform/observability.tf`). This cluster runs the plain chart without the',
     'Prometheus Operator, so there are no `PrometheusRule` objects: the rules are a',
     'rule file. `make alert-rules-check` in warehouse-infra runs `promtool check rules`',
-    'and the unit tests in `terraform/alerting/tests/warehouse-alert-rules.test.yml`.',
+    'and the unit tests in `terraform/alerting/tests/` (`warehouse-alert-rules.test.yml`,',
+    '`warehouse-slo-burn-rules.test.yml`).',
     '',
     ':::note[Nothing pages anyone]',
     'Alertmanager is on in the kind cluster, but its only receiver is `null`: it',

@@ -55,17 +55,18 @@ A15 below.
 `returns-processing` (`wms`, Supporting) and `exception-management` (`wes`,
 Supporting), decided 2026-10-20 and merged on `develop` 2026-10-20/21 (each
 with a service PR #2 and a packaging + read-only-MCP PR #3), are the newest
-contexts. Neither is registered in `warehouse-infra`, so none of their edges
-runs. All the code on both ends IS built: their three and six inbound
+contexts. Both are registered in `warehouse-infra` `develop` since
+2026-10-22 (`terraform/apps.yaml`, their consumer groups pinned in their
+value files), and the code on both ends is built: their three and six inbound
 consumers, `inventory-storage` ADR 0044 (the `ReturnLineStaged` handover into
 the staged-receipt seam), and — promoted onto their producers' integration
 topics on 2026-10-21 — `PackageDiverted` and `WeightDiscrepancyDetected`
 (fulfillment-execution) and `DiscrepancyDetected` and `ItemUnlocated`
 (inventory-storage). Their edges are K50 to K59, all
-**wired-but-unused**, plus the two dashed planned edges K60 and K61. Their
-repositories ship no ddd-crew pack yet, so there is no per-context map page
-to link; the source for their rows is each ADR 0001's context map plus the
-code on `develop`.
+**live**, plus the two dashed planned edges K60 and K61. `exception-management`
+ships the full ddd-crew pack and `returns-processing` part of it (no context
+map page yet), so the source for the `returns-processing` rows is its ADR
+0001's context map plus the code on `develop`.
 
 Each context's repository has its own context map, synced to this
 site and grounded in that repo's code. This page
@@ -132,7 +133,7 @@ That is not always the direction of the network call. For example,
 ```mermaid
 flowchart LR
     subgraph EXTERNAL["Outside the fleet"]
-        RN["retail-network<br/>external network role<br/>stub only"]
+        RN["retail-network<br/>external network role<br/>via vendor-connectivity"]
         WCS["WCS / equipment<br/>not built"]
     end
 
@@ -199,29 +200,28 @@ flowchart LR
     PM -->|"MCP list_products"| OA
     OA -->|"REST console BFF"| CON
 
-    PPM -.->|"Kafka, opt-in cache"| NF
-    WP -.->|"Kafka PathCapacityChanged,<br/>opt-in cache"| NF
-    INV -.->|"REST usable inventory, opt-in"| NF
+    PPM ==>|"Kafka, opt-in cache"| NF
+    WP ==>|"Kafka PathCapacityChanged,<br/>opt-in cache"| NF
+    INV -->|"REST usable inventory"| NF
     FL -.->|"REST classification, rollback"| INV
     FL -.->|"REST location role, opt-in"| FE
     LP -.->|"REST task-type performance"| WFM
     OM -.->|"MCP get_order, wired only"| OA
     PPM -.->|"MCP, wired only"| OA
     NF -.->|"Kafka networkorder events"| NOSUB
-    RN -.->|"Vendor API, planned"| NF
+    RN -->|"Vendor API, live mode"| NF
     FE -.-x|"deliberately absent"| WCS
 
     %% product-master (ADR 0001, 0003). The four Published Language edges are
     %% live in the reference deployment: every consumer keeps a version-guarded
     %% local copy (INV ADR 0034, OM ADR 0036, WP ADR 0035, FE ADR 0039). They
-    %% replaced the REST classification lookups R2, R3 and R4. Delete the
-    %% INV -.-> PM migration edge at stage E, when the legacy importer is
-    %% removed.
+    %% replaced the REST classification lookups R2, R3 and R4. The INV -> PM
+    %% migration edge (K21) was deleted: stage E removed the legacy importer
+    %% on 2026-10-17 (product-master ADR 0003).
     PM ==>|"Kafka ProductClassified,<br/>local copy"| INV
     PM ==>|"Kafka ProductClassified,<br/>local copy"| OM
     PM ==>|"Kafka ProductClassified,<br/>local copy"| WP
     PM ==>|"Kafka ProductClassified,<br/>local copy"| FE
-    INV -.->|"Kafka legacy ProductClassified,<br/>Conformist, migration only"| PM
 
     %% inbound-receiving and slotting-optimization (decided 2026-10-08, both
     %% built). inbound-receiving runs in the reference deployment in kafka mode
@@ -231,8 +231,8 @@ flowchart LR
     %% consumer modes on (helm-values/slotting-optimization.yaml), so K25 to K27
     %% and the execution chain are thick: SLOT -> WP (SlotPlanApproved, K29),
     %% FE -> INV (TaskCompleted RELOCATE, K37) and INV -> SLOT (StockRelocated,
-    %% K38, the WP -> FE hop is the WorkReleased edge above). Only INB -> WPL
-    %% stays dotted: it needs an inbound process path in warehouse-planning.
+    %% K38, the WP -> FE hop is the WorkReleased edge above). INB -> WPL is
+    %% thick too since warehouse-planning ADR 0017 (K28).
     PM ==>|"Kafka ProductRegistered,<br/>local copy"| INB
     FL ==>|"Kafka LocationSlot events,<br/>local copy"| INB
     INB ==>|"Kafka ReceiptLineReceived,<br/>handover"| INV
@@ -278,21 +278,21 @@ flowchart LR
     TI ==>|"Kafka InterleavingHintIssued,<br/>advisory tie-break"| FE
 
     %% returns-processing (wms) and exception-management (wes), both built on
-    %% develop 2026-10-20/21, neither registered in warehouse-infra. Every leg
-    %% is dotted wired-but-unused (code on both ends, nothing runs) except the
+    %% develop 2026-10-20/21 and registered in warehouse-infra develop
+    %% 2026-10-22. Every leg is thick (K50 to K59) except the
     %% workforce-management and network-inventory-planning fact sources, which
     %% are analytics-only on their producers today (K60, K61: planned, not
     %% built, no consumer exists).
-    PM -.->|"Kafka ProductClassified,<br/>local copy"| RP
-    OM -.->|"Kafka OrderAllocated,<br/>OrderPartiallyAllocated"| RP
-    FE -.->|"Kafka PackageManifested"| RP
-    RP -.->|"Kafka ReturnLineStaged,<br/>staged receipt"| INV
-    RP -.->|"Kafka UnexpectedReturnReceived"| EM
-    FE -.->|"Kafka TaskCPTMissed, PackageDiverted,<br/>WeightDiscrepancyDetected"| EM
-    WP -.->|"Kafka BacklogThresholdBreached"| EM
-    NF -.->|"Kafka AcknowledgementDeadlineAtRisk,<br/>OrphanedHoldCancelled"| EM
-    OM -.->|"Kafka OrderRepromised,<br/>auto-resolve correlation"| EM
-    INV -.->|"Kafka DiscrepancyDetected,<br/>ItemUnlocated"| EM
+    PM ==>|"Kafka ProductClassified,<br/>local copy"| RP
+    OM ==>|"Kafka OrderAllocated,<br/>OrderPartiallyAllocated"| RP
+    FE ==>|"Kafka PackageManifested"| RP
+    RP ==>|"Kafka ReturnLineStaged,<br/>staged receipt"| INV
+    RP ==>|"Kafka UnexpectedReturnReceived"| EM
+    FE ==>|"Kafka TaskCPTMissed, PackageDiverted,<br/>WeightDiscrepancyDetected"| EM
+    WP ==>|"Kafka BacklogThresholdBreached"| EM
+    NF ==>|"Kafka AcknowledgementDeadlineAtRisk,<br/>OrphanedHoldCancelled"| EM
+    OM ==>|"Kafka OrderRepromised,<br/>auto-resolve correlation"| EM
+    INV ==>|"Kafka DiscrepancyDetected,<br/>ItemUnlocated"| EM
     WFM -.->|"PathUnderstaffed (planned,<br/>analytics-only today)"| EM
     NIP -.->|"TransferStuckDetected (planned,<br/>analytics-only today)"| EM
 
@@ -310,9 +310,8 @@ flowchart LR
 structured mode on one shared broker). Thin solid arrows are live synchronous
 REST or MCP reads. Every REST and MCP surface in the fleet is unauthenticated.
 Dotted arrows are wired-but-unused or absent-planned, as the table states.
-The four thick `product-master` edges are K20; the dotted
-`inventory-storage` → `product-master` edge is the migration-only legacy
-import (K21). The thin `product-master` → `warehouse-ops-agent` edge is A12.
+The four thick `product-master` edges are K20; the migration-only legacy
+import K21 was removed at stage E and is no longer drawn. The thin `product-master` → `warehouse-ops-agent` edge is A12.
 The seven thick `network-inventory-planning` edges are K30 to K36; the thin
 one to the agent is A15. The three thick `inbound-receiving` edges are K22
 to K24 and its thin one to the agent is A13. The three thick edges into
@@ -325,11 +324,12 @@ hint consumer). K28 and K49 are the two thick edges into `warehouse-planning`
 from `inbound-receiving` and `fulfillment-execution`.
 The dashed K48 is the
 opt-in `WorkUnitCreated` release confirmation into `order-management`
-(wired-but-unused). The twelve dashed edges K50 to K61 belong to
+(wired-but-unused). The twelve edges K50 to K61 belong to
 `returns-processing` and `exception-management` (merged on `develop`
-2026-10-20/21, not deployed): K50 to K59 are wired-but-unused — the code on
-both ends is built, including `inventory-storage` ADR 0044 and the four
-2026-10-21 producer promotions — and K60 and K61 (`PathUnderstaffed`,
+2026-10-20/21, registered in `warehouse-infra` `develop` 2026-10-22): K50 to
+K59 are thick and live — the code on both ends is built, including
+`inventory-storage` ADR 0044 and the four 2026-10-21 producer promotions —
+and the dashed K60 and K61 (`PathUnderstaffed`,
 `TransferStuckDetected`) are absent-planned: their producers publish them on
 analytics topics only, so no consumer can exist yet.
 The crossed edge is deliberately absent. `order-management` is coloured with
@@ -363,18 +363,18 @@ Omitted from the diagram:
 | K7 | `workforce-management` → `warehouse-planning` | C/S, PL / ACL (a LABOR capacity constraint) | `warehouse.workforce.events`: `ShiftPlanCommitted` | **live** | [WFM](/contexts/workforce-management/context-map), [WPL](/contexts/warehouse-planning/context-map) |
 | K8 | `process-path-management` → `fulfillment-execution`, `wes-work-planning`, `workforce-management` | OHS + PL / CF | `warehouse.process-path-management.events`: `ProcessPathCreated`, `ProcessPathUpdated`, `ProcessPathDeactivated` | **live**. Each consumer's binary default is a YAML file (`PATH_CATALOGUE_SOURCE=file`), and the reference deployment injects `PATH_CATALOGUE_SOURCE=kafka` (`deploy_process_path_kafka_source`, default `true`) | [PPM](/contexts/process-path-management/context-map), [FE](/contexts/fulfillment-execution/context-map), [WP](/contexts/wes-work-planning/context-map), [WFM](/contexts/workforce-management/context-map) |
 | K9 | `process-path-management` → `order-management` | OHS + PL / ACL (local read model) | same topic: the three `processpath.*` types plus `CPTScheduleChanged` | **live** with `PATH_CATALOGUE_SOURCE=kafka` (`deploy_order_management_path_catalogue_kafka`, default `true`) | [PPM](/contexts/process-path-management/context-map), [OM](/contexts/order-management/context-map) |
-| K10 | `process-path-management` → `network-fulfillment` | OHS + PL / CF | same topic: `processpath.*` plus `CPTScheduleChanged`, read into the `processpathcache` | **wired-but-unused**. Started only when `CAPABILITY_OFFER_ENABLED=true`, which the reference deployment does not set | [PPM](/contexts/process-path-management/context-map), [NF](/contexts/network-fulfillment/context-map) |
+| K10 | `process-path-management` → `network-fulfillment` | OHS + PL / CF | same topic: `processpath.*` plus `CPTScheduleChanged`, read into the `processpathcache` | **live**. Started only when `CAPABILITY_OFFER_ENABLED=true`, which `helm-values/network-fulfillment.yaml` sets in `warehouse-infra` `develop` | [PPM](/contexts/process-path-management/context-map), [NF](/contexts/network-fulfillment/context-map) |
 | K11 | `wes-work-planning` → `fulfillment-execution` | C/S; OHS + PL / ACL | `warehouse.work-planning.events`: `WorkReleased`, and for slot-plan moves (K29) the same type with the additive `relocation` object on the `RELOCATE` path (fulfillment-execution ADR 0047). `fulfillment-execution` also accepts the additive `replenishment` object on a `REPLENISH` path (its ADR 0050), and `wes-work-planning` now produces it for the work units it plans from K44 (its ADR 0042: `WorkReleased` stays v1, the object is present only on `REPLENISH` units) | **live** (for `RELOCATE` and ordinary work). The `REPLENISH` variant is **live** since 2026-10-20/21: `wes-work-planning` runs K44's consumer (`REPLENISHMENT_MODE=kafka`); no `REPLENISH` unit has been traced through the chain yet | [WP](/contexts/wes-work-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
 | K12 | `wes-work-planning` → `order-management` | C/S; OHS + PL / ACL | `warehouse.work-planning.events`: `PathCapacityChanged` | **live** | [WP](/contexts/wes-work-planning/context-map), [OM](/contexts/order-management/context-map) |
-| K13 | `wes-work-planning` → `network-fulfillment` | OHS + PL / CF | `warehouse.work-planning.events`: `PathCapacityChanged` | **wired-but-unused**, behind the same `CAPABILITY_OFFER_ENABLED` gate as K10 | [WP](/contexts/wes-work-planning/context-map), [NF](/contexts/network-fulfillment/context-map) |
+| K13 | `wes-work-planning` → `network-fulfillment` | OHS + PL / CF | `warehouse.work-planning.events`: `PathCapacityChanged` | **live**, behind the same `CAPABILITY_OFFER_ENABLED` gate as K10 (set in `warehouse-infra` `develop`) | [WP](/contexts/wes-work-planning/context-map), [NF](/contexts/network-fulfillment/context-map) |
 | K14 | `fulfillment-execution` → `wes-work-planning` | C/S feedback edge; OHS + PL / CF per FE, ACL per WP | `warehouse.fulfillment.events`: `TaskCompleted` | **live**. This edge closes the release/complete control loop | [FE](/contexts/fulfillment-execution/context-map), [WP](/contexts/wes-work-planning/context-map) |
 | K15 | `fulfillment-execution` → `labor-performance` | OHS + PL / CF (C/S with no influence) | `warehouse.fulfillment.events`: `TaskCompleted`, same fan-out topic, own consumer group | **live** | [FE](/contexts/fulfillment-execution/context-map), [LP](/contexts/labor-performance/context-map) |
 | K16 | `fulfillment-execution` → `order-management` | OHS + PL / CF per FE, ACL per OM | `warehouse.fulfillment.events`: `TaskCPTMissed`, `PackageManifested` (re-promise loop) | **live** | [FE](/contexts/fulfillment-execution/context-map), [OM](/contexts/order-management/context-map) |
 | K17 | `labor-performance` → `workforce-management` | OHS + PL / CF + ACL | `warehouse.labor-performance.events`: `TaskPerformanceRecorded` (measured rate and idle share) | **live** with `LABOR_PERFORMANCE_MODE=kafka-cache`, which the reference deployment sets | [LP](/contexts/labor-performance/context-map), [WFM](/contexts/workforce-management/context-map) |
 | K18 | `warehouse-planning` → `order-management` | OHS + PL / ACL (local read model) | `warehouse.warehouse-planning.events`: `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected`. `BottleneckDetected` is ignored | **live**. It is opt-in (`PLANNED_CAPACITY_CONSUMER_GROUP`, OM ADR 0031), and the reference deployment sets it (`helm-values/order-management.yaml`, `plannedCapacity.consumerGroup`). The read model only annotates orders and serves `GET /planned-capacity`. No promise moves | [WPL](/contexts/warehouse-planning/context-map), [OM](/contexts/order-management/context-map) |
-| K19 | `network-fulfillment` → any subscriber | OHS + PL / — | `warehouse.network-fulfillment.events`: `networkorder.*` | **wired-but-unused**. Published only with `EVENT_PUBLISHER=kafka` (chart default `log`); `warehouse-infra` `develop` sets `config.eventPublisher = "kafka"` for it since #92 (a `terraform apply` is pending), so the topic exists once applied, and no consumer exists in the fleet by decision | [NF](/contexts/network-fulfillment/context-map) |
+| K19 | `network-fulfillment` → any subscriber | OHS + PL / — | `warehouse.network-fulfillment.events`: `networkorder.*` | **wired-but-unused**. Published with `config.eventPublisher: kafka` (`helm-values/network-fulfillment.yaml`; chart default `log`), and no consumer of the `networkorder.*` types exists in the fleet by decision (`exception-management` reads only the two alarm types on the same topic, K57) | [NF](/contexts/network-fulfillment/context-map) |
 | K20 | `product-master` → `inventory-storage`, `order-management`, `wes-work-planning`, `fulfillment-execution` | PL / local copy per consumer (one row per SKU, applied only when the event `version` is newer) | `warehouse.product-master.events`: `ProductClassified` | **live** (deployed 2026-10-07). INV ADR 0034, consumer group `PRODUCT_MASTER_CONSUMER_GROUP` (`helm-values/inventory-storage.yaml`, `productMasterConsumerGroup`); OM ADR 0036, WP ADR 0035 and FE ADR 0039, `PRODUCT_CLASSIFICATION_MODE=kafka` with `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (OM: `helm-values/order-management.yaml`, `productClassification`; WP and FE: `sync_edge_env`). It replaced the classification lookups R2, R3 and R4 (product-master ADR 0003, stages C and D) | [PM](/contexts/product-master/context-map), [INV](/contexts/inventory-storage/context-map), [OM](/contexts/order-management/context-map), [WP](/contexts/wes-work-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
-| K21 | `inventory-storage` → `product-master` | CF, migration only | `warehouse.inventory.events`: `com.warehouse.wms.inventory-storage.product.ProductClassified`, read by product-master's legacy importer (`LEGACY_IMPORT_CONSUMER_GROUP`) | **live, migration only**. The reference deployment starts the importer (`helm-values/product-master.yaml`, `legacyImportConsumerGroup`). `inventory-storage` emits the legacy type only from its one-shot `republish-product-classifications` backfill, run once on 2026-10-07. Removed at stage E together with the importer (product-master ADR 0003) | [PM](/contexts/product-master/context-map) |
+| K21 | `inventory-storage` → `product-master` | CF, migration only | `warehouse.inventory.events`: `com.warehouse.wms.inventory-storage.product.ProductClassified`, read by product-master's legacy importer (`LEGACY_IMPORT_CONSUMER_GROUP`) | **retired** at stage E (2026-10-17, product-master ADR 0003): the legacy importer, the `republish-product-classifications` backfill and the legacy type are removed, and `warehouse-infra` `develop` sets no `legacyImportConsumerGroup` | [PM](/contexts/product-master/context-map) |
 | K22 | `product-master` → `inbound-receiving` | PL / local copy (one row per SKU: existence check for ASN lines) | `warehouse.product-master.events`: `ProductRegistered` | **live**. Consumer mode defaults to `permissive`; the reference deployment sets `PRODUCT_MODE=kafka` (group `inbound-receiving-product`, `helm-values/inbound-receiving.yaml`) | [inbound-receiving](/contexts/inbound-receiving/context-map) |
 | K23 | `facility-layout` → `inbound-receiving` | OHS + PL / ACL (local copy of dock doors) | `warehouse.facility.events`: `LocationSlotRegistered`, `LocationSlotDecommissioned` | **live**. `DOCK_DOOR_MODE=kafka` (group `inbound-receiving-dock-doors`) in the reference deployment; only `role=Dock` slots with an inbound `dockFlow` are kept | [inbound-receiving](/contexts/inbound-receiving/context-map) |
 | K24 | `inbound-receiving` → `inventory-storage` | PL; the receiving handover. inventory-storage is the Conformist and runs its existing `ReceiveStock` use case for condition `Good` | `warehouse.inbound-receiving.events`: `receipt.ReceiptLineReceived` | **live**. inventory-storage ADR 0037; the reference deployment sets `INBOUND_RECEIPT_CONSUMER_GROUP` (`inventory-storage-inbound-receipts`, `helm-values/inventory-storage.yaml`). No synchronous call in either direction. Damaged units are not booked as stock in v1 | [inbound-receiving](/contexts/inbound-receiving/context-map), [INV](/contexts/inventory-storage/context-map) |
@@ -403,16 +403,16 @@ Omitted from the diagram:
 | K47 | `task-interleaving` → `fulfillment-execution` | C/S, advisory; PL / ACL on the FE side | `warehouse.task-interleaving.events`: `stationtrip.InterleavingHintIssued`. `fulfillment-execution` would store it locally and use it only as a tie-break inside one priority band, never across a CPT or priority boundary, fail-open when absent or expired. `claimNext` stays the only claim path and there is no `assign` | **live** (code merged 2026-10-18; deployed 2026-10-20/21). `fulfillment-execution` ADR 0051 (`fulfillment-execution#224`, `cmd/execution/interleaving.go`): a local one-active-hint-per-station table (migration 0021) and a tie-break inside one `claimNext` priority band, never across a CPT or priority boundary, fail-open when absent or expired; the consumer runs when `TASK_INTERLEAVING_MODE=kafka` (set on the pod, group `fulfillment-execution-interleaving`; the default `permissive` wires nothing). Whether the running consumer has processed a hint was not checked | [TI](/contexts/task-interleaving/context-map) |
 | K48 | `wes-work-planning` → `order-management` | PL (optional additive `reference` and `line_no`) / ACL (the consumer reads only those two fields); C/S | `warehouse.work-planning.events`: `workunit.WorkUnitCreated`. OM matches the order line a released unit belongs to and marks it confirmed; a line never confirmed within `RELEASE_CONFIRMATION_TIMEOUT` raises the analytics-only `OrderReleaseUnconfirmed`, never a cancel or a retry (OM ADR 0043; WP ADR 0041 adds the two fields) | **wired-but-unused**. Both ends are built on `develop`: `wes-work-planning` publishes `reference` and `line_no`, and the `order-management` consumer ships dark (`RELEASE_CONFIRMATION_MODE=kafka` with a database and `EVENT_PUBLISHER=kafka`; the chart default is empty). `warehouse-infra` `develop` does not set `RELEASE_CONFIRMATION_MODE`. Flip to **live** when it does. The chart warns against enabling it before the deployed `wes-work-planning` carries ADR 0041, or every event is ignored and every line is flagged | [OM](/contexts/order-management/context-map), [WP](/contexts/wes-work-planning/context-map) |
 | K49 | `fulfillment-execution` → `warehouse-planning` | C/S; PL / ACL (task completions into a local read model, advisory) | `warehouse.fulfillment.events`: `task.TaskCompleted` (attributed by `task_type` to the one configured `DEMAND_SITE_ID`) | **live** (code merged 2026-10-20, `warehouse-planning#79`, ADR 0017; deployed 2026-10-20/21: group `warehouse-planning-observed-capacity` is running). `GET /capacity-plans/{id}/variance` returns planned versus observed tasks; it is advisory and never changes or republishes a plan | [WPL](/contexts/warehouse-planning/context-map) |
-| K50 | `product-master` → `returns-processing` | OHS + PL / CF (version-guarded local copy of the classification) | `warehouse.product-master.events`: `ProductClassified` | **wired-but-unused**. The consumer is built and always on (group from the required `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`; its integration test applies, dedupes and version-gates on real Kafka), the producer is live (K20), and `returns-processing` is not deployed | [returns-processing](/contexts/returns-processing/async-api) |
-| K51 | `order-management` → `returns-processing` | OHS + PL / CF (local copy of the allocated lines; the lines carry no quantity) | `warehouse.order-management.events`: `OrderAllocated`, `OrderPartiallyAllocated` | **wired-but-unused**. Consumer built (group `ORDER_LINES_CONSUMER_GROUP`, one claim per event covering every line), producer live (K1), service not deployed | [returns-processing](/contexts/returns-processing/async-api) |
-| K52 | `fulfillment-execution` → `returns-processing` | OHS + PL / CF (local copy of the manifested work units) | `warehouse.fulfillment.events`: `PackageManifested` (`order_ref` = the work unit id, reversed into the (order, line) key) | **wired-but-unused**. Consumer built (group `MANIFEST_CONSUMER_GROUP`), producer live (K16), service not deployed | [returns-processing](/contexts/returns-processing/async-api) |
-| K53 | `returns-processing` → `inventory-storage` | PL, the returns handover; inventory-storage is the Conformist and runs its existing staged-receipt use case (`BookReturnLine` in front of `ReceiveStock`) | `warehouse.returns-processing.events`: `disposition.ReturnLineStaged` (raised once per RESTOCK disposition; `condition` is the constant `Good`) | **wired-but-unused**, both ends built on `develop`: the producer (service PR #2) and the consumer (inventory-storage ADR 0044, `return_line_consumer.go`, group from the required `RETURN_LINE_CONSUMER_GROUP`, claim name `return-line-staged`; every other type on the topic is ignored). No synchronous call in either direction and no acknowledgement event | [INV](/contexts/inventory-storage/context-map), [returns-processing](/contexts/returns-processing/domain-events) |
-| K54 | `returns-processing` → `exception-management` | PL / CF (frozen copy of the source payload on the case) | `warehouse.returns-processing.events`: `returnreceipt.UnexpectedReturnReceived` | **wired-but-unused**. Both services merged 2026-10-20/21; the consumer (group `RETURNS_EXCEPTIONS_CONSUMER_GROUP`) opens one case per receipt line; neither is deployed | [exception-management](/contexts/exception-management/domain-events) |
-| K55 | `fulfillment-execution` → `exception-management` | OHS + PL / CF (frozen copies; repeats touch the open case) | `warehouse.fulfillment.events`: `TaskCPTMissed` (re-fired every sweep tick by design), `PackageDiverted`, `WeightDiscrepancyDetected` (both promoted onto the integration topic 2026-10-21) | **wired-but-unused**. Consumer built (group `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`); `TaskCPTMissed` is live on the topic (K16) and the two package types are published since their promotion; service not deployed | [exception-management](/contexts/exception-management/domain-events) |
-| K56 | `wes-work-planning` → `exception-management` | OHS + PL / CF (one case per path while the alarm re-fires) | `warehouse.work-planning.events`: `BacklogThresholdBreached` | **wired-but-unused**. Consumer built (group `WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP`); the producer publishes the type on its live topic; service not deployed | [exception-management](/contexts/exception-management/domain-events) |
-| K57 | `network-fulfillment` → `exception-management` | OHS + PL / CF (re-fires on every sweep pass touch the open case) | `warehouse.network-fulfillment.events`: `AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled` | **wired-but-unused**. Consumer built (group `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`). The producer side is itself wired-but-unused today (K19: `EVENT_PUBLISHER=kafka` is set in `warehouse-infra` `develop` with an apply pending), so this edge needs that apply plus a deployment of `exception-management` | [exception-management](/contexts/exception-management/domain-events) |
-| K58 | `order-management` → `exception-management` | PL, correlation only (never a case source); CF on the consumer | `warehouse.order-management.events`: `OrderRepromised` | **wired-but-unused**. Consumer built (group `ORDER_CORRELATION_CONSUMER_GROUP`): the auto-resolve rule matches the repromised `order_id` against the order behind a `TaskCPTMissed` case's frozen `order_ref` (`{order_id}-line-{line_no}`, order-level, inclusive window), `rule_id` = `<sourceType>-><onType>`; no match fails soft. The type previously had no consumer (see below) | [exception-management](/contexts/exception-management/domain-events) |
-| K59 | `inventory-storage` → `exception-management` | OHS + PL / CF (frozen copies; a short count and unlocated stock each open or touch their own case) | `warehouse.inventory.events`: `bin.DiscrepancyDetected`, `stock.ItemUnlocated` (both promoted onto the integration topic 2026-10-21, inventory-storage ADR 0043) | **wired-but-unused**. Consumer built (group `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`); the producer publishes both types on its live topic since the promotion; service not deployed | [exception-management](/contexts/exception-management/domain-events) |
+| K50 | `product-master` → `returns-processing` | OHS + PL / CF (version-guarded local copy of the classification) | `warehouse.product-master.events`: `ProductClassified` | **live**. The consumer is built and always on (group `returns-processing-product-classification`, from the required `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`; its integration test applies, dedupes and version-gates on real Kafka), the producer is live (K20), and `returns-processing` is registered in `warehouse-infra` `develop` since 2026-10-22 (`terraform/apps.yaml`, consumer groups pinned in `helm-values/returns-processing.yaml`) | [returns-processing](/contexts/returns-processing/async-api) |
+| K51 | `order-management` → `returns-processing` | OHS + PL / CF (local copy of the allocated lines; the lines carry no quantity) | `warehouse.order-management.events`: `OrderAllocated`, `OrderPartiallyAllocated` | **live**. Consumer built (group `returns-processing-order-lines`, `ORDER_LINES_CONSUMER_GROUP`, one claim per event covering every line), producer live (K1); `returns-processing` registered in `warehouse-infra` `develop` since 2026-10-22 (`terraform/apps.yaml`, consumer groups pinned in `helm-values/returns-processing.yaml`) | [returns-processing](/contexts/returns-processing/async-api) |
+| K52 | `fulfillment-execution` → `returns-processing` | OHS + PL / CF (local copy of the manifested work units) | `warehouse.fulfillment.events`: `PackageManifested` (`order_ref` = the work unit id, reversed into the (order, line) key) | **live**. Consumer built (group `returns-processing-manifest`, `MANIFEST_CONSUMER_GROUP`), producer live (K16); `returns-processing` registered in `warehouse-infra` `develop` since 2026-10-22 (`terraform/apps.yaml`, consumer groups pinned in `helm-values/returns-processing.yaml`) | [returns-processing](/contexts/returns-processing/async-api) |
+| K53 | `returns-processing` → `inventory-storage` | PL, the returns handover; inventory-storage is the Conformist and runs its existing staged-receipt use case (`BookReturnLine` in front of `ReceiveStock`) | `warehouse.returns-processing.events`: `disposition.ReturnLineStaged` (raised once per RESTOCK disposition; `condition` is the constant `Good`) | **live**. Producer `returns-processing` (service PR #2) registered in `warehouse-infra` `develop` since 2026-10-22 (`terraform/apps.yaml`, consumer groups pinned in `helm-values/returns-processing.yaml`); consumer inventory-storage ADR 0044 (`return_line_consumer.go`, claim name `return-line-staged`, group `inventory-storage-return-lines` from the required `RETURN_LINE_CONSUMER_GROUP`, `helm-values/inventory-storage.yaml`; every other type on the topic is ignored). No synchronous call in either direction and no acknowledgement event | [INV](/contexts/inventory-storage/context-map), [returns-processing](/contexts/returns-processing/domain-events) |
+| K54 | `returns-processing` → `exception-management` | PL / CF (frozen copy of the source payload on the case) | `warehouse.returns-processing.events`: `returnreceipt.UnexpectedReturnReceived` | **live**. The consumer (group `exception-management-returns`, `RETURNS_EXCEPTIONS_CONSUMER_GROUP`) opens one case per receipt line; both services are registered in `warehouse-infra` `develop` since 2026-10-22 (`terraform/apps.yaml`, consumer groups pinned in `helm-values/exception-management.yaml`) | [exception-management](/contexts/exception-management/domain-events) |
+| K55 | `fulfillment-execution` → `exception-management` | OHS + PL / CF (frozen copies; repeats touch the open case) | `warehouse.fulfillment.events`: `TaskCPTMissed` (re-fired every sweep tick by design), `PackageDiverted`, `WeightDiscrepancyDetected` (both promoted onto the integration topic 2026-10-21) | **live**. Consumer built (group `exception-management-fulfillment`, `FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`); `TaskCPTMissed` is live on the topic (K16) and the two package types are published since their promotion; `exception-management` is registered in `warehouse-infra` `develop` since 2026-10-22 (`terraform/apps.yaml`, consumer groups pinned in `helm-values/exception-management.yaml`) | [exception-management](/contexts/exception-management/domain-events) |
+| K56 | `wes-work-planning` → `exception-management` | OHS + PL / CF (one case per path while the alarm re-fires) | `warehouse.work-planning.events`: `BacklogThresholdBreached` | **live**. Consumer built (group `exception-management-work-planning`, `WORK_PLANNING_EXCEPTIONS_CONSUMER_GROUP`); the producer publishes the type on its live topic; `exception-management` is registered in `warehouse-infra` `develop` since 2026-10-22 (`terraform/apps.yaml`, consumer groups pinned in `helm-values/exception-management.yaml`) | [exception-management](/contexts/exception-management/domain-events) |
+| K57 | `network-fulfillment` → `exception-management` | OHS + PL / CF (re-fires on every sweep pass touch the open case) | `warehouse.network-fulfillment.events`: `AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled` | **live**. Consumer built (group `exception-management-network-fulfillment`, `NETWORK_FULFILLMENT_EXCEPTIONS_CONSUMER_GROUP`); the producer publishes on `warehouse.network-fulfillment.events` with `config.eventPublisher: kafka` (`helm-values/network-fulfillment.yaml`); `exception-management` is registered in `warehouse-infra` `develop` since 2026-10-22 (`terraform/apps.yaml`, consumer groups pinned in `helm-values/exception-management.yaml`) | [exception-management](/contexts/exception-management/domain-events) |
+| K58 | `order-management` → `exception-management` | PL, correlation only (never a case source); CF on the consumer | `warehouse.order-management.events`: `OrderRepromised` | **live**. Consumer built (group `exception-management-order-correlation`, `ORDER_CORRELATION_CONSUMER_GROUP`): the auto-resolve rule matches the repromised `order_id` against the order behind a `TaskCPTMissed` case's frozen `order_ref` (`{order_id}-line-{line_no}`, order-level, inclusive window), `rule_id` = `<sourceType>-><onType>`; no match fails soft. The type previously had no consumer (see below) | [exception-management](/contexts/exception-management/domain-events) |
+| K59 | `inventory-storage` → `exception-management` | OHS + PL / CF (frozen copies; a short count and unlocated stock each open or touch their own case) | `warehouse.inventory.events`: `bin.DiscrepancyDetected`, `stock.ItemUnlocated` (both promoted onto the integration topic 2026-10-21, inventory-storage ADR 0043) | **live**. Consumer built (group `exception-management-inventory`, `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`); the producer publishes both types on its live topic since the promotion; `exception-management` is registered in `warehouse-infra` `develop` since 2026-10-22 (`terraform/apps.yaml`, consumer groups pinned in `helm-values/exception-management.yaml`) | [exception-management](/contexts/exception-management/domain-events) |
 | K60 | `workforce-management` → `exception-management` | PL, planned; CF on the consumer | `warehouse.workforce.analytics`: `shiftplan.PathUnderstaffed` (analytics-only on the producer today) | **absent-planned**. Named by exception-management's ADR 0001 and ADR 0003; the producer must promote the type onto its integration topic first (its own PR), and no consumer for it exists | [exception-management](/contexts/exception-management/bounded-context-canvas) |
 | K61 | `network-inventory-planning` → `exception-management` | PL, planned; CF on the consumer | `warehouse.network-inventory-planning.analytics`: `saga.TransferStuckDetected` (analytics-only on the producer today, its ADR 0007 health ticker) | **absent-planned**. Named by exception-management's ADR 0001 and ADR 0003; the producer must promote the type onto its integration topic first (its own PR), and no consumer for it exists | [exception-management](/contexts/exception-management/bounded-context-canvas) |
 
@@ -424,11 +424,11 @@ Both are Supporting, neither makes a synchronous call to a sibling, and no
 sibling calls them (the ops agent has no client for either).
 
 `returns-processing` and `exception-management`: both merged on `develop`
-2026-10-20/21 and NOT registered in `warehouse-infra`, so K50 to K59 are
-wired-but-unused wires and K60/K61 stay dashed planned. Both are Supporting,
+2026-10-20/21 and registered in `warehouse-infra` `develop` on 2026-10-22, so
+K50 to K59 are live and K60/K61 stay dashed planned. Both are Supporting,
 neither makes a synchronous call to a sibling, and no sibling calls them (the
-ops agent has no client for either; each ships a read-only MCP server that is
-default-off in its chart and has no caller).
+ops agent has no client for either; each ships a read-only MCP server with no
+caller).
 
 Published types with no consumer, as stated by their owners:
 
@@ -497,14 +497,14 @@ operators, `warehouse-console` (its own `productmaster_mfe` remote) and
 | R2 | `inventory-storage` → `order-management` | OHS + PL / C/S + ACL | `GET /products/{sku}/classification` (fail-open routing hint) | **retired** by OM ADR 0036: the `http` mode is removed and rejected at boot, replaced by K20 | [OM](/contexts/order-management/context-map), [INV](/contexts/inventory-storage/context-map) |
 | R3 | `inventory-storage` → `wes-work-planning` | OHS / CF | `GET /products/{sku}/classification` at release | **retired** by WP ADR 0035: the `http` mode is removed and rejected at boot, replaced by K20 | [INV](/contexts/inventory-storage/context-map), [WP](/contexts/wes-work-planning/context-map) |
 | R4 | `inventory-storage` → `fulfillment-execution` | OHS / ACL | `GET /products/{sku}/classification` at seal time | **retired** by FE ADR 0039: the `http` mode is removed and rejected at boot, replaced by K20 | [INV](/contexts/inventory-storage/context-map), [FE](/contexts/fulfillment-execution/context-map) |
-| R5 | `inventory-storage` → `network-fulfillment` | OHS / CF | `GET /inventory/{sku}/usable` | **wired-but-unused**. The client is built only inside the `CAPABILITY_OFFER_ENABLED` wiring | [NF](/contexts/network-fulfillment/context-map), [INV](/contexts/inventory-storage/context-map) |
+| R5 | `inventory-storage` → `network-fulfillment` | OHS / CF | `GET /inventory/{sku}/usable` | **live**. The client is built only inside the `CAPABILITY_OFFER_ENABLED` wiring, which `warehouse-infra` `develop` enables (`INVENTORY_STORAGE_URL` in `helm-values/network-fulfillment.yaml`) | [NF](/contexts/network-fulfillment/context-map), [INV](/contexts/inventory-storage/context-map) |
 | R6 | `facility-layout` → `inventory-storage` | OHS / ACL | `GET /locations/{locationCode}/classification` | **wired-but-unused**. This is the rollback for K4 (`LOCATION_LOOKUP_MODE=http`) | [FL](/contexts/facility-layout/context-map), [INV](/contexts/inventory-storage/context-map) |
 | R7 | `facility-layout` → `wes-work-planning` | OHS + PL / CF | `GET /distance?from=&to=` at shift-plan commit | **live** (`TRAVEL_DISTANCE_MODE=http` in `sync_edge_env`) | [FL](/contexts/facility-layout/context-map), [WP](/contexts/wes-work-planning/context-map) |
 | R8 | `facility-layout` → `fulfillment-execution` | OHS / ACL | `GET /locations/{locationCode}` (station role check) | **live** in `warehouse-infra` `develop` (`LOCATION_ROLE_MODE=http` and `FACILITY_LAYOUT_BASE_URL` in `local.sync_edge_env` since #92, with a `terraform apply` pending). `RegisterStation` rejects a supplied location whose known role is not WorkCenter; an unknown location passes (fail-open), and it runs at registration only | [FL](/contexts/facility-layout/context-map), [FE](/contexts/fulfillment-execution/context-map) |
 | R9 | `fulfillment-execution` → `workforce-management` | OHS / CF | `GET /capacity/{capability}` (fail-loud ceiling on committed heads) | **live** (`INSTALLED_CAPACITY_MODE=http`) | [FE](/contexts/fulfillment-execution/context-map), [WFM](/contexts/workforce-management/context-map) |
 | R10 | `labor-performance` → `workforce-management` | OHS / CF + ACL | `GET /task-types/{taskType}/performance` | **wired-but-unused**. `LABOR_PERFORMANCE_MODE=http` is the alternative to K17 | [LP](/contexts/labor-performance/context-map), [WFM](/contexts/workforce-management/context-map) |
 | R11 | `order-management` → `network-fulfillment` | OHS / C/S (NF is the Customer, and OM ADR 0020 changed the Supplier for it) | `POST /orders` (held, `requiredShipBy`), `POST /orders/{id}/release`, `DELETE /orders/{id}` | **live** | [OM](/contexts/order-management/context-map), [NF](/contexts/network-fulfillment/context-map) |
-| R12 | `retail-network` → `network-fulfillment` | OHS / CF + ACL | `ports.NetworkGateway`: `PollDemand`, `SubmitAcknowledgement`, `SubmissionStatus`, `SubmitShipmentConfirmation` | **absent-planned**. Only `StubGateway` exists, and `NETWORK_MODE=live` refuses to boot. See [retail-network](#upstream-retail-network-planned) | [NF](/contexts/network-fulfillment/context-map) |
+| R12 | `retail-network` → `network-fulfillment` | OHS / CF + ACL | `ports.NetworkGateway`: `PollDemand`, `SubmitAcknowledgement`, `SubmissionStatus`, `SubmitShipmentConfirmation`, `RequestLabel`, `DeclareNodeProfile`, `SubmitInventoryFeed`; `ports.InboundGateway`: `PollInboundShipments`, `SubmitInboundReceipt` (the retail network's Vendor API, served by `vendor-connectivity`) | **live**. `NETWORK_MODE=live` is built (NF ADRs [0026](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0026-live-retail-network-adapter-demand-loop.md) demand loop, [0027](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0027-supply-loop-node-profile-and-inventory-feed.md) supply loop, [0028](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0028-inbound-loop-seller-shipments-and-receipts.md) inbound loop) and `warehouse-infra` `develop` sets `config.networkMode: live` since 2026-10-25, calling the in-cluster `vendor-connectivity` Service as vendor `V-WS`; `StubGateway` stays the chart default and the test mode. See [retail-network](#upstream-retail-network) | [NF](/contexts/network-fulfillment/context-map) |
 
 ### warehouse-ops-agent (MCP Customer and console BFF)
 
@@ -729,20 +729,29 @@ different pattern for the downstream side. The edge table shows both:
 - The retail-network ADR is `network-fulfillment` ADR **0009**. It was
   renumbered from 0002, and 0002 is now a "Moved" stub.
 
-## Upstream: retail-network (planned)
+## Upstream: retail-network
 
 `retail-network` is not one of the fleet's bounded contexts. It plays the role
-of an external retail fulfillment network. `network-fulfillment` is
-**Conformist** to it and acts as an **Anti-Corruption Layer** for the fleet:
-the network's vocabulary stops at `internal/adapters/outbound/network/`, and
-the rest of the fleet sees only SKUs, quantities and a deadline. Today only
-`StubGateway` exists, and `NETWORK_MODE=live` refuses to boot because there is
-no adapter. The reference deployment pins `networkMode = "stub"`. The
-relationship is decided in
+of an external retail fulfillment network, and since 2026-10-24 it is built:
+the eleven contexts of the [retail network section](https://iqvo.github.io/warehouse-docs/network/)
+run in the same kind cluster, and their Vendor API is served by
+`vendor-connectivity`. `network-fulfillment` is **Conformist** to that API and
+acts as the fleet's **Anti-Corruption Layer**: the network's vocabulary stops
+at `internal/adapters/outbound/network/`, and the rest of the fleet sees only
+SKUs, quantities and a deadline. The relationship is decided in
 [`network-fulfillment` ADR 0009](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0009-retail-network-not-a-real-network-counterpart.md)
-(Accepted). Its companion `retail-network` ADR 0001 is still a draft at
-`docs/planning/retail-network-adr-0001-DRAFT-for-new-repo.md` in
-`network-fulfillment`, and no `retail-network` repository exists yet.
+(Accepted). The live adapter is built in three loops:
+[ADR 0026](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0026-live-retail-network-adapter-demand-loop.md)
+(demand: poll purchase orders, acknowledge, label, confirm shipment),
+[ADR 0027](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0027-supply-loop-node-profile-and-inventory-feed.md)
+(supply: node profile and inventory feed) and
+[ADR 0028](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0028-inbound-loop-seller-shipments-and-receipts.md)
+(inbound: seller shipments and receipts). `warehouse-infra` `develop` runs it
+with `config.networkMode: live` as vendor `V-WS` against the in-cluster
+`vendor-connectivity` Service, not through Kong (`helm-values/network-fulfillment.yaml`,
+since 2026-10-25); `StubGateway` stays the chart default and the mode of
+tests. The network side of the seam is described in the network section's
+integration pages.
 
 ## The console
 

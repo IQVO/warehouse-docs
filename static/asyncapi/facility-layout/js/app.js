@@ -71,6 +71,7 @@
         "message": {
           "oneOf": [
             {
+              "x-no-consumer-reason": "Published Language fact; consumed on demand",
               "name": "SiteRegistered",
               "contentType": "application/cloudevents+json",
               "title": "Site registered",
@@ -254,7 +255,7 @@
                 }
               ],
               "summary": "A site's transfer capability state changed.",
-              "description": "A complete, PII-free last-write-wins snapshot of site transfer capability. Kafka key and CloudEvents subject: `site_code`. Consumers compare `capability_revision` and retain the latest complete snapshot; they must not infer either capability from facility topology. Raised by `PUT /sites/{siteCode}/transfer-capability` through the transactional outbox, once per real change; `capability_revision` starts at 1 and increases by exactly one per change of the same site (ADR-0035). The payload stays snake_case although every other facility-layout payload is camelCase: recasing it would be a breaking `.v2` for network-inventory-planning (ADR-0035, decision D2).\n",
+              "description": "A complete, PII-free last-write-wins snapshot of site transfer capability. Kafka key and CloudEvents subject: `site_code`. Consumers compare `capability_revision` and retain the latest complete snapshot; they must not infer either capability from facility topology. Raised by `PUT /sites/{siteCode}/transfer-capability` through the transactional outbox, once per real change (ADR-0035), AND re-emitted periodically as a freshness HEARTBEAT (ADR-0041). A heartbeat is this same event type: the CURRENT values, a new CloudEvents `id`, the same key and subject, a fresh `time`, and `capability_revision` advanced by one. It is raised every `SITE_CAPABILITY_HEARTBEAT_INTERVAL` (chart `config.siteCapabilityHeartbeatInterval`, default 5m; 0 disables it) for every ACTIVE site that has declared a capability, so a consumer with a freshness window (network-inventory-planning treats a fact older than 10 minutes as stale) keeps a fact it has no reason to change. The CloudEvents `time` is the as_of watermark: it is the moment of emission, for a change and for a heartbeat alike. `capability_revision` starts at 1 and increases by exactly one per event of the same site, change or heartbeat, so consumers must not read a revision step as a capability change: compare the values. A PUT of the value a site already holds is still a no-op and raises nothing (ADR-0035). The payload stays snake_case although every other facility-layout payload is camelCase: recasing it would be a breaking `.v2` for network-inventory-planning (ADR-0035, decision D2).\n",
               "payload": {
                 "allOf": [
                   "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[0].payload.allOf[0]",
@@ -297,7 +298,7 @@
                               "capability_revision": {
                                 "type": "integer",
                                 "format": "int64",
-                                "description": "Monotonically increasing revision for last-write-wins consumers.",
+                                "description": "Monotonically increasing revision for last-write-wins consumers. Advances by exactly one per event of the site, whether it carries a changed capability or is a freshness heartbeat (ADR-0041); a consumer that only accepts a strictly greater revision therefore also refreshes its as_of on a heartbeat.\n",
                                 "x-parser-schema-id": "<anonymous-schema-30>"
                               }
                             },
@@ -314,6 +315,7 @@
               }
             },
             {
+              "x-no-consumer-reason": "Published Language fact; consumed on demand",
               "name": "SiteRoleChanged",
               "contentType": "application/cloudevents+json",
               "title": "Site role changed",
@@ -452,6 +454,7 @@
               }
             },
             {
+              "x-no-consumer-reason": "Published Language fact; consumed on demand",
               "name": "AisleRegistered",
               "contentType": "application/cloudevents+json",
               "title": "Aisle registered",
@@ -529,6 +532,7 @@
               }
             },
             {
+              "x-no-consumer-reason": "Published Language fact; consumed on demand",
               "name": "LocationTypeRegistered",
               "contentType": "application/cloudevents+json",
               "title": "Location type registered",
@@ -597,6 +601,7 @@
               }
             },
             {
+              "x-no-consumer-reason": "Published Language fact; consumed on demand",
               "name": "PlacementRuleDefined",
               "contentType": "application/cloudevents+json",
               "title": "Placement rule defined",
@@ -747,6 +752,17 @@
                               "maxVolumeM3": {
                                 "type": "number",
                                 "x-parser-schema-id": "<anonymous-schema-94>"
+                              },
+                              "handlingUnit": {
+                                "type": "string",
+                                "enum": [
+                                  "EACH",
+                                  "CASE",
+                                  "PALLET"
+                                ],
+                                "description": "OPTIONAL (ADR-0040). The unit of handling the slot accepts. Omitted when none was recorded at registration (every slot registered before the field existed); a later value arrives as `LocationSlotHandlingUnitDeclared`.\n",
+                                "example": "CASE",
+                                "x-parser-schema-id": "<anonymous-schema-95>"
                               }
                             },
                             "x-parser-schema-id": "<anonymous-schema-84>"
@@ -780,11 +796,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned",
-                        "x-parser-schema-id": "<anonymous-schema-97>"
+                        "x-parser-schema-id": "<anonymous-schema-98>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:LocationSlotDecommissioned:v1",
-                        "x-parser-schema-id": "<anonymous-schema-98>"
+                        "x-parser-schema-id": "<anonymous-schema-99>"
                       },
                       "data": {
                         "allOf": [
@@ -797,22 +813,23 @@
                             "properties": {
                               "locationCode": {
                                 "type": "string",
-                                "x-parser-schema-id": "<anonymous-schema-101>"
+                                "x-parser-schema-id": "<anonymous-schema-102>"
                               }
                             },
-                            "x-parser-schema-id": "<anonymous-schema-100>"
+                            "x-parser-schema-id": "<anonymous-schema-101>"
                           }
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-99>"
+                        "x-parser-schema-id": "<anonymous-schema-100>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-96>"
+                    "x-parser-schema-id": "<anonymous-schema-97>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-95>"
+                "x-parser-schema-id": "<anonymous-schema-96>"
               }
             },
             {
+              "x-no-consumer-reason": "Published Language fact; consumed on demand",
               "name": "FacilityLayoutImported",
               "contentType": "application/cloudevents+json",
               "title": "Facility layout imported",
@@ -831,11 +848,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.FacilityLayoutImported",
-                        "x-parser-schema-id": "<anonymous-schema-104>"
+                        "x-parser-schema-id": "<anonymous-schema-105>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:FacilityLayoutImported:v1",
-                        "x-parser-schema-id": "<anonymous-schema-105>"
+                        "x-parser-schema-id": "<anonymous-schema-106>"
                       },
                       "data": {
                         "allOf": [
@@ -850,27 +867,99 @@
                             "properties": {
                               "rowsSubmitted": {
                                 "type": "integer",
-                                "x-parser-schema-id": "<anonymous-schema-108>"
+                                "x-parser-schema-id": "<anonymous-schema-109>"
                               },
                               "slotsImported": {
                                 "type": "integer",
-                                "x-parser-schema-id": "<anonymous-schema-109>"
+                                "x-parser-schema-id": "<anonymous-schema-110>"
                               },
                               "rowsRejected": {
                                 "type": "integer",
-                                "x-parser-schema-id": "<anonymous-schema-110>"
+                                "x-parser-schema-id": "<anonymous-schema-111>"
                               }
                             },
-                            "x-parser-schema-id": "<anonymous-schema-107>"
+                            "x-parser-schema-id": "<anonymous-schema-108>"
                           }
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-106>"
+                        "x-parser-schema-id": "<anonymous-schema-107>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-103>"
+                    "x-parser-schema-id": "<anonymous-schema-104>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-102>"
+                "x-parser-schema-id": "<anonymous-schema-103>"
+              }
+            },
+            {
+              "name": "LocationSlotHandlingUnitDeclared",
+              "contentType": "application/cloudevents+json",
+              "title": "Location slot handling unit declared",
+              "tags": [
+                {
+                  "name": "locationslot"
+                }
+              ],
+              "summary": "A slot's handling unit (EACH, CASE or PALLET) was set or changed.",
+              "description": "Raised by `DeclareLocationHandlingUnit` (ADR-0040), i.e. `PUT /locations/{locationCode}/handling-unit`. The slot is identified by `locationCode`, exactly as in `LocationSlotRegistered`. CloudEvents `subject` and Kafka key: `locationCode` (same partition as that location's `LocationSlotRegistered`). **Consumed live** by inventory-storage's facility cache, which uses the handling unit to decide whether a sealed case may be stowed in the bin. Last write wins per `locationCode` (same partition, so ordered).\n",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wms.facility-layout.locationslot.LocationSlotHandlingUnitDeclared",
+                        "x-parser-schema-id": "<anonymous-schema-114>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:facility-layout:events:LocationSlotHandlingUnitDeclared:v1",
+                        "x-parser-schema-id": "<anonymous-schema-115>"
+                      },
+                      "data": {
+                        "allOf": [
+                          "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[0].payload.allOf[1].properties.data.allOf[0]",
+                          {
+                            "type": "object",
+                            "required": [
+                              "locationCode",
+                              "handlingUnit",
+                              "declaredAt"
+                            ],
+                            "properties": {
+                              "locationCode": {
+                                "type": "string",
+                                "description": "The full coded location, e.g. `WH1-STOR-AMB-A07-03-02-B`.\n",
+                                "example": "WH1-STOR-AMB-A07-03-02-B",
+                                "x-parser-schema-id": "<anonymous-schema-118>"
+                              },
+                              "handlingUnit": {
+                                "type": "string",
+                                "enum": [
+                                  "EACH",
+                                  "CASE",
+                                  "PALLET"
+                                ],
+                                "example": "CASE",
+                                "x-parser-schema-id": "<anonymous-schema-119>"
+                              },
+                              "declaredAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "description": "When the unit was declared (equals `occurredAt`).",
+                                "example": "2026-10-24T12:00:00Z",
+                                "x-parser-schema-id": "<anonymous-schema-120>"
+                              }
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-117>"
+                          }
+                        ],
+                        "x-parser-schema-id": "<anonymous-schema-116>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-113>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-112>"
               }
             },
             {
@@ -892,11 +981,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.LocationGeometryUpdated",
-                        "x-parser-schema-id": "<anonymous-schema-113>"
+                        "x-parser-schema-id": "<anonymous-schema-123>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:LocationGeometryUpdated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-114>"
+                        "x-parser-schema-id": "<anonymous-schema-124>"
                       },
                       "data": {
                         "allOf": [
@@ -916,54 +1005,55 @@
                               "locationCode": {
                                 "type": "string",
                                 "description": "The full coded location, e.g. `WH1-STOR-AMB-A07-03-02-B`.\n",
-                                "x-parser-schema-id": "<anonymous-schema-117>"
+                                "x-parser-schema-id": "<anonymous-schema-127>"
                               },
                               "xM": {
                                 "type": "number",
                                 "description": "Position in the site's local coordinate frame, in metres.",
-                                "x-parser-schema-id": "<anonymous-schema-118>"
+                                "x-parser-schema-id": "<anonymous-schema-128>"
                               },
                               "yM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-119>"
+                                "x-parser-schema-id": "<anonymous-schema-129>"
                               },
                               "zM": {
                                 "type": "number",
                                 "description": "Height above floor level, in metres. Never negative.",
-                                "x-parser-schema-id": "<anonymous-schema-120>"
+                                "x-parser-schema-id": "<anonymous-schema-130>"
                               },
                               "widthM": {
                                 "type": "number",
                                 "description": "Footprint extent, in metres. Always strictly positive.",
-                                "x-parser-schema-id": "<anonymous-schema-121>"
+                                "x-parser-schema-id": "<anonymous-schema-131>"
                               },
                               "depthM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-122>"
+                                "x-parser-schema-id": "<anonymous-schema-132>"
                               },
                               "heightM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-123>"
+                                "x-parser-schema-id": "<anonymous-schema-133>"
                               },
                               "pickSequence": {
                                 "type": "integer",
                                 "description": "Optional explicit pick-path override for this slot. Absent when no override was given.\n",
-                                "x-parser-schema-id": "<anonymous-schema-124>"
+                                "x-parser-schema-id": "<anonymous-schema-134>"
                               }
                             },
-                            "x-parser-schema-id": "<anonymous-schema-116>"
+                            "x-parser-schema-id": "<anonymous-schema-126>"
                           }
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-115>"
+                        "x-parser-schema-id": "<anonymous-schema-125>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-112>"
+                    "x-parser-schema-id": "<anonymous-schema-122>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-111>"
+                "x-parser-schema-id": "<anonymous-schema-121>"
               }
             },
             {
+              "x-no-consumer-reason": "Published Language fact; consumed on demand",
               "name": "AisleGeometryUpdated",
               "contentType": "application/cloudevents+json",
               "title": "Aisle geometry updated",
@@ -982,11 +1072,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.aisle.AisleGeometryUpdated",
-                        "x-parser-schema-id": "<anonymous-schema-127>"
+                        "x-parser-schema-id": "<anonymous-schema-137>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:AisleGeometryUpdated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-128>"
+                        "x-parser-schema-id": "<anonymous-schema-138>"
                       },
                       "data": {
                         "allOf": [
@@ -1007,51 +1097,52 @@
                               "aisleId": {
                                 "type": "string",
                                 "example": "WH1-STOR-AMB-A07",
-                                "x-parser-schema-id": "<anonymous-schema-131>"
+                                "x-parser-schema-id": "<anonymous-schema-141>"
                               },
                               "startXM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-132>"
+                                "x-parser-schema-id": "<anonymous-schema-142>"
                               },
                               "startYM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-133>"
+                                "x-parser-schema-id": "<anonymous-schema-143>"
                               },
                               "startZM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-134>"
+                                "x-parser-schema-id": "<anonymous-schema-144>"
                               },
                               "endXM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-135>"
+                                "x-parser-schema-id": "<anonymous-schema-145>"
                               },
                               "endYM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-136>"
+                                "x-parser-schema-id": "<anonymous-schema-146>"
                               },
                               "endZM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-137>"
+                                "x-parser-schema-id": "<anonymous-schema-147>"
                               },
                               "lengthM": {
                                 "type": "number",
                                 "description": "The centreline's straight-line length, in metres.",
-                                "x-parser-schema-id": "<anonymous-schema-138>"
+                                "x-parser-schema-id": "<anonymous-schema-148>"
                               }
                             },
-                            "x-parser-schema-id": "<anonymous-schema-130>"
+                            "x-parser-schema-id": "<anonymous-schema-140>"
                           }
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-129>"
+                        "x-parser-schema-id": "<anonymous-schema-139>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-126>"
+                    "x-parser-schema-id": "<anonymous-schema-136>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-125>"
+                "x-parser-schema-id": "<anonymous-schema-135>"
               }
             },
             {
+              "x-no-consumer-reason": "Published Language fact; consumed on demand",
               "name": "FixedStructureRegistered",
               "contentType": "application/cloudevents+json",
               "title": "Fixed structure registered",
@@ -1070,11 +1161,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.structure.FixedStructureRegistered",
-                        "x-parser-schema-id": "<anonymous-schema-141>"
+                        "x-parser-schema-id": "<anonymous-schema-151>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:FixedStructureRegistered:v1",
-                        "x-parser-schema-id": "<anonymous-schema-142>"
+                        "x-parser-schema-id": "<anonymous-schema-152>"
                       },
                       "data": {
                         "allOf": [
@@ -1097,62 +1188,63 @@
                               "structureId": {
                                 "type": "string",
                                 "example": "STR-1",
-                                "x-parser-schema-id": "<anonymous-schema-145>"
+                                "x-parser-schema-id": "<anonymous-schema-155>"
                               },
                               "siteCode": {
                                 "type": "string",
                                 "example": "WH1",
-                                "x-parser-schema-id": "<anonymous-schema-146>"
+                                "x-parser-schema-id": "<anonymous-schema-156>"
                               },
                               "kind": {
                                 "type": "string",
                                 "description": "Wall, Column, Office, Conveyor, or Other.",
-                                "x-parser-schema-id": "<anonymous-schema-147>"
+                                "x-parser-schema-id": "<anonymous-schema-157>"
                               },
                               "xM": {
                                 "type": "number",
                                 "description": "Footprint origin, in the site's local coordinate frame, in metres.",
-                                "x-parser-schema-id": "<anonymous-schema-148>"
+                                "x-parser-schema-id": "<anonymous-schema-158>"
                               },
                               "yM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-149>"
+                                "x-parser-schema-id": "<anonymous-schema-159>"
                               },
                               "zM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-150>"
+                                "x-parser-schema-id": "<anonymous-schema-160>"
                               },
                               "widthM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-151>"
+                                "x-parser-schema-id": "<anonymous-schema-161>"
                               },
                               "depthM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-152>"
+                                "x-parser-schema-id": "<anonymous-schema-162>"
                               },
                               "heightM": {
                                 "type": "number",
-                                "x-parser-schema-id": "<anonymous-schema-153>"
+                                "x-parser-schema-id": "<anonymous-schema-163>"
                               },
                               "label": {
                                 "type": "string",
                                 "example": "North wall",
-                                "x-parser-schema-id": "<anonymous-schema-154>"
+                                "x-parser-schema-id": "<anonymous-schema-164>"
                               }
                             },
-                            "x-parser-schema-id": "<anonymous-schema-144>"
+                            "x-parser-schema-id": "<anonymous-schema-154>"
                           }
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-143>"
+                        "x-parser-schema-id": "<anonymous-schema-153>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-140>"
+                    "x-parser-schema-id": "<anonymous-schema-150>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-139>"
+                "x-parser-schema-id": "<anonymous-schema-149>"
               }
             },
             {
+              "x-no-consumer-reason": "Published Language fact; consumed on demand",
               "name": "CrossAisleRegistered",
               "contentType": "application/cloudevents+json",
               "title": "Cross-aisle registered",
@@ -1171,11 +1263,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.crossaisle.CrossAisleRegistered",
-                        "x-parser-schema-id": "<anonymous-schema-157>"
+                        "x-parser-schema-id": "<anonymous-schema-167>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:CrossAisleRegistered:v1",
-                        "x-parser-schema-id": "<anonymous-schema-158>"
+                        "x-parser-schema-id": "<anonymous-schema-168>"
                       },
                       "data": {
                         "allOf": [
@@ -1192,34 +1284,34 @@
                               "zoneId": {
                                 "type": "string",
                                 "example": "WH1-STOR-AMB",
-                                "x-parser-schema-id": "<anonymous-schema-161>"
+                                "x-parser-schema-id": "<anonymous-schema-171>"
                               },
                               "fromAisle": {
                                 "type": "string",
                                 "example": "A07",
-                                "x-parser-schema-id": "<anonymous-schema-162>"
+                                "x-parser-schema-id": "<anonymous-schema-172>"
                               },
                               "toAisle": {
                                 "type": "string",
                                 "example": "A08",
-                                "x-parser-schema-id": "<anonymous-schema-163>"
+                                "x-parser-schema-id": "<anonymous-schema-173>"
                               },
                               "atBay": {
                                 "type": "string",
                                 "example": "02",
-                                "x-parser-schema-id": "<anonymous-schema-164>"
+                                "x-parser-schema-id": "<anonymous-schema-174>"
                               }
                             },
-                            "x-parser-schema-id": "<anonymous-schema-160>"
+                            "x-parser-schema-id": "<anonymous-schema-170>"
                           }
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-159>"
+                        "x-parser-schema-id": "<anonymous-schema-169>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-156>"
+                    "x-parser-schema-id": "<anonymous-schema-166>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-155>"
+                "x-parser-schema-id": "<anonymous-schema-165>"
               }
             }
           ]
@@ -1245,7 +1337,8 @@
             "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[10]",
             "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[11]",
             "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[12]",
-            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[13]"
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[13]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[14]"
           ]
         }
       }
@@ -1268,12 +1361,13 @@
       "locationTypeRegistered": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[5]",
       "placementRuleDefined": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[6]",
       "locationSlotRegistered": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[7]",
+      "locationSlotHandlingUnitDeclared": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[10]",
       "locationSlotDecommissioned": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[8]",
       "facilityLayoutImported": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[9]",
-      "locationGeometryUpdated": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[10]",
-      "aisleGeometryUpdated": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[11]",
-      "fixedStructureRegistered": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[12]",
-      "crossAisleRegistered": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[13]"
+      "locationGeometryUpdated": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[11]",
+      "aisleGeometryUpdated": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[12]",
+      "fixedStructureRegistered": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[13]",
+      "crossAisleRegistered": "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[14]"
     }
   },
   "x-parser-spec-parsed": true,

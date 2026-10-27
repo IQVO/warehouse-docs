@@ -599,10 +599,8 @@ flowchart LR
     E8 --> E10
 
     H8["H8 crash after raising the hold leaves a NEW order with no localOrderId"]:::hotspot
-    H9["H9 orphaned held order is never swept"]:::hotspot
     H11["H11 no background sweeper for timed-out reservations"]:::hotspot
     C2 -.- H8
-    C3 -.- H9
     E9 -.- H11
 
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
@@ -850,18 +848,12 @@ flowchart LR
     C6 --> E7
 
     H24["H24 Task CPT Missed re-fires on every pass"]:::hotspot
-    H25["H25 no known consumer of Order Repromised"]:::hotspot
     H26["H26 no WorkUnitId to NetworkRef mapping, shipment confirmed by hand"]:::hotspot
     H28["H28 at-risk fires only after the deadline"]:::hotspot
-    H29["H29 network-fulfillment events have no consumer"]:::hotspot
-    H30["H30 capability offer never submitted to the network"]:::hotspot
-    R1 -.- H30
     E2 -.- H24
-    E4 -.- H25
     E1 -.- H26
     H26 -.- C4
     E6 -.- H28
-    E5 -.- H29
 
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
     classDef command fill:#4aa3df,stroke:#1f6f9f,color:#0b1e2d
@@ -875,7 +867,8 @@ flowchart LR
 
 `network-fulfillment`'s two deadline passes run on their own tickers. Its
 capability offer is computed from Phase 2's `Path Capacity Changed`, the
-CPT schedule and usable stock, but it is never sent to the network (H30).
+CPT schedule and usable stock, and in live mode each pass is fed to the
+network as one inventory feed per site (H30, resolved).
 
 Sources: [order-management flow 3](/contexts/order-management/domain-message-flow),
 [fulfillment-execution scenario 3](/contexts/fulfillment-execution/domain-message-flow),
@@ -900,7 +893,7 @@ this site, and the corroborating context page is linked instead.
 | ~~H6~~ | network-fulfillment | ~~`NetworkOrderAcknowledged` fires at `SUBMITTED`, before reconciliation~~ **Resolved 2026-10-06.** `NetworkOrderSubmitted` now announces SUBMITTED; `NetworkOrderAcknowledged` (v2) fires only on settle (ADR 0016). | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming) |
 | ~~H7~~ | network-fulfillment | ~~No event when an order settles from `SUBMITTED` to `ACKNOWLEDGED`~~ **Resolved 2026-10-06.** The settle now raises `NetworkOrderAcknowledged` v2 (ADR 0016). | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming) |
 | H8 | network-fulfillment | A crash after raising the hold leaves a `NEW` order with no `localOrderId` | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), sticky inventory |
-| H9 | order-management | An orphaned held order is never swept | [order-management EventStorming](/contexts/order-management/eventstorming) H3 |
+| ~~H9~~ | order-management | ~~An orphaned held order is never swept~~ **Resolved** by network-fulfillment's `SweepOrphanedHolds` ([ADR 0024](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0024-orphaned-order-management-hold-sweep.md), on by default): an `order-management` hold nobody decided, or whose cancel was never confirmed, is cancelled and reported as `OrphanedHoldCancelled`. | [order-management EventStorming](/contexts/order-management/eventstorming) H3 |
 | ~~H10~~ | order-management | ~~`OrderLineReleased` and `OrderReleased` are never raised~~ **Resolved 2026-10-06.** Raised on the analytics topic only (ADR 0034). | [order-management EventStorming](/contexts/order-management/eventstorming) |
 | H11 | inventory-storage | No background sweeper. An unread, expired reservation keeps its stock until the next read. | [inventory-storage EventStorming](/contexts/inventory-storage/eventstorming) H5 **Decided 2026-10-06: kept** (lazy expiry, ADR 0003). |
 | H12 | wes-work-planning | `UsableInventoryObserved` is projected but feeds no decision | [wes-work-planning EventStorming](/contexts/wes-work-planning/eventstorming), Hotspots. Discrepancy log. **Decided 2026-10-06: kept read-only** (ADR 0006). |
@@ -916,12 +909,12 @@ this site, and the corroborating context page is linked instead.
 | H22 | labor-performance | `REBIN` and other unknown task types are never scored | [labor-performance EventStorming](/contexts/labor-performance/eventstorming) |
 | ~~H23~~ | fulfillment-execution | ~~No in-process scheduler for `expire-leases` or `sweep-cpt-misses`~~ **Resolved 2026-10-06.** The chart CronJobs now run both sweeps by default (ADR 0037). | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H24 | fulfillment-execution | `TaskCPTMissed` re-fires on every sweep pass | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
-| H25 | order-management | No known consumer of `OrderRepromised` | [order-management EventStorming](/contexts/order-management/eventstorming) H5. [order-management context map](/contexts/order-management/context-map). **Decided 2026-10-12: kept unconsumed** (it carries no new cutoff instant; warehouse-planning ADR 0004, [ecosystem gaps tracker](/fleet-health/ecosystem-gaps) E4). |
+| ~~H25~~ | order-management | ~~No known consumer of `OrderRepromised`~~ **Resolved 2026-10-22**: `exception-management` consumes it to auto-resolve `TaskCPTMissed` cases (context map K58, group `exception-management-order-correlation`), wired in `warehouse-infra` `develop`. | [order-management EventStorming](/contexts/order-management/eventstorming) H5. [order-management context map](/contexts/order-management/context-map). **Decided 2026-10-12: kept unconsumed** (it carries no new cutoff instant; warehouse-planning ADR 0004, [ecosystem gaps tracker](/fleet-health/ecosystem-gaps) E4). |
 | H26 | network-fulfillment | No persisted WorkUnitId-to-NetworkRef mapping, so shipment confirmation is an explicit call (ADR 0014) | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), section 3 |
 | ~~H27~~ | network-fulfillment | ~~Confirming a shipment before acknowledgement surfaces as HTTP 500~~ **Resolved 2026-10-06.** Now 409 `confirm-before-acknowledge` (ADR 0015). | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming) |
 | H28 | network-fulfillment | `AcknowledgementDeadlineAtRisk` fires only after the deadline, while ADR 0001 says "approaching" | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), sticky inventory |
-| H29 | network-fulfillment | `warehouse.network-fulfillment.events` is wired but unused: no consumer in the fleet | [network-fulfillment context map](/contexts/network-fulfillment/context-map) |
-| H30 | network-fulfillment | The capability offer is never submitted outward. `SubmitAvailability` is unused. | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), section 4 |
+| ~~H29~~ | network-fulfillment | ~~`warehouse.network-fulfillment.events` is wired but unused: no consumer in the fleet~~ **Resolved for the alarm types**: `exception-management` consumes `AcknowledgementDeadlineAtRisk` and `OrphanedHoldCancelled` (context map K57). The five `NetworkOrder*` types keep no consumer by decision (K19). | [network-fulfillment context map](/contexts/network-fulfillment/context-map) |
+| ~~H30~~ | network-fulfillment | ~~The capability offer is never submitted outward. `SubmitAvailability` is unused.~~ **Resolved**: in live mode each recompute pass's offers go to the network as one inventory feed per site (`SubmitInventoryFeed`, which replaced `SubmitAvailability`; [ADR 0027](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0027-supply-loop-node-profile-and-inventory-feed.md), [network-fulfillment#123](https://github.com/IQVO/network-fulfillment/pull/123)). | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), section 4 |
 | ~~H31~~ | workforce-management | ~~The default `INSTALLED_CAPACITY_MODE=permissive` rejects every shift-plan commit~~ **Resolved 2026-10-13.** The chart now sets `INSTALLED_CAPACITY_MODE=http` and the fulfillment-execution base URL by default (workforce-management#164); the binary default stays `permissive` for local runs. | [workforce-management EventStorming](/contexts/workforce-management/eventstorming). [Ecosystem gaps tracker](/fleet-health/ecosystem-gaps) 10b. |
 | ~~H32~~ | fulfillment-execution | ~~`apis/openapi.yaml` expands CPT as "Committed Processing Time"~~ **Resolved 2026-10-06.** Now reads "Critical Pull Time". | [fulfillment-execution Ubiquitous Language](/contexts/fulfillment-execution/ubiquitous-language) |
 | H33 | product-master | A SKU classified moments before its first stow may reach a consumer's local copy late | [product-master EventStorming](/contexts/product-master/eventstorming) (product-master ADR 0001, Consequences) |
@@ -933,7 +926,7 @@ this site, and the corroborating context page is linked instead.
 | ~~H40~~ | pick-face-replenishment | ~~A request cannot yet reach the floor: nothing consumes `ReplenishmentRequested`~~ **Resolved 2026-10-17 on `develop`.** `wes-work-planning` ADR 0042 plans one `REPLENISH` work unit per request (consumer `internal/adapters/inbound/kafka/replenishment_consumer.go`, opt-in `REPLENISHMENT_MODE=kafka`) and `process-path-management` ADR 0036 declares the `REPLENISH` path; `fulfillment-execution` ADR 0050 and `inventory-storage` ADR 0040 and 0041 were already built. K44 is **live** since the 2026-10-20/21 deploy (`REPLENISHMENT_MODE=kafka` is set and `pick-face-replenishment` runs, H39). | [pick-face-replenishment context map](/contexts/pick-face-replenishment/context-map), [Async API](/contexts/pick-face-replenishment/async-api) |
 | ~~H41~~ | task-interleaving | ~~Not deployed: `warehouse-infra` `develop` has no database, Kong route, ArgoCD application, values file or dashboard for it.~~ **Resolved 2026-10-20/21.** The ArgoCD application is Synced and Healthy with five pods (API, MCP, analytics projector and reports, frontend); its inputs K41, K45 and K46 are consumed by a running instance. Still open: its `cmd/api` emits no metrics or traces. | [task-interleaving Business Context](/contexts/task-interleaving/business-context), [Runbook](/contexts/task-interleaving/runbook) (deployment status) |
 | ~~H42~~ | task-interleaving | ~~The hint has no reader: `fulfillment-execution` has no consumer of `InterleavingHintIssued`, no hint table and no `claimNext` tie-break (K47)~~ **Resolved 2026-10-18 on `develop`, deployed 2026-10-20/21.** `fulfillment-execution` ADR 0051 (`fulfillment-execution#224`) stores one active hint per station and uses it as a tie-break inside one `claimNext` priority band. | [task-interleaving context map](/contexts/task-interleaving/context-map), [Async API](/contexts/task-interleaving/async-api) |
-| H35 | product-master | Stage E (remove the legacy importer, the inventory-storage backfill and the deprecated classification endpoint) has no date | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0003, stage E) |
+| ~~H35~~ | product-master | ~~Stage E (remove the legacy importer, the inventory-storage backfill and the deprecated classification endpoint) has no date~~ **Resolved 2026-10-17**: stage E removed the legacy importer, the `inventory-storage` backfill and the legacy `ProductClassified` type (product-master ADR 0003 index: "importer removed at stage E (2026-10-17)"). | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0003, stage E) |
 
 Other wired-but-unused edges are not drawn, because they sit outside
 the order-to-ship timeline. They are `warehouse-ops-agent`'s MCP clients

@@ -200,6 +200,18 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          returnsProcessing: {
+            specPath: 'apis/returns-processing/openapi.yaml',
+            outputDir: 'docs/api-reference/rest/returns-processing',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
+          exceptionManagement: {
+            specPath: 'apis/exception-management/openapi.yaml',
+            outputDir: 'docs/api-reference/rest/exception-management',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],

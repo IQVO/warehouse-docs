@@ -33,12 +33,10 @@ Attributes set on every published event (`cloudevents.New`):
 | `datacontenttype` | `application/json` |
 | `dataschema` | `urn:warehouse:labor-performance:<stream>:<EventName>:v1`, stream = `analytics` or `events` |
 
-The domain event is raised inside the use case's unit of work. With
-`EVENT_PUBLISHER=kafka` and `DATABASE_URL` set it is encoded into
-`outbox_events` in the same transaction and published by the outbox
-relay (ADR 0010); with `EVENT_PUBLISHER=kafka` and no database it is
-written straight to Kafka; by default (`EVENT_PUBLISHER=log`) it is only
-logged.
+The domain event is raised inside the use case's unit of work. It is
+encoded into `outbox_events` in the same transaction and published by the
+always-on outbox relay (ADR 0010). There is no direct-to-Kafka path and no
+log-only mode ([ADR 0034](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0034-postgres-and-kafka-are-the-only-runtime.md)).
 
 ## Published
 
@@ -61,6 +59,9 @@ logged.
 | `expected_seconds` | integer | > 0 |
 | `effective_from` | RFC 3339 timestamp | |
 | `travel_component_seconds` | integer | **omitted** when the standard declares none (ADR 0015) |
+| `handling_unit` | string | `EACH`, `CASE` or `PALLET`; **omitted** for a task-type-only standard (ADR 0035) |
+| `team_lift_threshold_g` | integer | CASE standards only; the weight in grams above which a case needs a team lift; **omitted** when none |
+| `team_lift_expected_seconds` | integer | CASE standards only; the team-lift standard time; present only with `team_lift_threshold_g` |
 
 ### LaborStandardRevised
 
@@ -82,6 +83,7 @@ logged.
 | `expected_seconds` | integer | the new value (`NewExpectedSeconds` in Go) |
 | `effective_from` | RFC 3339 timestamp | also the instant the prior standard closed |
 | `travel_component_seconds` | integer | the new standard's value; omitted when none |
+| `handling_unit`, `team_lift_threshold_g`, `team_lift_expected_seconds` | string, integer, integer | the new standard's values, omitted when none (ADR 0035); a revision closes only the standard of the same task type and handling unit |
 
 ### TaskPerformanceRecorded (analytics)
 
@@ -119,6 +121,8 @@ a separate CloudEvent with its own `id`:
 | `actual_seconds` | integer | the upstream `duration_seconds`; 0 when unmeasurable |
 | `idle_seconds_before` | integer or null | additive (ADR 0014); null on first observation, empty associate or out-of-order gap |
 | `completed_at` | RFC 3339 timestamp | the consumed event's `time` |
+| `handling_unit` | string | additive (ADR 0035); `EACH`, `CASE` or `PALLET`; **omitted** when the completion carried no handling unit |
+| `team_lift` | boolean | additive (ADR 0035); present only with `handling_unit`; true when the CASE team-lift standard time scored the task |
 
 ## Consumed
 
@@ -141,6 +145,12 @@ a separate CloudEvent with its own `id`:
 | `data.associate_id` | `AssociateId` (empty allowed) |
 | `data.duration_seconds` | `ActualSeconds` (0 allowed) |
 | `data.task_type` | `TaskType` via `shared.ParseTaskTypeLenient` |
+| `data.handling_unit` (optional, ADR 0035) | `HandlingUnit` via `shared.ParseHandlingUnitLenient`; absent or unrecognised is "no handling unit" |
+| `data.weight_g` (optional, ADR 0035) | `WeightG`; absent, non-integer or non-positive is unknown, never a team lift |
+
+`fulfillment-execution`'s `TaskCompleted` v1 does not publish `handling_unit` or
+`weight_g` today; until it does, every completion is scored against the
+task-type-only standard exactly as before.
 
 `data.station_id` and `data.work_unit_id` are decoded but unused. Every
 other CloudEvents type on the shared topic is committed and ignored.

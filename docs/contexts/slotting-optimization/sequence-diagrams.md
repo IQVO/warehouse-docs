@@ -12,8 +12,8 @@ This page is a copy of [`docs/docs/ddd/sequence-diagrams.md`](https://github.com
 
 
 The main runtime interactions inside `cmd/api`, drawn from the code with
-their error branches. Postgres mode (`DATABASE_URL` set) is shown; the
-in-memory mode is the same without the idempotency middleware.
+their error branches. They show the only runtime, Postgres and Kafka (ADR 0011),
+with the idempotency middleware always on.
 
 ## Generate a plan
 

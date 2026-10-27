@@ -54,19 +54,19 @@ there were no proposals) and the stale facts seen. Ordered by day. `from` / `to`
 </Heading>
 
 <ParamsDetails
-  {...require("./get-rebalance-runs-report.ParamsDetails.json")}
+  parameters={[{"name":"from","in":"query","required":false,"description":"RFC 3339; inclusive. Defaults to `to` minus 30 days.","schema":{"type":"string","format":"date-time"},"example":"2026-10-05T00:00:00Z"},{"name":"to","in":"query","required":false,"description":"RFC 3339; exclusive. Defaults to now.","schema":{"type":"string","format":"date-time"},"example":"2026-10-07T00:00:00Z"}]}
 >
   
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./get-rebalance-runs-report.RequestSchema.json")}
+  title={"Body"}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./get-rebalance-runs-report.StatusCodes.json")}
+  responses={{"200":{"description":"The report (possibly empty).","content":{"application/json":{"schema":{"allOf":[{"type":"object","required":["from","to"],"properties":{"from":{"type":"string","format":"date-time","description":"The effective inclusive start."},"to":{"type":"string","format":"date-time","description":"The effective exclusive end."}},"title":"ReportRange"},{"type":"object","required":["days"],"properties":{"days":{"type":"array","items":{"type":"object","required":["day","runs","proposals","rejected","rejection_rate","stale_facts"],"properties":{"day":{"type":"string","format":"date","example":"2026-10-05"},"runs":{"type":"integer","minimum":1,"example":2},"proposals":{"type":"integer","minimum":0,"description":"Proposals the planner produced, summed over the day's runs.","example":14},"rejected":{"type":"integer","minimum":0,"description":"Proposals the runs' own safety checks refused (never an operator rejection).","example":2},"rejection_rate":{"type":"number","format":"double","minimum":0,"maximum":1,"description":"rejected / proposals; 0 when there were no proposals.","example":0.142857},"stale_facts":{"type":"integer","minimum":0,"example":1}},"title":"RebalanceRunsDay"}}}}],"title":"RebalanceRunsReport"}}}},"400":{"description":"RFC 7807 problem+json error.","content":{"application/problem+json":{"schema":{"type":"object","required":["type","title","status"],"properties":{"type":{"type":"string","description":"Stable machine-readable problem identifier."},"title":{"type":"string"},"status":{"type":"integer"},"detail":{"type":"string"}},"title":"Problem"}}}},"500":{"description":"RFC 7807 problem+json error.","content":{"application/problem+json":{"schema":{"type":"object","required":["type","title","status"],"properties":{"type":{"type":"string","description":"Stable machine-readable problem identifier."},"title":{"type":"string"},"status":{"type":"integer"},"detail":{"type":"string"}},"title":"Problem"}}}}}}
 >
   
 </StatusCodes>

@@ -27,7 +27,7 @@ tags:
   - name: cpt-schedule
     description: Site-scoped Critical Pull Time (CPT) schedules (ADR 0010)
   - name: health
-    description: Liveness probe
+    description: Liveness and readiness probes
 paths:
   /healthz:
     get:
@@ -46,6 +46,41 @@ paths:
                   status:
                     type: string
                     example: ok
+  /readyz:
+    get:
+      tags: [health]
+      operationId: getReadyz
+      summary: Readiness probe
+      description: >-
+        Distinct from liveness (GET /healthz). Ready means: the service is
+        not draining AND Postgres answers a ping AND a Kafka broker
+        answers a metadata request (reachability only; topics are never
+        required). The dependency verdict is cached for a few seconds.
+        Readiness flips to not-ready as the FIRST step of a graceful
+        shutdown drain (503 with a status body), so a Kubernetes
+        readinessProbe stops routing new traffic while in-flight requests
+        finish. Liveness never flips.
+      responses:
+        "200":
+          description: The service is ready to receive traffic
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+        "503":
+          description: >-
+            The service is draining (shutdown in progress), or Postgres or
+            Kafka is not reachable (problem type `dependency-unavailable`,
+            the detail names the failing dependencies), and must not
+            receive new traffic.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/ProblemDetails"
   /process-paths:
     post:
       tags: [process-paths]
@@ -64,6 +99,39 @@ paths:
           application/json:
             schema:
               $ref: "#/components/schemas/DefineProcessPathRequest"
+            examples:
+              fullCase:
+                summary: FULL_CASE (ADR 0038) - whole-case picking, gated on the fullCase attribute
+                value:
+                  pathId: FULL_CASE
+                  matchPrefix: full-case
+                  direct: true
+                  requiredCapabilities: ["pick"]
+                  cycleTimeP95: 1h30m
+                  eligibility:
+                    requiredProductAttributes: ["fullCase"]
+                  intake: ["CUSTOMER_ORDER"]
+              crossDock:
+                summary: CROSS_DOCK (ADR 0038) - receive to ship with no put-away, ends at Shipping
+                value:
+                  pathId: CROSS_DOCK
+                  matchPrefix: cross-dock
+                  direct: true
+                  requiredCapabilities: ["dispatch"]
+                  destinationLocationRole: Shipping
+                  cycleTimeP95: 1h
+                  eligibility:
+                    requiredProductAttributes: ["crossDock"]
+                  intake: ["CUSTOMER_ORDER", "STOCK_TRANSFER"]
+              breakCase:
+                summary: BREAK_CASE (ADR 0038) - the loose remainder of a line that is not a whole number of cases
+                value:
+                  pathId: BREAK_CASE
+                  matchPrefix: break
+                  direct: true
+                  requiredCapabilities: ["break"]
+                  cycleTimeP95: 2h
+                  intake: []
       responses:
         "201":
           description: Path defined
@@ -358,7 +426,7 @@ components:
     IdempotencyKeyHeader:
       name: Idempotency-Key
       in: header
-      required: false
+      required: true
       schema:
         type: string
       description: >-
@@ -367,11 +435,9 @@ components:
         request key (e.g. a UUID minted per submit): a retried request with
         the same key AND the same body replays the original response instead
         of creating a second path, while the same key with a different body
-        is rejected 422 idempotency-key-reused. Declared required: false
-        with no minLength only because the Schemathesis contract job boots
-        the API in in-memory mode, which does not enforce the header —
-        against a Postgres-backed deployment an absent/empty key is a 400
-        idempotency-key-required.
+        is rejected 422 idempotency-key-reused, and an absent or empty key
+        is a 400 idempotency-key-required. Postgres is the only runtime
+        (ADR 0037), so the check is on in every deployment.
       example: 0b6b1f1e-4a5c-4c1e-9f2a-7d3c8e5f9a01
   schemas:
     DefineProcessPathRequest:

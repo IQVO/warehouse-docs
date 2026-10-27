@@ -11,11 +11,13 @@ description: Kafka integration for warehouse-planning — one published integrat
 
 | Topic | Direction | Messages | Status |
 | --- | --- | --- | --- |
-| `warehouse.warehouse-planning.events` | **Published** (this context is the exclusive publisher) | `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected`, `BottleneckDetected` | **Live**. `order-management` consumes `CapacityPlanCreated`, `CapacityPlanPublished` and `CapacityShortageDetected` into a local read model (opt-in via `PLANNED_CAPACITY_CONSUMER_GROUP`, OM ADR 0031, set in the reference deployment); `BottleneckDetected` has no consumer |
+| `warehouse.warehouse-planning.events` | **Published** (this context is the exclusive publisher) | `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected`, `BottleneckDetected`, `ProcessCapacityRegistered`, `ProcessCapacityChanged` | **Live**. `order-management` consumes `CapacityPlanCreated`, `CapacityPlanPublished` and `CapacityShortageDetected` into a local read model (opt-in via `PLANNED_CAPACITY_CONSUMER_GROUP`, OM ADR 0031, set in the reference deployment); `BottleneckDetected` and the two `processcapacity` types have no consumer |
 | `warehouse.workforce.events` | **Consumed** (producer: `workforce-management`) | `ShiftPlanCommitted` | **Live** |
 | `warehouse.facility.events` | **Consumed** (producer: `facility-layout`) | `LocationSlotRegistered`, `LocationSlotDecommissioned` | **Live** |
 | `warehouse.order-management.events` | **Consumed** (producer: `order-management`) | `OrderAllocated`, `OrderPartiallyAllocated` (every other type, `OrderRepromised` included, is ignored) | **Live**. Opt-in via `DEMAND_CONSUMER_GROUP` (ADR 0004; unset = no consumer), set in the reference deployment |
-| `warehouse.warehouse-planning.analytics` | **Published** and consumed only by this context's own `planning-projector` (ADR 0005) | the same four capacity-plan events, same `type` and `id`, `dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`; `CapacityPlanPublished` adds `binding_constraint` | **Live** (internal, not an integration contract) |
+| `warehouse.inbound-receiving.events` | **Consumed** (producer: `inbound-receiving`) | `DockAppointmentBooked`, `DockAppointmentCancelled` (every other type is ignored) | **Live**. ADR 0017 Part A; group `warehouse-planning-inbound-demand` pinned in `warehouse-infra` `develop` |
+| `warehouse.fulfillment.events` | **Consumed** (producer: `fulfillment-execution`) | `TaskCompleted` (every other type is ignored) | **Live**. ADR 0017 Part B (observed capacity); group `warehouse-planning-observed-capacity` pinned in `warehouse-infra` `develop` |
+| `warehouse.warehouse-planning.analytics` | **Published** and consumed only by this context's own `planning-projector` (ADR 0005) | the four capacity-plan events only (the `processcapacity` types are integration-stream only), same `type` and `id`, `dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`; `CapacityPlanPublished` adds `binding_constraint` | **Live** (internal, not an integration contract) |
 
 `process-path-management`'s topic is deliberately **not** consumed (ADR 0001
 Addendum).
@@ -78,6 +80,9 @@ Kafka). Kafka is dialled lazily by the relay's first send, never at boot.
 | `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | Decrements the same tally |
 | `com.warehouse.wes.order-management.order.OrderAllocated` | Upserts one row of the local expected-demand read model (`order_demand`, one row per order id): promise cutoff = `promise_date`, site = the configured `DEMAND_SITE_ID` (the event carries none); last writer wins per order on the CloudEvents `time`. Demand is counted in orders |
 | `com.warehouse.wes.order-management.order.OrderPartiallyAllocated` | Same effect as `OrderAllocated` |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked` | Upserts one row of `inbound_appointments` (door window, ASN count), site = `DEMAND_SITE_ID`; its labour is `minutes_per_appointment + minutes_per_asn x ASNs` from the declared `InboundLabourStandard`, composed at read time (ADR 0017) |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled` | Flips the row to `CANCELLED`; last writer wins on the event `time`, `Cancelled` wins a tie, a cancel that arrives first is stored as a tombstone |
+| `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` | Adds the completion to `observed_capacity`, one row per `(location, process_type, minute)` with `process_type` = upper-cased `task_type` (the process step) and location = `DEMAND_SITE_ID`; a `TaskCompleted` without `task_type` is dead-lettered. `GET /capacity-plans/{id}/variance` compares it with the plan's bottleneck step only when the caller supplies `tasks_per_order` (ADR 0017 Part B) |
 
 Station capacity is composed at **read time** from the tally and an
 operator-declared `StationStandard` (ADR 0002); registered windows are
@@ -93,7 +98,9 @@ is dead-lettered to `<topic>.dlq` with `x-dlq-*` headers. Deterministic
 problems (not a CloudEvent, unknown type, malformed payload) are skipped and
 committed past, never retried or dead-lettered. Consumer group ids come from
 env vars (`LABOR_CAPACITY_CONSUMER_GROUP`, `STORAGE_CAPACITY_CONSUMER_GROUP`,
-`DEMAND_CONSUMER_GROUP`), never a string literal. The analytics projector
+`DEMAND_CONSUMER_GROUP`, `INBOUND_DEMAND_CONSUMER_GROUP`,
+`OBSERVED_CAPACITY_CONSUMER_GROUP`; the chart requires the last two),
+never a string literal. The analytics projector
 (group `ANALYTICS_CONSUMER_GROUP`) never dead-letters a transient failure; it
 dead-letters a known type with an unusable payload to
 `warehouse.warehouse-planning.analytics.dlq`.

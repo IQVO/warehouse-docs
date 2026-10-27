@@ -18,14 +18,15 @@ How `cmd/api` is deployed, started, drained, migrated and operated. Everything h
 
 | Artifact | State on `develop` |
 | --- | --- |
-| Dockerfile | **absent** (`git ls-tree` shows none) although `.github/workflows/ci.yml` `docker-publish` builds `context: .` and tags `ghcr.io/iqvo/pick-face-replenishment` on push to `main` |
-| Helm chart `charts/pick-face-replenishment` | **absent**, although `ci.yml` jobs `chart-tests` and `release` refer to it (`chart-tests` prints a warning and passes when the directory has no tests; `release` runs `helm package charts/pick-face-replenishment` on push to `main`) |
-| `warehouse-infra` | **no entry**: no `helm-values/pick-face-replenishment.yaml`, no `terraform/dashboards/contexts/pick-face-replenishment.json`, no Kong route and no database in `terraform/services.tf` |
-| Kafka topics | not pre-created by the repo; the dead-letter writer allows auto-creation of `<topic>.dlq` |
+| Dockerfile | `Dockerfile` at the repository root: digest-pinned multi-stage build of every `cmd/*` binary (`api`, `mcp`, `pfr-projector`, `pfr-reports`; the chart selects one with `command: ["/app/<name>"]`), non-root uid 1000, `ENTRYPOINT ["./api"]`, port 8080. Started without environment it exits 1 naming `DATABASE_URL`, `KAFKA_BROKERS` and the three `*_CONSUMER_GROUP` variables. Built by `docker-publish` on push to `main` |
+| Web remote image | `web/Dockerfile` + `web/nginx.conf` + `web/.dockerignore`: the `replenishment_mfe` remote as a static nginx-unprivileged image on port 8080; see [Frontend image](#frontend-image-web-remote). CI job `web` builds it and smoke-tests it |
+| Helm chart `charts/pick-face-replenishment` | present: it deploys what [ADR 0006](https://iqvo.github.io/pick-face-replenishment/docs/adr/0006-postgres-and-kafka-are-the-only-runtime) requires (Postgres, Kafka, three consumers, no `*_MODE`); see [Configuration](/contexts/pick-face-replenishment/configuration#helm-chart). CI runs `charts/pick-face-replenishment/tests/*` in `chart-tests`, and `release` packages it on push to `main` |
+| `warehouse-infra` | **registered, API and consumers only** (`origin/develop`): `terraform/apps.yaml` has `pick-face-replenishment` (`kind: service`, `database: true`; no `analytics`, no `frontend_remote`), `helm-values/pick-face-replenishment.yaml` sets the three consumer groups (`pick-face-replenishment-inventory`, `-slotting`, `-layout`) and a Gateway API route `/api/pick-face-replenishment` (Kong strips the prefix), and `terraform/dashboards/contexts/pick-face-replenishment.json` plus alert rules exist. The values file has no `mcp`, `analytics` or `frontend` block, so the MCP server, `pfr-projector`, `pfr-reports` and the web remote are **not deployed** (off by default in the chart). Cluster state was not checked |
+| Kafka topics | not pre-created by the repo and declared by no infrastructure: the cluster broker auto-creates every topic on first write (fleet convention, [ADR 0006 Amendment 1](https://iqvo.github.io/pick-face-replenishment/docs/adr/0006-postgres-and-kafka-are-the-only-runtime)); the relay writer and the dead-letter writer set `AllowAutoTopicCreation` |
 
-So today the service runs from a local binary or a container someone builds; the sections below describe what any
-deployment must provide. Those missing artifacts, and the `drift` job's `web/` step for a directory that does not exist,
-are listed as discrepancies in the campaign report rather than fixed here.
+The image, the chart and the `warehouse-infra` entry for `cmd/api` exist. What `warehouse-infra` does not yet wire
+(MCP, analytics pair, web remote) is the subject of the infra PR in flight (`feat/wire-wms-gap-components`); until it
+merges, those three components are built but unused. The sections below describe what any deployment must provide.
 
 ## What a deployment needs
 
@@ -34,20 +35,24 @@ are listed as discrepancies in the campaign report rather than fixed here.
 | Deployment | one, running `cmd/api` (REST, outbox relay and consumers are goroutines of the same process) |
 | Service port | HTTP `8080` (`HTTP_ADDR`) |
 | Liveness probe | `GET /healthz` returns `200 {"status":"ok"}` while the process runs; shutdown never flips it |
-| Readiness probe | `GET /readyz` returns `200 {"status":"ready"}`, `503 {"status":"not_ready"}` once shutdown has begun |
+| Readiness probe | `GET /readyz` returns `200 {"status":"ready"}`; `503` `dependency-unavailable` while Postgres or the Kafka broker is unreachable; `503 {"status":"not_ready"}` once shutdown has begun |
 | Database | a PostgreSQL the `DATABASE_URL` user may run DDL on (the migrations run at boot) |
 | Secrets | the DSNs only (`DATABASE_URL`, `MIGRATIONS_DATABASE_URL`); there is no auth, API key or TLS material |
 | Kafka | `KAFKA_BROKERS` (one fleet broker) for the relay and the consumers |
 
 ### Readiness and shutdown
 
-`/readyz` is a process-wide gate that is **ready from the moment the listener is up** and is flipped only by shutdown. It
-does **not** probe Postgres or Kafka. Readiness is nevertheless meaningful, because the listener only starts after
-`buildAdapters` has succeeded: the embedded migrations ran (retried 5 times over about 15 s, see `internal/bootretry`)
-and the first `Ping` of the pool worked. A database that never becomes reachable therefore keeps the process from
-listening (it exits with the last error after the retry budget) and the pod never turns ready. Kafka is dialled lazily
-inside the consumer and relay goroutines, so a broker outage never blocks boot and never turns the pod unready; it shows
-up in the logs ([Observability](/contexts/pick-face-replenishment/observability)) and as consumer lag or unpublished outbox rows.
+`/readyz` is ready only when the shutdown drain gate is open, Postgres answers a ping and a Kafka broker answers a
+metadata request that names no topic (reachability only; the verdict is cached for 3 s and a round of checks is bounded
+by 2 s). **Topics play no part in readiness**: the broker auto-creates the service's own topics on first write, so a
+pod that waited for them could never become ready and so never publish, and a consumed topic exists only once its
+producer ran. A missing consumed topic shows up as consumer retry logs (`kafka reader error; retrying`, with the
+consumer and the topic, [Observability](/contexts/pick-face-replenishment/observability)), not as an unready pod. The listener also only
+starts after `buildAdapters` has succeeded: the embedded migrations ran (retried 5 times over about 15 s, see
+`internal/bootretry`) and the first `Ping` of the pool worked. A database that never becomes reachable therefore keeps
+the process from listening (it exits with the last error after the retry budget). Kafka is dialled lazily inside the
+consumer and relay goroutines, so a broker outage never blocks boot; it turns the pod unready (`503`
+`dependency-unavailable`, `not ready: kafka`) and shows up in the logs and as consumer lag or unpublished outbox rows.
 
 On `SIGINT` or `SIGTERM` the order is fixed in `serveUntilSignal`:
 
@@ -60,6 +65,46 @@ On `SIGINT` or `SIGTERM` the order is fixed in `serveUntilSignal`:
 
 The worst case is the drain delay plus the 10 s HTTP bound plus 10 s for each running consumer plus 10 s for the relay, so
 set the pod's `terminationGracePeriodSeconds` above that sum (55 s with all three consumers and the default delay).
+
+## Frontend image (web remote)
+
+`web/` holds the operator UI as a Module Federation remote, not a standalone app. The files that package it:
+
+| File | Role |
+| --- | --- |
+| `web/Dockerfile` | multi-stage build: `node:22-bookworm-slim` builds `@warehouse/ui-kit` (a sibling checkout, supplied as the named BuildKit context `uikit`), then `npm ci && npm run build` for the remote, then copies `dist/` into `nginxinc/nginx-unprivileged` |
+| `web/nginx.conf` | `listen 8080`; `GET /healthz` answers `200 ok`; `remoteEntry.js` and `index.html` are `Cache-Control: no-cache`; `/assets/` is `public, max-age=31536000, immutable` (one header); unknown paths fall back to `index.html` |
+| `web/.dockerignore` | keeps the host `node_modules` and `dist` out of the build context (a macOS `node_modules` would hide the linux native bindings) |
+
+Facts a deployer needs (from `web/vite.config.ts`):
+
+| Item | Value |
+| --- | --- |
+| Federation container name | `replenishment_mfe` |
+| Exposed module | `./App` |
+| Entry file | `remoteEntry.js` |
+| Public base path (build) | `/mfes/pick-face-replenishment/` |
+| Container port | `8080` |
+| Dev / preview port | `5196` (slotting-optimization holds 5194, task-interleaving 5197) |
+| Image build context | `web/` with `--build-context uikit=<path to warehouse-ui-kit>` |
+| Chart component | `frontend` (`frontend.enabled`, default `false`; image `warehouse/pick-face-replenishment-frontend`) |
+
+Build and check it locally from the repository root:
+
+```bash
+docker build --build-context uikit=../warehouse-ui-kit \
+  -t warehouse/pick-face-replenishment-frontend:local web
+docker run --rm -p 18196:8080 warehouse/pick-face-replenishment-frontend:local
+curl -s localhost:18196/healthz                                           # ok
+curl -s -o /dev/null -w '%{http_code}\n' localhost:18196/remoteEntry.js   # 200
+```
+
+The Nginx web gateway of `warehouse-infra` strips the `/mfes/pick-face-replenishment` prefix before proxying to the pod,
+so the pod itself sees root-relative paths. The pod serves static bytes only: the SPA reaches the REST API at
+`${apiOrigin}/api/pick-face-replenishment`, with `apiOrigin` read at runtime from the console's `/config.json`
+([Configuration](/contexts/pick-face-replenishment/configuration#web)). Kong never serves these assets. The CI job `web` runs lint,
+`tsc -b`, the vitest suite and the production build, then builds this image and requests `/healthz` and
+`remoteEntry.js` from it.
 
 ## Migrations
 
@@ -79,7 +124,7 @@ set the pod's `terminationGracePeriodSeconds` above that sum (55 s with all thre
 | Topic | Direction | Consumer group | Mode switch | Notes |
 | --- | --- | --- | --- | --- |
 | `warehouse.pick-face-replenishment.events` | produced | n/a | relay | integration events; key = request id |
-| `warehouse.pick-face-replenishment.analytics` | produced | n/a | relay | the same three request events (same CloudEvents `id`) plus `ReplenishmentPolicyDeclared`; key = request id, or `<site_id>/<sku>` for the policy event |
+| `warehouse.pick-face-replenishment.analytics` | produced | `ANALYTICS_CONSUMER_GROUP` (`cmd/pfr-projector`) | relay | the same three request events (same CloudEvents `id`) plus `ReplenishmentPolicyDeclared`; key = request id, or `<site_id>/<sku>` for the policy event. Dead-letter: `warehouse.pick-face-replenishment.analytics.dlq` |
 | `warehouse.inventory.events` | consumed | value of `INVENTORY_CONSUMER_GROUP` | `INVENTORY_MODE=kafka` | acts on `BinStockLevelChanged` and `StockRelocated` only |
 | `warehouse.slotting-optimization.events` | consumed | value of `SLOTTING_CONSUMER_GROUP` | `SLOTTING_MODE=kafka` | acts on `SlotPlanApproved` only |
 | `warehouse.facility.events` | consumed | value of `LAYOUT_CONSUMER_GROUP` | `LAYOUT_MODE=kafka` | acts on `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` |
@@ -172,6 +217,7 @@ protection for those keys. Do **not** delete `processed_events` rows of messages
   batches; the Kafka key keeps a request's events on one partition, and a request's events are inserted in order.
   Consumers of one group split the topic's partitions; the three topics' partition counts bound consumer parallelism.
 - **Database.** Each process holds at most 10 connections (`MaxConns`) with a 5 s `statement_timeout`; size Postgres (or
-  PgBouncer) for replicas times 10. There is no HPA because there is no chart yet.
+  PgBouncer) for replicas times 10. The chart has an HPA (`autoscaling.api`, off by default); the relay and the
+  version-guarded writes are safe with N > 1, which has not been load-tested.
 - **Sweep cost.** `POST /sites/{siteId}/evaluate` assesses every forward assignment of the site one unit of work at a
   time; `GET /pick-faces` assesses faces in order until a page is full. Both are linear in the number of faces.

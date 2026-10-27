@@ -67,10 +67,14 @@ harness `repo_lint` rule R11 (coverage-scope) forbids a workflow passing
 
 ## BDD (godog)
 
-- `features_test.go` (`TestFeatures`) drives the **real chi router** over a
-  TCP `httptest.Server`, wired with the in-memory adapters, a fixed clock and
-  a buffered event publisher. Every scenario is a black-box test of the REST
-  API.
+- `features/features_test.go` (`TestFeatures`; the godog files live in
+  `features/`, never at the repo root, enforced by `TestNoGoFilesAtRepoRoot`)
+  drives the **real chi router** over a TCP `httptest.Server`, wired with the
+  in-memory test doubles, a fixed clock and a buffered event publisher. Every
+  scenario is a black-box test of the REST API. The in-memory adapters are
+  test doubles only: no shipped binary imports them
+  (`TestRuntimeBinaryHasNoInMemoryAdapters`, ADR 0039); the real runtime is
+  proven by `TestRunOnRealPostgresAndKafka` below.
 - There are **12 feature files under `features/`** with **113 `Scenario` /
   `Scenario Outline` headings**: `catalog_reads` 7, `draw_the_warehouse` 4,
   `error_contract` 7, `fixed_structures_and_cross_aisles` 21, `geometry` 18,
@@ -95,12 +99,13 @@ both.
 
 | Package | Files |
 |---|---|
-| `internal/adapters/outbound/postgres` | `integration_test.go` (shared container and migrations), `repos_`, `version_` (optimistic concurrency), `site_capability_` (ADR-0035: the `SiteCapabilityChanged` outbox row is the CloudEvent network-inventory-planning decodes; repeat writes no row; concurrent changes never share a revision), `site_role_` (ADR-0037: migration `0009` backfills the role of rows seeded at schema version 8 from the name pattern, leaves other names `UNSPECIFIED`, touches no capability/version and writes no outbox row; the CHECK rejects an unknown role; role changes are version-guarded; the `SiteRoleChanged` outbox row is a CloudEvents 1.0 message with the documented attributes and camelCase data), `travel_`, `geometry_`, `telemetry_` (otelpgx child spans), `pool_limits_` (MaxConns / statement_timeout), `pool_alias_`, `outbox_`, `outbox_trace_` (ADR-0038, Postgres + Kafka: a request span's `traceparent` is stored on every outbox row and reaches the consumed Kafka message, where `Extract` yields the request span as a remote parent; a NULL-headers row relays with `content-type` only; an untraced use case stores NULL), `outbox_relay_cap_` (ADR-0036: a poison row is excluded after `WithMaxAttempts` failures and logged once at ERROR, the good same-key row behind it publishes; re-arm with `attempts = 0`; `0` = unlimited blocks), `sweeper_` |
+| `internal/adapters/outbound/postgres` | `integration_test.go` (shared container and migrations), `repos_`, `version_` (optimistic concurrency), `site_capability_heartbeat_` (ADR-0041: the heartbeat outbox row decodes through the hand-mirrored NIP DTO and a mirrored copy of NIP's supersede rule moves `as_of` while a same-revision copy does not; concurrent replica passes leave one heartbeat per site; the SQL due boundary; the real loop), `site_capability_` (ADR-0035: the `SiteCapabilityChanged` outbox row is the CloudEvent network-inventory-planning decodes; repeat writes no row; concurrent changes never share a revision), `site_role_` (ADR-0037: migration `0009` backfills the role of rows seeded at schema version 8 from the name pattern, leaves other names `UNSPECIFIED`, touches no capability/version and writes no outbox row; the CHECK rejects an unknown role; role changes are version-guarded; the `SiteRoleChanged` outbox row is a CloudEvents 1.0 message with the documented attributes and camelCase data), `travel_`, `geometry_`, `telemetry_` (otelpgx child spans), `pool_limits_` (MaxConns / statement_timeout), `pool_alias_`, `outbox_`, `outbox_trace_` (ADR-0038, Postgres + Kafka: a request span's `traceparent` is stored on every outbox row and reaches the consumed Kafka message, where `Extract` yields the request span as a remote parent; a NULL-headers row relays with `content-type` only; an untraced use case stores NULL), `outbox_relay_cap_` (ADR-0036: a poison row is excluded after `WithMaxAttempts` failures and logged once at ERROR, the good same-key row behind it publishes; re-arm with `attempts = 0`; `0` = unlimited blocks), `sweeper_` |
 | `internal/adapters/outbound/analyticsstore` | `postgres_integration_test.go` (projection and report) |
 | `internal/adapters/outbound/kafka` | `publisher_partition_integration_test.go` (Hash balancer keeps aggregate order) |
 | `internal/adapters/inbound/kafka` | `analytics_dlq_integration_test.go` (retry then DLQ) |
 | `internal/adapters/inbound/http` | `idempotency_integration_test.go` (Idempotency-Key replay and reuse) |
 | `internal/adapters/inbound/mcp` | `streamable_http_integration_test.go` |
+| `cmd/facility` | `e2e_integration_test.go` (`TestRunOnRealPostgresAndKafka`: boots the real `run()` on testcontainers Postgres and Kafka, drives only REST, asserts the Postgres rows, the byte-exact CloudEvents on both topics, `Idempotency-Key` replay, an in-process restart, and `/readyz` following Postgres and Kafka going away) |
 | `internal/application/usecases` | `usecases_wiring_integration_test.go` |
 
 The CI `integration` job runs `go test -tags=integration ./... -race -count=1`,
@@ -108,10 +113,20 @@ so every tagged package runs, the same as `make integration`.
 
 ## Contract tests (Schemathesis)
 
-`scripts/contract-test.sh` builds `cmd/facility`, boots it in-memory on
-`127.0.0.1:18081` (override with `CONTRACT_PORT`), waits for `/healthz`, and
-runs `st run apis/openapi.yaml` with 100 examples per operation
-(`CONTRACT_MAX_EXAMPLES`) and 4 workers.
+`scripts/contract-test.sh` builds `cmd/facility`, boots it against a **real
+Postgres and a real Kafka** (`DATABASE_URL` and `KAFKA_BROKERS` are required;
+CI provides `postgres:16` and `confluentinc/confluent-local:7.6.1` service
+containers, locally `docker compose up -d --wait` does), on `127.0.0.1:18081`
+(override with `CONTRACT_PORT`), waits for `/readyz`, and runs
+`st run apis/openapi.yaml` with 100 examples per operation
+(`CONTRACT_MAX_EXAMPLES`) and 4 workers. Because the Idempotency-Key check is
+always on, `scripts/contract_hooks.py` (a Schemathesis `before_call` hook)
+gives every request a fresh `Idempotency-Key`; the header is `required: true`
+on the create operations in the spec. NUL characters are not generated
+(`--generation-allow-x00 false`): the service answers them with 400 (body) or
+404 (path) instead of the 500 a Postgres text parameter would give, pinned by
+unit and real-Postgres tests (ADR 0039). The service seeds nothing at boot:
+a fresh database starts empty.
 
 Six operations are excluded because their cross-field rules cannot be
 expressed in OpenAPI 3.0.3. The script names the test that covers each one:
@@ -144,7 +159,7 @@ exactly the schema's properties. Spectral (`api-lint`) lints both specs.
 | `TestReplayConsumersSetCommitInterval` | A reader with a process-unique group must set `CommitInterval`. Nothing in this repo matches, because the projector's group is fixed and shared. |
 | `TestEventCatalogueMatchesContract` (+ detector self-test) | Every CloudEvents type this service declares for itself in `apis/asyncapi.yaml` also appears in a CloudEvents ADR under `docs/docs/adr/` |
 | `TestNoStructTagsInDomain` (+ sensor self-test) | No serialisation tags in `internal/domain` |
-| `TestSiteCapabilityChangedContractPublishesFullLWWState` | The `SiteCapabilityChanged` message in the AsyncAPI carries the full last-write-wins state |
+| `TestSiteCapabilityChangedContractPublishesFullLWWState` | The `SiteCapabilityChanged` message in the AsyncAPI carries the full last-write-wins state and documents the ADR-0041 heartbeat |
 | `TestSiteRoleContractIsPublished` | The AsyncAPI declares `SiteRoleChanged` on the integration topic (type, dataschema, required `siteCode`/`siteRole`/`previousSiteRole`) and the additive `siteRole` ([ADR-0037](https://github.com/IQVO/facility-layout/blob/develop/docs/docs/adr/0037-site-role-and-siterolechanged-cloudevents.md)) |
 | `TestKafkaWritersSetRequiredAcks` (+ `TestKafkaWriterAcksSensorBites`) | Every kafka-go `Writer` composite literal in a non-test file under `internal/` or `cmd/` sets `RequiredAcks` (the import alias is resolved per file). kafka-go defaults it to `RequireNone` (acks=0): the broker never confirms the write, so a broker blip silently drops the message while `WriteMessages` returns nil. The twin proves the sensor flags a bad fixture under any alias. |
 | `TestDeadLetterCallsGuardCancellation` (+ `TestDeadLetterShutdownSensorBites`, `kafka_dlq_shutdown_fitness_test.go`) | Every function in a non-test file under `internal/adapters/inbound/kafka` that sends to the dead-letter topic must reference `ctx.Err()` (any context-named value) or `context.Canceled` in its own body, or carry a `//dlq:deterministic <reason>` comment on the call line or the line above it. A handler that fails because the process is stopping must not dead-letter a good message and commit past it (network-fulfillment #89); a guard in the caller does not count. The sensor test proves the detector flags the pre-fix shape. |
