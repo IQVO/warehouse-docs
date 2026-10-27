@@ -1,20 +1,18 @@
 openapi: 3.0.3
 info:
-  title: Checkout API (proposed)
-  version: 0.1.0-proposed
+  title: Checkout API
+  version: 0.1.0
   contact:
     name: checkout maintainers
     url: https://github.com/IQVO/checkout
   description: >-
-    Proposed REST contract of the checkout bounded context of the digital
-    storefront, derived from storefront/model/model.yaml
-    (contexts[checkout].rest). Nothing is built yet. Checkout is the purchase
-    saga: OPEN -> AUTHORIZING -> PLACING -> COMPLETED, with DECLINED (another
-    token may be tried while the price quote is valid; DECLINED also expires
-    with the quote), REQUOTE_REQUIRED and FAILED (each records the
-    authorization void as owed, voidOwed, and the RetryOwedVoids policy retries
-    it every minute until it succeeds), and EXPIRED (OPEN or DECLINED, with the
-    price quote).
+    REST contract of the checkout bounded context of the digital storefront,
+    derived from storefront/model/model.yaml (contexts[checkout].rest) and the
+    final model-gap decisions H1-H10. Checkout is the purchase saga: OPEN ->
+    AUTHORIZING -> PLACING -> COMPLETED, with DECLINED (another token may be
+    tried while the price quote is valid), REQUOTE_REQUIRED and FAILED (both
+    carry a void that is retried until it succeeds), and EXPIRED (from OPEN or
+    DECLINED).
     Authorize before placing (compensatable: void), place the order through
     customer-ordering POST /checkout (the pivot, via an Anti-Corruption
     Layer), then retriable steps via events. PLACING is the semantic lock:
@@ -22,11 +20,8 @@ info:
     attempt; the session answers 202 and the BFF polls. The session stores
     shopperId and shipToAddressId references, never PII, and the stored
     placement request is PII-free so ResolveInDoubtPlacements can replay it
-    byte for byte with the same Idempotency-Key (alert at 20 h, give up and
-    void at 22 h, before customer-payments' 24 h backstop and the network's
-    24 h idempotency window). A session stuck in AUTHORIZING for more than 2
-    minutes is settled by ResolveStuckAuthorizations, which re-calls the
-    authorize with the same key. Errors are RFC 9457 problem details
+    byte for byte with the same Idempotency-Key (alert at 20 h, give up and void at 22 h, before
+    the network's 24 h idempotency window). Errors are RFC 9457 problem details
     (application/problem+json) whose type is /problems/<slug>; shared types
     are not-found (404), illegal-transition (409), concurrent-update (409)
     and validation-failed (422), plus one kebab-case slug per Err of the
@@ -72,9 +67,26 @@ paths:
               schema:
                 $ref: '#/components/schemas/Problem'
         '422':
-          $ref: '#/components/responses/Unprocessable'
+          description: >-
+            validation-failed (a missing reference or an unknown cart) or
+            offer-not-quotable (ErrOfferNotQuotable, decision H3: a selected
+            offer is no longer QUOTED or expires within 2 minutes; no state
+            changes, the BFF refreshes the cart's delivery quote).
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
+        '502':
+          description: upstream-contract-violation (ErrContractViolation, gap S1/S2 checks) - a sibling answered something that cannot form a session; an alert is raised.
+          content:
+            application/problem+json:
+              schema:
+                $ref: '#/components/schemas/Problem'
         '503':
-          description: A dependency (shopping-cart, delivery-promise or pricing) is unreachable; retry with the same Idempotency-Key.
+          description: >-
+            A dependency is unreachable (shopping-cart-unavailable,
+            delivery-promise-unavailable or pricing-unavailable); retry with the
+            same Idempotency-Key.
           content:
             application/problem+json:
               schema:
@@ -106,20 +118,15 @@ paths:
       description: >-
         ConfirmSession with the PSP payment method token (never a card
         number). AUTHORIZING calls customer-payments POST
-        /payment-authorizations (key: session id, then the literal auth, then authAttempt, joined by colons; allocations
-        per group; authAttempt starts at 1 and is incremented on each DECLINED
-        to AUTHORIZING, so a retry with another token is a new attempt); first,
-        every selected offer is re-checked with delivery-promise GET
-        /delivery-offers/{offerId} and one that is no longer QUOTED fails with
-        422 offer-not-quotable (ErrOfferNotQuotable, no state change; the BFF
-        refreshes the cart quote). The authorized amount must equal the quote
-        total (ErrAuthorizationMismatch; the authorization is then voided,
-        recorded as voidOwed). PLACING persists the placement request and
+        /payment-authorizations (key <sessionId>:auth:<attempt>, the attempt
+        counter grows on every retry after a decline; allocations per group);
+        the authorized amount must equal the quote total
+        (ErrAuthorizationMismatch). PLACING persists the placement request and
         calls customer-ordering POST /checkout with Idempotency-Key equal to
         the sessionId. Outcomes: 200 with the session in a definitive state
-        (COMPLETED, DECLINED, REQUOTE_REQUIRED with requotedOffers, or FAILED
-        plus an alert for a contract bug; both record the void as owed and
-        retry it until it succeeds); 202 while the place-order outcome is unknown (the session stays
+        (COMPLETED, DECLINED, REQUOTE_REQUIRED with requotedOffers after a
+        successful void, or FAILED after a void plus an alert for a contract
+        bug); 202 while the place-order outcome is unknown (the session stays
         PLACING; poll GET /checkout-sessions/{sessionId}). A DECLINED session
         may be confirmed again with another token while the price quote is
         valid.
@@ -140,7 +147,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/CheckoutSession'
         '202':
-          description: The place-order outcome is unknown; the session stays PLACING (the semantic lock). Poll GET /checkout-sessions/{sessionId}.
+          description: >-
+            An outcome is unknown: the authorization (the session stays
+            AUTHORIZING; ResolveStuckAuthorizations re-calls with the same key
+            after 2 minutes) or the place-order step (the session stays PLACING,
+            the semantic lock). Poll GET /checkout-sessions/{sessionId}.
           content:
             application/json:
               schema:
@@ -149,19 +160,19 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           description: >-
-            session-closed (ErrSessionClosed), price-quote-expired
-            (ErrPriceQuoteExpired), authorization-mismatch
-            (ErrAuthorizationMismatch), placement-in-doubt (ErrPlacementInDoubt)
-            or concurrent-update.
+            session-closed (ErrSessionClosed), authorization-mismatch
+            (ErrAuthorizationMismatch, the authorization is voided),
+            placement-in-doubt (ErrPlacementInDoubt), void-pending (ErrVoidPending,
+            a previous authorization is still being voided), illegal-transition
+            (a confirm while AUTHORIZING) or concurrent-update.
           content:
             application/problem+json:
               schema:
                 $ref: '#/components/schemas/Problem'
         '422':
           description: >-
-            validation-failed, or offer-not-quotable (ErrOfferNotQuotable): a
-            selected offer is no longer QUOTED at the pre-authorize check; no
-            state change.
+            validation-failed (a missing token) or price-quote-expired
+            (ErrPriceQuoteExpired, contracts-delta S2: open a new session).
           content:
             application/problem+json:
               schema:
@@ -186,12 +197,6 @@ components:
   responses:
     NotFound:
       description: not-found.
-      content:
-        application/problem+json:
-          schema:
-            $ref: '#/components/schemas/Problem'
-    Unprocessable:
-      description: validation-failed.
       content:
         application/problem+json:
           schema:
@@ -346,14 +351,6 @@ components:
           type: string
           nullable: true
           description: Present in FAILED.
-        authAttempt:
-          type: integer
-          minimum: 1
-          description: The authorize attempt number; incremented on each DECLINED to AUTHORIZING and part of the authorize key.
-        voidOwed:
-          type: string
-          nullable: true
-          description: The authorizationId whose void is owed (set with the decision to void); retried every minute until it succeeds.
         version:
           type: integer
           minimum: 1
