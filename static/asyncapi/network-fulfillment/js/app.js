@@ -52,6 +52,7 @@
         "message": {
           "oneOf": [
             {
+              "x-no-consumer-reason": "facts of the external-network channel, no consumer by decision (K19)",
               "name": "NetworkOrderReceived",
               "title": "Network order received",
               "summary": "Demand from the external retail network was turned into a NetworkOrder; the 24h acknowledgement clock is running.",
@@ -283,6 +284,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "facts of the external-network channel, no consumer by decision (K19)",
               "name": "NetworkOrderSubmitted",
               "title": "Network order submitted",
               "summary": "We told the network yes (the order is SUBMITTED) and a held order exists in order-management; the submission is not yet reconciled.",
@@ -512,6 +514,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "facts of the external-network channel, no consumer by decision (K19)",
               "name": "NetworkOrderRejected",
               "title": "Network order rejected",
               "summary": "We told the network no — or the acknowledgement window closed unanswered.",
@@ -624,6 +627,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "facts of the external-network channel, no consumer by decision (K19)",
               "name": "NetworkOrderShipmentConfirmed",
               "title": "Network order shipment confirmed",
               "summary": "A shipment was confirmed back to the network, closing the order.",

@@ -372,6 +372,7 @@
       "description": "This context's OWN integration stream (Phase 2). Everything on it is\nemitted through the transactional outbox: the saga state change and\nthe outbox row commit in one transaction, and a background relay\npublishes afterwards — a request handler never sends directly.\n",
       "messages": {
         "transferPlanApproved": {
+          "x-no-consumer-reason": "operator approval record of the transfer saga; consumed on demand",
           "name": "TransferPlanApproved",
           "title": "Transfer plan approved",
           "summary": "An operator approved an advisory proposal into a transfer plan (published).",
@@ -425,20 +426,47 @@
                         "minimum": 1,
                         "x-parser-schema-id": "<anonymous-schema-54>"
                       },
+                      "case_multiple": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "description": "Additive (ADR 0017). Units per pack of the SKU's active CASE level; the case rounding fields are present only for such a SKU, and quantity is then the rounded whole-case quantity.",
+                        "x-parser-schema-id": "<anonymous-schema-55>"
+                      },
+                      "cases": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "x-parser-schema-id": "<anonymous-schema-56>"
+                      },
+                      "requested_qty_eaches": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "The quantity before rounding (the demand).",
+                        "x-parser-schema-id": "<anonymous-schema-57>"
+                      },
+                      "rounded_qty_eaches": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "x-parser-schema-id": "<anonymous-schema-58>"
+                      },
+                      "remainder_eaches": {
+                        "type": "integer",
+                        "description": "requested_qty_eaches minus rounded_qty_eaches (signed).",
+                        "x-parser-schema-id": "<anonymous-schema-59>"
+                      },
                       "policy_version": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-55>"
+                        "x-parser-schema-id": "<anonymous-schema-60>"
                       },
                       "operator_reason": {
                         "type": "string",
                         "description": "The operator's captured approval reason (may be empty).",
-                        "x-parser-schema-id": "<anonymous-schema-56>"
+                        "x-parser-schema-id": "<anonymous-schema-61>"
                       },
                       "proposal_as_of": {
                         "type": "string",
                         "format": "date-time",
                         "description": "The advisory proposal snapshot's as-of watermark (RFC 3339, UTC).",
-                        "x-parser-schema-id": "<anonymous-schema-57>"
+                        "x-parser-schema-id": "<anonymous-schema-62>"
                       }
                     },
                     "x-parser-schema-id": "<anonymous-schema-49>"
@@ -465,11 +493,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.network-inventory-planning.transfer.TransferAllocationRequested",
-                    "x-parser-schema-id": "<anonymous-schema-59>"
+                    "x-parser-schema-id": "<anonymous-schema-64>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:network-inventory-planning:events:TransferAllocationRequested:v1",
-                    "x-parser-schema-id": "<anonymous-schema-60>"
+                    "x-parser-schema-id": "<anonymous-schema-65>"
                   },
                   "data": {
                     "type": "object",
@@ -483,31 +511,31 @@
                     "properties": {
                       "transfer_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-62>"
+                        "x-parser-schema-id": "<anonymous-schema-67>"
                       },
                       "transfer_line_id": {
                         "type": "string",
                         "description": "\"<transfer_id>:1\" in v1's single-line saga; also the Kafka\nkey and subject, and inventory-storage's allocation-ledger\nand reply-correlation key.\n",
-                        "x-parser-schema-id": "<anonymous-schema-63>"
+                        "x-parser-schema-id": "<anonymous-schema-68>"
                       },
                       "origin_site_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-64>"
+                        "x-parser-schema-id": "<anonymous-schema-69>"
                       },
                       "sku": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-65>"
+                        "x-parser-schema-id": "<anonymous-schema-70>"
                       },
                       "quantity": {
                         "type": "integer",
                         "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-66>"
+                        "x-parser-schema-id": "<anonymous-schema-71>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-61>"
+                    "x-parser-schema-id": "<anonymous-schema-66>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-58>"
+                "x-parser-schema-id": "<anonymous-schema-63>"
               }
             ],
             "x-parser-schema-id": "TransferAllocationRequestedEvent"
@@ -528,11 +556,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.network-inventory-planning.workdemand.WorkDemandReleased",
-                    "x-parser-schema-id": "<anonymous-schema-68>"
+                    "x-parser-schema-id": "<anonymous-schema-73>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:network-inventory-planning:events:WorkDemandReleased:v1",
-                    "x-parser-schema-id": "<anonymous-schema-69>"
+                    "x-parser-schema-id": "<anonymous-schema-74>"
                   },
                   "data": {
                     "type": "object",
@@ -550,7 +578,7 @@
                       "demand_id": {
                         "type": "string",
                         "description": "Deterministic identity of the leg — `<transfer_id>:pick`\nor `<transfer_id>:dispatch`. Also the Kafka key and\nsubject; WES mints its work unit under it.\n",
-                        "x-parser-schema-id": "<anonymous-schema-71>"
+                        "x-parser-schema-id": "<anonymous-schema-76>"
                       },
                       "work_kind": {
                         "type": "string",
@@ -559,44 +587,44 @@
                           "TRANSFER_DISPATCH",
                           "TRANSFER_ARRIVAL"
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-72>"
+                        "x-parser-schema-id": "<anonymous-schema-77>"
                       },
                       "transfer_ref": {
                         "type": "string",
                         "description": "The transfer saga's correlation id.",
-                        "x-parser-schema-id": "<anonymous-schema-73>"
+                        "x-parser-schema-id": "<anonymous-schema-78>"
                       },
                       "path_id": {
                         "type": "string",
                         "description": "Process path the leg executes on, from deployment\nconfiguration (TRANSFER_PICK_PATH_ID /\nTRANSFER_DISPATCH_PATH_ID); WES validates it against\nits PathCatalogue.\n",
-                        "x-parser-schema-id": "<anonymous-schema-74>"
+                        "x-parser-schema-id": "<anonymous-schema-79>"
                       },
                       "site_id": {
                         "type": "string",
                         "description": "Network site anchoring the leg — the ORIGIN for pick and dispatch.",
-                        "x-parser-schema-id": "<anonymous-schema-75>"
+                        "x-parser-schema-id": "<anonymous-schema-80>"
                       },
                       "cpt": {
                         "type": "string",
                         "format": "date-time",
                         "description": "Critical Pull Time: the triggering fact's time plus the\nleg's configured TRANSFER_*_CPT_OFFSET.\n",
-                        "x-parser-schema-id": "<anonymous-schema-76>"
+                        "x-parser-schema-id": "<anonymous-schema-81>"
                       },
                       "sku": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-77>"
+                        "x-parser-schema-id": "<anonymous-schema-82>"
                       },
                       "quantity": {
                         "type": "integer",
                         "minimum": 1,
                         "description": "Units the leg moves — the allocated quantity for the\npick leg, the PICKED quantity for the dispatch leg\n(short picks dispatch what was actually picked).\n",
-                        "x-parser-schema-id": "<anonymous-schema-78>"
+                        "x-parser-schema-id": "<anonymous-schema-83>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-70>"
+                    "x-parser-schema-id": "<anonymous-schema-75>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-67>"
+                "x-parser-schema-id": "<anonymous-schema-72>"
               }
             ],
             "x-parser-schema-id": "WorkDemandReleasedEvent"
@@ -625,11 +653,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.network-inventory-planning.saga.TransferStateAdvanced",
-                    "x-parser-schema-id": "<anonymous-schema-80>"
+                    "x-parser-schema-id": "<anonymous-schema-85>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:network-inventory-planning:analytics:TransferStateAdvanced:v1",
-                    "x-parser-schema-id": "<anonymous-schema-81>"
+                    "x-parser-schema-id": "<anonymous-schema-86>"
                   },
                   "data": {
                     "type": "object",
@@ -643,12 +671,12 @@
                       "transfer_id": {
                         "type": "string",
                         "description": "The saga aggregate id; also the Kafka key and subject.",
-                        "x-parser-schema-id": "<anonymous-schema-83>"
+                        "x-parser-schema-id": "<anonymous-schema-88>"
                       },
                       "from": {
                         "type": "string",
                         "description": "The state before the transition (empty string for the creation entry).",
-                        "x-parser-schema-id": "<anonymous-schema-84>"
+                        "x-parser-schema-id": "<anonymous-schema-89>"
                       },
                       "to": {
                         "type": "string",
@@ -665,19 +693,19 @@
                           "UNFULFILLABLE",
                           "CANCELLED"
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-85>"
+                        "x-parser-schema-id": "<anonymous-schema-90>"
                       },
                       "age_seconds": {
                         "type": "integer",
                         "format": "int64",
                         "description": "Seconds since the aggregate's creation at the moment of the transition.",
-                        "x-parser-schema-id": "<anonymous-schema-86>"
+                        "x-parser-schema-id": "<anonymous-schema-91>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-82>"
+                    "x-parser-schema-id": "<anonymous-schema-87>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-79>"
+                "x-parser-schema-id": "<anonymous-schema-84>"
               }
             ],
             "x-parser-schema-id": "TransferStateAdvancedEvent"
@@ -698,11 +726,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.network-inventory-planning.saga.TransferStuckDetected",
-                    "x-parser-schema-id": "<anonymous-schema-88>"
+                    "x-parser-schema-id": "<anonymous-schema-93>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:network-inventory-planning:analytics:TransferStuckDetected:v1",
-                    "x-parser-schema-id": "<anonymous-schema-89>"
+                    "x-parser-schema-id": "<anonymous-schema-94>"
                   },
                   "data": {
                     "type": "object",
@@ -716,30 +744,30 @@
                       "transfer_id": {
                         "type": "string",
                         "description": "The saga aggregate id; also the Kafka key and subject.",
-                        "x-parser-schema-id": "<anonymous-schema-91>"
+                        "x-parser-schema-id": "<anonymous-schema-96>"
                       },
                       "state": {
                         "type": "string",
                         "description": "The non-terminal state the transfer is stuck in.",
-                        "x-parser-schema-id": "<anonymous-schema-92>"
+                        "x-parser-schema-id": "<anonymous-schema-97>"
                       },
                       "age_seconds": {
                         "type": "integer",
                         "format": "int64",
                         "description": "Seconds since the transfer's last transition (updated_at).",
-                        "x-parser-schema-id": "<anonymous-schema-93>"
+                        "x-parser-schema-id": "<anonymous-schema-98>"
                       },
                       "threshold_seconds": {
                         "type": "integer",
                         "format": "int64",
                         "description": "The per-state threshold that was exceeded (NIP_STUCK_THRESHOLDS or the default).",
-                        "x-parser-schema-id": "<anonymous-schema-94>"
+                        "x-parser-schema-id": "<anonymous-schema-99>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-90>"
+                    "x-parser-schema-id": "<anonymous-schema-95>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-87>"
+                "x-parser-schema-id": "<anonymous-schema-92>"
               }
             ],
             "x-parser-schema-id": "TransferStuckDetectedEvent"
@@ -760,11 +788,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.network-inventory-planning.saga.RebalanceRunCompleted",
-                    "x-parser-schema-id": "<anonymous-schema-96>"
+                    "x-parser-schema-id": "<anonymous-schema-101>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:network-inventory-planning:analytics:RebalanceRunCompleted:v1",
-                    "x-parser-schema-id": "<anonymous-schema-97>"
+                    "x-parser-schema-id": "<anonymous-schema-102>"
                   },
                   "data": {
                     "type": "object",
@@ -778,28 +806,28 @@
                       "run_id": {
                         "type": "string",
                         "description": "The run's identity; also the Kafka key and subject.",
-                        "x-parser-schema-id": "<anonymous-schema-99>"
+                        "x-parser-schema-id": "<anonymous-schema-104>"
                       },
                       "proposal_count": {
                         "type": "integer",
                         "description": "Proposals the planner produced this pass.",
-                        "x-parser-schema-id": "<anonymous-schema-100>"
+                        "x-parser-schema-id": "<anonymous-schema-105>"
                       },
                       "rejected_count": {
                         "type": "integer",
                         "description": "Proposals the run's own safety checks refused (never an operator rejection; the run approves nothing).",
-                        "x-parser-schema-id": "<anonymous-schema-101>"
+                        "x-parser-schema-id": "<anonymous-schema-106>"
                       },
                       "stale_facts": {
                         "type": "integer",
                         "description": "Facts excluded by freshness in this pass (0 while the snapshot is fully fresh).",
-                        "x-parser-schema-id": "<anonymous-schema-102>"
+                        "x-parser-schema-id": "<anonymous-schema-107>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-98>"
+                    "x-parser-schema-id": "<anonymous-schema-103>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-95>"
+                "x-parser-schema-id": "<anonymous-schema-100>"
               }
             ],
             "x-parser-schema-id": "RebalanceRunCompletedEvent"
@@ -828,11 +856,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wms.inventory-storage.reservation.TransferStockAllocated",
-                    "x-parser-schema-id": "<anonymous-schema-104>"
+                    "x-parser-schema-id": "<anonymous-schema-109>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:inventory-storage:events:TransferStockAllocated:v1",
-                    "x-parser-schema-id": "<anonymous-schema-105>"
+                    "x-parser-schema-id": "<anonymous-schema-110>"
                   },
                   "data": {
                     "type": "object",
@@ -849,29 +877,29 @@
                     "properties": {
                       "transfer_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-107>"
+                        "x-parser-schema-id": "<anonymous-schema-112>"
                       },
                       "transfer_line_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-108>"
+                        "x-parser-schema-id": "<anonymous-schema-113>"
                       },
                       "origin_site_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-109>"
+                        "x-parser-schema-id": "<anonymous-schema-114>"
                       },
                       "reservation_id": {
                         "type": "string",
                         "description": "Also the Kafka key and subject of the reply.",
-                        "x-parser-schema-id": "<anonymous-schema-110>"
+                        "x-parser-schema-id": "<anonymous-schema-115>"
                       },
                       "sku": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-111>"
+                        "x-parser-schema-id": "<anonymous-schema-116>"
                       },
                       "quantity": {
                         "type": "integer",
                         "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-112>"
+                        "x-parser-schema-id": "<anonymous-schema-117>"
                       },
                       "allocations": {
                         "type": "array",
@@ -886,33 +914,33 @@
                           "properties": {
                             "stock_unit_id": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-115>"
+                              "x-parser-schema-id": "<anonymous-schema-120>"
                             },
                             "bin_id": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-116>"
+                              "x-parser-schema-id": "<anonymous-schema-121>"
                             },
                             "quantity": {
                               "type": "integer",
                               "minimum": 1,
-                              "x-parser-schema-id": "<anonymous-schema-117>"
+                              "x-parser-schema-id": "<anonymous-schema-122>"
                             }
                           },
-                          "x-parser-schema-id": "<anonymous-schema-114>"
+                          "x-parser-schema-id": "<anonymous-schema-119>"
                         },
-                        "x-parser-schema-id": "<anonymous-schema-113>"
+                        "x-parser-schema-id": "<anonymous-schema-118>"
                       },
                       "expires_at": {
                         "type": "string",
                         "format": "date-time",
                         "description": "The origin reservation's expiry.",
-                        "x-parser-schema-id": "<anonymous-schema-118>"
+                        "x-parser-schema-id": "<anonymous-schema-123>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-106>"
+                    "x-parser-schema-id": "<anonymous-schema-111>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-103>"
+                "x-parser-schema-id": "<anonymous-schema-108>"
               }
             ],
             "x-parser-schema-id": "TransferStockAllocatedEvent"
@@ -933,11 +961,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wms.inventory-storage.reservation.TransferStockAllocationRejected",
-                    "x-parser-schema-id": "<anonymous-schema-120>"
+                    "x-parser-schema-id": "<anonymous-schema-125>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:inventory-storage:events:TransferStockAllocationRejected:v1",
-                    "x-parser-schema-id": "<anonymous-schema-121>"
+                    "x-parser-schema-id": "<anonymous-schema-126>"
                   },
                   "data": {
                     "type": "object",
@@ -952,25 +980,25 @@
                     "properties": {
                       "transfer_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-123>"
+                        "x-parser-schema-id": "<anonymous-schema-128>"
                       },
                       "transfer_line_id": {
                         "type": "string",
                         "description": "Also the Kafka key and subject of the reply.",
-                        "x-parser-schema-id": "<anonymous-schema-124>"
+                        "x-parser-schema-id": "<anonymous-schema-129>"
                       },
                       "origin_site_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-125>"
+                        "x-parser-schema-id": "<anonymous-schema-130>"
                       },
                       "sku": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-126>"
+                        "x-parser-schema-id": "<anonymous-schema-131>"
                       },
                       "requested_quantity": {
                         "type": "integer",
                         "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-127>"
+                        "x-parser-schema-id": "<anonymous-schema-132>"
                       },
                       "reason": {
                         "type": "string",
@@ -979,13 +1007,13 @@
                           "INSUFFICIENT_USABLE",
                           "IDEMPOTENCY_CONFLICT"
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-128>"
+                        "x-parser-schema-id": "<anonymous-schema-133>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-122>"
+                    "x-parser-schema-id": "<anonymous-schema-127>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-119>"
+                "x-parser-schema-id": "<anonymous-schema-124>"
               }
             ],
             "x-parser-schema-id": "TransferStockAllocationRejectedEvent"
@@ -1006,11 +1034,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wms.inventory-storage.stock.TransferReceiptStaged",
-                    "x-parser-schema-id": "<anonymous-schema-130>"
+                    "x-parser-schema-id": "<anonymous-schema-135>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:inventory-storage:events:TransferReceiptStaged:v1",
-                    "x-parser-schema-id": "<anonymous-schema-131>"
+                    "x-parser-schema-id": "<anonymous-schema-136>"
                   },
                   "data": {
                     "type": "object",
@@ -1026,39 +1054,39 @@
                     "properties": {
                       "transfer_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-133>"
+                        "x-parser-schema-id": "<anonymous-schema-138>"
                       },
                       "transfer_line_id": {
                         "type": "string",
                         "description": "Also the Kafka key and subject.",
-                        "x-parser-schema-id": "<anonymous-schema-134>"
+                        "x-parser-schema-id": "<anonymous-schema-139>"
                       },
                       "destination_site_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-135>"
+                        "x-parser-schema-id": "<anonymous-schema-140>"
                       },
                       "sku": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-136>"
+                        "x-parser-schema-id": "<anonymous-schema-141>"
                       },
                       "expected_quantity": {
                         "type": "integer",
-                        "x-parser-schema-id": "<anonymous-schema-137>"
+                        "x-parser-schema-id": "<anonymous-schema-142>"
                       },
                       "received_quantity": {
                         "type": "integer",
-                        "x-parser-schema-id": "<anonymous-schema-138>"
+                        "x-parser-schema-id": "<anonymous-schema-143>"
                       },
                       "variance": {
                         "type": "integer",
                         "description": "Informational in v1 (no variance disposition workflow yet).",
-                        "x-parser-schema-id": "<anonymous-schema-139>"
+                        "x-parser-schema-id": "<anonymous-schema-144>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-132>"
+                    "x-parser-schema-id": "<anonymous-schema-137>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-129>"
+                "x-parser-schema-id": "<anonymous-schema-134>"
               }
             ],
             "x-parser-schema-id": "TransferReceiptStagedEvent"
@@ -1079,11 +1107,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wms.inventory-storage.stock.TransferStockStowed",
-                    "x-parser-schema-id": "<anonymous-schema-141>"
+                    "x-parser-schema-id": "<anonymous-schema-146>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:inventory-storage:events:TransferStockStowed:v1",
-                    "x-parser-schema-id": "<anonymous-schema-142>"
+                    "x-parser-schema-id": "<anonymous-schema-147>"
                   },
                   "data": {
                     "type": "object",
@@ -1099,28 +1127,28 @@
                     "properties": {
                       "transfer_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-144>"
+                        "x-parser-schema-id": "<anonymous-schema-149>"
                       },
                       "transfer_line_id": {
                         "type": "string",
                         "description": "Also the Kafka key and subject.",
-                        "x-parser-schema-id": "<anonymous-schema-145>"
+                        "x-parser-schema-id": "<anonymous-schema-150>"
                       },
                       "destination_site_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-146>"
+                        "x-parser-schema-id": "<anonymous-schema-151>"
                       },
                       "sku": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-147>"
+                        "x-parser-schema-id": "<anonymous-schema-152>"
                       },
                       "received_quantity": {
                         "type": "integer",
-                        "x-parser-schema-id": "<anonymous-schema-148>"
+                        "x-parser-schema-id": "<anonymous-schema-153>"
                       },
                       "stowed_quantity": {
                         "type": "integer",
-                        "x-parser-schema-id": "<anonymous-schema-149>"
+                        "x-parser-schema-id": "<anonymous-schema-154>"
                       },
                       "allocations": {
                         "type": "array",
@@ -1135,27 +1163,27 @@
                           "properties": {
                             "stock_unit_id": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-152>"
+                              "x-parser-schema-id": "<anonymous-schema-157>"
                             },
                             "bin_id": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-153>"
+                              "x-parser-schema-id": "<anonymous-schema-158>"
                             },
                             "quantity": {
                               "type": "integer",
                               "minimum": 1,
-                              "x-parser-schema-id": "<anonymous-schema-154>"
+                              "x-parser-schema-id": "<anonymous-schema-159>"
                             }
                           },
-                          "x-parser-schema-id": "<anonymous-schema-151>"
+                          "x-parser-schema-id": "<anonymous-schema-156>"
                         },
-                        "x-parser-schema-id": "<anonymous-schema-150>"
+                        "x-parser-schema-id": "<anonymous-schema-155>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-143>"
+                    "x-parser-schema-id": "<anonymous-schema-148>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-140>"
+                "x-parser-schema-id": "<anonymous-schema-145>"
               }
             ],
             "x-parser-schema-id": "TransferStockStowedEvent"
@@ -1184,11 +1212,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.fulfillment-execution.transfer.TransferPicked",
-                    "x-parser-schema-id": "<anonymous-schema-156>"
+                    "x-parser-schema-id": "<anonymous-schema-161>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:fulfillment-execution:events:TransferPicked:v1",
-                    "x-parser-schema-id": "<anonymous-schema-157>"
+                    "x-parser-schema-id": "<anonymous-schema-162>"
                   },
                   "data": {
                     "description": "The payload every fulfillment-execution transfer fact carries,\nmirrored read-only from fulfillment-execution's\nTransferFactData. The optional fields are omitted when the\nrelease carried none.\n",
@@ -1202,20 +1230,20 @@
                     "properties": {
                       "transfer_ref": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-158>"
+                        "x-parser-schema-id": "<anonymous-schema-163>"
                       },
                       "demand_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-159>"
+                        "x-parser-schema-id": "<anonymous-schema-164>"
                       },
                       "work_unit_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-160>"
+                        "x-parser-schema-id": "<anonymous-schema-165>"
                       },
                       "task_id": {
                         "type": "string",
                         "description": "Also the Kafka key and subject.",
-                        "x-parser-schema-id": "<anonymous-schema-161>"
+                        "x-parser-schema-id": "<anonymous-schema-166>"
                       },
                       "work_kind": {
                         "type": "string",
@@ -1224,25 +1252,25 @@
                           "TRANSFER_DISPATCH",
                           "TRANSFER_ARRIVAL"
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-162>"
+                        "x-parser-schema-id": "<anonymous-schema-167>"
                       },
                       "site_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-163>"
+                        "x-parser-schema-id": "<anonymous-schema-168>"
                       },
                       "sku": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-164>"
+                        "x-parser-schema-id": "<anonymous-schema-169>"
                       },
                       "quantity": {
                         "type": "integer",
-                        "x-parser-schema-id": "<anonymous-schema-165>"
+                        "x-parser-schema-id": "<anonymous-schema-170>"
                       }
                     },
                     "x-parser-schema-id": "TransferFactData"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-155>"
+                "x-parser-schema-id": "<anonymous-schema-160>"
               }
             ],
             "x-parser-schema-id": "TransferPickedEvent"
@@ -1263,15 +1291,15 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.fulfillment-execution.transfer.TransferDispatched",
-                    "x-parser-schema-id": "<anonymous-schema-167>"
+                    "x-parser-schema-id": "<anonymous-schema-172>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:fulfillment-execution:events:TransferDispatched:v1",
-                    "x-parser-schema-id": "<anonymous-schema-168>"
+                    "x-parser-schema-id": "<anonymous-schema-173>"
                   },
                   "data": "$ref:$.channels.warehouse.fulfillment.events.messages.transferPicked.payload.allOf[1].properties.data"
                 },
-                "x-parser-schema-id": "<anonymous-schema-166>"
+                "x-parser-schema-id": "<anonymous-schema-171>"
               }
             ],
             "x-parser-schema-id": "TransferDispatchedEvent"
@@ -1292,15 +1320,15 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.fulfillment-execution.transfer.TransferArrived",
-                    "x-parser-schema-id": "<anonymous-schema-170>"
+                    "x-parser-schema-id": "<anonymous-schema-175>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:fulfillment-execution:events:TransferArrived:v1",
-                    "x-parser-schema-id": "<anonymous-schema-171>"
+                    "x-parser-schema-id": "<anonymous-schema-176>"
                   },
                   "data": "$ref:$.channels.warehouse.fulfillment.events.messages.transferPicked.payload.allOf[1].properties.data"
                 },
-                "x-parser-schema-id": "<anonymous-schema-169>"
+                "x-parser-schema-id": "<anonymous-schema-174>"
               }
             ],
             "x-parser-schema-id": "TransferArrivedEvent"

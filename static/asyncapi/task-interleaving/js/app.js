@@ -293,11 +293,11 @@
       }
     },
     "warehouse.task-interleaving.analytics": {
-      "description": "This service's analytics topic. Written by the SAME outbox relay, from rows\ninserted in the same transaction as the integration row, with the SAME `type`\nand `id` per occurrence and `dataschema` =\n`urn:warehouse:task-interleaving:analytics:<EventName>:v1`; key = station id\n(hint events) or site id (policy event). `InterleavingHintConsumed`,\n`InterleavingHintExpired` and `InterleavingPolicyDeclared` exist ONLY here.\nNot an integration contract: other contexts consume the integration topic.\n",
+      "description": "This service's analytics topic. Written by the SAME outbox relay, from rows\ninserted in the same transaction as the integration row, with the SAME `type`\nand `id` per occurrence and `dataschema` =\n`urn:warehouse:task-interleaving:analytics:<EventName>:v1`; key = station id\n(hint events) or site id (policy event). `InterleavingHintConsumed`,\n`InterleavingHintExpired` and `InterleavingPolicyDeclared` exist ONLY here.\nNot an integration contract: other contexts consume the integration topic.\nThe only consumer is this service's own `cmd/ti-projector` (ADR 0008),\nunder a fixed consumer group read from env `ANALYTICS_CONSUMER_GROUP`\n(default `task-interleaving-analytics`), which folds the events into the\nseparate analytical database that `cmd/ti-reports` serves\n(`GET /reports/hint-adoption`, `GET /reports/freshness`). A message the\nprojector can never apply (a known `type` whose payload contradicts its\nenvelope or fails validation) is dead-lettered at once, byte for byte, to\n`warehouse.task-interleaving.analytics.dlq`; a transient failure retries the\nsame message and never dead-letters it.\n",
       "subscribe": {
         "operationId": "receiveInterleavingAnalyticsEvents",
         "summary": "Receive the interleaving analytics events.",
-        "description": "Route on the full `type`; the payloads are the integration payloads for\n`InterleavingHintIssued` and the documented analytics-only payloads for the\nother three types.\n",
+        "description": "Route on the full `type`; the payloads are the integration payloads for\n`InterleavingHintIssued` and the documented analytics-only payloads for the\nother three types. The projector keeps, per hint, the earliest\nCloudEvents `time` of each of `InterleavingHintIssued`,\n`InterleavingHintConsumed` and `InterleavingHintExpired` (arrival order\nnever matters) and records `InterleavingPolicyDeclared` only as an applied\nid (freshness). A redelivered `id` is applied once.\n",
         "tags": [
           {
             "name": "analytics"

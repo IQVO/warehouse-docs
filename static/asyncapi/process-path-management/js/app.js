@@ -4,7 +4,7 @@
   "info": {
     "title": "Process Path Management — Published Events",
     "version": "1.0.0",
-    "description": "Publisher-side event contract for the **Process Path Management**\nbounded context. Unlike `labor-performance`'s own `apis/asyncapi.yaml`\n(which documents what that service SUBSCRIBES TO), this document\ndescribes what this service PUBLISHES: it is the SOURCE of the\nprocess-path published language for the fleet, never a consumer of\nanyone else's events.\n\n## Message format: CloudEvents 1.0 (mandatory, ADR 0016)\n\nEvery message on `warehouse.process-path-management.events` AND\n`warehouse.process-path-management.analytics` is a CloudEvents 1.0\nevent in structured content mode (Kafka protocol binding). The Kafka\nmessage value is the JSON event format and every message carries the\nKafka header `content-type: application/cloudevents+json; charset=UTF-8`.\nW3C trace context travels in the `traceparent` (and, when present,\n`tracestate`) Kafka headers of every message raised inside a traced\noperation (ADR 0027); a message raised outside any trace carries no\ntrace headers. Baggage is never propagated. The CloudEvent body does\nnot carry the trace context.\nThere is no other envelope, no dual-write and no envelope toggle.\n\n```json\n{\n  \"specversion\": \"1.0\",\n  \"id\": \"4f1c2a7e-9d31-4a6b-8f0e-6b2c1d5e7a90\",\n  \"source\": \"/warehouse/process-path-management\",\n  \"type\": \"com.warehouse.wes.process-path-management.processpath.ProcessPathCreated\",\n  \"subject\": \"PICK\",\n  \"time\": \"2026-09-06T00:00:00Z\",\n  \"datacontenttype\": \"application/json\",\n  \"dataschema\": \"urn:warehouse:process-path-management:events:ProcessPathCreated:v1\",\n  \"data\": { \"path_id\": \"PICK\", \"...\": \"...\" }\n}\n```\n\n- `id` is minted once per domain event and persisted with the outbox\n  row, so a redelivery carries the same `id`; `(source, id)` is the\n  consumer idempotency key.\n- `subject` is the aggregate id (`path_id` for ProcessPath* events,\n  `site_id` for CPTScheduleChanged) — the same value as the Kafka key.\n- `type` = `com.warehouse.wes.process-path-management.<entity>.<EventName>`.\n  These exact strings are a cross-service contract (consumed by\n  fulfillment-execution, wes-work-planning, workforce-management and\n  order-management); consumers dispatch on the FULL `type`.\n- `dataschema` = `urn:warehouse:process-path-management:<events|analytics>:<EventName>:v1`\n  distinguishes the integration payload from the analytics payload of\n  the same occurrence (today both carry the identical `data` shape).\n- A breaking payload change ships as a new `.v2` type with a new\n  dataschema version, never by mutating an existing one.\n\n## Single, shared topic for four event types\n\nA single topic (not one per event type) per stream. Consumers dispatch\non the CloudEvents `type`. `ProcessPathCreated`, `ProcessPathUpdated`,\nand `ProcessPathDeactivated` are keyed by `path_id`;\n`CPTScheduleChanged` (ADR 0010) is keyed by `site_id` — a different\naggregate on the same topic, so a consumer replaying the topic sees a\ngiven path's or a given site's events in publish order, never\ninterleaved with another aggregate's out of order.\n\n## ADR 0010: the fulfillment capability contract\n\n`ProcessPathCreated`/`ProcessPathUpdated` gained two additive fields —\n`cycle_time_p95` (the operator-declared p95 end-to-end cycle time) and\n`eligibility` (the rules a unit of work must satisfy to be routed to\nthis path) — and this topic now also carries `CPTScheduleChanged`, a\nnew event type for the site-scoped Critical Pull Time schedule. Every\nconsumer's decoder must tolerate an unknown `type` (ignore it,\nnot fail) and tolerate unknown/absent fields on the payloads it\nalready knows, exactly as it already must for any future addition —\nsee ADR 0010's Consequences section.\n\n## ADR 0034: process-path intake\n\n`ProcessPathCreated`/`ProcessPathUpdated` gained an additive `intake`\narray: the demand sources (`CUSTOMER_ORDER`, `STOCK_TRANSFER`,\n`SLOT_RELOCATION`, `INVENTORY_CONTROL`) allowed to route work onto the\npath. order-management's path selection considers only paths whose\nintake contains `CUSTOMER_ORDER`; `[]` means the path is reached only by\nan explicit path id (PACK, REBIN, SLAM).\n\n## ADR 0036: REPLENISHMENT demand source and the REPLENISH path\n\nThe closed `intake` vocabulary gained `REPLENISHMENT` (additive: no new\nevent type, no payload field). It is declared on exactly one path,\n`REPLENISH` (`match_prefix` `replenish`, required capability\n`replenish`), the path wes-work-planning releases pick-face top-ups on.\nConsumers that decode `intake` as free strings need no change; a\nconsumer that validates against a fixed enum must accept the new value.\n\n## Consumers\n\n`fulfillment-execution`, `wes-work-planning`, `workforce-management`\n(ProcessPath* catalogue caches) and `order-management` (ProcessPath*\nand CPTScheduleChanged) consume the integration topic. The analytics\ntopic is consumed only by this service's own projector\n(`cmd/pathmgmt-projector`). See `docs/docs/ecosystem/context-map.md`.\n",
+    "description": "Publisher-side event contract for the **Process Path Management**\nbounded context. Unlike `labor-performance`'s own `apis/asyncapi.yaml`\n(which documents what that service SUBSCRIBES TO), this document\ndescribes what this service PUBLISHES: it is the SOURCE of the\nprocess-path published language for the fleet, never a consumer of\nanyone else's events.\n\n## Message format: CloudEvents 1.0 (mandatory, ADR 0016)\n\nEvery message on `warehouse.process-path-management.events` AND\n`warehouse.process-path-management.analytics` is a CloudEvents 1.0\nevent in structured content mode (Kafka protocol binding). The Kafka\nmessage value is the JSON event format and every message carries the\nKafka header `content-type: application/cloudevents+json; charset=UTF-8`.\nW3C trace context travels in the `traceparent` (and, when present,\n`tracestate`) Kafka headers of every message raised inside a traced\noperation (ADR 0027); a message raised outside any trace carries no\ntrace headers. Baggage is never propagated. The CloudEvent body does\nnot carry the trace context.\nThere is no other envelope, no dual-write and no envelope toggle.\n\n```json\n{\n  \"specversion\": \"1.0\",\n  \"id\": \"4f1c2a7e-9d31-4a6b-8f0e-6b2c1d5e7a90\",\n  \"source\": \"/warehouse/process-path-management\",\n  \"type\": \"com.warehouse.wes.process-path-management.processpath.ProcessPathCreated\",\n  \"subject\": \"PICK\",\n  \"time\": \"2026-09-06T00:00:00Z\",\n  \"datacontenttype\": \"application/json\",\n  \"dataschema\": \"urn:warehouse:process-path-management:events:ProcessPathCreated:v1\",\n  \"data\": { \"path_id\": \"PICK\", \"...\": \"...\" }\n}\n```\n\n- `id` is minted once per domain event and persisted with the outbox\n  row, so a redelivery carries the same `id`; `(source, id)` is the\n  consumer idempotency key.\n- `subject` is the aggregate id (`path_id` for ProcessPath* events,\n  `site_id` for CPTScheduleChanged) — the same value as the Kafka key.\n- `type` = `com.warehouse.wes.process-path-management.<entity>.<EventName>`.\n  These exact strings are a cross-service contract (consumed by\n  fulfillment-execution, wes-work-planning, workforce-management and\n  order-management); consumers dispatch on the FULL `type`.\n- `dataschema` = `urn:warehouse:process-path-management:<events|analytics>:<EventName>:v1`\n  distinguishes the integration payload from the analytics payload of\n  the same occurrence (today both carry the identical `data` shape).\n- A breaking payload change ships as a new `.v2` type with a new\n  dataschema version, never by mutating an existing one.\n\n## Single, shared topic for four event types\n\nA single topic (not one per event type) per stream. Consumers dispatch\non the CloudEvents `type`. `ProcessPathCreated`, `ProcessPathUpdated`,\nand `ProcessPathDeactivated` are keyed by `path_id`;\n`CPTScheduleChanged` (ADR 0010) is keyed by `site_id` — a different\naggregate on the same topic, so a consumer replaying the topic sees a\ngiven path's or a given site's events in publish order, never\ninterleaved with another aggregate's out of order.\n\n## ADR 0010: the fulfillment capability contract\n\n`ProcessPathCreated`/`ProcessPathUpdated` gained two additive fields —\n`cycle_time_p95` (the operator-declared p95 end-to-end cycle time) and\n`eligibility` (the rules a unit of work must satisfy to be routed to\nthis path) — and this topic now also carries `CPTScheduleChanged`, a\nnew event type for the site-scoped Critical Pull Time schedule. Every\nconsumer's decoder must tolerate an unknown `type` (ignore it,\nnot fail) and tolerate unknown/absent fields on the payloads it\nalready knows, exactly as it already must for any future addition —\nsee ADR 0010's Consequences section.\n\n## ADR 0034: process-path intake\n\n`ProcessPathCreated`/`ProcessPathUpdated` gained an additive `intake`\narray: the demand sources (`CUSTOMER_ORDER`, `STOCK_TRANSFER`,\n`SLOT_RELOCATION`, `INVENTORY_CONTROL`) allowed to route work onto the\npath. order-management's path selection considers only paths whose\nintake contains `CUSTOMER_ORDER`; `[]` means the path is reached only by\nan explicit path id (PACK, REBIN, SLAM).\n\n## ADR 0036: REPLENISHMENT demand source and the REPLENISH path\n\nThe closed `intake` vocabulary gained `REPLENISHMENT` (additive: no new\nevent type, no payload field). It is declared on exactly one path,\n`REPLENISH` (`match_prefix` `replenish`, required capability\n`replenish`), the path wes-work-planning releases pick-face top-ups on.\nConsumers that decode `intake` as free strings need no change; a\nconsumer that validates against a fixed enum must accept the new value.\n\n## ADR 0038: the full-case and cross-dock paths\n\nThree paths are declared as catalogue data under the unchanged v1\npayload (additive: no new event type, no payload field, no new enum\nvalue). `FULL_CASE` (`match_prefix` `full-case`, capability `pick`)\nand `CROSS_DOCK` (`match_prefix` `cross-dock`, capability `dispatch`,\n`destination_location_role` `Shipping`) accept `CUSTOMER_ORDER`\nonly for a line carrying their `required_product_attributes`\n(`fullCase`, `crossDock`), so a line without them still selects `PICK`;\n`CROSS_DOCK` also accepts `STOCK_TRANSFER`. `BREAK_CASE`\n(`match_prefix` `break`, capability `break`) has an empty intake and is\nreached only by an explicit path id. This service reads no pack fact:\nthe attributes are derived by the consumer from its own data.\n\n## Consumers\n\n`fulfillment-execution`, `wes-work-planning`, `workforce-management`\n(ProcessPath* catalogue caches) and `order-management` (ProcessPath*\nand CPTScheduleChanged) consume the integration topic. The analytics\ntopic is consumed only by this service's own projector\n(`cmd/pathmgmt-projector`). See `docs/docs/ecosystem/context-map.md`.\n",
     "contact": {
       "name": "Process Path Management Team",
       "url": "https://github.com/claudioed/process-path-management",
@@ -42,7 +42,7 @@
       "publish": {
         "operationId": "publishProcessPathEvents",
         "summary": "Publish ProcessPathCreated / ProcessPathUpdated / ProcessPathDeactivated / CPTScheduleChanged.",
-        "description": "One message per domain event raised by the DefinePath, RevisePath, DeactivatePath, and DefineCPTSchedule use cases. A no-op revision (RevisePath or DefineCPTSchedule with no actual change) and a no-op deactivation (already-deactivated path) raise nothing — consumers never have to diff two identical payloads to notice nothing changed.",
+        "description": "One message per domain event raised by the DefinePath, RevisePath, DeactivatePath, and DefineCPTSchedule use cases. A no-op revision (RevisePath or DefineCPTSchedule with no actual change) and a no-op deactivation (already-deactivated path) raise nothing — consumers never have to diff two identical payloads to notice nothing changed.\nAdditionally, once at every service start (ADR 0038), after the migrations and before the listener binds, the service re-enqueues its whole CURRENT catalogue through the same transactional outbox: one `ProcessPathUpdated` (the path's full current state) per ACTIVE path, in ascending `path_id` order, then one `CPTScheduleChanged` per site, in ascending `site_id` order. Deactivated paths are not republished. This keeps the topic carrying the current state of every live path and schedule even after the broker's retention expired their original events, so a consumer that rebuilds its catalogue by replaying the topic from the earliest offset never depends on retention. The events are ordinary ones: same types, same `data`, same `dataschema`, no new attribute; applying one for an already-known path or site is an idempotent upsert. The republish is NOT written to the analytics topic.",
         "tags": [
           {
             "name": "process-path"
@@ -353,6 +353,95 @@
                       ]
                     }
                   }
+                },
+                {
+                  "name": "fullCasePathDefined",
+                  "summary": "The FULL_CASE path (ADR 0038): whole-case picking, selectable only for a line carrying the fullCase attribute.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "1b7d4e92-5c68-4f03-a9d1-3e8f6a2c7b15",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processpath.ProcessPathCreated",
+                    "subject": "FULL_CASE",
+                    "time": "2026-10-24T00:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:events:ProcessPathCreated:v1",
+                    "data": {
+                      "path_id": "FULL_CASE",
+                      "match_prefix": "full-case",
+                      "direct": true,
+                      "required_capabilities": [
+                        "pick"
+                      ],
+                      "cycle_time_p95": "1h30m0s",
+                      "eligibility": {
+                        "required_product_attributes": [
+                          "fullCase"
+                        ]
+                      },
+                      "intake": [
+                        "CUSTOMER_ORDER"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "crossDockPathDefined",
+                  "summary": "The CROSS_DOCK path (ADR 0038): receive to ship with no put-away; completed work is destined for Shipping.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "8e3a5c71-2d94-4b60-8f17-5a9c1e4d6b38",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processpath.ProcessPathCreated",
+                    "subject": "CROSS_DOCK",
+                    "time": "2026-10-24T00:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:events:ProcessPathCreated:v1",
+                    "data": {
+                      "path_id": "CROSS_DOCK",
+                      "match_prefix": "cross-dock",
+                      "direct": true,
+                      "required_capabilities": [
+                        "dispatch"
+                      ],
+                      "destination_location_role": "Shipping",
+                      "cycle_time_p95": "1h0m0s",
+                      "eligibility": {
+                        "required_product_attributes": [
+                          "crossDock"
+                        ]
+                      },
+                      "intake": [
+                        "CUSTOMER_ORDER",
+                        "STOCK_TRANSFER"
+                      ]
+                    }
+                  }
+                },
+                {
+                  "name": "breakCasePathDefined",
+                  "summary": "The BREAK_CASE path (ADR 0038): reached only by an explicit path id, never selected for an order line.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "5d2f8b46-7a10-4c93-b2e5-9f6d3a1c8e72",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processpath.ProcessPathCreated",
+                    "subject": "BREAK_CASE",
+                    "time": "2026-10-24T00:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:events:ProcessPathCreated:v1",
+                    "data": {
+                      "path_id": "BREAK_CASE",
+                      "match_prefix": "break",
+                      "direct": true,
+                      "required_capabilities": [
+                        "break"
+                      ],
+                      "cycle_time_p95": "2h0m0s",
+                      "eligibility": {},
+                      "intake": []
+                    }
+                  }
                 }
               ]
             },
@@ -360,7 +449,7 @@
               "name": "ProcessPathUpdated",
               "title": "Process Path Updated",
               "summary": "An Active path's matchPrefix, requiredCapabilities, cycleTimeP95, eligibility, or intake was revised.",
-              "description": "Raised when RevisePath actually changes something. Not raised for a no-op update.",
+              "description": "Raised when RevisePath actually changes something. Not raised for a no-op update. Also published once per ACTIVE path at every service start (ADR 0038), carrying the path's full current state, so the topic holds it regardless of broker retention; consumers upsert it exactly like a revision.",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -491,7 +580,7 @@
               "name": "CPTScheduleChanged",
               "title": "CPT Schedule Changed",
               "summary": "A site's Critical Pull Time (CPT) schedule was defined or revised.",
-              "description": "Raised by DefineCPTSchedule whenever a schedule is first defined or a subsequent revision actually changes something (ADR 0010). Carries the FULL schedule — a snapshot, not a diff — so a fresh consumer replaying from FirstOffset needs no prior state to build its read model, the same self-sufficient-event convention ProcessPathCreated/Updated already use. Keyed by `site_id`, not `path_id` — a different aggregate sharing this topic.",
+              "description": "Raised by DefineCPTSchedule whenever a schedule is first defined or a subsequent revision actually changes something (ADR 0010). Carries the FULL schedule — a snapshot, not a diff — so a fresh consumer replaying from FirstOffset needs no prior state to build its read model, the same self-sufficient-event convention ProcessPathCreated/Updated already use. Keyed by `site_id`, not `path_id` — a different aggregate sharing this topic. Also published once per site at every service start (ADR 0038), with the schedule's current cutoffs, so the topic holds it regardless of broker retention; consumers upsert it as they do a revision.",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -662,7 +751,7 @@
       "publish": {
         "operationId": "publishProcessPathAnalyticsEvents",
         "summary": "Publish the analytics occurrence of every domain event.",
-        "description": "Written in the same outbox transaction as the integration row, sharing its CloudEvents `id`.",
+        "description": "Written in the same outbox transaction as the integration row, sharing its CloudEvents `id`. The startup catalogue republish (ADR 0038) is the one exception: it is not a catalogue change, so it is not written here and never inflates the revised-paths report.",
         "tags": [
           {
             "name": "process-path"

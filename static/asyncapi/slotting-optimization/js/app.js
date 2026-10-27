@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **slotting-optimization** bounded context (WMS\nsubdomain): reviewable plans that assign SKUs to forward pick slots, and the\nhuman decision taken on them (ADR 0001, ADR 0002).\n\n**Published.** The `SlotPlan` aggregate raises three events, published to\n`warehouse.slotting-optimization.events` through a **transactional outbox**:\nthe plan row and its already-encoded events are written in ONE database\ntransaction and a relay drains them to Kafka (at-least-once; the CloudEvents\n`id` is stored with the outbox row, so a retry republishes the same `id`).\n`SlotPlanApproved` carries the FULL forward assignment map and the moves, so\na consumer needs no lookup; `supersedes_plan_id` names the previously\nApproved plan of the site, if any.\n\n**Consumed (ADR 0003).** `SiteSkuDemandChanged` from order-management,\n`ProductClassified`, `ProductDimensionsDeclared` and `ProductMeasured` from\nproduct-master, and `ZoneRegistered`, `LocationSlotRegistered` and\n`LocationSlotDecommissioned` from facility-layout. Each feeds a durable\nlocal copy (modes `DEMAND_MODE`, `PRODUCT_MODE`, `LAYOUT_MODE`, default\n`permissive`; consumer groups from `DEMAND_CONSUMER_GROUP`,\n`PRODUCT_CONSUMER_GROUP`, `LAYOUT_CONSUMER_GROUP`). The consumed messages\nbelow are the producers' own contracts, decoded independently here and never\nimported.\n\n**Analytics (later phase).** `warehouse.slotting-optimization.analytics` is\nreserved for this service's own analytics read side (ADR 0004). Nothing is\npublished there yet, so it is not declared as a channel.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0009); consumers may extract them, and must not require\nthem.\n`specversion`, `id`, `source` (`/warehouse/slotting-optimization`), `type`,\n`subject` (the plan id), `time`, `datacontenttype` (`application/json`) and\n`dataschema` (`urn:warehouse:slotting-optimization:events:<EventName>:v1`)\nare all required. Kafka key = the plan id. Type =\n`com.warehouse.wms.slotting-optimization.slotplan.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
+    "description": "Event catalog for the **slotting-optimization** bounded context (WMS\nsubdomain): reviewable plans that assign SKUs to forward pick slots, and the\nhuman decision taken on them (ADR 0001, ADR 0002).\n\n**Published.** The `SlotPlan` aggregate raises three events, published to\n`warehouse.slotting-optimization.events` through a **transactional outbox**:\nthe plan row and its already-encoded events are written in ONE database\ntransaction and a relay drains them to Kafka (at-least-once; the CloudEvents\n`id` is stored with the outbox row, so a retry republishes the same `id`).\n`SlotPlanApproved` carries the FULL forward assignment map and the moves, so\na consumer needs no lookup; `supersedes_plan_id` names the previously\nApproved plan of the site, if any.\n\n**Consumed (ADR 0003).** `SiteSkuDemandChanged` from order-management,\n`ProductClassified`, `ProductDimensionsDeclared` and `ProductMeasured` from\nproduct-master, and `ZoneRegistered`, `LocationSlotRegistered` and\n`LocationSlotDecommissioned` from facility-layout. Each feeds a durable\nlocal copy (modes `DEMAND_MODE`, `PRODUCT_MODE`, `LAYOUT_MODE`, default\n`permissive`; consumer groups from `DEMAND_CONSUMER_GROUP`,\n`PRODUCT_CONSUMER_GROUP`, `LAYOUT_CONSUMER_GROUP`). The consumed messages\nbelow are the producers' own contracts, decoded independently here and never\nimported.\n\n**Analytics (ADR 0006).** The same three events are ALSO published, in\nthe same transaction and under the same `id` per occurrence, to\n`warehouse.slotting-optimization.analytics` with\n`dataschema urn:warehouse:slotting-optimization:analytics:<EventName>:v1`.\nThat stream is not an integration contract: only this service's own\nprojector (`cmd/slotting-projector`, consumer group from\n`ANALYTICS_CONSUMER_GROUP`) consumes it, folding it into the slot-plan\nfunnel read model; `cmd/slotting-reports` serves the report. Other\ncontexts keep reading `warehouse.slotting-optimization.events`.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0009); consumers may extract them, and must not require\nthem.\n`specversion`, `id`, `source` (`/warehouse/slotting-optimization`), `type`,\n`subject` (the plan id), `time`, `datacontenttype` (`application/json`) and\n`dataschema` (`urn:warehouse:slotting-optimization:<events|analytics>:<EventName>:v1`)\nare all required. Kafka key = the plan id. Type =\n`com.warehouse.wms.slotting-optimization.slotplan.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
   },
   "servers": {
     "production": {
@@ -39,6 +39,10 @@
     {
       "name": "consumed",
       "description": "Events produced by sibling contexts that this service consumes (ADR 0003)."
+    },
+    {
+      "name": "analytics",
+      "description": "This service's own analytics stream and read side (ADR 0006)."
     }
   ],
   "channels": {
@@ -56,6 +60,7 @@
         "message": {
           "oneOf": [
             {
+              "x-no-consumer-reason": "slotting run outcome fact; consumed on demand",
               "name": "SlotPlanGenerated",
               "title": "Slot plan generated",
               "summary": "A Draft slot plan was generated.",
@@ -276,6 +281,21 @@
                                   "type": "string",
                                   "description": "The facility-layout location code of the forward slot.",
                                   "x-parser-schema-id": "<anonymous-schema-27>"
+                                },
+                                "pick_unit": {
+                                  "type": "string",
+                                  "enum": [
+                                    "CASE"
+                                  ],
+                                  "description": "Additive (ADR 0012). Present only for a CASE-pick face; absent means EACH.",
+                                  "x-parser-schema-id": "<anonymous-schema-28>"
+                                },
+                                "cases_capacity": {
+                                  "type": "integer",
+                                  "format": "int64",
+                                  "minimum": 1,
+                                  "description": "Additive (ADR 0012). Whole cases the CASE-pick face holds; present only with pick_unit CASE.",
+                                  "x-parser-schema-id": "<anonymous-schema-29>"
                                 }
                               },
                               "x-parser-schema-id": "SlotAssignment"
@@ -293,17 +313,17 @@
                               "properties": {
                                 "sku": {
                                   "type": "string",
-                                  "x-parser-schema-id": "<anonymous-schema-29>"
+                                  "x-parser-schema-id": "<anonymous-schema-31>"
                                 },
                                 "from_slot": {
                                   "type": "string",
                                   "description": "Omitted for an Assign.",
-                                  "x-parser-schema-id": "<anonymous-schema-30>"
+                                  "x-parser-schema-id": "<anonymous-schema-32>"
                                 },
                                 "to_slot": {
                                   "type": "string",
                                   "description": "Omitted for a Vacate.",
-                                  "x-parser-schema-id": "<anonymous-schema-31>"
+                                  "x-parser-schema-id": "<anonymous-schema-33>"
                                 },
                                 "kind": {
                                   "type": "string",
@@ -312,12 +332,12 @@
                                     "Relocate",
                                     "Vacate"
                                   ],
-                                  "x-parser-schema-id": "<anonymous-schema-32>"
+                                  "x-parser-schema-id": "<anonymous-schema-34>"
                                 }
                               },
                               "x-parser-schema-id": "SlotMove"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-28>"
+                            "x-parser-schema-id": "<anonymous-schema-30>"
                           }
                         },
                         "x-parser-schema-id": "<anonymous-schema-20>"
@@ -380,6 +400,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "slotting run outcome fact (rejection record); consumed on demand",
               "name": "SlotPlanRejected",
               "title": "Slot plan rejected",
               "summary": "A Draft slot plan was rejected.",
@@ -406,28 +427,28 @@
                         "properties": {
                           "plan_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-35>"
+                            "x-parser-schema-id": "<anonymous-schema-37>"
                           },
                           "site_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-36>"
+                            "x-parser-schema-id": "<anonymous-schema-38>"
                           },
                           "rejected_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-37>"
+                            "x-parser-schema-id": "<anonymous-schema-39>"
                           },
                           "reason": {
                             "type": "string",
                             "maxLength": 500,
                             "description": "Omitted when none was given.",
-                            "x-parser-schema-id": "<anonymous-schema-38>"
+                            "x-parser-schema-id": "<anonymous-schema-40>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-34>"
+                        "x-parser-schema-id": "<anonymous-schema-36>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-33>"
+                    "x-parser-schema-id": "<anonymous-schema-35>"
                   }
                 ],
                 "x-parser-schema-id": "SlotPlanRejectedEvent"
@@ -445,6 +466,149 @@
                     "time": "2026-10-08T12:15:00Z",
                     "datacontenttype": "application/json",
                     "dataschema": "urn:warehouse:slotting-optimization:events:SlotPlanRejected:v1",
+                    "data": {
+                      "plan_id": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                      "site_id": "SITE-1",
+                      "rejected_at": "2026-10-08T12:15:00Z",
+                      "reason": "Too many relocations before peak season."
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.slotting-optimization.analytics": {
+      "description": "This service's own analytics stream (ADR 0006), written by the SAME\ntransactional outbox as the integration topic: every published event\nappears here too, under the SAME CloudEvents id and `type`, with only\nthe `dataschema` stream segment different\n(urn:warehouse:slotting-optimization:analytics:<EventName>:v1). It is\nNOT an integration contract: the only consumer is this service's\ncmd/slotting-projector (fixed group from ANALYTICS_CONSUMER_GROUP),\nwhich folds the events into the analytical database; its deterministic\npoison goes to warehouse.slotting-optimization.analytics.dlq. Other\ncontexts keep reading warehouse.slotting-optimization.events.\n",
+      "subscribe": {
+        "operationId": "receiveSlotPlanAnalytics",
+        "summary": "Receive the analytics twin of every SlotPlan event.",
+        "description": "Payloads are byte-for-byte the integration payloads (ADR 0006\nsection 2); only the dataschema names the analytics stream.\n",
+        "tags": [
+          {
+            "name": "analytics"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "SlotPlanGenerated",
+              "title": "Slot plan generated (analytics twin)",
+              "summary": "The analytics-stream twin of SlotPlanGenerated (ADR 0006).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:slotting-optimization:analytics:SlotPlanGenerated:v1`. Consumed only by cmd/slotting-projector.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload",
+              "examples": [
+                {
+                  "name": "generated",
+                  "summary": "The analytics twin of the generated example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1d2c3b-4a5e-4b7c-8d9e-0a1b2c3d4e5f",
+                    "source": "/warehouse/slotting-optimization",
+                    "type": "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanGenerated",
+                    "subject": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                    "time": "2026-10-08T12:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:slotting-optimization:analytics:SlotPlanGenerated:v1",
+                    "data": {
+                      "plan_id": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                      "site_id": "SITE-1",
+                      "window_from": "2026-09-10T12:00:00Z",
+                      "window_to": "2026-10-08T12:00:00Z",
+                      "policy": "abc-velocity-v1",
+                      "assignment_count": 2,
+                      "move_count": 3,
+                      "unassigned_count": 1
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "SlotPlanApproved",
+              "title": "Slot plan approved (analytics twin)",
+              "summary": "The analytics-stream twin of SlotPlanApproved (ADR 0006).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:slotting-optimization:analytics:SlotPlanApproved:v1`. The `supersedes_plan_id`, when present, stamps the SUPERSEDED plan's supersession day in the read model.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[1].payload",
+              "examples": [
+                {
+                  "name": "approvedWithSupersede",
+                  "summary": "The analytics twin of the approved example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "0b9a8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d",
+                    "source": "/warehouse/slotting-optimization",
+                    "type": "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved",
+                    "subject": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                    "time": "2026-10-08T12:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:slotting-optimization:analytics:SlotPlanApproved:v1",
+                    "data": {
+                      "plan_id": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                      "site_id": "SITE-1",
+                      "approved_at": "2026-10-08T12:30:00Z",
+                      "supersedes_plan_id": "plan-8e7d6c5b-4a39-4281-b0c9-d8e7f6a5b4c3",
+                      "assignments": [
+                        {
+                          "sku": "SKU-1",
+                          "slot": "WH1-FWD-A01-01-01-A"
+                        },
+                        {
+                          "sku": "SKU-2",
+                          "slot": "WH1-FWD-A01-01-02-A"
+                        }
+                      ],
+                      "moves": [
+                        {
+                          "sku": "SKU-1",
+                          "to_slot": "WH1-FWD-A01-01-01-A",
+                          "kind": "Assign"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "SlotPlanRejected",
+              "title": "Slot plan rejected (analytics twin)",
+              "summary": "The analytics-stream twin of SlotPlanRejected (ADR 0006).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:slotting-optimization:analytics:SlotPlanRejected:v1`.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[2].payload",
+              "examples": [
+                {
+                  "name": "rejected",
+                  "summary": "The analytics twin of the rejected example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "4d3c2b1a-0f9e-4d8c-8b7a-6f5e4d3c2b1a",
+                    "source": "/warehouse/slotting-optimization",
+                    "type": "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanRejected",
+                    "subject": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                    "time": "2026-10-08T12:15:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:slotting-optimization:analytics:SlotPlanRejected:v1",
                     "data": {
                       "plan_id": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
                       "site_id": "SITE-1",
@@ -502,30 +666,30 @@
                     "properties": {
                       "source_order_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-41>"
+                        "x-parser-schema-id": "<anonymous-schema-43>"
                       },
                       "line_no": {
                         "type": "integer",
                         "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-42>"
+                        "x-parser-schema-id": "<anonymous-schema-44>"
                       },
                       "site_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-43>"
+                        "x-parser-schema-id": "<anonymous-schema-45>"
                       },
                       "sku": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-44>"
+                        "x-parser-schema-id": "<anonymous-schema-46>"
                       },
                       "demanded_units": {
                         "type": "integer",
                         "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-45>"
+                        "x-parser-schema-id": "<anonymous-schema-47>"
                       },
                       "due_at": {
                         "type": "string",
                         "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-46>"
+                        "x-parser-schema-id": "<anonymous-schema-48>"
                       },
                       "state": {
                         "type": "string",
@@ -533,20 +697,20 @@
                           "ACTIVE",
                           "REMOVED"
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-47>"
+                        "x-parser-schema-id": "<anonymous-schema-49>"
                       },
                       "assignment_version": {
                         "type": "string",
                         "enum": [
                           "static-site-v1"
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-48>"
+                        "x-parser-schema-id": "<anonymous-schema-50>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-40>"
+                    "x-parser-schema-id": "<anonymous-schema-42>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-39>"
+                "x-parser-schema-id": "<anonymous-schema-41>"
               }
             ],
             "x-parser-schema-id": "SiteSkuDemandChangedEvent"
@@ -621,7 +785,7 @@
                         "properties": {
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-51>"
+                            "x-parser-schema-id": "<anonymous-schema-53>"
                           },
                           "handling_tags": {
                             "type": "array",
@@ -636,7 +800,7 @@
                               ],
                               "x-parser-schema-id": "HandlingTag"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-52>"
+                            "x-parser-schema-id": "<anonymous-schema-54>"
                           },
                           "temperature_class": {
                             "type": "string",
@@ -645,13 +809,13 @@
                               "Chilled",
                               "Frozen"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-53>"
+                            "x-parser-schema-id": "<anonymous-schema-55>"
                           },
                           "dot_hazard_class": {
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 9,
-                            "x-parser-schema-id": "<anonymous-schema-54>"
+                            "x-parser-schema-id": "<anonymous-schema-56>"
                           },
                           "classification_source": {
                             "type": "string",
@@ -659,18 +823,18 @@
                               "native",
                               "legacy-import"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-55>"
+                            "x-parser-schema-id": "<anonymous-schema-57>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-56>"
+                            "x-parser-schema-id": "<anonymous-schema-58>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-50>"
+                        "x-parser-schema-id": "<anonymous-schema-52>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-49>"
+                    "x-parser-schema-id": "<anonymous-schema-51>"
                   }
                 ],
                 "x-parser-schema-id": "ProductClassifiedEvent"
@@ -730,7 +894,7 @@
                         "properties": {
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-59>"
+                            "x-parser-schema-id": "<anonymous-schema-61>"
                           },
                           "declared": {
                             "type": "object",
@@ -745,27 +909,27 @@
                               "length_mm": {
                                 "type": "integer",
                                 "minimum": 1,
-                                "x-parser-schema-id": "<anonymous-schema-60>"
+                                "x-parser-schema-id": "<anonymous-schema-62>"
                               },
                               "width_mm": {
                                 "type": "integer",
                                 "minimum": 1,
-                                "x-parser-schema-id": "<anonymous-schema-61>"
+                                "x-parser-schema-id": "<anonymous-schema-63>"
                               },
                               "height_mm": {
                                 "type": "integer",
                                 "minimum": 1,
-                                "x-parser-schema-id": "<anonymous-schema-62>"
+                                "x-parser-schema-id": "<anonymous-schema-64>"
                               },
                               "weight_g": {
                                 "type": "integer",
                                 "minimum": 1,
-                                "x-parser-schema-id": "<anonymous-schema-63>"
+                                "x-parser-schema-id": "<anonymous-schema-65>"
                               },
                               "volume_mm3": {
                                 "type": "integer",
                                 "minimum": 1,
-                                "x-parser-schema-id": "<anonymous-schema-64>"
+                                "x-parser-schema-id": "<anonymous-schema-66>"
                               }
                             },
                             "x-parser-schema-id": "Dimensions"
@@ -773,7 +937,7 @@
                           "measured": {
                             "type": "object",
                             "description": "Measured dimensions plus measured_at and an optional device_id (ignored here).",
-                            "x-parser-schema-id": "<anonymous-schema-65>"
+                            "x-parser-schema-id": "<anonymous-schema-67>"
                           },
                           "effective": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[1].payload.allOf[1].properties.data.properties.declared",
                           "effective_source": {
@@ -783,22 +947,22 @@
                               "declared",
                               "none"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-66>"
+                            "x-parser-schema-id": "<anonymous-schema-68>"
                           },
                           "discrepancy": {
                             "type": "boolean",
-                            "x-parser-schema-id": "<anonymous-schema-67>"
+                            "x-parser-schema-id": "<anonymous-schema-69>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-68>"
+                            "x-parser-schema-id": "<anonymous-schema-70>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-58>"
+                        "x-parser-schema-id": "<anonymous-schema-60>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-57>"
+                    "x-parser-schema-id": "<anonymous-schema-59>"
                   }
                 ],
                 "x-parser-schema-id": "PhysicalProfileEvent"
@@ -945,19 +1109,19 @@
                         "properties": {
                           "zoneId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-71>"
+                            "x-parser-schema-id": "<anonymous-schema-73>"
                           },
                           "siteCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-72>"
+                            "x-parser-schema-id": "<anonymous-schema-74>"
                           },
                           "areaCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-73>"
+                            "x-parser-schema-id": "<anonymous-schema-75>"
                           },
                           "zoneCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-74>"
+                            "x-parser-schema-id": "<anonymous-schema-76>"
                           },
                           "temperatureClass": {
                             "type": "string",
@@ -966,17 +1130,17 @@
                               "Chilled",
                               "Frozen"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-75>"
+                            "x-parser-schema-id": "<anonymous-schema-77>"
                           },
                           "hazmat": {
                             "type": "boolean",
-                            "x-parser-schema-id": "<anonymous-schema-76>"
+                            "x-parser-schema-id": "<anonymous-schema-78>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-70>"
+                        "x-parser-schema-id": "<anonymous-schema-72>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-69>"
+                    "x-parser-schema-id": "<anonymous-schema-71>"
                   }
                 ],
                 "x-parser-schema-id": "ZoneRegisteredEvent"
@@ -1039,50 +1203,50 @@
                         "properties": {
                           "locationCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-79>"
+                            "x-parser-schema-id": "<anonymous-schema-81>"
                           },
                           "aisleId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-80>"
+                            "x-parser-schema-id": "<anonymous-schema-82>"
                           },
                           "zoneId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-81>"
+                            "x-parser-schema-id": "<anonymous-schema-83>"
                           },
                           "locationType": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-82>"
+                            "x-parser-schema-id": "<anonymous-schema-84>"
                           },
                           "role": {
                             "type": "string",
                             "description": "Absent means Storage.",
-                            "x-parser-schema-id": "<anonymous-schema-83>"
+                            "x-parser-schema-id": "<anonymous-schema-85>"
                           },
                           "dockFlow": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-84>"
+                            "x-parser-schema-id": "<anonymous-schema-86>"
                           },
                           "activities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-86>"
+                              "x-parser-schema-id": "<anonymous-schema-88>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-85>"
+                            "x-parser-schema-id": "<anonymous-schema-87>"
                           },
                           "maxWeightKg": {
                             "type": "number",
-                            "x-parser-schema-id": "<anonymous-schema-87>"
+                            "x-parser-schema-id": "<anonymous-schema-89>"
                           },
                           "maxVolumeM3": {
                             "type": "number",
-                            "x-parser-schema-id": "<anonymous-schema-88>"
+                            "x-parser-schema-id": "<anonymous-schema-90>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-78>"
+                        "x-parser-schema-id": "<anonymous-schema-80>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-77>"
+                    "x-parser-schema-id": "<anonymous-schema-79>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotRegisteredEvent"
@@ -1141,13 +1305,13 @@
                         "properties": {
                           "locationCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-91>"
+                            "x-parser-schema-id": "<anonymous-schema-93>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-90>"
+                        "x-parser-schema-id": "<anonymous-schema-92>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-89>"
+                    "x-parser-schema-id": "<anonymous-schema-91>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotDecommissionedEvent"
@@ -1226,29 +1390,29 @@
                           "relocation_id": {
                             "type": "string",
                             "description": "The relocation id; recorded once per id.",
-                            "x-parser-schema-id": "<anonymous-schema-94>"
+                            "x-parser-schema-id": "<anonymous-schema-96>"
                           },
                           "site_code": {
                             "type": "string",
                             "description": "The site both bins belong to (this service's site id).",
-                            "x-parser-schema-id": "<anonymous-schema-95>"
+                            "x-parser-schema-id": "<anonymous-schema-97>"
                           },
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-96>"
+                            "x-parser-schema-id": "<anonymous-schema-98>"
                           },
                           "from_bin": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-97>"
+                            "x-parser-schema-id": "<anonymous-schema-99>"
                           },
                           "to_bin": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-98>"
+                            "x-parser-schema-id": "<anonymous-schema-100>"
                           },
                           "quantity": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-99>"
+                            "x-parser-schema-id": "<anonymous-schema-101>"
                           },
                           "reason": {
                             "type": "string",
@@ -1259,24 +1423,24 @@
                               "REPLENISHMENT"
                             ],
                             "description": "Only SLOTTING can execute a slot-plan move; every other reason (including REPLENISHMENT, added by pick-face-replenishment's REPLENISH tasks) is recorded as unmatched with reason=reason-not-slotting.",
-                            "x-parser-schema-id": "<anonymous-schema-100>"
+                            "x-parser-schema-id": "<anonymous-schema-102>"
                           },
                           "source_ref": {
                             "type": "string",
                             "maxLength": 200,
                             "description": "`<plan_id>:<move_seq>` on slot-plan moves (matched first); a task id, a ticket or \"\" otherwise.",
-                            "x-parser-schema-id": "<anonymous-schema-101>"
+                            "x-parser-schema-id": "<anonymous-schema-103>"
                           },
                           "occurred_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-102>"
+                            "x-parser-schema-id": "<anonymous-schema-104>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-93>"
+                        "x-parser-schema-id": "<anonymous-schema-95>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-92>"
+                    "x-parser-schema-id": "<anonymous-schema-94>"
                   }
                 ],
                 "x-parser-schema-id": "StockRelocatedEvent"
@@ -1326,7 +1490,10 @@
       "ZoneRegistered": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[0]",
       "LocationSlotRegistered": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1]",
       "LocationSlotDecommissioned": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[2]",
-      "StockRelocated": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0]"
+      "StockRelocated": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0]",
+      "SlotPlanGeneratedAnalytics": "$ref:$.channels.warehouse.slotting-optimization.analytics.subscribe.message.oneOf[0]",
+      "SlotPlanApprovedAnalytics": "$ref:$.channels.warehouse.slotting-optimization.analytics.subscribe.message.oneOf[1]",
+      "SlotPlanRejectedAnalytics": "$ref:$.channels.warehouse.slotting-optimization.analytics.subscribe.message.oneOf[2]"
     },
     "schemas": {
       "CloudEventEnvelope": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
