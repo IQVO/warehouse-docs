@@ -1794,21 +1794,21 @@ contexts:
       - {event: CatalogItemPackLevelRetired, from: offer-availability}
     sync_calls: []
     ul:
-      - {term: Seller, definition: "An organisation that sends its own stock to the network. Distinct from a Vendor, which operates fulfillment nodes.", code: "seller.SellerAccount"}
-      - {term: "Owner / Seller of Record", definition: "Whose stock it is. On the network ownerRef equals the sellerId; stock, listings and reservations are segregated by it.", code: "seller.OwnerRef"}
-      - {term: Inbound Plan, definition: "A seller's declaration, in eaches, of what it will send to one node and with which packing option.", code: "inbound.InboundPlan"}
-      - {term: Inbound Shipment, definition: "One physical consignment of a plan to a node: its cartons, labels and receipt outcome.", code: "inbound.InboundShipment"}
-      - {term: Carton, definition: "One physical outer carton of a shipment, identified by an SSCC and holding the contents it declares.", code: "inbound.Carton"}
-      - {term: Packing Option, definition: "INDIVIDUAL (eaches packed freely) or CASE_PACKED (cartons are case packs of a declared CASE level).", code: "inbound.PackingOption"}
+      - {term: Seller, definition: "An organisation that sends its own stock to the network. Distinct from a Vendor, which operates fulfillment nodes.", code: "seller.Account"}
+      - {term: "Owner / Seller of Record", definition: "Whose stock it is. On the network ownerRef equals the sellerId; stock, listings and reservations are segregated by it.", code: "seller.ID (shared.ValidOwnerRef)"}
+      - {term: Inbound Plan, definition: "A seller's declaration, in eaches, of what it will send to one node and with which packing option.", code: "inboundplan.Plan"}
+      - {term: Inbound Shipment, definition: "One physical consignment of a plan to a node: its cartons, labels and receipt outcome.", code: "inboundshipment.Shipment"}
+      - {term: Carton, definition: "One physical outer carton of a shipment, identified by an SSCC and holding the contents it declares.", code: "inboundshipment.Carton"}
+      - {term: Packing Option, definition: "INDIVIDUAL (eaches packed freely) or CASE_PACKED (cartons are case packs of a declared CASE level).", code: "inboundplan.PackingOption"}
       - {term: Each, definition: "The lowest packaging level, intended for individual resale and the unit of every quantity in the network's ledgers.", code: "catalog.PackLevel.EACH"}
       - {term: Inner Pack, definition: "An intermediate package of several eaches of one item. In the model but not used by any flow in the first version.", code: "catalog.PackLevel.INNER"}
       - {term: Case Pack, definition: "The quantity of eaches in one case of an item (unitsPerPack). Fixed by the case's GTIN; a different quantity needs a different GTIN.", code: "catalog.PackLevelDef.UnitsPerPack"}
-      - {term: Master Carton, definition: "An outer carton holding one case: identical sellable units of one item, labelled with an SSCC. A HOMOGENEOUS_CASE carton in the model.", code: "inbound.Carton (kind HOMOGENEOUS_CASE)"}
-      - {term: Mixed Carton, definition: "A carton holding more than one item. It has no pack GTIN: it is a logistic unit identified by its SSCC and carton manifest only.", code: "inbound.Carton (kind MIXED)"}
-      - {term: GTIN, definition: "The global trade item number identifying an item at one packaging level. Stored as 14 digits, zero-left-padded; accepted as 8, 12, 13 or 14 digits with a valid check digit.", code: "catalog.Gtin"}
-      - {term: EAN, definition: "A 13-digit GTIN as printed on a consumer unit. Treated as a GTIN input like any other length.", code: "catalog.Gtin"}
-      - {term: SSCC, definition: "The 18-digit serial shipping container code identifying one logistic unit. Unique network-wide, with a mod-10 check digit.", code: "inbound.Sscc"}
-      - {term: Logistic Unit, definition: "Any combination of items packed for transport or storage and identified by an SSCC, such as a carton or a pallet.", code: "inbound.Carton"}
+      - {term: Master Carton, definition: "An outer carton holding one case: identical sellable units of one item, labelled with an SSCC. A HOMOGENEOUS_CASE carton in the model.", code: "inboundshipment.Carton (kind HOMOGENEOUS_CASE)"}
+      - {term: Mixed Carton, definition: "A carton holding more than one item. It has no pack GTIN: it is a logistic unit identified by its SSCC and carton manifest only.", code: "inboundshipment.Carton (kind MIXED)"}
+      - {term: GTIN, definition: "The global trade item number identifying an item at one packaging level. Stored as 14 digits, zero-left-padded; accepted as 8, 12, 13 or 14 digits with a valid check digit.", code: "gs1.GTIN"}
+      - {term: EAN, definition: "A 13-digit GTIN as printed on a consumer unit. Treated as a GTIN input like any other length.", code: "gs1.GTIN"}
+      - {term: SSCC, definition: "The 18-digit serial shipping container code identifying one logistic unit. Unique network-wide, with a mod-10 check digit.", code: "gs1.SSCC"}
+      - {term: Logistic Unit, definition: "Any combination of items packed for transport or storage and identified by an SSCC, such as a carton or a pallet.", code: "inboundshipment.Carton"}
       - {term: Break Case, definition: "Opening a sealed case at a vendor node to release its eaches. A vendor-node operation, not a network event; quantities stay in eaches.", code: "(vendor node operation, not modelled)"}
 
 # ---------------------------------------------------------------------------

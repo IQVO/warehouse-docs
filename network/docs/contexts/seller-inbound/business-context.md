@@ -7,8 +7,8 @@ description: "Why the network needs a seller inbound front door, who uses it, th
 
 # Business Context
 
-:::info[Proposed design]
-Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). Nothing in this context is built yet, and unlike the other ten contexts it has no reference service: it is design only ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)). Identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built ([`IQVO/seller-inbound`](https://github.com/IQVO/seller-inbound), designed by [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)); the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. Where the model left a choice open, the service's own ADRs 0002 to 0005 record what it does.
 :::
 
 ## The problem
@@ -34,8 +34,8 @@ level above the base unit
 A logistic unit such as a case, pallet or parcel is identified by an SSCC
 ([GS1, SSCC](https://www.gs1.org/standards/id-keys/sscc)).
 
-Everything else on this page is the **proposed model**, not a claim about
-any operator.
+Everything else on this page is **this model** (built by the
+`seller-inbound` service), not a claim about any operator.
 
 **Seller Inbound** answers: *what is this seller sending, to which node, in
 which cartons, and did it arrive as declared?*

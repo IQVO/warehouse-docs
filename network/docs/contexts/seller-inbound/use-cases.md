@@ -2,20 +2,22 @@
 id: use-cases
 title: Use Cases
 sidebar_label: Use Cases
-description: "One proposed application service per Seller Inbound command, with preconditions, main flow, errors mapped to HTTP, events and idempotency."
+description: "One application service per Seller Inbound command, with preconditions, main flow, errors mapped to HTTP, events and idempotency."
 ---
 
 # Use Cases
 
-:::info[Proposed design]
-Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). Nothing in this context is built yet, and unlike the other ten contexts it has no reference service: it is design only ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)). Identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built ([`IQVO/seller-inbound`](https://github.com/IQVO/seller-inbound), designed by [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)); the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. Where the model left a choice open, the service's own ADRs 0002 to 0005 record what it does.
 :::
 
-One proposed application service per command in
+One application service per command in
 `contexts[seller-inbound].aggregates[*].commands`, under
 `internal/application/usecases`. Runtime views of the key ones are on
 [Sequence Diagrams](/network/contexts/seller-inbound/sequence-diagrams).
-Reads (`GetInboundShipment`, `GetLabels`) go straight to the repository.
+Reads (`GetInboundPlan`, `GetInboundShipment`, `GetLabels`) go straight to the repository;
+`GetSellerScorecard` (`GET /sellers/{sellerId}/scorecard`, service ADR 0005) computes an
+informational scorecard from this service's own facts and changes nothing.
 
 ## Conventions for every use case
 
@@ -32,7 +34,7 @@ Reads (`GetInboundShipment`, `GetLabels`) go straight to the repository.
 | --- | --- | --- |
 | `ErrSellerExists` | 409 | `seller-exists` |
 | `ErrSellerSuspended` | 409 | `seller-suspended` |
-| `ErrNodeCannotReceive` | 422 | `node-cannot-receive` |
+| `ErrNodeCannotReceive` | 409 | `node-cannot-receive` |
 | `ErrCasePackNotUniform` | 422 | `case-pack-not-uniform` |
 | `ErrCaseQtyMismatchesGtin` | 422 | `case-qty-mismatches-gtin` |
 | `ErrCartonOverweight` | 422 | `carton-overweight` |
@@ -41,6 +43,7 @@ Reads (`GetInboundShipment`, `GetLabels`) go straight to the repository.
 | `ErrInvalidSscc` | 422 | `invalid-sscc` |
 | `ErrCartonContentsMismatchPlan` | 422 | `carton-contents-mismatch-plan` |
 | `ErrShipmentNotLabelled` | 409 | `shipment-not-labelled` |
+| `ErrInvalidWindow` (scorecard read) | 400 | `invalid-window` |
 | `ErrValidation`, `ErrNotFound`, `ErrIllegalTransition`, `ErrConcurrentUpdate` | 422, 404, 409, 409 | the shared slugs from `conventions.errors` |
 
 ## OnboardSeller
@@ -67,8 +70,9 @@ Reads (`GetInboundShipment`, `GetLabels`) go straight to the repository.
 - **Actor:** seller. REST `POST /inbound-plans`.
 - **Preconditions:** seller `ACTIVE`; destination node `ACTIVE` with `INBOUND`
   in `NodeInboundView`.
-- **Flow:** validate each line (live catalogue item in `CatalogPackagingView`,
-  GTIN of 8, 12, 13 or 14 digits with a valid check digit, normalised to
+- **Flow:** validate each line (1 to 500 lines, one per catalogue item; whether
+  the item is live is not checked, since no `CatalogItemCreated` or
+  `CatalogItemDiscontinued` is consumed; GTIN of 8, 12, 13 or 14 digits with a valid check digit, normalised to
   14 digits, `qtyEaches > 0`); if `CASE_PACKED`, each line's item must have an
   active CASE level. Save `DRAFT`.
 - **Errors:** `ErrSellerSuspended`, `ErrNodeCannotReceive`, `ErrValidation`.
@@ -96,8 +100,9 @@ Reads (`GetInboundShipment`, `GetLabels`) go straight to the repository.
   1. Validate contents (GTINs, `qtyEaches > 0`, optional `lot` up to 20
      characters and `expiry` date).
   2. `HOMOGENEOUS_CASE`: one item, `gtin` is the CASE-level GTIN, `qtyEaches`
-     equals its `unitsPerPack` (`ErrCaseQtyMismatchesGtin`), and equals the
-     other cartons of that item (`ErrCasePackNotUniform`). `MIXED`: contents are
+     equals the `unitsPerPack` of the item's active CASE level
+     (`ErrCaseQtyMismatchesGtin`); the carton holds exactly one item, one GTIN
+     and one quantity (`ErrCasePackNotUniform`). `MIXED`: contents are
      each-level GTINs and the carton gets no pack GTIN.
   3. Check weight and dimensions against the node's `inbound` limits.
   4. SSCC: a supplied one must be valid and unique (`SsccIssuance`); otherwise
@@ -113,9 +118,9 @@ Reads (`GetInboundShipment`, `GetLabels`) go straight to the repository.
 ## LabelShipment
 
 - **REST:** `POST /inbound-shipments/{shipmentId}:label`.
-- **Flow:** `DRAFT → LABELLED`. Checks that contents, summed per item over the
-  plan's shipments, do not exceed the plan lines (and equal them for a
-  single-shipment plan). After this, `GET .../labels` returns one printable
+- **Flow:** `DRAFT → LABELLED`. Checks that the eaches per item and GTIN over
+  this shipment's cartons equal the confirmed plan's lines, every line exactly
+  and no extra item (service ADR 0002 A10). After this, `GET .../labels` returns one printable
   label per carton.
 - **Errors:** `ErrCartonContentsMismatchPlan`, `ErrSellerSuspended`, `ErrIllegalTransition`.
 - **Events:** `InboundShipmentLabelled` (the carton manifest, with contents, weights and sizes).

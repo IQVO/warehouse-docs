@@ -7,8 +7,8 @@ description: "The ddd-crew Bounded Context Canvas for Seller Inbound: purpose, r
 
 # Bounded Context Canvas
 
-:::info[Proposed design]
-Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). Nothing in this context is built yet, and unlike the other ten contexts it has no reference service: it is design only ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)). Identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built ([`IQVO/seller-inbound`](https://github.com/IQVO/seller-inbound), designed by [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)); the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. Where the model left a choice open, the service's own ADRs 0002 to 0005 record what it does.
 :::
 
 Following the ddd-crew [Bounded Context Canvas](https://github.com/ddd-crew/bounded-context-canvas).
@@ -64,10 +64,11 @@ Service), Enforcer (carton and label compliance).
 | network partner managers | command | `SuspendSeller`, `ReinstateSeller` | REST `POST /sellers/{sellerId}:suspend`, `:reinstate` | UI |
 | seller / seller portal | command | `CreateInboundPlan`, `ConfirmInboundPlan`, `CancelInboundPlan` | REST `POST /inbound-plans`, `:confirm`, `:cancel` | OHS |
 | seller / seller portal | command | `CreateInboundShipment`, `AddCarton`, `LabelShipment`, `ShipInboundShipment` | REST `POST /inbound-plans/{planId}/shipments`, `POST /inbound-shipments/{shipmentId}/cartons`, `:label`, `:ship` | OHS |
-| seller / seller portal | query | `GetInboundShipment`, `GetLabels` | REST `GET /inbound-shipments/{shipmentId}`, `.../labels` | OHS |
+| seller / seller portal | query | `GetInboundPlan`, `GetInboundShipment`, `GetLabels` | REST `GET /inbound-plans/{planId}`, `GET /inbound-shipments/{shipmentId}`, `.../labels` | OHS |
+| seller / seller portal, network partner managers | query | `GetSellerScorecard` (informational) | REST `GET /sellers/{sellerId}/scorecard?window=7d` or `30d` | OHS |
 | `vendor-connectivity` | event | `InboundReceiptSubmitted` | Kafka `retailnetwork.vendor-connectivity.events` | Customer/Supplier |
 | `node-topology` | event | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | Kafka `retailnetwork.node-topology.events` | Conformist |
-| `offer-availability` | event | `CatalogItemCreated`, `CatalogItemDiscontinued`, `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | Kafka `retailnetwork.offer-availability.events` | Conformist |
+| `offer-availability` | event | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | Kafka `retailnetwork.offer-availability.events` | Conformist |
 
 All write routes take an `Idempotency-Key`. No authentication, as in every
 other context (`conventions.no_auth`).
@@ -105,12 +106,17 @@ The rules as policies: `SsccIssuance`, `NodeMustBeAbleToReceive`,
 
 ## 10. Verification metrics
 
-Proposed, not built: share of shipments `CLOSED` without discrepancy;
-share of cartons whose SSCC was network-issued; time from `SHIPPED` to the
-first receipt; share of case-packed cartons refused at `AddCarton`.
+As built: the Tier-2 counter `seller_inbound.shipment.shipped` (attribute
+`outcome` `shipped` or `rejected`, `reason` the problem slug; service ADR 0008)
+and the per-seller scorecard (`receiptAccuracyRate`,
+`discrepancyRatePerShipment`, `discrepanciesByKind`, `complianceViolations`,
+`complianceTier`; service ADR 0005). Not built: share of cartons whose SSCC
+was network-issued; time from `SHIPPED` to the first receipt; share of
+case-packed cartons refused at `AddCarton`.
 
 ## 11. Open questions
 
 See the gap register, [G41 to G55](/network/strategic-design/model-gap-register#introduced-by-seller-inbound-and-case-packed-shipments):
-commingling, compliance scoring, inbound freight, EDI adapters, FEFO, who
+commingling, compliance scoring beyond the informational scorecard (nothing
+acts on its tier), inbound freight, EDI adapters, FEFO, who
 creates owner-scoped listings from received stock, pallets and inner packs.

@@ -2,18 +2,23 @@
 id: class-diagram
 title: Class Diagram
 sidebar_label: Class Diagram
-description: "UML class diagrams of the proposed Seller Inbound domain model and its hexagonal layout."
+description: "UML class diagrams of the Seller Inbound domain model (design pack) and its hexagonal layout, with the as-built package names."
 ---
 
 # Class Diagram
 
-:::info[Proposed design]
-Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). Nothing in this context is built yet, and unlike the other ten contexts it has no reference service: it is design only ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)). Identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built ([`IQVO/seller-inbound`](https://github.com/IQVO/seller-inbound), designed by [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)); the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. Where the model left a choice open, the service's own ADRs 0002 to 0005 record what it does.
 :::
 
-UML class diagrams of the **proposed** Go domain model in
-`internal/domain/seller` and `internal/domain/inbound`. Fields are shown
-unexported (`-`), methods exported (`+`).
+UML class diagrams of the domain model as the design pack drew it. Fields are
+shown unexported (`-`), methods exported (`+`). As built, the service splits
+it into `internal/domain/seller` (`Account`), `internal/domain/inboundplan`
+(`Plan`), `internal/domain/inboundshipment` (`Shipment`, `Carton`, `Receipt`),
+`internal/domain/network` (the read-model value types), `internal/domain/scorecard`
+(the informational seller scorecard) and `internal/domain/shared/gs1` (`GTIN`,
+`SSCC`); the class names below are the model's names, the Go types are on
+[Ubiquitous Language](/network/contexts/seller-inbound/ubiquitous-language).
 
 ## 1. InboundShipment aggregate
 

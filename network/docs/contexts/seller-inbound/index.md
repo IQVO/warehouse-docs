@@ -2,19 +2,19 @@
 id: index
 title: Seller Inbound
 sidebar_label: Seller Inbound
-description: "The proposed Supporting partner-tier context where sellers plan, pack, label and ship stock to vendor nodes, including case-packed master cartons identified by SSCC."
+description: "The Supporting partner-tier context where sellers plan, pack, label and ship stock to vendor nodes, including case-packed master cartons identified by SSCC."
 ---
 
 # Seller Inbound
 
-:::info[Proposed design]
-Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). Nothing in this context is built yet, and unlike the other ten contexts it has no reference service: it is design only ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)). Identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built ([`IQVO/seller-inbound`](https://github.com/IQVO/seller-inbound), designed by [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)); the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. Where the model left a choice open, the service's own ADRs 0002 to 0005 record what it does.
 :::
 
 <span className="badge-supporting">Supporting</span>
 
 **Seller Inbound** (`seller-inbound`, code `SI`, tier `partner`) is the
-proposed front door for stock that **sellers** send to the network. A seller
+front door for stock that **sellers** send to the network. A seller
 declares an **inbound plan** in eaches, packs it into **cartons** that each
 carry an **SSCC** and a printed label, and ships it to a vendor node. Cartons
 may be **case-packed** (a *master carton* holding one item at the quantity of
@@ -36,12 +36,12 @@ Vendor API of `vendor-connectivity` remains the only channel.
 | [Bounded Context Canvas](/network/contexts/seller-inbound/bounded-context-canvas) | Purpose, roles, inbound and outbound messages, decisions | [bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas) |
 | [Context Map](/network/contexts/seller-inbound/context-map) | Every neighbour with direction and pattern | [context-mapping](https://github.com/ddd-crew/context-mapping) |
 | [Aggregate Design Canvas](/network/contexts/seller-inbound/aggregate-design-canvas) | `SellerAccount`, `InboundPlan`, `InboundShipment` with `Carton` | [aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas) |
-| [Domain Events](/network/contexts/seller-inbound/domain-events) | Nine published events, ten consumed | — |
+| [Domain Events](/network/contexts/seller-inbound/domain-events) | Nine published events, eight consumed | — |
 | [Domain Message Flow](/network/contexts/seller-inbound/domain-message-flow) | Case-packed happy path, discrepancy, SSCC issuance | [domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
 | [EventStorming](/network/contexts/seller-inbound/eventstorming) | Process-level boards with hotspots | [eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
 | [Use Cases](/network/contexts/seller-inbound/use-cases) | One section per command, errors mapped to HTTP | — |
-| [Class Diagram](/network/contexts/seller-inbound/class-diagram) | Proposed domain types | — |
-| [Entity Relationship](/network/contexts/seller-inbound/entity-relationship) | Proposed Postgres schema | — |
+| [Class Diagram](/network/contexts/seller-inbound/class-diagram) | Domain types (design pack; packages as built are listed on the aggregate canvas) | — |
+| [Entity Relationship](/network/contexts/seller-inbound/entity-relationship) | The as-built Postgres schema (migrations 0001 and 0002) | — |
 | [Sequence Diagrams](/network/contexts/seller-inbound/sequence-diagrams) | One runtime sequence per key command | — |
 
 ## Service and operations
@@ -71,6 +71,16 @@ Vendor API of `vendor-connectivity` remains the only channel.
   [Vendor API](/network/integration/vendor-api).
 - What this design does not solve:
   [Model gap register](/network/strategic-design/model-gap-register), G41 to G55.
-- There is no OpenAPI file for the seller-facing routes yet; the routes are
-  listed in `contexts[seller-inbound].rest` in the model.
+- The seller-facing REST contract (as built, from the service repository):
+  `network/apis/seller-inbound/openapi.yaml`, rendered under the
+  [API reference](/network/api-reference): 14 operations, including
+  `GET /inbound-plans/{planId}` and the informational
+  `GET /sellers/{sellerId}/scorecard` (service ADR 0005).
+- Read-only MCP server (service ADR 0006): `cmd/mcp`, a second binary serving Streamable HTTP
+  on `:8090` with no auth; it sources this context's own reads and nothing that writes. Four
+  tools: `get_inbound_plan`, `get_inbound_shipment`, `get_seller_scorecard`,
+  `get_shipment_labels`. The gateway (Kong) exposes it at `/api/mcp/seller-inbound`.
+- Console remote (service ADR 0007): `web/`, a Vite + React Module Federation remote —
+  federation container `seller_inbound_mfe`, gateway mount `/mfes/seller-inbound/`,
+  dev/preview port `4022`.
 - Where the context sits among the eleven: [Context Map](/network/strategic-design/context-map).
