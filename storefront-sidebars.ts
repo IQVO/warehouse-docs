@@ -1,8 +1,10 @@
 import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 
 /**
- * Storefront docs instance sidebars. Contexts get their 14-page ddd-crew
- * pack one per wave; a context with a pack gets its own category below.
+ * Storefront docs instance sidebars. Every context carries its 14-page
+ * ddd-crew pack (one category each below). storefront-bff, storefront-web and
+ * payment-provider-simulator are not bounded contexts: they share the
+ * `components` page, and every repo's ADRs are indexed on `adr/index`.
  */
 const CONTEXTS = [
   'pricing',
@@ -60,6 +62,8 @@ const apiCategories = CONTEXTS.map((ctx) => ({
 const sidebars: SidebarsConfig = {
   strategicSidebar: [
     'overview',
+    'components',
+    'adr/index',
     {
       type: 'category',
       label: 'Strategic Design',
