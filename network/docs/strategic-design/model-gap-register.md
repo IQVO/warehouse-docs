@@ -8,7 +8,7 @@ description: "Every gap the per-context packs found in model/model.yaml, dedupli
 # Model Gap Register
 
 The ten context packs were written strictly from
-[`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml).
+[`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml).
 Where the model was silent or contradicted itself, the pack did not invent an
 answer: it marked the choice "proposed" or "this pack's reading" on the page and
 reported a gap. 2026-10-22 produced about 140 reports. This page holds them

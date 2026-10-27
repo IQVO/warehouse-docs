@@ -8,7 +8,7 @@ description: "The six node types, who operates them, the declared operational pr
 # Node model
 
 :::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml)
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml)
 → `node_types`, `lane_rules`, `fleet_site_role_mapping` and
 `contexts[node-topology]`. The building types are grounded on
 public fulfillment-network research; the

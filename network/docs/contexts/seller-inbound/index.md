@@ -8,7 +8,7 @@ description: "The proposed Supporting partner-tier context where sellers plan, p
 # Seller Inbound
 
 :::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet, and unlike the other ten contexts it has no reference service: it is design only ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)). Identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). Nothing in this context is built yet, and unlike the other ten contexts it has no reference service: it is design only ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)). Identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
 :::
 
 <span className="badge-supporting">Supporting</span>
@@ -43,6 +43,24 @@ Vendor API of `vendor-connectivity` remains the only channel.
 | [Class Diagram](/network/contexts/seller-inbound/class-diagram) | Proposed domain types | — |
 | [Entity Relationship](/network/contexts/seller-inbound/entity-relationship) | Proposed Postgres schema | — |
 | [Sequence Diagrams](/network/contexts/seller-inbound/sequence-diagrams) | One runtime sequence per key command | — |
+
+## Service and operations
+
+- **Service:** [`IQVO/seller-inbound`](https://github.com/IQVO/seller-inbound) on `develop` (`3a23fb2`,
+  2026-10-26): binaries `cmd/api` (REST) and `cmd/mcp` (read-only MCP), and the console
+  remote in `web/`.
+- **Deployment:** wired in warehouse-infra develop: a `terraform/apps.yaml` entry
+  (`database: true`, `frontend_remote: seller_inbound_mfe`) and `helm-values/seller-inbound.yaml`
+  (MCP enabled, gateway path `/api/mcp/seller-inbound`). The cluster itself was not checked in this
+  refresh.
+- **Observability:** [service ADR 0008](https://github.com/IQVO/seller-inbound/blob/develop/docs/adr/0008-fleet-observability-standard.md),
+  *Adopt the fleet observability standard*, Accepted 2026-10-26. Logs, metrics and traces leave
+  over OTLP to the otel-collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, chart default
+  `otel-collector.observability.svc.cluster.local:4317`; `OTEL_SERVICE_NAME`). The Tier-2
+  business counter is `seller_inbound.shipment.shipped` (unit `{shipment}`, in
+  `internal/adapters/outbound/telemetry/shipment_metrics.go`), with attribute `outcome` = `shipped` or `rejected` and
+  `reason` on the outcomes that are not a success. The dashboard queries it as `seller_inbound_shipment_shipped_total` in warehouse-infra's
+  `terraform/dashboards/contexts/seller-inbound.json`, by `outcome`.
 
 ## Elsewhere
 

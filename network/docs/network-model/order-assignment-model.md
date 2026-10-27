@@ -8,7 +8,7 @@ description: "How order-sourcing keeps each shipment group in a virtual queue, r
 # Order assignment model
 
 :::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml)
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml)
 → `contexts[order-sourcing]`, `contexts[vendor-connectivity]`. Owner:
 [`order-sourcing`](/network/contexts/order-sourcing) (Core). The published fact
 behind it: A large-scale operator assigns items to fulfillment centres and paths after

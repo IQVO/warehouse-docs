@@ -13,7 +13,7 @@ compared page for page: business context, ubiquitous language, core domain
 chart, bounded context canvas, context map, aggregate design canvas, domain
 events, domain message flow, EventStorming, use cases, class diagram, entity
 relationship and sequence diagrams. All are derived from
-[`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml).
+[`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml).
 
 | Context | Classification | Tier | Aggregates | Events published | Events consumed |
 | --- | --- | --- | --- | --- | --- |

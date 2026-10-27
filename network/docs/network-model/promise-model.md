@@ -8,7 +8,7 @@ description: "How the network quotes a delivery offer and makes a promise: the i
 # Promise model
 
 :::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml)
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml)
 → `contexts[delivery-promise]`, `service_tiers`. Owner:
 [`delivery-promise`](/network/contexts/delivery-promise) (Core). The public facts it
 rests on (a promise from network state and a feasible path; assignment later
