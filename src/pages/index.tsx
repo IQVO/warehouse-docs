@@ -79,6 +79,19 @@ const SECTIONS = [
       {label: 'WMS/WES Integration', to: '/network/integration/wms-wes-integration'},
     ],
   },
+  {
+    key: 'storefront',
+    name: 'Digital Storefront',
+    tagline: 'The e-commerce storefront on the retail network',
+    description:
+      'Six bounded contexts (pricing, product content, product discovery, shopping cart, checkout, customer payments) plus the storefront-bff edge, the React SSR web app and a payment-provider simulator. Built on develop, not deployed yet. Source of truth: the storefront domain model.',
+    links: [
+      {label: 'Storefront Overview', to: '/storefront'},
+      {label: 'Context Map', to: '/storefront/strategic-design/context-map'},
+      {label: 'Bounded Contexts', to: '/storefront/contexts'},
+      {label: 'API Reference', to: '/storefront/api-reference'},
+    ],
+  },
 ];
 
 function HomepageHeader() {

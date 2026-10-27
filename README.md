@@ -66,6 +66,19 @@ Live site: https://iqvo.github.io/warehouse-docs/
   The network REST reference is generated at build time (gitignored), unlike
   the committed fleet reference. Gates: `npm run check:model:network` and
   `npm run check:pages:network`.
+- **Digital Storefront** (`storefront/`, served at `/storefront/`): the
+  e-commerce storefront on top of the retail network. Six bounded contexts
+  (`pricing`, `product-content`, `product-discovery`, `shopping-cart`,
+  `checkout`, `customer-payments`), each a service repo built on `develop` and
+  not deployed yet (no warehouse-infra `terraform/apps.yaml` entry), plus
+  `storefront-bff` (the only storefront edge), `storefront-web` (React SSR) and
+  `payment-provider-simulator`. Same shape as the network section: the source
+  of truth is `storefront/model/model.yaml`, the `storefront/docs/strategic-design/`
+  pages it feeds are regenerated via `storefront/scripts/gen_pages.py`, the
+  14-page context packs are written here, `storefront/apis/<repo>/openapi.yaml`
+  are copies of each service's spec (six contexts plus the BFF), and the REST
+  reference is generated at build time (gitignored). Gates:
+  `npm run check:model:storefront` and `npm run check:pages:storefront`.
 
 Every Kafka message in the fleet is a CloudEvents 1.0 event in structured
 content mode. REST and MCP surfaces are unauthenticated fleet-wide. All
