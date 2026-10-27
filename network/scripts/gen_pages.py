@@ -24,7 +24,7 @@ CODE = {c["id"]: c["code"] for c in M["contexts"]}
 CLS = {c["id"]: c["classification"] for c in M["contexts"]}
 
 BANNER = """:::info[Generated from the model]
-This page is generated from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml) by `scripts/gen_pages.py`. Edit the model, then regenerate; CI fails when the page and the model disagree.
+This page is generated from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml) by `network/scripts/gen_pages.py`. Edit the model, then regenerate; CI fails when the page and the model disagree.
 :::
 """
 

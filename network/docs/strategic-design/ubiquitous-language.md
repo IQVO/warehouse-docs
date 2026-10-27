@@ -8,7 +8,7 @@ description: "Every term of the retail-network domain, the context that owns it,
 # Ubiquitous Language
 
 :::info[Generated from the model]
-This page is generated from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml) by `scripts/gen_pages.py`. Edit the model, then regenerate; CI fails when the page and the model disagree.
+This page is generated from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml) by `network/scripts/gen_pages.py`. Edit the model, then regenerate; CI fails when the page and the model disagree.
 :::
 
 
