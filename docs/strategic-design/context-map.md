@@ -215,14 +215,13 @@ flowchart LR
     %% product-master (ADR 0001, 0003). The four Published Language edges are
     %% live in the reference deployment: every consumer keeps a version-guarded
     %% local copy (INV ADR 0034, OM ADR 0036, WP ADR 0035, FE ADR 0039). They
-    %% replaced the REST classification lookups R2, R3 and R4. Delete the
-    %% INV -.-> PM migration edge at stage E, when the legacy importer is
-    %% removed.
+    %% replaced the REST classification lookups R2, R3 and R4. The INV -> PM
+    %% migration edge (K21) was deleted: stage E removed the legacy importer
+    %% on 2026-10-17 (product-master ADR 0003).
     PM ==>|"Kafka ProductClassified,<br/>local copy"| INV
     PM ==>|"Kafka ProductClassified,<br/>local copy"| OM
     PM ==>|"Kafka ProductClassified,<br/>local copy"| WP
     PM ==>|"Kafka ProductClassified,<br/>local copy"| FE
-    INV -.->|"Kafka legacy ProductClassified,<br/>Conformist, migration only"| PM
 
     %% inbound-receiving and slotting-optimization (decided 2026-10-08, both
     %% built). inbound-receiving runs in the reference deployment in kafka mode
@@ -311,9 +310,8 @@ flowchart LR
 structured mode on one shared broker). Thin solid arrows are live synchronous
 REST or MCP reads. Every REST and MCP surface in the fleet is unauthenticated.
 Dotted arrows are wired-but-unused or absent-planned, as the table states.
-The four thick `product-master` edges are K20; the dotted
-`inventory-storage` → `product-master` edge is the migration-only legacy
-import (K21). The thin `product-master` → `warehouse-ops-agent` edge is A12.
+The four thick `product-master` edges are K20; the migration-only legacy
+import K21 was removed at stage E and is no longer drawn. The thin `product-master` → `warehouse-ops-agent` edge is A12.
 The seven thick `network-inventory-planning` edges are K30 to K36; the thin
 one to the agent is A15. The three thick `inbound-receiving` edges are K22
 to K24 and its thin one to the agent is A13. The three thick edges into
@@ -376,7 +374,7 @@ Omitted from the diagram:
 | K18 | `warehouse-planning` → `order-management` | OHS + PL / ACL (local read model) | `warehouse.warehouse-planning.events`: `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected`. `BottleneckDetected` is ignored | **live**. It is opt-in (`PLANNED_CAPACITY_CONSUMER_GROUP`, OM ADR 0031), and the reference deployment sets it (`helm-values/order-management.yaml`, `plannedCapacity.consumerGroup`). The read model only annotates orders and serves `GET /planned-capacity`. No promise moves | [WPL](/contexts/warehouse-planning/context-map), [OM](/contexts/order-management/context-map) |
 | K19 | `network-fulfillment` → any subscriber | OHS + PL / — | `warehouse.network-fulfillment.events`: `networkorder.*` | **wired-but-unused**. Published with `config.eventPublisher: kafka` (`helm-values/network-fulfillment.yaml`; chart default `log`), and no consumer of the `networkorder.*` types exists in the fleet by decision (`exception-management` reads only the two alarm types on the same topic, K57) | [NF](/contexts/network-fulfillment/context-map) |
 | K20 | `product-master` → `inventory-storage`, `order-management`, `wes-work-planning`, `fulfillment-execution` | PL / local copy per consumer (one row per SKU, applied only when the event `version` is newer) | `warehouse.product-master.events`: `ProductClassified` | **live** (deployed 2026-10-07). INV ADR 0034, consumer group `PRODUCT_MASTER_CONSUMER_GROUP` (`helm-values/inventory-storage.yaml`, `productMasterConsumerGroup`); OM ADR 0036, WP ADR 0035 and FE ADR 0039, `PRODUCT_CLASSIFICATION_MODE=kafka` with `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (OM: `helm-values/order-management.yaml`, `productClassification`; WP and FE: `sync_edge_env`). It replaced the classification lookups R2, R3 and R4 (product-master ADR 0003, stages C and D) | [PM](/contexts/product-master/context-map), [INV](/contexts/inventory-storage/context-map), [OM](/contexts/order-management/context-map), [WP](/contexts/wes-work-planning/context-map), [FE](/contexts/fulfillment-execution/context-map) |
-| K21 | `inventory-storage` → `product-master` | CF, migration only | `warehouse.inventory.events`: `com.warehouse.wms.inventory-storage.product.ProductClassified`, read by product-master's legacy importer (`LEGACY_IMPORT_CONSUMER_GROUP`) | **live, migration only**. The reference deployment starts the importer (`helm-values/product-master.yaml`, `legacyImportConsumerGroup`). `inventory-storage` emits the legacy type only from its one-shot `republish-product-classifications` backfill, run once on 2026-10-07. Removed at stage E together with the importer (product-master ADR 0003) | [PM](/contexts/product-master/context-map) |
+| K21 | `inventory-storage` → `product-master` | CF, migration only | `warehouse.inventory.events`: `com.warehouse.wms.inventory-storage.product.ProductClassified`, read by product-master's legacy importer (`LEGACY_IMPORT_CONSUMER_GROUP`) | **retired** at stage E (2026-10-17, product-master ADR 0003): the legacy importer, the `republish-product-classifications` backfill and the legacy type are removed, and `warehouse-infra` `develop` sets no `legacyImportConsumerGroup` | [PM](/contexts/product-master/context-map) |
 | K22 | `product-master` → `inbound-receiving` | PL / local copy (one row per SKU: existence check for ASN lines) | `warehouse.product-master.events`: `ProductRegistered` | **live**. Consumer mode defaults to `permissive`; the reference deployment sets `PRODUCT_MODE=kafka` (group `inbound-receiving-product`, `helm-values/inbound-receiving.yaml`) | [inbound-receiving](/contexts/inbound-receiving/context-map) |
 | K23 | `facility-layout` → `inbound-receiving` | OHS + PL / ACL (local copy of dock doors) | `warehouse.facility.events`: `LocationSlotRegistered`, `LocationSlotDecommissioned` | **live**. `DOCK_DOOR_MODE=kafka` (group `inbound-receiving-dock-doors`) in the reference deployment; only `role=Dock` slots with an inbound `dockFlow` are kept | [inbound-receiving](/contexts/inbound-receiving/context-map) |
 | K24 | `inbound-receiving` → `inventory-storage` | PL; the receiving handover. inventory-storage is the Conformist and runs its existing `ReceiveStock` use case for condition `Good` | `warehouse.inbound-receiving.events`: `receipt.ReceiptLineReceived` | **live**. inventory-storage ADR 0037; the reference deployment sets `INBOUND_RECEIPT_CONSUMER_GROUP` (`inventory-storage-inbound-receipts`, `helm-values/inventory-storage.yaml`). No synchronous call in either direction. Damaged units are not booked as stock in v1 | [inbound-receiving](/contexts/inbound-receiving/context-map), [INV](/contexts/inventory-storage/context-map) |
