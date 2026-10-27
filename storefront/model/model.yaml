@@ -5,10 +5,14 @@
 # ubiquitous-language term printed on the site must exist here first.
 # Pages derive from it; they never introduce a new message or edge.
 #
-# Status: PROPOSED DESIGN. Nothing in this file is built. Identifiers
-# (Go-style Err... names, REST paths, CloudEvents types) are the names a
-# future implementation must use, so that the docs and the code agree from
-# day one.
+# Status (2026-10-27): BUILT ON DEVELOP, NOT DEPLOYED. All six contexts are
+# built from this model in their own service repos (IQVO/<context>,
+# origin/develop); none has a warehouse-infra terraform/apps.yaml entry yet.
+# The as-built check of 2026-10-27 diffed every event payload, REST route,
+# consumed type and UL code identifier against the repos and folded the real
+# differences back in here, so the model stays the source of truth for the
+# generated pages. Identifiers (Go-style Err... names, REST paths,
+# CloudEvents types) are the names the services use.
 #
 # The storefront is a second domain inside the retail-network ORGANISATION
 # (decision D1): it may consume retailnetwork.* topics and call the
@@ -328,7 +332,6 @@ contexts:
       - "POST /product-contents"
       - "GET /product-contents"
       - "GET /product-contents/{catalogItemId}"
-      - "POST /product-contents/{catalogItemId}:revise-draft"
       - "POST /product-contents/{catalogItemId}:revise"
       - "POST /product-contents/{catalogItemId}:publish"
       - "POST /product-contents/{catalogItemId}:discard"
@@ -351,7 +354,7 @@ contexts:
       - {term: "Revision", definition: "One published shape of an item's content; publishing bumps it.", code: "content.ProductContent.Revision"}
       - {term: "Primary Medium", definition: "The one image a product page leads with; exactly one per published content.", code: "content.Media.RolePrimary"}
       - {term: "Category", definition: "One node of the browsable category tree.", code: "category.Category"}
-      - {term: "Category Tree", definition: "The single, versioned tree of categories, at most four levels deep.", code: "category.CategoryTree"}
+      - {term: "Category Tree", definition: "The single, versioned tree of categories, at most four levels deep.", code: "category.Tree"}
 
   # =========================================================================
   - id: product-discovery
@@ -418,10 +421,10 @@ contexts:
       - {to: product-content, type: qry, message: ListCategories, channel: "REST GET /categories", fields: [version, categories], note: "bootstrap needs the tree for CategoryView"}
     ul:
       - {term: "Purchasable", definition: "Item ACTIVE in the item master, content PUBLISHED, price ACTIVE, and at least one LIVE listing with quantity > 0.", code: "productview.Purchasable", not_to_be_confused_with: "the network's sellable listing (one node only)"}
-      - {term: "Product View", definition: "The projection one product page or search hit renders from.", code: "productview.ProductView"}
-      - {term: "Category View", definition: "The browsable tree with purchasable counts per category.", code: "categoryview.CategoryView"}
+      - {term: "Product View", definition: "The projection one product page or search hit renders from.", code: "productview.View"}
+      - {term: "Category View", definition: "The browsable tree with purchasable counts per category.", code: "categoryview.View"}
       - {term: "In Stock", definition: "At least one LIVE listing with availableQty > 0 for the item.", code: "productview.InStock"}
-      - {term: "Category Suggestion", definition: "A category whose name matches the query terms, returned beside the hits; there is no product-type detection.", code: "productview.CategorySuggestion"}
+      - {term: "Category Suggestion", definition: "A category whose name matches the query terms, returned beside the hits; there is no product-type detection.", code: "categoryview.View.Suggestions"}
 
   # =========================================================================
   - id: shopping-cart
@@ -522,8 +525,8 @@ contexts:
     ul:
       - {term: "Cart", definition: "One shopper's held intent: lines, destination, delivery quote and selections.", code: "cart.Cart"}
       - {term: "Delivery Quote (cart)", definition: "The offers delivery-promise returned for the cart's lines and destination, held by the cart; a quote holds no capacity.", code: "cart.DeliveryQuote", not_to_be_confused_with: "the network's DeliveryOffer (one offer)"}
-      - {term: "Delivery Selection", definition: "The offer the shopper picked per shipment group.", code: "cart.DeliverySelection"}
-      - {term: "Estimate", definition: "The labelled, non-binding total in the cart: effective prices plus selected tier charges plus tax band.", code: "cart.Estimate", not_to_be_confused_with: "the binding PriceQuote of a checkout session"}
+      - {term: "Delivery Selection", definition: "The offer the shopper picked per shipment group.", code: "cart.Selection"}
+      - {term: "Estimate", definition: "The labelled, non-binding total in the cart: effective prices plus selected tier charges plus tax band.", code: "estimate.Estimate", not_to_be_confused_with: "the binding PriceQuote of a checkout session"}
       - {term: "Checkout Readiness", definition: "Every group selected and no offer expired.", code: "cart.CheckoutReadiness"}
 
   # =========================================================================
@@ -603,7 +606,7 @@ contexts:
       - {event: CheckoutDeclined, entity: checkoutsession, data: [sessionId, reason, at], consumers: ["analytics only"]}
       - {event: CheckoutRequoteRequired, entity: checkoutsession, data: [sessionId, requotedOffers, at], consumers: ["analytics only"]}
       - {event: CheckoutFailed, entity: checkoutsession, data: [sessionId, code, at], consumers: ["analytics only"]}
-      - {event: CheckoutSessionExpired, entity: checkoutsession, data: [sessionId, cartId, quoteExpiresAt, at], consumers: ["analytics only"]}
+      - {event: CheckoutSessionExpired, entity: checkoutsession, data: [sessionId, at], consumers: ["analytics only"]}
       - {event: CheckoutPlacementInDoubt, entity: checkoutsession, data: [sessionId, placingSince, at], consumers: ["analytics only"]}
     consumes: []
     sync_calls:
@@ -614,11 +617,11 @@ contexts:
       - {to: customer-payments, type: cmd, message: VoidAuthorization, channel: "REST POST /payment-authorizations/{authorizationId}:void", note: "Idempotency-Key <sessionId>:void; only after a definitive rejection; recorded as voidOwed and retried by RetryOwedVoids"}
       - {to: customer-ordering, type: cmd, message: PlaceOrder, channel: "REST POST /checkout", note: "ACL (internal/adapters/outbound/customerordering); Idempotency-Key is the sessionId; shipToAddressId (NG1), never an inline address"}
     ul:
-      - {term: "Checkout Session", definition: "The purchase transaction from review to placed order.", code: "session.CheckoutSession", not_to_be_confused_with: "the network's \"Checkout\" (customer-ordering PlaceOrder), which is the session's place-order step"}
-      - {term: "Place-Order Step", definition: "The pivot of the saga: customer-ordering POST /checkout through the ACL.", code: "session.PlaceOrder"}
-      - {term: "In-Doubt Placement", definition: "The place-order outcome is unknown (timeout or 503); PLACING holds the semantic lock until the resolver settles it.", code: "session.PlacementInDoubt"}
-      - {term: "Requote", definition: "A definitive 409 from the network: the authorization is voided and the session carries the re-quoted offers for the cart.", code: "session.RequotedOffer"}
-      - {term: "Allocation", definition: "The share of an authorization that belongs to one shipment group.", code: "session.SessionGroup.Amount"}
+      - {term: "Checkout Session", definition: "The purchase transaction from review to placed order.", code: "checkoutsession.CheckoutSession", not_to_be_confused_with: "the network's \"Checkout\" (customer-ordering PlaceOrder), which is the session's place-order step"}
+      - {term: "Place-Order Step", definition: "The pivot of the saga: customer-ordering POST /checkout through the ACL.", code: "ports.OrderPlacer"}
+      - {term: "In-Doubt Placement", definition: "The place-order outcome is unknown (timeout or 503); PLACING holds the semantic lock until the resolver settles it.", code: "checkoutsession.CheckoutSession.RecordPlacementInDoubt"}
+      - {term: "Requote", definition: "A definitive 409 from the network: the authorization is voided and the session carries the re-quoted offers for the cart.", code: "checkoutsession.RequotedOffer"}
+      - {term: "Allocation", definition: "The share of an authorization that belongs to one shipment group.", code: "checkoutsession.Group.AmountMinor"}
 
   # =========================================================================
   - id: customer-payments
@@ -704,7 +707,7 @@ contexts:
       - {name: ReleaseOnUnsourceable, rule: "on FulfillmentUnsourceable release that group's allocation (PaymentReleased reason UNSOURCEABLE)"}
       - {name: RefundOnLostPackage, rule: "on PackageLost refund the affected group's captured amount (reason LOST)"}
       - {name: RefundOnReturnToSender, rule: "on PackageReturned refund the affected group's captured amount (reason RETURNED_TO_SENDER)"}
-      - {name: ReauthorizeBeforeExpiry, rule: "scheduled at expiresAt minus 24 h [9]: call Reauthorize for the uncaptured allocations (raises PaymentReauthorized with the new expiresAt and providerRef); a provider decline moves the authorization to EXPIRED and raises PaymentDeclined{reason: REAUTH_DECLINED}"}
+      - {name: ReauthorizeBeforeExpiry, rule: "scheduled at expiresAt minus 24 h [9]: call Reauthorize for the uncaptured allocations (raises PaymentReauthorized with the new expiresAt and providerAuthorizationId); a provider decline moves the authorization to EXPIRED and raises PaymentDeclined{reason: REAUTH_DECLINED}"}
       - {name: VoidUnboundAuthorizations, rule: "no CheckoutCompleted after 24 h: void (covers a checkout crash after authorize)"}
     inbound:
       - {from: checkout, type: cmd, channel: "REST POST /payment-authorizations, POST /payment-authorizations/{authorizationId}:void", message: "AuthorizePayment, VoidAuthorization", relationship: Customer/Supplier}
@@ -723,12 +726,12 @@ contexts:
       - "POST /refunds"
     publishes:
       - {event: PaymentAuthorized, entity: paymentauthorization, data: [authorizationId, checkoutSessionId, currency, totalMinor, "allocations(groupNo, amountMinor)", expiresAt], consumers: ["analytics only"]}
-      - {event: PaymentReauthorized, entity: paymentauthorization, data: [authorizationId, expiresAt, providerRef], consumers: ["analytics only"]}
+      - {event: PaymentReauthorized, entity: paymentauthorization, data: [authorizationId, orderId, expiresAt, providerAuthorizationId], consumers: ["analytics only"]}
       - {event: PaymentCaptured, entity: paymentauthorization, data: [authorizationId, orderId, groupNo, amountMinor], consumers: ["analytics only"]}
       - {event: PaymentReleased, entity: paymentauthorization, data: [authorizationId, orderId, groupNo, amountMinor, "reason(CANCELLED|UNSOURCEABLE|VOIDED|EXPIRED)"], consumers: ["analytics only"]}
       - {event: PaymentAuthorizationExpired, entity: paymentauthorization, data: [authorizationId, orderId, expiredAt], consumers: ["analytics only"]}
       - {event: RefundIssued, entity: refund, data: [refundId, orderId, groupNo, authorizationId, amountMinor, reason], consumers: ["analytics only"]}
-      - {event: RefundFailed, entity: refund, data: [refundId, orderId, code], consumers: ["analytics only"]}
+      - {event: RefundFailed, entity: refund, data: [refundId, orderId, authorizationId, groupNo, code, attempts, final], consumers: ["analytics only"]}
       - {event: PaymentDeclined, entity: paymentauthorization, data: [authorizationId, checkoutSessionId, reason, at], consumers: ["analytics only"]}
     consumes:
       - {event: CheckoutCompleted, from: checkout, fields: [sessionId, orderId, authorizationId, groups]}
@@ -740,12 +743,12 @@ contexts:
     sync_calls:
       - {to: payment-provider, type: cmd, message: "Authorize, Capture, Void, Refund, Reauthorize, ReduceAuthorization", channel: "provider port (ACL); adapter calls payment-provider-simulator", note: "external system; idempotency keys deterministic per (operation, authorizationId, groupNo); never receives a card number"}
     ul:
-      - {term: "Payment Authorization", definition: "A hold on the shopper's payment method for the quote total, split into allocations per shipment group.", code: "authorization.PaymentAuthorization"}
-      - {term: "Capture", definition: "Taking an allocation's money when its shipment group ships.", code: "authorization.Allocation.Capture", not_to_be_confused_with: "authorize (the hold at checkout)"}
-      - {term: "Release", definition: "Letting an uncaptured allocation go when its group is cancelled.", code: "authorization.Allocation.Release"}
-      - {term: "Void", definition: "Cancelling the whole authorization before any capture.", code: "authorization.Void"}
+      - {term: "Payment Authorization", definition: "A hold on the shopper's payment method for the quote total, split into allocations per shipment group.", code: "paymentauthorization.PaymentAuthorization"}
+      - {term: "Capture", definition: "Taking an allocation's money when its shipment group ships.", code: "paymentauthorization.PaymentAuthorization.Capture", not_to_be_confused_with: "authorize (the hold at checkout)"}
+      - {term: "Release", definition: "Letting an uncaptured allocation go when its group is cancelled.", code: "paymentauthorization.PaymentAuthorization.Release"}
+      - {term: "Void", definition: "Cancelling the whole authorization before any capture.", code: "paymentauthorization.PaymentAuthorization.Void"}
       - {term: "Refund", definition: "Returning captured money for a lost or returned package, or manually.", code: "refund.Refund"}
-      - {term: "Reauthorization", definition: "A fresh authorization replacing one about to expire, for allocations not yet captured.", code: "authorization.Reauthorize"}
+      - {term: "Reauthorization", definition: "A fresh authorization replacing one about to expire, for allocations not yet captured.", code: "paymentauthorization.PaymentAuthorization.Reauthorize"}
       - {term: "Payment Method Token", definition: "The PSP token standing in for the shopper's card; the storefront never sees a card number.", code: "(provider port)"}
 
 # ---------------------------------------------------------------------------

@@ -254,7 +254,8 @@ def ubiquitous_language():
            "---", "", "# Ubiquitous Language", "", BANNER, ""]
     out.append("""Each term belongs to the context that owns its meaning. Where the same word
 means something else in the retail network, the network counterpart is named.
-Code identifiers are the proposed Go package and type names.
+Code identifiers are the Go package and type names the services use on
+develop (checked in the 2026-10-27 as-built refresh).
 """)
     rows = []
     for u in M.get("ul", []):
