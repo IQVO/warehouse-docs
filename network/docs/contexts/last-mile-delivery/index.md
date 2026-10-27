@@ -8,7 +8,7 @@ description: "The proposed Last-Mile Delivery context: it runs the network's del
 # Last-Mile Delivery
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-supporting">Supporting</span> &nbsp; tier `logistics` · code `LM`
@@ -58,6 +58,24 @@ aggregates: `DeliveryWave`, `Route` and `DeliveryServicePartner`.
 | [Class Diagram](/network/contexts/last-mile-delivery/class-diagram) | UML class diagram + ports and adapters | The proposed Go domain model and package layout |
 | [Entity Relationship](/network/contexts/last-mile-delivery/entity-relationship) | ER diagram | The proposed Postgres schema, outbox and inbox |
 | [Sequence Diagrams](/network/contexts/last-mile-delivery/sequence-diagrams) | UML sequence diagrams | Adapter → use case → aggregate → repository → outbox for every command |
+
+## Service and operations
+
+- **Service:** [`IQVO/last-mile-delivery`](https://github.com/IQVO/last-mile-delivery) on `develop` (`f77cc6a`,
+  2026-10-26): binaries `cmd/api` (REST) and `cmd/mcp` (read-only MCP), and the console
+  remote in `web/`.
+- **Deployment:** wired in warehouse-infra develop: a `terraform/apps.yaml` entry
+  (`database: true`, `frontend_remote: last_mile_mfe`) and `helm-values/last-mile-delivery.yaml`
+  (MCP enabled, gateway path `/api/mcp/last-mile-delivery`). The cluster itself was not checked in this
+  refresh.
+- **Observability:** [service ADR 0008](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0008-fleet-observability-standard.md),
+  *Adopt the fleet observability standard*, Accepted 2026-10-26. Logs, metrics and traces leave
+  over OTLP to the otel-collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, chart default
+  `otel-collector.observability.svc.cluster.local:4317`; `OTEL_SERVICE_NAME`). The Tier-2
+  business counter is `last_mile_delivery.package.attempted` (unit `{package}`, in
+  `internal/adapters/outbound/telemetry/attempt_metrics.go`), with attribute `outcome` = `delivered`, `failed` or `rejected` and
+  `reason` on the outcomes that are not a success. The dashboard queries it as `last_mile_delivery_package_attempted_total` in warehouse-infra's
+  `terraform/dashboards/contexts/last-mile-delivery.json`, by `outcome`.
 
 ## Elsewhere
 

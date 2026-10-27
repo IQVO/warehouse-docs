@@ -8,7 +8,7 @@ description: One proposed application use case per Vendor Connectivity command -
 # Use Cases
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 One proposed application service per command in
@@ -347,10 +347,10 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 
 ## SubmitInboundReceipt
 
-> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+> **Built, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)** as realized by [`vendor-connectivity` ADR 0005](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0005-inbound-shipments-receipts-and-catalog-packaging.md) (inbound shipments, inbound receipts and catalogue packaging). This section is the delta the seller-inbound design added to this page; where the service decided differently, the text below says so.
 
 - **Actor / trigger:** a vendor (for the fleet, `network-fulfillment`). REST `POST /vendor/inbound-receipts` with an `Idempotency-Key`.
 - **Preconditions:** the shipment is in `InboundShipmentView` and its `nodeId` belongs to the vendor.
-- **Flow:** validate the body (carton statuses, GTIN and SSCC shapes, quantities as eaches), create a `Submission` of kind `INBOUND_RECEIPT` in `PROCESSING`, return `202` with the `transactionId`. `ProcessSubmission` later marks it `SUCCESS` and writes `SubmissionProcessed` and `InboundReceiptSubmitted` to the outbox in one transaction.
-- **Errors:** `ErrNodeNotOwnedByVendor` (404), `ErrUnknownInboundShipment` (404 `not-found`, so a vendor cannot probe another vendor's shipments), body malformed (422 `validation`).
-- **Reads:** `GET /vendor/inbound-shipments?nodeId=&createdAfter=&nextToken=` and `GET /vendor/inbound-shipments/{shipmentId}` read `InboundShipmentView` directly. They return the shipment as a tree (shipment, optional pallet, carton, item) with `sscc`, `gtin`, `qtyEaches`, `lot`, `expiry` and `sellerId` (the seller of record, which the vendor keeps as its `ownerRef`).
+- **Flow:** validate the body (carton statuses, GTIN and SSCC shapes, quantities as eaches), create a `Submission` of kind `INBOUND_RECEIPT` in `PROCESSING`, return `202` with the `transactionId`. `InboundReceiptSubmitted` is appended to the outbox in the same unit of work, so a `202` always has its event; `ProcessSubmission` later reports `SubmissionProcessed` (service ADR 0005).
+- **Errors:** `ErrNodeNotOwnedByVendor` (404), an unknown vendor, shipment or node (404 `not-found`, so a vendor cannot probe another vendor's shipments; the design named it `ErrUnknownInboundShipment`), body malformed (422 `validation`).
+- **Reads:** `GET /vendor/inbound-shipments?vendorId=&nodeId=&createdAfter=&nextToken=&limit=` and `GET /vendor/inbound-shipments/{shipmentId}` read `InboundShipmentView` directly. They return the shipment as a tree (shipment, optional pallet, carton, item) with `sscc`, `gtin`, `qtyEaches`, `lot`, `expiry` and `sellerId` (the seller of record, which the vendor keeps as its `ownerRef`).

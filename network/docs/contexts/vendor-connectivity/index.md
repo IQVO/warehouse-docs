@@ -8,7 +8,7 @@ description: "The network's Open Host Service for vendors: a Supporting partner-
 # Vendor Connectivity
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-supporting">Supporting</span>
@@ -44,6 +44,24 @@ between the two organizations.
 | [Class Diagram](/network/contexts/vendor-connectivity/class-diagram) | Proposed domain types and the hexagonal layout | — |
 | [Entity Relationship](/network/contexts/vendor-connectivity/entity-relationship) | Proposed Postgres schema | — |
 | [Sequence Diagrams](/network/contexts/vendor-connectivity/sequence-diagrams) | One runtime sequence per command | — |
+
+## Service and operations
+
+- **Service:** [`IQVO/vendor-connectivity`](https://github.com/IQVO/vendor-connectivity) on `develop` (`0253f45`,
+  2026-10-26): binaries `cmd/api` (REST) and `cmd/mcp` (read-only MCP), and the console
+  remote in `web/`.
+- **Deployment:** wired in warehouse-infra develop: a `terraform/apps.yaml` entry
+  (`database: true`, `frontend_remote: vendor_connectivity_mfe`) and `helm-values/vendor-connectivity.yaml`
+  (MCP enabled, gateway path `/api/mcp/vendor-connectivity`). The cluster itself was not checked in this
+  refresh.
+- **Observability:** [service ADR 0008](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0008-fleet-observability-standard.md),
+  *Adopt the fleet observability standard*, Accepted 2026-10-26. Logs, metrics and traces leave
+  over OTLP to the otel-collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, chart default
+  `otel-collector.observability.svc.cluster.local:4317`; `OTEL_SERVICE_NAME`). The Tier-2
+  business counter is `vendor.submissions.processed` (unit `{submission}`, in
+  `internal/adapters/outbound/telemetry/submission_metrics.go`), with attribute `outcome` = `succeeded` or `failed` and
+  `reason` on the outcomes that are not a success. The dashboard queries it as `vendor_submissions_processed_total` in warehouse-infra's
+  `terraform/dashboards/contexts/vendor-connectivity.json`, by `outcome`.
 
 ## Elsewhere
 

@@ -2,13 +2,13 @@
 id: domain-events
 title: Domain Events
 sidebar_label: Domain Events
-description: "The nine events Seller Inbound publishes and the ten it consumes, with full CloudEvents types, payloads and idempotency rules."
+description: "The nine events Seller Inbound publishes and the eight it consumes, with full CloudEvents types, payloads and idempotency rules."
 ---
 
 # Domain Events
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet, and unlike the other ten contexts it has no reference service: it is design only ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)). Identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built ([`IQVO/seller-inbound`](https://github.com/IQVO/seller-inbound), designed by [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)); the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. Where the model left a choice open, the service's own ADRs 0002 to 0005 record what it does.
 :::
 
 Every event this context publishes (`contexts[seller-inbound].publishes`) and
@@ -69,8 +69,9 @@ kind strings); this context does not own a closed vocabulary for it and
 branches on none of its values. `InboundShipmentReceived` is
 published once, when the shipment closes. `InboundDiscrepancyRecorded` is
 published for each discrepancy as receipts are processed, including while
-the shipment is still `RECEIVING`. Whether the analytics-only events go to
-the `.analytics` topic follows `conventions.analytics_rule`.
+the shipment is still `RECEIVING`. As built, the six analytics-only events go
+to `retailnetwork.seller-inbound.analytics` and the three consumed ones to
+`retailnetwork.seller-inbound.events` (service ADR 0002 A11, ADR 0004).
 
 ### Example envelope
 
@@ -120,13 +121,18 @@ CloudEvents `id` (`processed_events` inbox).
 
 | Producer | Full `type` | What this context does |
 | --- | --- | --- |
-| `vendor-connectivity` | `com.retailnetwork.partner.vendor-connectivity.submission.InboundReceiptSubmitted` | `RecordInboundReceipt` on the named shipment (`ReceiveOnVendorReceipt`). |
+| `vendor-connectivity` | `com.retailnetwork.partner.vendor-connectivity.inboundreceipt.InboundReceiptSubmitted` | `RecordInboundReceipt` on the named shipment (`ReceiveOnVendorReceipt`). |
 | `node-topology` | `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | Creates the node in `NodeInboundView`. |
 | `node-topology` | `com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared` | Updates `inbound` limits in `NodeInboundView`. |
 | `node-topology` | `com.retailnetwork.logistics.node-topology.node.NodeActivated` | Marks the node receivable. |
 | `node-topology` | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | Marks the node not receivable. |
 | `node-topology` | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | Marks the node retired. |
-| `offer-availability` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | Adds the item and its each GTIN to `CatalogPackagingView`. |
-| `offer-availability` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued` | Marks the item not plannable. |
 | `offer-availability` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackagingDeclared` | Stores the declared levels, GTINs and `unitsPerPack`. |
-| `offer-availability` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackLevelRetired` | End-dates the level; in-flight shipments keep validating against what was active when they were labelled. |
+| `offer-availability` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackLevelRetired` | Marks the level retired (`active = false`, `retired_at`); only an active CASE level validates a case carton (`ErrCaseQtyMismatchesGtin`). |
+
+As built (service ADR 0003): one consumer per topic, each under a mandatory
+group variable (`NODE_CONSUMER_GROUP`, `CATALOG_CONSUMER_GROUP`,
+`RECEIPT_CONSUMER_GROUP`). A transient failure is retried with capped backoff
+and then dead-lettered to `<topic>.dlq`; a payload that can never apply is
+dead-lettered at once. `CatalogItemCreated` and `CatalogItemDiscontinued` are
+not consumed, so a plan line's catalogue item is not checked for being live.

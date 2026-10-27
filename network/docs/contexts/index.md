@@ -13,7 +13,7 @@ compared page for page: business context, ubiquitous language, core domain
 chart, bounded context canvas, context map, aggregate design canvas, domain
 events, domain message flow, EventStorming, use cases, class diagram, entity
 relationship and sequence diagrams. All are derived from
-[`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml).
+[`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml).
 
 | Context | Classification | Tier | Aggregates | Events published | Events consumed |
 | --- | --- | --- | --- | --- | --- |
@@ -22,12 +22,12 @@ relationship and sequence diagrams. All are derived from
 | [`delivery-promise`](/network/contexts/delivery-promise) | <span class="badge-core">Core</span> | `commerce` | 3 | 12 | 34 |
 | [`customer-ordering`](/network/contexts/customer-ordering) | <span class="badge-generic">Generic</span> | `commerce` | 2 | 2 | 17 |
 | [`order-sourcing`](/network/contexts/order-sourcing) | <span class="badge-core">Core</span> | `commerce` | 1 | 10 | 32 |
-| [`vendor-connectivity`](/network/contexts/vendor-connectivity) | <span class="badge-supporting">Supporting</span> | `partner` | 3 | 11 | 11 |
+| [`vendor-connectivity`](/network/contexts/vendor-connectivity) | <span class="badge-supporting">Supporting</span> | `partner` | 3 | 11 | 13 |
 | [`linehaul-transportation`](/network/contexts/linehaul-transportation) | <span class="badge-supporting">Supporting</span> | `logistics` | 3 | 10 | 13 |
 | [`last-mile-delivery`](/network/contexts/last-mile-delivery) | <span class="badge-supporting">Supporting</span> | `logistics` | 3 | 8 | 4 |
 | [`shipping-and-tracking`](/network/contexts/shipping-and-tracking) | <span class="badge-generic">Generic</span> | `logistics` | 2 | 8 | 7 |
-| [`node-performance`](/network/contexts/node-performance) | <span class="badge-supporting">Supporting</span> | `partner` | 1 | 2 | 14 |
-| [`seller-inbound`](/network/contexts/seller-inbound) (proposed, no service) | <span class="badge-supporting">Supporting</span> | `partner` | 3 | 9 | 10 |
+| [`node-performance`](/network/contexts/node-performance) | <span class="badge-supporting">Supporting</span> | `partner` | 1 | 2 | 15 |
+| [`seller-inbound`](/network/contexts/seller-inbound) | <span class="badge-supporting">Supporting</span> | `partner` | 3 | 9 | 8 |
 
 Future contexts named by the model but not documented: `customer-returns`,
 `customer-notification`, `payments-and-invoicing`. `inventory-placement`, named

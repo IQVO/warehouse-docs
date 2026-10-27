@@ -8,7 +8,7 @@ description: Every command use case of Delivery Promise - trigger, adapter, prec
 # Use Cases
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 The proposed application services of `internal/application/usecases`, one per

@@ -292,6 +292,12 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          sellerInbound: {
+            specPath: 'network/apis/seller-inbound/openapi.yaml',
+            outputDir: 'network/docs/api-reference/rest/seller-inbound',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],

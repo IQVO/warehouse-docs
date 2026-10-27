@@ -106,7 +106,7 @@ rest of the ddd-crew pack, all derived from one model file so they cannot
 drift.
 
 Output: [Bounded Contexts](/network/contexts) and
-[`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml).
+[`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml).
 
 ## 8. Code
 

@@ -33,7 +33,7 @@ it is not the Core/Supporting/Generic verdict.
 | Performance Management | Measuring nodes against commitments | Supporting |
 | Order Capture | Taking the order and the address | Generic |
 | Shipping Labels & Tracking | Labels, tracking numbers, the package timeline | Generic |
-| Seller Inbound | Letting sellers plan, label and ship stock to vendor nodes and reconciling what arrives | Supporting (proposed) |
+| Seller Inbound | Letting sellers plan, label and ship stock to vendor nodes and reconciling what arrives | Supporting |
 | Customer Returns | Routing returns to a returns centre | Supporting (future) |
 | Customer Notification | Telling the customer about changes | Generic (future) |
 | Payments & Invoicing | Charging customers, settling with vendors | Generic (future) |
@@ -50,7 +50,7 @@ it is not the Core/Supporting/Generic verdict.
 | `linehaul-transportation` | <span class="badge-supporting">Supporting</span> | `logistics` | Cost reducer, speed enabler | Custom-built | Transportation optimization can be Core at very large scale; here the promise and sourcing consume its schedules and capacities, and route optimization is not modelled, so it stays Supporting. |
 | `last-mile-delivery` | <span class="badge-supporting">Supporting</span> | `logistics` | Cost reducer, experience creator | Custom-built | Waves with stop capacity are what the promise's last leg stands on; routing itself is replaceable. |
 | `node-performance` | <span class="badge-supporting">Supporting</span> | `partner` | Risk reducer | Custom-built | Measured capability is what keeps declared capability honest, but it only measures and grades; it decides nothing. |
-| `seller-inbound` | <span class="badge-supporting">Supporting</span> | `partner` | Supply enabler | Custom-built | Proposed. Identifying every carton, checking it against a plan and counting what arrives is common practice; nothing here decides a promise or a route. It enables supply and does not differentiate. |
+| `seller-inbound` | <span class="badge-supporting">Supporting</span> | `partner` | Supply enabler | Custom-built | Identifying every carton, checking it against a plan and counting what arrives is common practice; nothing here decides a promise or a route. It enables supply and does not differentiate. |
 | `customer-ordering` | <span class="badge-generic">Generic</span> | `commerce` | Engagement | Commodity | Cart-to-order is commodity commerce. It is kept thin and holds the PII so nothing else has to. |
 | `shipping-and-tracking` | <span class="badge-generic">Generic</span> | `logistics` | Compliance and experience | Commodity | Labels and tracking timelines are bought, not built, in most networks. |
 

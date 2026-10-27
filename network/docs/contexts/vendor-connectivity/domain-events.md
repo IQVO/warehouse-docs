@@ -8,7 +8,7 @@ description: Every event Vendor Connectivity publishes and consumes, with full C
 # Domain Events
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 These are **in-organization** events. Vendors never see them; vendors see
@@ -24,7 +24,7 @@ and [ADR 0007](/network/adr/0007-cloudevents-namespace).
 | `specversion` | `1.0` |
 | `id` | a UUID minted once per event and stored in the outbox row, so a redelivery carries the same `id` |
 | `source` | `/retailnetwork/vendor-connectivity` |
-| `type` | `com.retailnetwork.partner.vendor-connectivity.<entity>.<EventName>`; entity is `vendoraccount`, `purchaseorder` or `submission` |
+| `type` | `com.retailnetwork.partner.vendor-connectivity.<entity>.<EventName>`; entity is `vendoraccount`, `purchaseorder`, `submission` or `inboundreceipt` (`InboundReceiptSubmitted` only) |
 | `subject` | the aggregate root id: `vendorId`, `poNumber` or `transactionId` |
 | `time` | the instant of the fact, UTC |
 | `datacontenttype` | `application/json` |
@@ -227,15 +227,15 @@ context no source for it. This is listed as an open question on the
 
 ## Inbound receipts
 
-> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+> **Built, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)** as realized by [`vendor-connectivity` ADR 0005](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0005-inbound-shipments-receipts-and-catalog-packaging.md) (inbound shipments, inbound receipts and catalogue packaging). This section is the delta the seller-inbound design added to this page; where the service decided differently, the text below says so.
 
 ### InboundReceiptSubmitted (published)
 
 | | |
 | --- | --- |
-| Type | `com.retailnetwork.partner.vendor-connectivity.submission.InboundReceiptSubmitted` |
-| Subject / key | `transactionId` |
-| Produced by | `ProcessSubmission` of an `INBOUND_RECEIPT` submission that ends in `SUCCESS` (policy `ReceiptRelay`) |
+| Type | `com.retailnetwork.partner.vendor-connectivity.inboundreceipt.InboundReceiptSubmitted` |
+| Subject / key | `shipmentId` |
+| Produced by | `SubmitInboundReceipt`, in the same unit of work that accepts the `INBOUND_RECEIPT` submission (policy `ReceiptRelay`, service ADR 0005); `SubmissionProcessed` still reports the processing |
 | Consumers | `seller-inbound` (`RecordInboundReceipt`), `node-performance` (inbound timeliness and accuracy observations) |
 
 | Field | Type | Meaning |
