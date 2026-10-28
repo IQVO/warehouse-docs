@@ -413,6 +413,7 @@ const config: Config = {
             {type: 'docSidebar', sidebarId: 'strategicSidebar', docsPluginId: 'storefront', label: 'Strategic Design'},
             {type: 'docSidebar', sidebarId: 'contextsSidebar', docsPluginId: 'storefront', label: 'Bounded Contexts'},
             {type: 'docSidebar', sidebarId: 'apiSidebar', docsPluginId: 'storefront', label: 'API Reference'},
+            {to: '/storefront/adr', label: 'ADRs'},
           ],
         },
         {
@@ -426,13 +427,15 @@ const config: Config = {
       style: 'dark',
       links: [
         {
-          title: 'Documentation',
+          title: 'wms / wes',
           items: [
             {label: 'Overview', to: '/overview'},
             {label: 'Strategic Design', to: '/strategic-design/domain-vision'},
             {label: 'WMS and WES', to: '/wms-wes'},
             {label: 'Business Capability Architecture', to: '/business-capability-architecture'},
             {label: 'Bounded Contexts', to: '/contexts'},
+            {label: 'API Reference', to: '/api-reference'},
+            {label: 'ADRs', to: '/adr'},
           ],
         },
         {
@@ -442,13 +445,21 @@ const config: Config = {
             {label: 'Domain Vision', to: '/network/strategic-design/domain-vision'},
             {label: 'Promise Model', to: '/network/network-model/promise-model'},
             {label: 'WMS/WES Integration', to: '/network/integration/wms-wes-integration'},
+            {label: 'Bounded Contexts', to: '/network/contexts'},
+            {label: 'API Reference', to: '/network/api-reference'},
+            {label: 'ADRs', to: '/network/adr'},
           ],
         },
         {
-          title: 'storefront',
+          title: 'digital storefront',
           items: [
             {label: 'Storefront Overview', to: '/storefront/'},
+            {label: 'Subdomain Classification', to: '/storefront/strategic-design/subdomain-classification'},
             {label: 'Context Map', to: '/storefront/strategic-design/context-map'},
+            {label: 'Edge and Supporting Components', to: '/storefront/components'},
+            {label: 'Bounded Contexts', to: '/storefront/contexts'},
+            {label: 'API Reference', to: '/storefront/api-reference'},
+            {label: 'ADRs', to: '/storefront/adr'},
             {label: 'Benchmarks', to: '/storefront/research/benchmarks'},
           ],
         },
