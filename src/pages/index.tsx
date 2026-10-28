@@ -105,8 +105,8 @@ function HomepageHeader() {
         </Heading>
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
         <p className={styles.heroLead}>
-          Two domains, one site: the WMS/WES warehouse execution fleet and the
-          retail network it serves. Every page is generated from each
+          Three domains, one site: the WMS/WES warehouse execution fleet, the
+          retail network it serves and the digital storefront built on that network. Every page is generated from each
           context&rsquo;s own specifications and ADRs — never hand-transcribed.
         </p>
         <div className={styles.buttons}>
