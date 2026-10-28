@@ -2,13 +2,13 @@
 id: ubiquitous-language
 title: Ubiquitous Language
 sidebar_label: Ubiquitous Language
-description: The terms Product Content speaks, each mapped to its proposed code identifier, plus the neighbour terms it uses and the terms most often confused with them.
+description: The terms Product Content speaks, each mapped to its code identifier on develop, plus the neighbour terms it uses and the terms most often confused with them.
 ---
 
 # Ubiquitous Language
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model carries the proposed contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-content` service is built on develop ([`IQVO/product-content`](https://github.com/IQVO/product-content) at `2f09dc0`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-content#service-and-operations) section lists it.
 :::
 
 The terms this context speaks, each mapped to the identifier a future
@@ -28,7 +28,7 @@ Derived from: `model.yaml → contexts[product-content].ul`.
 | **Revision** | One published shape of an item's content; publishing bumps it. | `content.ProductContent.Revision` | The optimistic-concurrency `version` a save checks. A revision is what `product-discovery` orders content by; the version is a storage detail. |
 | **Primary Medium** | The one image a product page leads with; exactly one per published content. | `content.Media.RolePrimary` | A GALLERY medium: any other picture of the item. Publish fails without exactly one PRIMARY (`ErrIncompleteContent`). |
 | **Category** | One node of the browsable category tree. | `category.Category` | A **primary category**: the one category a content names by `primaryCategoryId`. Every category is a node; only one per content is primary. |
-| **Category Tree** | The single, versioned tree of categories, at most four levels deep. | `category.CategoryTree` | The catalogue (`offer-availability`): the tree orders browsing, not the item master. |
+| **Category Tree** | The single, versioned tree of categories, at most four levels deep. | `category.Tree` | The catalogue (`offer-availability`): the tree orders browsing, not the item master. |
 
 ## Model elements of this context
 
@@ -40,7 +40,7 @@ Derived from: `model.yaml → contexts[product-content].aggregates[*]` (`value_o
 | **Media** | One picture reference: `mediaId`, `url`, `altText`, `role` PRIMARY or GALLERY. At most 12 per content. URLs to static assets only; upload is out of scope. | `content.Media{mediaId, url, altText, role}` | An uploaded asset: this context never stores bytes. |
 | **Bullet** | One line of the bullet list under the title. At most 10 per content. | `content.ProductContent` bullets | An attribute: a bullet is prose, an attribute is a named value. |
 | **Content state** | `DRAFT`, `PUBLISHED` or `RETIRED`. RETIRED never publishes again. | `content.ProductContent` states | The item's state in the item master (`offer-availability`): an item is ACTIVE or discontinued there; content has its own lifecycle. |
-| **Tree state** | `DRAFT` or `PUBLISHED`; publishing a tree bumps its version. The model marks these states as the least-surprising reading of "single, versioned". | `category.CategoryTree` states | A content's state: a PUBLISHED tree and PUBLISHED content are independent facts. |
+| **Tree state** | `DRAFT` or `PUBLISHED`; publishing a tree bumps its version. The model marks these states as the least-surprising reading of "single, versioned". | `category.Tree` states | A content's state: a PUBLISHED tree and PUBLISHED content are independent facts. |
 | **Catalog Item View** | The local, event-fed read model of the items the network knows; the existence check behind `ErrUnknownCatalogItem`. | `CatalogItemView` | The item master itself (`offer-availability`): this is a projection, never the source of truth. |
 | **Retire On Discontinue** | Policy: on `CatalogItemDiscontinued`, retire the item's PUBLISHED content. | `RetireOnDiscontinue` | `RetireContent` from the content manager (REST): the policy runs the same command, without a human. |
 
@@ -50,8 +50,8 @@ Derived from: `model.yaml → contexts[product-content].aggregates[*]` (`value_o
 | --- | --- | --- | --- |
 | **Catalog Item** | The network's own entry for a product, independent of who ships it. | `catalog.Item` (`offer-availability`) | **Product Content**: this context's sellable description of that item. The title stays the item master's. |
 | **Purchasable** | Item ACTIVE in the item master, content PUBLISHED, price ACTIVE, and at least one LIVE listing with quantity above zero. | `productview.Purchasable` (`product-discovery`) | Published: PUBLISHED content is one of the four conditions, never the verdict. |
-| **Product View** | The projection one product page or search hit renders from. | `productview.ProductView` (`product-discovery`) | Product Content: the view folds this context's events together with the item master, listings and prices. |
-| **Category View** | The browsable tree with purchasable counts per category. | `categoryview.CategoryView` (`product-discovery`) | Category Tree: the view adds purchasable counts to this context's published tree. |
+| **Product View** | The projection one product page or search hit renders from. | `productview.View` (`product-discovery`) | Product Content: the view folds this context's events together with the item master, listings and prices. |
+| **Category View** | The browsable tree with purchasable counts per category. | `categoryview.View` (`product-discovery`) | Category Tree: the view adds purchasable counts to this context's published tree. |
 
 ## Fleet translation
 

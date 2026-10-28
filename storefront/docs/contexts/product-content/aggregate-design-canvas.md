@@ -7,14 +7,13 @@ description: The ddd-crew Aggregate Design Canvas for Product Content's two aggr
 
 # Aggregate Design Canvas
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model carries the proposed contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-content` service is built on develop ([`IQVO/product-content`](https://github.com/IQVO/product-content) at `2f09dc0`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-content#service-and-operations) section lists it.
 :::
 
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
 The model has two aggregate roots in this context, **ProductContent** and
-**CategoryTree**, and one read model, **CatalogItemView**. Proposed Go
-packages: `internal/domain/content` and `internal/domain/category`.
+**CategoryTree**, and one read model, **CatalogItemView**. Go packages **as built**: `internal/domain/category`, `internal/domain/content` (plus `shared`).
 
 ## ProductContent
 
@@ -88,7 +87,7 @@ The entry arrow `[*] --> DRAFT` is the creating command
 Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent].invariants`.
 
 The command pairing of the first three invariants is this pack's reading of
-the proposed API's error table: the model lists the rules and the errors
+the API's error table: the model lists the rules and the errors
 but not which command checks which. The collection bounds (bullets,
 attributes, media) are the named invariants `ErrTooManyBullets`,
 `ErrTooManyAttributes` and `ErrTooManyMedia`; the schema also carries
@@ -106,7 +105,7 @@ attributes, media) are the named invariants `ErrTooManyBullets`,
 | Command | Trigger | Transition |
 | --- | --- | --- |
 | `CreateProductContent` | Content manager, REST `POST /product-contents` | `[*] → DRAFT` |
-| `ReviseDraft` | Content manager, REST `POST /product-contents/{catalogItemId}:revise-draft` | `DRAFT → DRAFT` |
+| `ReviseDraft` | Content manager, REST `POST /product-contents/{catalogItemId}:revise` (**As built:** one route for both revisions; the content state picks ReviseDraft or ReviseContent, product-content ADR 0002) | `DRAFT → DRAFT` |
 | `ReviseContent` | Content manager, REST `POST /product-contents/{catalogItemId}:revise` | `PUBLISHED → PUBLISHED` |
 | `PublishContent` | Content manager, REST `POST /product-contents/{catalogItemId}:publish` | `DRAFT → PUBLISHED`, `PUBLISHED → PUBLISHED` |
 | `DiscardDraft` | Content manager, REST `POST /product-contents/{catalogItemId}:discard` | `DRAFT → RETIRED` (reason `DISCARDED`) |
@@ -151,7 +150,7 @@ read shows).
 
 ### 1. Name
 
-`CategoryTree` (`category.CategoryTree`), identified by `categoryTreeId`.
+`CategoryTree` (`category.Tree`), identified by `categoryTreeId`.
 
 ### 2. Description
 
@@ -195,10 +194,10 @@ consumers can resync.
 | A category in use by PUBLISHED content is never removed | no remove-category command by design; `ErrCategoryInUse` guards a future removal |
 
 Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree].invariants`.
-The command pairing is this pack's reading of the proposed API's error
+The command pairing is this pack's reading of the API's error
 tables. Categories are never deleted, only renamed or moved, so
-`ErrCategoryInUse` is not raised by any current command and the proposed API
-no longer maps it to `:move`.
+`ErrCategoryInUse` is not raised by any current command and the API (as
+built) maps it to no route.
 
 ### 5. Corrective Policies
 

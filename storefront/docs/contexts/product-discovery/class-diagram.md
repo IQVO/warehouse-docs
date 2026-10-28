@@ -2,21 +2,23 @@
 id: class-diagram
 title: Class Diagram
 sidebar_label: Class Diagram
-description: Proposed UML class diagrams of Product Discovery's read-side domain model, policies and projector, the search port, and the hexagonal ports-and-adapters layout a Go implementation would use.
+description: UML class diagrams of Product Discovery's read-side domain model, policies and projector, the search port, and the hexagonal ports-and-adapters layout, as the model designs them, with the as-built Go packages.
 ---
 
 # Class Diagram
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-discovery` service is built on develop ([`IQVO/product-discovery`](https://github.com/IQVO/product-discovery) at `9c2f945`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-discovery#service-and-operations) section lists it.
 :::
 
-UML class diagrams of the **proposed** `internal/domain/**` packages, plus
+UML class diagrams of the `internal/domain/**` packages as the model designs them, plus
 the hexagonal ports and adapters. Type names come from the model's code
-identifiers (`productview.ProductView`, `productview.Purchasable`,
-`categoryview.CategoryView`, `search.Port` in the UL spellings). Fields are
+identifiers (`productview.View`, `productview.Purchasable`,
+`categoryview.View`, `ports.SearchPort` in the UL spellings). Fields are
 unexported in Go and shown with `-`; methods are shown with `+`. There is
 no aggregate and no `Err...` type in this context — nothing to refuse.
+
+**As built** (`IQVO/product-discovery` develop `9c2f945`): the domain packages are `internal/domain/categoryview`, `internal/domain/productview`, `internal/domain/search`. Exported types per package: `categoryview`: `Category`, `Counted`, `View`; `productview`: `PublishedContent`, `Outcome`, `ItemCreated`, `ListingCreated`, `AvailabilityChanged`, `ListingSnapshot`, `PriceChanged`, `ItemState`, `ContentState`, `PriceState`, `ListingState`, `Attribute`, `Media`, `Listing`, `View`; `search`: `Band`, `Mode`, `Cursor`, `FacetValue`, `Facet`, `Counts`, `Sort`, `ValidationError`, `Input`, `Query`. Application packages: `internal/application/ports`, `internal/application/readmodel`, `internal/application/usecases`; adapters: `internal/adapters/inbound/http`, `internal/adapters/inbound/kafka`, `internal/adapters/inbound/requestlog`, `internal/adapters/outbound/kafka`, `internal/adapters/outbound/memory`, `internal/adapters/outbound/postgres`, `internal/adapters/outbound/repocontract`, `internal/adapters/outbound/sources`, `internal/adapters/outbound/telemetry`. Where a type name below differs (the UML keeps the design names), the [Ubiquitous Language](/storefront/contexts/product-discovery/ubiquitous-language) page carries the built identifier.
 
 ## 1. Read models (the domain package)
 
@@ -149,7 +151,7 @@ flowchart TB
         OPS["ops<br/>rebuild job (no REST route)"]
     end
     APP["<b>internal/application/usecases</b><br/>SearchProducts<br/>GetProduct<br/>ListCategories<br/>FoldEvent (11 handlers)<br/>RebuildProjections"]
-    DOM["<b>internal/domain</b><br/>productview.ProductView<br/>categoryview.CategoryView<br/>PurchasableRule, UnavailableNotBuyable"]
+    DOM["<b>internal/domain</b><br/>productview.View<br/>categoryview.View<br/>PurchasableRule, UnavailableNotBuyable"]
     PORTS["<b>internal/application/ports</b><br/>ProductViewStore<br/>CategoryViewStore<br/>SearchPort<br/>Inbox<br/>UnitOfWork, Clock"]
     subgraph OUT["internal/adapters/outbound"]
         A1["postgres<br/>projections + search index,<br/>inbox, UoW"]

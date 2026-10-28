@@ -7,8 +7,8 @@ description: Every CloudEvents type Product Content publishes and consumes, with
 
 # Domain Events
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model carries the proposed contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-content` service is built on develop ([`IQVO/product-content`](https://github.com/IQVO/product-content) at `2f09dc0`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-content#service-and-operations) section lists it.
 :::
 
 Every event this context publishes and consumes, from
@@ -110,7 +110,7 @@ roughly 10^3 categories (`size_estimate`) the message stays small.
 The consumer is idempotent on the CloudEvents `id`: the id is inserted into
 `processed_events` in the same transaction as the effect, and a duplicate is
 acknowledged without effect. It dispatches on the **full type string**,
-never on a suffix. Proposed consumer group:
+never on a suffix. Consumer group names come from mandatory environment variables (`OFFER_AVAILABILITY_CONSUMER_GROUP`; the service refuses to start without them); the names the design suggests:
 `product-content.offer-availability`.
 
 ### From offer-availability (`retailnetwork.offer-availability.events`, Conformist)

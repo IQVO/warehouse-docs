@@ -7,16 +7,14 @@ description: The ddd-crew Aggregate Design Canvas for Pricing's four aggregates,
 
 # Aggregate Design Canvas
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `pricing` service is built on develop ([`IQVO/pricing`](https://github.com/IQVO/pricing) at `5a18326`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/pricing#service-and-operations) section lists it.
 :::
 
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
 The model has four aggregate roots in this context, **ItemPrice**,
 **DeliveryChargeSchedule**, **TaxTable** and **PriceQuote**, and one read
-model, **CatalogItemView**. Proposed Go packages: `internal/domain/itemprice`,
-`internal/domain/schedule`, `internal/domain/tax` and `internal/domain/quote`
-(the packages the UL code identifiers name).
+model, **CatalogItemView**. Go packages **as built**: `internal/domain/itemprice`, `internal/domain/quote`, `internal/domain/schedule`, `internal/domain/tax` (plus `shared`).
 
 ## ItemPrice
 

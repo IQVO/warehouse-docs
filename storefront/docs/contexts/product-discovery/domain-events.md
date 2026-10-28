@@ -7,8 +7,8 @@ description: The eleven CloudEvents types Product Discovery consumes (it publish
 
 # Domain Events
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-discovery` service is built on develop ([`IQVO/product-discovery`](https://github.com/IQVO/product-discovery) at `9c2f945`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-discovery#service-and-operations) section lists it.
 :::
 
 Every event this context consumes, from `contexts[product-discovery].consumes`
@@ -39,7 +39,7 @@ producer:
 CloudEvents `id` — the id is inserted into `processed_events` in the same
 transaction as the projection effect, and a duplicate is acknowledged
 without effect; dispatch on the **full type string**, never on a suffix.
-Proposed consumer groups: `product-discovery.offer-availability`,
+Consumer group names come from mandatory environment variables (`OFFER_AVAILABILITY_CONSUMER_GROUP`, `PRICING_CONSUMER_GROUP`, `PRODUCT_CONTENT_CONSUMER_GROUP`; the service refuses to start without them); the names the design suggests: `product-discovery.offer-availability`,
 `product-discovery.product-content`, `product-discovery.pricing`.
 
 **Ordering rules.** Within one producer, events keyed by the same root id
@@ -89,7 +89,7 @@ terms, zero-result and fallback rates) have no event to ride on.
 
 **Two payload notes (model gaps, also on the
 [canvas](/storefront/contexts/product-discovery/bounded-context-canvas) open
-questions).** The `ProductView` purpose and the proposed API render the
+questions).** The `ProductView` purpose and the API render the
 product page with **bullets, media and the list price**, yet the declared
 `consumes` fields name neither `bullets`/`media` (on
 `ProductContentPublished`) nor `listPriceMinor`/`currency` (on

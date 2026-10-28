@@ -102,7 +102,7 @@ Topic `retailnetwork.product-content.events` (analytics-only events on `retailne
 
 ### `shopping-cart`
 
-Topic `retailnetwork.shopping-cart.events` (analytics-only events on `retailnetwork.shopping-cart.analytics`).
+Topic `retailnetwork.shopping-cart.events` (analytics-only events on `retailnetwork.shopping-cart.analytics`). Analytics-only events carry dataschema `urn:retailnetwork:shopping-cart:analytics:<EventName>:v1`.
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
@@ -113,7 +113,7 @@ Topic `retailnetwork.shopping-cart.events` (analytics-only events on `retailnetw
 
 ### `checkout`
 
-Topic `retailnetwork.checkout.events` (analytics-only events on `retailnetwork.checkout.analytics`).
+Topic `retailnetwork.checkout.events` (analytics-only events on `retailnetwork.checkout.analytics`). Analytics-only events carry dataschema `urn:retailnetwork:checkout:analytics:<EventName>:v1`.
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
@@ -127,7 +127,7 @@ Topic `retailnetwork.checkout.events` (analytics-only events on `retailnetwork.c
 
 ### `customer-payments`
 
-Topic `retailnetwork.customer-payments.events` (analytics-only events on `retailnetwork.customer-payments.analytics`).
+Topic `retailnetwork.customer-payments.events` for every event, analytics-only ones included (no analytics topic).
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |

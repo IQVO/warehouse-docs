@@ -354,6 +354,12 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          storefrontBff: {
+            specPath: 'storefront/apis/storefront-bff/openapi.yaml',
+            outputDir: 'storefront/docs/api-reference/rest/storefront-bff',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],

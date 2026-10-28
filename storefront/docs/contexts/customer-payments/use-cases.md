@@ -2,19 +2,19 @@
 id: use-cases
 title: Use Cases
 sidebar_label: Use Cases
-description: Every proposed Customer Payments command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency.
+description: Every Customer Payments command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency.
 ---
 
 # Use Cases
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `customer-payments` service is built on develop ([`IQVO/customer-payments`](https://github.com/IQVO/customer-payments) at `530c7cb`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/customer-payments#service-and-operations) section lists it.
 :::
 
 One section per command of
 `contexts[customer-payments].aggregates[PaymentAuthorization].commands` and
 `aggregates[Refund].commands`, plus the policies that issue them. They are
-proposed application services in `internal/application/usecases`. The
+application services in `internal/application/usecases` (as built). The
 step-by-step diagrams are on
 [Sequence Diagrams](/storefront/contexts/customer-payments/sequence-diagrams);
 the payloads are on [Domain Events](/storefront/contexts/customer-payments/domain-events);
@@ -52,7 +52,7 @@ conflict is retried once inside the use case, then surfaces as 409
 (`outbox_events`) is written in the same transaction. A consumer-driven use
 case also inserts the CloudEvents `id` into `processed_events` in that
 transaction. A relay publishes outbox rows to
-`retailnetwork.customer-payments.analytics` after the commit.
+`retailnetwork.customer-payments.events` after the commit.
 
 **The provider call sits outside the transaction.** A use case that calls
 the provider (`AuthorizePayment`, `CaptureAllocation`, `VoidAuthorization`,
@@ -291,7 +291,7 @@ is still written, which is a proposed disposition the model does not state.
 - **Inbound adapter:** an internal scheduler scanning `expires_at`.
 - **Main flow:** per authorization, call the provider `Reauthorize` through
   the ACL port for the uncaptured allocations with the deterministic key.
-  On success `Reauthorize(newExpiresAt, providerRef)`: `AUTHORIZED →
+  On success `Reauthorize(providerAuthorizationId, newExpiresAt)`: `AUTHORIZED →
   AUTHORIZED` with the new `expiresAt` and provider reference. On a provider
   decline the authorization goes to `EXPIRED` (`ExpireAuthorization`) and
   `PaymentDeclined{reason: REAUTH_DECLINED}` is raised (H1, H2).

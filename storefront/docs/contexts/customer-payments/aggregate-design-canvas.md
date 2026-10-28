@@ -7,21 +7,19 @@ description: The ddd-crew Aggregate Design Canvas for Customer Payments' two agg
 
 # Aggregate Design Canvas
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `customer-payments` service is built on develop ([`IQVO/customer-payments`](https://github.com/IQVO/customer-payments) at `530c7cb`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/customer-payments#service-and-operations) section lists it.
 :::
 
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
 The model has two aggregate roots in this context, **PaymentAuthorization**
-and **Refund**, and one read model, **ParkedFulfillmentFacts**. Proposed Go
-packages: `internal/domain/authorization` and `internal/domain/refund` (the
-packages the UL code identifiers name).
+and **Refund**, and one read model, **ParkedFulfillmentFacts**. Go packages **as built**: `internal/domain/paymentauthorization`, `internal/domain/refund` (plus `shared`); the design named `internal/domain/authorization`, `internal/domain/refund`.
 
 ## PaymentAuthorization
 
 ### 1. Name
 
-`PaymentAuthorization` (`authorization.PaymentAuthorization`), identified by
+`PaymentAuthorization` (`paymentauthorization.PaymentAuthorization`), identified by
 `authorizationId`.
 
 ### 2. Description
@@ -128,14 +126,14 @@ the state does not allow, `concurrent-update` (409) and `validation-failed`
 | Event | Raised when | Full CloudEvents type |
 | --- | --- | --- |
 | `PaymentAuthorized` | `AuthorizePayment` is accepted by the provider and saved | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentAuthorized` |
-| `PaymentReauthorized` | `ReauthorizePayment` is saved (new `expiresAt`, `providerRef`) | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentReauthorized` |
+| `PaymentReauthorized` | `ReauthorizePayment` is saved (new `expiresAt`, `providerAuthorizationId`, plus `orderId`) | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentReauthorized` |
 | `PaymentCaptured` | `CaptureAllocation` is saved | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentCaptured` |
 | `PaymentReleased` | `ReleaseAllocation` or `VoidAuthorization` is saved (`reason` is `CANCELLED`, `UNSOURCEABLE`, `VOIDED` or `EXPIRED`) | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentReleased` |
 | `PaymentAuthorizationExpired` | `ExpireAuthorization` is saved | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentAuthorizationExpired` |
 | `PaymentDeclined` | `AuthorizePayment` is declined by the provider and the `DECLINED` record is saved, or a re-authorization is declined (reason `REAUTH_DECLINED`); carries `authorizationId` | `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentDeclined` |
 
-All six are analytics-only by design (topic `retailnetwork.customer-payments.analytics`;
-no network consumer exists yet). `BindOrder` raises nothing. Events leave through the transactional outbox in the same transaction as the
+All six are analytics-only by design (no network consumer exists yet). **As built** they go to
+`retailnetwork.customer-payments.events` (service ADR 0003); the design placed them on `.analytics`. `BindOrder` raises nothing. Events leave through the transactional outbox in the same transaction as the
 save.
 
 ### 8. Throughput

@@ -2,20 +2,20 @@
 id: use-cases
 title: Use Cases
 sidebar_label: Use Cases
-description: Every proposed Product Content command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency.
+description: Every Product Content command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency.
 ---
 
 # Use Cases
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model carries the proposed contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-content` service is built on develop ([`IQVO/product-content`](https://github.com/IQVO/product-content) at `2f09dc0`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-content#service-and-operations) section lists it.
 :::
 
 One section per command of `contexts[product-content].aggregates[*].commands`.
-They are proposed application services in `internal/application/usecases`. The
+They are application services in `internal/application/usecases` (as built). The
 step-by-step diagrams are on [Sequence Diagrams](/storefront/contexts/product-content/sequence-diagrams);
 the payloads are on [Domain Events](/storefront/contexts/product-content/domain-events);
-the proposed REST contract is `apis/product-content/openapi.yaml`.
+the REST contract is `apis/product-content/openapi.yaml`.
 
 Reads are not use cases here: `GET /product-contents` (paged, for
 `product-discovery`'s bootstrap), `GET /product-contents/{catalogItemId}`
@@ -85,7 +85,7 @@ key returns the stored response of the first call.
 | `ErrUnknownCatalogItem` | 422 | `unknown-catalog-item` | The item is not in `CatalogItemView`: never created, or the projection lags. |
 | `ErrUnknownCategory` | 422 | `unknown-category` | The `primaryCategoryId` is not in the current tree. |
 | validation | 422 | `validation-failed` | Schema rules, including the collection bounds (bullets at most 10, attributes at most 50, media at most 12), which have no `Err` names. |
-| duplicate content for the item | 409 | `concurrent-update` | The proposed API maps a second create to 409; the model names no `Err` for it. |
+| duplicate content for the item | 409 | `concurrent-update` | The API maps a second create to 409 (as built too); the model names no `Err` for it. |
 
 - **Events emitted:** none.
 - **Idempotency:** `Idempotency-Key`; the primary key on `catalogItemId` is
@@ -122,7 +122,7 @@ key returns the stored response of the first call.
 
 - **Events emitted:** none modelled. How a revised PUBLISHED content reaches
   `product-discovery` is a model gap: `PublishContent` is `DRAFT →
-  PUBLISHED` only, so no transition re-publishes, yet the proposed API says
+  PUBLISHED` only, so no transition re-publishes, yet the design-time API said
   the revision bumps "once published again" and `product-discovery` orders
   content by `revision`.
 - **Idempotency:** `Idempotency-Key`.
@@ -225,7 +225,7 @@ key returns the stored response of the first call.
 | Error | HTTP | Problem `type` slug | Note |
 | --- | --- | --- | --- |
 | `ErrMaxDepth` | 422 | `max-depth` | The new node would sit below level four. |
-| `ErrCategoryCycle` | 422 | `category-cycle` | The proposed API lists it on create; a brand-new node cannot close a cycle, so this can only fire on a parent that is itself inconsistent. |
+| `ErrCategoryCycle` | 422 | `category-cycle` | The design-time API listed it on create; a brand-new node cannot close a cycle. **As built** the API lists it only on `:move`. |
 | `ErrDuplicateSiblingName` | 422 | `duplicate-sibling-name` | A sibling already has this name. |
 | validation | 422 | `validation-failed` | An empty name or a missing parent id shape. |
 
@@ -256,7 +256,7 @@ key returns the stored response of the first call.
 | `ErrCategoryCycle` | 422 | `category-cycle` | The new parent is inside the moved subtree. |
 | `ErrMaxDepth` | 422 | `max-depth` | The moved subtree would reach below level four. |
 | `ErrDuplicateSiblingName` | 422 | `duplicate-sibling-name` | The new siblings already have this name. |
-| `ErrCategoryInUse` | 409 | `category-in-use` | The proposed API maps it to `:move`, although the invariant guards **removal** and the model has no remove command (model gap). |
+| `ErrCategoryInUse` | 409 | `category-in-use` | The design-time API mapped it to `:move`, although the invariant guards **removal** and the model has no remove command (model gap). **As built** no route answers `category-in-use`. |
 | version conflict | 409 | `concurrent-update` | Retried once inside the use case. |
 
 - **Events emitted:** none.

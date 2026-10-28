@@ -2,20 +2,20 @@
 id: use-cases
 title: Use Cases
 sidebar_label: Use Cases
-description: Every proposed Checkout command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency, including the in-doubt resolver policy.
+description: Every Checkout command use case with its actor or trigger, inbound adapter, preconditions, main flow, error mapping, events and idempotency, including the in-doubt resolver policy.
 ---
 
 # Use Cases
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `checkout` service is built on develop ([`IQVO/checkout`](https://github.com/IQVO/checkout) at `ab4f0e9`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/checkout#service-and-operations) section lists it.
 :::
 
 One section per command of
 `contexts[checkout].aggregates[CheckoutSession].commands`, plus the
 `ResolveInDoubtPlacements`, `ResolveStuckAuthorizations` and `RetryOwedVoids`
-policies. They are proposed application services in
-`internal/application/usecases`. The step-by-step diagrams are on
+policies. They are application services in
+`internal/application/usecases` (as built). The step-by-step diagrams are on
 [Sequence Diagrams](/storefront/contexts/checkout/sequence-diagrams); the
 payloads are on [Domain Events](/storefront/contexts/checkout/domain-events);
 the REST contract is `storefront/apis/checkout/openapi.yaml`.

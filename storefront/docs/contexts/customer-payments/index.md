@@ -7,8 +7,8 @@ description: "Customer Payments, the Generic subdomain of the digital storefront
 
 # Customer Payments
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `customer-payments` service is built on develop ([`IQVO/customer-payments`](https://github.com/IQVO/customer-payments) at `530c7cb`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/customer-payments#service-and-operations) section lists it.
 :::
 
 <span className="badge-generic">Generic</span>
@@ -43,13 +43,22 @@ sees a card number, only PSP tokens.
 | [Domain Message Flow](/storefront/contexts/customer-payments/domain-message-flow) | Authorize, capture on shipment, release, refund, parked facts | [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
 | [EventStorming](/storefront/contexts/customer-payments/eventstorming) | Process-level boards with hotspots | [EventStorming glossary & cheat sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
 | [Use Cases](/storefront/contexts/customer-payments/use-cases) | One section per command: trigger, flow, errors, events, idempotency | (application layer, fleet convention) |
-| [Class Diagram](/storefront/contexts/customer-payments/class-diagram) | Proposed domain model and hexagonal ports and adapters | (UML, fleet convention) |
-| [Entity Relationship](/storefront/contexts/customer-payments/entity-relationship) | Proposed Postgres schema | (fleet convention) |
+| [Class Diagram](/storefront/contexts/customer-payments/class-diagram) | Domain model and hexagonal ports and adapters (the model's design, with the as-built packages) | (UML, fleet convention) |
+| [Entity Relationship](/storefront/contexts/customer-payments/entity-relationship) | Postgres schema as built (migration 0001) | (fleet convention) |
 | [Sequence Diagrams](/storefront/contexts/customer-payments/sequence-diagrams) | Adapter to Kafka and provider for every command use case | (UML, fleet convention) |
+
+## Service and operations
+
+- **Service:** [`IQVO/customer-payments`](https://github.com/IQVO/customer-payments) on `develop` (`530c7cb`, 2026-10-27): binaries `cmd/api`, `cmd/mcp`; REST contract [`apis/openapi.yaml`](https://github.com/IQVO/customer-payments/blob/develop/apis/openapi.yaml), event contract [`apis/asyncapi.yaml`](https://github.com/IQVO/customer-payments/blob/develop/apis/asyncapi.yaml), schema in `internal/adapters/outbound/postgres/migrations/` (see [Entity Relationship](/storefront/contexts/customer-payments/entity-relationship)). 4 ADRs, listed in the [ADR index](/storefront/adr#customer-payments).
+- **Configuration:** mandatory at boot (the service exits naming the missing variable): `DATABASE_URL`, `KAFKA_BROKERS`, `PAYMENT_PROVIDER_URL`, `CHECKOUT_CONSUMER_GROUP`, `ORDER_SOURCING_CONSUMER_GROUP`, `SHIPPING_AND_TRACKING_CONSUMER_GROUP`. There is no in-memory mode. Packaging: no Helm chart in the repo yet (`charts/` is absent on develop).
+- **Deployment:** not deployed. warehouse-infra `develop` has no `terraform/apps.yaml` entry and no `helm-values/customer-payments.yaml`, so no database, consumer group or gateway route is provisioned. The kind cluster was not checked in this refresh.
+- **Observability:** [service ADR 0004](https://github.com/IQVO/customer-payments/blob/develop/docs/adr/0004-fleet-observability-standard.md), *Adopt the fleet observability standard (logs, metrics, traces)*, Accepted (2026-10-26). Logs, metrics and traces leave over OTLP/gRPC (`OTEL_EXPORTER_OTLP_ENDPOINT`, code default `localhost:4317`; `OTEL_SERVICE_NAME`); a collector that is down only drops telemetry. The Tier-2 business counter is `payments.authorizations.decided` (unit `{authorization}`, in `internal/adapters/outbound/telemetry/payment_metrics.go`), with attribute `outcome` = `authorized`, `declined` or `failed` and `reason` on the outcomes that are not a success. No warehouse-infra dashboard queries it yet.
+- **MCP:** `cmd/mcp` is a read-only MCP server on `MCP_ADDR` (default `:8090`) with four tools: `get_payment_authorization`, `list_payment_authorizations`, `get_refund`, `list_refunds`.
+- **Payment provider:** reached over HTTP at `PAYMENT_PROVIDER_URL`; in development and tests that is [`payment-provider-simulator`](/storefront/components#payment-provider-simulator).
 
 ## Elsewhere
 
-- REST contract (proposed): `storefront/apis/customer-payments/openapi.yaml`,
+- REST contract: `storefront/apis/customer-payments/openapi.yaml` (a copy of the service\'s spec on develop),
   rendered under the [API reference](/storefront/api-reference).
 - The storefront-wide [Context Map](/storefront/strategic-design/context-map),
   [Subdomain Classification](/storefront/strategic-design/subdomain-classification)

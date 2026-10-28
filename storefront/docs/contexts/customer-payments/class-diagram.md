@@ -2,20 +2,22 @@
 id: class-diagram
 title: Class Diagram
 sidebar_label: Class Diagram
-description: Proposed UML class diagrams of Customer Payments' domain model, events and policies, and the hexagonal ports-and-adapters layout with the payment provider Anti-Corruption Layer a Go implementation would use.
+description: UML class diagrams of Customer Payments' domain model, events and policies, and the hexagonal ports-and-adapters layout with the payment provider Anti-Corruption Layer a Go implementation would use.
 ---
 
 # Class Diagram
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `customer-payments` service is built on develop ([`IQVO/customer-payments`](https://github.com/IQVO/customer-payments) at `530c7cb`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/customer-payments#service-and-operations) section lists it.
 :::
 
-UML class diagrams of the **proposed** `internal/domain/**` packages, plus
+UML class diagrams of the `internal/domain/**` packages as the model designs them, plus
 the hexagonal ports and adapters. Type names come from the model's code
-identifiers (`authorization.PaymentAuthorization`,
-`authorization.Allocation`, `refund.Refund`) and value objects. Fields are
+identifiers (`paymentauthorization.PaymentAuthorization`,
+`paymentauthorization.Allocation`, `refund.Refund`) and value objects. Fields are
 unexported in Go and shown with `-`; methods are shown with `+`.
+
+**As built** (`IQVO/customer-payments` develop `530c7cb`): the domain packages are `internal/domain/paymentauthorization`, `internal/domain/refund`. Exported types per package: `paymentauthorization`: `Outcome`, `AllocationAmount`, `PaymentAuthorized`, `PaymentCaptured`, `PaymentReleased`, `PaymentAuthorizationExpired`, `PaymentDeclined`, `PaymentReauthorized`, `ID`, `State`, `AllocState`, `Allocation`, `AllocationInput`, `Draft`, `PaymentAuthorization`, `Snapshot`; `refund`: `RefundIssued`, `RefundFailed`, `ID`, `State`, `Reason`, `Request`, `Limits`, `Refund`, `Snapshot`. Application packages: `internal/application/idempotency`, `internal/application/outbox`, `internal/application/parked`, `internal/application/ports`, `internal/application/provider`, `internal/application/usecases`, `internal/application/views`; adapters: `internal/adapters/inbound/http`, `internal/adapters/inbound/kafka`, `internal/adapters/inbound/mcp`, `internal/adapters/inbound/requestlog`, `internal/adapters/outbound/clock`, `internal/adapters/outbound/ids`, `internal/adapters/outbound/kafka`, `internal/adapters/outbound/memory`, `internal/adapters/outbound/outbox`, `internal/adapters/outbound/paymentprovider`, `internal/adapters/outbound/postgres`, `internal/adapters/outbound/repocontract`, `internal/adapters/outbound/telemetry`. Where a type name below differs (the UML keeps the design names), the [Ubiquitous Language](/storefront/contexts/customer-payments/ubiquitous-language) page carries the built identifier.
 
 ## 1. The PaymentAuthorization aggregate and its allocations
 
@@ -274,7 +276,7 @@ flowchart TB
         SCH["scheduler<br/>reauthorize, void unbound"]
     end
     APP["<b>internal/application/usecases</b><br/>AuthorizePayment, VoidAuthorization<br/>CaptureAllocation, ReleaseAllocation<br/>BindOrder, ReauthorizePayment<br/>ExpireAuthorization<br/>RequestRefund, RecordRefundOutcome"]
-    DOM["<b>internal/domain</b><br/>authorization.PaymentAuthorization<br/>authorization.Allocation, ProviderRef<br/>refund.Refund"]
+    DOM["<b>internal/domain</b><br/>paymentauthorization.PaymentAuthorization<br/>paymentauthorization.Allocation, ProviderRef<br/>refund.Refund"]
     PORTS["<b>internal/application/ports</b><br/>AuthorizationRepository<br/>RefundRepository<br/>ParkedFactsStore<br/>PaymentProvider (ACL)<br/>Outbox, Inbox<br/>IdempotencyStore<br/>UnitOfWork, Clock"]
     subgraph OUT["internal/adapters/outbound"]
         A1["postgres<br/>repositories, parked facts, outbox,<br/>inbox, idempotency store, UoW"]

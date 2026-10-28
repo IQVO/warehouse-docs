@@ -7,8 +7,8 @@ description: "Product Discovery, the Supporting read side of the digital storefr
 
 # Product Discovery
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-discovery` service is built on develop ([`IQVO/product-discovery`](https://github.com/IQVO/product-discovery) at `9c2f945`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-discovery#service-and-operations) section lists it.
 :::
 
 <span className="badge-supporting">Supporting</span>
@@ -41,13 +41,21 @@ publishes no events and takes no commands, only the three read routes the
 | [Domain Message Flow](/storefront/contexts/product-discovery/domain-message-flow) | Search, the availability feed, the content and price feeds, the bootstrap rebuild | [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
 | [EventStorming](/storefront/contexts/product-discovery/eventstorming) | Process-level boards with hotspots | [EventStorming glossary & cheat sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
 | [Use Cases](/storefront/contexts/product-discovery/use-cases) | The three queries, the projector and the bootstrap rebuild | (application layer, fleet convention) |
-| [Class Diagram](/storefront/contexts/product-discovery/class-diagram) | Proposed read-side model, the search port and the hexagonal adapters | (UML, fleet convention) |
-| [Entity Relationship](/storefront/contexts/product-discovery/entity-relationship) | Proposed Postgres schema (projections, search index, inbox) | (fleet convention) |
+| [Class Diagram](/storefront/contexts/product-discovery/class-diagram) | Read-side model, the search port and the hexagonal adapters (the model's design, with the as-built packages) | (UML, fleet convention) |
+| [Entity Relationship](/storefront/contexts/product-discovery/entity-relationship) | Postgres schema as built (migration 0001): projections, search index, inbox | (fleet convention) |
 | [Sequence Diagrams](/storefront/contexts/product-discovery/sequence-diagrams) | Adapter to store for every use case, including the ops-only rebuild | (UML, fleet convention) |
+
+## Service and operations
+
+- **Service:** [`IQVO/product-discovery`](https://github.com/IQVO/product-discovery) on `develop` (`9c2f945`, 2026-10-27): binaries `cmd/api`, `cmd/rebuild`; REST contract [`apis/openapi.yaml`](https://github.com/IQVO/product-discovery/blob/develop/apis/openapi.yaml), event contract [`apis/asyncapi.yaml`](https://github.com/IQVO/product-discovery/blob/develop/apis/asyncapi.yaml), schema in `internal/adapters/outbound/postgres/migrations/` (see [Entity Relationship](/storefront/contexts/product-discovery/entity-relationship)). 5 ADRs, listed in the [ADR index](/storefront/adr#product-discovery).
+- **Configuration:** mandatory at boot (the service exits naming the missing variable): `DATABASE_URL`, `KAFKA_BROKERS`, `OFFER_AVAILABILITY_CONSUMER_GROUP`, `PRODUCT_CONTENT_CONSUMER_GROUP`, `PRICING_CONSUMER_GROUP`. There is no in-memory mode. Packaging: no Helm chart in the repo yet (`charts/` is absent on develop).
+- **Deployment:** not deployed. warehouse-infra `develop` has no `terraform/apps.yaml` entry and no `helm-values/product-discovery.yaml`, so no database, consumer group or gateway route is provisioned. The kind cluster was not checked in this refresh.
+- **Observability:** [service ADR 0005](https://github.com/IQVO/product-discovery/blob/develop/docs/adr/0005-fleet-observability-standard.md), *Adopt the fleet observability standard (logs, metrics, traces)*, Accepted (2026-10-26). Logs, metrics and traces leave over OTLP/gRPC (`OTEL_EXPORTER_OTLP_ENDPOINT`, code default `localhost:4317`; `OTEL_SERVICE_NAME`); a collector that is down only drops telemetry. The Tier-2 business counter is `discovery.searches.served` (unit `{search}`, in `internal/adapters/outbound/telemetry/search_metrics.go`), with attribute `outcome` = `served`, `empty` or `failed` and `reason` on the outcomes that are not a success. No warehouse-infra dashboard queries it yet.
+- **Rebuild:** `cmd/rebuild` is a one-shot ops binary (service ADR 0003): it pages every source over REST (`OFFER_AVAILABILITY_URL`, `PRODUCT_CONTENT_URL`, `PRICING_URL`, all mandatory) and rebuilds the projections; it never serves a shopper request.
 
 ## Elsewhere
 
-- REST contract (proposed): `storefront/apis/product-discovery/openapi.yaml`,
+- REST contract: `storefront/apis/product-discovery/openapi.yaml` (a copy of the service\'s spec on develop),
   rendered under the [API reference](/storefront/api-reference).
 - The storefront-wide [Context Map](/storefront/strategic-design/context-map),
   [Subdomain Classification](/storefront/strategic-design/subdomain-classification)

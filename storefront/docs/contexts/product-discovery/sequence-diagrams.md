@@ -2,18 +2,18 @@
 id: sequence-diagrams
 title: Sequence Diagrams
 sidebar_label: Sequence Diagrams
-description: Proposed UML sequence diagrams for every Product Discovery use case — the three read routes, the projector folds with their guards, and the ops-run bootstrap rebuild — adapter to store, with error, duplicate and out-of-order branches.
+description: UML sequence diagrams for every Product Discovery use case — the three read routes, the projector folds with their guards, and the ops-run bootstrap rebuild — adapter to store, with error, duplicate and out-of-order branches.
 ---
 
 # Sequence Diagrams
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-discovery` service is built on develop ([`IQVO/product-discovery`](https://github.com/IQVO/product-discovery) at `9c2f945`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-discovery#service-and-operations) section lists it.
 :::
 
 One UML sequence diagram per use case on
 [Use Cases](/storefront/contexts/product-discovery/use-cases). Participant
-names are the proposed packages and ports from the
+names are the packages and ports the model designs, from the
 [Class Diagram](/storefront/contexts/product-discovery/class-diagram):
 
 - `http` and `kafka` are the inbound adapters; `ops` is the rebuild job.
