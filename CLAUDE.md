@@ -191,6 +191,34 @@ scripts/validate-mermaid.cjs    renders every Mermaid diagram in a real
                                 browser (`npm run validate:mermaid`)
 ```
 
+### The landing page (`src/pages/index.tsx`) — three sections, three grids
+
+The site home page is hand-written React, NOT generated, and no CI gate
+covers it, so it is the first thing that silently goes stale when a context
+is added. It must always carry, in this order:
+
+1. a hero whose lead names **all three** domains and one `button--lg` link
+   per domain (`/overview`, `/network`, `/storefront`);
+2. `SECTIONS` — one card per domain (WMS/WES, Retail Network, Digital
+   Storefront) with the same link shape: Overview, Strategic Design, Context
+   Map, API Reference. Each card's description states the context COUNT in
+   words — update it when a context lands;
+3. one `ContextGrid` per domain, in the same order, fed by `WMS_CONTEXTS`,
+   `NETWORK_CONTEXTS` and `STOREFRONT_CONTEXTS`. Each array must match its
+   context directories exactly (19 / 11 / 6 today — recount
+   `<section>/docs/contexts` on every change, never trust the old number);
+   each entry's `tier` must match that domain's
+   `strategic-design/subdomain-classification.md` verdict, and `slug` is the
+   context directory name (links resolve to `/contexts/<slug>`,
+   `/network/contexts/<slug>`, `/storefront/contexts/<slug>`).
+
+The same three-domain shape is mirrored in `docusaurus.config.ts`: one navbar
+dropdown per domain ending in an ADRs link, and one footer column per domain
+(`wms / wes`, `retail network`, `digital storefront`) ending in Bounded
+Contexts, API Reference and ADRs. **Adding a bounded context is not finished
+until it appears in its domain's grid and the section card's count is
+corrected.**
+
 ### Per-context page set (`docs/contexts/<context>/`)
 
 Every context directory has the same page set, in this sidebar order:
