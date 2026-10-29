@@ -28,12 +28,11 @@ currency with integer minor units; no authentication.
 | `product-discovery` | [Product Discovery API](/storefront/api-reference/rest/product-discovery/product-discovery-api) | [`apis/openapi.yaml`](https://github.com/IQVO/product-discovery/blob/develop/apis/openapi.yaml) |
 | `shopping-cart` | [Shopping Cart API](/storefront/api-reference/rest/shopping-cart/shopping-cart-api) | [`apis/openapi.yaml`](https://github.com/IQVO/shopping-cart/blob/develop/apis/openapi.yaml) |
 | `checkout` | [Checkout API](/storefront/api-reference/rest/checkout/checkout-api) | [`apis/openapi.yaml`](https://github.com/IQVO/checkout/blob/develop/apis/openapi.yaml) |
-| `customer-payments` | [Customer Payments API](/storefront/api-reference/rest/customer-payments/customer-payments-api-proposed) | [`apis/openapi.yaml`](https://github.com/IQVO/customer-payments/blob/develop/apis/openapi.yaml) |
+| `customer-payments` | [Customer Payments API](/storefront/api-reference/rest/customer-payments/customer-payments-api) | [`apis/openapi.yaml`](https://github.com/IQVO/customer-payments/blob/develop/apis/openapi.yaml) |
 | `storefront-bff` (edge) | [Storefront BFF API](/storefront/api-reference/rest/storefront-bff/storefront-bff-api) | [`apis/openapi.yaml`](https://github.com/IQVO/storefront-bff/blob/develop/apis/openapi.yaml) |
 
-The customer-payments spec on develop still carries the design-time title
-"Customer Payments API (proposed)" and version `0.1.0-proposed`, so its
-generated page keeps the `-proposed` slug until the service repo renames it.
+The customer-payments spec dropped its design-time "(proposed)" title and version on
+2026-10-27 (customer-payments#6), so its generated page is at the plain slug.
 
 The event contracts (`apis/asyncapi.yaml` in each context repo) are not
 rendered here: the section's events live in the
