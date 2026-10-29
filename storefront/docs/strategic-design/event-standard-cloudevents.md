@@ -80,7 +80,7 @@ Integration rules carried by every context:
 
 ### `pricing`
 
-Topic `retailnetwork.pricing.events` (analytics-only events on `retailnetwork.pricing.analytics`).
+Topic `retailnetwork.pricing.events` (analytics-only events on `retailnetwork.pricing.analytics`). Analytics-only events carry dataschema `urn:retailnetwork:pricing:analytics:<EventName>:v1`.
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |

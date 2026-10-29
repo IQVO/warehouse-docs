@@ -3543,6 +3543,201 @@
       "ProcessPathCreated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0]",
       "ProcessPathUpdated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[1]",
       "ProcessPathDeactivated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[2]",
+      "ProductPackLevelDeclared": {
+        "name": "ProductPackLevelDeclared",
+        "title": "ProductPackLevelDeclared",
+        "summary": "product-master declared or revised a pack level of a SKU (consumed).",
+        "description": "Published by product-master on `warehouse.product-master.events` (its AsyncAPI is the source of truth); consumed here into the local PackView read per scanned GTIN at scan time (ADR 0054), by the always-on consumer under the required `PACK_VIEW_CONSUMER_GROUP`.",
+        "contentType": "application/cloudevents+json",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+        "payload": {
+          "allOf": [
+            "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+            {
+              "type": "object",
+              "required": [
+                "type",
+                "source",
+                "dataschema",
+                "data"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "com.warehouse.wms.product-master.product.ProductPackLevelDeclared",
+                  "x-parser-schema-id": "<anonymous-schema-313>"
+                },
+                "source": {
+                  "type": "string",
+                  "const": "/warehouse/product-master",
+                  "x-parser-schema-id": "<anonymous-schema-314>"
+                },
+                "dataschema": {
+                  "type": "string",
+                  "const": "urn:warehouse:product-master:events:ProductPackLevelDeclared:v1",
+                  "x-parser-schema-id": "<anonymous-schema-315>"
+                },
+                "data": {
+                  "type": "object",
+                  "required": [
+                    "sku",
+                    "level",
+                    "gtin",
+                    "units_per_pack",
+                    "is_orderable",
+                    "is_despatch_unit",
+                    "effective_from",
+                    "version"
+                  ],
+                  "properties": {
+                    "sku": {
+                      "type": "string",
+                      "description": "The SKU (also the Kafka key and the CloudEvents `subject`).",
+                      "x-parser-schema-id": "<anonymous-schema-317>"
+                    },
+                    "level": {
+                      "type": "string",
+                      "x-parser-schema-id": "<anonymous-schema-318>"
+                    },
+                    "gtin": {
+                      "type": "string",
+                      "x-parser-schema-id": "<anonymous-schema-319>"
+                    },
+                    "child_gtin": {
+                      "type": "string",
+                      "x-parser-schema-id": "<anonymous-schema-320>"
+                    },
+                    "qty_of_child": {
+                      "type": "integer",
+                      "minimum": 2,
+                      "description": "Absent for EACH.",
+                      "x-parser-schema-id": "<anonymous-schema-321>"
+                    },
+                    "units_per_pack": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "description": "Direct factor to eaches; 1 for EACH.",
+                      "x-parser-schema-id": "<anonymous-schema-322>"
+                    },
+                    "is_orderable": {
+                      "type": "boolean",
+                      "x-parser-schema-id": "<anonymous-schema-323>"
+                    },
+                    "is_despatch_unit": {
+                      "type": "boolean",
+                      "x-parser-schema-id": "<anonymous-schema-324>"
+                    },
+                    "effective_from": {
+                      "type": "string",
+                      "format": "date-time",
+                      "x-parser-schema-id": "<anonymous-schema-325>"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "x-parser-schema-id": "<anonymous-schema-326>"
+                    }
+                  },
+                  "x-parser-schema-id": "<anonymous-schema-316>"
+                }
+              },
+              "x-parser-schema-id": "<anonymous-schema-312>"
+            }
+          ],
+          "x-parser-schema-id": "<anonymous-schema-311>"
+        }
+      },
+      "ProductPackLevelRetired": {
+        "name": "ProductPackLevelRetired",
+        "title": "ProductPackLevelRetired",
+        "summary": "product-master retired a pack level of a SKU (consumed).",
+        "description": "Published by product-master on `warehouse.product-master.events` (its AsyncAPI is the source of truth); consumed here into the local PackView read per scanned GTIN at scan time (ADR 0054), by the always-on consumer under the required `PACK_VIEW_CONSUMER_GROUP`.",
+        "contentType": "application/cloudevents+json",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+        "payload": {
+          "allOf": [
+            "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+            {
+              "type": "object",
+              "required": [
+                "type",
+                "source",
+                "dataschema",
+                "data"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "const": "com.warehouse.wms.product-master.product.ProductPackLevelRetired",
+                  "x-parser-schema-id": "<anonymous-schema-329>"
+                },
+                "source": {
+                  "type": "string",
+                  "const": "/warehouse/product-master",
+                  "x-parser-schema-id": "<anonymous-schema-330>"
+                },
+                "dataschema": {
+                  "type": "string",
+                  "const": "urn:warehouse:product-master:events:ProductPackLevelRetired:v1",
+                  "x-parser-schema-id": "<anonymous-schema-331>"
+                },
+                "data": {
+                  "type": "object",
+                  "required": [
+                    "sku",
+                    "level",
+                    "gtin",
+                    "effective_to",
+                    "reason",
+                    "version"
+                  ],
+                  "properties": {
+                    "sku": {
+                      "type": "string",
+                      "x-parser-schema-id": "<anonymous-schema-333>"
+                    },
+                    "level": {
+                      "type": "string",
+                      "x-parser-schema-id": "<anonymous-schema-334>"
+                    },
+                    "gtin": {
+                      "type": "string",
+                      "x-parser-schema-id": "<anonymous-schema-335>"
+                    },
+                    "effective_to": {
+                      "type": "string",
+                      "format": "date-time",
+                      "x-parser-schema-id": "<anonymous-schema-336>"
+                    },
+                    "reason": {
+                      "type": "string",
+                      "x-parser-schema-id": "<anonymous-schema-337>"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "x-parser-schema-id": "<anonymous-schema-338>"
+                    }
+                  },
+                  "x-parser-schema-id": "<anonymous-schema-332>"
+                }
+              },
+              "x-parser-schema-id": "<anonymous-schema-328>"
+            }
+          ],
+          "x-parser-schema-id": "<anonymous-schema-327>"
+        }
+      },
       "ProductClassified": "$ref:$.channels.warehouse.product-master.events.publish.message",
       "InterleavingHintIssued": "$ref:$.channels.warehouse.task-interleaving.events.publish.message"
     },
