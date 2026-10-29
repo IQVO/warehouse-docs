@@ -110,29 +110,13 @@ const CONTEXT_EXTRA_PAGES: Record<string, string[]> = {};
 // Contexts whose repository ships only part of the synced page set: they list
 // exactly the pages that exist instead of the shared set. Remove an entry once
 // the context's repository ships the full pack.
-const CONTEXT_PAGE_OVERRIDES: Record<string, string[]> = {
-  // returns-processing ships 4 of the 11 pack pages and no use-cases page
-  // (no core-domain-chart, context-map, domain-message-flow, eventstorming,
-  // class-diagram, entity-relationship, sequence-diagrams on develop).
-  'returns-processing': [
-    'business-context',
-    'ubiquitous-language',
-    'bounded-context-canvas',
-    'aggregate-design-canvas',
-    'domain-events',
-  ],
-};
+const CONTEXT_PAGE_OVERRIDES: Record<string, string[]> = {};
 
-// Operations pages of an overridden context: the ones its repository ships
-// (returns-processing has no development/testing page on develop).
-const CONTEXT_OPS_OVERRIDES: Record<string, string[]> = {
-  'returns-processing': ['configuration', 'runbook', 'observability', 'troubleshooting'],
-};
 
 function contextCategory(ctx: string, hasAsyncNarrative: boolean) {
   const base = CONTEXT_PAGE_OVERRIDES[ctx] ?? [...CONTEXT_PAGES, ...(CONTEXT_EXTRA_PAGES[ctx] ?? [])];
   const pages = hasAsyncNarrative ? [...base, 'async-api'] : base;
-  const ops = CONTEXT_OPS_OVERRIDES[ctx] ?? (CONTEXT_PAGE_OVERRIDES[ctx] ? [] : CONTEXT_OPS_PAGES);
+  const ops = CONTEXT_PAGE_OVERRIDES[ctx] ? [] : CONTEXT_OPS_PAGES;
   return {
     type: 'category' as const,
     label: ctx,

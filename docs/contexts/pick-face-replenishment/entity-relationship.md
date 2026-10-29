@@ -11,8 +11,10 @@ This page is a copy of [`docs/docs/ddd/entity-relationship.md`](https://github.c
 :::
 
 
-The OLTP schema created by `migrations/0001_replenishment_schema.up.sql` and
-`migrations/0002_forward_assignment_maps.up.sql`, plus the separate [analytics database](#analytics-database). The schema declares **no foreign keys**: the relations drawn below are
+The OLTP schema created by `migrations/0001_replenishment_schema.up.sql`,
+`migrations/0002_forward_assignment_maps.up.sql` and
+`migrations/0003_pack_derived_policies.up.sql` (`pack_levels`, the local copy of
+product-master's pack levels), plus the separate [analytics database](#analytics-database). The schema declares **no foreign keys**: the relations drawn below are
 logical, joined at read time, so rows of the event-fed copies may arrive in any order.
 
 ```mermaid
@@ -108,9 +110,19 @@ erDiagram
     locations ||--o{ bin_stock_levels : "bin"
     locations ||--o{ forward_assignments : "bin"
     zones ||--o{ locations : "zone_id"
+    pack_levels {
+        text sku PK "no FK"
+        text level PK "EACH INNER CASE PALLET"
+        text gtin
+        bigint units_per_pack "CHECK at least 1"
+        timestamptz effective_from
+        timestamptz effective_to "null while current; retired stays as history"
+        bigint version "product-master aggregate version, LWW"
+        timestamptz updated_at
+    }
 ```
 
-Source: `migrations/0001_replenishment_schema.up.sql`, `migrations/0002_forward_assignment_maps.up.sql`.
+Source: `migrations/0001_replenishment_schema.up.sql`, `migrations/0002_forward_assignment_maps.up.sql`, `migrations/0003_pack_derived_policies.up.sql`.
 `processed_events`, `outbox_events` and `idempotency_keys` are plumbing and relate to nothing by key.
 
 ## What backs what

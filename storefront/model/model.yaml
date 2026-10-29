@@ -116,6 +116,7 @@ contexts:
   - id: pricing
     name: Pricing
     code: PR
+    analytics_dataschema: "urn:retailnetwork:pricing:analytics:<EventName>:v1"   # as built (pricing ADR 0006: stream segment names the stream)
     tier: storefront
     classification: Core
     chart: {differentiation: 0.78, complexity: 0.52, evolution: Custom-built}

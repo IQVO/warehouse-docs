@@ -1337,6 +1337,177 @@
         }
       },
       "x-parser-unique-object-id": "warehouse.fulfillment.events"
+    },
+    "warehouse.product-master.events": {
+      "address": "warehouse.product-master.events",
+      "title": "product-master integration topic",
+      "description": "product-master's integration stream (the ProductMasterTopic constant in\ninternal/adapters/inbound/kafka/pack_level_consumer.go).\nnetwork-inventory-planning consumes only ProductPackLevelDeclared and\nProductPackLevelRetired into its local pack_levels view (ADR 0017,\ncase-multiple transfers) and ignores every other type.\n",
+      "messages": {
+        "productPackLevelDeclared": {
+          "name": "ProductPackLevelDeclared",
+          "title": "Product pack level declared",
+          "summary": "product-master declared or revised a pack level of a SKU (consumed).",
+          "contentType": "application/cloudevents+json",
+          "payload": {
+            "description": "CloudEvents 1.0 envelope of product-master's ProductPackLevelDeclared (fields as product-master's apis/asyncapi.yaml; this service reads sku, level, gtin, units_per_pack, effective_from, version).",
+            "allOf": [
+              "$ref:$.channels.warehouse.facility.events.messages.siteCapabilityChanged.payload.allOf[0]",
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "com.warehouse.wms.product-master.product.ProductPackLevelDeclared",
+                    "x-parser-schema-id": "<anonymous-schema-178>"
+                  },
+                  "dataschema": {
+                    "const": "urn:warehouse:product-master:events:ProductPackLevelDeclared:v1",
+                    "x-parser-schema-id": "<anonymous-schema-179>"
+                  },
+                  "data": {
+                    "type": "object",
+                    "required": [
+                      "sku",
+                      "level",
+                      "gtin",
+                      "units_per_pack",
+                      "is_orderable",
+                      "is_despatch_unit",
+                      "effective_from",
+                      "version"
+                    ],
+                    "properties": {
+                      "sku": {
+                        "type": "string",
+                        "description": "The SKU; also the Kafka key and subject.",
+                        "x-parser-schema-id": "<anonymous-schema-181>"
+                      },
+                      "level": {
+                        "type": "string",
+                        "description": "The pack level (product-master's PackLevel enum).",
+                        "x-parser-schema-id": "<anonymous-schema-182>"
+                      },
+                      "gtin": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-183>"
+                      },
+                      "child_gtin": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-184>"
+                      },
+                      "qty_of_child": {
+                        "type": "integer",
+                        "minimum": 2,
+                        "description": "Absent for EACH.",
+                        "x-parser-schema-id": "<anonymous-schema-185>"
+                      },
+                      "units_per_pack": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Direct factor to eaches; 1 for EACH.",
+                        "x-parser-schema-id": "<anonymous-schema-186>"
+                      },
+                      "is_orderable": {
+                        "type": "boolean",
+                        "x-parser-schema-id": "<anonymous-schema-187>"
+                      },
+                      "is_despatch_unit": {
+                        "type": "boolean",
+                        "x-parser-schema-id": "<anonymous-schema-188>"
+                      },
+                      "effective_from": {
+                        "type": "string",
+                        "format": "date-time",
+                        "x-parser-schema-id": "<anonymous-schema-189>"
+                      },
+                      "version": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "Per (sku, level); last writer wins.",
+                        "x-parser-schema-id": "<anonymous-schema-190>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-180>"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-177>"
+              }
+            ],
+            "x-parser-schema-id": "ProductPackLevelDeclaredEvent"
+          },
+          "x-parser-unique-object-id": "productPackLevelDeclared"
+        },
+        "productPackLevelRetired": {
+          "name": "ProductPackLevelRetired",
+          "title": "Product pack level retired",
+          "summary": "product-master retired a pack level of a SKU (consumed).",
+          "contentType": "application/cloudevents+json",
+          "payload": {
+            "description": "CloudEvents 1.0 envelope of product-master's ProductPackLevelRetired (this service reads sku, level, gtin, effective_to, version).",
+            "allOf": [
+              "$ref:$.channels.warehouse.facility.events.messages.siteCapabilityChanged.payload.allOf[0]",
+              {
+                "type": "object",
+                "properties": {
+                  "type": {
+                    "const": "com.warehouse.wms.product-master.product.ProductPackLevelRetired",
+                    "x-parser-schema-id": "<anonymous-schema-192>"
+                  },
+                  "dataschema": {
+                    "const": "urn:warehouse:product-master:events:ProductPackLevelRetired:v1",
+                    "x-parser-schema-id": "<anonymous-schema-193>"
+                  },
+                  "data": {
+                    "type": "object",
+                    "required": [
+                      "sku",
+                      "level",
+                      "gtin",
+                      "effective_to",
+                      "reason",
+                      "version"
+                    ],
+                    "properties": {
+                      "sku": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-195>"
+                      },
+                      "level": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-196>"
+                      },
+                      "gtin": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-197>"
+                      },
+                      "effective_to": {
+                        "type": "string",
+                        "format": "date-time",
+                        "x-parser-schema-id": "<anonymous-schema-198>"
+                      },
+                      "reason": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "x-parser-schema-id": "<anonymous-schema-199>"
+                      },
+                      "version": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "x-parser-schema-id": "<anonymous-schema-200>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-194>"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-191>"
+              }
+            ],
+            "x-parser-schema-id": "ProductPackLevelRetiredEvent"
+          },
+          "x-parser-unique-object-id": "productPackLevelRetired"
+        }
+      },
+      "x-parser-unique-object-id": "warehouse.product-master.events"
     }
   },
   "operations": {
@@ -1451,10 +1622,32 @@
       "summary": "Drive the saga ARRIVED → RECEIVED (terminal).",
       "description": "inventory-storage's destination stow fact: the received stock was\nstowed into destination bins. RECEIVED is terminal; the stow\nallocations are persisted on the aggregate. Consumer group\nTRANSFER_REPLY_CONSUMER_GROUP (env-configured).\n",
       "x-parser-unique-object-id": "receiveTransferStockStowed"
+    },
+    "receiveProductPackLevelDeclared": {
+      "action": "receive",
+      "channel": "$ref:$.channels.warehouse.product-master.events",
+      "summary": "Keep the local pack_levels view current (a pack level declared).",
+      "description": "Upsert the (sku, level) pack level with its GTIN, units_per_pack and\neffective_from, last writer wins on version, in ONE transaction with\nthe processed-event claim (consumer pack-level-consumer). A malformed\npayload or an unparsable effective_from is dead-lettered to\nwarehouse.product-master.events.dlq; only infrastructure failures are\nretried. Consumer group PACK_LEVEL_CONSUMER_GROUP (env-configured; unset\n= the consumer does not start).\n",
+      "messages": [
+        "$ref:$.channels.warehouse.product-master.events.messages.productPackLevelDeclared"
+      ],
+      "x-parser-unique-object-id": "receiveProductPackLevelDeclared"
+    },
+    "receiveProductPackLevelRetired": {
+      "action": "receive",
+      "channel": "$ref:$.channels.warehouse.product-master.events",
+      "summary": "Keep the local pack_levels view current (a pack level retired).",
+      "description": "Mark the (sku, level) pack level retired as of effective_to, last\nwriter wins on version, in the same transaction shape as the declared\nhandler. Consumer group PACK_LEVEL_CONSUMER_GROUP.\n",
+      "messages": [
+        "$ref:$.channels.warehouse.product-master.events.messages.productPackLevelRetired"
+      ],
+      "x-parser-unique-object-id": "receiveProductPackLevelRetired"
     }
   },
   "components": {
     "messages": {
+      "productPackLevelDeclared": "$ref:$.channels.warehouse.product-master.events.messages.productPackLevelDeclared",
+      "productPackLevelRetired": "$ref:$.channels.warehouse.product-master.events.messages.productPackLevelRetired",
       "siteCapabilityChanged": "$ref:$.channels.warehouse.facility.events.messages.siteCapabilityChanged",
       "siteSkuDemandChanged": "$ref:$.channels.warehouse.order-management.events.messages.siteSkuDemandChanged",
       "capacityPlanPublished": "$ref:$.channels.warehouse.warehouse-planning.events.messages.capacityPlanPublished",
@@ -1473,6 +1666,8 @@
       "rebalanceRunCompleted": "$ref:$.channels.warehouse.network-inventory-planning.analytics.messages.rebalanceRunCompleted"
     },
     "schemas": {
+      "ProductPackLevelDeclaredEvent": "$ref:$.channels.warehouse.product-master.events.messages.productPackLevelDeclared.payload",
+      "ProductPackLevelRetiredEvent": "$ref:$.channels.warehouse.product-master.events.messages.productPackLevelRetired.payload",
       "cloudEvent": "$ref:$.channels.warehouse.facility.events.messages.siteCapabilityChanged.payload.allOf[0]",
       "SiteCapabilityChangedEvent": "$ref:$.channels.warehouse.facility.events.messages.siteCapabilityChanged.payload",
       "SiteSkuDemandChangedEvent": "$ref:$.channels.warehouse.order-management.events.messages.siteSkuDemandChanged.payload",

@@ -124,7 +124,7 @@ analytics-only: by `conventions.integration_rules` it goes to the
 | Full type | `com.retailnetwork.storefront.pricing.pricequote.PriceQuoteIssued` |
 | Topic | `retailnetwork.pricing.analytics` (analytics only) |
 | Subject / key | `quoteId` |
-| Dataschema | `urn:retailnetwork:pricing:events:PriceQuoteIssued:v1` |
+| Dataschema | `urn:retailnetwork:pricing:analytics:PriceQuoteIssued:v1` (pricing ADR 0006) |
 | Producing command / use case | `IssuePriceQuote` (REST `POST /price-quotes`, called by `checkout`) |
 | Consumers | analytics only |
 

@@ -745,7 +745,7 @@
       }
     },
     "warehouse.product-master.events": {
-      "description": "product-master's integration topic (key and subject = the SKU). This\nservice consumes `ProductClassified`, `ProductDimensionsDeclared` and\n`ProductMeasured` under a stable consumer group read from env\n`PRODUCT_CONSUMER_GROUP` when `PRODUCT_MODE=kafka`. A message is applied\nonly when its `version` is greater than the stored one. Every other type\nis ignored.\n",
+      "description": "product-master's integration topic (key and subject = the SKU). This\nservice consumes `ProductClassified`, `ProductDimensionsDeclared` and\n`ProductMeasured` under a stable consumer group read from env\n`PRODUCT_CONSUMER_GROUP` when `PRODUCT_MODE=kafka`, and\n`ProductPackLevelDeclared`, `ProductPackLevelRetired` and\n`ProductPackLevelMeasured` into its local PackLevelView (ADR 0012) under\n`PACK_LEVEL_CONSUMER_GROUP` when `PACK_LEVEL_MODE=kafka`. A message is\napplied only when its `version` is greater than the stored one. Every\nother type is ignored.\n",
       "publish": {
         "operationId": "consumeProductMasterEvents",
         "summary": "Consume product classification and physical profile events.",
@@ -1061,6 +1061,287 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "ProductPackLevelDeclared",
+              "title": "ProductPackLevelDeclared (consumed, product-master)",
+              "summary": "A pack level of a SKU was declared or revised.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelDeclared`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductPackLevelDeclared:v1`. Subject and key =\nthe SKU. Applied to the local PackLevelView (ADR 0012,\n`PACK_LEVEL_MODE=kafka`, group `PACK_LEVEL_CONSUMER_GROUP`) only when\n`version` is greater than the stored one. Payload pinned by\nproduct-master's `apis/asyncapi.yaml` on `develop`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "type": "object",
+                "description": "CloudEvents 1.0 envelope of product-master's ProductPackLevelDeclared, as consumed here.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wms.product-master.product.ProductPackLevelDeclared",
+                        "x-parser-schema-id": "<anonymous-schema-72>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:product-master:events:ProductPackLevelDeclared:v1",
+                        "x-parser-schema-id": "<anonymous-schema-73>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "units_per_pack",
+                          "is_orderable",
+                          "is_despatch_unit",
+                          "effective_from",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-75>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-76>"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-77>"
+                          },
+                          "child_gtin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-78>"
+                          },
+                          "qty_of_child": {
+                            "type": "integer",
+                            "minimum": 2,
+                            "description": "Absent for EACH.",
+                            "x-parser-schema-id": "<anonymous-schema-79>"
+                          },
+                          "units_per_pack": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Direct factor to eaches; 1 for EACH.",
+                            "x-parser-schema-id": "<anonymous-schema-80>"
+                          },
+                          "is_orderable": {
+                            "type": "boolean",
+                            "x-parser-schema-id": "<anonymous-schema-81>"
+                          },
+                          "is_despatch_unit": {
+                            "type": "boolean",
+                            "x-parser-schema-id": "<anonymous-schema-82>"
+                          },
+                          "effective_from": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-83>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-84>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-74>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-71>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelDeclaredEvent"
+              }
+            },
+            {
+              "name": "ProductPackLevelRetired",
+              "title": "ProductPackLevelRetired (consumed, product-master)",
+              "summary": "A pack level of a SKU was retired.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelRetired`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductPackLevelRetired:v1`. Subject and key =\nthe SKU. Applied to the local PackLevelView (ADR 0012,\n`PACK_LEVEL_MODE=kafka`, group `PACK_LEVEL_CONSUMER_GROUP`) only when\n`version` is greater than the stored one. Payload pinned by\nproduct-master's `apis/asyncapi.yaml` on `develop`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "type": "object",
+                "description": "CloudEvents 1.0 envelope of product-master's ProductPackLevelRetired, as consumed here.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wms.product-master.product.ProductPackLevelRetired",
+                        "x-parser-schema-id": "<anonymous-schema-86>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:product-master:events:ProductPackLevelRetired:v1",
+                        "x-parser-schema-id": "<anonymous-schema-87>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "effective_to",
+                          "reason",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-89>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-90>"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-91>"
+                          },
+                          "effective_to": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-92>"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-93>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-94>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-88>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-85>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelRetiredEvent"
+              }
+            },
+            {
+              "name": "ProductPackLevelMeasured",
+              "title": "ProductPackLevelMeasured (consumed, product-master)",
+              "summary": "A pack level of a SKU was physically measured.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelMeasured`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductPackLevelMeasured:v1`. Subject and key =\nthe SKU. Applied to the local PackLevelView (ADR 0012,\n`PACK_LEVEL_MODE=kafka`, group `PACK_LEVEL_CONSUMER_GROUP`) only when\n`version` is greater than the stored one. Payload pinned by\nproduct-master's `apis/asyncapi.yaml` on `develop`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "type": "object",
+                "description": "CloudEvents 1.0 envelope of product-master's ProductPackLevelMeasured, as consumed here.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wms.product-master.product.ProductPackLevelMeasured",
+                        "x-parser-schema-id": "<anonymous-schema-96>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:product-master:events:ProductPackLevelMeasured:v1",
+                        "x-parser-schema-id": "<anonymous-schema-97>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "dims",
+                          "measured_at",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-99>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-100>"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-101>"
+                          },
+                          "dims": {
+                            "type": "object",
+                            "required": [
+                              "length_mm",
+                              "width_mm",
+                              "height_mm",
+                              "weight_g"
+                            ],
+                            "properties": {
+                              "length_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20000,
+                                "x-parser-schema-id": "<anonymous-schema-103>"
+                              },
+                              "width_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20000,
+                                "x-parser-schema-id": "<anonymous-schema-104>"
+                              },
+                              "height_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20000,
+                                "x-parser-schema-id": "<anonymous-schema-105>"
+                              },
+                              "weight_g": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2000000,
+                                "x-parser-schema-id": "<anonymous-schema-106>"
+                              }
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-102>"
+                          },
+                          "measured_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-107>"
+                          },
+                          "device_id": {
+                            "type": "string",
+                            "description": "Omitted for a manual measurement.",
+                            "x-parser-schema-id": "<anonymous-schema-108>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-109>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-98>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-95>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelMeasuredEvent"
+              }
             }
           ]
         }
@@ -1109,19 +1390,19 @@
                         "properties": {
                           "zoneId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-73>"
+                            "x-parser-schema-id": "<anonymous-schema-112>"
                           },
                           "siteCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-74>"
+                            "x-parser-schema-id": "<anonymous-schema-113>"
                           },
                           "areaCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-75>"
+                            "x-parser-schema-id": "<anonymous-schema-114>"
                           },
                           "zoneCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-76>"
+                            "x-parser-schema-id": "<anonymous-schema-115>"
                           },
                           "temperatureClass": {
                             "type": "string",
@@ -1130,17 +1411,17 @@
                               "Chilled",
                               "Frozen"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-77>"
+                            "x-parser-schema-id": "<anonymous-schema-116>"
                           },
                           "hazmat": {
                             "type": "boolean",
-                            "x-parser-schema-id": "<anonymous-schema-78>"
+                            "x-parser-schema-id": "<anonymous-schema-117>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-72>"
+                        "x-parser-schema-id": "<anonymous-schema-111>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-71>"
+                    "x-parser-schema-id": "<anonymous-schema-110>"
                   }
                 ],
                 "x-parser-schema-id": "ZoneRegisteredEvent"
@@ -1203,50 +1484,50 @@
                         "properties": {
                           "locationCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-81>"
+                            "x-parser-schema-id": "<anonymous-schema-120>"
                           },
                           "aisleId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-82>"
+                            "x-parser-schema-id": "<anonymous-schema-121>"
                           },
                           "zoneId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-83>"
+                            "x-parser-schema-id": "<anonymous-schema-122>"
                           },
                           "locationType": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-84>"
+                            "x-parser-schema-id": "<anonymous-schema-123>"
                           },
                           "role": {
                             "type": "string",
                             "description": "Absent means Storage.",
-                            "x-parser-schema-id": "<anonymous-schema-85>"
+                            "x-parser-schema-id": "<anonymous-schema-124>"
                           },
                           "dockFlow": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-86>"
+                            "x-parser-schema-id": "<anonymous-schema-125>"
                           },
                           "activities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-88>"
+                              "x-parser-schema-id": "<anonymous-schema-127>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-87>"
+                            "x-parser-schema-id": "<anonymous-schema-126>"
                           },
                           "maxWeightKg": {
                             "type": "number",
-                            "x-parser-schema-id": "<anonymous-schema-89>"
+                            "x-parser-schema-id": "<anonymous-schema-128>"
                           },
                           "maxVolumeM3": {
                             "type": "number",
-                            "x-parser-schema-id": "<anonymous-schema-90>"
+                            "x-parser-schema-id": "<anonymous-schema-129>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-80>"
+                        "x-parser-schema-id": "<anonymous-schema-119>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-79>"
+                    "x-parser-schema-id": "<anonymous-schema-118>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotRegisteredEvent"
@@ -1305,13 +1586,13 @@
                         "properties": {
                           "locationCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-93>"
+                            "x-parser-schema-id": "<anonymous-schema-132>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-92>"
+                        "x-parser-schema-id": "<anonymous-schema-131>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-91>"
+                    "x-parser-schema-id": "<anonymous-schema-130>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotDecommissionedEvent"
@@ -1390,29 +1671,29 @@
                           "relocation_id": {
                             "type": "string",
                             "description": "The relocation id; recorded once per id.",
-                            "x-parser-schema-id": "<anonymous-schema-96>"
+                            "x-parser-schema-id": "<anonymous-schema-135>"
                           },
                           "site_code": {
                             "type": "string",
                             "description": "The site both bins belong to (this service's site id).",
-                            "x-parser-schema-id": "<anonymous-schema-97>"
+                            "x-parser-schema-id": "<anonymous-schema-136>"
                           },
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-98>"
+                            "x-parser-schema-id": "<anonymous-schema-137>"
                           },
                           "from_bin": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-99>"
+                            "x-parser-schema-id": "<anonymous-schema-138>"
                           },
                           "to_bin": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-100>"
+                            "x-parser-schema-id": "<anonymous-schema-139>"
                           },
                           "quantity": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-101>"
+                            "x-parser-schema-id": "<anonymous-schema-140>"
                           },
                           "reason": {
                             "type": "string",
@@ -1423,24 +1704,24 @@
                               "REPLENISHMENT"
                             ],
                             "description": "Only SLOTTING can execute a slot-plan move; every other reason (including REPLENISHMENT, added by pick-face-replenishment's REPLENISH tasks) is recorded as unmatched with reason=reason-not-slotting.",
-                            "x-parser-schema-id": "<anonymous-schema-102>"
+                            "x-parser-schema-id": "<anonymous-schema-141>"
                           },
                           "source_ref": {
                             "type": "string",
                             "maxLength": 200,
                             "description": "`<plan_id>:<move_seq>` on slot-plan moves (matched first); a task id, a ticket or \"\" otherwise.",
-                            "x-parser-schema-id": "<anonymous-schema-103>"
+                            "x-parser-schema-id": "<anonymous-schema-142>"
                           },
                           "occurred_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-104>"
+                            "x-parser-schema-id": "<anonymous-schema-143>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-95>"
+                        "x-parser-schema-id": "<anonymous-schema-134>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-94>"
+                    "x-parser-schema-id": "<anonymous-schema-133>"
                   }
                 ],
                 "x-parser-schema-id": "StockRelocatedEvent"
@@ -1493,7 +1774,10 @@
       "StockRelocated": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0]",
       "SlotPlanGeneratedAnalytics": "$ref:$.channels.warehouse.slotting-optimization.analytics.subscribe.message.oneOf[0]",
       "SlotPlanApprovedAnalytics": "$ref:$.channels.warehouse.slotting-optimization.analytics.subscribe.message.oneOf[1]",
-      "SlotPlanRejectedAnalytics": "$ref:$.channels.warehouse.slotting-optimization.analytics.subscribe.message.oneOf[2]"
+      "SlotPlanRejectedAnalytics": "$ref:$.channels.warehouse.slotting-optimization.analytics.subscribe.message.oneOf[2]",
+      "ProductPackLevelDeclared": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[3]",
+      "ProductPackLevelRetired": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[4]",
+      "ProductPackLevelMeasured": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[5]"
     },
     "schemas": {
       "CloudEventEnvelope": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
@@ -1510,7 +1794,10 @@
       "ZoneRegisteredEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[0].payload",
       "LocationSlotRegisteredEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1].payload",
       "LocationSlotDecommissionedEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[2].payload",
-      "StockRelocatedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0].payload"
+      "StockRelocatedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0].payload",
+      "ProductPackLevelDeclaredEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[3].payload",
+      "ProductPackLevelRetiredEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[4].payload",
+      "ProductPackLevelMeasuredEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[5].payload"
     }
   },
   "x-parser-spec-parsed": true,
