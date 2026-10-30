@@ -15,6 +15,7 @@ when matching files are touched; OpenCode and Codex find them through each repo'
 | context-boundaries.md | outbound adapters, ports |
 | gitflow-and-ci.md | workflows, Makefile, branching |
 | idempotency-and-outbox.md | HTTP handlers, Postgres adapters |
+| readme-standard.md | README edits |
 
 ## Second set: retail network
 

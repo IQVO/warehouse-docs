@@ -24,6 +24,7 @@ sources, dataschemas and topics); edit each set's `cloudevents.md` on its own.
 | kafka-testing-and-consumers.md | tests, consumer groups |
 | no-auth-and-mcp.md | inbound adapters (REST, MCP) |
 | a2a.md | A2A adapters (server cmd/a2a, outbound client) |
+| readme-standard.md | README edits (byte-identical twin of agents/fleet/readme-standard.md) |
 | context-boundaries.md | outbound adapters, ports |
 | gitflow-and-ci.md | workflows, Makefile, branching |
 | idempotency-and-outbox.md | HTTP handlers, Postgres adapters |
