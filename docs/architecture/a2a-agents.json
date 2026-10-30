@@ -1,0 +1,1360 @@
+{
+  "agents": {
+    "inventory-storage": {
+      "name": "inventory-storage",
+      "description": "Inventory & Storage agent for the Warehouse Management System: answers how much of a SKU is usable (on-hand minus active reservations and held or unlocated stock, which is what actually constrains a release) and revokes a reservation so its quantity returns to usable. It reports and releases stock from this context's own ledger; it never stows, receives, picks or moves stock.",
+      "interface": "http://inventory-storage-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "check_availability",
+          "name": "Usable availability of a SKU",
+          "kind": "read",
+          "description": "Read the usable quantity of one SKU: on-hand across all its bins minus active reservations and held or unlocated stock, counted for fleet-owned stock. Usable, not total on-hand, is what constrains a release. Changes nothing. Unknown SKUs answer 0.",
+          "tags": [
+            "inventory",
+            "availability",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"check_availability\",\"arguments\":{\"sku\":\"SKU-1\"}}"
+          ]
+        },
+        {
+          "id": "revoke_reservation",
+          "name": "Revoke a reservation",
+          "kind": "write",
+          "description": "Revokes an active reservation, returning its bound quantity to usable inventory so a failed physical delivery never strands an order, and publishes ReservationRevoked (plus the bin stock-level facts) through the transactional outbox. Rejected as a problem answer, with nothing written, when the reservation is unknown or already resolved (revoked, confirmed or expired). NOT idempotent: a second call on the same reservation is a 409, so a caller may treat that as already done.",
+          "tags": [
+            "inventory",
+            "reservation",
+            "write"
+          ],
+          "examples": [
+            "{\"skill\":\"revoke_reservation\",\"arguments\":{\"reservationId\":\"res-123\"}}"
+          ]
+        }
+      ]
+    },
+    "product-master": {
+      "name": "product-master",
+      "description": "Product Master agent for the Warehouse Management System: tells a delegating agent what a SKU is for handling and physically (description, handling classification, declared and measured unit dimensions and weight, packaging hierarchy), looks a product up from a scanned GTIN, and declares one packaging level with its GTIN under this context's invariants. It answers no \"where\" or \"how many\" question: stock is inventory-storage's.",
+      "interface": "http://product-master-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "product_profile",
+          "name": "Product handling and packaging profile",
+          "kind": "read",
+          "description": "Composed read of one product: description and version, its handling classification (tags, temperature class, DOT hazard class; absent when unclassified), its physical profile (declared and latest measured unit dimensions, the effective ones and whether they disagree by more than 10%) and its whole packaging hierarchy, retired levels included. Identify the product with exactly one of sku or gtin; a GTIN (8, 12, 13 or 14 digits as printed on the barcode) is resolved to its SKU and the pack level it identifies is returned as identifiedBy.",
+          "tags": [
+            "product",
+            "classification",
+            "packaging",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"product_profile\",\"arguments\":{\"sku\":\"SKU-1\"}}",
+            "{\"skill\":\"product_profile\",\"arguments\":{\"gtin\":\"4006381333931\"}}"
+          ]
+        },
+        {
+          "id": "declare_pack_level",
+          "name": "Declare a packaging level with its GTIN",
+          "kind": "write",
+          "description": "Declares one packaging level (EACH, INNER, CASE or PALLET) of a registered SKU with its GTIN, exactly as the REST and MCP surfaces do, and publishes ProductPackLevelDeclared (and ProductPackLevelRetired when it supersedes a level) through the transactional outbox. Every level but EACH names childGtin (an active lower level of this SKU) and qtyOfChild (at least 2). A GTIN identifies exactly one (sku, level), fleet-wide. Idempotent: repeating an identical declaration changes nothing; declaring an active level's GTIN with another quantity is rejected (a new quantity needs a new GTIN). Rejections come back as problem answers and nothing is written.",
+          "tags": [
+            "product",
+            "packaging",
+            "write"
+          ],
+          "examples": [
+            "{\"skill\":\"declare_pack_level\",\"arguments\":{\"sku\":\"SKU-1\",\"level\":\"EACH\",\"gtin\":\"4006381333931\"}}",
+            "{\"skill\":\"declare_pack_level\",\"arguments\":{\"sku\":\"SKU-1\",\"level\":\"CASE\",\"gtin\":\"24006381333935\",\"childGtin\":\"4006381333931\",\"qtyOfChild\":12,\"dims\":{\"lengthMm\":400,\"widthMm\":300,\"heightMm\":200,\"weightG\":9000},\"isDespatchUnit\":true}}"
+          ]
+        }
+      ]
+    },
+    "facility-layout": {
+      "name": "facility-layout",
+      "description": "Facility Layout agent for the warehouse map: answers what a site physically looks like (zones, aisles, coded storage slots and fixed structures) and how far apart two coded locations are on the map. Read-only: it never changes the map, which is edited only through this context's REST API, and it reports map topology only -- never occupancy, stock, travel time or congestion.",
+      "interface": "http://facility-layout-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "site_layout",
+          "name": "Layout of a site",
+          "kind": "read",
+          "description": "Read: one site's full drawable structure as a compact nested map -- zones, then aisles in walk order, then slot codes, with each zone's temperature class and hazmat flag, each aisle's direction and sequence hint, the site's fixed structures, and the site header (name, role in the fulfilment network, transfer capability). Identify the site with siteCode (the canonical Site code, e.g. WH1). Answers a 404 problem when the site does not exist. Changes nothing.",
+          "tags": [
+            "facility",
+            "layout",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"site_layout\",\"arguments\":{\"siteCode\":\"WH1\"}}"
+          ]
+        },
+        {
+          "id": "travel_distance",
+          "name": "Travel distance between two locations",
+          "kind": "read",
+          "description": "Read: the shortest travel distance, in metres, between two coded locations (seven-segment codes, e.g. WH1-STOR-AMB-A07-01-01-A). Within one zone it routes over the zone's travel graph honouring one-way aisles and cross-aisles; the result is flagged estimated when any leg used a bay-pitch fallback instead of real geometry. Across zones it answers the straight-line distance, always flagged estimated, only when both locations have recorded position geometry, otherwise a 422 problem (it does not guess). Reports map TOPOLOGY only, never travel time or congestion. Changes nothing.",
+          "tags": [
+            "facility",
+            "travel",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"travel_distance\",\"arguments\":{\"from\":\"WH1-STOR-AMB-A07-01-01-A\",\"to\":\"WH1-STOR-AMB-A07-02-01-A\"}}"
+          ]
+        }
+      ]
+    },
+    "slotting-optimization": {
+      "name": "slotting-optimization",
+      "description": "Slotting Optimization agent for forward pick slotting (read-only): answers where every SKU is slotted right now at a site (the assignments of its Approved slot plan) and reviews a slot plan (its state and policy, the SKU-to-slot assignments with their ABC class, the moves against the previous plan, the SKUs left unassigned and the execution progress of its relocations), either by plan id or as the newest plan of a site and/or state. It changes nothing: generating a plan and approving or rejecting it (the human decision) are REST operations of slotting-optimization and are not offered here.",
+      "interface": "http://slotting-optimization-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "forward_slot_map",
+          "name": "Current forward slot map of a site",
+          "kind": "read",
+          "description": "Read the CURRENT forward slot map of a site: the assignments (sku, slot, abcClass, pickUnit, casesCapacity for CASE faces) of its Approved slot plan, with that planId and approvedAt. A site without an Approved plan yields an empty assignment list and no planId, not a problem. siteId defaults to the service's default site; a malformed site (or none given while no default is configured) is answered as a 400 problem. Read-only.",
+          "tags": [
+            "slotting",
+            "forward-slots",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"forward_slot_map\",\"arguments\":{\"siteId\":\"SITE-1\"}}",
+            "{\"skill\":\"forward_slot_map\",\"arguments\":{}}"
+          ]
+        },
+        {
+          "id": "slot_plan_review",
+          "name": "Review a slot plan",
+          "kind": "read",
+          "description": "Read one slot plan in full: siteId, state (Draft, Approved, Rejected or Superseded), policy, the demand window, generatedAt and the decision instants (approvedAt, rejectedAt, supersededAt, each omitted until it happens), rejectReason and supersedesPlanId (omitted when none), the assignments (sku, slot, abcClass, picks, units), the moves against the previous plan (sku, fromSlot, toSlot, kind), the unassigned SKUs with their reason, the version and the execution progress of its relocations. Give planId to read that plan (404 problem when unknown, 400 when malformed); without planId the NEWEST plan matching the optional siteId and/or state (Draft, Approved, Rejected, Superseded) is read, and a 404 problem says when none matches. planId cannot be combined with siteId or state. Read-only.",
+          "tags": [
+            "slotting",
+            "slot-plan",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"slot_plan_review\",\"arguments\":{\"planId\":\"plan-1b4e28ba-2fa1-4d3c-8f6e-0a1b2c3d4e5f\"}}",
+            "{\"skill\":\"slot_plan_review\",\"arguments\":{\"siteId\":\"SITE-1\",\"state\":\"Draft\"}}"
+          ]
+        }
+      ]
+    },
+    "inbound-receiving": {
+      "name": "inbound-receiving",
+      "description": "Inbound Receiving agent for the Warehouse Management System (read-only): answers where an advance ship notice stands in the inbound dock workflow (its state and lines, the receipts counted against it and the Short, Over or Damaged discrepancies they found) and what is booked at the dock doors (carrier appointments by door, state and time window). It never registers, books, receives or closes anything, and it does not decide stow or putaway.",
+      "interface": "http://inbound-receiving-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "asn_receiving_status",
+          "name": "Receiving status of an ASN",
+          "kind": "read",
+          "description": "Composed read for one advance ship notice by asnNumber: the ASN (supplierRef, expectedArrival when announced, state Registered, Receiving, Closed or Cancelled, lines with expectedQty) and the receipts counted against it (state Open or Closed, door and appointment when not a walk-in, per-line receivedGood and receivedDamaged, and the discrepancies Short, Over or Damaged: provisional while the receipt is Open, final once Closed). Answers a 404 problem for an unknown ASN. Persists nothing.",
+          "tags": [
+            "inbound",
+            "asn",
+            "receipt",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"asn_receiving_status\",\"arguments\":{\"asnNumber\":\"ASN-1001\"}}"
+          ]
+        },
+        {
+          "id": "dock_schedule",
+          "name": "Dock appointment schedule",
+          "kind": "read",
+          "description": "Read the carrier dock appointments in ascending window-start order, optionally only those at one door, in one state (Booked, CheckedIn, Completed or Cancelled) and/or overlapping a from/to range (RFC 3339 instants: from keeps appointments whose window ends after it, to those whose window starts before it). Each entry carries appointmentId, doorCode, carrier, windowStart, windowEnd (UTC), the asnNumbers it covers and its state. At most limit entries (1..100, default 50) are returned; truncated is true when more exist, so narrow the range instead of paging. Persists nothing.",
+          "tags": [
+            "inbound",
+            "dock",
+            "appointment",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"dock_schedule\",\"arguments\":{}}",
+            "{\"skill\":\"dock_schedule\",\"arguments\":{\"door\":\"DOOR-3\",\"state\":\"Booked\",\"from\":\"2026-10-29T00:00:00Z\",\"to\":\"2026-10-30T00:00:00Z\",\"limit\":20}}"
+          ]
+        }
+      ]
+    },
+    "pick-face-replenishment": {
+      "name": "pick-face-replenishment",
+      "description": "Pick-face replenishment agent for the Warehouse Management System (read-only): answers which forward pick faces of a site are below their minimum, have no reserve source or no policy (with on-hand, reserved and available stock and the policy min/max), and what the replenishment requests that move stock from a reserve bin to a forward bin are doing (Requested, Completed or Cancelled). Stock levels are event-fed local copies and may lag the inventory ledger by a few seconds. It changes nothing: declaring a policy, requesting or cancelling a replenishment are REST operations of this context.",
+      "interface": "http://pick-face-replenishment-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "pick_face_status",
+          "name": "Pick-face status of a site",
+          "kind": "read",
+          "description": "Read the forward pick faces of one site ordered by forward bin, a page at a time (limit 1..500, default 100): SKU, onHand, reserved and available quantity, the policy minQty and maxQty (absent without a policy), the openRequestId (absent without an open request) and a status: BELOW_MIN (projected level at or below the minimum), OK, NO_SOURCE (below minimum but no reserve bin can supply it) or NO_POLICY. Optionally only one status. Pass the returned nextCursor for the next page. siteId is required.",
+          "tags": [
+            "replenishment",
+            "pick-face",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"pick_face_status\",\"arguments\":{\"siteId\":\"SITE-1\"}}",
+            "{\"skill\":\"pick_face_status\",\"arguments\":{\"siteId\":\"SITE-1\",\"status\":\"BELOW_MIN\",\"limit\":50}}"
+          ]
+        },
+        {
+          "id": "replenishment_lookup",
+          "name": "Replenishment request lookup",
+          "kind": "read",
+          "description": "Read replenishment requests. With requestId (starting with repl-) it answers that one request: forward and reserve source bin, quantity, movedQuantity once completed, priority, state (Requested, Completed or Cancelled), the policy min and max it was raised under, requestedAt, completedAt or cancelledAt with cancelReason, and version. Without requestId it lists requests newest first, a page at a time (limit 1..500, default 100), optionally only those of one siteId, one sku and/or one state; pass the returned nextCursor for the next page. requestId cannot be combined with filters or paging.",
+          "tags": [
+            "replenishment",
+            "request",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"replenishment_lookup\",\"arguments\":{\"requestId\":\"repl-1b4e28ba\"}}",
+            "{\"skill\":\"replenishment_lookup\",\"arguments\":{\"siteId\":\"SITE-1\",\"state\":\"Requested\"}}"
+          ]
+        }
+      ]
+    },
+    "wes-work-planning": {
+      "name": "wes-work-planning",
+      "description": "Work Planning & Release agent for the Warehouse Execution System core: reads a process path's live flow status (backlog telemetry plus Drum-Buffer-Rope rebalance recommendation) and admits the next priority-ordered work unit into a path's pool. Delegates goals, answers from its own state; publishes resulting facts as CloudEvents on Kafka.",
+      "interface": "http://wes-work-planning-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "flow_status",
+          "name": "Flow status for a process path",
+          "kind": "read",
+          "description": "Composed read for one process path: backlog telemetry (pending depth, released WIP, feed mode, alarm state) plus the flow-balancing recommendation (NoActionNeeded, ThrottleUpstream, or ReassignLabor). Side effect: telemetry sampling publishes BacklogThresholdBreached when the pool is over its alarm threshold, and every ThrottleUpstream/ReassignLabor answer publishes PathThrottled/LaborReassignmentFlagged to the work-planning and analytics topics.",
+          "tags": [
+            "wes",
+            "flow-balancing",
+            "telemetry",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"flow_status\",\"arguments\":{\"pathId\":\"pick-zone-a\"}}"
+          ]
+        },
+        {
+          "id": "release_next_work",
+          "name": "Release the next work unit",
+          "kind": "write",
+          "description": "Admits the next highest-priority (earliest CPT) pending work unit into a path's work pool, exactly as the REST and MCP surfaces do, and publishes WorkReleased through the transactional outbox. Safe by construction: at most one unit per call, rejected once the WIP limit is reached or the pool is empty.",
+          "tags": [
+            "wes",
+            "release",
+            "write"
+          ],
+          "examples": [
+            "{\"skill\":\"release_next_work\",\"arguments\":{\"pathId\":\"pick-zone-a\"}}"
+          ]
+        }
+      ]
+    },
+    "fulfillment-execution": {
+      "name": "fulfillment-execution",
+      "description": "Fulfillment Execution agent for the Warehouse Execution System: reports how one process-path queue is doing (pending depth, the most urgent claimable task, claimed tasks whose lease has lapsed or is about to) and completes a claimed task on behalf of the station that holds the claim, under this context's invariants (at-most-once completion, claim ownership, RELOCATE/REPLENISH confirmation). It never claims, releases or creates work.",
+      "interface": "http://fulfillment-execution-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "backlog_status",
+          "name": "Backlog status for a process path",
+          "kind": "read",
+          "description": "Composed read for one process-path queue (PICK, PACK, SLAM, RELOCATE, REPLENISH or BREAK_CASE): the number of Pending tasks, how many tasks a station could claim now with the highest-priority (earliest-CPT) one, and the claimed tasks of that path whose lease has already expired or expires within withinSeconds (default 0 = only already expired). Changes nothing.",
+          "tags": [
+            "fulfillment",
+            "backlog",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"backlog_status\",\"arguments\":{\"processPath\":\"PICK\"}}",
+            "{\"skill\":\"backlog_status\",\"arguments\":{\"processPath\":\"PACK\",\"withinSeconds\":300}}"
+          ]
+        },
+        {
+          "id": "complete_task",
+          "name": "Complete a claimed task",
+          "kind": "write",
+          "description": "Completes a claimed task on behalf of the station that holds its active claim, exactly as the REST and MCP surfaces do, and publishes TaskCompleted through the transactional outbox. Rejected (as a problem answer, nothing written) when the task is unknown, not claimed, already completed, or the station does not own the claim. A RELOCATE task also needs the operator's counted quantity and the scanned fromBin (Assign) or toBin (Vacate) the move left open; a REPLENISH task needs the counted quantity (bins are optional scans that must equal the planned ones); never invent these values. NOT idempotent: a second call on the same task is rejected as already completed.",
+          "tags": [
+            "fulfillment",
+            "task",
+            "write"
+          ],
+          "examples": [
+            "{\"skill\":\"complete_task\",\"arguments\":{\"taskId\":\"task-1\",\"stationId\":\"station-1\"}}",
+            "{\"skill\":\"complete_task\",\"arguments\":{\"taskId\":\"task-2\",\"stationId\":\"station-1\",\"quantity\":4,\"fromBin\":\"A-01-01\"}}"
+          ]
+        }
+      ]
+    },
+    "workforce-management": {
+      "name": "workforce-management",
+      "description": "Workforce Management agent for the Warehouse Execution System: answers whether a process path is staffed for a shift (planned vs active heads, with an optional headcount sizing for a charge at a planned rate) and assigns an associate to a path under this context's invariants (one active assignment per associate, certification match, no break, shift not ended). It makes the staffing gap legible and executes a delegated assignment; it never links an associate to a specific task.",
+      "interface": "http://workforce-management-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "staffing_status",
+          "name": "Staffing status for a process path",
+          "kind": "read",
+          "description": "Composed read for one process path in one site's committed shift plan: planned vs active heads and whether the path is understaffed. When charge and plannedRate are both given, also the headcount needed to clear that charge at that rate (ceil(charge/rate)); the sizing persists nothing. Identify the site with siteCode (the canonical facility-layout Site code, e.g. WH1).",
+          "tags": [
+            "workforce",
+            "staffing",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"staffing_status\",\"arguments\":{\"siteCode\":\"WH1\",\"shiftId\":\"shift-1\",\"pathId\":\"PICK\"}}",
+            "{\"skill\":\"staffing_status\",\"arguments\":{\"siteCode\":\"WH1\",\"shiftId\":\"shift-1\",\"pathId\":\"PICK\",\"charge\":120,\"plannedRate\":30}}"
+          ]
+        },
+        {
+          "id": "assign_labor",
+          "name": "Assign an associate to a process path",
+          "kind": "write",
+          "description": "Puts an associate on a process path, ending their prior active assignment if any, exactly as the REST and MCP surfaces do, and publishes LaborAssigned or LaborReassigned through the transactional outbox. Rejected (as a problem answer, nothing written) when the associate is unknown, lacks the path's required certification, is on break, or their shift has ended. NOT idempotent: each accepted call closes the prior interval and starts a new one, so a caller must not blindly retry an ambiguous failure.",
+          "tags": [
+            "workforce",
+            "assignment",
+            "write"
+          ],
+          "examples": [
+            "{\"skill\":\"assign_labor\",\"arguments\":{\"associateId\":\"assoc-1\",\"pathId\":\"PICK\"}}"
+          ]
+        }
+      ]
+    },
+    "labor-performance": {
+      "name": "labor-performance",
+      "description": "Labor Performance agent for the Warehouse Execution System (read-only): answers how an associate is performing (task count, mean efficiency vs. the engineered labor standard, per-task-type breakdown, trend and a coaching-flag visibility signal) and how a task type is performing across the whole floor (task count, mean efficiency, measured mean duration, the active engineered standard and idle-vs-busy utilization over a trailing window). Efficiency and utilization figures are null, never 0, when nothing was measurable. It never changes state: performance rows are recorded only from fulfillment-execution's TaskCompleted event, and standards are defined by an operator over REST.",
+      "interface": "http://labor-performance-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "associate_scorecard",
+          "name": "Performance scorecard for one associate",
+          "kind": "read",
+          "description": "Read-only scorecard for one associate: task count, mean efficiency percent (null when no task was scorable), a per-task-type breakdown, a trend (IMPROVING, DECLINING, STABLE or INSUFFICIENT_DATA) and a coaching flag over their most recent tasks. The coaching flag is a visibility signal for a human, never a trigger to act autonomously. Answered as a 404 problem when no task performance is recorded for the associate.",
+          "tags": [
+            "labor",
+            "performance",
+            "associate",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"associate_scorecard\",\"arguments\":{\"associateId\":\"assoc-1\"}}"
+          ]
+        },
+        {
+          "id": "task_type_status",
+          "name": "Performance status of a task type",
+          "kind": "read",
+          "description": "Read-only composed status of one task type (PICK, PACK or SLAM) across the whole floor: task count, mean efficiency percent and real measured mean duration (both null when nothing was measurable), the currently-active engineered labor standard (null when none is active, in which case efficiency cannot be scored) and idle-vs-busy utilization over a trailing window (windowSeconds, default 3600). utilizationPct is null when nothing was observed in the window; never treat null as 0%. Per-task-type utilization reports closed idle gaps only, so it can understate idleness by whatever gap is still open.",
+          "tags": [
+            "labor",
+            "performance",
+            "task-type",
+            "standard",
+            "utilization",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"task_type_status\",\"arguments\":{\"taskType\":\"PICK\"}}",
+            "{\"skill\":\"task_type_status\",\"arguments\":{\"taskType\":\"PACK\",\"windowSeconds\":7200}}"
+          ]
+        }
+      ]
+    },
+    "task-interleaving": {
+      "name": "task-interleaving",
+      "description": "Task Interleaving agent for the Warehouse Execution System (read-only, advisory): tells which interleaving hint a station currently holds and which open tasks it ranks next by travel detour, and gives a site's interleaving overview (its declared policy and how its most recent hints ended). A hint is a suggestion for which open task to take next, never an assignment. It changes nothing: declaring a policy is a REST operation of task-interleaving, and hints are issued and retired by the service itself.",
+      "interface": "http://task-interleaving-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "station_hint_status",
+          "name": "Interleaving hint status of a station",
+          "kind": "read",
+          "description": "Read where one station stands and what it should take next: its site, its position (location code and the point in metres when the geometry is known), the last task it completed and when, and the hint it currently holds, if any, with its ranked candidate tasks (rank, taskId, taskType, location, detourM). Advisory only: a hint never assigns or claims a task. A station that never recorded a completion is answered as station-not-found (404).",
+          "tags": [
+            "interleaving",
+            "station",
+            "hint",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"station_hint_status\",\"arguments\":{\"stationId\":\"STN-07\"}}"
+          ]
+        },
+        {
+          "id": "site_interleaving_overview",
+          "name": "Interleaving overview of a site",
+          "kind": "read",
+          "description": "Read how interleaving is set up and behaving at one site: the policy the site declared (maxDetourM, maxCandidates, hintTtlSeconds, eligibleTaskTypes, verticalWeight, version, declaredAt) and its most recent hints, newest first, with how each ended (Active, Consumed, Expired or Superseded) and a count per state. limit (optional, 1..20, default 5) sizes the recent-hint window. A site that never declared a policy is inert (no hint is ever issued for it) and is answered as policy-not-found (404).",
+          "tags": [
+            "interleaving",
+            "site",
+            "policy",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"site_interleaving_overview\",\"arguments\":{\"siteId\":\"SITE-1\"}}",
+            "{\"skill\":\"site_interleaving_overview\",\"arguments\":{\"siteId\":\"SITE-1\",\"limit\":10}}"
+          ]
+        }
+      ]
+    },
+    "process-path-management": {
+      "name": "process-path-management",
+      "description": "Process Path Management agent for the Warehouse Execution System: the read-only source of truth for the fleet's process-path catalogue. It answers what a process path is (its matchPrefix routing rule, whether it is direct, the capabilities required to work it, cycle time, eligibility and which demand sources may route onto it) and which paths currently exist. It never changes the catalogue, and it does not decide dispatch, routing or assignment.",
+      "interface": "http://process-path-management-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "get_process_path",
+          "name": "Look up one process path",
+          "kind": "read",
+          "description": "Read the full definition of one process path by its canonical pathId (e.g. PICK, PACK, REBIN, SLAM): matchPrefix, direct, requiredCapabilities, cycleTimeP95, eligibility, intake (the demand sources allowed to route work onto it; [] means only an explicit path id reaches it), status and timestamps. Works for deactivated paths too. Answers a 404 problem when no path has that id. Persists nothing.",
+          "tags": [
+            "process-path",
+            "catalogue",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"get_process_path\",\"arguments\":{\"pathId\":\"PICK\"}}"
+          ]
+        },
+        {
+          "id": "list_process_paths",
+          "name": "List the process-path catalogue",
+          "kind": "read",
+          "description": "Read the process-path catalogue: every ACTIVE path by default, or, with activeOnly=false, deactivated paths too (the audit view). Each entry carries the same fields as get_process_path. The catalogue is small and bounded. Persists nothing.",
+          "tags": [
+            "process-path",
+            "catalogue",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"list_process_paths\",\"arguments\":{}}",
+            "{\"skill\":\"list_process_paths\",\"arguments\":{\"activeOnly\":false}}"
+          ]
+        }
+      ]
+    },
+    "warehouse-planning": {
+      "name": "warehouse-planning",
+      "description": "Warehouse Planning agent for the Warehouse Execution System: answers whether a registered process path can clear work at a location in a time window (its end-to-end ORDER/HOUR capacity and the bottleneck step) and evaluates the demand assigned to that window against it, recording a DRAFT capacity plan with the shortage. It answers from this context's own capacity registrations and demand read model; it never publishes a plan, registers capacities or reads another context.",
+      "interface": "http://warehouse-planning-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "path_capacity",
+          "name": "Capacity of a process path in a window",
+          "kind": "read",
+          "description": "Read: the end-to-end capacity of one registered process path at one location for [windowStart, windowEnd) in ORDER per HOUR, the bottleneck step and the constraint binding it, each step's own rate and the composition warnings. A registered capacity window applies when it COVERS the requested window, not only when equal. unitsPerOrder / packagesPerOrder are the workload conversion factors and are required when a step is measured in UNIT / PACKAGE. Windows are RFC3339 timestamps. Persists nothing.",
+          "tags": [
+            "planning",
+            "capacity",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"path_capacity\",\"arguments\":{\"pathId\":\"tote-path\",\"location\":\"FC01\",\"windowStart\":\"2026-10-05T08:00:00Z\",\"windowEnd\":\"2026-10-05T16:00:00Z\",\"unitsPerOrder\":2.5,\"packagesPerOrder\":1}}"
+          ]
+        },
+        {
+          "id": "evaluate_capacity_plan",
+          "name": "Evaluate assigned demand against a path's capacity",
+          "kind": "write",
+          "description": "Write: evaluates the demand assigned to a window against a process path's capacity and records a DRAFT capacity plan (capacity over the window, shortage, bottleneck), exactly as the REST and MCP create-plan operation does, and stores its CapacityPlanCreated CloudEvents in the transactional outbox. assignedDemand (ORDERS, 0 is a real figure) is optional: when omitted the demand is the number of orders order-management has promised at the location in the window, and the call is rejected (nothing written) when there are none. siteId is the REQUIRED canonical site code. The plan is NOT published by this skill. NOT idempotent: every accepted call records a new plan, so a caller must not blindly retry an ambiguous failure.",
+          "tags": [
+            "planning",
+            "capacity-plan",
+            "write"
+          ],
+          "examples": [
+            "{\"skill\":\"evaluate_capacity_plan\",\"arguments\":{\"warehouseId\":\"WH-1\",\"siteId\":\"SIM1\",\"location\":\"FC01\",\"pathId\":\"tote-path\",\"windowStart\":\"2026-10-05T08:00:00Z\",\"windowEnd\":\"2026-10-05T16:00:00Z\",\"assignedDemand\":12000,\"unitsPerOrder\":2.5,\"packagesPerOrder\":1}}"
+          ]
+        }
+      ]
+    },
+    "order-management": {
+      "name": "order-management",
+      "description": "Order Management agent for the Warehouse Execution System, the system of record for customer orders. READ-ONLY: it answers where one order stands (status, promise date and every line's SKU, quantity, allocation and release progress) and how healthy the delivery promises have been over a time window (capability vs lead-time vs network promise basis, re-promise and split-shipment rates, promise-to-cutoff gap). It never places, cancels, allocates or releases an order.",
+      "interface": "http://order-management-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "order_status",
+          "name": "Where does an order stand",
+          "kind": "read",
+          "description": "Current state of one order by id: status, allow-partial-shipment flag, promise date and every line's SKU, quantity, process path, gift-wrap, status and reservation id (present only once the line is allocated). Use it for allocation, backorder, release or cancellation progress. An unknown id is answered as a 404 problem.",
+          "tags": [
+            "orders",
+            "status",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"order_status\",\"arguments\":{\"orderId\":\"ORD-1\"}}"
+          ]
+        },
+        {
+          "id": "promise_health",
+          "name": "How healthy are our delivery promises",
+          "kind": "read",
+          "description": "Promise-health KPIs for a time window [from, to) (RFC3339) and an optional exact-match pathId, from the Order Funnel & Allocation Health data product: promise basis distribution (capability-derived CPT window, LeadTimePolicy fallback, or an external network deadline), re-promise rate (fleet-wide, NOT path-scoped: a pathId filter zeroes it), split-shipment rate and the mean promise-to-cutoff gap in seconds. Does NOT include on-time-to-CPT, which lives in fulfillment-execution's own analytics. The data product is eventually consistent.",
+          "tags": [
+            "orders",
+            "promise",
+            "analytics",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"promise_health\",\"arguments\":{\"from\":\"2026-10-01T00:00:00Z\",\"to\":\"2026-10-08T00:00:00Z\"}}",
+            "{\"skill\":\"promise_health\",\"arguments\":{\"from\":\"2026-10-01T00:00:00Z\",\"to\":\"2026-10-08T00:00:00Z\",\"pathId\":\"pick\"}}"
+          ]
+        }
+      ]
+    },
+    "network-fulfillment": {
+      "name": "network-fulfillment",
+      "description": "Network Fulfillment agent for the Warehouse Execution System: the anti-corruption layer between the fleet and the external retail fulfillment network. Read-only. Answers where the network's demand stands (one order by its network reference, or the orders in a state, with both vocabularies per line and whether the acknowledgement deadline has passed unanswered) and what availability this context would advertise to the network (the throughput-constrained advertised quantity per SKU and site). It never changes state: shipment confirmation is REST only and demand enters only by polling the network. No customer PII exists in any answer.",
+      "interface": "http://network-fulfillment-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "network_demand_status",
+          "name": "Where the network's demand stands",
+          "kind": "read",
+          "description": "Read network orders. With networkRef (the network's own purchase-order reference, e.g. po-4711): that one order, or a not-found problem. With state (NEW, SUBMITTED, ACKNOWLEDGED, REJECTED or CONFIRMED): every order in that state; with neither: every order. NEW is the unanswered working set the acknowledgement sweep acts on, SUBMITTED an acknowledgement told to the network but not yet reconciled. networkRef and state are mutually exclusive. Each order carries both vocabularies per line (the network's product id and the resolved SKU), its state, the acknowledgement deadline and whether that deadline has passed unanswered. Never carries ship-to PII.",
+          "tags": [
+            "network-fulfillment",
+            "orders",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"network_demand_status\",\"arguments\":{\"networkRef\":\"po-4711\"}}",
+            "{\"skill\":\"network_demand_status\",\"arguments\":{\"state\":\"NEW\"}}"
+          ]
+        },
+        {
+          "id": "advertised_availability",
+          "name": "Availability this context advertises to the network",
+          "kind": "read",
+          "description": "Read the currently stored CapabilityOffers: the throughput-constrained advertised quantity this context would tell the network it can ship, per SKU and site, and whether that figure is limited by physical stock (PHYSICAL) or by the process path's remaining admission capacity before its next cutoff (THROUGHPUT_CONSTRAINED). Optionally narrow by sku and/or siteId. The offer is persisted and recomputed by the OLTP service; this skill reads the latest snapshot and computes nothing.",
+          "tags": [
+            "network-fulfillment",
+            "capability",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"advertised_availability\",\"arguments\":{}}",
+            "{\"skill\":\"advertised_availability\",\"arguments\":{\"sku\":\"sku-1\",\"siteId\":\"site-1\"}}"
+          ]
+        }
+      ]
+    },
+    "node-topology": {
+      "name": "node-topology",
+      "description": "Node Topology agent of the retail network (read-only): answers which delivery station serves a postal prefix, with that station's region and current operational profile (operating hours, cutoffs, handling time, throughput cap), and finds the network's nodes by type, region and status. It reads the authoritative registry of nodes, regions and postal service areas; it never changes it (registering nodes, profile revisions, lifecycle transitions, lanes, service areas and regions are REST operations of node-topology).",
+      "interface": "http://node-topology-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "serving_station",
+          "name": "Delivery station serving a postal prefix",
+          "kind": "read",
+          "description": "Composed read: resolves the delivery station that serves a postal prefix (matched exactly) and returns the assignment (deliveryStationNodeId, regionId, assignmentVersion) together with that station's node: type, operator, region, timezone, location, status and its current operational profile (operating hours, holidays, handling time, cutoffs, throughput cap). An unassigned prefix is answered as a not-found problem.",
+          "tags": [
+            "topology",
+            "service-area",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"serving_station\",\"arguments\":{\"postalPrefix\":\"013\"}}"
+          ]
+        },
+        {
+          "id": "find_nodes",
+          "name": "Find network nodes",
+          "kind": "read",
+          "description": "Lists the network's nodes by id ascending, optionally filtered by type (FULFILLMENT_CENTER, INBOUND_CROSS_DOCK, RETURNS_CENTER, SORTATION_CENTER, DELIVERY_STATION or AIR_HUB), regionId and/or status (PROPOSED, ACTIVE, SUSPENDED or RETIRED); the filters combine with AND and no match is an empty list. A type or status that is not an enumeration value is answered as a validation problem.",
+          "tags": [
+            "topology",
+            "node",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"find_nodes\",\"arguments\":{}}",
+            "{\"skill\":\"find_nodes\",\"arguments\":{\"type\":\"DELIVERY_STATION\",\"status\":\"ACTIVE\"}}"
+          ]
+        }
+      ]
+    },
+    "node-performance": {
+      "name": "node-performance",
+      "description": "Node Performance agent for the retail network (read-only): answers how a node is performing, from the two scorecards (7-day and 30-day window) this context grades from observed facts only (on-time handover, acknowledgement latency, rejections, expiry, promise-kept rate and inventory feed freshness), and which nodes currently sit at a given grade (A, B, C, D or PROVISIONAL below 50 observations). It never changes data: observations are recorded by the event consumers and grades are computed by the service itself.",
+      "interface": "http://node-performance-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "node_performance",
+          "name": "How is this node performing",
+          "kind": "read",
+          "description": "Read both scorecards of one node by nodeId: the 7-day and the 30-day window, in that order, each with its state (PROVISIONAL or GRADED), its grade (A, B, C, D, or PROVISIONAL below the observation minimum of 50), its metrics (onTimeHandoverRate, lateAckRate, rejectRate, expiryRate, promiseKeptRate, feedFreshnessP95Minutes, observations) and computedAt, omitted before the first recompute. Answers a 404 problem for a node nothing was observed about and a 422 problem for a malformed nodeId. Persists nothing.",
+          "tags": [
+            "node-performance",
+            "scorecard",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"node_performance\",\"arguments\":{\"nodeId\":\"N-0042\"}}"
+          ]
+        },
+        {
+          "id": "nodes_by_grade",
+          "name": "Which nodes sit at this grade",
+          "kind": "read",
+          "description": "List the scorecards whose current grade matches, ordered by scorecardId ascending, one page at a time: grade is required (A, B, C, D or PROVISIONAL); the window filter (7d or 30d), the page size (limit, 1..500, default 100) and the cursor are optional. Pass the returned nextCursor as after to get the next page; it is absent on the last page. Answers a 422 problem for a bad grade, window, limit or cursor. Persists nothing.",
+          "tags": [
+            "node-performance",
+            "scorecard",
+            "grade",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"nodes_by_grade\",\"arguments\":{\"grade\":\"D\"}}",
+            "{\"skill\":\"nodes_by_grade\",\"arguments\":{\"grade\":\"A\",\"window\":\"7d\",\"limit\":50}}"
+          ]
+        }
+      ]
+    },
+    "network-inventory-planning": {
+      "name": "network-inventory-planning",
+      "description": "Network Inventory Planning agent for the Warehouse Execution System, read-only: reports where one inter-warehouse transfer stands (state, quantities, sites, reservation, rejection reason and the full audit trail of state transitions) and finds the transfers that have stopped advancing (non-terminal state unchanged for longer than a threshold, stalest first). It makes the transfer saga legible; it never approves, cancels or retries a transfer, which stay operator actions on the REST API.",
+      "interface": "http://network-inventory-planning-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "transfer_status",
+          "name": "Status of one transfer",
+          "kind": "read",
+          "description": "Reads one inter-warehouse transfer by id: its current state (DRAFT, PROPOSED, APPROVED, ALLOCATING, ALLOCATED, PICKED, IN_TRANSIT, ARRIVED, RECEIVED, UNFULFILLABLE or CANCELLED), sku, quantity, picked quantity, origin and destination sites, reservation id once allocated, rejection reason once unfulfillable, and the audit trail of state transitions (timestamp and cause of each). Answered as a 404 problem for an unknown id.",
+          "tags": [
+            "transfers",
+            "status",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"transfer_status\",\"arguments\":{\"transferId\":\"tr-1\"}}"
+          ]
+        },
+        {
+          "id": "find_stuck_transfers",
+          "name": "Find transfers that are not advancing",
+          "kind": "read",
+          "description": "Finds transfers in a NON-terminal state (RECEIVED, UNFULFILLABLE and CANCELLED are finished and never reported) whose state has been unchanged for MORE than olderThanMinutes, stalest first, with the total number of matches before paging. Optionally narrow to one state, e.g. ALLOCATING for an allocation reply that never arrived, and cap the page with limit (1 to 200, default 50).",
+          "tags": [
+            "transfers",
+            "stuck",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"find_stuck_transfers\",\"arguments\":{\"olderThanMinutes\":30}}",
+            "{\"skill\":\"find_stuck_transfers\",\"arguments\":{\"olderThanMinutes\":120,\"state\":\"ALLOCATING\",\"limit\":20}}"
+          ]
+        }
+      ]
+    },
+    "order-sourcing": {
+      "name": "order-sourcing",
+      "description": "Order Sourcing agent of the retail network (read-only): answers which vendor node and path will fulfil each shipment group of a customer order, in which state, and why (the promise it must keep, the candidate with its cost, the VirtualQueue release point, the release history, the excluded nodes and the lock and shipment facts). It never changes data: asking for an immediate re-optimisation is a REST operation of order-sourcing, and every other lifecycle change arrives as a consumed event.",
+      "interface": "http://order-sourcing-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "find_assignments",
+          "name": "Find fulfillment assignments",
+          "kind": "read",
+          "description": "Lists the fulfillment assignments (one per shipment group of a customer order), ordered by assignmentId ascending, optionally narrowed by state (QUEUED, RELEASED, LOCKED, SHIPPED, DELIVERED, UNSOURCEABLE or CANCELLED), orderId and nodeId (the candidate node while QUEUED, the node of the latest release later); filters combine with AND. Each item carries the promise constraint, the lines, the current candidate with its cost and the releaseAt point. limit caps the page, 1..500 (default 100). Read-only.",
+          "tags": [
+            "order-sourcing",
+            "assignment",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"find_assignments\",\"arguments\":{\"orderId\":\"ord-1\"}}",
+            "{\"skill\":\"find_assignments\",\"arguments\":{\"state\":\"UNSOURCEABLE\",\"limit\":50}}"
+          ]
+        },
+        {
+          "id": "assignment_detail",
+          "name": "Explain one fulfillment assignment",
+          "kind": "read",
+          "description": "Reads one fulfillment assignment in full by assignmentId: the promise it must keep (tier, deliverByLatest, witness node), its lines, the current candidate node and path with the cost in cost points, the VirtualQueue release point, the whole release history with each outcome (ACCEPTED, REJECTED, EXPIRED, PENDING), the nodes that were excluded and why, and the lock, shipment and delivery facts once they apply. Answered as a not-found problem for an unknown id. Read-only.",
+          "tags": [
+            "order-sourcing",
+            "assignment",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"assignment_detail\",\"arguments\":{\"assignmentId\":\"fa-1b4e28ba-2fa1-4d3c-8f6e-0a1b2c3d4e5f\"}}"
+          ]
+        }
+      ]
+    },
+    "delivery-promise": {
+      "name": "delivery-promise",
+      "description": "Delivery Promise agent of the retail network (read-only): answers whether the delivery promises of a customer order, or one promise, are intact -- their state, terms, witness path, revisions and the KEPT or BROKEN judgement -- and how full a node's promise books are on a date (share, provisional and confirmed holds per pickup cutoff). It never quotes, makes, confirms, cancels or revises a promise and never publishes a policy; those stay on REST and the event consumers.",
+      "interface": "http://delivery-promise-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "promise_status",
+          "name": "Status of the delivery promises of an order",
+          "kind": "read",
+          "description": "Read the delivery promise(s) behind one customer order: pass orderId for every promise of the order (one per shipment group) or promiseId for one promise. Each promise carries its state (PROVISIONAL, CONFIRMED, AT_RISK, KEPT, BROKEN, RELEASED or CANCELLED), terms (tier, shipBy, deliverByEarliest, deliverByLatest, basis, policyVersion), witness path, holdExpiresAt, revisions and, once judged, the judgement (outcome, cause, lateByMinutes). Pass exactly one of orderId and promiseId. Read-only; an unknown promise is answered as a 404 problem, an order with no promise as an empty list.",
+          "tags": [
+            "delivery-promise",
+            "promise",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"promise_status\",\"arguments\":{\"orderId\":\"ord-1001\"}}",
+            "{\"skill\":\"promise_status\",\"arguments\":{\"promiseId\":\"prm-1\"}}"
+          ]
+        },
+        {
+          "id": "book_capacity",
+          "name": "Promise book capacity of a node on a date",
+          "kind": "read",
+          "description": "Read the promise books of one fulfillment node whose pickup cutoff falls on a date (YYYY-MM-DD, the node's own time zone): per book its state and capacity ledger (share, provisional and confirmed holds), its pickup departure and cutoffAt. Read-only; a node or date without books is answered as an empty list.",
+          "tags": [
+            "delivery-promise",
+            "capacity",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"book_capacity\",\"arguments\":{\"nodeId\":\"N-AUS3\",\"date\":\"2026-10-22\"}}"
+          ]
+        }
+      ]
+    },
+    "offer-availability": {
+      "name": "offer-availability",
+      "description": "Offer & Availability agent of the retail network (read-only): answers where an item can be sold and how much is available there (the catalogue item, which nodes list it, whether each listing is LIVE or SUPPRESSED and why, and the quantity a vendor's feed last reported), and what became of one vendor inventory feed (applied, superseded or failed, with its counters and failure code). It never creates or discontinues an item, never lists an item on a node and never applies a feed: those stay REST operations of offer-availability.",
+      "interface": "http://offer-availability-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "check_availability",
+          "name": "Check where an item is sold and how much is available",
+          "kind": "read",
+          "description": "Composed read of this context's own listings, narrowed by catalogItemId and/or nodeId (at least one is required). With catalogItemId the answer also carries that catalogue item (title, dimensions in mm, weightG, hazmat and fragile flags, state ACTIVE or DISCONTINUED) and an unknown item is a not-found problem. Each listing says LIVE or SUPPRESSED (reason NODE_NOT_SELLABLE or DISCONTINUED), its ownerRef when owned by a seller, and the availability a vendor's feed last gave it (availableQty, basis, asOf, feedId). Listings come one keyset page at a time: pass the returned nextCursor as after; limit is 1..500 (default 100).",
+          "tags": [
+            "offer-availability",
+            "availability",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"check_availability\",\"arguments\":{\"catalogItemId\":\"item-1\"}}",
+            "{\"skill\":\"check_availability\",\"arguments\":{\"nodeId\":\"node-a\",\"limit\":50}}"
+          ]
+        },
+        {
+          "id": "feed_outcome",
+          "name": "Read the outcome of one vendor inventory feed",
+          "kind": "read",
+          "description": "Read one vendor inventory feed by feedId: the node it was sent for (nodeId), whether it was a fullUpdate, its asOf, its state APPLIED, SUPERSEDED or FAILED with the counters (lineCount, appliedCount, staleCount, zeroedCount), receivedAt, appliedAt and, when it FAILED, the failureCode (listing-not-on-node or negative-availability). An unknown feedId is a not-found problem. Reading a feed changes nothing; applying one stays a REST operation.",
+          "tags": [
+            "offer-availability",
+            "inventory-feed",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"feed_outcome\",\"arguments\":{\"feedId\":\"feed-7\"}}"
+          ]
+        }
+      ]
+    },
+    "seller-inbound": {
+      "name": "seller-inbound",
+      "description": "Seller Inbound agent of the retail network (read-only): the seller-facing front door for stock coming into the network. It answers how compliant a seller is (the rolling-window compliance scorecard and its informational GOOD / WATCH / AT_RISK tier) and where an inbound stands (an inbound plan with its declared lines, or an inbound shipment with its cartons). It never changes data: onboarding or suspending sellers, planning, packing, labelling and shipping stay on the REST API.",
+      "interface": "http://seller-inbound-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "seller_compliance",
+          "name": "Assess a seller's compliance",
+          "kind": "read",
+          "description": "Answer one seller's rolling-window compliance scorecard from the facts this service recorded: shipments received in the window, cartons reported and received, receiptAccuracyRate (omitted when nothing was reported), discrepancies by kind, discrepancyRatePerShipment (omitted when no shipment closed), compliance violations and the derived complianceTier (GOOD, WATCH or AT_RISK), which is informational only. Arguments: sellerId (required) and window (optional: 7d or 30d, default 30d). Answers a 404 problem for an unknown seller and a 400 problem for another window. Persists nothing.",
+          "tags": [
+            "seller",
+            "compliance",
+            "scorecard",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"seller_compliance\",\"arguments\":{\"sellerId\":\"seller-77\"}}",
+            "{\"skill\":\"seller_compliance\",\"arguments\":{\"sellerId\":\"seller-77\",\"window\":\"7d\"}}"
+          ]
+        },
+        {
+          "id": "inbound_status",
+          "name": "Check where an inbound stands",
+          "kind": "read",
+          "description": "Read the state of one inbound: pass planId for an inbound plan (seller, destination node, packing option, state DRAFT / CONFIRMED / CANCELLED and the declared lines in eaches) or shipmentId for an inbound shipment (plan, seller, destination node, state PLANNED / PACKING / LABELLED / SHIPPED / RECEIVED and every carton packed so far with its SSCC, contents and receipt status). Exactly one of the two is required. Answers a 404 problem when the id is unknown. Persists nothing.",
+          "tags": [
+            "inbound",
+            "plan",
+            "shipment",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"inbound_status\",\"arguments\":{\"planId\":\"pln-0f3a91\"}}",
+            "{\"skill\":\"inbound_status\",\"arguments\":{\"shipmentId\":\"shp-0f3a91\"}}"
+          ]
+        }
+      ]
+    },
+    "vendor-connectivity": {
+      "name": "vendor-connectivity",
+      "description": "Vendor Connectivity agent of the retail network: the read-only Open Host Service for vendors that operate fulfilment nodes. It answers where one purchase order released to a vendor stands (state, windows, lines, acknowledgement, labels, tracking) and how one of the vendor's nodes is performing (rolling scorecards relayed from node-performance). It never changes anything: acknowledgements, inventory feeds, shipment confirmations and label requests are REST operations, and facts leave as CloudEvents on Kafka.",
+      "interface": "http://vendor-connectivity-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "get_purchase_order",
+          "name": "Check where one purchase order stands",
+          "kind": "read",
+          "description": "Read one purchase order released to a vendor, by vendorId and poNumber: state (ISSUED, ACK_PROCESSING, ACCEPTED, REJECTED, EXPIRED, SHIPMENT_PROCESSING, SHIPPED or CANCELLED), nodeId, the windows (issuedAt, requiredShipBy, ackBy), the lines (lineNo, listingId, quantity) and, once they exist, the acknowledgement, the labels, the tracking numbers and shippedAt. Never a ship-to address, an orderId or a delivery promise. Answers a 404 problem for an unknown vendor or order and for an order of another vendor (node-not-owned-by-vendor). Persists nothing.",
+          "tags": [
+            "vendor",
+            "purchase-order",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"get_purchase_order\",\"arguments\":{\"vendorId\":\"vend-south-1\",\"poNumber\":\"PO-9a1b-0001\"}}"
+          ]
+        },
+        {
+          "id": "get_node_scorecard",
+          "name": "Read how one vendor node is performing",
+          "kind": "read",
+          "description": "Read a vendor node's rolling scorecards, by vendorId and nodeId, relayed live from the node-performance context: per window (7d, 30d, 90d) the grade, on-time handover rate, late acknowledgement rate, reject rate, expiry rate, promise-kept rate and feed freshness p95, with the observation count. The node must belong to the vendor. Answers a 404 problem for an unknown vendor, a node of another vendor or a node without a scorecard yet, and a 503/502 problem when node-performance is unavailable or refuses. Persists nothing.",
+          "tags": [
+            "vendor",
+            "node",
+            "scorecard",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"get_node_scorecard\",\"arguments\":{\"vendorId\":\"vend-south-1\",\"nodeId\":\"node-76c2\"}}"
+          ]
+        }
+      ]
+    },
+    "linehaul-transportation": {
+      "name": "linehaul-transportation",
+      "description": "Linehaul Transportation agent of the retail network (read-only): it answers which departures leave a node and how much capacity they still have, and where one departure stands (lane, kind, cutoff/departs/arrives, capacity, booked and remaining packages, state and the cancel/depart/arrive trail). It never schedules lanes, cancels or re-capacitates departures or changes a load: those stay REST operations of this context.",
+      "interface": "http://linehaul-transportation-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "list_departures",
+          "name": "Find departures and their remaining capacity",
+          "kind": "read",
+          "description": "Read the departure horizon by cutoffAt (then departureId), optionally only departures leaving one origin node (origin), bound for one destination node (destination) and/or whose cutoffAt falls in a window [from, to) (RFC 3339 instants, from inclusive, to exclusive); at most limit rows (1..1000, default 500). Each departure carries its lane, kind (PICKUP, LINEHAUL, AIR), nodes, cutoff/departs/arrives, capacity, booked and remaining packages and state (SCHEDULED, CLOSED, DEPARTED, ARRIVED, CANCELLED). Persists nothing.",
+          "tags": [
+            "linehaul",
+            "departures",
+            "capacity",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"list_departures\",\"arguments\":{}}",
+            "{\"skill\":\"list_departures\",\"arguments\":{\"origin\":\"n-a\",\"from\":\"2026-10-24T08:00:00Z\",\"to\":\"2026-10-25T08:00:00Z\",\"limit\":20}}"
+          ]
+        },
+        {
+          "id": "get_departure",
+          "name": "Look up where one departure stands",
+          "kind": "read",
+          "description": "Read one departure by its departureId: lane, kind, origin and destination nodes, cutoffAt (no booking after it), departsAt, arrivesAt, capacityPackages, bookedPackages, remainingPackages and state, plus cancelReason and cancelledAt once cancelled, departedAt once it left and arrivedAt once it arrived. Answers a 404 problem when no departure has that id. Persists nothing.",
+          "tags": [
+            "linehaul",
+            "departures",
+            "status",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"get_departure\",\"arguments\":{\"departureId\":\"dep-7f3a\"}}"
+          ]
+        }
+      ]
+    },
+    "last-mile-delivery": {
+      "name": "last-mile-delivery",
+      "description": "Last-Mile Delivery agent of the retail network: the read-only source of truth for a delivery station's waves and for the routes its delivery service partners run. It answers which waves a station runs on a service date (state, induct cutoff, delivery window, stop capacity and what is left) and where one route stands (its stops with their derived outcome and every recorded delivery attempt). It never schedules a wave, plans a route or records an attempt, and it does not decide induction or dispatch.",
+      "interface": "http://last-mile-delivery-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "list_waves",
+          "name": "List a station's delivery waves for a day",
+          "kind": "read",
+          "description": "Read the delivery waves of one station on one service date, ordered by inductCutoffAt: state (OPEN, INDUCTION_CLOSED, DISPATCHED, COMPLETED or CANCELLED), the induct cutoff and delivery window, the stop capacity with assignedStops and remainingStops, and cancelReason on a cancelled wave. A station and date with no wave is an empty list. A station id or serviceDate that is not YYYY-MM-DD answers a 422 validation-failed problem. Persists nothing.",
+          "tags": [
+            "delivery-wave",
+            "station",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"list_waves\",\"arguments\":{\"stationNodeId\":\"node-ds-01\",\"serviceDate\":\"2026-10-24\"}}"
+          ]
+        },
+        {
+          "id": "get_route",
+          "name": "Look up where one route stands",
+          "kind": "read",
+          "description": "Read one route of a delivery service partner: its state (PLANNED, OUT_FOR_DELIVERY or COMPLETED), its numbered stops with the trackingNumbers of each and the outcome derived from the per-package attempts (omitted until every package of the stop has one), and every recorded attempt (trackingNumber, DELIVERED or FAILED, failureReason, at). Answers a 404 not-found problem when no route has that id. Persists nothing.",
+          "tags": [
+            "route",
+            "delivery-attempt",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"get_route\",\"arguments\":{\"routeId\":\"route-1\"}}"
+          ]
+        }
+      ]
+    },
+    "shipping-and-tracking": {
+      "name": "shipping-and-tracking",
+      "description": "Shipping & Tracking agent of the retail network: the read-only source of truth for where a package is. It answers the customer-visible journey of one package by tracking number: its state, the label's poNumber, assignmentId, orderId and tier, when it was handed over and delivered, and every stored scan. It never issues or voids a label, never records a scan, never reveals a ship-to address, and does not decide routing or delivery.",
+      "interface": "http://shipping-and-tracking-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "get_journey",
+          "name": "Track one package",
+          "kind": "read",
+          "description": "Read the customer-visible journey of one package by its trackingNumber: the state (LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, DELIVERED, RETURNED, LOST or VOIDED), the poNumber, assignmentId, orderId and tier of its label, handedOverAt and deliveredAt when they happened, and every stored scan in the order they were recorded, each with its scanType, nodeId, when, and applied (false for a scan stored out of order or without an edge from the state it met). Answers a 404 problem when no journey has that tracking number. Persists nothing.",
+          "tags": [
+            "shipping",
+            "tracking",
+            "journey",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"get_journey\",\"arguments\":{\"trackingNumber\":\"RN0123456789ABCDEF\"}}"
+          ]
+        }
+      ]
+    },
+    "returns-processing": {
+      "name": "returns-processing",
+      "description": "Returns Processing agent for the Warehouse Execution System (reverse logistics): the read-only source of truth for return authorizations (RMAs) and the disposition policy. It answers where a return stands (status REQUESTED, AUTHORIZED, REJECTED, RECEIVED or CLOSED, with the rejection code of a refused one) by RMA id or for every RMA of an order, and which disposition policy applies (return window, per-line quantity cap, and the grade x product-class outcome table). It never authorizes, rejects, receives or inspects a return and never changes the policy: those stay on the REST API.",
+      "interface": "http://returns-processing-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "return_status",
+          "name": "Where does a return stand",
+          "kind": "read",
+          "description": "Read the state of returns, addressed by EXACTLY ONE of rmaId (one return authorization) or orderId (every RMA of one original order, ordered by line number then id; an order with no returns, or an unknown one, answers an empty list). Each return carries its orderId and lineNo, the work unit it shipped in, sku, quantity, site, reasonCode, status, the rejectionCode of a refused return, the instant the return window ends and the aggregate version. Answers a 404 problem for an unknown rmaId. Persists nothing.",
+          "tags": [
+            "returns",
+            "rma",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"return_status\",\"arguments\":{\"rmaId\":\"rma-1b4e28ba\"}}",
+            "{\"skill\":\"return_status\",\"arguments\":{\"orderId\":\"ord-7c9e\"}}"
+          ]
+        },
+        {
+          "id": "disposition_policy",
+          "name": "Read the disposition policy",
+          "kind": "read",
+          "description": "Read the disposition policy table: version, returnWindowDays, maxUnitsPerLine, the vetoOutcome a guardrail demotes to, declaredAt and the rules mapping each inspection grade (A, B, C, SCRAP) and product class to an outcome (RESTOCK, REFURBISH, LIQUIDATE, DISPOSE, RTV; \"*\" is a rule's default product class). Omitting version reads the CURRENT policy; a positive version reads that declared one (the policy is append-only). Answers a 404 problem when no such version exists. Persists nothing.",
+          "tags": [
+            "returns",
+            "disposition",
+            "policy",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"disposition_policy\",\"arguments\":{}}",
+            "{\"skill\":\"disposition_policy\",\"arguments\":{\"version\":1}}"
+          ]
+        }
+      ]
+    },
+    "pricing": {
+      "name": "pricing",
+      "description": "Pricing agent for the retail network: answers what a catalogue item sells for right now (state, list price, effective price at this instant, planned and running sale windows) and what a previously issued price quote priced (lines, delivery charges, tax, total, and whether it is still ISSUED or already EXPIRED). It is read-only: it returns what the REST GET routes return and never changes a price, a sale or a quote, and it exposes no cost or margin data.",
+      "interface": "http://pricing-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "item_price",
+          "name": "Current price of a catalogue item",
+          "kind": "read",
+          "description": "Read of one item price by catalogItemId: its state (ACTIVE or WITHDRAWN), list price, the effective price at this instant (the running sale price, else the list price), every sale window with its saleId, price and from/to instants, and the version. Amounts are minor units of the stated currency. Answers a 404 problem when the item has no price.",
+          "tags": [
+            "pricing",
+            "item-price",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"item_price\",\"arguments\":{\"catalogItemId\":\"sku-1\"}}"
+          ]
+        },
+        {
+          "id": "quote_status",
+          "name": "Status and breakdown of an issued price quote",
+          "kind": "read",
+          "description": "Read of one price quote by quoteId: ISSUED or EXPIRED at this instant (a quote past its expiresAt is EXPIRED whether or not the policy stored it yet), the cart it priced, its lines (unit price and line total), the delivery charge per shipment group, tax, total, the price/schedule/tax-table versions it used, and issuedAt/expiresAt. Amounts are minor units of the quote currency. Answers a 404 problem for an unknown quote. It never issues a quote.",
+          "tags": [
+            "pricing",
+            "price-quote",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"quote_status\",\"arguments\":{\"quoteId\":\"quote-1\"}}"
+          ]
+        }
+      ]
+    },
+    "checkout": {
+      "name": "checkout",
+      "description": "Checkout agent for the retail storefront (read-only): answers where a checkout session stands, from its state (OPEN, AUTHORIZING, DECLINED, PLACING, REQUOTE_REQUIRED, COMPLETED, EXPIRED or FAILED) to the numbered lines and shipment groups, the binding total and when its quote expires, the payment authorization and the placed order. It never opens, confirms or changes a session: those move a shopper's money and stay on the REST API.",
+      "interface": "http://checkout-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "checkout_session_status",
+          "name": "Where does a checkout session stand",
+          "kind": "read",
+          "description": "Read one checkout session by its sessionId: state, cart and shopper references, numbered lines, shipment groups (groupNo, offerId, tier, lineNos, amountMinor), the binding total and currency, when the price quote expires, the payment authorizationId, the placed orderId, the re-quoted offers of a REQUOTE_REQUIRED session and the failureCode of a FAILED one. PLACING means the place-order outcome is unknown and a resolver is replaying it: ask again later. Answers a 404 problem for an unknown or malformed sessionId. Persists nothing.",
+          "tags": [
+            "checkout",
+            "session",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"checkout_session_status\",\"arguments\":{\"sessionId\":\"sess-3f9c1a2b4d5e\"}}"
+          ]
+        }
+      ]
+    },
+    "customer-ordering": {
+      "name": "customer-ordering",
+      "description": "Customer Ordering agent of the retail network: the read-only source of truth for placed customer orders. It answers where an order stands (its status, cart lines and the promise of every shipment group) and how it is travelling (per shipment group the promise window, verdict, at-risk signals and packages). It never places, cancels or changes an order, it does not register shoppers, and it does not expose the ship-to address.",
+      "interface": "http://customer-ordering-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "get_order",
+          "name": "Look up a placed order",
+          "kind": "read",
+          "description": "Find out where one customer order stands, by its orderId: its status (PLACED, IN_FULFILLMENT, PARTIALLY_SHIPPED, SHIPPED, PARTIALLY_DELIVERED, DELIVERED, LOST, RETURNED or CANCELLED), the shopper, the destination postal prefix, when it was placed, the cart lines and every shipment group with its promise (promiseId, tier, shipBy, deliverByEarliest, deliverByLatest), its status and revision and any cancellation request or refusal. The ship-to address is not part of it. Answers a 404 problem when no order has that id. Persists nothing.",
+          "tags": [
+            "order",
+            "customer-ordering",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"get_order\",\"arguments\":{\"orderId\":\"ord-3f9c1a2b\"}}"
+          ]
+        },
+        {
+          "id": "get_order_tracking",
+          "name": "Follow an order's delivery",
+          "kind": "read",
+          "description": "Find out how one order is travelling, by its orderId: for every shipment group its promise window, status, lock and ship times, the at-risk and unsourceable signals, the promise verdict (and how many minutes late it ran) and its packages with carrier, state, last scan and exception; a lost or returned group also carries the outcome. Answers a 404 problem when no order has that id. Persists nothing.",
+          "tags": [
+            "order",
+            "tracking",
+            "customer-ordering",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"get_order_tracking\",\"arguments\":{\"orderId\":\"ord-3f9c1a2b\"}}"
+          ]
+        }
+      ]
+    },
+    "customer-payments": {
+      "name": "customer-payments",
+      "description": "Customer Payments agent for the storefront: the read-only source of truth for what has been authorized, captured, released and refunded for a checkout session or an order. It answers where a payment stands (state, total, allocations per shipment group with their capture state and tracking numbers, expiry, decline reason) and how a refund went (state, reason, group, attempts, failure code). It is read-only: it never authorizes, voids, captures or refunds, and it never sees or returns a card number, a PSP token or any payment instrument.",
+      "interface": "http://customer-payments-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "get_payment_status",
+          "name": "Where does a payment stand",
+          "kind": "read",
+          "description": "Read the payment authorizations of one checkout session or one order, or one authorization by id. Give exactly one of authorizationId, orderId and checkoutSessionId. Each authorization carries its state (AUTHORIZED, PARTIALLY_CAPTURED, CAPTURED, RELEASED, VOIDED, EXPIRED or DECLINED), the checkout session and order it belongs to, the currency and total in minor units, every allocation per shipment group (groupNo, amountMinor, PENDING, CAPTURED or RELEASED, tracking numbers), when the hold expires and the decline reason. A checkout session lists declined attempts too. An unknown authorizationId answers a 404 problem; an order or session with no authorization answers an empty list. Persists nothing and returns no card data.",
+          "tags": [
+            "payment",
+            "authorization",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"get_payment_status\",\"arguments\":{\"orderId\":\"ord-1\"}}",
+            "{\"skill\":\"get_payment_status\",\"arguments\":{\"checkoutSessionId\":\"cs-1\"}}",
+            "{\"skill\":\"get_payment_status\",\"arguments\":{\"authorizationId\":\"pay-3f9c1a2b4d5e\"}}"
+          ]
+        },
+        {
+          "id": "get_refund_status",
+          "name": "How did a refund go",
+          "kind": "read",
+          "description": "Read the refunds of one order (oldest first), or one refund by id. Give exactly one of refundId and orderId. Each refund carries its state (REQUESTED, SUCCEEDED or FAILED), reason (LOST, RETURNED_TO_SENDER or MANUAL), order, authorization, group, amount in minor units, how many provider attempts were made and the last failure code. An unknown refundId answers a 404 problem; an order with no refund answers an empty list. Persists nothing; it never requests or retries a refund.",
+          "tags": [
+            "payment",
+            "refund",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"get_refund_status\",\"arguments\":{\"orderId\":\"ord-1\"}}",
+            "{\"skill\":\"get_refund_status\",\"arguments\":{\"refundId\":\"ref-3f9c1a2b4d5e\"}}"
+          ]
+        }
+      ]
+    },
+    "shopping-cart": {
+      "name": "shopping-cart",
+      "description": "Shopping Cart agent for the storefront: a read-only view of a shopper's carts. It answers what a cart holds (its lines, destination postal prefix, delivery quote, the shopper's delivery selections, the labelled non-binding cost estimate and whether the cart is ready for checkout) and which carts a shopper has. It exposes exactly what the REST GET endpoints expose, never changes a cart and never places an order.",
+      "interface": "http://shopping-cart-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "get_cart",
+          "name": "Look up one cart",
+          "kind": "read",
+          "description": "Read one cart by its cartId: lines, destinationPostalPrefix, deliveryQuote, selections, the labelled estimate (minor units, estimateComplete says whether every line is priced) and checkoutReadiness. The same document GET /carts/{cartId} returns, for a cart of any state. Answers a 404 problem when no cart has that id. Persists nothing.",
+          "tags": [
+            "cart",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"get_cart\",\"arguments\":{\"cartId\":\"cart-123\"}}"
+          ]
+        },
+        {
+          "id": "list_shopper_carts",
+          "name": "List a shopper's carts",
+          "kind": "read",
+          "description": "Read the carts of one shopper, newest first, optionally of one state (OPEN, CHECKED_OUT, ABANDONED or MERGED). Each entry is the same document get_cart returns. The same answer as GET /carts?shopperId=&state=. A shopper with no carts gets an empty list, not a problem. Persists nothing.",
+          "tags": [
+            "cart",
+            "shopper",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"list_shopper_carts\",\"arguments\":{\"shopperId\":\"shopper-42\"}}",
+            "{\"skill\":\"list_shopper_carts\",\"arguments\":{\"shopperId\":\"shopper-42\",\"state\":\"OPEN\"}}"
+          ]
+        }
+      ]
+    },
+    "product-content": {
+      "name": "product-content",
+      "description": "Product Content agent for the storefront domain: answers what a product page needs for one catalogue item (description, bullets, attributes, media and primary category, with its draft/published/retired state and revisions) and what the category tree looks like (every category with its parent and path, at the current tree version). Read-only: it never creates, revises, publishes or retires content and never changes the category tree.",
+      "interface": "http://product-content-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "get_product_content",
+          "name": "Product content of a catalogue item",
+          "kind": "read",
+          "description": "Reads the product content of one catalogue item exactly as GET /product-contents/{catalogItemId} returns it: state (DRAFT, PUBLISHED or RETIRED), description, bullets, attributes, media, primary category, revision and published revision. Answers a not-found problem when the item has no content. Changes nothing.",
+          "tags": [
+            "product-content",
+            "catalogue",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"get_product_content\",\"arguments\":{\"catalogItemId\":\"item-123\"}}"
+          ]
+        },
+        {
+          "id": "list_categories",
+          "name": "The category tree",
+          "kind": "read",
+          "description": "Reads the whole live category tree exactly as GET /categories returns it: the tree version and every category with its id, parent id, name and path from the root. Before the first category the tree is version 0 and empty. Takes no arguments. Changes nothing.",
+          "tags": [
+            "product-content",
+            "categories",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"list_categories\",\"arguments\":{}}"
+          ]
+        }
+      ]
+    },
+    "product-discovery": {
+      "name": "product-discovery",
+      "description": "Product Discovery agent for the digital storefront: the read-only source of truth for what a shopper can find and see. It searches the product catalogue projection (title, category and attribute full-text with a typo fallback, category / price / in-stock filters, facets and category suggestions) and reads one product page view (content, category path, list and effective price, stock and purchasability). It never changes the catalogue, the prices or the offers, and it does not place orders or reserve stock.",
+      "interface": "http://product-discovery-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "search_products",
+          "name": "Search the product catalogue",
+          "kind": "read",
+          "description": "Find purchasable products. Arguments (all optional): q (free text, at most 200 characters; a product-type query also returns categorySuggestions), categoryId (restrict to that category subtree), inStock (true / false), priceMin and priceMax (effective price in minor units, not negative), sort (relevance | price-asc | price-desc | title), limit (1 to 100, default 20) and after (the next cursor of a previous answer). Each hit carries catalogItemId, title, effectivePrice, primaryMedia, categoryPath, inStock and purchasable; the answer also carries the facets and a next cursor (null on the last page). A bad value is answered as a 422 validation-failed problem. Persists nothing.",
+          "tags": [
+            "product",
+            "search",
+            "catalogue",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"search_products\",\"arguments\":{\"q\":\"kettle\",\"inStock\":true,\"sort\":\"price-asc\",\"limit\":5}}",
+            "{\"skill\":\"search_products\",\"arguments\":{\"categoryId\":\"kettles\",\"priceMax\":10000}}"
+          ]
+        },
+        {
+          "id": "get_product",
+          "name": "Read one product page view",
+          "kind": "read",
+          "description": "Read the full view of one catalogue item by catalogItemId: title, hazmat and fragile flags, description, bullets, attributes, media, categoryId and categoryPath (once content is published), list and effective price (once priced), inStock and purchasable. An item the item master has not announced yet is invisible: it answers a 404 problem, like an unknown id. Persists nothing.",
+          "tags": [
+            "product",
+            "catalogue",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"get_product\",\"arguments\":{\"catalogItemId\":\"I-1\"}}"
+          ]
+        }
+      ]
+    },
+    "exception-management": {
+      "name": "exception-management",
+      "description": "Exception Management agent for the warehouse (read-only): answers how the open exception caseload sits against its SLA clocks (open, breached, escalated, by severity and queue, optionally with the severity/queue/SLA policy declared per source type) and finds exception cases, one by id or a filtered list by status, queue, site and source type, with their SLA clock, occurrence count, assignee, resolution and audit trail. It reads this context's own state only; triaging, assigning and resolving a case and declaring a policy are REST operations and are not offered here.",
+      "interface": "http://exception-management-a2a.warehouse-systems.svc.cluster.local:8093/",
+      "binding": "JSONRPC",
+      "streaming": false,
+      "securitySchemes": null,
+      "skills": [
+        {
+          "id": "sla_status",
+          "name": "SLA status of the open exception caseload",
+          "kind": "read",
+          "description": "How the open caseload sits against its SLA clocks at generatedAt: openCases, breached (open cases past their SLA due time), escalated (cases the SLA sweeper flagged) and the open counts bySeverity and byQueue. With includePolicies=true it also returns the exception policy declared for every source type (latest version, severity, queue, slaMinutes and the auto-resolve rule or null). Read-only; takes no required argument.",
+          "tags": [
+            "exceptions",
+            "sla",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"sla_status\",\"arguments\":{}}",
+            "{\"skill\":\"sla_status\",\"arguments\":{\"includePolicies\":true}}"
+          ]
+        },
+        {
+          "id": "find_exceptions",
+          "name": "Find exception cases",
+          "kind": "read",
+          "description": "Reads exception cases, newest opened first. Give caseId (starts with case-) to read exactly one case, or any of status (OPEN, TRIAGED, ASSIGNED or RESOLVED; omitted means every status, open and resolved alike), queue, siteId and sourceType (the full CloudEvents type that opened the case) to list the matching cases; caseId cannot be combined with the filters, and no argument lists every case. Each case carries its dedup identity, severity, queue, occurrenceCount, escalated flag, assignee, SLA clock (slaMinutes, slaDueAt), the frozen sourcePayload of the opening fact, the resolution once resolved and the audit trail. Read-only; an unknown caseId is answered as a 404 problem.",
+          "tags": [
+            "exceptions",
+            "cases",
+            "read"
+          ],
+          "examples": [
+            "{\"skill\":\"find_exceptions\",\"arguments\":{\"status\":\"OPEN\",\"queue\":\"ps-main\"}}",
+            "{\"skill\":\"find_exceptions\",\"arguments\":{\"caseId\":\"case-1b4e28ba\"}}"
+          ]
+        }
+      ]
+    }
+  }
+}

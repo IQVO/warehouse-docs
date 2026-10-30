@@ -51,6 +51,10 @@ jobs:
       # scripts/capability-map/capabilities.py: fail when a page and the model
       # disagree (stdlib-only Python, preinstalled on the runner).
       - run: python3 scripts/capability-map/generate.py --check
+      # The A2A agent index page is generated from docs/architecture/a2a-agents.json
+      # (the registry of live Agent Cards): fail when the page and the registry disagree.
+      # The live-card drift check needs a cluster and runs from e2e-tests.
+      - run: python3 scripts/a2a-cards.py --check-page
       - run: pip install pyyaml
       - name: Network model consistency (network/model/model.yaml vs network/docs/)
         run: npm run check:model:network
