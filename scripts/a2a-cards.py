@@ -89,9 +89,14 @@ def load_registry() -> dict:
     return json.loads(REGISTRY.read_text()) if REGISTRY.exists() else {"agents": {}}
 
 
+def mdx_text(text: str) -> str:
+    """Card prose lands in an MDX page: braces would be evaluated as JavaScript and a bare < starts JSX."""
+    return text.replace("\\", "\\\\").replace("{", "\\{").replace("}", "\\}").replace("<", "&lt;")
+
+
 def first_sentence(text: str) -> str:
     cut = text.find(". ")
-    return (text[: cut + 1] if cut != -1 else text).strip()
+    return mdx_text((text[: cut + 1] if cut != -1 else text).strip())
 
 
 def render(reg: dict) -> str:
@@ -171,9 +176,17 @@ def cmd_write(base: str) -> int:
 
 def mdx_problems(text: str) -> list:
     """Docusaurus compiles these pages as MDX v3: HTML comments and autolinks are compile errors."""
+    import re
     out = []
     if "<!--" in text:
         out.append("contains an HTML comment (<!--); use an MDX comment {/* ... */}")
+    body = re.sub(r"\{/\*.*?\*/\}", "", text, flags=re.S)       # the generator's own MDX comment
+    body = re.sub(r"```.*?```", "", body, flags=re.S)             # fenced code
+    body = re.sub(r"`[^`\n]*`", "", body)                          # inline code
+    for n, line in enumerate(body.split("\n"), 1):
+        if re.search(r"(?<!\\)[{}]", line):
+            out.append(f"unescaped brace outside code (MDX evaluates it as JavaScript): {line.strip()[:70]!r}")
+            break
     return out
 
 

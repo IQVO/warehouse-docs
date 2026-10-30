@@ -319,7 +319,7 @@ Shopping Cart agent for the storefront: a read-only view of a shopper's carts.
 
 Product Content agent for the storefront domain: answers what a product page needs for one catalogue item (description, bullets, attributes, media and primary category, with its draft/published/retired state and revisions) and what the category tree looks like (every category with its parent and path, at the current tree version).
 
-- **`get_product_content`** (read): Reads the product content of one catalogue item exactly as GET /product-contents/{catalogItemId} returns it: state (DRAFT, PUBLISHED or RETIRED), description, bullets, attributes, media, primary category, revision and published revision.
+- **`get_product_content`** (read): Reads the product content of one catalogue item exactly as GET /product-contents/\{catalogItemId\} returns it: state (DRAFT, PUBLISHED or RETIRED), description, bullets, attributes, media, primary category, revision and published revision.
 - **`list_categories`** (read): Reads the whole live category tree exactly as GET /categories returns it: the tree version and every category with its id, parent id, name and path from the root.
 
 ### product-discovery
