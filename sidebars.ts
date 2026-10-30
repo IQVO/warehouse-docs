@@ -235,6 +235,7 @@ const sidebars: SidebarsConfig = {
         'architecture/domain-model',
         'architecture/data-models',
         'architecture/runtime-flows',
+        'architecture/a2a-agents',
       ],
     },
   ],
