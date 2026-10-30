@@ -12,6 +12,25 @@ preserved under `network/`).
 
 Live site: https://iqvo.github.io/warehouse-docs/
 
+## Disclaimer
+
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
+
+## Documentation
+
+This repository **is** the fleet's documentation site; it publishes itself to
+GitHub Pages: **https://iqvo.github.io/warehouse-docs/**. Page map:
+
+| Area | Where |
+|---|---|
+| Strategic design (context map, core domain chart, EventStorming, CloudEvents standard) | `docs/strategic-design/` |
+| Architecture (C4, fleet data model, runtime flows) | `docs/architecture/` |
+| Per-context pages (business context, ddd-crew pack, operations) | `docs/contexts/<context>/` |
+| Retail-network domain (second docs section) | `network/` |
+| Generated REST references (OpenAPI) | `docs/api-reference/` (regenerated, not hand-edited) |
+| Generated AsyncAPI references | `static/asyncapi/` (regenerated, not hand-edited) |
+| Fleet health (docs coverage, README standard, gaps) | `docs/fleet-health/` |
+
 ## What's here
 
 - **Strategic Design** (`docs/strategic-design/`): the fleet-wide artifacts,
@@ -181,13 +200,12 @@ deployment repository (`warehouse-infra`) are referenced where relevant.
 They are not bounded contexts in the Evans/Vernon sense, so they have no DDD
 artifacts here.
 
-## Study-project disclosure
+## Architecture Decision Records
 
-`warehouse-systems` is an educational Domain-Driven Design exercise
-following real industry-standard patterns. It is not a production system
-and is not affiliated with, endorsed by, or representative of
-Manhattan Associates, Blue Yonder, or any other company.
+Nine ADRs live in [`network/docs/adr/`](network/docs/adr/) — the retail-network
+domain's structural decisions (ten-context domain, promise vs assignment,
+declared vs measured capability, and the rest).
 
-## Disclaimer
+## License
 
-This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
+MIT — see [LICENSE](LICENSE).
