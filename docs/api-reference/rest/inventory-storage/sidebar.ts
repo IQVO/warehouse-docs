@@ -18,7 +18,7 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/rest/inventory-storage/receive-stock",
           label: "Acknowledge inbound stock for a SKU",
-          className: "api-method post",
+          className: "menu__list-item--deprecated api-method post",
         },
         {
           type: "doc",
@@ -36,6 +36,40 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/rest/inventory-storage/get-relocation",
           label: "Read one relocation",
+          className: "api-method get",
+        },
+      ],
+    },
+    {
+      type: "category",
+      label: "Containers",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/inventory-storage/containers",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/inventory-storage/get-container",
+          label: "Read one container",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/inventory-storage/stow-container",
+          label: "Stow a sealed case into a case bin",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/inventory-storage/break-case",
+          label: "Break a sealed case into loose eaches",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/inventory-storage/list-bin-containers",
+          label: "List the containers stowed in a bin",
           className: "api-method get",
         },
       ],
@@ -70,7 +104,7 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/rest/inventory-storage/confirm-pick",
           label: "Confirm a reservation's physical pick",
-          className: "api-method post",
+          className: "menu__list-item--deprecated api-method post",
         },
       ],
     },
@@ -115,28 +149,6 @@ const sidebar: SidebarsConfig = {
           id: "api-reference/rest/inventory-storage/run-cycle-count",
           label: "Record a physical cycle count for a bin",
           className: "api-method post",
-        },
-      ],
-    },
-    {
-      type: "category",
-      label: "Products",
-      link: {
-        type: "doc",
-        id: "api-reference/rest/inventory-storage/products",
-      },
-      items: [
-        {
-          type: "doc",
-          id: "api-reference/rest/inventory-storage/classify-product",
-          label: "Retired - classify the SKU in product-master instead (410)",
-          className: "menu__list-item--deprecated api-method put",
-        },
-        {
-          type: "doc",
-          id: "api-reference/rest/inventory-storage/get-product-classification",
-          label: "Get a SKU's product classification (deprecated local copy)",
-          className: "menu__list-item--deprecated api-method get",
         },
       ],
     },

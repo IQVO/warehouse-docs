@@ -23,11 +23,16 @@ card data (only `shopperId`, `shipToAddressId` and PSP tokens). The network
 owns what can be promised and how it is fulfilled; the storefront owns what a
 shopper sees and pays.
 
-:::info[Proposed design, docs only]
-Nothing on this site is built. The canonical model is
+:::info[Built on develop, not deployed]
+All six bounded contexts and the three supporting repos (`storefront-bff`,
+`storefront-web`, `payment-provider-simulator`) are built and merged on their
+`develop` branches (refreshed here 2026-10-27). None is deployed yet: no
+storefront service has an entry in warehouse-infra's `terraform/apps.yaml`.
+The canonical model is
 [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml);
-every page is derived from it, and CI gates fail the build when a page names a
-message the model does not have or a call the network does not allow.
+the services were built from it, the 2026-10-27 as-built check folded the
+differences it found back into it, and CI gates fail the build when a page
+names a message the model does not have or a call the network does not allow.
 :::
 
 ## The six bounded contexts
@@ -41,9 +46,18 @@ message the model does not have or a call the network does not allow.
 | `product-content` | Descriptions, media, attributes and the category tree for items the network already knows. Generic. |
 | `customer-payments` | Authorize, capture per shipment group, release, refund and re-authorize through a payment provider. Generic. |
 
+Each context is its own Go service repo (`IQVO/<context>`), with
+`apis/openapi.yaml`, `apis/asyncapi.yaml`, its own Postgres database, Kafka for
+CloudEvents 1.0 (structured mode), and the fleet observability standard (logs,
+metrics and traces over OTLP, one Tier-2 business counter each), adopted on
+2026-10-26/27. `checkout` and `customer-payments` also ship a read-only MCP
+server (`cmd/mcp`). Every context page has a *Service and operations* section.
+
 The experience layer — `storefront-bff` (Go, the only storefront edge under
-`/api/storefront`) and `storefront-web` (React SSR) — carries no domain model.
-`payment-provider-simulator` stands in for the external payment provider.
+`/api/storefront`, no database and no Kafka) and `storefront-web` (React 19,
+React Router 7 SSR) — carries no domain model. `payment-provider-simulator`
+stands in for the external payment provider with deterministic test tokens.
+See [Edge and supporting components](/storefront/components).
 
 ## How to read this site
 
@@ -54,8 +68,12 @@ The experience layer — `storefront-bff` (Go, the only storefront edge under
    model), and the [Model Gap Register](/storefront/strategic-design/model-gap-register)
    (S1-S6).
 3. [Bounded Contexts](/storefront/contexts): the six contexts at a glance and
-   the 14-page ddd-crew packs (pricing first; one context per wave).
-4. [API Reference](/storefront/api-reference): the proposed REST contracts.
+   their 14-page ddd-crew packs, each with the service facts on its index page.
+4. [Edge and supporting components](/storefront/components): the BFF route
+   table, the web app and the payment simulator's test tokens.
+5. [Architecture Decisions](/storefront/adr): every ADR of the nine repos.
+6. [API Reference](/storefront/api-reference): the REST contracts of the six
+   contexts and the BFF, copied from each repo's `develop`.
 
 ## Disclaimer
 

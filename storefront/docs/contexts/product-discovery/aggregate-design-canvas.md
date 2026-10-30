@@ -7,8 +7,8 @@ description: "The ddd-crew Aggregate Design Canvas applied to Product Discovery'
 
 # Aggregate Design Canvas
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-discovery` service is built on develop ([`IQVO/product-discovery`](https://github.com/IQVO/product-discovery) at `9c2f945`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-discovery#service-and-operations) section lists it.
 :::
 
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
@@ -17,8 +17,7 @@ Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-cre
 this page applies the canvas to the two **read models** the model does
 name, **ProductView** and **CategoryView**, and answers each canvas section
 honestly: most sections exist to protect invariants, and a projection
-protects none. Proposed Go packages: `internal/domain/productview` and
-`internal/domain/categoryview`.
+protects none. Go packages **as built**: `internal/domain/categoryview`, `internal/domain/productview`, `internal/domain/search` (plus `shared`).
 
 ## Why no aggregate (the canvas question zero)
 
@@ -42,7 +41,7 @@ illegal, they only skip a stale redelivery.
 
 ### 1. Name
 
-`ProductView` (`productview.ProductView`), one row per `catalogItemId`.
+`ProductView` (`productview.View`), one row per `catalogItemId`.
 
 ### 2. Description
 
@@ -117,7 +116,7 @@ from the topics or, past retention, from the snapshot reads.
 
 ### 1. Name
 
-`CategoryView` (`categoryview.CategoryView`), one tree under one
+`CategoryView` (`categoryview.View`), one tree under one
 `version`.
 
 ### 2. Description

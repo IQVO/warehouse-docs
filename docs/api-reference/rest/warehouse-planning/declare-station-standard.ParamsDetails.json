@@ -1,1 +1,0 @@
-{"parameters":[{"name":"location","in":"path","required":true,"schema":{"type":"string"},"example":"SIM1"},{"name":"process_type","in":"path","required":true,"schema":{"type":"string"},"example":"PACK"}]}

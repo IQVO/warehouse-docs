@@ -1,11 +1,11 @@
 ---
 id: readyz
 title: "Readiness probe"
-description: "200 when the service can serve traffic; 503 while starting or draining for shutdown."
+description: "200 when the service can serve traffic: it is not draining for shutdown, Postgres answers a ping and a"
 sidebar_label: "Readiness probe"
 hide_title: true
 hide_table_of_contents: true
-api: eJzVVU1zGzcM/SsYnuzMSlo7kybdtJ3JJG7ryWdjuz14PSOIC4mMueSGwErZavTfO1ipzoenvfXQ03JJEHgAHh63JnWUUXyK542pTCZshj9NYRpim32nB6Yyp2UJG0cRxBEw5bW3BBbjuCaQjMult0/hUfkQNs4HAhbM4uMKUoYmo4+6XqYM7Hpp0iZOTWEEV2yqa/MrYRBnbgqTibsUmdhUW42qn6+hvFeEetmmKBRFLbDrgrdjFrMPrGZbw9ZRi7qSoSNTmbT4QFaMxvjY+0yNRmZB6Vkjd1krIX4f+rD/+TZL9nFlCkOfsO3C6PDW7HaFES/j78X+ym6nm4/Kh/ehv0kC+X8Af1eYlsQlJcSKNGaH4kxlZnf0GPuetXlb0+dgKuNEumo2C8licImlelI+Ke8R6ZUeQ0NrCqlrNf9d8S8eynKGnZ91OTW9lUmLLJT/wemtjw3Y0KsJiMupXzl4meLK7G4K4+MyjfU4pPtu7xJejy7h2btzUxhNae/yZFpO76O/dAR/vL6YiKcMnPpsCdISJPfiRnJfvLyaBE0ODpBhDxkaFAQ/zk8dN5jJpZ5pwgMLtQxdQFmm3MLRsxfvoSzLk+MKNg4FUH3CA88PxgAOYxN8XNWx63OXmBiOvDDYgMx+eWDRMWBsoHMDe4shDHDUkA2YqRkPWkLu9aePXurY+Jai5s3j6Yb8ykkBBySnx1M4F8DIG8oMMUFtNo4y1UZnuzYubaDFONSmjh97YgXwFFiSvYXg18Sat49ripLyMGFJGVc0rWMdz9aUB9hkLwReo4NvqO2SDgbM311dzivI1BGOSoKg1CcW2HhxeynClmCRmqGO1mFckQIU5+OqgEXfdiPeQ1f3NekXwbMb7YAU0xSeWUudUAMHF3XETHeWDSDD85D65kzNGVKE+V0Hp19Tczq65Pkd/7COkjEyWi0LBki9LNInOGIimGPneYY8RIudnw7YhvnxU2C/0BbDqBCfhOGWqFNP42SATd0Ay5xaEJeY9lnsWxdpTRm05SDOs7IaUO7KJr491D3nlBk0zfc/P4fHT8rHSthFoBaaZPt29KhVruNcFQR+BJ1OrmYzGu9+m/c9Sk8bWs9+4NCvfppP63ipjNEexwTYi6MoB65CwIEyHC0DkUBD1o/NOi1Pv5uU309OTo6ndTzoJdpRLyO2OsJfQ4AWfRT0UWWp+EJSFPTKi+sXU5va2flvv7/9VlB2hQneUmT6wv3Vm1fnz8/eXJy9GHWySywtxi8M9CXykZjH2tG3arH9LPH/2fu5F3dlyawL6KNmMma+PUj29d8v+k1hVFN1Z7tdINNVDrudbn/sKQ+mur4pzBqzx4Xq4/XNrjCOsKE8avwtDaYy+0lRocTQa+R7L5dK7d3b8cvZpdnt/gLZ7fEn
+api: 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
 sidebar_class_name: "get api-method"
 info_path: api-reference/rest/product-master/product-master-api
 custom_edit_url: null
@@ -38,20 +38,24 @@ import Translate from "@docusaurus/Translate";
 
 
 
-200 when the service can serve traffic; 503 while starting or draining for shutdown.
+200 when the service can serve traffic: it is not draining for shutdown, Postgres answers a ping and a
+Kafka broker answers a metadata request (reachability only, never topics; the verdict is cached for a few
+seconds). 503 with `{"status":"not_ready"}` while draining for shutdown; 503 `application/problem+json`
+(`dependency-unavailable`, the detail names `postgres` and/or `kafka`) while a dependency is unreachable.
+
 
 <ParamsDetails>
   
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./readyz.RequestSchema.json")}
+  title={"Body"}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./readyz.StatusCodes.json")}
+  responses={{"200":{"description":"Ready.","content":{"application/json":{"schema":{"type":"object","required":["status"],"properties":{"status":{"type":"string","example":"ok"}},"title":"Status"}}}},"503":{"description":"Not ready (draining) or a runtime dependency is unavailable.","content":{"application/json":{"schema":{"type":"object","required":["status"],"properties":{"status":{"type":"string","example":"ok"}},"title":"Status"}},"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 problem document used for every non-2xx response.","required":["type","title","status","detail"],"properties":{"type":{"type":"string","format":"uri"},"title":{"type":"string"},"status":{"type":"integer","format":"int32"},"detail":{"type":"string"},"instance":{"type":"string"}},"title":"Problem"}}}}}}
 >
   
 </StatusCodes>

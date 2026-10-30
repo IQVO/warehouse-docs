@@ -8,7 +8,7 @@ description: The Core context that quotes a delivery date only from a feasible, 
 # Delivery Promise
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-core">Core</span>
@@ -44,6 +44,24 @@ a local read model fed by events.
 | [Class Diagram](/network/contexts/delivery-promise/class-diagram) | The proposed domain model and the hexagonal ports and adapters | — (UML) |
 | [Entity Relationship](/network/contexts/delivery-promise/entity-relationship) | The proposed Postgres schema | — (UML / ER) |
 | [Sequence Diagrams](/network/contexts/delivery-promise/sequence-diagrams) | Adapter → use case → aggregate → outbox for every command | — (UML) |
+
+## Service and operations
+
+- **Service:** [`IQVO/delivery-promise`](https://github.com/IQVO/delivery-promise) on `develop` (`806d835`,
+  2026-10-26): binaries `cmd/api` (REST) and `cmd/mcp` (read-only MCP), and the console
+  remote in `web/`.
+- **Deployment:** wired in warehouse-infra develop: a `terraform/apps.yaml` entry
+  (`database: true`, `frontend_remote: delivery_promise_mfe`) and `helm-values/delivery-promise.yaml`
+  (MCP enabled, gateway path `/api/mcp/delivery-promise`). The cluster itself was not checked in this
+  refresh.
+- **Observability:** [service ADR 0009](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0009-fleet-observability-standard.md),
+  *Adopt the fleet observability standard*, Accepted 2026-10-26. Logs, metrics and traces leave
+  over OTLP to the otel-collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, chart default
+  `otel-collector.observability.svc.cluster.local:4317`; `OTEL_SERVICE_NAME`). The Tier-2
+  business counter is `promising.promises.made` (unit `{promise}`, in
+  `internal/adapters/outbound/telemetry/promise_metrics.go`), with attribute `outcome` = `made` or `refused` and
+  `reason` on the outcomes that are not a success. The dashboard queries it as `promising_promises_made_total` in warehouse-infra's
+  `terraform/dashboards/contexts/delivery-promise.json`, by `outcome`.
 
 ## Elsewhere
 

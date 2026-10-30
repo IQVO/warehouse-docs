@@ -8,7 +8,7 @@ description: "Every event Offer & Availability publishes and consumes, with full
 # Domain Events
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 Every event this context publishes and consumes, from
@@ -179,7 +179,7 @@ All four come from `node-topology` on `retailnetwork.node-topology.events`
 
 ## Packaging and owner fields
 
-> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+> **Built, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)** as realized by [`offer-availability` ADR 0006](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0006-catalog-gtin-packaging-and-listing-owner.md) (catalogue GTIN and packaging hierarchy, and the optional owner of a listing). This section is the delta the seller-inbound design added to this page; where the service decided differently, the text below says so.
 
 **`CatalogItemPackagingDeclared`** (entity `catalogitem`, subject `catalogItemId`)
 

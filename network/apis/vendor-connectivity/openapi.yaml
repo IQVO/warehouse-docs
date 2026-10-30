@@ -37,12 +37,6 @@ info:
     - No ship-to PII anywhere. A label is `labelRef + trackingNumber + carrier`, never
       an address.
     - No authentication (consistent with the fleet).
-    - Inbound shipments (proposed, ADR 0009): poll the cartons sellers are sending to the
-      vendor's nodes with `GET /vendor/inbound-shipments`, and answer with a carton-level
-      receipt on `POST /vendor/inbound-receipts` (`202` and a `transactionId`, kind
-      `INBOUND_RECEIPT`). Every quantity is **eaches**. A GTIN is 14 digits, zero-left-padded;
-      an SSCC is 18 digits. `ownerRef` is the seller of record and is opaque to the vendor.
-      The vendor never talks to the seller.
   contact:
     name: vendor-connectivity maintainers
     url: https://github.com/IQVO/vendor-connectivity
@@ -63,12 +57,12 @@ tags:
   description: Labels for the packages of an ACCEPTED purchase order.
 - name: Shipment Confirmations
   description: Confirm that a purchase order shipped (asynchronous).
+- name: Inbound Shipments
+  description: Poll and read the SHIPPED inbound shipments bound for the vendor's nodes (seller cartons with SSCC and GTIN).
+- name: Inbound Receipts
+  description: Report what the dock received against an inbound shipment (asynchronous).
 - name: Transactions
   description: Reconcile every asynchronous write by its transactionId.
-- name: Inbound Shipments
-  description: Poll the carton manifests of the inbound shipments sellers send to the vendor's nodes (proposed, ADR 0009).
-- name: Inbound Receipts
-  description: Answer an inbound shipment with a carton-level receipt (asynchronous, proposed, ADR 0009).
 - name: Vendors
   description: Vendor onboarding, suspension and reinstatement, used by network partner managers (not part of the vendor-facing protocol).
 paths:
@@ -405,6 +399,162 @@ paths:
           $ref: '#/components/responses/ValidationProblem'
         '429':
           $ref: '#/components/responses/RateLimited'
+  /vendor/inbound-shipments:
+    get:
+      tags:
+      - Inbound Shipments
+      operationId: pollInboundShipments
+      summary: Poll inbound shipments (PollInboundShipments)
+      description: |
+        Returns the `SHIPPED` inbound shipments bound for the vendor's nodes after
+        `createdAfter`, oldest first, in pages. Every shipment is the pallet-and-carton
+        tree shipment > pallet > carton > item. `createdAfter` compares with `shippedAt`,
+        the instant the seller handed the shipment over. Pass the returned `nextToken`
+        for the next page; an absent `nextToken` means the last page. A shipment
+        leaves the poll once the network records its receipt.
+      parameters:
+      - $ref: '#/components/parameters/VendorId'
+      - name: createdAfter
+        in: query
+        required: false
+        description: Only shipments with `shippedAt` strictly after this instant.
+        schema:
+          type: string
+          format: date-time
+      - name: nodeId
+        in: query
+        required: false
+        description: Only shipments bound for this node.
+        schema:
+          type: string
+      - name: nextToken
+        in: query
+        required: false
+        description: Opaque continuation token from the previous page. When present, the other filters are ignored.
+        schema:
+          type: string
+      - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: One page of inbound shipments.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboundShipmentPage'
+              example:
+                inboundShipments:
+                - shipmentId: SHP-1001
+                  sellerId: S-100
+                  nodeId: n-1
+                  shippedAt: '2026-10-24T13:00:00Z'
+                  status: SHIPPED
+                  pallets:
+                  - sscc: '006141410000000036'
+                    cartons:
+                    - sscc: '006141410000000012'
+                      parentSscc: '006141410000000036'
+                      kind: HOMOGENEOUS_CASE
+                      contents:
+                      - gtin: '00614141000036'
+                        qtyEaches: 12
+                        lot: L-77
+                        expiry: '2027-03-01'
+                      grossWeightG: 4200
+                      dimsMm:
+                        l: 400
+                        w: 300
+                        h: 200
+                  cartons:
+                  - sscc: '006141410000000029'
+                    kind: MIXED
+                    contents:
+                    - gtin: '00614141000036'
+                      qtyEaches: 6
+                    grossWeightG: 2100
+                nextToken: eyJ0IjoiMjAyNi0xMC0yNFQxMzowMDowMFoiLCJzIjoiU0hQLTEwMDEiLCJ2IjoiVi1XUyJ9
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/ValidationProblem'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /vendor/inbound-shipments/{shipmentId}:
+    get:
+      tags:
+      - Inbound Shipments
+      operationId: getInboundShipment
+      summary: Get one inbound shipment (GetInboundShipment)
+      description: |
+        One inbound shipment as the pallet-and-carton tree. A shipment that has not shipped
+        yet, or that is bound for another vendor's node, is `not-found`. Unlike the
+        poll, this read also answers for a shipment that was already received
+        (`status` `CLOSED` or `CLOSED_WITH_DISCREPANCY`).
+      parameters:
+      - $ref: '#/components/parameters/VendorId'
+      - $ref: '#/components/parameters/ShipmentId'
+      responses:
+        '200':
+          description: The inbound shipment.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InboundShipment'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+  /vendor/inbound-receipts:
+    post:
+      tags:
+      - Inbound Receipts
+      operationId: submitInboundReceipt
+      summary: Report an inbound receipt (SubmitInboundReceipt)
+      description: |
+        Asynchronous (`SubmissionKind` `INBOUND_RECEIPT`). The shipment must be known
+        and `SHIPPED`, `nodeId` must be its destination and belong to the vendor, and
+        every carton `sscc` must be on the shipment, except a carton reported
+        `UNEXPECTED`. A `MISSING` carton has no items; the GTINs counted in a
+        carton must be GTINs of that carton on the manifest. Counting more or fewer
+        eaches than the manifest says is a discrepancy to report, never a refusal.
+        On `202` the network publishes `InboundReceiptSubmitted`.
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InboundReceiptRequest'
+            example:
+              vendorId: V-WS
+              shipmentId: SHP-1001
+              nodeId: n-1
+              receivedAt: '2026-10-25T09:30:00Z'
+              cartons:
+              - sscc: '006141410000000012'
+                status: RECEIVED
+                items:
+                - gtin: '00614141000036'
+                  qtyEaches: 12
+                complianceCodes: []
+              - sscc: '006141410000000029'
+                status: DAMAGED
+                items:
+                - gtin: '00614141000036'
+                  qtyEaches: 5
+                complianceCodes:
+                - CARTON_CRUSHED
+      responses:
+        '202':
+          $ref: '#/components/responses/Accepted'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/StateConflict'
+        '422':
+          $ref: '#/components/responses/ValidationProblem'
+        '429':
+          $ref: '#/components/responses/RateLimited'
   /vendor/transactions/{transactionId}:
     get:
       tags:
@@ -427,106 +577,6 @@ paths:
           $ref: '#/components/responses/RateLimited'
       description: The outcome of any asynchronous write of the calling vendor. A transaction of another vendor is `not-found`. A processed `NODE_REGISTRATION`
         transaction carries the new `nodeId`.
-  /vendor/inbound-shipments:
-    get:
-      tags:
-      - Inbound Shipments
-      operationId: pollInboundShipments
-      summary: Poll inbound shipments (PollInboundShipments)
-      description: |
-        Proposed (ADR 0009). Returns the inbound shipments sellers have shipped to the
-        vendor's nodes after `createdAfter`, oldest first, in pages, each as a tree:
-        shipment, optional pallet, carton, item. Pass the returned `nextToken` for the
-        next page; an absent `nextToken` means the last page. A shipment can be returned
-        again; the vendor deduplicates on `shipmentId`. All quantities are eaches.
-      parameters:
-      - $ref: '#/components/parameters/VendorId'
-      - name: nodeId
-        in: query
-        required: false
-        description: Only shipments addressed to this node.
-        schema:
-          type: string
-      - name: createdAfter
-        in: query
-        required: false
-        description: Only shipments with `shippedAt` strictly after this instant.
-        schema:
-          type: string
-          format: date-time
-      - name: nextToken
-        in: query
-        required: false
-        description: Opaque continuation token from the previous page. When present, the other filters are ignored.
-        schema:
-          type: string
-      - $ref: '#/components/parameters/Limit'
-      responses:
-        '200':
-          description: One page of inbound shipments.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InboundShipmentPage'
-        '422':
-          $ref: '#/components/responses/ValidationProblem'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-  /vendor/inbound-shipments/{shipmentId}:
-    get:
-      tags:
-      - Inbound Shipments
-      operationId: getInboundShipment
-      summary: Get one inbound shipment (GetInboundShipment)
-      description: |
-        Proposed (ADR 0009). One inbound shipment addressed to a node of the calling
-        vendor, as a tree. A shipment addressed to another vendor's node is
-        `node-not-owned-by-vendor`; an unknown one is `not-found`.
-      parameters:
-      - $ref: '#/components/parameters/VendorId'
-      - $ref: '#/components/parameters/ShipmentId'
-      responses:
-        '200':
-          description: The inbound shipment.
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InboundShipment'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '429':
-          $ref: '#/components/responses/RateLimited'
-  /vendor/inbound-receipts:
-    post:
-      tags:
-      - Inbound Receipts
-      operationId: submitInboundReceipt
-      summary: Submit a carton-level receipt (SubmitInboundReceipt)
-      description: |
-        Proposed (ADR 0009). Asynchronous (`SubmissionKind` `INBOUND_RECEIPT`). Reports,
-        per carton SSCC, whether it was `RECEIVED`, `MISSING`, `UNEXPECTED` or `DAMAGED`,
-        the eaches received per GTIN and any compliance codes. May be sent in parts: the
-        shipment closes when every carton of the manifest has a final status. The
-        shipment must have been shipped to a node of the calling vendor
-        (`ErrUnknownInboundShipment`, problem type `not-found`). A receipt records
-        differences; it never edits the manifest.
-      parameters:
-      - $ref: '#/components/parameters/IdempotencyKey'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/InboundReceiptRequest'
-      responses:
-        '202':
-          $ref: '#/components/responses/Accepted'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '422':
-          $ref: '#/components/responses/ValidationProblem'
-        '429':
-          $ref: '#/components/responses/RateLimited'
   /vendors:
     post:
       tags:
@@ -636,6 +686,13 @@ components:
       description: The purchase order number. Idempotent on the release it was issued for.
       schema:
         type: string
+    ShipmentId:
+      name: shipmentId
+      in: path
+      required: true
+      description: The seller-inbound shipment id.
+      schema:
+        type: string
     NodeId:
       name: nodeId
       in: path
@@ -664,13 +721,6 @@ components:
       in: path
       required: true
       description: The vendor account id.
-      schema:
-        type: string
-    ShipmentId:
-      name: shipmentId
-      in: path
-      required: true
-      description: The inbound shipment id minted by the network (seller-inbound).
       schema:
         type: string
     TransactionId:
@@ -879,6 +929,38 @@ components:
         quantity:
           type: integer
           minimum: 1
+        packaging:
+          type: array
+          description: The active packaging levels of the listing's catalogue item, from the network's catalogue (empty when none was declared).
+          items:
+            $ref: '#/components/schemas/Packaging'
+    Packaging:
+      type: object
+      required:
+      - level
+      - gtin
+      - unitsPerPack
+      properties:
+        level:
+          type: string
+          enum:
+          - EACH
+          - INNER
+          - CASE
+          - PALLET
+        gtin:
+          type: string
+          description: The 14-digit GTIN of the level.
+          example: '10614141000019'
+        childGtin:
+          type: string
+          description: The GTIN of the next lower level; absent for EACH.
+          example: '00614141000036'
+        unitsPerPack:
+          type: integer
+          minimum: 1
+          description: Eaches in one unit of this level (1 for EACH).
+          example: 12
     Label:
       type: object
       required:
@@ -1195,8 +1277,6 @@ components:
         sortDwellMinutes:
           type: integer
           minimum: 0
-        inbound:
-          $ref: '#/components/schemas/InboundLimits'
     VendorNode:
       type: object
       required:
@@ -1234,241 +1314,6 @@ components:
         profileRevision:
           type: integer
           description: Revision of that profile; absent before the first one.
-    InboundLimits:
-      type: object
-      description: Proposed (ADR 0009). What a receiving node accepts. Declared only by nodes with the INBOUND capability.
-      required:
-      - maxCartonWeightG
-      - maxCartonDimsMm
-      - acceptsPallets
-      - requiresSscc
-      properties:
-        maxCartonWeightG:
-          type: integer
-          minimum: 1
-        maxCartonDimsMm:
-          type: object
-          required:
-          - l
-          - w
-          - h
-          properties:
-            l:
-              type: integer
-              minimum: 1
-            w:
-              type: integer
-              minimum: 1
-            h:
-              type: integer
-              minimum: 1
-        acceptsPallets:
-          type: boolean
-        requiresSscc:
-          type: boolean
-    InboundItem:
-      type: object
-      description: One kind of item in a carton. Quantity is in eaches.
-      required:
-      - catalogItemId
-      - gtin
-      - qtyEaches
-      properties:
-        catalogItemId:
-          type: string
-        gtin:
-          type: string
-          pattern: '^[0-9]{14}$'
-          description: 14 digits, zero-left-padded, valid mod-10 check digit. For a case-packed carton, the CASE-level GTIN.
-          example: '00012345678905'
-        qtyEaches:
-          type: integer
-          minimum: 1
-          description: Eaches, never cases. For a case-packed carton, the case's `unitsPerPack`.
-          example: 12
-        sku:
-          type: string
-          description: The vendor's own SKU for the item, when the network knows it. Optional.
-        lot:
-          type: string
-          maxLength: 20
-        expiry:
-          type: string
-          format: date
-    InboundCarton:
-      type: object
-      description: One logistic unit identified by an SSCC.
-      required:
-      - sscc
-      - kind
-      - contents
-      properties:
-        sscc:
-          type: string
-          pattern: '^[0-9]{18}$'
-          description: 18 digits with a valid mod-10 check digit; unique network-wide.
-          example: '000123450000000010'
-        parentSscc:
-          type: string
-          pattern: '^[0-9]{18}$'
-          description: The SSCC of the pallet the carton is on. Absent for a carton that is not on a pallet.
-        kind:
-          type: string
-          enum:
-          - HOMOGENEOUS_CASE
-          - MIXED
-          description: A HOMOGENEOUS_CASE carton holds one item at its case quantity. A MIXED carton has no pack GTIN.
-        unitsPerPack:
-          type: integer
-          minimum: 2
-          description: Present for a HOMOGENEOUS_CASE carton, from the catalogue packaging.
-        grossWeightG:
-          type: integer
-          minimum: 1
-        dimsMm:
-          type: object
-          required:
-          - l
-          - w
-          - h
-          properties:
-            l:
-              type: integer
-              minimum: 1
-            w:
-              type: integer
-              minimum: 1
-            h:
-              type: integer
-              minimum: 1
-        sealed:
-          type: boolean
-        contents:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/InboundItem'
-    InboundPallet:
-      type: object
-      description: A pallet logistic unit with the cartons on it (the tare level of the tree).
-      required:
-      - sscc
-      - cartons
-      properties:
-        sscc:
-          type: string
-          pattern: '^[0-9]{18}$'
-        cartons:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/InboundCarton'
-    InboundShipment:
-      type: object
-      description: 'A seller''s consignment to one node, as a tree: shipment, pallet, carton, item.'
-      required:
-      - shipmentId
-      - sellerId
-      - nodeId
-      - shippedAt
-      properties:
-        shipmentId:
-          type: string
-        sellerId:
-          type: string
-          maxLength: 64
-          pattern: '^[A-Za-z0-9._-]+$'
-          description: The seller of record (the owner of the stock). Opaque to the vendor, which carries it as its ownerRef and never contacts the seller.
-        nodeId:
-          type: string
-        shippedAt:
-          type: string
-          format: date-time
-        pallets:
-          type: array
-          items:
-            $ref: '#/components/schemas/InboundPallet'
-        cartons:
-          type: array
-          description: Cartons that are not on a pallet.
-          items:
-            $ref: '#/components/schemas/InboundCarton'
-    InboundShipmentPage:
-      type: object
-      required:
-      - inboundShipments
-      properties:
-        inboundShipments:
-          type: array
-          items:
-            $ref: '#/components/schemas/InboundShipment'
-        nextToken:
-          type: string
-          description: Absent on the last page.
-    InboundReceiptItem:
-      type: object
-      required:
-      - gtin
-      - qtyEaches
-      properties:
-        gtin:
-          type: string
-          pattern: '^[0-9]{14}$'
-        qtyEaches:
-          type: integer
-          minimum: 0
-          description: Eaches actually received for this GTIN in this carton.
-    InboundReceiptCarton:
-      type: object
-      required:
-      - sscc
-      - status
-      properties:
-        sscc:
-          type: string
-          pattern: '^[0-9]{18}$'
-        status:
-          type: string
-          enum:
-          - RECEIVED
-          - MISSING
-          - UNEXPECTED
-          - DAMAGED
-          description: UNEXPECTED is a carton the vendor received whose SSCC is not in the manifest.
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/InboundReceiptItem'
-        complianceCodes:
-          type: array
-          description: Reasons the seller broke the carton and label rules. The vocabulary is open (gap G46).
-          items:
-            type: string
-    InboundReceiptRequest:
-      type: object
-      required:
-      - vendorId
-      - shipmentId
-      - nodeId
-      - receivedAt
-      - cartons
-      properties:
-        vendorId:
-          type: string
-        shipmentId:
-          type: string
-        nodeId:
-          type: string
-          description: The receiving node. It must be a node of the submitting vendor.
-        receivedAt:
-          type: string
-          format: date-time
-          description: When the cartons arrived at the node.
-        cartons:
-          type: array
-          minItems: 1
-          items:
-            $ref: '#/components/schemas/InboundReceiptCarton'
     ScorecardWindow:
       type: object
       required:
@@ -1569,6 +1414,206 @@ components:
           items:
             $ref: '#/components/schemas/Label'
           description: One label per requested package, ordered by `packageNo`.
+    Dims:
+      type: object
+      required:
+      - l
+      - w
+      - h
+      properties:
+        l:
+          type: integer
+          minimum: 0
+        w:
+          type: integer
+          minimum: 0
+        h:
+          type: integer
+          minimum: 0
+    ShipmentItem:
+      type: object
+      required:
+      - gtin
+      - qtyEaches
+      properties:
+        gtin:
+          type: string
+          description: 14-digit GTIN with a valid check digit.
+          example: '00614141000036'
+        sku:
+          type: string
+          description: The seller's SKU, when known.
+        qtyEaches:
+          type: integer
+          minimum: 1
+          description: Quantity in eaches.
+        lot:
+          type: string
+          maxLength: 20
+        expiry:
+          type: string
+          format: date
+    ShipmentCarton:
+      type: object
+      required:
+      - sscc
+      - kind
+      - contents
+      properties:
+        sscc:
+          type: string
+          description: 18-digit SSCC (AI 00) with a valid check digit.
+          example: '006141410000000012'
+        parentSscc:
+          type: string
+          description: The SSCC of the pallet the carton is on; absent for a carton that is not on a pallet.
+        kind:
+          type: string
+          description: HOMOGENEOUS_CASE (one GTIN) or MIXED (a logistic unit with no pack GTIN).
+          example: HOMOGENEOUS_CASE
+        contents:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShipmentItem'
+        grossWeightG:
+          type: integer
+          minimum: 0
+        dimsMm:
+          $ref: '#/components/schemas/Dims'
+    ShipmentPallet:
+      type: object
+      required:
+      - sscc
+      - cartons
+      properties:
+        sscc:
+          type: string
+          description: 18-digit SSCC of the pallet.
+          example: '006141410000000036'
+        cartons:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShipmentCarton'
+    InboundShipment:
+      type: object
+      description: |
+        The pallet-and-carton tree of one inbound shipment: shipment > pallet > carton > item.
+        Cartons that are not on a pallet are top-level; a pallet SSCC is the `parentSscc` of its cartons.
+      required:
+      - shipmentId
+      - nodeId
+      - shippedAt
+      - status
+      - pallets
+      - cartons
+      properties:
+        shipmentId:
+          type: string
+          example: SHP-1001
+        sellerId:
+          type: string
+          description: The owner of the goods (`ownerRef` of the stock).
+          example: S-100
+        nodeId:
+          type: string
+          example: n-1
+        shippedAt:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum:
+          - SHIPPED
+          - CLOSED
+          - CLOSED_WITH_DISCREPANCY
+        pallets:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShipmentPallet'
+        cartons:
+          type: array
+          items:
+            $ref: '#/components/schemas/ShipmentCarton'
+    InboundShipmentPage:
+      type: object
+      required:
+      - inboundShipments
+      properties:
+        inboundShipments:
+          type: array
+          items:
+            $ref: '#/components/schemas/InboundShipment'
+        nextToken:
+          type: string
+          description: Absent on the last page.
+    InboundReceiptItem:
+      type: object
+      required:
+      - gtin
+      - qtyEaches
+      properties:
+        gtin:
+          type: string
+          description: GTIN (8, 12, 13 or 14 digits, valid check digit); stored as 14 digits.
+          example: '00614141000036'
+        qtyEaches:
+          type: integer
+          minimum: 0
+          description: Eaches counted.
+    InboundReceiptCarton:
+      type: object
+      required:
+      - sscc
+      - status
+      properties:
+        sscc:
+          type: string
+          description: 18-digit SSCC with a valid check digit.
+          example: '006141410000000012'
+        status:
+          type: string
+          enum:
+          - RECEIVED
+          - MISSING
+          - UNEXPECTED
+          - DAMAGED
+        items:
+          type: array
+          description: Per-GTIN counts. Empty for a `MISSING` carton.
+          items:
+            $ref: '#/components/schemas/InboundReceiptItem'
+        complianceCodes:
+          type: array
+          description: UPPER_SNAKE compliance findings, for example `LABEL_UNREADABLE`.
+          maxItems: 20
+          items:
+            type: string
+            pattern: ^[A-Z][A-Z0-9_]{0,63}$
+    InboundReceiptRequest:
+      type: object
+      required:
+      - vendorId
+      - shipmentId
+      - nodeId
+      - receivedAt
+      - cartons
+      properties:
+        vendorId:
+          type: string
+        shipmentId:
+          type: string
+        nodeId:
+          type: string
+          description: The destination node of the shipment.
+        receivedAt:
+          type: string
+          format: date-time
+        cartons:
+          type: array
+          minItems: 1
+          maxItems: 5000
+          items:
+            $ref: '#/components/schemas/InboundReceiptCarton'
     ShipmentConfirmationRequest:
       type: object
       required:

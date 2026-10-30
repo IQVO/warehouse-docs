@@ -33,15 +33,21 @@ MCP tools, ADR 0005), and the analytics read side `cmd/inbound-projector` and
 Its web remote `inbound_mfe` is mounted by `warehouse-console`, and it ships a
 Helm chart (`charts/inbound-receiving`).
 
-**Live in the reference deployment:** `warehouse-infra` runs it with
-`EVENT_PUBLISHER=kafka` and both local copies in `kafka` mode;
+**Live in the reference deployment (wired in `warehouse-infra` `develop`):**
+it runs with `EVENT_PUBLISHER=kafka`, both local copies in `kafka` mode and the
+pack-level consumer (`packagingConsumerGroup`, product-master's
+`ProductPackLevelDeclared`/`Retired` for carton-level receiving);
 `inventory-storage` consumes the handover event `ReceiptLineReceived` (its ADR
-0037, group set in the deployment) and books `Good` lines only;
-`warehouse-ops-agent` reads it over MCP (its ADR 0021).
-
-**Planned, not built:** `warehouse-planning` consuming `DockAppointmentBooked`
-as inbound-labor demand (its CapacityPlan has no inbound process path). Eight
-of the nine published event types have no consumer today.
+0037) and the identity-only `ReceiptCartonReceived` (its ADR 0045/0046, the same
+consumer group) and books `Good` lines only; `warehouse-planning` consumes
+`DockAppointmentBooked` and `DockAppointmentCancelled` as inbound-labor demand
+(its ADR 0017, K28); `exception-management` consumes `CartonDiscrepancyRaised`
+(its ADR 0006); `network-fulfillment` consumes `ReceiptCartonReceived`,
+`CartonDiscrepancyRaised` and `ReceiptClosed` for its seller inbound loop (its
+ADR 0028, live mode); `warehouse-ops-agent` reads it over MCP (its ADR 0021).
+Five of the eleven published event types have no consumer today
+(`ASNRegistered`, `ASNCancelled`, `DockAppointmentCheckedIn`,
+`DockAppointmentCompleted`, `ReceiptOpened`).
 :::
 
 It owns three aggregates, each its own consistency boundary: **`Asn`**,
@@ -65,8 +71,8 @@ It owns three aggregates, each its own consistency boundary: **`Asn`**,
   pattern, technology and status, planned edges labelled.
 - [Aggregate Design Canvas](/contexts/inbound-receiving/aggregate-design-canvas):
   `Asn`, `DockAppointment` and `Receipt`.
-- [Domain Events](/contexts/inbound-receiving/domain-events): the nine
-  published events and three consumed ones.
+- [Domain Events](/contexts/inbound-receiving/domain-events): the eleven
+  published events and five consumed ones.
 - [Domain Message Flow](/contexts/inbound-receiving/domain-message-flow),
   [EventStorming](/contexts/inbound-receiving/eventstorming),
   [Class Diagram](/contexts/inbound-receiving/class-diagram),

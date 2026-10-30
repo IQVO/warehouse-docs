@@ -16,8 +16,7 @@ Five key business scenarios. Participants are contexts and external
 systems. Every arrow is a real message (port call, REST route, CloudEvents
 type) and is prefixed `cmd:` (command), `qry:` (query) or `evt:` (event).
 
-Kafka events are published only with `EVENT_PUBLISHER=kafka`. With
-`DATABASE_URL` set they go through the transactional outbox. Every event
+Kafka events always go through the transactional outbox (ADR 0025). Every event
 goes to both `warehouse.network-fulfillment.events` and
 `warehouse.network-fulfillment.analytics`; the diagrams show one "Kafka"
 participant for both.
@@ -172,8 +171,9 @@ Omitted: full CE types are
 `com.warehouse.wes.process-path-management.processpath.*`,
 `com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged`
 and `com.warehouse.wes.work-planning.workpool.PathCapacityChanged`. The
-whole scenario runs only with `CAPABILITY_OFFER_ENABLED=true`. No message
-goes to the network: `SubmitAvailability` is not called yet.
+whole scenario always runs. No message
+goes to the network from this scenario. In live mode the separate `FeedInventory`
+worker later reads the persisted offers and feeds them (ADR 0027 part 2).
 
 ## 5. Orphaned hold freed
 

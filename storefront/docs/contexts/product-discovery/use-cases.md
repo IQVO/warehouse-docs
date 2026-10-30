@@ -2,13 +2,13 @@
 id: use-cases
 title: Use Cases
 sidebar_label: Use Cases
-description: Every proposed Product Discovery use case — the three read routes, the projector that folds eleven event types, and the ops-run bootstrap rebuild — with actor, adapter, preconditions, main flow, error mapping and idempotency.
+description: Every Product Discovery use case — the three read routes, the projector that folds eleven event types, and the ops-run bootstrap rebuild — with actor, adapter, preconditions, main flow, error mapping and idempotency.
 ---
 
 # Use Cases
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-discovery` service is built on develop ([`IQVO/product-discovery`](https://github.com/IQVO/product-discovery) at `9c2f945`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-discovery#service-and-operations) section lists it.
 :::
 
 `contexts[product-discovery].aggregates` is empty, so there is **no command
@@ -16,11 +16,11 @@ use case** in this context. The application services are: the three
 **queries** of `.rest` (called by the experience layer), the **projector**
 that folds the eleven consumed events into `ProductView` and `CategoryView`,
 and the ops-run **bootstrap rebuild** of business decision 5. They are
-proposed application services in `internal/application/usecases`. The
+application services in `internal/application/usecases` (as built). The
 step-by-step diagrams are on
 [Sequence Diagrams](/storefront/contexts/product-discovery/sequence-diagrams);
 the payloads are on [Domain Events](/storefront/contexts/product-discovery/domain-events);
-the proposed REST contract is `apis/product-discovery/openapi.yaml`.
+the REST contract is `apis/product-discovery/openapi.yaml`.
 
 ## Triggers at a glance
 

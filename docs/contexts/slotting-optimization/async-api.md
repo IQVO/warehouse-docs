@@ -2,7 +2,7 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: Kafka integration for slotting-optimization — one published integration topic with three SlotPlan events, four consumed sibling topics (three feeding local copies, one feeding the plan execution progress), dead-lettering and the CloudEvents envelope.
+description: "Kafka integration for slotting-optimization — one published integration topic with three SlotPlan events and its analytics mirror, four consumed sibling topics (five consumers: four feeding local copies, one feeding the plan execution progress), dead-lettering and the CloudEvents envelope."
 ---
 
 # Async API
@@ -19,13 +19,13 @@ producer use cases and consumed contracts, see
 
 | Topic | Direction | Notes |
 | --- | --- | --- |
-| `warehouse.slotting-optimization.events` | **Published** | Three events from the `SlotPlan` aggregate, written by the transactional outbox relay. Key = the plan id. `wes-work-planning` consumes `SlotPlanApproved`. |
-| `warehouse.order-management.events` | Consumed | Only `SiteSkuDemandChanged`, into the `demand_lines` local copy. Started only when `DEMAND_MODE=kafka`, group from `DEMAND_CONSUMER_GROUP`. |
-| `warehouse.product-master.events` | Consumed | Only `ProductClassified`, `ProductDimensionsDeclared` and `ProductMeasured`, into the `product_profiles` local copy. Started only when `PRODUCT_MODE=kafka`, group from `PRODUCT_CONSUMER_GROUP`. |
-| `warehouse.facility.events` | Consumed | Only `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned`, into the `zones` and `slots` local copies. Started only when `LAYOUT_MODE=kafka`, group from `LAYOUT_CONSUMER_GROUP`. |
-| `warehouse.inventory.events` | Consumed | Only `com.warehouse.wms.inventory-storage.stock.StockRelocated`, into `slot_plan_move_executions` (the plans' execution progress, ADR 0010). Started only when `RELOCATION_MODE=kafka`, group from `RELOCATION_CONSUMER_GROUP` (no default). |
+| `warehouse.slotting-optimization.events` | **Published** | Three events from the `SlotPlan` aggregate, written by the transactional outbox relay. Key = the plan id. `wes-work-planning` and `pick-face-replenishment` consume `SlotPlanApproved`. |
+| `warehouse.order-management.events` | Consumed | Only `SiteSkuDemandChanged`, into the `demand_lines` local copy. `DEMAND_MODE` defaults to `kafka` (`permissive` and `off` are boot errors, ADR 0011), group from `DEMAND_CONSUMER_GROUP`. |
+| `warehouse.product-master.events` | Consumed | `ProductClassified`, `ProductDimensionsDeclared` and `ProductMeasured` into the `product_profiles` local copy, and (a second consumer, `PACK_LEVEL_MODE` / `PACK_LEVEL_CONSUMER_GROUP`, ADR 0012) `ProductPackLevelDeclared`, `ProductPackLevelMeasured` and `ProductPackLevelRetired` into the local pack view behind the case-pick faces. `PRODUCT_MODE` defaults to `kafka` (`permissive` and `off` are boot errors, ADR 0011), group from `PRODUCT_CONSUMER_GROUP`. |
+| `warehouse.facility.events` | Consumed | Only `ZoneRegistered`, `LocationSlotRegistered` and `LocationSlotDecommissioned`, into the `zones` and `slots` local copies. `LAYOUT_MODE` defaults to `kafka` (`permissive` and `off` are boot errors, ADR 0011), group from `LAYOUT_CONSUMER_GROUP`. |
+| `warehouse.inventory.events` | Consumed | Only `com.warehouse.wms.inventory-storage.stock.StockRelocated`, into `slot_plan_move_executions` (the plans' execution progress, ADR 0010). `RELOCATION_MODE` defaults to `kafka` (ADR 0011), group from `RELOCATION_CONSUMER_GROUP` (no default). |
 | `<consumed topic>.dlq` | Published (dead letters) | One per consumed topic, written after a transient failure exhausts its retries, or at once for a `StockRelocated` that cannot be decoded (see below). |
-| `warehouse.slotting-optimization.analytics` | Reserved | Named in ADR 0004 for a later analytics read side. Nothing publishes to it, so the spec does not declare it as a channel. |
+| `warehouse.slotting-optimization.analytics` | **Published** (internal data product) | The three SlotPlan events again, read only by this context's own `slotting-projector` (ADR 0006). |
 
 ## The envelope
 
@@ -114,13 +114,13 @@ K37 and K38 closing the loop; all three are live in `warehouse-infra`
 
 ## Consuming: local copies and the execution progress
 
-All four consumers dispatch on the full `type` and ignore every other type
+All five consumers dispatch on the full `type` and ignore every other type
 on their topic. The CloudEvents `id` claim (`processed_events`) and the
 effect run in one transaction, and the offset is committed only afterwards,
 so a redelivery is a no-op (`outcome=duplicate`). The product copy also
 applies a message only when its `version` is newer than the stored one
-(`outcome=stale` otherwise). Each mode defaults to `permissive` (no consumer
-started; the copy is whatever the database already holds).
+(`outcome=stale` otherwise). Every mode defaults to `kafka`; `permissive` and
+`off` are boot errors (ADR 0011).
 
 | Situation | Behaviour |
 | --- | --- |

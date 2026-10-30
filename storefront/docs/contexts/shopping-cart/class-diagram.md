@@ -2,21 +2,23 @@
 id: class-diagram
 title: Class Diagram
 sidebar_label: Class Diagram
-description: Proposed UML class diagrams of Shopping Cart's domain model, events and policies, and the hexagonal ports-and-adapters layout a Go implementation would use.
+description: UML class diagrams of Shopping Cart's domain model, events and policies, and the hexagonal ports-and-adapters layout, as the model designs them, with the as-built Go packages.
 ---
 
 # Class Diagram
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `shopping-cart` service is built on develop ([`IQVO/shopping-cart`](https://github.com/IQVO/shopping-cart) at `95bc5bc`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/shopping-cart#service-and-operations) section lists it.
 :::
 
-UML class diagrams of the **proposed** `internal/domain/**` packages, plus
+UML class diagrams of the `internal/domain/**` packages as the model designs them, plus
 the hexagonal ports and adapters. Type names come from the model's code
 identifiers (`cart.Cart`, `cart.DeliveryQuote`, `cart.QuotedOffer`,
-`cart.DeliverySelection`, `cart.Estimate`, `cart.CheckoutReadiness`) and
+`cart.Selection`, `estimate.Estimate`, `cart.CheckoutReadiness`) and
 value objects. Fields are unexported in Go and shown with `-`; methods are
 shown with `+`.
+
+**As built** (`IQVO/shopping-cart` develop `95bc5bc`): the domain packages are `internal/domain/cart`, `internal/domain/estimate`. Exported types per package: `cart`: `ID`, `State`, `Line`, `Cart`, `CheckoutReadiness`, `CartLineAdded`, `CartDeliveryQuoted`, `CartAbandoned`, `CartCheckedOut`, `Tier`, `QuotedOffer`, `QuoteGroup`, `TierUnavailable`, `DeliveryQuote`, `Selection`, `Snapshot`; `estimate`: `TierCharge`, `Schedule`, `TaxBand`, `TaxTable`, `Group`, `Input`, `Estimate`. Application packages: `internal/application/idempotency`, `internal/application/outbox`, `internal/application/ports`, `internal/application/readmodel`, `internal/application/usecases`, `internal/application/views`; adapters: `internal/adapters/inbound/http`, `internal/adapters/inbound/kafka`, `internal/adapters/inbound/requestlog`, `internal/adapters/inbound/scheduler`, `internal/adapters/outbound/clock`, `internal/adapters/outbound/deliverypromise`, `internal/adapters/outbound/ids`, `internal/adapters/outbound/kafka`, `internal/adapters/outbound/memory`, `internal/adapters/outbound/outbox`, `internal/adapters/outbound/postgres`, `internal/adapters/outbound/repocontract`, `internal/adapters/outbound/telemetry`. Where a type name below differs (the UML keeps the design names), the [Ubiquitous Language](/storefront/contexts/shopping-cart/ubiquitous-language) page carries the built identifier.
 
 ## 1. The Cart aggregate and its held quote
 
@@ -202,7 +204,7 @@ classDiagram
 ```
 
 Derived from: `model.yaml → contexts[shopping-cart].read_models`,
-`.publishes`, `.policies`, `.ul` (`cart.Estimate`, `cart.CheckoutReadiness`).
+`.publishes`, `.policies`, `.ul` (`estimate.Estimate`, `cart.CheckoutReadiness`).
 
 Omitted: the CloudEvents envelope (built in the Kafka adapter) and the
 `CheckoutReadiness` derivation, which lives on `Cart` (every group
@@ -220,7 +222,7 @@ flowchart TB
         SCH["scheduler<br/>abandon sweep"]
     end
     APP["<b>internal/application/usecases</b><br/>CreateCart, AddLine, SetLineQuantity<br/>RemoveLine, SetDestination<br/>QuoteDelivery, SelectDelivery, MergeInto<br/>AbandonInactive, CloseOnCheckoutCompleted<br/>ProjectPurchasabilityView<br/>ProjectEstimateView"]
-    DOM["<b>internal/domain</b><br/>cart.Cart<br/>cart.DeliveryQuote, cart.QuotedOffer<br/>cart.DeliverySelection<br/>cart.Estimate, cart.CheckoutReadiness"]
+    DOM["<b>internal/domain</b><br/>cart.Cart<br/>cart.DeliveryQuote, cart.QuotedOffer<br/>cart.Selection<br/>estimate.Estimate, cart.CheckoutReadiness"]
     PORTS["<b>internal/application/ports</b><br/>CartRepository<br/>PurchasabilityStore, EstimateStore<br/>QuoteOffers (delivery-promise)<br/>Outbox, Inbox<br/>IdempotencyStore<br/>UnitOfWork, Clock"]
     subgraph OUT["internal/adapters/outbound"]
         A1["postgres<br/>repository, views, outbox, inbox,<br/>idempotency store, UoW"]

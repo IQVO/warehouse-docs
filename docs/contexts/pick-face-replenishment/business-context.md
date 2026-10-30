@@ -40,9 +40,9 @@ single writer of it), so it is a context of its own (ADR 0001).
 | Tier | **WMS** (CloudEvents subdomain segment `wms`, the sixth `wms` context) |
 | Aggregates | `ReplenishmentPolicy` (package `internal/domain/policy`) and `ReplenishmentRequest` (package `internal/domain/replenishment`), ADR 0002 |
 | Detector | the pure function `Detect` in `internal/domain/detection`, with the `SourceBinPolicy` port (v1: `fullest-reserve-bin-v1`) |
-| Binaries | one: `cmd/api` (REST on `HTTP_ADDR`, default `:8080`, plus up to three Kafka consumers and the outbox relay as goroutines). There is **no** `cmd/mcp` |
+| Binaries | four: `cmd/api` (REST on `HTTP_ADDR`, default `:8080`, plus four Kafka consumers and the outbox relay as goroutines), `cmd/mcp` (read-only MCP server, ADR 0007), `cmd/pfr-projector` and `cmd/pfr-reports` (the analytics read side, ADR 0008) |
 | Data store | one Postgres database (embedded migrations). `DATABASE_URL` and `KAFKA_BROKERS` are mandatory (a boot error naming the variable); the in-memory adapters are test doubles only (its ADR 0006) |
-| Kafka | publishes `warehouse.pick-face-replenishment.events` and `warehouse.pick-face-replenishment.analytics`; consumes `warehouse.inventory.events`, `warehouse.slotting-optimization.events` and `warehouse.facility.events` (ADR 0003, ADR 0004) |
+| Kafka | publishes `warehouse.pick-face-replenishment.events` and `warehouse.pick-face-replenishment.analytics`; consumes `warehouse.inventory.events`, `warehouse.slotting-optimization.events`, `warehouse.facility.events` and `warehouse.product-master.events` (pack levels, ADR 0009) (ADR 0003, ADR 0004) |
 | Auth | none (fleet-wide decision) |
 
 - **The policy.** The explicit `MIN_MAX` rule of one (site, SKU): `minQty`,
@@ -129,19 +129,19 @@ It has no edge to `inbound-receiving`, `order-management` or `product-master`
 ## Honest scope today
 
 - The service is built on `IQVO/pick-face-replenishment` `develop`: REST API,
-  outbox and relay, the three consumers and the BDD and architecture fitness
-  suites. This site holds its `apis/pick-face-replenishment/` specs, the
+  outbox and relay, the four consumers, the read-only MCP server, the analytics
+  projector and reports, the console remote and the BDD and architecture
+  fitness suites. This site holds its `apis/pick-face-replenishment/` specs, the
   generated references and the synced artifact pack and operations pages.
-- It is **not deployed in the reference cluster.** `warehouse-infra` `develop`
-  has no database, Kong route, ArgoCD application, values file or dashboard
-  for it, and the repository has no Dockerfile or Helm chart on `develop`
-  (its Runbook says so). It runs only from a locally built binary or image.
-  Its declared Kong URL, `http://localhost:8000/api/pick-face-replenishment`,
-  therefore routes nowhere yet.
-- **The execution chain is complete on `develop`, and switched off.** The inputs
-  from `slotting-optimization`, `facility-layout` and `inventory-storage` are
-  published by producers on `develop` (`inventory-storage` publishes
-  `BinStockLevelChanged` and records a completed `REPLENISH` task as a
+- It is **wired in `warehouse-infra` `develop`**: `terraform/apps.yaml`
+  registers it (database, analytics database, web remote `replenishment_mfe`)
+  and `helm-values/pick-face-replenishment.yaml` sets every consumer group. Its
+  Kong URL is `http://localhost:8000/api/pick-face-replenishment`. The kind
+  cluster was not checked for this page.
+- **The execution chain is complete on `develop` and wired.** The inputs
+  from `slotting-optimization`, `facility-layout`, `inventory-storage` and
+  `product-master` are published by producers on `develop` (`inventory-storage`
+  publishes `BinStockLevelChanged` and records a completed `REPLENISH` task as a
   `StockRelocated` with reason `REPLENISHMENT`, its ADR 0040 and ADR 0041).
   The output side exists as well: `wes-work-planning` consumes
   `ReplenishmentRequested` and `ReplenishmentCancelled` and plans one
@@ -149,10 +149,9 @@ It has no edge to `inbound-receiving`, `order-management` or `product-master`
   declares the `REPLENISH` path (its ADR 0036) and `fulfillment-execution` runs
   `REPLENISH` tasks (its ADR 0050). Both consumed contracts were pinned
   consumer-first (ADR 0003) and the producers now match them (field names
-  equal, key `<bin>:<sku>`). The planner's consumer is opt-in
-  (`REPLENISHMENT_MODE=kafka`; the default consumes nothing) and
-  `warehouse-infra` does not set it, so no request reaches the floor in the
-  reference cluster.
-- An analytics read side (`warehouse.pick-face-replenishment.analytics` is
-  written, but nothing reads it), a `warehouse-ops-agent` client and a console
-  remote are later phases. None of them exists yet.
+  equal, key `<bin>:<sku>`). `warehouse-infra` sets `REPLENISHMENT_MODE=kafka`
+  for the planner. The `REPLENISH` path exists on a cluster only after the
+  catalogue seed (an operator step), and no request has been traced through
+  every hop on a cluster.
+- The analytics topic is read only by this context's own projector. A
+  demand-cover policy behind the `MIN_MAX` port is a later phase.

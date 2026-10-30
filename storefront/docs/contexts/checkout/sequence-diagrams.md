@@ -2,19 +2,19 @@
 id: sequence-diagrams
 title: Sequence Diagrams
 sidebar_label: Sequence Diagrams
-description: Proposed UML sequence diagrams for every Checkout command use case, from inbound adapter through aggregate, repository, the outbound clients and the Anti-Corruption Layer to the outbox and Kafka, with error, concurrency, idempotency and in-doubt branches.
+description: UML sequence diagrams for every Checkout command use case, from inbound adapter through aggregate, repository, the outbound clients and the Anti-Corruption Layer to the outbox and Kafka, with error, concurrency, idempotency and in-doubt branches.
 ---
 
 # Sequence Diagrams
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `checkout` service is built on develop ([`IQVO/checkout`](https://github.com/IQVO/checkout) at `ab4f0e9`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/checkout#service-and-operations) section lists it.
 :::
 
 One UML sequence diagram per command use case on
 [Use Cases](/storefront/contexts/checkout/use-cases); the long
 `ConfirmSession` is drawn in two parts (authorize, then place the order).
-Participant names are the proposed packages and ports from the
+Participant names are the packages and ports the model designs, from the
 [Class Diagram](/storefront/contexts/checkout/class-diagram):
 
 - `http` and `scheduler` are the inbound adapters.
@@ -212,8 +212,8 @@ address; the `Idempotency-Key` towards the network is the `sessionId`. The
 `REQUOTE_REQUIRED` and `FAILED` states are recorded together with
 `voidOwed`, in one transaction, before the void is attempted; a failing void
 is retried every minute by `RetryOwedVoids` (hotspot H5, resolved). Omitted:
-the mapping of the network's wire names, which happens inside `ACL` and is
-not yet in the network model (hotspot H8).
+the mapping of the network's wire names, which happens inside `ACL`
+(`internal/adapters/outbound/customerordering`; hotspot H8, resolved).
 
 ## 4. ResolveInDoubtPlacements (scheduler)
 

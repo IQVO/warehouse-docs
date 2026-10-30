@@ -2,7 +2,7 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: Kafka integration for exception-management — one published topic plus its built analytics mirror (seven event types) through the transactional outbox, six consumed sibling topics, the correlation consumer, dead-lettering and the CloudEvents envelope.
+description: Kafka integration for exception-management — one published topic plus its built analytics mirror (seven event types) through the transactional outbox, seven consumed sibling topics (six case sources plus the correlation consumer), dead-lettering and the CloudEvents envelope.
 ---
 
 # Async API
@@ -14,12 +14,14 @@ machine-generated reference is at the bottom. For per-event payloads and the
 raising use cases, see
 [Domain Events](/contexts/exception-management/domain-events).
 
-:::caution[Built on develop, not deployed]
-`warehouse-infra` `develop` has no entry for this context, so no instance
-publishes or consumes any topic below in the reference deployment. Every
-consumed type now has a producer on an integration topic (the last four were
-promoted on 2026-10-21), but nothing runs. The tables state what the code
-does.
+:::info[Built on develop, wired in warehouse-infra develop]
+`warehouse-infra` `develop` registers this context (`terraform/apps.yaml`
+entry `exception-management`, `helm-values/exception-management.yaml`): the
+API pod with its outbox relay, SLA sweeper and seven consumer groups, the
+analytics projector and reports, the read-only MCP server and the console
+remote. Every consumed type has a producer on an integration topic. The
+kind cluster itself was not checked for this page. The tables state what the
+code does.
 :::
 
 ## Topics
@@ -34,6 +36,7 @@ does.
 | `warehouse.order-management.events` | Consumed | Only `OrderRepromised`, group from `ORDER_CORRELATION_CONSUMER_GROUP` — never a case source; it is the correlated fact of the auto-resolve rule. |
 | `warehouse.returns-processing.events` | Consumed | Only `UnexpectedReturnReceived`, group from `RETURNS_EXCEPTIONS_CONSUMER_GROUP`. |
 | `warehouse.inventory.events` | Consumed | `DiscrepancyDetected`, `ItemUnlocated`, group from `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`. |
+| `warehouse.inbound-receiving.events` | Consumed | Only `CartonDiscrepancyRaised` (ADR 0006), group from `CARTON_DISCREPANCY_CONSUMER_GROUP` (chart default `exception-management-carton-discrepancy`). One case per (receipt, SSCC or `-`, kind); blocking kinds go to problem solve, informational ones (unlabelled, over-limit) to the receiving lead. |
 | `<consumed topic>.dlq` | Published (dead letters) | One per consumed topic, after a transient failure exhausts its retries, or at once for an undecodable payload of a handled type. |
 
 ## The envelope
@@ -71,7 +74,7 @@ at-least-once with the same `id` on a retry.
 
 ## Consuming: open or touch, dedup, correlation
 
-All six consumers dispatch on the full `type` and ignore every other type on
+All seven consumers dispatch on the full `type` and ignore every other type on
 their topic. The CloudEvents `id` claim (`processed_events`) and the effect
 run in one transaction, and the offset (`CommitMessages`) is committed only
 afterwards, so a redelivery is a no-op. Anything that is not a valid

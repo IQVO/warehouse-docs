@@ -3,7 +3,7 @@
   "asyncapi": "2.6.0",
   "info": {
     "title": "product-master Domain Events",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "contact": {
       "name": "product-master maintainers",
       "url": "https://github.com/IQVO/product-master",
@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **product-master** bounded context (WMS subdomain):\nSKU-level product master data, i.e. handling classification and the\nphysical profile (ADR 0001, ADR 0002).\n\n**Published.** The `Product` aggregate raises five events, published to\n`warehouse.product-master.events` through a **transactional outbox**: the\nproduct row and its already-encoded events are written in ONE database\ntransaction and a relay drains them to Kafka (at-least-once; the CloudEvents\n`id` is stored with the outbox row, so a retry republishes the same `id`).\nA change that alters nothing raises no event.\n\n**Local copies, not lookups.** Sibling contexts (inventory-storage,\norder-management, wes-work-planning, fulfillment-execution) keep a local\ncopy keyed by SKU. Every payload carries the aggregate `version` after the\nchange; apply a message only when its `version` is greater than the stored\none. Payloads are full-state per concern (classification, physical profile),\nso a consumer overwrites, it never merges.\n\n**Analytics (ADR 0006).** The same five events are ALSO written, in the\nsame transaction, to `warehouse.product-master.analytics` with the same\n`type` and the same `id` per occurrence, `dataschema`\n`urn:warehouse:product-master:analytics:<EventName>:v1` and payloads equal\nto the integration payloads. Only this service's `product-projector`\nconsumes it; it is not an integration contract.\n\n**Consumed (migration only, ADR 0003).** inventory-storage's legacy\n`ProductClassified` on `warehouse.inventory.events`, read by the legacy\nimporter when `LEGACY_IMPORT_CONSUMER_GROUP` is set.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0009); consumers may extract them, and must not require\nthem.\n`specversion`, `id`, `source` (`/warehouse/product-master`), `type`,\n`subject` (the SKU), `time`, `datacontenttype` (`application/json`) and\n`dataschema` (`urn:warehouse:product-master:events:<EventName>:v1`) are all\nrequired. Kafka key = the SKU. Type =\n`com.warehouse.wms.product-master.product.<EventName>`. A breaking payload\nchange is a new `.v2` type, never a mutation.\n"
+    "description": "Event catalog for the **product-master** bounded context (WMS subdomain):\nSKU-level product master data, i.e. handling classification, the\nphysical profile and the packaging hierarchy with GS1 GTINs (ADR 0001,\nADR 0002, ADR 0011).\n\n**Published.** The `Product` aggregate raises eight events, published to\n`warehouse.product-master.events` through a **transactional outbox**: the\nproduct row and its already-encoded events are written in ONE database\ntransaction and a relay drains them to Kafka (at-least-once; the CloudEvents\n`id` is stored with the outbox row, so a retry republishes the same `id`).\nA change that alters nothing raises no event.\n\n**Packaging hierarchy (ADR 0011).** Three events carry the pack levels\n(`EACH | INNER | CASE | PALLET`) of a SKU. They are additive and\nintegration-only (NOT written to the analytics stream). A GTIN is always\nthe 14-digit zero-left-padded string. Eaches are the ledger unit: `qty_of_child`\nand `units_per_pack` are the only pack quantities, a bare quantity never\nchanges meaning. `units_per_pack` is the direct factor to eaches. Once a\nlevel is active its quantities never change: a new content quantity is a\nnew GTIN at that level (declaring it end-dates the old level with a\n`ProductPackLevelRetired`, reason `superseded`, in the same transaction,\none `version` apart). An end-dated level is kept: resolve a GTIN of an\nin-flight ASN from your local copy, which must keep retired levels.\nDates and timestamps are RFC 3339 UTC.\n\n**Local copies, not lookups.** Sibling contexts (inventory-storage,\norder-management, wes-work-planning, fulfillment-execution) keep a local\ncopy keyed by SKU. Every payload carries the aggregate `version` after the\nchange; apply a message only when its `version` is greater than the stored\none. Payloads are full-state per concern (classification, physical profile),\nso a consumer overwrites, it never merges.\n\n**Analytics (ADR 0006).** The same five events are ALSO written, in the\nsame transaction, to `warehouse.product-master.analytics` with the same\n`type` and the same `id` per occurrence, `dataschema`\n`urn:warehouse:product-master:analytics:<EventName>:v1` and payloads equal\nto the integration payloads. Only this service's `product-projector`\nconsumes it; it is not an integration contract.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0009); consumers may extract them, and must not require\nthem.\n`specversion`, `id`, `source` (`/warehouse/product-master`), `type`,\n`subject` (the SKU), `time`, `datacontenttype` (`application/json`) and\n`dataschema` (`urn:warehouse:product-master:events:<EventName>:v1`) are all\nrequired. Kafka key = the SKU. Type =\n`com.warehouse.wms.product-master.product.<EventName>`. A breaking payload\nchange is a new `.v2` type, never a mutation.\n"
   },
   "servers": {
     "production": {
@@ -35,10 +35,6 @@
     {
       "name": "product",
       "description": "Events raised by the Product aggregate."
-    },
-    {
-      "name": "consumed",
-      "description": "Events produced by sibling contexts that this service consumes (migration only)."
     },
     {
       "name": "analytics",
@@ -182,6 +178,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "Published Language fact (product description); consumed on demand",
               "name": "ProductDescriptionChanged",
               "title": "Product description changed",
               "summary": "A registered product's description changed.",
@@ -580,6 +577,344 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "ProductPackLevelDeclared",
+              "title": "Product pack level declared",
+              "summary": "A pack level (EACH, INNER, CASE or PALLET) of a SKU was declared, or one of its mutable attributes changed.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelDeclared`;\nsubject and key = the SKU. Carries the FULL level after the change\n(ADR 0011). `child_gtin` and `qty_of_child` are absent for EACH;\n`units_per_pack` is 1 for EACH. `dims` are the DECLARED dimensions\n(omitted when none); measurements arrive as `ProductPackLevelMeasured`.\nOnly `dims`, `is_orderable` and `is_despatch_unit` can change for a\nGTIN already announced (the event is then re-sent in full); a new\ncontent quantity is a new `gtin`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "product"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "units_per_pack",
+                          "is_orderable",
+                          "is_despatch_unit",
+                          "effective_from",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-43>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "EACH",
+                              "INNER",
+                              "CASE",
+                              "PALLET"
+                            ],
+                            "x-parser-schema-id": "PackLevel"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "pattern": "^[0-9]{14}$",
+                            "description": "A GTIN, always the 14-digit zero-left-padded string with a valid mod-10 check digit.",
+                            "x-parser-schema-id": "Gtin"
+                          },
+                          "child_gtin": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data.properties.gtin",
+                          "qty_of_child": {
+                            "type": "integer",
+                            "minimum": 2,
+                            "maximum": 1000000,
+                            "description": "Absent for EACH.",
+                            "x-parser-schema-id": "<anonymous-schema-44>"
+                          },
+                          "units_per_pack": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000000,
+                            "description": "Direct factor to eaches; 1 for EACH.",
+                            "x-parser-schema-id": "<anonymous-schema-45>"
+                          },
+                          "dims": {
+                            "type": "object",
+                            "required": [
+                              "length_mm",
+                              "width_mm",
+                              "height_mm",
+                              "weight_g"
+                            ],
+                            "properties": {
+                              "length_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20000,
+                                "x-parser-schema-id": "<anonymous-schema-46>"
+                              },
+                              "width_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20000,
+                                "x-parser-schema-id": "<anonymous-schema-47>"
+                              },
+                              "height_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20000,
+                                "x-parser-schema-id": "<anonymous-schema-48>"
+                              },
+                              "weight_g": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2000000,
+                                "x-parser-schema-id": "<anonymous-schema-49>"
+                              }
+                            },
+                            "x-parser-schema-id": "PackDimensions"
+                          },
+                          "is_orderable": {
+                            "type": "boolean",
+                            "x-parser-schema-id": "<anonymous-schema-50>"
+                          },
+                          "is_despatch_unit": {
+                            "type": "boolean",
+                            "x-parser-schema-id": "<anonymous-schema-51>"
+                          },
+                          "effective_from": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-52>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-53>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-42>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-41>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelDeclaredEvent"
+              },
+              "examples": [
+                {
+                  "name": "caseOf12",
+                  "summary": "SKU-1 declares a case of 12 eaches.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3c2b1a09-8f7e-4d6c-9b5a-4a3b2c1d0e9f",
+                    "source": "/warehouse/product-master",
+                    "type": "com.warehouse.wms.product-master.product.ProductPackLevelDeclared",
+                    "subject": "SKU-1",
+                    "time": "2026-10-06T21:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:product-master:events:ProductPackLevelDeclared:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "level": "CASE",
+                      "gtin": "24006381333935",
+                      "child_gtin": "04006381333931",
+                      "qty_of_child": 12,
+                      "units_per_pack": 12,
+                      "dims": {
+                        "length_mm": 400,
+                        "width_mm": 300,
+                        "height_mm": 200,
+                        "weight_g": 6500
+                      },
+                      "is_orderable": true,
+                      "is_despatch_unit": true,
+                      "effective_from": "2026-10-06T20:00:00Z",
+                      "version": 3
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProductPackLevelRetired",
+              "title": "Product pack level retired",
+              "summary": "A pack level was end-dated; its GTIN stays resolvable.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelRetired`;\nsubject and key = the SKU. `reason` is `superseded` when a new GTIN was\ndeclared at the same level (the matching `ProductPackLevelDeclared`\nfollows with the next `version`), else the reason given to the retire\ncommand. The GTIN is never reused. The levels above it are NOT retired\nby this event: re-declare them.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "product"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "effective_to",
+                          "reason",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-56>"
+                          },
+                          "level": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data.properties.level",
+                          "gtin": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data.properties.gtin",
+                          "effective_to": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-57>"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "x-parser-schema-id": "<anonymous-schema-58>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-59>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-55>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-54>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelRetiredEvent"
+              },
+              "examples": [
+                {
+                  "name": "superseded",
+                  "summary": "The case GTIN was superseded by a new one.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7b6a5948-3726-4150-8f9e-0d1c2b3a4958",
+                    "source": "/warehouse/product-master",
+                    "type": "com.warehouse.wms.product-master.product.ProductPackLevelRetired",
+                    "subject": "SKU-1",
+                    "time": "2026-10-06T21:01:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:product-master:events:ProductPackLevelRetired:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "level": "CASE",
+                      "gtin": "24006381333935",
+                      "effective_to": "2026-10-06T21:01:00Z",
+                      "reason": "superseded",
+                      "version": 4
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "x-no-consumer-reason": "pending: measurement fact (ADR 0002/0011); no consumer declared in any fleet spec yet",
+              "name": "ProductPackLevelMeasured",
+              "title": "Product pack level measured",
+              "summary": "A measurement of one pack of an active level was recorded.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelMeasured`;\nsubject and key = the SKU. The measurement of the declared-versus-measured\nsplit (ADR 0002) per level; `device_id` is omitted for a manual one.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "product"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "dims",
+                          "measured_at",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-62>"
+                          },
+                          "level": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data.properties.level",
+                          "gtin": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data.properties.gtin",
+                          "dims": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data.properties.dims",
+                          "measured_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-63>"
+                          },
+                          "device_id": {
+                            "type": "string",
+                            "description": "Omitted for a manual measurement.",
+                            "x-parser-schema-id": "<anonymous-schema-64>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-65>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-61>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-60>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelMeasuredEvent"
+              },
+              "examples": [
+                {
+                  "name": "cubiscan",
+                  "summary": "A cubiscan measured the case.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+                    "source": "/warehouse/product-master",
+                    "type": "com.warehouse.wms.product-master.product.ProductPackLevelMeasured",
+                    "subject": "SKU-1",
+                    "time": "2026-10-06T21:02:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:product-master:events:ProductPackLevelMeasured:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "level": "CASE",
+                      "gtin": "24006381333935",
+                      "dims": {
+                        "length_mm": 410,
+                        "width_mm": 310,
+                        "height_mm": 210,
+                        "weight_g": 6900
+                      },
+                      "measured_at": "2026-10-06T14:05:00Z",
+                      "device_id": "CUBISCAN-03",
+                      "version": 5
+                    }
+                  }
+                }
+              ]
             }
           ]
         }
@@ -816,100 +1151,6 @@
           ]
         }
       }
-    },
-    "warehouse.inventory.events": {
-      "description": "inventory-storage's integration topic. Consumed ONLY by the legacy\nimporter during the migration (ADR 0003), with a stable consumer group\nread from env `LEGACY_IMPORT_CONSUMER_GROUP` (unset = not started). Every\ntype other than inventory-storage's `ProductClassified` is ignored.\n",
-      "publish": {
-        "operationId": "consumeLegacyProductClassified",
-        "summary": "Consume inventory-storage's legacy ProductClassified.",
-        "description": "Imports a classification authored in inventory-storage. Unknown SKUs\nare registered; a classification authored in product-master\n(`classification_source=native`) is never overwritten. The CloudEvents\n`id` claim and the effect commit in one transaction; the offset is\ncommitted afterwards.\n",
-        "tags": [
-          {
-            "name": "consumed"
-          }
-        ],
-        "message": {
-          "name": "LegacyProductClassified",
-          "title": "inventory-storage ProductClassified (legacy, consumed)",
-          "summary": "inventory-storage's classification event, imported during the migration.",
-          "description": "`type` = `com.warehouse.wms.inventory-storage.product.ProductClassified`,\nsource `/warehouse/inventory-storage`, dataschema\n`urn:warehouse:inventory-storage:events:ProductClassified:v1`. Produced\nby inventory-storage (its ADR 0031); retired by its ADR 0034.\n",
-          "contentType": "application/cloudevents+json",
-          "tags": [
-            {
-              "name": "consumed"
-            }
-          ],
-          "payload": {
-            "allOf": [
-              "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[0].payload.allOf[0]",
-              {
-                "type": "object",
-                "properties": {
-                  "data": {
-                    "type": "object",
-                    "required": [
-                      "sku",
-                      "handling_tags"
-                    ],
-                    "properties": {
-                      "sku": {
-                        "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-43>"
-                      },
-                      "handling_tags": {
-                        "type": "array",
-                        "items": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[2].payload.allOf[1].properties.data.properties.handling_tags.items",
-                        "x-parser-schema-id": "<anonymous-schema-44>"
-                      },
-                      "temperature_class": {
-                        "type": "string",
-                        "enum": [
-                          "Ambient",
-                          "Chilled",
-                          "Frozen"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-45>"
-                      },
-                      "dot_hazard_class": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 9,
-                        "x-parser-schema-id": "<anonymous-schema-46>"
-                      }
-                    },
-                    "x-parser-schema-id": "<anonymous-schema-42>"
-                  }
-                },
-                "x-parser-schema-id": "<anonymous-schema-41>"
-              }
-            ],
-            "x-parser-schema-id": "LegacyProductClassifiedEvent"
-          },
-          "examples": [
-            {
-              "name": "legacy",
-              "summary": "A legacy hazmat classification.",
-              "payload": {
-                "specversion": "1.0",
-                "id": "3c2b1a0f-9e8d-4c7b-a6f5-e4d3c2b1a0f9",
-                "source": "/warehouse/inventory-storage",
-                "type": "com.warehouse.wms.inventory-storage.product.ProductClassified",
-                "subject": "SKU-9",
-                "time": "2026-10-06T20:00:00Z",
-                "datacontenttype": "application/json",
-                "dataschema": "urn:warehouse:inventory-storage:events:ProductClassified:v1",
-                "data": {
-                  "sku": "SKU-9",
-                  "handling_tags": [
-                    "Hazmat"
-                  ],
-                  "dot_hazard_class": 9
-                }
-              }
-            }
-          ]
-        }
-      }
     }
   },
   "components": {
@@ -919,7 +1160,9 @@
       "ProductClassified": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[2]",
       "ProductDimensionsDeclared": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[3]",
       "ProductMeasured": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[4]",
-      "LegacyProductClassified": "$ref:$.channels.warehouse.inventory.events.publish.message",
+      "ProductPackLevelDeclared": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[5]",
+      "ProductPackLevelRetired": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[6]",
+      "ProductPackLevelMeasured": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[7]",
       "ProductRegisteredAnalytics": "$ref:$.channels.warehouse.product-master.analytics.subscribe.message.oneOf[0]",
       "ProductDescriptionChangedAnalytics": "$ref:$.channels.warehouse.product-master.analytics.subscribe.message.oneOf[1]",
       "ProductClassifiedAnalytics": "$ref:$.channels.warehouse.product-master.analytics.subscribe.message.oneOf[2]",
@@ -935,7 +1178,12 @@
       "ProductDescriptionChangedEvent": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[1].payload",
       "ProductClassifiedEvent": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[2].payload",
       "PhysicalProfileEvent": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[3].payload",
-      "LegacyProductClassifiedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.payload"
+      "PackLevel": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data.properties.level",
+      "Gtin": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data.properties.gtin",
+      "PackDimensions": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[5].payload.allOf[1].properties.data.properties.dims",
+      "ProductPackLevelDeclaredEvent": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[5].payload",
+      "ProductPackLevelRetiredEvent": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[6].payload",
+      "ProductPackLevelMeasuredEvent": "$ref:$.channels.warehouse.product-master.events.subscribe.message.oneOf[7].payload"
     }
   },
   "x-parser-spec-parsed": true,

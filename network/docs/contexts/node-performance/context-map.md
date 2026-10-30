@@ -8,7 +8,7 @@ description: Node Performance's neighbourhood, with every upstream and downstrea
 # Context Map
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).
@@ -110,7 +110,7 @@ to this one, which are Separate Ways: `customer-ordering` (Generic),
 
 ## Inbound receipts
 
-> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+> **Built, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)** as realized by [`node-performance` ADR 0009](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0009-inbound-timeliness-and-accuracy-metrics.md) (inbound timeliness and accuracy, two informational scorecard metrics). This section is the delta the seller-inbound design added to this page; where the service decided differently, the text below says so.
 
 | Neighbour | Direction | Pattern | Channel | Messages | Why |
 | --- | --- | --- | --- | --- | --- |

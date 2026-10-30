@@ -33,9 +33,15 @@ info:
     below are the producers' own contracts, decoded independently here and never
     imported.
 
-    **Analytics (later phase).** `warehouse.slotting-optimization.analytics` is
-    reserved for this service's own analytics read side (ADR 0004). Nothing is
-    published there yet, so it is not declared as a channel.
+    **Analytics (ADR 0006).** The same three events are ALSO published, in
+    the same transaction and under the same `id` per occurrence, to
+    `warehouse.slotting-optimization.analytics` with
+    `dataschema urn:warehouse:slotting-optimization:analytics:<EventName>:v1`.
+    That stream is not an integration contract: only this service's own
+    projector (`cmd/slotting-projector`, consumer group from
+    `ANALYTICS_CONSUMER_GROUP`) consumes it, folding it into the slot-plan
+    funnel read model; `cmd/slotting-reports` serves the report. Other
+    contexts keep reading `warehouse.slotting-optimization.events`.
 
     **Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka
     header `content-type: application/cloudevents+json; charset=UTF-8`.
@@ -45,7 +51,7 @@ info:
     them.
     `specversion`, `id`, `source` (`/warehouse/slotting-optimization`), `type`,
     `subject` (the plan id), `time`, `datacontenttype` (`application/json`) and
-    `dataschema` (`urn:warehouse:slotting-optimization:events:<EventName>:v1`)
+    `dataschema` (`urn:warehouse:slotting-optimization:<events|analytics>:<EventName>:v1`)
     are all required. Kafka key = the plan id. Type =
     `com.warehouse.wms.slotting-optimization.slotplan.<EventName>`. A breaking
     payload change is a new `.v2` type, never a mutation.
@@ -68,6 +74,8 @@ tags:
     description: Events raised by the SlotPlan aggregate.
   - name: consumed
     description: Events produced by sibling contexts that this service consumes (ADR 0003).
+  - name: analytics
+    description: This service's own analytics stream and read side (ADR 0006).
 
 channels:
   warehouse.slotting-optimization.events:
@@ -93,6 +101,32 @@ channels:
           - $ref: "#/components/messages/SlotPlanApproved"
           - $ref: "#/components/messages/SlotPlanRejected"
 
+  warehouse.slotting-optimization.analytics:
+    description: |
+      This service's own analytics stream (ADR 0006), written by the SAME
+      transactional outbox as the integration topic: every published event
+      appears here too, under the SAME CloudEvents id and `type`, with only
+      the `dataschema` stream segment different
+      (urn:warehouse:slotting-optimization:analytics:<EventName>:v1). It is
+      NOT an integration contract: the only consumer is this service's
+      cmd/slotting-projector (fixed group from ANALYTICS_CONSUMER_GROUP),
+      which folds the events into the analytical database; its deterministic
+      poison goes to warehouse.slotting-optimization.analytics.dlq. Other
+      contexts keep reading warehouse.slotting-optimization.events.
+    subscribe:
+      operationId: receiveSlotPlanAnalytics
+      summary: Receive the analytics twin of every SlotPlan event.
+      description: |
+        Payloads are byte-for-byte the integration payloads (ADR 0006
+        section 2); only the dataschema names the analytics stream.
+      tags:
+        - name: analytics
+      message:
+        oneOf:
+          - $ref: "#/components/messages/SlotPlanGeneratedAnalytics"
+          - $ref: "#/components/messages/SlotPlanApprovedAnalytics"
+          - $ref: "#/components/messages/SlotPlanRejectedAnalytics"
+
   warehouse.order-management.events:
     description: |
       order-management's integration topic. This service consumes ONLY
@@ -117,9 +151,12 @@ channels:
       product-master's integration topic (key and subject = the SKU). This
       service consumes `ProductClassified`, `ProductDimensionsDeclared` and
       `ProductMeasured` under a stable consumer group read from env
-      `PRODUCT_CONSUMER_GROUP` when `PRODUCT_MODE=kafka`. A message is applied
-      only when its `version` is greater than the stored one. Every other type
-      is ignored.
+      `PRODUCT_CONSUMER_GROUP` when `PRODUCT_MODE=kafka`, and
+      `ProductPackLevelDeclared`, `ProductPackLevelRetired` and
+      `ProductPackLevelMeasured` into its local PackLevelView (ADR 0012) under
+      `PACK_LEVEL_CONSUMER_GROUP` when `PACK_LEVEL_MODE=kafka`. A message is
+      applied only when its `version` is greater than the stored one. Every
+      other type is ignored.
     publish:
       operationId: consumeProductMasterEvents
       summary: Consume product classification and physical profile events.
@@ -134,6 +171,9 @@ channels:
           - $ref: "#/components/messages/ProductClassified"
           - $ref: "#/components/messages/ProductDimensionsDeclared"
           - $ref: "#/components/messages/ProductMeasured"
+          - $ref: "#/components/messages/ProductPackLevelDeclared"
+          - $ref: "#/components/messages/ProductPackLevelRetired"
+          - $ref: "#/components/messages/ProductPackLevelMeasured"
 
   warehouse.facility.events:
     description: |
@@ -189,6 +229,7 @@ channels:
 components:
   messages:
     SlotPlanGenerated:
+      x-no-consumer-reason: "slotting run outcome fact; consumed on demand"
       name: SlotPlanGenerated
       title: Slot plan generated
       summary: A Draft slot plan was generated.
@@ -263,6 +304,7 @@ components:
                 - { sku: "SKU-3", from_slot: "WH1-FWD-A01-01-03-A", kind: "Vacate" }
 
     SlotPlanRejected:
+      x-no-consumer-reason: "slotting run outcome fact (rejection record); consumed on demand"
       name: SlotPlanRejected
       title: Slot plan rejected
       summary: A Draft slot plan was rejected.
@@ -574,6 +616,150 @@ components:
               source_ref: "plan-9:0"
               occurred_at: "2026-10-13T12:00:00Z"
 
+    SlotPlanGeneratedAnalytics:
+      name: SlotPlanGenerated
+      title: Slot plan generated (analytics twin)
+      summary: The analytics-stream twin of SlotPlanGenerated (ADR 0006).
+      description: "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:slotting-optimization:analytics:SlotPlanGenerated:v1`. Consumed only by cmd/slotting-projector."
+      contentType: application/cloudevents+json
+      tags:
+        - name: analytics
+      payload:
+        $ref: "#/components/schemas/SlotPlanGeneratedEvent"
+      examples:
+        - name: generated
+          summary: The analytics twin of the generated example above.
+          payload:
+            specversion: "1.0"
+            id: "6f1d2c3b-4a5e-4b7c-8d9e-0a1b2c3d4e5f"
+            source: "/warehouse/slotting-optimization"
+            type: "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanGenerated"
+            subject: "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07"
+            time: "2026-10-08T12:00:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:slotting-optimization:analytics:SlotPlanGenerated:v1"
+            data:
+              plan_id: "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07"
+              site_id: "SITE-1"
+              window_from: "2026-09-10T12:00:00Z"
+              window_to: "2026-10-08T12:00:00Z"
+              policy: "abc-velocity-v1"
+              assignment_count: 2
+              move_count: 3
+              unassigned_count: 1
+
+    SlotPlanApprovedAnalytics:
+      name: SlotPlanApproved
+      title: Slot plan approved (analytics twin)
+      summary: The analytics-stream twin of SlotPlanApproved (ADR 0006).
+      description: "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:slotting-optimization:analytics:SlotPlanApproved:v1`. The `supersedes_plan_id`, when present, stamps the SUPERSEDED plan's supersession day in the read model."
+      contentType: application/cloudevents+json
+      tags:
+        - name: analytics
+      payload:
+        $ref: "#/components/schemas/SlotPlanApprovedEvent"
+      examples:
+        - name: approvedWithSupersede
+          summary: The analytics twin of the approved example above.
+          payload:
+            specversion: "1.0"
+            id: "0b9a8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d"
+            source: "/warehouse/slotting-optimization"
+            type: "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved"
+            subject: "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07"
+            time: "2026-10-08T12:30:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:slotting-optimization:analytics:SlotPlanApproved:v1"
+            data:
+              plan_id: "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07"
+              site_id: "SITE-1"
+              approved_at: "2026-10-08T12:30:00Z"
+              supersedes_plan_id: "plan-8e7d6c5b-4a39-4281-b0c9-d8e7f6a5b4c3"
+              assignments:
+                - { sku: "SKU-1", slot: "WH1-FWD-A01-01-01-A" }
+                - { sku: "SKU-2", slot: "WH1-FWD-A01-01-02-A" }
+              moves:
+                - { sku: "SKU-1", to_slot: "WH1-FWD-A01-01-01-A", kind: "Assign" }
+
+    SlotPlanRejectedAnalytics:
+      name: SlotPlanRejected
+      title: Slot plan rejected (analytics twin)
+      summary: The analytics-stream twin of SlotPlanRejected (ADR 0006).
+      description: "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:slotting-optimization:analytics:SlotPlanRejected:v1`."
+      contentType: application/cloudevents+json
+      tags:
+        - name: analytics
+      payload:
+        $ref: "#/components/schemas/SlotPlanRejectedEvent"
+      examples:
+        - name: rejected
+          summary: The analytics twin of the rejected example above.
+          payload:
+            specversion: "1.0"
+            id: "4d3c2b1a-0f9e-4d8c-8b7a-6f5e4d3c2b1a"
+            source: "/warehouse/slotting-optimization"
+            type: "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanRejected"
+            subject: "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07"
+            time: "2026-10-08T12:15:00Z"
+            datacontenttype: "application/json"
+            dataschema: "urn:warehouse:slotting-optimization:analytics:SlotPlanRejected:v1"
+            data:
+              plan_id: "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07"
+              site_id: "SITE-1"
+              rejected_at: "2026-10-08T12:15:00Z"
+              reason: "Too many relocations before peak season."
+
+    ProductPackLevelDeclared:
+      name: ProductPackLevelDeclared
+      title: ProductPackLevelDeclared (consumed, product-master)
+      summary: A pack level of a SKU was declared or revised.
+      description: |
+        `type` = `com.warehouse.wms.product-master.product.ProductPackLevelDeclared`,
+        source `/warehouse/product-master`, dataschema
+        `urn:warehouse:product-master:events:ProductPackLevelDeclared:v1`. Subject and key =
+        the SKU. Applied to the local PackLevelView (ADR 0012,
+        `PACK_LEVEL_MODE=kafka`, group `PACK_LEVEL_CONSUMER_GROUP`) only when
+        `version` is greater than the stored one. Payload pinned by
+        product-master's `apis/asyncapi.yaml` on `develop`.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/ProductPackLevelDeclaredEvent"
+    ProductPackLevelRetired:
+      name: ProductPackLevelRetired
+      title: ProductPackLevelRetired (consumed, product-master)
+      summary: A pack level of a SKU was retired.
+      description: |
+        `type` = `com.warehouse.wms.product-master.product.ProductPackLevelRetired`,
+        source `/warehouse/product-master`, dataschema
+        `urn:warehouse:product-master:events:ProductPackLevelRetired:v1`. Subject and key =
+        the SKU. Applied to the local PackLevelView (ADR 0012,
+        `PACK_LEVEL_MODE=kafka`, group `PACK_LEVEL_CONSUMER_GROUP`) only when
+        `version` is greater than the stored one. Payload pinned by
+        product-master's `apis/asyncapi.yaml` on `develop`.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/ProductPackLevelRetiredEvent"
+    ProductPackLevelMeasured:
+      name: ProductPackLevelMeasured
+      title: ProductPackLevelMeasured (consumed, product-master)
+      summary: A pack level of a SKU was physically measured.
+      description: |
+        `type` = `com.warehouse.wms.product-master.product.ProductPackLevelMeasured`,
+        source `/warehouse/product-master`, dataschema
+        `urn:warehouse:product-master:events:ProductPackLevelMeasured:v1`. Subject and key =
+        the SKU. Applied to the local PackLevelView (ADR 0012,
+        `PACK_LEVEL_MODE=kafka`, group `PACK_LEVEL_CONSUMER_GROUP`) only when
+        `version` is greater than the stored one. Payload pinned by
+        product-master's `apis/asyncapi.yaml` on `develop`.
+      contentType: application/cloudevents+json
+      tags:
+        - name: consumed
+      payload:
+        $ref: "#/components/schemas/ProductPackLevelMeasuredEvent"
   schemas:
     CloudEventEnvelope:
       type: object
@@ -594,6 +780,8 @@ components:
       properties:
         sku: { type: string }
         slot: { type: string, description: The facility-layout location code of the forward slot. }
+        pick_unit: { type: string, enum: [CASE], description: "Additive (ADR 0012). Present only for a CASE-pick face; absent means EACH." }
+        cases_capacity: { type: integer, format: int64, minimum: 1, description: "Additive (ADR 0012). Whole cases the CASE-pick face holds; present only with pick_unit CASE." }
 
     SlotMove:
       type: object
@@ -791,3 +979,123 @@ components:
                   maxLength: 200
                   description: "`<plan_id>:<move_seq>` on slot-plan moves (matched first); a task id, a ticket or \"\" otherwise."
                 occurred_at: { type: string, format: date-time }
+    ProductPackLevelDeclaredEvent:
+      type: object
+      description: CloudEvents 1.0 envelope of product-master's ProductPackLevelDeclared, as consumed here.
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            type:
+              const: "com.warehouse.wms.product-master.product.ProductPackLevelDeclared"
+            dataschema:
+              const: "urn:warehouse:product-master:events:ProductPackLevelDeclared:v1"
+            data:
+              type: object
+              required: [sku, level, gtin, units_per_pack, is_orderable, is_despatch_unit, effective_from, version]
+              properties:
+                sku:
+                  type: string
+                level:
+                  type: string
+                gtin:
+                  type: string
+                child_gtin:
+                  type: string
+                qty_of_child:
+                  type: integer
+                  minimum: 2
+                  description: Absent for EACH.
+                units_per_pack:
+                  type: integer
+                  minimum: 1
+                  description: Direct factor to eaches; 1 for EACH.
+                is_orderable:
+                  type: boolean
+                is_despatch_unit:
+                  type: boolean
+                effective_from:
+                  type: string
+                  format: date-time
+                version:
+                  type: integer
+                  minimum: 1
+    ProductPackLevelRetiredEvent:
+      type: object
+      description: CloudEvents 1.0 envelope of product-master's ProductPackLevelRetired, as consumed here.
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            type:
+              const: "com.warehouse.wms.product-master.product.ProductPackLevelRetired"
+            dataschema:
+              const: "urn:warehouse:product-master:events:ProductPackLevelRetired:v1"
+            data:
+              type: object
+              required: [sku, level, gtin, effective_to, reason, version]
+              properties:
+                sku:
+                  type: string
+                level:
+                  type: string
+                gtin:
+                  type: string
+                effective_to:
+                  type: string
+                  format: date-time
+                reason:
+                  type: string
+                version:
+                  type: integer
+                  minimum: 1
+    ProductPackLevelMeasuredEvent:
+      type: object
+      description: CloudEvents 1.0 envelope of product-master's ProductPackLevelMeasured, as consumed here.
+      allOf:
+        - $ref: "#/components/schemas/CloudEventEnvelope"
+        - type: object
+          properties:
+            type:
+              const: "com.warehouse.wms.product-master.product.ProductPackLevelMeasured"
+            dataschema:
+              const: "urn:warehouse:product-master:events:ProductPackLevelMeasured:v1"
+            data:
+              type: object
+              required: [sku, level, gtin, dims, measured_at, version]
+              properties:
+                sku:
+                  type: string
+                level:
+                  type: string
+                gtin:
+                  type: string
+                dims:
+                  type: object
+                  required: [length_mm, width_mm, height_mm, weight_g]
+                  properties:
+                    length_mm:
+                      type: integer
+                      minimum: 1
+                      maximum: 20000
+                    width_mm:
+                      type: integer
+                      minimum: 1
+                      maximum: 20000
+                    height_mm:
+                      type: integer
+                      minimum: 1
+                      maximum: 20000
+                    weight_g:
+                      type: integer
+                      minimum: 1
+                      maximum: 2000000
+                measured_at:
+                  type: string
+                  format: date-time
+                device_id:
+                  type: string
+                  description: Omitted for a manual measurement.
+                version:
+                  type: integer
+                  minimum: 1

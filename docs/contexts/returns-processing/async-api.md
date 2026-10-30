@@ -2,7 +2,7 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: Kafka integration for returns-processing — one published topic (seven event types) through the transactional outbox, three consumed sibling topics feeding local copies, dead-lettering and the CloudEvents envelope.
+description: Kafka integration for returns-processing — the integration topic (seven event types) and its analytics mirror through the transactional outbox, three consumed sibling topics feeding local copies, dead-lettering and the CloudEvents envelope.
 ---
 
 # Async API
@@ -14,12 +14,15 @@ machine-generated reference is at the bottom. For per-event payloads and the
 producing use cases, see
 [Domain Events](/contexts/returns-processing/domain-events).
 
-:::caution[Built on develop, not deployed]
-`warehouse-infra` `develop` has no entry for this context, so no instance
-publishes or consumes any topic below in the reference deployment. Every
-consumed type has a live producer, and both consumers of this context's own
-types are built (`inventory-storage` ADR 0044 and `exception-management`
-ADR 0003), but nothing runs. The tables state what the code does.
+:::info[Built on develop, wired in warehouse-infra develop]
+`warehouse-infra` `develop` registers this context (`terraform/apps.yaml`
+entry `returns-processing`, `helm-values/returns-processing.yaml`): the API
+pod with its outbox relay and all three consumer groups, the analytics
+projector and reports, the read-only MCP server and the console remote.
+Every consumed type has a live producer, and both consumers of this
+context's own types are wired too (`inventory-storage` ADR 0044,
+`exception-management` ADR 0003). The kind cluster itself was not checked
+for this page. The tables state what the code does.
 :::
 
 ## Topics
@@ -27,13 +30,16 @@ ADR 0003), but nothing runs. The tables state what the code does.
 | Topic | Direction | Notes |
 | --- | --- | --- |
 | `warehouse.returns-processing.events` | **Published** | Seven types from the three aggregates, written by the transactional outbox relay. Key = the event's subject. `ReturnLineStaged` is the only type that asks a sibling to do something (inventory-storage books it as a staged receipt line); `UnexpectedReturnReceived` is what exception-management turns into a problem-solve case. |
+| `warehouse.returns-processing.analytics` | **Published** (internal data product) | The same seven facts as `<EventName>Analytics` messages (ADR 0007), fanned out by the same outbox relay. Read only by this context's own `returns-projector`, the single writer of the separate analytics database behind `returns-reports`. |
 | `warehouse.product-master.events` | Consumed | Only `ProductClassified` (key = the SKU), group from the required `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`. Applied only when `version` is newer than the stored one. |
 | `warehouse.order-management.events` | Consumed | Only `OrderAllocated` and `OrderPartiallyAllocated` (key = the order id), group from `ORDER_LINES_CONSUMER_GROUP`. The lines carry NO quantity; v1 caps the authorized quantity by the policy's `max_units_per_line`. |
 | `warehouse.fulfillment.events` | Consumed | Only `PackageManifested` (key = the package id), group from `MANIFEST_CONSUMER_GROUP`. `order_ref` (a WES work unit id `{order_id}-line-{line_no}`) is reversed into the (order, line) key. |
 | `<consumed topic>.dlq` | Published (dead letters) | One per consumed topic, after a transient failure exhausts its retries, or at once for an undecodable payload of a handled type. |
 
-The analytics mirror `warehouse.returns-processing.analytics` is **planned,
-not built** (ADR 0004): it arrives with the service's own analytics read side.
+The analytics mirror `warehouse.returns-processing.analytics` is built
+(ADR 0007, which fills the slot ADR 0004 reserved): `cmd/returns-projector`
+projects it into a separate analytics database and `cmd/returns-reports`
+serves read-only reports over it. No sibling consumes the analytics topic.
 
 ## The envelope
 
@@ -93,7 +99,10 @@ the message behind it still applies.
 - `exception-management` (ADR 0003): only `UnexpectedReturnReceived`, group
   `RETURNS_EXCEPTIONS_CONSUMER_GROUP`, one problem-solve case per receipt line.
 
-Neither is deployed, so both edges are wired-but-unused. See the fleet
+Both consumer groups are set in `warehouse-infra` `develop`
+(`returnLineConsumerGroup` in `helm-values/inventory-storage.yaml`,
+`returnsExceptionsConsumerGroup` in `helm-values/exception-management.yaml`),
+so both edges are live by the fleet's status rule. See the fleet
 [Context Map](/strategic-design/context-map) (edges K53 and K54).
 
 ## Machine-generated reference

@@ -11,9 +11,15 @@ Served at `/storefront/` inside
 [warehouse-docs](https://github.com/IQVO/warehouse-docs); not a standalone
 site.
 
-**Status: proposed design, docs only.** Nothing described here is built. The
-model is derived from public e-commerce UX research and the retail-network
-model; everything else is the design this site proposes.
+**Status: built on develop, not deployed** (as-built refresh 2026-10-27). All six
+contexts are Go services in their own repos (`IQVO/pricing`,
+`IQVO/product-content`, `IQVO/product-discovery`, `IQVO/shopping-cart`,
+`IQVO/checkout`, `IQVO/customer-payments`), next to `IQVO/storefront-bff` (the
+only storefront edge), `IQVO/storefront-web` (React SSR) and
+`IQVO/payment-provider-simulator` (the payment provider stand-in). None has an
+entry in warehouse-infra's `terraform/apps.yaml` yet. The model below is the
+design the services were built from; the as-built check folds differences
+back into it.
 
 ## Layout
 
@@ -23,7 +29,7 @@ model; everything else is the design this site proposes.
 | `scripts/check_model.py` | Consistency gate: publish/consume symmetry inside the storefront, plus cross-model rules against `network/model/model.yaml` (read-only): consumed network events exist with the fields needed, sync calls hit only OHS storefront routes, never a restricted or in-org route, and every storefront event uses the `storefront` tier. |
 | `scripts/gen_pages.py` | Generates the strategic-design pages from the model; `--check` fails when a page and the model disagree. |
 | `docs/` | The site pages (Docusaurus instance `storefront`). |
-| `apis/<context>/openapi.yaml` | Proposed REST contracts per context, linted with Spectral (`.spectral.yaml`). |
+| `apis/<repo>/openapi.yaml` | Copies of each service's `apis/openapi.yaml` on `develop` (six contexts plus `storefront-bff`), linted with Spectral (`.spectral.yaml`). Refresh with `git -C <repo> show origin/develop:apis/openapi.yaml > storefront/apis/<repo>/openapi.yaml`. The REST reference under `docs/api-reference/rest/` is generated at build time (`npm run gen-api-docs:storefront`) and gitignored. |
 
 The research citations ledger (verbatim quotes and source URLs) is held
 privately, outside this repo.
@@ -33,7 +39,7 @@ privately, outside this repo.
 ```bash
 python3 storefront/scripts/check_model.py --pages
 python3 storefront/scripts/gen_pages.py --check
-spectral lint storefront/apis/<context>/openapi.yaml --ruleset storefront/.spectral.yaml --fail-severity=warn
+spectral lint storefront/apis/<repo>/openapi.yaml --ruleset storefront/.spectral.yaml --fail-severity=warn
 npm run build
 ```
 

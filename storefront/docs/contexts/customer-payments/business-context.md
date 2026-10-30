@@ -7,8 +7,8 @@ description: Why moving money with the shipment facts is the storefront's Generi
 
 # Business Context
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `customer-payments` service is built on develop ([`IQVO/customer-payments`](https://github.com/IQVO/customer-payments) at `530c7cb`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/customer-payments#service-and-operations) section lists it.
 :::
 
 ## The problem in plain language
@@ -51,7 +51,7 @@ stores no PII, and it never sees a card number — only PSP tokens.
 | `order-sourcing` (network) | Reports that a group shipped (capture) or was cancelled (release) | Kafka `retailnetwork.order-sourcing.events`, `FulfillmentShipped`, `FulfillmentCancelled` |
 | `shipping-and-tracking` (network) | Reports that a package was lost or returned (refund) | Kafka `retailnetwork.shipping-and-tracking.events`, `PackageLost`, `PackageReturned` |
 | `payment-provider` (external) | Answers the five provider operations; in the study, the payment-provider simulator stands in behind the port | Provider port (ACL), the only synchronous call out |
-| Analytics consumers | Follow authorizations, captures, releases, expiries, declines and refunds | Kafka `retailnetwork.customer-payments.analytics` |
+| Analytics consumers | Follow authorizations, captures, releases, expiries, declines and refunds | Kafka `retailnetwork.customer-payments.events` |
 
 The shopper is a synthetic person who never calls a payment route: the
 card details are entered into the provider's hosted fields, and the

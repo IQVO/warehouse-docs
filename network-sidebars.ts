@@ -19,10 +19,10 @@ const CONTEXTS = [
 ];
 
 /**
- * The REST contracts rendered under API reference. seller-inbound has none
- * yet: its seller-facing routes are in the model only (gap G53).
+ * The REST contracts rendered under API reference: one per context, each a
+ * copy of the repo's apis/openapi.yaml on develop.
  */
-const API_CONTEXTS = CONTEXTS.filter((ctx) => ctx !== 'seller-inbound');
+const API_CONTEXTS = CONTEXTS;
 
 const CONTEXT_PAGES = [
   'business-context',

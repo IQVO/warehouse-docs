@@ -2,13 +2,13 @@
 id: ubiquitous-language
 title: Ubiquitous Language
 sidebar_label: Ubiquitous Language
-description: The terms Pricing speaks, each mapped to its proposed code identifier, plus the neighbour terms it uses and the terms most often confused with them.
+description: The terms Pricing speaks, each mapped to its code identifier on develop, plus the neighbour terms it uses and the terms most often confused with them.
 ---
 
 # Ubiquitous Language
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `pricing` service is built on develop ([`IQVO/pricing`](https://github.com/IQVO/pricing) at `5a18326`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/pricing#service-and-operations) section lists it.
 :::
 
 The terms this context speaks, each mapped to the identifier a future
@@ -41,8 +41,8 @@ Derived from: `model.yaml → contexts[pricing].aggregates[*]` (`value_objects`,
 | **Item Price** | The list price and sale windows of one catalogue item, versioned. | `itemprice.ItemPrice` | The catalogue item itself (`offer-availability`). |
 | **Delivery Charge Schedule** | The charge per service tier, one current version at a time. | `schedule.DeliveryChargeSchedule` | The network's promise per tier. |
 | **Tax Table** | The synthetic basis-point rates by postal-prefix band, one current version. | `tax.TaxTable` | A bought tax engine (later phase). |
-| **Quote Line** | One priced line of a quote: item, quantity, unit price, line total. | `quote.QuoteLine` | A cart line (`shopping-cart`): the quote line's price is binding, the cart line's is not. |
-| **Quote Group** | One shipment group of a quote: group number, tier, delivery charge. | `quote.QuoteGroup` | The network's shipment group (`delivery-promise`); this is only its price. |
+| **Quote Line** | One priced line of a quote: item, quantity, unit price, line total. | `quote.Line` | A cart line (`shopping-cart`): the quote line's price is binding, the cart line's is not. |
+| **Quote Group** | One shipment group of a quote: group number, tier, delivery charge. | `quote.Group` | The network's shipment group (`delivery-promise`); this is only its price. |
 | **Catalog Item View** | The local, event-fed copy of which catalogue items exist and are not discontinued. | `CatalogItemView` | The item master in `offer-availability`, which is authoritative. |
 | **Quote TTL** | Policy: a PriceQuote expires 15 minutes (default) after issue; expiry is by time, immutable otherwise. | `QuoteTtl` | A delivery offer's expiry (network): an expiring offer holds no money amount. |
 
@@ -52,8 +52,8 @@ Derived from: `model.yaml → contexts[pricing].aggregates[*]` (`value_objects`,
 | --- | --- | --- | --- |
 | **Catalog Item** | The network's own entry for a product, independent of who ships it. | `catalog.Item` (`offer-availability`, [network](/network/contexts/offer-availability)) | **Item Price**: this context's price of that item. The item master stays upstream. |
 | **Service Tier** | `SAME_DAY`, `NEXT_DAY`, `TWO_DAY` or `STANDARD`. | `promise.Tier` (`delivery-promise`, [network](/network/contexts/delivery-promise)) | **Delivery Charge**: the price this context puts on the tier. `TierCharge` re-declares the enum locally; there is no shared kernel. |
-| **Checkout Session** | The purchase transaction from review to placed order. | `session.CheckoutSession` (`checkout`) | The **Price Quote** it is confirmed against; the session orchestrates, the quote only prices. |
-| **Estimate** | The labelled, non-binding total in the cart. | `cart.Estimate` (`shopping-cart`) | The binding **Price Quote**. The cart's own UL marks this as the term not to confuse. |
+| **Checkout Session** | The purchase transaction from review to placed order. | `checkoutsession.CheckoutSession` (`checkout`) | The **Price Quote** it is confirmed against; the session orchestrates, the quote only prices. |
+| **Estimate** | The labelled, non-binding total in the cart. | `estimate.Estimate` (`shopping-cart`) | The binding **Price Quote**. The cart's own UL marks this as the term not to confuse. |
 | **Purchasable** | Item ACTIVE, content PUBLISHED, price ACTIVE, at least one LIVE listing with stock. | `productview.Purchasable` (`product-discovery`) | **ACTIVE price**: one of the four inputs, not the verdict. |
 
 ## Fleet translation

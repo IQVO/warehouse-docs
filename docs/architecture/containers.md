@@ -2,7 +2,7 @@
 id: containers
 title: C4 Level 2 — Containers
 sidebar_label: 2. Containers
-description: Every separately deployable process in the fleet — four Go binaries per bounded context, two databases per context, Kafka, and the two independent localhost gateways.
+description: Every separately deployable process in the fleet — four Go binaries per domain bounded context, two databases per context, Kafka, and the two independent localhost gateways.
 ---
 
 # C4 Level 2 — Containers
@@ -12,26 +12,23 @@ A **container** here is C4's meaning of the word: a separately deployable or
 runnable unit, whether that is a Go process, a Postgres database or the
 broker. It is unrelated to Docker specifically.
 
-This site covers seventeen backend contexts: sixteen domain contexts and
-`warehouse-ops-agent`. Thirteen of them, `inbound-receiving`
-included, ship **four Go binaries and two databases** each, plus a Module
-Federation frontend remote, because the analytical read side is a separate
-process family from the operational one. `warehouse-ops-agent` is one binary
-with no database. `slotting-optimization` ships two binaries in
-one image, `cmd/api` (REST, four Kafka consumers and the outbox relay) and a
-read-only `cmd/mcp`, and one database, with no read side or remote yet. It is
-registered in the reference cluster's `warehouse-infra` `develop` (database,
-Kong route, ArgoCD application, `helm-values/slotting-optimization.yaml`).
-The two newest, `pick-face-replenishment` and `task-interleaving`, are each one binary, `cmd/api`.
-`pick-face-replenishment` has REST, three opt-in Kafka consumers and the
-outbox relay, with one Postgres schema (ten OLTP tables). `task-interleaving`
-has REST, two opt-in Kafka consumers, the outbox relay and a hint-expiry
-worker, with one Postgres schema (ten OLTP tables). Neither has an MCP server,
-read side or remote. Both are **built but not
-deployed**: `warehouse-infra` `develop` has no database, Kong route or ArgoCD
-application for either, and neither repository has a Dockerfile or Helm chart. So they
-appear in the fleet table and the Kafka diagram below, and not in the
-deployed-workload diagrams or the database count. Binaries are listed from each repository's `cmd/` on
+This site covers nineteen backend contexts: eighteen domain contexts and
+`warehouse-ops-agent`. All eighteen domain contexts ship **four Go binaries
+and two databases** each, plus a Module Federation frontend remote, because
+the analytical read side is a separate process family from the operational
+one. `fulfillment-execution` also ships `cmd/sweep`, the entrypoint of its two
+sweep CronJobs (expire-leases, sweep-cpt-misses), which POSTs the sweep
+endpoints of its own Service. `warehouse-ops-agent` is one binary with no
+database. Every one of the nineteen has an entry in `warehouse-infra`
+`develop`'s application registry (`terraform/apps.yaml`), and each domain
+context's entry declares `database: true`, an `analytics:` read side and a
+`frontend_remote:`. The five most recent read sides
+(`slotting-optimization`, `pick-face-replenishment`, `task-interleaving`,
+`returns-processing`, `exception-management`) have `mcp.enabled: true` and
+`analytics.enabled: true` in their value files; `returns-processing` and
+`exception-management` were registered on 2026-10-22. That is the wiring in
+`warehouse-infra` `develop`; this page does not record whether a given
+cluster has applied it. Binaries are listed from each repository's `cmd/` on
 `origin/develop`, and workloads from its Helm chart's `templates/`.
 
 ## The edge: two independent gateways
@@ -53,12 +50,12 @@ C4Container
 
     Container_Boundary(fe, "Frontend workloads — ClusterIP only") {
         Container(shell, "warehouse-console", "React + nginx", "The Module Federation host shell, served at /")
-        Container(remotes, "11 x MFE remote", "React + nginx", "Each owned by its context's repo (web/), served at /mfes/{context}/")
+        Container(remotes, "18 x MFE remote", "React + nginx", "Each owned by its context's repo (web/), served at /mfes/{context}/")
     }
 
     Container_Boundary(api, "API workloads — ClusterIP only") {
-        Container(oltp, "11 x OLTP REST service", "Go", "One per persisting bounded context, :8080")
-        Container(reports, "11 x reports service", "Go", "Read-only analytics API, :8092")
+        Container(oltp, "18 x OLTP REST service", "Go", "One per domain bounded context, :8080")
+        Container(reports, "18 x reports service", "Go", "Read-only analytics API, :8092")
         Container(agent, "warehouse-ops-agent", "Go", ":8095 — console BFF, advisories and its own MCP server")
     }
 
@@ -94,14 +91,19 @@ Three consequences follow, and all three are load-bearing:
    calls stay on direct ClusterIP and Kafka and never hairpin through either
    gateway.
 
-The console's thirteen remotes are `order_mgmt_mfe`, `inventory_mfe`,
+The console registers eighteen WMS and WES remotes, one per domain context:
+`order_mgmt_mfe`, `inventory_mfe`,
 `planning_mfe`, `fulfillment_mfe`, `workforce_mfe`, `facility_mfe`,
 `process_path_mfe`, `labor_mfe`, `netfulfil_mfe` (keyed
 `network_fulfillment_mfe` in the console's federation config),
 `capacity_mfe` (warehouse-planning), `productmaster_mfe`
-(product-master, served at `/mfes/product-master/`), `nip_mfe`
-(network-inventory-planning, served at `/mfes/network-inventory-planning/`)
-and `inbound_mfe` (inbound-receiving, served at `/mfes/inbound-receiving/`). The console's
+(product-master), `nip_mfe` (network-inventory-planning), `inbound_mfe`
+(inbound-receiving), `slotting_mfe`, `replenishment_mfe`
+(pick-face-replenishment), `task_interleaving_mfe`, `returns_mfe`
+(returns-processing) and `exceptions_mfe` (exception-management). Each is
+served at `/mfes/<context>/`. The same web gateway also serves the eleven
+remotes of the [retail network](/network/) services, which are outside this
+section. The console's
 cross-cutting screens (the order lifecycle and the WMS and WES dashboards)
 do not call every service
 from the browser. They call `warehouse-ops-agent`'s BFF routes
@@ -112,7 +114,7 @@ from the browser. They call `warehouse-ops-agent`'s BFF routes
 
 Every persisting bounded context follows the same internal shape.
 `labor-performance` is drawn here as the representative example. Substitute
-the names and the diagram holds for all thirteen.
+the names and the diagram holds for all eighteen.
 
 ```mermaid
 C4Container
@@ -164,7 +166,7 @@ is a freshness lag, not real time, which is why every report has a
 | `order-management` | `cmd/order` | `cmd/mcp` | `cmd/order-projector` | `cmd/order-reports` | `order_mgmt_mfe` | 2 |
 | `inventory-storage` | `cmd/inventory` | `cmd/mcp` | `cmd/inventory-projector` | `cmd/inventory-reports` | `inventory_mfe` | 2 |
 | `wes-work-planning` | `cmd/wes` | `cmd/mcp` | `cmd/wes-projector` | `cmd/wes-reports` | `planning_mfe` | 2 |
-| `fulfillment-execution` | `cmd/execution` | `cmd/mcp` | `cmd/fulfillment-projector` | `cmd/fulfillment-reports` | `fulfillment_mfe` | 2 |
+| `fulfillment-execution` | `cmd/execution` (plus `cmd/sweep`, the CronJob entrypoint) | `cmd/mcp` | `cmd/fulfillment-projector` | `cmd/fulfillment-reports` | `fulfillment_mfe` | 2 |
 | `workforce-management` | `cmd/workforce` | `cmd/mcp` | `cmd/workforce-projector` | `cmd/workforce-reports` | `workforce_mfe` | 2 |
 | `facility-layout` | `cmd/facility` | `cmd/mcp` | `cmd/facility-projector` | `cmd/facility-reports` | `facility_mfe` | 2 |
 | `process-path-management` | `cmd/pathmgmt` | `cmd/mcp` | `cmd/pathmgmt-projector` | `cmd/pathmgmt-reports` | `process_path_mfe` | 2 |
@@ -177,6 +179,8 @@ is a freshness lag, not real time, which is why every report has a
 | `slotting-optimization` | `cmd/api` | `cmd/mcp` | `cmd/slotting-projector` | `cmd/slotting-reports` | `slotting_mfe` | 2 |
 | `pick-face-replenishment` | `cmd/api` | `cmd/mcp` | `cmd/pfr-projector` | `cmd/pfr-reports` | `replenishment_mfe` | 2 |
 | `task-interleaving` | `cmd/api` | `cmd/mcp` | `cmd/ti-projector` | `cmd/ti-reports` | `task_interleaving_mfe` | 2 |
+| `returns-processing` | `cmd/api` | `cmd/mcp` | `cmd/returns-projector` | `cmd/returns-reports` | `returns_mfe` | 2 |
+| `exception-management` | `cmd/api` | `cmd/mcp` | `cmd/exceptions-projector` | `cmd/exceptions-reports` | `exceptions_mfe` | 2 |
 | `warehouse-ops-agent` | `cmd/agent` | in-process at `/mcp` | none | none | none | **0** |
 
 Per-context table counts are in [Data Models](/architecture/data-models),
@@ -208,22 +212,28 @@ release are addressed separately.
 
 The logical separation is real, but the physical deployment has less
 isolation than the diagram might suggest. **One Postgres release**
-(`postgres`, in the data namespace) hosts twenty-seven databases: an OLTP
-database and a `<service>_analytics` database for each of the thirteen
-persisting contexts that have an analytical read side, plus the OLTP-only
-database of `slotting-optimization` (no analytics database), each with its own generated role. OLTP connections go through PgBouncer. Analytics connections go to
-Postgres directly.
+(`postgres`, in the data namespace) hosts forty-seven databases in
+`warehouse-infra` `develop`'s registry: an OLTP database and a
+`<service>_analytics` database for each of the eighteen domain contexts
+(thirty-six), plus the OLTP-only databases of the eleven
+[retail network](/network/) services registered in the same
+`terraform/apps.yaml`. Each database has its own generated role. OLTP
+connections go through PgBouncer. Analytics connections go to Postgres
+directly.
 
 In the local cluster a single generated analytics role serves both the
 projector and the reports binary (each chart's `reportsUrl` falls back to
-`projectorUrl`). The read-only guarantee therefore comes from the reports
+`projectorUrl`; the registry entries of `network-fulfillment`,
+`pick-face-replenishment`, `task-interleaving`, `returns-processing` and
+`exception-management` provision only `ANALYTICS_DATABASE_URL`, which both
+binaries read). The read-only guarantee therefore comes from the reports
 binary's read-only sessions. A distinct read-only role is the documented
 promotion path in `warehouse-infra`.
 
 ## MCP servers
 
-Every deployed persisting context runs a `cmd/mcp` binary that serves MCP over
-Streamable HTTP on `:8090` (`pick-face-replenishment` and `task-interleaving` have no MCP server), and `warehouse-ops-agent` serves its own read-only
+Every domain context ships a `cmd/mcp` binary that serves MCP over
+Streamable HTTP on `:8090`, and `warehouse-ops-agent` serves its own read-only
 tools in-process at `/mcp`. Like REST, **MCP is unauthenticated
 fleet-wide**.
 
@@ -266,139 +276,154 @@ charset=UTF-8` on every message and `type` of the form
 
 ### Integration topics
 
-Who publishes what, and who consumes it, from the synced `apis/*/asyncapi.yaml`
-and each context's context map. "opt-in" means the consumer is off unless
-configured.
+Who publishes what, and who consumes it, from each context's
+`apis/asyncapi.yaml` and Kafka adapters on `origin/develop` and its context
+map. Each topic is drawn once, on the left, with its producer; its consumers
+are on the right. A dashed edge marks an opt-in consumer, one that stays
+off unless its mode or consumer group is configured; solid edges are the
+rest. Which types travel on each edge is in the table below the diagram, and
+the per-edge status (live, wired-but-unused) is on the
+[Context Map](/strategic-design/context-map).
 
 ```mermaid
 flowchart LR
-    OM[order-management]
-    INV[inventory-storage]
-    WWP[wes-work-planning]
-    FE[fulfillment-execution]
-    WFM[workforce-management]
-    FL[facility-layout]
-    PPM[process-path-management]
-    LP[labor-performance]
-    NF[network-fulfillment]
-    WPL[warehouse-planning]
-    PM[product-master]
-    NIP[network-inventory-planning]
-    IR[inbound-receiving]
-    SO[slotting-optimization]
-    PFR[pick-face-replenishment]
-    TI[task-interleaving]
-
-    tOM(["warehouse.order-management.events"])
-    tINV(["warehouse.inventory.events"])
-    tWWP(["warehouse.work-planning.events"])
-    tFE(["warehouse.fulfillment.events"])
-    tWFM(["warehouse.workforce.events"])
-    tFL(["warehouse.facility.events"])
-    tPPM(["warehouse.process-path-management.events"])
-    tLP(["warehouse.labor-performance.events"])
-    tWPL(["warehouse.warehouse-planning.events"])
-    tNF(["warehouse.network-fulfillment.events"])
-    tPM(["warehouse.product-master.events"])
-    tNIP(["warehouse.network-inventory-planning.events"])
-    tIR(["warehouse.inbound-receiving.events"])
-    tSO(["warehouse.slotting-optimization.events"])
-    tPFR(["warehouse.pick-face-replenishment.events"])
-    tTI(["warehouse.task-interleaving.events"])
-
-    OM --> tOM
-    INV --> tINV
-    WWP --> tWWP
-    FE --> tFE
-    WFM --> tWFM
-    FL --> tFL
-    PPM --> tPPM
-    LP --> tLP
-    WPL --> tWPL
-    NF --> tNF
-    PM --> tPM
-    NIP --> tNIP
-    IR --> tIR
-    SO --> tSO
-    PFR --> tPFR
-    TI --> tTI
-
-    tOM --> WWP
-    tOM -.->|opt-in| WPL
-    tINV --> WWP
-    tWWP --> FE
-    tWWP --> OM
-    tWWP -.->|opt-in| NF
-    tFE --> WWP
-    tFE --> LP
-    tFE --> OM
-    tWFM --> WWP
-    tWFM --> WPL
-    tFL --> INV
-    tFL --> WPL
-    tPPM --> FE
-    tPPM --> WWP
-    tPPM --> WFM
-    tPPM --> OM
-    tPPM -.->|opt-in| NF
-    tLP --> WFM
-    tWPL -.->|opt-in| OM
-    tPM --> INV
-    tPM --> OM
-    tPM --> WWP
-    tPM --> FE
-    tINV -.->|"legacy ProductClassified, migration only"| PM
-    tOM -.->|opt-in| NIP
-    tFL -.->|opt-in| NIP
-    tWPL -.->|opt-in| NIP
-    tINV -.->|opt-in| NIP
-    tFE -.->|opt-in| NIP
-    tNIP -.->|opt-in| INV
-    tNIP --> WWP
-    tPM -->|opt-in| IR
-    tFL -->|opt-in| IR
-    tIR -->|opt-in| INV
-    tPM -->|opt-in| SO
-    tFL -->|opt-in| SO
-    tOM -->|opt-in| SO
-    tSO -->|"SlotPlanApproved"| WWP
-    tFE -->|"TaskCompleted, opt-in"| INV
-    tINV -->|"StockRelocated, opt-in"| SO
-    tINV -.->|"opt-in, BinStockLevelChanged and StockRelocated REPLENISHMENT"| PFR
-    tSO -.->|"opt-in"| PFR
-    tFL -.->|"opt-in"| PFR
-    tFE -.->|"TaskAvailable, TaskClaimed, TaskCompleted, opt-in"| TI
-    tFL -.->|"opt-in, zones, slots and geometry"| TI
+    subgraph topics["Integration topics, by producer"]
+        tOM(["order-management<br/>warehouse.order-management.events"])
+        tINV(["inventory-storage<br/>warehouse.inventory.events"])
+        tWWP(["wes-work-planning<br/>warehouse.work-planning.events"])
+        tFE(["fulfillment-execution<br/>warehouse.fulfillment.events"])
+        tWFM(["workforce-management<br/>warehouse.workforce.events"])
+        tFL(["facility-layout<br/>warehouse.facility.events"])
+        tPPM(["process-path-management<br/>warehouse.process-path-management.events"])
+        tLP(["labor-performance<br/>warehouse.labor-performance.events"])
+        tWPL(["warehouse-planning<br/>warehouse.warehouse-planning.events"])
+        tNF(["network-fulfillment<br/>warehouse.network-fulfillment.events"])
+        tPM(["product-master<br/>warehouse.product-master.events"])
+        tNIP(["network-inventory-planning<br/>warehouse.network-inventory-planning.events"])
+        tIR(["inbound-receiving<br/>warehouse.inbound-receiving.events"])
+        tSO(["slotting-optimization<br/>warehouse.slotting-optimization.events"])
+        tPFR(["pick-face-replenishment<br/>warehouse.pick-face-replenishment.events"])
+        tTI(["task-interleaving<br/>warehouse.task-interleaving.events"])
+        tRP(["returns-processing<br/>warehouse.returns-processing.events"])
+        tEM(["exception-management<br/>warehouse.exception-management.events"])
+    end
+    subgraph consumers["Consumers"]
+        cOM[order-management]
+        cINV[inventory-storage]
+        cWWP[wes-work-planning]
+        cFE[fulfillment-execution]
+        cWFM[workforce-management]
+        cLP[labor-performance]
+        cWPL[warehouse-planning]
+        cNF[network-fulfillment]
+        cNIP[network-inventory-planning]
+        cIR[inbound-receiving]
+        cSO[slotting-optimization]
+        cPFR[pick-face-replenishment]
+        cTI[task-interleaving]
+        cRP[returns-processing]
+        cEM[exception-management]
+    end
+    tOM --> cWWP
+    tINV --> cWWP
+    tWWP --> cFE
+    tWWP --> cOM
+    tFE --> cWWP
+    tFE --> cLP
+    tFE --> cOM
+    tFE --> cWPL
+    tWFM --> cWWP
+    tWFM --> cWPL
+    tFL --> cINV
+    tFL --> cWPL
+    tPPM --> cFE
+    tPPM --> cWWP
+    tPPM --> cWFM
+    tPPM --> cOM
+    tLP --> cWFM
+    tPM --> cINV
+    tPM --> cOM
+    tPM --> cWWP
+    tPM --> cFE
+    tNIP --> cWWP
+    tIR --> cWPL
+    tSO --> cWWP
+    tPM --> cRP
+    tOM --> cRP
+    tFE --> cRP
+    tRP --> cINV
+    tRP --> cEM
+    tFE --> cEM
+    tWWP --> cEM
+    tNF --> cEM
+    tOM --> cEM
+    tINV --> cEM
+    tIR --> cEM
+    tOM -.-> cWPL
+    tWWP -.-> cNF
+    tPPM -.-> cNF
+    tWPL -.-> cOM
+    tOM -.-> cNIP
+    tFL -.-> cNIP
+    tWPL -.-> cNIP
+    tINV -.-> cNIP
+    tFE -.-> cNIP
+    tNIP -.-> cINV
+    tPM -.-> cIR
+    tFL -.-> cIR
+    tIR -.-> cINV
+    tPM -.-> cSO
+    tFL -.-> cSO
+    tOM -.-> cSO
+    tFE -.-> cINV
+    tINV -.-> cSO
+    tINV -.-> cPFR
+    tSO -.-> cPFR
+    tFL -.-> cPFR
+    tPM -.-> cPFR
+    tPM -.-> cNIP
+    tFE -.-> cTI
+    tFL -.-> cTI
+    tIR -.-> cNF
+    tPFR -.-> cWWP
+    tTI -.-> cFE
 ```
 
 | Topic | Producer | Integration types | Consumers |
 | --- | --- | ---: | --- |
-| `warehouse.order-management.events` | order-management | 4 | wes-work-planning (`OrderAllocated`, `OrderPartiallyAllocated`); warehouse-planning, opt-in; network-inventory-planning (`SiteSkuDemandChanged`), opt-in; slotting-optimization (`SiteSkuDemandChanged`, opt-in) |
-| `warehouse.inventory.events` | inventory-storage | 9 | wes-work-planning (`StockReserved`, `ReservationRevoked`); slotting-optimization (`StockRelocated`, opt-in: the plan execution progress); pick-face-replenishment (`StockRelocated`, acted on only for reason `REPLENISHMENT`, and `BinStockLevelChanged`, both opt-in); product-master's legacy importer (`ProductClassified`, emitted only by the one-shot backfill, migration only); `network-inventory-planning` (the two allocation replies and the two destination facts, opt-in) |
-| `warehouse.work-planning.events` | wes-work-planning | 11 | fulfillment-execution (`WorkReleased`, including `RELOCATE` work); order-management and network-fulfillment (`PathCapacityChanged`) |
-| `warehouse.fulfillment.events` | fulfillment-execution | 8 | wes-work-planning and labor-performance (`TaskCompleted`); inventory-storage (`TaskCompleted`, opt-in: confirms picks and applies `RELOCATE` and `REPLENISH` moves); task-interleaving (`TaskAvailable`, `TaskClaimed`, `TaskCompleted`, opt-in); order-management (`TaskCPTMissed`, `PackageManifested`); network-inventory-planning (the three transfer facts, opt-in) |
+| `warehouse.order-management.events` | order-management | 4 | wes-work-planning (`OrderAllocated`, `OrderPartiallyAllocated`); warehouse-planning, opt-in; network-inventory-planning (`SiteSkuDemandChanged`), opt-in; slotting-optimization (`SiteSkuDemandChanged`, opt-in); returns-processing (`OrderAllocated`, `OrderPartiallyAllocated`, into its allocated-lines copy); exception-management (`OrderRepromised`, correlation only: it auto-resolves an open `TaskCPTMissed` case) |
+| `warehouse.inventory.events` | inventory-storage | 15 | wes-work-planning (`StockReserved`, `ReservationRevoked`); slotting-optimization (`StockRelocated`, opt-in: the plan execution progress); pick-face-replenishment (`StockRelocated`, acted on only for reason `REPLENISHMENT`, and `BinStockLevelChanged`, both opt-in); `network-inventory-planning` (the two allocation replies and the two destination facts, opt-in); exception-management (`DiscrepancyDetected`, `ItemUnlocated`, promoted onto this topic 2026-10-21) |
+| `warehouse.work-planning.events` | wes-work-planning | 11 | fulfillment-execution (`WorkReleased`, including `RELOCATE` and `REPLENISH` work); order-management and network-fulfillment (`PathCapacityChanged`); order-management (`WorkUnitCreated`, the release confirmation, opt-in and not set in the reference deployment); exception-management (`BacklogThresholdBreached`) |
+| `warehouse.fulfillment.events` | fulfillment-execution | 10 | wes-work-planning and labor-performance (`TaskCompleted`); warehouse-planning (`TaskCompleted`, the observed-capacity read model, its ADR 0017); inventory-storage (`TaskCompleted`, opt-in: confirms picks and applies `RELOCATE` and `REPLENISH` moves); task-interleaving (`TaskAvailable`, `TaskClaimed`, `TaskCompleted`, opt-in); order-management (`TaskCPTMissed`, `PackageManifested`); network-inventory-planning (the three transfer facts, opt-in); returns-processing (`PackageManifested`); exception-management (`TaskCPTMissed`, `PackageDiverted`, `WeightDiscrepancyDetected`) |
 | `warehouse.workforce.events` | workforce-management | 1 | wes-work-planning, warehouse-planning (`ShiftPlanCommitted`) |
-| `warehouse.facility.events` | facility-layout | 13 | inventory-storage, warehouse-planning, network-inventory-planning (`SiteCapabilityChanged`, opt-in), inbound-receiving (the two slot events, opt-in); slotting-optimization (zone and slot events, opt-in); pick-face-replenishment (`ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned`, opt-in); task-interleaving (the same three plus `LocationGeometryUpdated`, opt-in) |
+| `warehouse.facility.events` | facility-layout | 15 | inventory-storage, warehouse-planning, network-inventory-planning (`SiteCapabilityChanged`, opt-in), inbound-receiving (the two slot events, opt-in); slotting-optimization (zone and slot events, opt-in); pick-face-replenishment (`ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned`, opt-in); task-interleaving (the same three plus `LocationGeometryUpdated`, opt-in) |
 | `warehouse.process-path-management.events` | process-path-management | 4 | fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment |
 | `warehouse.labor-performance.events` | labor-performance | 1 | workforce-management (`TaskPerformanceRecorded`) |
-| `warehouse.warehouse-planning.events` | warehouse-planning | 4 | order-management, opt-in; network-inventory-planning (`CapacityPlanPublished`), opt-in |
-| `warehouse.network-fulfillment.events` | network-fulfillment | 5 | none yet |
+| `warehouse.warehouse-planning.events` | warehouse-planning | 6 | order-management, opt-in; network-inventory-planning (`CapacityPlanPublished`), opt-in |
+| `warehouse.network-fulfillment.events` | network-fulfillment | 7 | exception-management (`AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled`); the `networkorder.*` types have no consumer |
 | `warehouse.network-inventory-planning.events` | network-inventory-planning | 3 | inventory-storage (`TransferAllocationRequested`, opt-in); wes-work-planning (`WorkDemandReleased`); `TransferPlanApproved` has no consumer |
-| `warehouse.product-master.events` | product-master | 5 | inventory-storage, order-management, wes-work-planning, fulfillment-execution (`ProductClassified`, into local copies); inbound-receiving (`ProductRegistered`, opt-in); slotting-optimization (`ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured`, opt-in) |
-| `warehouse.inbound-receiving.events` | inbound-receiving | 9 | inventory-storage (`ReceiptLineReceived`, opt-in, its ADR 0037) |
+| `warehouse.product-master.events` | product-master | 8 | inventory-storage, order-management, wes-work-planning, fulfillment-execution (`ProductClassified`, into local copies); the pack-level events (`ProductPackLevelDeclared`, `ProductPackLevelRetired`), into a local packaging view, have consumers built in seven contexts: inventory-storage, wes-work-planning, fulfillment-execution, inbound-receiving, slotting-optimization, network-inventory-planning and pick-face-replenishment (the per-edge status is on the context map); inbound-receiving (`ProductRegistered`, opt-in); slotting-optimization (`ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured`, opt-in); returns-processing (`ProductClassified`) |
+| `warehouse.inbound-receiving.events` | inbound-receiving | 11 | inventory-storage (`ReceiptLineReceived`, opt-in, its ADR 0037, and `ReceiptCartonReceived`); warehouse-planning (`DockAppointmentBooked`, `DockAppointmentCancelled`, its ADR 0017); network-fulfillment (the receipt events of the ASNs it registered, live mode only, its ADR 0028); exception-management (`CartonDiscrepancyRaised`) |
 | `warehouse.slotting-optimization.events` | slotting-optimization | 3 | wes-work-planning (`SlotPlanApproved`, plans one `RELOCATE` work unit per move, its ADR-0040); pick-face-replenishment (`SlotPlanApproved`, opt-in); `SlotPlanGenerated` and `SlotPlanRejected` have no consumer |
 | `warehouse.pick-face-replenishment.events` | pick-face-replenishment | 3 | wes-work-planning (`ReplenishmentRequested` and `ReplenishmentCancelled`, plans one `REPLENISH` work unit per request, its ADR-0042; opt-in `REPLENISHMENT_MODE=kafka`, set in the reference deployment); `ReplenishmentCompleted` has no consumer (wes-work-planning ignores it) |
 | `warehouse.task-interleaving.events` | task-interleaving | 1 | fulfillment-execution (`InterleavingHintIssued`, an advisory tie-break inside one `claimNext` priority band, its ADR 0051; `TASK_INTERLEAVING_MODE=kafka`) |
+| `warehouse.returns-processing.events` | returns-processing | 7 | inventory-storage (`ReturnLineStaged`, once per `RESTOCK` disposition, into its staged-receipt use case, its ADR 0044); exception-management (`UnexpectedReturnReceived`, one case per receipt line); the other five types have no consumer |
+| `warehouse.exception-management.events` | exception-management | 7 | none: no context consumes any of its seven types |
 
 The type counts are the messages each producer's `asyncapi.yaml` declares on
-its integration channel. Several consumers are themselves behind a mode
+its integration channel (counted on `origin/develop`, 2026-10-27). The
+consumers come from each consumer's own `asyncapi.yaml` plus its Kafka
+adapters on `develop`: several consumers' specs omit a type their code
+consumes (the pack-level consumers of wes-work-planning, fulfillment-execution,
+slotting-optimization and network-inventory-planning, and
+network-fulfillment's receipt consumer). Several consumers are themselves behind a mode
 switch (for example `PATH_CATALOGUE_SOURCE=kafka` or
 `LOCATION_LOOKUP_MODE=kafka`). The per-edge status is on each context's
 context map page.
 
 ### Analytics topics
 
-One per persisting context, consumed only by that context's own projector:
+One per domain context, consumed only by that context's own projector:
 `warehouse.order-management.analytics`, `warehouse.inventory.analytics`,
 `warehouse.wes.analytics` (wes-work-planning), `warehouse.fulfillment.analytics`,
 `warehouse.workforce.analytics`, `warehouse.facility.analytics`,
@@ -407,14 +432,16 @@ One per persisting context, consumed only by that context's own projector:
 `warehouse.network-fulfillment.analytics`,
 `warehouse.warehouse-planning.analytics`,
 `warehouse.product-master.analytics`,
-`warehouse.network-inventory-planning.analytics` and
-`warehouse.inbound-receiving.analytics`. `slotting-optimization` has no
-analytics topic yet (`warehouse.slotting-optimization.analytics` is reserved
-by its ADR 0004). `pick-face-replenishment` publishes
+`warehouse.network-inventory-planning.analytics`,
+`warehouse.inbound-receiving.analytics`,
+`warehouse.slotting-optimization.analytics`,
 `warehouse.pick-face-replenishment.analytics` (its three request events plus
-the analytics-only `ReplenishmentPolicyDeclared`), and `task-interleaving`
-publishes `warehouse.task-interleaving.analytics` (the hint, its outcomes and
-the policy event). Neither has a projector, so nothing reads them yet.
+the analytics-only `ReplenishmentPolicyDeclared`),
+`warehouse.task-interleaving.analytics` (the hint, its outcomes and the
+policy event), `warehouse.returns-processing.analytics` and
+`warehouse.exception-management.analytics` (seven types each, mirroring
+their integration topics). Each of the eighteen has a projector binary on
+`develop` (`cmd/<prefix>-projector`, see the fleet table above).
 
 ## What this diagram does not show
 

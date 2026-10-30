@@ -8,7 +8,7 @@ description: UML class diagrams of the aggregates, entities and value objects in
 # Domain Model
 
 The fleet-level view of what lives under `internal/domain/**` in each of the
-seventeen contexts documented on this site: which aggregate roots each one owns, the invariant
+nineteen contexts documented on this site: which aggregate roots each one owns, the invariant
 that makes each one a consistency boundary, and how aggregates in different
 contexts refer to each other.
 
@@ -34,22 +34,27 @@ in the outbound Postgres adapter.
 
 ## The fleet at a glance
 
-43 aggregate roots across sixteen contexts. The seventeenth, `warehouse-ops-agent`,
-owns none, and that is a design decision. The four newest contexts are built and counted:
-`inbound-receiving` (decided on 2026-10-08) has three aggregates
-(`Asn`, `DockAppointment`, `Receipt`), `slotting-optimization` (2026-10-08) has one
-(`SlotPlan`) `pick-face-replenishment` (2026-10-17) has two
-(`ReplenishmentPolicy`, `ReplenishmentRequest`) and `task-interleaving` (2026-10-17) has two
-(`StationTrip`, `InterleavingPolicy`). Counts are the per-aggregate sections of each context's
+50 aggregate roots across eighteen contexts. The nineteenth, `warehouse-ops-agent`,
+owns none, and that is a design decision. The two newest contexts are built and
+counted: `returns-processing` (decided 2026-10-20) has three aggregates
+(`ReturnAuthorization`, `ReturnReceipt`, `Disposition`; its versioned
+`DispositionPolicy` is data without behaviour, not an aggregate) and
+`exception-management` (2026-10-20) has two (`ExceptionCase`,
+`ExceptionPolicy`). Counts are the per-aggregate sections of each context's
 Aggregate Design Canvas, cross-checked against the `<<AggregateRoot>>`
-classes in its class diagram (the class diagrams of `slotting-optimization`,
-`pick-face-replenishment` and `task-interleaving` draw their aggregates without the
-stereotype; their canvases cover them).
+classes in its class diagram and the "is the aggregate root" doc comments in
+its `internal/domain` packages on `develop` (the class diagrams of
+`slotting-optimization`, `pick-face-replenishment` and `task-interleaving`
+draw their aggregates without the stereotype; their canvases cover them).
+One count comes from the code instead of the canvas: `inventory-storage`'s
+`internal/domain/container` and `internal/domain/relocation` packages each
+declare an aggregate root (`Container`, ADR 0045, and `Relocation`, ADR
+0039) that its synced canvas does not list yet, so its row counts six.
 
 | Context | Aggregate roots | # | Detailed pages |
 | --- | --- | --- | --- |
 | `order-management` | `Order` (entity `OrderLine`, value object `PromiseGroup`) | 1 | [class diagram](/contexts/order-management/class-diagram), [canvas](/contexts/order-management/aggregate-design-canvas) |
-| `inventory-storage` | `StockUnit`, `Bin`, `Reservation` (entity `Allocation`), `ProductClassification` (a local copy since its ADR 0034) | 4 | [class diagram](/contexts/inventory-storage/class-diagram), [canvas](/contexts/inventory-storage/aggregate-design-canvas) |
+| `inventory-storage` | `StockUnit`, `Bin`, `Reservation` (entity `Allocation`), `ProductClassification` (a local copy since its ADR 0034), `Container` (one sealed case), `Relocation` (one intra-site move) | 6 | [class diagram](/contexts/inventory-storage/class-diagram), [canvas](/contexts/inventory-storage/aggregate-design-canvas) |
 | `wes-work-planning` | `ChargeForecast`, `ShiftPlan` (entity `PathPlan`), `WorkPool` (pool entries), `WorkUnit` | 4 | [class diagram](/contexts/wes-work-planning/class-diagram), [canvas](/contexts/wes-work-planning/aggregate-design-canvas) |
 | `fulfillment-execution` | `Task`, `Station`, `Package`, `OrderConsolidation` | 4 | [class diagram](/contexts/fulfillment-execution/class-diagram), [canvas](/contexts/fulfillment-execution/aggregate-design-canvas) |
 | `workforce-management` | `ShiftPlan`, `AssociateShift`, `LaborAssignment` | 3 | [class diagram](/contexts/workforce-management/class-diagram), [canvas](/contexts/workforce-management/aggregate-design-canvas) |
@@ -64,60 +69,45 @@ stereotype; their canvases cover them).
 | `slotting-optimization` | `SlotPlan` (assignments, moves and unassigned SKUs as value objects; the `abc-velocity-v1` planner is a domain service) | 1 | [class diagram](/contexts/slotting-optimization/class-diagram), [canvas](/contexts/slotting-optimization/aggregate-design-canvas) |
 | `pick-face-replenishment` | `ReplenishmentRequest` (states `Requested`, `Completed`, `Cancelled`), `ReplenishmentPolicy` (the versioned `MIN_MAX` rule of one site and SKU). The detector in `internal/domain/detection` is a stateless function, not an aggregate | 2 | [class diagram](/contexts/pick-face-replenishment/class-diagram), [canvas](/contexts/pick-face-replenishment/aggregate-design-canvas) |
 | `task-interleaving` | `StationTrip` (the station's position and its hint, in the states `Active`, `Consumed`, `Expired`, `Superseded`), `InterleavingPolicy` (the versioned per-site settings). The recommender in `internal/domain/recommend` and the `rectilinear-v1` travel model are pure functions behind a port, not aggregates | 2 | [class diagram](/contexts/task-interleaving/class-diagram), [canvas](/contexts/task-interleaving/aggregate-design-canvas) |
+| `returns-processing` | `ReturnAuthorization` (the RMA), `ReturnReceipt` (lines matched to an RMA or `UNEXPECTED`), `Disposition` (immutable; an override is a new instance). `DispositionPolicy` is versioned data, not an aggregate | 3 | class diagram not synced yet, [canvas](/contexts/returns-processing/aggregate-design-canvas) |
+| `exception-management` | `ExceptionCase` (one owned anomaly, with its SLA clock and audit trail), `ExceptionPolicy` (the append-only handling policy of one source type) | 2 | [class diagram](/contexts/exception-management/class-diagram), [canvas](/contexts/exception-management/aggregate-design-canvas) |
 | `warehouse-ops-agent` | none: per-request decision objects in `internal/domain/policy` | 0 | [class diagram](/contexts/warehouse-ops-agent/class-diagram), [canvas](/contexts/warehouse-ops-agent/aggregate-design-canvas) |
 
 ## Aggregates across context boundaries
 
 No aggregate in the fleet holds a pointer to, or a foreign key into, another
 context's aggregate. Where one context needs another's identity, it stores it
-as an opaque string and never parses it. The dashed edges below are those
-identity references. Each comes from the referencing context's own
-entity-relationship or sequence-diagram page.
+as an opaque string, and parses it only at the two seams listed on
+[Data Models](/architecture/data-models#identity-references-across-contexts).
+The dashed edges below are those identity references; only the aggregates
+that hold or are the target of one are drawn. Each comes from the
+referencing context's own entity-relationship, sequence-diagram or canvas
+page.
 
 ```mermaid
-flowchart LR
+flowchart TB
     subgraph OM["order-management"]
         Order
     end
     subgraph INV["inventory-storage"]
         Reservation
-        StockUnit
-        Bin
         ProductClassification
     end
     subgraph PPM["process-path-management"]
         ProcessPath
-        CPTSchedule
     end
     subgraph WWP["wes-work-planning"]
         WorkUnit
-        WorkPool
-        ChargeForecast
-        WesShiftPlan["ShiftPlan"]
     end
     subgraph FE["fulfillment-execution"]
         Task
-        Station
         Package
-        OrderConsolidation
     end
     subgraph LP["labor-performance"]
         TaskPerformance
-        LaborStandard
-        IdlePeriod
     end
     subgraph NF["network-fulfillment"]
         NetworkOrder
-        CapabilityOffer
-    end
-    subgraph WPL["warehouse-planning"]
-        CapacityPlan
-        ProcessCapacity
-    end
-    subgraph WFM["workforce-management"]
-        WfmShiftPlan["ShiftPlan"]
-        AssociateShift
-        LaborAssignment
     end
     subgraph PM["product-master"]
         Product
@@ -125,22 +115,26 @@ flowchart LR
     subgraph NIP["network-inventory-planning"]
         InterWarehouseTransfer
     end
+    subgraph RP["returns-processing"]
+        ReturnAuthorization
+    end
 
     Order -.->|"order line reservationId"| Reservation
     Reservation -.->|"demandRef"| Order
     Order -.->|"line pathId"| ProcessPath
     WorkUnit -.->|"id is orderId-line-n"| Order
-    Task -.->|"orderRef is the work unit id"| WorkUnit
+    Task -.->|"orderRef = work unit id"| WorkUnit
     Package -.->|"taskId, no FK"| Task
     TaskPerformance -.->|"taskId"| Task
     NetworkOrder -.->|"localOrderId"| Order
-    ProductClassification -.->|"sku, version-guarded copy"| Product
-    InterWarehouseTransfer -.->|"reservationId, stock unit and bin ids"| Reservation
-    InterWarehouseTransfer -.->|"transfer_ref on released demand"| WorkUnit
-    Task -.->|"transfer_ref on transfer facts"| InterWarehouseTransfer
+    ProductClassification -.->|"sku + version"| Product
+    InterWarehouseTransfer -.->|"reservation, unit and bin ids"| Reservation
+    InterWarehouseTransfer -.->|"transfer_ref on demand"| WorkUnit
+    Task -.->|"transfer_ref on facts"| InterWarehouseTransfer
+    ReturnAuthorization -.->|"order line, work unit id"| WorkUnit
 ```
 
-Read the edges as "stores the identity of". Six chains are worth following:
+Read the edges as "stores the identity of". Seven chains are worth following:
 
 - **Order to reservation and back.** `Order` keeps the `reservationId` that
   inventory-storage minted for each allocated line, and the `Reservation`
@@ -168,6 +162,10 @@ Read the edges as "stores the identity of". Six chains are worth following:
   wes-work-planning uses as the work unit id. fulfillment-execution's transfer facts
   carry the `transfer_ref` back. None of the three contexts models a transfer
   aggregate.
+- **Return to the shipped order line.** returns-processing authorizes an RMA
+  only for an order line whose work unit it has seen manifested. It keys its
+  copies by order line and rebuilds the work unit id `{order_id}-line-{line_no}`
+  to match fulfillment-execution's `order_ref` on `PackageManifested`.
 
 Same-named aggregates in different contexts are different models. The two
 `ShiftPlan`s are the clearest example: workforce-management's is the headcount
@@ -219,6 +217,10 @@ model live beside the aggregate but are not aggregates.
   product-master is the source of truth, and this context no longer authors
   it (`PUT /products/{sku}/classification` answers `410`). Placement and DOT
   segregation at stow stay here.
+- `Container` (ADR 0045): the identity of one sealed case, its LPN unique,
+  bound one-to-one to its `SEALED_CASE` stock unit. `Relocation` (ADR 0039):
+  one intra-site move, immutable once applied. Both are aggregate roots in
+  the code on `develop` and not yet on the synced canvas.
 
 [Canvas](/contexts/inventory-storage/aggregate-design-canvas).
 
@@ -316,8 +318,10 @@ request, not aggregates. [Canvas](/contexts/facility-layout/aggregate-design-can
   `NetworkRef` (`ErrEmptyNetworkRef`), and a translated order has at least
   one line (`ErrNoLines`).
 - `CapabilityOffer`: a replaceable snapshot that never advertises more than
-  physically exists (`ErrAdvertisedExceedsPhysical`). It is persisted but
-  neither published to Kafka nor submitted to the network yet.
+  physically exists (`ErrAdvertisedExceedsPhysical`). It is persisted and not
+  published to Kafka; in live mode the inventory feed of the supply loop
+  (ADR 0027) sends it to the network, and `CAPABILITY_OFFER_ENABLED=true` is
+  set in `warehouse-infra` `develop`.
 
 [Canvas](/contexts/network-fulfillment/aggregate-design-canvas).
 
@@ -387,6 +391,38 @@ request, not aggregates. [Canvas](/contexts/facility-layout/aggregate-design-can
 
 [Canvas](/contexts/task-interleaving/aggregate-design-canvas).
 
+### returns-processing
+
+- `ReturnAuthorization`: at most one open RMA per (order, line)
+  (`ErrOpenRMAExists`, backed by a partial unique index). It is authorizable
+  only for the line's own manifested work unit, inside the policy return
+  window, and for a quantity within the policy maximum; a rejection is
+  terminal and carries its code.
+- `ReturnReceipt`: every line is matched to an RMA or explicitly
+  `UNEXPECTED`, and a line is inspected exactly once
+  (`ErrLineAlreadyInspected`).
+- `Disposition`: created decided and never mutated. `RESTOCK` is allowed only
+  for grades A and B and never for a hazmat SKU without a DOT rating (demoted,
+  fail-closed); an override is a new `Disposition` that names the one it
+  supersedes; `ReturnLineStaged` is raised once per `RESTOCK` disposition
+  (`ErrAlreadyStaged`, `ErrNotRestock`).
+
+[Canvas](/contexts/returns-processing/aggregate-design-canvas).
+
+### exception-management
+
+- `ExceptionCase`: one direction only, `OPEN` to `TRIAGED` to `ASSIGNED` to
+  `RESOLVED`, with `ESCALATED` as a flag. `RESOLVED` needs a resolution code
+  and a root cause and is terminal (`ErrCaseClosed`). At most one case is open
+  per dedup key (source type, source subject, site): the use case and a
+  partial unique index enforce it (`ErrOpenCaseExists`). The frozen source
+  payload never changes after open.
+- `ExceptionPolicy`: one append-only version chain per source type, with
+  `SLAMinutes >= 1` and an optional declarative auto-resolve rule. Two writers
+  racing the same next version collide (`ErrConcurrentModification`).
+
+[Canvas](/contexts/exception-management/aggregate-design-canvas).
+
 ### warehouse-ops-agent
 
 No aggregate root and no persisted state. `internal/domain/policy` is
@@ -416,5 +452,5 @@ place of invariants. [Canvas](/contexts/warehouse-ops-agent/aggregate-design-can
    order-management, `SaveClaim` in fulfillment-execution, and the
    `WorkPool` version check in wes-work-planning).
 6. **The domain layer imports nothing framework-shaped.** Every one of the
-   seventeen repositories has `internal/architecture/*_test.go` fitness tests
+   nineteen repositories has `internal/architecture/*_test.go` fitness tests
    that fail the build if it does. See [Components](/architecture/components).

@@ -8,7 +8,7 @@ description: The terms of the Vendor API and the purchase-order protocol, their 
 # Ubiquitous Language
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 The terms this context speaks. Because the Vendor API is a Published
@@ -128,9 +128,9 @@ the changes the fleet needs are on [Fleet changes](/network/integration/fleet-ch
 
 ## Inbound terms
 
-> **Proposed, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments).** This section is the delta that the seller-inbound design adds to this page. Nothing in it is built.
+> **Built, [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)** as realized by [`vendor-connectivity` ADR 0005](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0005-inbound-shipments-receipts-and-catalog-packaging.md) (inbound shipments, inbound receipts and catalogue packaging). This section is the delta the seller-inbound design added to this page; where the service decided differently, the text below says so.
 
 | Term | Definition | Code identifier | Not to be confused with |
 | --- | --- | --- | --- |
-| **Inbound Receipt** | A vendor's carton-level report of what arrived for one inbound shipment: per SSCC a status, the eaches received per GTIN and any compliance codes. | `submission.InboundReceipt` | A purchase-order acknowledgement, which answers an order the network sent. |
+| **Inbound Receipt** | A vendor's carton-level report of what arrived for one inbound shipment: per SSCC a status, the eaches received per GTIN and any compliance codes. | `inbound.Receipt` | A purchase-order acknowledgement, which answers an order the network sent. |
 | **ownerRef** (on the Vendor API) | The seller of record of the cartons: the `sellerId` of `seller-inbound` (carried on the poll as `sellerId`, kept by the vendor as its own `ownerRef`), opaque to the vendor. | `InboundShipmentView.sellerId` | The vendor. |

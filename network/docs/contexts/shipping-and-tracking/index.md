@@ -8,7 +8,7 @@ description: "Shipping & Tracking (proposed): a Generic subdomain that issues sh
 # Shipping & Tracking
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-generic">Generic Subdomain</span>
@@ -58,6 +58,24 @@ as an exception (`ExceptionOnSilence`).
 | [Class Diagram](/network/contexts/shipping-and-tracking/class-diagram) | Proposed domain types and the hexagonal layout | none (UML) |
 | [Entity Relationship](/network/contexts/shipping-and-tracking/entity-relationship) | Proposed Postgres schema | none |
 | [Sequence Diagrams](/network/contexts/shipping-and-tracking/sequence-diagrams) | Adapter to Kafka for every command use case | none (UML) |
+
+## Service and operations
+
+- **Service:** [`IQVO/shipping-and-tracking`](https://github.com/IQVO/shipping-and-tracking) on `develop` (`fc7e530`,
+  2026-10-26): binaries `cmd/api` (REST) and `cmd/mcp` (read-only MCP), and the console
+  remote in `web/`.
+- **Deployment:** wired in warehouse-infra develop: a `terraform/apps.yaml` entry
+  (`database: true`, `frontend_remote: shipping_mfe`) and `helm-values/shipping-and-tracking.yaml`
+  (MCP enabled, gateway path `/api/mcp/shipping-and-tracking`). The cluster itself was not checked in this
+  refresh.
+- **Observability:** [service ADR 0008](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0008-fleet-observability-standard.md),
+  *Adopt the fleet observability standard*, Accepted 2026-10-26. Logs, metrics and traces leave
+  over OTLP to the otel-collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, chart default
+  `otel-collector.observability.svc.cluster.local:4317`; `OTEL_SERVICE_NAME`). The Tier-2
+  business counter is `shipping.labels.issued` (unit `{label}`, in
+  `internal/adapters/outbound/telemetry/label_metrics.go`), with attribute `outcome` = `issued` or `rejected` and
+  `reason` on the outcomes that are not a success. The dashboard queries it as `shipping_labels_issued_total` in warehouse-infra's
+  `terraform/dashboards/contexts/shipping-and-tracking.json`, by `outcome`.
 
 ## Elsewhere
 

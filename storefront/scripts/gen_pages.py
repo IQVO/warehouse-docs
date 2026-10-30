@@ -254,7 +254,8 @@ def ubiquitous_language():
            "---", "", "# Ubiquitous Language", "", BANNER, ""]
     out.append("""Each term belongs to the context that owns its meaning. Where the same word
 means something else in the retail network, the network counterpart is named.
-Code identifiers are the proposed Go package and type names.
+Code identifiers are the Go package and type names the services use on
+develop (checked in the 2026-10-27 as-built refresh).
 """)
     rows = []
     for u in M.get("ul", []):
@@ -349,7 +350,15 @@ Tiers (the `<tier>` segment):
         if not c.get("publishes"):
             continue
         out.append(f"### `{c['id']}`\n")
-        out.append(f"Topic `retailnetwork.{c['id']}.events` (analytics-only events on `retailnetwork.{c['id']}.analytics`).\n")
+        events_topic = f"retailnetwork.{c['id']}.events"
+        analytics_topic = c.get("analytics_topic", f"retailnetwork.{c['id']}.analytics")
+        if analytics_topic == events_topic:
+            line = f"Topic `{events_topic}` for every event, analytics-only ones included (no analytics topic)."
+        else:
+            line = f"Topic `{events_topic}` (analytics-only events on `{analytics_topic}`)."
+        if c.get("analytics_dataschema"):
+            line += f" Analytics-only events carry dataschema `{c['analytics_dataschema']}`."
+        out.append(line + "\n")
         out.append("| Event | CloudEvents type | Consumers |")
         out.append("| --- | --- | --- |")
         for p in c["publishes"]:

@@ -7,8 +7,8 @@ description: The ddd-crew Bounded Context Canvas v5 for Customer Payments, with 
 
 # Bounded Context Canvas
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `customer-payments` service is built on develop ([`IQVO/customer-payments`](https://github.com/IQVO/customer-payments) at `530c7cb`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/customer-payments#service-and-operations) section lists it.
 :::
 
 Following the ddd-crew [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas).
@@ -83,7 +83,7 @@ flowchart LR
         out1(["analytics consumers"]):::actor
     end
     BC -->|"cmd - provider port (ACL)<br/>Authorize, Capture, Void,<br/>Refund, Reauthorize"| out0
-    BC ==>|"evt - Kafka<br/>retailnetwork.customer-payments.analytics<br/>PaymentAuthorized, PaymentCaptured,<br/>PaymentReleased, PaymentAuthorizationExpired,<br/>PaymentDeclined, RefundIssued, RefundFailed"| out1
+    BC ==>|"evt - Kafka<br/>retailnetwork.customer-payments.events<br/>PaymentAuthorized, PaymentCaptured,<br/>PaymentReleased, PaymentAuthorizationExpired,<br/>PaymentDeclined, RefundIssued, RefundFailed"| out1
     linkStyle 0 stroke:#1971c2,stroke-width:1.5px
     linkStyle 1 stroke:#e8590c,stroke-width:2.5px
 ```
@@ -166,13 +166,13 @@ route and the command the two refund policies issue.
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
 | `payment-provider` (external) | `Authorize`, `Capture`, `Void`, `Refund`, `Reauthorize` | Command | Provider port (ACL); the adapter calls the payment-provider simulator | Anti-Corruption Layer; we are the Customer of an external system |
-| analytics only | `PaymentAuthorized` | Event | Kafka `retailnetwork.customer-payments.analytics`, `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentAuthorized` | analytics stream |
-| analytics only | `PaymentCaptured` | Event | Kafka `retailnetwork.customer-payments.analytics`, `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentCaptured` | analytics stream |
-| analytics only | `PaymentReleased` | Event | Kafka `retailnetwork.customer-payments.analytics`, `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentReleased` | analytics stream |
-| analytics only | `PaymentAuthorizationExpired` | Event | Kafka `retailnetwork.customer-payments.analytics`, `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentAuthorizationExpired` | analytics stream |
-| analytics only | `PaymentDeclined` | Event | Kafka `retailnetwork.customer-payments.analytics`, `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentDeclined` | analytics stream |
-| analytics only | `RefundIssued` | Event | Kafka `retailnetwork.customer-payments.analytics`, `com.retailnetwork.storefront.customer-payments.refund.RefundIssued` | analytics stream |
-| analytics only | `RefundFailed` | Event | Kafka `retailnetwork.customer-payments.analytics`, `com.retailnetwork.storefront.customer-payments.refund.RefundFailed` | analytics stream |
+| analytics only | `PaymentAuthorized` | Event | Kafka `retailnetwork.customer-payments.events`, `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentAuthorized` | analytics stream |
+| analytics only | `PaymentCaptured` | Event | Kafka `retailnetwork.customer-payments.events`, `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentCaptured` | analytics stream |
+| analytics only | `PaymentReleased` | Event | Kafka `retailnetwork.customer-payments.events`, `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentReleased` | analytics stream |
+| analytics only | `PaymentAuthorizationExpired` | Event | Kafka `retailnetwork.customer-payments.events`, `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentAuthorizationExpired` | analytics stream |
+| analytics only | `PaymentDeclined` | Event | Kafka `retailnetwork.customer-payments.events`, `com.retailnetwork.storefront.customer-payments.paymentauthorization.PaymentDeclined` | analytics stream |
+| analytics only | `RefundIssued` | Event | Kafka `retailnetwork.customer-payments.events`, `com.retailnetwork.storefront.customer-payments.refund.RefundIssued` | analytics stream |
+| analytics only | `RefundFailed` | Event | Kafka `retailnetwork.customer-payments.events`, `com.retailnetwork.storefront.customer-payments.refund.RefundFailed` | analytics stream |
 
 What the neighbours do with them: nobody in the storefront or the network
 consumes a payment event. All seven are analytics-only, so
@@ -219,7 +219,7 @@ Token** (never a card number).
 - `checkout` calls `VoidAuthorization` only after a definitive rejection of
   the place-order step, never while the outcome is in doubt.
 - The PSP token arrives in the authorize request (`paymentMethodToken` in
-  the proposed REST contract); the context never receives card data.
+  the REST contract); the context never receives card data.
 - The provider honours the idempotency key it is given, which is what makes a
   retried capture or refund safe.
 - Every consumed event is applied once (inbox on the CloudEvents `id`), and

@@ -24,7 +24,7 @@ Kafka, architecture fitness tests, and spec linting.
 | Coverage gate | 90% over `./internal/domain/...,./internal/application/...`; measured 99.9% on this commit | `make coverage` |
 | BDD (godog / Gherkin) | 6 feature files, **68 scenarios** (64 `Scenario` blocks, one of which is an outline with 5 example rows), 608 steps; all pass | `make bdd` |
 | Integration (testcontainers) | 55 top-level tests behind `//go:build integration`: `cmd/api` 7, `inbound/kafka` 4, `outbound/outbox` 8, `outbound/postgres` 36 | `make integration` |
-| Architecture fitness | 22 top-level test functions in `internal/architecture` (one, the MCP optional-inputs sensor, skips because there is no MCP adapter) | `make arch-test` |
+| Architecture fitness | 29 top-level test functions in `internal/architecture` (none skips) | `make arch-test` |
 | Mutation (gremlins) | efficacy 90, mutant coverage 90 (`.gremlins.yaml`); measured 100% / 100% on the four domain packages | `make mutation`, `make mutation-full` |
 | Spec linting (Spectral) | OpenAPI and AsyncAPI, `--fail-severity=warn` | CI `api-lint` |
 | Contract (schemathesis) | **none**: no schemathesis configuration and no CI job. Response shapes are checked against the OpenAPI document by a Go test instead (`internal/adapters/inbound/http/shape_test.go`) | none |
@@ -49,7 +49,7 @@ scope and the mutation package list.
 | `make test` | `go test ./... -race` | unit, httptest and BDD (the BDD suite is a normal `Test` function) |
 | `make coverage` | `go test ./... -race -coverprofile=coverage.out -coverpkg=./internal/domain/...,./internal/application/...` then the 90% gate | The CI `test` job runs exactly this; a workflow that defined its own `-coverpkg` would fail `repo_lint` R11. |
 | `make arch-test` | `go test ./internal/architecture/... -v` | |
-| `make bdd` | `go test ./... -run TestFeatures -v` | the godog suite, `features_test.go` at the module root |
+| `make bdd` | `go test ./... -run TestFeatures -v` | the godog suite, `features/features_test.go` (the module root holds no Go file) |
 | `make integration` | `go test -tags=integration ./... -race -count=1` | needs only Docker; every test boots its own Postgres and Kafka |
 | `make mutation` | `gremlins unleash` on each of `./internal/domain/stationtrip ./internal/domain/recommend ./internal/domain/travel ./internal/domain/policy` | the fast, blocking subset (`MUTATION_FAST_PKGS`) |
 | `make mutation-full` | `gremlins unleash ./internal/domain --workers 1 --timeout-coefficient 30` | the exhaustive scheduled run |
@@ -73,7 +73,8 @@ in sync by hand.
   issue, before expiry, at expiry), one Active hint per station, consumption at
   most once, and ordered domain events.
 - **Use cases** (`internal/application/usecases`): run against the in-memory
-  adapters, including injected faults (`faults_test.go`), input validation
+  adapters, which are test doubles only (the shipped binary never imports them;
+  `internal/architecture/runtime_no_memory_fitness_test.go` enforces it), including injected faults (`faults_test.go`), input validation
   (`inputs_test.go`) and the completion path (`completion_station_test.go`).
 - **HTTP adapter**: `httptest` over the real router, one file per handler group
   plus `idempotency_test.go` (replay, reuse, rollback on 4xx and 5xx, concurrent
@@ -86,7 +87,8 @@ in sync by hand.
   service's own helper.
 - **Outbox relay and events**: relay cap and ordering with a fake store,
   golden CloudEvents bytes in `outbound/events/testdata`.
-- **`cmd/api`**: env parsing (`config_test.go`), consumer planning
+- **`cmd/api`**: env parsing and boot configuration (`config_test.go`,
+  `bootconfig_test.go`), consumer planning and the supervised restart
   (`consumers_test.go`), shutdown order (`shutdown_test.go`), boot (`main_test.go`).
 
 Run one package or one test:
@@ -102,9 +104,13 @@ go test ./internal/application/usecases -v
 lifecycle, supersede, consume, expiry, duplicates), `inert.feature` (3),
 `policy.feature` (12 blocks, one outline with 5 rows), `ranking.feature` (16),
 `simulation.feature` (10) and `tasks.feature` (10: pool and claim copies).
-`features_test.go` and its `features_setup/flow/assertions_test.go` companions
-wire the **real use cases over the in-memory adapters** with a fake clock, so the
-scenarios are fast and need no Docker. `go test . -run TestFeatures -v` ends with
+The godog runner `features/features_test.go` (package `features_test`, godog
+`Paths` `["."]`) and its `features/features_setup/flow/assertions_test.go`
+companions live in the same directory as the `.feature` files; the repository
+root holds no `.go` file at all (`TestNoGoFilesAtRepoRoot` in
+`internal/architecture` enforces it). They wire the **real use cases over the
+in-memory adapters** with a fake clock, so the scenarios are fast and need no
+Docker. `go test ./features -run TestFeatures -v` ends with
 `68 scenarios (68 passed)` and `608 steps (608 passed)`.
 
 ## Integration (testcontainers)
@@ -116,7 +122,8 @@ Postgres, and a missing Docker is a test failure, never a skip.
 
 | Suite | Package | What it proves |
 | --- | --- | --- |
-| Service over Postgres | `cmd/api` (7) | boot migrates, `Idempotency-Key` is enforced, the simulation writes no outbox row, policy `PUT` is version guarded, a rejection leaves no effect and replays, concurrent requests with one key store one answer, the expiry worker expires a hint and enqueues the fact, boot **fails closed** on an unreachable database |
+| Service over Postgres | `cmd/api` (6) | boot migrates, `Idempotency-Key` is enforced, the simulation writes no outbox row, policy `PUT` is version guarded, a rejection leaves no effect and replays, concurrent requests with one key store one answer, the expiry worker expires a hint and enqueues the fact, boot **fails closed** on an unreachable database |
+| Real entry point | `cmd/api/e2e_integration_test.go` (2) | `run()` is booted in-process on real Postgres and a real Kafka whose topic auto-creation is **off**: `/readyz` is `200` while none of the four topics exists (topics are not part of readiness, ADR 0006 Amendment 1), then the test creates them; layout, policy, task and completion events published to Kafka produce an `InterleavingHintIssued` ranked by detour (read from REST, Postgres and the produced topic); a claim of the top candidate consumes the hint; a restart halfway and a full replay lose and duplicate nothing; the service stays alive but not ready while Kafka is unreachable |
 | Repositories and contract | `outbound/postgres` (36) | the repository contract suite (`internal/testing/repocontract`) for policies, trips, task pool, location book, processed events and the idempotency store; one Active hint per station even under racing issuers; version-guarded policy writes under races; unit-of-work rollback and nesting; outbox ordering, retry, attempt cap and trace-context headers; migrations apply, re-run as a no-op, every `down` restores the previous schema, and run from the unpooled URL only |
 | Outbox relay | `outbound/outbox` (8) | exact envelopes published for issued/consumed/expired, crash and restart without duplicates, a crash between send and mark republishes the **same id**, the attempt cap excludes a poison row, re-arming claims it again, no cap lets a poison row block later rows |
 | Consumers | `inbound/kafka` (4) | the fulfillment consumer and the layout consumer over a real Kafka and Postgres, and the no-policy case issuing no hint |
@@ -149,8 +156,7 @@ surviving mutant. A failing scheduled run opens or refreshes a `harness:red` iss
 sensors listed with their rules on [Architecture](https://iqvo.github.io/task-interleaving/docs/overview/architecture#rules-enforced-by-internalarchitecture).
 Each sensor that scans source also has a test that proves it can fail
 (`...SensorBites`, `...SensorFailsOnBadFixtures`, `TestEventCatalogueDetector`).
-Only `TestMCPOptionalToolInputsCarryOmitempty` skips (there is no MCP adapter);
-`go test` prints the reason.
+No sensor skips: the MCP sensors run against `internal/adapters/inbound/mcp` and the A2A sensors against `internal/adapters/inbound/a2a` and `cmd/a2a`.
 
 ```bash
 make arch-test
@@ -174,7 +180,7 @@ weekly (Monday 06:00 UTC, mutation and drift only) and on manual dispatch.
 | `drift` | deadcode, `go mod tidy -diff`, knip in `web/`, coverage-quality; advisory | schedule and dispatch only |
 | `api-lint` | Spectral on `apis/openapi.yaml` (`.spectral.yaml`) and `apis/asyncapi.yaml` (`.spectral.asyncapi.yaml`), `--fail-severity=warn` | always |
 | `vuln` | `govulncheck ./...` | always |
-| `chart-tests` | every `charts/task-interleaving/tests/*.sh` and `test_*.py`; with none it prints a warning and exits 0 | always |
+| `chart-tests` | every `charts/task-interleaving/tests/*.sh` and `test_*.py` (`render_test.sh`, `test_service_selectors.py`, `test_kong_config.py`); with none it prints a warning and exits 0 | always |
 | `arch-test` | `go test ./internal/architecture/... -v` | always |
 | `docker-publish` | build, push to `ghcr.io/iqvo/task-interleaving`, cosign signature, SBOM; needs the jobs above | push to `main` only |
 | `release` | tags the next patch version, retags the image, packages and pushes the Helm chart, creates the GitHub release | push to `main` only, after `docker-publish` |
@@ -194,10 +200,9 @@ conditions; that is expected, not a failure.
 These are mismatches between `ci.yml` and the tree, reported so nobody reads a green
 check as more than it is:
 
-- `docker-publish` builds with `context: .`, but there is no `Dockerfile`; the first
-  push to `main` would fail there.
-- `release` and `chart-tests` refer to `charts/task-interleaving`, which does not
-  exist (`chart-tests` therefore passes with a warning).
+- `ci.yml` has no `helm-lint` job (HARNESS.md lists it as a sensor for PRs into
+  `main`); `helm lint charts/task-interleaving` with `ci/default-values.yaml` and
+  `ci/all-components-values.yaml` is run by hand.
 - The `drift` job runs `npm ci` in `web/`, which does not exist.
 - `HARNESS.md` lists `docs-api-drift`, `helm-lint`, `trivy-scan` and CodeQL as
   sensors; none is in `ci.yml`. There is no job that regenerates the REST

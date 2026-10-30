@@ -319,13 +319,16 @@ Details: [warehouse-planning diagrams 2 to 7](/contexts/warehouse-planning/seque
 ## 7. Network demand
 
 network-fulfillment is the anti-corruption layer to an external retail
-fulfillment network. The network gateway is a stub today, and
-`NETWORK_MODE=live` refuses to boot.
+fulfillment network. `warehouse-infra` `develop` wires it to run
+`NETWORK_MODE=live` (its ADR 0026): the live gateway calls the in-cluster
+[retail network](/network/) through the vendor-connectivity Service, as set
+in `warehouse-infra` `develop`'s `helm-values/network-fulfillment.yaml`. The
+stub gateway stays the chart default and the test mode. The demand loop:
 
 ```mermaid
 sequenceDiagram
     autonumber
-    participant NET as Network gateway stub
+    participant NET as Retail network
     participant NF as network-fulfillment
     participant OM as order-management
     participant K as Kafka
@@ -338,14 +341,14 @@ sequenceDiagram
         NF->>NET: SubmitAcknowledgement false
     else translated
         NF-)K: NetworkOrderReceived
-        NF->>+OM: POST /orders as a held, ship-complete order
+        NF->>+OM: POST /orders, held and ship-complete
         OM-->>-NF: local order id and feasibility
         alt not feasible by the required ship-by
             NF->>OM: DELETE /orders/{id}
             NF-)K: NetworkOrderRejected
             NF->>NET: SubmitAcknowledgement false
         else feasible
-            NF-)K: NetworkOrderAcknowledged
+            NF-)K: NetworkOrderSubmitted
             NF->>NET: SubmitAcknowledgement true
         end
     end
@@ -353,6 +356,7 @@ sequenceDiagram
     Note over NF,OM: later, on the reconcile ticker
     NF->>NET: SubmissionStatus
     alt SUCCESS
+        NF-)K: NetworkOrderAcknowledged
         NF->>OM: POST /orders/{id}/release
     else FAILURE
         NF->>OM: DELETE /orders/{id}
@@ -360,8 +364,21 @@ sequenceDiagram
     end
 ```
 
+When the work ships, network-fulfillment asks the network for a label
+(`RequestLabel`), records `NetworkOrderShipmentConfirmed` and then confirms
+the shipment to the network (`SubmitShipmentConfirmation`). Two more loops share the gateway: the
+supply loop (ADR 0027) declares each node's profile (`DeclareNodeProfile`) and
+sends an inventory feed built from the persisted capability offers
+(`SubmitInventoryFeed`, with `CAPABILITY_OFFER_ENABLED=true` set in
+`warehouse-infra` `develop`), and the inbound loop (ADR 0028) polls seller shipments
+(`PollInboundShipments`), registers each as an ASN in inbound-receiving,
+projects inbound-receiving's receipt events and reports each closed receipt
+(`SubmitInboundReceipt`).
+
 Every network-fulfillment event goes to `warehouse.network-fulfillment.events`.
-No fleet context consumes that topic yet. Details:
+exception-management consumes its two alarm types,
+`AcknowledgementDeadlineAtRisk` and `OrphanedHoldCancelled`; the
+`networkorder.*` types have no consumer. Details:
 [network-fulfillment diagrams 1 to 4](/contexts/network-fulfillment/sequence-diagrams).
 
 ## 8. Event-fed cache instead of a synchronous call
@@ -392,7 +409,7 @@ sequenceDiagram
 
 | Upstream topic and types | Downstream cache | Selected by |
 | --- | --- | --- |
-| process-path-management `ProcessPath*` (and `CPTScheduleChanged` where needed) | path catalogues in fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment `PATH_CATALOGUE_SOURCE=kafka` in the first four. The default is a YAML file in fulfillment-execution, wes-work-planning and workforce-management, and `none` in order-management. network-fulfillment's cache is behind `CAPABILITY_OFFER_ENABLED` |
+| process-path-management `ProcessPath*` (and `CPTScheduleChanged` where needed) | path catalogues in fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment | `PATH_CATALOGUE_SOURCE=kafka` in the first four. The default is a YAML file in fulfillment-execution, wes-work-planning and workforce-management, and `none` in order-management. network-fulfillment's cache is behind `CAPABILITY_OFFER_ENABLED` |
 | facility-layout `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | inventory-storage's location classification cache | `LOCATION_LOOKUP_MODE=kafka`. `http` is the wired rollback to `GET /locations/{code}/classification` |
 | labor-performance `TaskPerformanceRecorded` | workforce-management's labor-performance cache | `LABOR_PERFORMANCE_MODE=kafka-cache`. `http` calls `GET /task-types/{taskType}/performance`, and the service default is `permissive` |
 | wes-work-planning `PathCapacityChanged` | path-capacity caches in order-management and network-fulfillment | order-management's path catalogue source, and network-fulfillment's `CAPABILITY_OFFER_ENABLED` |

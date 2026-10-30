@@ -1,1 +1,0 @@
-{"parameters":[{"name":"asnNumber","in":"path","required":true,"description":"The ASN number (1 to 64 characters of `[A-Za-z0-9._-]`).","schema":{"type":"string","minLength":1,"maxLength":64,"pattern":"^[A-Za-z0-9._-]+$"},"example":"ASN-1001"}]}

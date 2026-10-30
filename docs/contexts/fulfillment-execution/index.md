@@ -42,8 +42,18 @@ Work released on the `REPLENISH` path is the same shape for pick-face top-ups: a
 `REPLENISH` task carries the planned move (request id, SKU, reserve and pick-face
 bins, quantity, `NORMAL` or `URGENT`), the operator confirms the quantity, and the
 completion's `TaskCompleted` adds the request id as `request_ref`. The release is
-produced by `wes-work-planning` (its ADR 0042, opt-in and off in the reference
-deployment), so no `REPLENISH` task exists there today.
+produced by `wes-work-planning` (its ADR 0042), whose replenishment consumer runs
+with `REPLENISHMENT_MODE=kafka` in `warehouse-infra` `develop`.
+
+Case-aware picking ([ADR 0054](https://github.com/IQVO/fulfillment-execution/blob/develop/docs/docs/adr/0054-case-and-each-pick-scans-and-break-case-task.md)):
+`POST /tasks/{id}/scans` (`confirmPickScan`) confirms each scanned each or case
+GTIN against a `PICK` task, resolved against the local copy of `product-master`'s
+pack levels, and counts the eaches confirmed so far. When an each pick finds only
+a sealed case at its source, a `BREAK_CASE` task is created;
+`POST /tasks/{id}/break-case` (`completeCaseBreak`) asks `inventory-storage` to
+break the container (`POST /containers/{lpn}:break`, with an `Idempotency-Key`
+stable per task) and only then completes the task. If `inventory-storage` cannot
+be reached the task stays claimed (`503`).
 
 ## This context's pages
 

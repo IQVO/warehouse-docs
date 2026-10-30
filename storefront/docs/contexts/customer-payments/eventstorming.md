@@ -7,8 +7,8 @@ description: Process-level EventStorming boards for Customer Payments, covering 
 
 # EventStorming
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `customer-payments` service is built on develop ([`IQVO/customer-payments`](https://github.com/IQVO/customer-payments) at `530c7cb`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/customer-payments#service-and-operations) section lists it.
 :::
 
 Process-level boards in the ddd-crew
@@ -243,7 +243,7 @@ flowchart LR
     G1["PaymentAuthorization"]:::aggregate
     E9["PaymentAuthorizationExpired"]:::event
     AN([analytics]):::actor
-    E10["PaymentReauthorized<br/>new expiresAt, providerRef"]:::event
+    E10["PaymentReauthorized<br/>new expiresAt,<br/>providerAuthorizationId"]:::event
     E11["PaymentDeclined<br/>reason REAUTH_DECLINED"]:::event
 
     T --> P7
@@ -277,7 +277,7 @@ VoidUnboundAuthorizations]`, `.aggregates[PaymentAuthorization]` (`commands`,
 Omitted: the capture-after-expiry guard (`ErrCaptureAfterExpiry`, board 3).
 The two policies are the model's only clock-driven rules. A successful
 reauthorization keeps the state `AUTHORIZED` and raises `PaymentReauthorized`
-with the new `expiresAt` and `providerRef` (H1). A provider decline moves the
+with the new `expiresAt` and `providerAuthorizationId` (H1; the design called it `providerRef`). A provider decline moves the
 authorization to `EXPIRED` and raises `PaymentDeclined{reason:
 REAUTH_DECLINED}`, which is what raises `ExpireAuthorization` (H2).
 

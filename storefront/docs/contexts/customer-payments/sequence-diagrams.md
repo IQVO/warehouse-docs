@@ -2,18 +2,18 @@
 id: sequence-diagrams
 title: Sequence Diagrams
 sidebar_label: Sequence Diagrams
-description: Proposed UML sequence diagrams for every Customer Payments command use case, from inbound adapter through aggregate, repository, the payment provider Anti-Corruption Layer port and outbox to Kafka, with error, concurrency and idempotency branches.
+description: UML sequence diagrams for every Customer Payments command use case, from inbound adapter through aggregate, repository, the payment provider Anti-Corruption Layer port and outbox to Kafka, with error, concurrency and idempotency branches.
 ---
 
 # Sequence Diagrams
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `customer-payments` service is built on develop ([`IQVO/customer-payments`](https://github.com/IQVO/customer-payments) at `530c7cb`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/customer-payments#service-and-operations) section lists it.
 :::
 
 One UML sequence diagram per command use case on
 [Use Cases](/storefront/contexts/customer-payments/use-cases). Participant
-names are the proposed packages and ports from the
+names are the packages and ports the model designs, from the
 [Class Diagram](/storefront/contexts/customer-payments/class-diagram):
 
 - `http`, `kafka consumer` and `scheduler` are the inbound adapters.
@@ -26,7 +26,7 @@ names are the proposed packages and ports from the
   inbox and the idempotency store. They share one transaction through
   `UnitOfWork`.
 - `Relay / Kafka` is the outbox relay. It reads committed `outbox_events`
-  rows and publishes them to `retailnetwork.customer-payments.analytics` —
+  rows and publishes them to `retailnetwork.customer-payments.events` —
   the only topic the context writes to (all eight events are analytics-only by design).
 
 The provider call is made **before** the transaction opens and carries the
@@ -364,8 +364,8 @@ sequenceDiagram
             A-->>UC: EXPIRED, PaymentDeclined(REAUTH_DECLINED)
             UC->>DB: BEGIN, save with version check,<br/>outbox PaymentDeclined, COMMIT
         else reauthorized
-            P-->>UC: new expiresAt, providerRef
-            UC->>A: ReauthorizePayment(expiresAt, providerRef)
+            P-->>UC: new expiresAt, providerAuthorizationId
+            UC->>A: Reauthorize(providerAuthorizationId, expiresAt)
             A-->>UC: AUTHORIZED, PaymentReauthorized
             UC->>DB: BEGIN, save with version check,<br/>outbox PaymentReauthorized, COMMIT
         end

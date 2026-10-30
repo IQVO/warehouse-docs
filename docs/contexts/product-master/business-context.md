@@ -111,18 +111,17 @@ no shared database, no cross-context REST call (ADR 0003).
   order-management ADR 0036, wes-work-planning ADR 0035,
   fulfillment-execution ADR 0039). Stage E (removing the legacy importer,
   the backfill command and the deprecated endpoint) is not done.
-- The reference deployment runs product-master and all four consumers in
-  `kafka` mode (deployed 2026-10-07): `warehouse-infra` has a
-  `product-master` entry in `terraform/locals.tf`, sets
-  `PRODUCT_CLASSIFICATION_MODE=kafka` for `wes-work-planning` and
-  `fulfillment-execution` in `sync_edge_env`, and sets the dedicated chart
-  values for `order-management` (`productClassification.mode: kafka`) and
-  `inventory-storage` (`productMasterConsumerGroup`). The stage B backfill
-  (`inventory republish-product-classifications`) was run once on
-  2026-10-07 and republished 6 rows.
-- Four of the five published types have no consumer yet. The physical
-  profile's intended downstream uses (expected package weight at the weigh
-  check, cube-based slot fit, cube-based storage capacity) are later phases.
+- `warehouse-infra` `develop` registers product-master (`terraform/apps.yaml`)
+  and sets every consumer's group: the six `ProductClassified` local copies
+  (`inventory-storage`, `order-management`, `wes-work-planning`,
+  `fulfillment-execution`, `slotting-optimization`, `returns-processing`) and
+  the seven pack-level local views of ADR 0011. The stage B backfill
+  (`inventory republish-product-classifications`) was run once on 2026-10-07;
+  the legacy importer was removed at stage E.
+- One of the eight published types, `ProductDescriptionChanged`, has no
+  consumer. The physical profile feeds `slotting-optimization`'s slot fit;
+  its other intended uses (expected package weight at the weigh check,
+  cube-based storage capacity) are later phases.
 - There is no measurement history: only the latest measurement is kept
   (ADR 0002). The analytics read side
   ([ADR 0006](https://github.com/IQVO/product-master/blob/develop/docs/adr/0006-analytics-read-side.md))

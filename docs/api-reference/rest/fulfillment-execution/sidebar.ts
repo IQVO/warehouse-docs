@@ -8,6 +8,22 @@ const sidebar: SidebarsConfig = {
     },
     {
       type: "category",
+      label: "Work Planning Delegation",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/fulfillment-execution/work-planning-delegation",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/fulfillment-execution/request-next-work",
+          label: "Ask the Work Planning agent (over A2A) to admit the next unit for a path",
+          className: "api-method post",
+        },
+      ],
+    },
+    {
+      type: "category",
       label: "Tasks",
       link: {
         type: "doc",
@@ -42,6 +58,18 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/rest/fulfillment-execution/complete-task",
           label: "Complete a task on behalf of the station that claimed it",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/fulfillment-execution/confirm-pick-scan",
+          label: "Confirm one scan of an each or case GTIN against a PICK task",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/fulfillment-execution/complete-case-break",
+          label: "Complete a BREAK_CASE task by breaking the sealed case in inventory-storage",
           className: "api-method post",
         },
         {

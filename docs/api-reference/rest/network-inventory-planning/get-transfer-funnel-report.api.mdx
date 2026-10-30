@@ -55,19 +55,19 @@ be non-empty and at most 366 days. 200 with `days: []` when nothing matches.
 </Heading>
 
 <ParamsDetails
-  {...require("./get-transfer-funnel-report.ParamsDetails.json")}
+  parameters={[{"name":"from","in":"query","required":false,"description":"RFC 3339; inclusive. Defaults to `to` minus 30 days.","schema":{"type":"string","format":"date-time"},"example":"2026-10-05T00:00:00Z"},{"name":"to","in":"query","required":false,"description":"RFC 3339; exclusive. Defaults to now.","schema":{"type":"string","format":"date-time"},"example":"2026-10-07T00:00:00Z"}]}
 >
   
 </ParamsDetails>
 
 <RequestSchema
-  {...require("./get-transfer-funnel-report.RequestSchema.json")}
+  title={"Body"}
 >
   
 </RequestSchema>
 
 <StatusCodes
-  {...require("./get-transfer-funnel-report.StatusCodes.json")}
+  responses={{"200":{"description":"The report (possibly empty).","content":{"application/json":{"schema":{"allOf":[{"type":"object","required":["from","to"],"properties":{"from":{"type":"string","format":"date-time","description":"The effective inclusive start."},"to":{"type":"string","format":"date-time","description":"The effective exclusive end."}},"title":"ReportRange"},{"type":"object","required":["days"],"properties":{"days":{"type":"array","items":{"type":"object","required":["day","state","transfers"],"properties":{"day":{"type":"string","format":"date","description":"UTC calendar day of the transition.","example":"2026-10-05"},"state":{"type":"string","description":"The saga state reached (TransferStateAdvanced `to`).","example":"APPROVED"},"transfers":{"type":"integer","minimum":1,"description":"Distinct transfers that reached the state that day.","example":5}},"title":"TransferFunnelDay"}}}}],"title":"TransferFunnelReport"}}}},"400":{"description":"RFC 7807 problem+json error.","content":{"application/problem+json":{"schema":{"type":"object","required":["type","title","status"],"properties":{"type":{"type":"string","description":"Stable machine-readable problem identifier."},"title":{"type":"string"},"status":{"type":"integer"},"detail":{"type":"string"}},"title":"Problem"}}}},"500":{"description":"RFC 7807 problem+json error.","content":{"application/problem+json":{"schema":{"type":"object","required":["type","title","status"],"properties":{"type":{"type":"string","description":"Stable machine-readable problem identifier."},"title":{"type":"string"},"status":{"type":"integer"},"detail":{"type":"string"}},"title":"Problem"}}}}}}
 >
   
 </StatusCodes>

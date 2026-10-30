@@ -8,7 +8,7 @@ description: "Order Sourcing, a Core subdomain of the retail network: decides, a
 # Order Sourcing
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-core">Core</span>
@@ -61,6 +61,24 @@ assignment for good. When no node can still meet the promise's
 
 The REST contract is `apis/order-sourcing/openapi.yaml` (proposed, OpenAPI
 3.0.3), rendered under the [API reference](/network/api-reference).
+
+## Service and operations
+
+- **Service:** [`IQVO/order-sourcing`](https://github.com/IQVO/order-sourcing) on `develop` (`62a2e03`,
+  2026-10-26): binaries `cmd/api` (REST) and `cmd/mcp` (read-only MCP), and the console
+  remote in `web/`.
+- **Deployment:** wired in warehouse-infra develop: a `terraform/apps.yaml` entry
+  (`database: true`, `frontend_remote: order_sourcing_mfe`) and `helm-values/order-sourcing.yaml`
+  (MCP enabled, gateway path `/api/mcp/order-sourcing`). The cluster itself was not checked in this
+  refresh.
+- **Observability:** [service ADR 0008](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0008-fleet-observability-standard.md),
+  *Adopt the fleet observability standard*, Accepted 2026-10-26. Logs, metrics and traces leave
+  over OTLP to the otel-collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, chart default
+  `otel-collector.observability.svc.cluster.local:4317`; `OTEL_SERVICE_NAME`). The Tier-2
+  business counter is `sourcing.groups.sourced` (unit `{group}`, in
+  `internal/adapters/outbound/telemetry/sourcing_metrics.go`), with attribute `outcome` = `queued`, `released`, `unsourceable` or `failed` and
+  `reason` on the outcomes that are not a success. The dashboard queries it as `sourcing_groups_sourced_total` in warehouse-infra's
+  `terraform/dashboards/contexts/order-sourcing.json`, by `outcome`.
 
 ## Elsewhere
 

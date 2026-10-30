@@ -7,8 +7,8 @@ description: "Why Seller Inbound is a Supporting subdomain, plotted on the ddd-c
 
 # Core Domain Chart
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). Nothing in this context is built yet, and unlike the other ten contexts it has no reference service: it is design only ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)). Identifiers (`Err...` names, routes, CloudEvents types) are the names an implementation must use.
+:::info[As built]
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built ([`IQVO/seller-inbound`](https://github.com/IQVO/seller-inbound), designed by [ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)); the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. Where the model left a choice open, the service's own ADRs 0002 to 0005 record what it does.
 :::
 
 Following the ddd-crew [Core Domain Charts](https://github.com/ddd-crew/core-domain-charts):
@@ -48,7 +48,7 @@ sets the network apart ([ADR 0002](/network/adr/0002-promise-and-assignment-are-
 It enables supply; it does not differentiate.
 
 **Model complexity is moderate (x = 0.48).** Three aggregates, one with a
-child entity (`Carton`) and an eight-edge state machine, ten consumed event
+child entity (`Carton`) and an eight-edge state machine, eight consumed event
 types from three producers, and invariants that depend on two local read
 models (`NodeInboundView`, `CatalogPackagingView`). The hardest part is
 validating a carton set against a plan and a packaging hierarchy, not the

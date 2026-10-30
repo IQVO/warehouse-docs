@@ -1188,6 +1188,517 @@
           ]
         }
       }
+    },
+    "warehouse.labor-performance.events": {
+      "description": "labor-performance's integration topic (its ADR 0013), CONSUMED by this\nservice — not published: key and `subject` = the associate id,\n`source=/warehouse/labor-performance`. This service consumes only\n`com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded`\nand ignores every other type. The consumer is the measured-rate cache\n(`LABOR_PERFORMANCE_MODE=kafka-cache`, the `laborperformancecache`\nadapter: a per-process consumer group replays the topic's full history\nat startup, then keeps the local mean and idle-share totals current);\nthis channel mirrors labor-performance's own apis/asyncapi.yaml\nread-only.\n",
+      "subscribe": {
+        "operationId": "consumeLaborPerformanceEvents",
+        "summary": "Keep the local measured-rate cache current for ProposePathPlan.",
+        "description": "Subscribe to labor-performance's TaskPerformanceRecorded stream.\nEvery message updates the running mean of `actual_seconds` and the\nrunning idle share for its `task_type`. `efficiency_pct` is nullable\nand unused here (never coerced to 0); `idle_seconds_before` is\nnullable (\"not observed\"; such a message contributes to the actual\ntotal only). Messages are CloudEvents 1.0 structured-mode JSON\n(dataschema\n`urn:warehouse:labor-performance:events:TaskPerformanceRecorded:v1`).\nA message that is not a valid CloudEvents 1.0 event is logged at WARN\nand skipped; the cache dedupes on `id`.\n",
+        "tags": [
+          {
+            "name": "labor-performance",
+            "description": "Consumed from the labor-performance bounded context."
+          }
+        ],
+        "message": {
+          "name": "TaskPerformanceRecorded",
+          "title": "Task Performance Recorded (from labor-performance, consumed)",
+          "summary": "One completed task was scored against the standard active at completion time.",
+          "description": "CONSUMED, not produced. Pinned by labor-performance's\n`apis/asyncapi.yaml`: type\n`com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded`,\n`source=/warehouse/labor-performance`, subject and Kafka key = the\nassociate id. `efficiency_pct` is NULL when the task could not be\nscored (a real business fact, never coerced to 0) and\n`idle_seconds_before` is NULL when no idle gap was observed; the\nmeasured-rate cache (`laborperformancecache`) updates its\nper-`task_type` running mean of `actual_seconds` and running idle\nshare from every message.\n",
+          "contentType": "application/cloudevents+json",
+          "tags": [
+            {
+              "name": "labor-performance",
+              "description": "Consumed from labor-performance."
+            }
+          ],
+          "payload": {
+            "type": "object",
+            "description": "CloudEvents 1.0 envelope of labor-performance's\nTaskPerformanceRecorded, the integration payload, as consumed here\n(not composed from CloudEventBase, whose `source` is this service's\nown).\n",
+            "required": [
+              "specversion",
+              "id",
+              "source",
+              "type",
+              "subject",
+              "time",
+              "datacontenttype",
+              "dataschema",
+              "data"
+            ],
+            "properties": {
+              "specversion": {
+                "type": "string",
+                "enum": [
+                  "1.0"
+                ],
+                "x-parser-schema-id": "<anonymous-schema-84>"
+              },
+              "id": {
+                "type": "string",
+                "description": "CloudEvents id; the cache's dedupe key.",
+                "x-parser-schema-id": "<anonymous-schema-85>"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "/warehouse/labor-performance"
+                ],
+                "x-parser-schema-id": "<anonymous-schema-86>"
+              },
+              "type": {
+                "type": "string",
+                "const": "com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded",
+                "x-parser-schema-id": "<anonymous-schema-87>"
+              },
+              "subject": {
+                "type": "string",
+                "description": "The associate id (also the Kafka key); the task id when the task could not be scored.",
+                "x-parser-schema-id": "<anonymous-schema-88>"
+              },
+              "time": {
+                "type": "string",
+                "format": "date-time",
+                "x-parser-schema-id": "<anonymous-schema-89>"
+              },
+              "datacontenttype": {
+                "type": "string",
+                "enum": [
+                  "application/json"
+                ],
+                "x-parser-schema-id": "<anonymous-schema-90>"
+              },
+              "dataschema": {
+                "type": "string",
+                "description": "urn:warehouse:labor-performance:events:TaskPerformanceRecorded:v1",
+                "x-parser-schema-id": "<anonymous-schema-91>"
+              },
+              "data": {
+                "type": "object",
+                "description": "Mirrors labor-performance's TaskPerformanceRecordedEventsData field-for-field.",
+                "required": [
+                  "task_id",
+                  "task_type",
+                  "actual_seconds",
+                  "completed_at"
+                ],
+                "properties": {
+                  "task_id": {
+                    "type": "string",
+                    "description": "fulfillment-execution's task id, an opaque foreign reference.",
+                    "x-parser-schema-id": "<anonymous-schema-93>"
+                  },
+                  "associate_id": {
+                    "type": "string",
+                    "description": "The associate who completed the task; the empty string means no checked-in occupant (e.g. a robot station).",
+                    "x-parser-schema-id": "<anonymous-schema-94>"
+                  },
+                  "task_type": {
+                    "type": "string",
+                    "description": "PICK, PACK, SLAM, or the empty string when the type could not be resolved.",
+                    "x-parser-schema-id": "<anonymous-schema-95>"
+                  },
+                  "efficiency_pct": {
+                    "type": "number",
+                    "format": "double",
+                    "nullable": true,
+                    "description": "100 * standard_seconds / actual_seconds, or NULL when unscorable; never coerced to 0.",
+                    "x-parser-schema-id": "<anonymous-schema-96>"
+                  },
+                  "actual_seconds": {
+                    "type": "integer",
+                    "format": "int64",
+                    "description": "The measured duration; 0 means unmeasurable.",
+                    "x-parser-schema-id": "<anonymous-schema-97>"
+                  },
+                  "idle_seconds_before": {
+                    "type": "integer",
+                    "format": "int64",
+                    "nullable": true,
+                    "description": "The idle gap immediately before this task's claim; NULL when not observed (additive field).",
+                    "x-parser-schema-id": "<anonymous-schema-98>"
+                  },
+                  "completed_at": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "When the associate finished — the business time, distinct from the CloudEvents `time`.",
+                    "x-parser-schema-id": "<anonymous-schema-99>"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-92>"
+              }
+            },
+            "x-parser-schema-id": "TaskPerformanceRecordedEvent"
+          },
+          "examples": [
+            {
+              "name": "scoredPickTask",
+              "summary": "A PICK task scored at 91.2% of standard after a 90s idle gap.",
+              "payload": {
+                "specversion": "1.0",
+                "id": "7a2d5e91-3f04-4c8b-9e12-8b4a6d1c5f30",
+                "source": "/warehouse/labor-performance",
+                "type": "com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded",
+                "subject": "assoc-4471",
+                "time": "2026-09-05T11:00:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:labor-performance:events:TaskPerformanceRecorded:v1",
+                "data": {
+                  "task_id": "task-10231",
+                  "associate_id": "assoc-4471",
+                  "task_type": "PICK",
+                  "efficiency_pct": 91.2,
+                  "actual_seconds": 41,
+                  "idle_seconds_before": 90,
+                  "completed_at": "2026-09-05T09:30:00Z"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.process-path-management.events": {
+      "description": "process-path-management's integration topic (the `Topic` constant in\n`internal/adapters/outbound/kafkacatalog/consumer.go`), CONSUMED by this\nservice, not published: key and `subject` = the path id,\n`source=/warehouse/process-path-management`. This service acts on\n`ProcessPathCreated`, `ProcessPathUpdated` and `ProcessPathDeactivated`\nand ignores every other type (`CPTScheduleChanged` included). The\nconsumer is the process-path catalogue (`PATH_CATALOGUE_SOURCE=kafka`,\nthe default; `file` is rejected at boot): a per-process, unique consumer\ngroup (prefix `workforce-management-process-path-catalogue`) replays the\ntopic's full history from the earliest offset at startup, and readiness\nwaits for that replay. Both `cmd/workforce` and `cmd/mcp` run one, so\npath ids are validated against the same catalogue. This channel mirrors\nprocess-path-management's own apis/asyncapi.yaml read-only.\n",
+      "subscribe": {
+        "operationId": "consumeProcessPathEvents",
+        "summary": "Keep the local process-path catalogue current.",
+        "description": "Upsert the path definition on Created and Updated (`path_id`,\n`match_prefix`, `required_capabilities`,\n`destination_location_role`; `direct` is decoded and discarded) and\nremove it on Deactivated. Messages are CloudEvents 1.0\nstructured-mode JSON (dataschema\n`urn:warehouse:process-path-management:events:<EventName>:v1`).\n",
+        "tags": [
+          {
+            "name": "process-path-management",
+            "description": "Consumed from the process-path-management bounded context."
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "ProcessPathCreated",
+              "title": "ProcessPathCreated (from process-path-management, consumed)",
+              "summary": "A process path was defined.",
+              "description": "CONSUMED, not produced. Pinned by process-path-management's\n`apis/asyncapi.yaml`: type\n`com.warehouse.wes.process-path-management.processpath.ProcessPathCreated`,\n`source=/warehouse/process-path-management`, subject and Kafka key =\nthe path id.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "process-path-management",
+                  "description": "Consumed from process-path-management."
+                }
+              ],
+              "payload": {
+                "type": "object",
+                "description": "CloudEvents 1.0 envelope of process-path-management's ProcessPathCreated, the\nintegration payload, as consumed here.\n",
+                "required": [
+                  "specversion",
+                  "id",
+                  "source",
+                  "type",
+                  "subject",
+                  "time",
+                  "datacontenttype",
+                  "dataschema",
+                  "data"
+                ],
+                "properties": {
+                  "specversion": {
+                    "type": "string",
+                    "enum": [
+                      "1.0"
+                    ],
+                    "x-parser-schema-id": "<anonymous-schema-100>"
+                  },
+                  "id": {
+                    "type": "string",
+                    "x-parser-schema-id": "<anonymous-schema-101>"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "/warehouse/process-path-management"
+                    ],
+                    "x-parser-schema-id": "<anonymous-schema-102>"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathCreated",
+                    "x-parser-schema-id": "<anonymous-schema-103>"
+                  },
+                  "subject": {
+                    "type": "string",
+                    "description": "The path id (also the Kafka key).",
+                    "x-parser-schema-id": "<anonymous-schema-104>"
+                  },
+                  "time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "x-parser-schema-id": "<anonymous-schema-105>"
+                  },
+                  "datacontenttype": {
+                    "type": "string",
+                    "enum": [
+                      "application/json"
+                    ],
+                    "x-parser-schema-id": "<anonymous-schema-106>"
+                  },
+                  "dataschema": {
+                    "type": "string",
+                    "const": "urn:warehouse:process-path-management:events:ProcessPathCreated:v1",
+                    "x-parser-schema-id": "<anonymous-schema-107>"
+                  },
+                  "data": {
+                    "type": "object",
+                    "description": "The fields this service reads; the producer's payload carries more (cycle_time_p95, eligibility, intake), ignored here.",
+                    "required": [
+                      "path_id"
+                    ],
+                    "properties": {
+                      "path_id": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-109>"
+                      },
+                      "match_prefix": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-110>"
+                      },
+                      "direct": {
+                        "type": "boolean",
+                        "description": "Decoded and discarded; absent means false.",
+                        "x-parser-schema-id": "<anonymous-schema-111>"
+                      },
+                      "required_capabilities": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "x-parser-schema-id": "<anonymous-schema-113>"
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-112>"
+                      },
+                      "destination_location_role": {
+                        "type": "string",
+                        "enum": [
+                          "Drop",
+                          "WorkCenter",
+                          "Shipping"
+                        ],
+                        "description": "Omitted when the path declares none.",
+                        "x-parser-schema-id": "<anonymous-schema-114>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-108>"
+                  }
+                },
+                "x-parser-schema-id": "ProcessPathCreatedEvent"
+              }
+            },
+            {
+              "name": "ProcessPathUpdated",
+              "title": "ProcessPathUpdated (from process-path-management, consumed)",
+              "summary": "A process path definition changed.",
+              "description": "CONSUMED, not produced. Pinned by process-path-management's\n`apis/asyncapi.yaml`: type\n`com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated`,\n`source=/warehouse/process-path-management`, subject and Kafka key =\nthe path id.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "process-path-management",
+                  "description": "Consumed from process-path-management."
+                }
+              ],
+              "payload": {
+                "type": "object",
+                "description": "CloudEvents 1.0 envelope of process-path-management's ProcessPathUpdated, the\nintegration payload, as consumed here.\n",
+                "required": [
+                  "specversion",
+                  "id",
+                  "source",
+                  "type",
+                  "subject",
+                  "time",
+                  "datacontenttype",
+                  "dataschema",
+                  "data"
+                ],
+                "properties": {
+                  "specversion": {
+                    "type": "string",
+                    "enum": [
+                      "1.0"
+                    ],
+                    "x-parser-schema-id": "<anonymous-schema-115>"
+                  },
+                  "id": {
+                    "type": "string",
+                    "x-parser-schema-id": "<anonymous-schema-116>"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "/warehouse/process-path-management"
+                    ],
+                    "x-parser-schema-id": "<anonymous-schema-117>"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated",
+                    "x-parser-schema-id": "<anonymous-schema-118>"
+                  },
+                  "subject": {
+                    "type": "string",
+                    "description": "The path id (also the Kafka key).",
+                    "x-parser-schema-id": "<anonymous-schema-119>"
+                  },
+                  "time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "x-parser-schema-id": "<anonymous-schema-120>"
+                  },
+                  "datacontenttype": {
+                    "type": "string",
+                    "enum": [
+                      "application/json"
+                    ],
+                    "x-parser-schema-id": "<anonymous-schema-121>"
+                  },
+                  "dataschema": {
+                    "type": "string",
+                    "const": "urn:warehouse:process-path-management:events:ProcessPathUpdated:v1",
+                    "x-parser-schema-id": "<anonymous-schema-122>"
+                  },
+                  "data": {
+                    "type": "object",
+                    "description": "The fields this service reads; the producer's payload carries more (cycle_time_p95, eligibility, intake), ignored here.",
+                    "required": [
+                      "path_id"
+                    ],
+                    "properties": {
+                      "path_id": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-124>"
+                      },
+                      "match_prefix": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-125>"
+                      },
+                      "direct": {
+                        "type": "boolean",
+                        "description": "Decoded and discarded; absent means false.",
+                        "x-parser-schema-id": "<anonymous-schema-126>"
+                      },
+                      "required_capabilities": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "x-parser-schema-id": "<anonymous-schema-128>"
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-127>"
+                      },
+                      "destination_location_role": {
+                        "type": "string",
+                        "enum": [
+                          "Drop",
+                          "WorkCenter",
+                          "Shipping"
+                        ],
+                        "description": "Omitted when the path declares none.",
+                        "x-parser-schema-id": "<anonymous-schema-129>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-123>"
+                  }
+                },
+                "x-parser-schema-id": "ProcessPathUpdatedEvent"
+              }
+            },
+            {
+              "name": "ProcessPathDeactivated",
+              "title": "ProcessPathDeactivated (from process-path-management, consumed)",
+              "summary": "A process path was deactivated; it carries only the path id.",
+              "description": "CONSUMED, not produced. Pinned by process-path-management's\n`apis/asyncapi.yaml`: type\n`com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated`,\n`source=/warehouse/process-path-management`, subject and Kafka key =\nthe path id.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "process-path-management",
+                  "description": "Consumed from process-path-management."
+                }
+              ],
+              "payload": {
+                "type": "object",
+                "description": "CloudEvents 1.0 envelope of process-path-management's ProcessPathDeactivated, the\nintegration payload, as consumed here.\n",
+                "required": [
+                  "specversion",
+                  "id",
+                  "source",
+                  "type",
+                  "subject",
+                  "time",
+                  "datacontenttype",
+                  "dataschema",
+                  "data"
+                ],
+                "properties": {
+                  "specversion": {
+                    "type": "string",
+                    "enum": [
+                      "1.0"
+                    ],
+                    "x-parser-schema-id": "<anonymous-schema-130>"
+                  },
+                  "id": {
+                    "type": "string",
+                    "x-parser-schema-id": "<anonymous-schema-131>"
+                  },
+                  "source": {
+                    "type": "string",
+                    "enum": [
+                      "/warehouse/process-path-management"
+                    ],
+                    "x-parser-schema-id": "<anonymous-schema-132>"
+                  },
+                  "type": {
+                    "type": "string",
+                    "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated",
+                    "x-parser-schema-id": "<anonymous-schema-133>"
+                  },
+                  "subject": {
+                    "type": "string",
+                    "description": "The path id (also the Kafka key).",
+                    "x-parser-schema-id": "<anonymous-schema-134>"
+                  },
+                  "time": {
+                    "type": "string",
+                    "format": "date-time",
+                    "x-parser-schema-id": "<anonymous-schema-135>"
+                  },
+                  "datacontenttype": {
+                    "type": "string",
+                    "enum": [
+                      "application/json"
+                    ],
+                    "x-parser-schema-id": "<anonymous-schema-136>"
+                  },
+                  "dataschema": {
+                    "type": "string",
+                    "const": "urn:warehouse:process-path-management:events:ProcessPathDeactivated:v1",
+                    "x-parser-schema-id": "<anonymous-schema-137>"
+                  },
+                  "data": {
+                    "type": "object",
+                    "required": [
+                      "path_id"
+                    ],
+                    "properties": {
+                      "path_id": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-139>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-138>"
+                  }
+                },
+                "x-parser-schema-id": "ProcessPathDeactivatedEvent"
+              }
+            }
+          ]
+        }
+      }
     }
   },
   "components": {
@@ -1202,7 +1713,11 @@
       "AssociateBreakEnded": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[6]",
       "AssociateShiftEnded": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[7]",
       "LaborAssigned": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[8]",
-      "LaborReassigned": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[9]"
+      "LaborReassigned": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[9]",
+      "TaskPerformanceRecorded": "$ref:$.channels.warehouse.labor-performance.events.subscribe.message",
+      "ProcessPathCreated": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[0]",
+      "ProcessPathUpdated": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[1]",
+      "ProcessPathDeactivated": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[2]"
     },
     "schemas": {
       "CloudEventBase": "$ref:$.channels.warehouse.workforce.events.subscribe.message.oneOf[0].payload.allOf[0]",
@@ -1216,7 +1731,11 @@
       "AssociateBreakEndedEvent": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[6].payload",
       "AssociateShiftEndedEvent": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[7].payload",
       "LaborAssignedEvent": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[8].payload",
-      "LaborReassignedEvent": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[9].payload"
+      "LaborReassignedEvent": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[9].payload",
+      "TaskPerformanceRecordedEvent": "$ref:$.channels.warehouse.labor-performance.events.subscribe.message.payload",
+      "ProcessPathCreatedEvent": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[0].payload",
+      "ProcessPathUpdatedEvent": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[1].payload",
+      "ProcessPathDeactivatedEvent": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[2].payload"
     }
   },
   "x-parser-spec-parsed": true,

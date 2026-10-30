@@ -72,7 +72,7 @@ flowchart LR
     subgraph OUT["Outbound - whom it notifies"]
         direction TB
         out0["fulfillment-execution<br/>(tie-break inside one priority band;<br/>no consumer yet)"]:::none
-        out1["own analytics side<br/>(later phase, no consumer)"]:::self
+        out1["own analytics side<br/>(ti-projector, ADR 0008)"]:::self
     end
     BC ==>|"evt - Kafka<br/>warehouse.task-interleaving.events<br/>InterleavingHintIssued"| out0
     BC ==>|"evt - Kafka<br/>warehouse.task-interleaving.analytics<br/>all four types"| out1
@@ -115,9 +115,9 @@ may use as a tie-break inside one priority band.
 
 | Collaborator | Message | Kind | Channel | Status |
 | --- | --- | --- | --- | --- |
-| fulfillment-execution | `TaskCompleted` | event | `warehouse.fulfillment.events` | producer verified; consumer built (`FULFILLMENT_MODE=kafka`) |
+| fulfillment-execution | `TaskCompleted` | event | `warehouse.fulfillment.events` | producer verified; consumer built (always on) |
 | fulfillment-execution | `TaskAvailable` (RELOCATE and REPLENISH tasks only), `TaskClaimed` (every task type) | events | `warehouse.fulfillment.events` | producer verified (its ADR 0049 and ADR 0050); consumer built |
-| facility-layout | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned`, `LocationGeometryUpdated` | events | `warehouse.facility.events` | producer verified; consumer built (`LAYOUT_MODE=kafka`) |
+| facility-layout | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned`, `LocationGeometryUpdated` | events | `warehouse.facility.events` | producer verified; consumer built (always on) |
 | operator (console, agent) | Declare policy | command | `PUT /sites/{siteId}/policy` | built |
 | operator (console, agent) | Get policy, list hints, get hint, get station, simulate | queries | `GET /sites/{siteId}/policy`, `GET /hints`, `GET /hints/{hintId}`, `GET /stations/{stationId}`, `POST /recommendations` | built |
 
@@ -126,7 +126,7 @@ may use as a tie-break inside one priority band.
 | Message | Kind | Channel | Consumers |
 | --- | --- | --- | --- |
 | `InterleavingHintIssued` | event | `warehouse.task-interleaving.events` and `warehouse.task-interleaving.analytics` | none built: fulfillment-execution does not read it yet |
-| `InterleavingHintConsumed`, `InterleavingHintExpired`, `InterleavingPolicyDeclared` | events | `warehouse.task-interleaving.analytics` only | none built (ADR 0004: a later phase) |
+| `InterleavingHintConsumed`, `InterleavingHintExpired`, `InterleavingPolicyDeclared` | events | `warehouse.task-interleaving.analytics` only | `ti-projector` (ADR 0008) |
 
 Source: `apis/asyncapi.yaml`, ADR 0004.
 

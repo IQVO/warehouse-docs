@@ -83,8 +83,7 @@ answers `503` (`explain travel factor not configured`) and the
 | `FACILITY_LAYOUT_MCP_ENDPOINT` | empty | needed by explain-travel-factor; the brief only loses site names | `list_sites`, `estimate_travel_distance` | `internal/config/config.go` | `upstreams.facilityLayout.endpoint` |
 | `INVENTORY_STORAGE_MCP_ENDPOINT` | empty | needed by `detect_stranded_reservation` | `check_availability`, `get_bin_occupancy` | `internal/config/config.go` | `upstreams.inventoryStorage.endpoint` |
 | `LABOR_PERFORMANCE_MCP_ENDPOINT` | empty | no; without it the flow balance has no `utilization` overlay | `get_task_type_utilization` | `internal/config/config.go` | `upstreams.laborPerformance.endpoint` |
-| `ORDER_MANAGEMENT_MCP_ENDPOINT` | empty | no; the client is wired but no use case calls it | `get_order` | `internal/config/config.go` | `upstreams.orderManagement.endpoint` |
-| `PROCESS_PATH_MANAGEMENT_MCP_ENDPOINT` | empty | no; the client is wired but no use case calls it | `get_process_path`, `list_process_paths` | `internal/config/config.go` | `upstreams.processPathManagement.endpoint` |
+| `ORDER_MANAGEMENT_MCP_ENDPOINT` | empty | no; without it the daily brief carries no `promiseHealth` section | `get_promise_health` ([ADR 0024](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0024-slot-plan-watch-promise-health-and-ppm-client-removal.md)) | `internal/config/config.go` | `upstreams.orderManagement.endpoint` |
 
 **Optional upstreams.** Without the client the feature is off. Nothing
 else changes.
@@ -95,7 +94,30 @@ else changes.
 | `PRODUCT_MASTER_MCP_ENDPOINT` | empty | no | `GET /master-data-gaps` answers `503` and `find_master_data_gaps` is not registered ([ADR 0020](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0020-product-master-mcp-client-and-master-data-gaps.md)). | `internal/config/config.go` | `upstreams.productMaster.endpoint` |
 | `INBOUND_RECEIVING_MCP_ENDPOINT` | empty | no | `GET /inbound-outlook` answers `503` and `get_inbound_outlook` is not registered ([ADR 0021](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0021-inbound-receiving-mcp-client-and-inbound-outlook.md)). | `internal/config/config.go` | `upstreams.inboundReceiving.endpoint` |
 | `NETWORK_INVENTORY_PLANNING_MCP_ENDPOINT` | empty | no | The three `/transfer-watch/*` routes answer `503` and the three transfer-watch tools are not registered ([ADR 0019](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0019-network-inventory-planning-transfer-watch.md)). | `internal/config/config.go` | `upstreams.networkInventoryPlanning.endpoint` |
+| `SLOTTING_OPTIMIZATION_MCP_ENDPOINT` | empty | no | No `slotPlanWatch` section in the daily brief ([ADR 0024](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/docs/adr/0024-slot-plan-watch-promise-health-and-ppm-client-removal.md)); nothing else changes. | `internal/config/config.go` | `upstreams.slottingOptimization.endpoint` |
+| `RETURNS_PROCESSING_MCP_ENDPOINT` | empty | no | No returns-processing client is built (fail-open; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.returnsProcessing.endpoint` |
+| `EXCEPTION_MANAGEMENT_MCP_ENDPOINT` | empty | no | No exception-management client is built (fail-open; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.exceptionManagement.endpoint` |
+
+| `CUSTOMER_ORDERING_MCP_ENDPOINT` | empty | no | No customer-ordering client is built (fail-open, ADR 0025; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.customerOrdering.endpoint` |
+| `DELIVERY_PROMISE_MCP_ENDPOINT` | empty | no | No delivery-promise client is built (fail-open, ADR 0025; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.deliveryPromise.endpoint` |
+| `LAST_MILE_DELIVERY_MCP_ENDPOINT` | empty | no | No last-mile-delivery client is built (fail-open, ADR 0025; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.lastMileDelivery.endpoint` |
+| `LINEHAUL_TRANSPORTATION_MCP_ENDPOINT` | empty | no | No linehaul-transportation client is built (fail-open, ADR 0025; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.linehaulTransportation.endpoint` |
+| `NODE_PERFORMANCE_MCP_ENDPOINT` | empty | no | No node-performance client is built (fail-open, ADR 0025; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.nodePerformance.endpoint` |
+| `NODE_TOPOLOGY_MCP_ENDPOINT` | empty | no | No node-topology client is built (fail-open, ADR 0025; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.nodeTopology.endpoint` |
+| `OFFER_AVAILABILITY_MCP_ENDPOINT` | empty | no | No offer-availability client is built (fail-open, ADR 0025; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.offerAvailability.endpoint` |
+| `ORDER_SOURCING_MCP_ENDPOINT` | empty | no | No order-sourcing client is built (fail-open, ADR 0025; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.orderSourcing.endpoint` |
+| `SHIPPING_AND_TRACKING_MCP_ENDPOINT` | empty | no | No shipping-and-tracking client is built (fail-open, ADR 0025; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.shippingAndTracking.endpoint` |
+| `SELLER_INBOUND_MCP_ENDPOINT` | empty | no | No seller-inbound client is built (fail-open, ADR 0023; wired, no consuming use case yet, ADR 0027). | `internal/config/config.go` | `upstreams.sellerInbound.endpoint` |
+| `VENDOR_CONNECTIVITY_MCP_ENDPOINT` | empty | no | No vendor-connectivity client is built (fail-open, ADR 0025; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.vendorConnectivity.endpoint` |
+| `TASK_INTERLEAVING_MCP_ENDPOINT` | empty | no | No task-interleaving client is built (fail-open, ADR 0025; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.taskInterleaving.endpoint` |
+| `PICK_FACE_REPLENISHMENT_MCP_ENDPOINT` | empty | no | No pick-face-replenishment client is built (fail-open, ADR 0025; wired, no consuming use case yet, so nothing else changes). | `internal/config/config.go` | `upstreams.pickFaceReplenishment.endpoint` |
 | `INBOUND_STALE_RECEIPT_AGE` | none | no | Go duration, e.g. `6h`. An Open receipt older than this is listed in `staleReceipts`. Unset, unparseable or non-positive means the section is omitted with the reason `INBOUND_STALE_RECEIPT_AGE is not configured`. There is deliberately no default. | `internal/config/config.go` | `config.inboundStaleReceiptAge` |
+| `SLOT_PLAN_STALE_AGE` | `24h` | no | Go duration, e.g. `12h`. An Approved slot plan whose moves are not fully executed this long after approval is listed in the daily brief's `slotPlanWatch.stale`. Unset, unparseable or non-positive means `24h`. Used only when `SLOTTING_OPTIMIZATION_MCP_ENDPOINT` is set. | `internal/config/config.go` | `config.slotPlanStaleAge` |
+
+The process-path-management client was removed (ADR 0024, gap A9);
+`PROCESS_PATH_MANAGEMENT_MCP_ENDPOINT` is no longer read. The endpoint
+stays configured in warehouse-infra's terraform until the orchestrator
+removes it in a later infra change.
 
 ### console-bff REST base URLs
 
@@ -160,6 +182,30 @@ see [ADR 0004](https://github.com/IQVO/warehouse-ops-agent/blob/develop/docs/doc
 warehouse-infra runs the kind cluster with `llm.mode = "shadow"` and the
 key in the Secret `warehouse-ops-agent-anthropic`
 (`terraform/ops-agent.tf`).
+
+### Act slice (ADR 0027)
+
+The human-confirmed `release_next_work` write. Opt-in: with
+`WES_WORK_PLANNING_A2A_URL` unset the agent is read-only and both
+`POST /act/release-next-work/*` routes answer `503`. None of these has a chart
+value yet; warehouse-infra sets them through `extraEnv`.
+
+| Variable | Default | Required | Effect | Source | Helm value |
+|---|---|---|---|---|---|
+| `WES_WORK_PLANNING_A2A_URL` | empty (act slice off) | no | Base URL of the wes-work-planning A2A agent, e.g. `http://wes-work-planning-a2a.warehouse-systems.svc.cluster.local:8093/`. Its Agent Card is discovered under it on first use. Setting it builds the only write adapter in this agent. | `internal/config/config.go`, `cmd/agent/act.go` | none (`extraEnv`) |
+| `APPROVAL_TTL` | `5m` | no | Go duration: how long a confirmation token stays valid. Must be positive and at most `1h`. **A malformed or non-positive value aborts startup** (it is never defaulted: it is a security parameter). | `internal/config/config.go`, `internal/domain/approval/approval.go` | none (`extraEnv`) |
+| `APPROVAL_SIGNING_KEY` | empty, which generates an ephemeral per-process key | no | HMAC key for confirmation tokens, at least 32 bytes; a shorter value aborts startup. Never logged. Empty is only coherent with `replicaCount: 1`: a token minted by one process does not verify in another. | `internal/config/config.go` | none (a Secret via `extraEnv`) |
+
+### Advisory exception context (ADR 0028)
+
+Read-only, advisory: when the act slice proposes a release, the agent also asks
+the exception-management A2A agent what is open. It never gates or changes the
+proposal. None of these has a chart value; warehouse-infra sets them through
+`extraEnv`.
+
+| Variable | Default | Required | Effect | Source | Helm value |
+|---|---|---|---|---|---|
+| `EXCEPTION_MANAGEMENT_A2A_URL` | empty (lookup off) | no | Base URL of the exception-management A2A agent, e.g. `http://exception-management-a2a.warehouse-systems.svc.cluster.local:8093/`. Unset: proposals carry `exceptionContext.status = "disabled"` and behave exactly as under ADR 0027. Set: each successful proposal asks `find_exceptions` (`status: OPEN`) under a 3 s bound and returns `ok` with a summary, or `unavailable` if the peer fails or is slow (the proposal still succeeds). **A value that is not an absolute `http(s)` URL with a host aborts startup** (it is never silently disabled). Has no effect while `WES_WORK_PLANNING_A2A_URL` is unset (no propose route). | `internal/config/config.go`, `cmd/agent/act.go` | none (`extraEnv`) |
 
 ### OpenTelemetry
 

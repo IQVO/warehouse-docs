@@ -7,8 +7,8 @@ description: The ddd-crew Bounded Context Canvas v5 for Checkout, with purpose, 
 
 # Bounded Context Canvas
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `checkout` service is built on develop ([`IQVO/checkout`](https://github.com/IQVO/checkout) at `ab4f0e9`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/checkout#service-and-operations) section lists it.
 :::
 
 Following the ddd-crew [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas).
@@ -259,12 +259,17 @@ Top terms: **Checkout Session**, **Place-Order Step** (the network's
   an authorization without `CheckoutCompleted` (hotspot H6).
 - **Silent outcomes.** `ExpireSession` and `RecordPlacementInDoubt` publish
   nothing, so analytics cannot see expiry or in-doubt volume (hotspot H7).
-- **The network contract is still planned.** `shipToAddressId`,
-  `offer-not-quotable` and `requotedOffers` are not yet in the network
-  model, which lists the hard boundary as "once built" (hotspot H8).
+- **The network contract (hotspot H8): resolved.** `shipToAddressId`,
+  `offer-not-quotable` and `requotedOffers` are now in the network model
+  (customer-ordering) and in customer-ordering's `apis/openapi.yaml` on
+  develop (`POST /checkout`, 409 `offer-not-quotable` with `requotedOffers`).
 - **The stored placement request has no name.** Its shape, its retention
   ("for the idempotency window") and its purge are unnamed (hotspot H9).
 - **How does the cart take the requoted offers?** The REST contract says the
   BFF writes them into the cart as a new quote, yet the cart's commands only
   quote through `delivery-promise` (`QuoteDelivery`); none accepts an offer set
-  from outside (hotspot H10).
+  from outside (hotspot H10). The model now has
+  `AcceptRequotedOffers`, and **as built** shopping-cart serves
+  `POST /carts/{cartId}/delivery/requoted` (`acceptRequotedOffers`), but
+  `storefront-bff` exposes no route that calls it, so the requote path is
+  not reachable from the web app yet.

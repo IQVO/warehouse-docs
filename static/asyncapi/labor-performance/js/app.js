@@ -28,7 +28,7 @@
     "production": {
       "url": "kafka.warehouse-systems.internal:9092",
       "protocol": "kafka",
-      "description": "Shared Kafka broker for warehouse-systems integration events. Locally, a broker is available at localhost:9092 via ~/warehouse-systems/docker-compose.kafka.yml."
+      "description": "Shared Kafka broker for warehouse-systems integration events. Locally, `docker compose up -d --wait kafka` in this repository provides one at localhost:9092."
     }
   },
   "defaultContentType": "application/cloudevents+json",
@@ -172,6 +172,25 @@
                         "description": "OPTIONAL. Elapsed time between the task's claim and its completion. Absent — not `0` — when no claim timestamp existed to compute it from (e.g. a task claimed before fulfillment-execution's claim-timestamp migration), or on a pre-enrichment payload. This service treats an absent field identically to `0`: the resulting TaskPerformance is recorded with `ActualSeconds=0` and `EfficiencyPct=null`, a real, expected \"unmeasurable\" business fact, not an error.",
                         "example": 52,
                         "x-parser-schema-id": "<anonymous-schema-17>"
+                      },
+                      "handling_unit": {
+                        "type": "string",
+                        "enum": [
+                          "EACH",
+                          "CASE",
+                          "PALLET"
+                        ],
+                        "description": "OPTIONAL, ADDITIVE (ADR 0035). The handling unit the completed task handled. fulfillment-execution's TaskCompleted v1 does NOT publish this field today, so on every payload published so far it is absent; this service reads it when it appears (a future additive field on the producer) and scores the completion against the standard declared for (task_type, handling_unit), falling back to the task-type-only standard. Absent, null, not a string or any other value (e.g. INNER) is treated as absent: the completion is scored exactly as before ADR 0035.",
+                        "example": "CASE",
+                        "x-parser-schema-id": "<anonymous-schema-18>"
+                      },
+                      "weight_g": {
+                        "type": "integer",
+                        "format": "int64",
+                        "minimum": 1,
+                        "description": "OPTIONAL, ADDITIVE (ADR 0035). The weight in grams of the handled case. Only meaningful with handling_unit CASE: when the CASE standard declares a team lift and weight_g is strictly greater than its threshold, the team-lift standard time scores the completion. Absent, null, non-integer or non-positive means unknown, never a team lift (a weight is never guessed). Not published by fulfillment-execution's TaskCompleted v1 today.",
+                        "example": 20000,
+                        "x-parser-schema-id": "<anonymous-schema-19>"
                       }
                     },
                     "x-parser-schema-id": "TaskCompletedData"
@@ -243,6 +262,30 @@
                   "associate_id": "assoc-4472"
                 }
               }
+            },
+            {
+              "name": "taskCompletedHeavyCase",
+              "summary": "A CASE handle carrying the OPTIONAL handling_unit and weight_g (ADR 0035). fulfillment-execution's TaskCompleted v1 does not publish these fields today; this example shows what the consumer reads when a producer adds them.",
+              "payload": {
+                "specversion": "1.0",
+                "id": "5b8e2d70-14c9-4a36-9d2f-7e0a4c6b1f83",
+                "source": "/warehouse/fulfillment-execution",
+                "type": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
+                "subject": "task-10234",
+                "time": "2026-10-24T22:15:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
+                "data": {
+                  "task_id": "task-10234",
+                  "station_id": "station-3",
+                  "work_unit_id": "order-88424-line-1",
+                  "associate_id": "assoc-4472",
+                  "duration_seconds": 75,
+                  "task_type": "PICK",
+                  "handling_unit": "CASE",
+                  "weight_g": 20000
+                }
+              }
             }
           ]
         }
@@ -281,11 +324,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.labor-performance.standard.LaborStandardDefined",
-                        "x-parser-schema-id": "<anonymous-schema-19>"
+                        "x-parser-schema-id": "<anonymous-schema-21>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:labor-performance:analytics:LaborStandardDefined:v1",
-                        "x-parser-schema-id": "<anonymous-schema-20>"
+                        "x-parser-schema-id": "<anonymous-schema-22>"
                       },
                       "data": {
                         "type": "object",
@@ -300,7 +343,7 @@
                             "type": "string",
                             "description": "Identifies this one record in the standard's append-only history. A revision mints a new id rather than reusing the prior one.",
                             "example": "std-0001",
-                            "x-parser-schema-id": "<anonymous-schema-21>"
+                            "x-parser-schema-id": "<anonymous-schema-23>"
                           },
                           "task_type": {
                             "type": "string",
@@ -311,14 +354,14 @@
                             ],
                             "description": "The task type this standard applies to.",
                             "example": "PICK",
-                            "x-parser-schema-id": "<anonymous-schema-22>"
+                            "x-parser-schema-id": "<anonymous-schema-24>"
                           },
                           "expected_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "description": "The engineered expected duration. Always greater than zero.",
                             "example": 45,
-                            "x-parser-schema-id": "<anonymous-schema-23>"
+                            "x-parser-schema-id": "<anonymous-schema-25>"
                           },
                           "travel_component_seconds": {
                             "type": "integer",
@@ -326,20 +369,47 @@
                             "minimum": 0,
                             "description": "Optional declaration of how much of expected_seconds is attributable to travel between locations for this task type. Omitted entirely (not present, not null) when the standard never declared one — the default, most common case. This service never computes or validates it against a live location lookup (ADR 0015).",
                             "example": 15,
-                            "x-parser-schema-id": "<anonymous-schema-24>"
+                            "x-parser-schema-id": "<anonymous-schema-26>"
+                          },
+                          "handling_unit": {
+                            "type": "string",
+                            "enum": [
+                              "EACH",
+                              "CASE",
+                              "PALLET"
+                            ],
+                            "description": "ADDITIVE (ADR 0035). Present only when the standard is declared for one handling unit; omitted entirely (not null) for a task-type-only standard.",
+                            "example": "CASE",
+                            "x-parser-schema-id": "<anonymous-schema-27>"
+                          },
+                          "team_lift_threshold_g": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 1,
+                            "description": "ADDITIVE (ADR 0035). CASE standards only: the weight in grams above which a case needs a team lift (two operators). Present only together with team_lift_expected_seconds.",
+                            "example": 18000,
+                            "x-parser-schema-id": "<anonymous-schema-28>"
+                          },
+                          "team_lift_expected_seconds": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 1,
+                            "description": "ADDITIVE (ADR 0035). CASE standards only: the engineered elapsed seconds of a team lift. Present only together with team_lift_threshold_g.",
+                            "example": 75,
+                            "x-parser-schema-id": "<anonymous-schema-29>"
                           },
                           "effective_from": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the standard came into force. The BUSINESS time the projector buckets this event on.",
                             "example": "2026-09-05T09:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-25>"
+                            "x-parser-schema-id": "<anonymous-schema-30>"
                           }
                         },
                         "x-parser-schema-id": "LaborStandardDefinedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-18>"
+                    "x-parser-schema-id": "<anonymous-schema-20>"
                   }
                 ],
                 "x-parser-schema-id": "LaborStandardDefinedCloudEvent"
@@ -385,6 +455,29 @@
                       "effective_from": "2026-09-05T09:05:00Z"
                     }
                   }
+                },
+                {
+                  "name": "casePickStandardWithTeamLift",
+                  "summary": "A CASE pick standard (ADR 0035) declaring a heavy-case team lift.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3d1a6e24-95c7-4f3a-b081-4e0d2c6f9a57",
+                    "source": "/warehouse/labor-performance",
+                    "type": "com.warehouse.wes.labor-performance.standard.LaborStandardDefined",
+                    "subject": "std-0004",
+                    "time": "2026-10-24T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:labor-performance:analytics:LaborStandardDefined:v1",
+                    "data": {
+                      "standard_id": "std-0004",
+                      "task_type": "PICK",
+                      "expected_seconds": 30,
+                      "effective_from": "2026-10-24T08:00:00Z",
+                      "handling_unit": "CASE",
+                      "team_lift_threshold_g": 18000,
+                      "team_lift_expected_seconds": 75
+                    }
+                  }
                 }
               ]
             },
@@ -408,11 +501,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.labor-performance.standard.LaborStandardRevised",
-                        "x-parser-schema-id": "<anonymous-schema-27>"
+                        "x-parser-schema-id": "<anonymous-schema-32>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:labor-performance:analytics:LaborStandardRevised:v1",
-                        "x-parser-schema-id": "<anonymous-schema-28>"
+                        "x-parser-schema-id": "<anonymous-schema-33>"
                       },
                       "data": {
                         "type": "object",
@@ -428,7 +521,7 @@
                             "type": "string",
                             "description": "The id of the NEW standard record opened by this revision.",
                             "example": "std-0002",
-                            "x-parser-schema-id": "<anonymous-schema-29>"
+                            "x-parser-schema-id": "<anonymous-schema-34>"
                           },
                           "task_type": {
                             "type": "string",
@@ -438,21 +531,21 @@
                               "SLAM"
                             ],
                             "example": "PICK",
-                            "x-parser-schema-id": "<anonymous-schema-30>"
+                            "x-parser-schema-id": "<anonymous-schema-35>"
                           },
                           "previous_expected_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "description": "The now-closed standard's expected duration, carried so a consumer can see the size of the change without joining back to the prior event.",
                             "example": 45,
-                            "x-parser-schema-id": "<anonymous-schema-31>"
+                            "x-parser-schema-id": "<anonymous-schema-36>"
                           },
                           "expected_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "description": "The newly effective expected duration.",
                             "example": 40,
-                            "x-parser-schema-id": "<anonymous-schema-32>"
+                            "x-parser-schema-id": "<anonymous-schema-37>"
                           },
                           "travel_component_seconds": {
                             "type": "integer",
@@ -460,20 +553,47 @@
                             "minimum": 0,
                             "description": "Optional declaration of how much of the NEW (revised) expected_seconds is attributable to travel — always the revision's own value, never carried over from the closed prior standard. Omitted entirely when the revision does not declare one.",
                             "example": 20,
-                            "x-parser-schema-id": "<anonymous-schema-33>"
+                            "x-parser-schema-id": "<anonymous-schema-38>"
+                          },
+                          "handling_unit": {
+                            "type": "string",
+                            "enum": [
+                              "EACH",
+                              "CASE",
+                              "PALLET"
+                            ],
+                            "description": "ADDITIVE (ADR 0035). Describes the NEW standard. Present only when the standard is declared for one handling unit; omitted entirely (not null) for a task-type-only standard.",
+                            "example": "CASE",
+                            "x-parser-schema-id": "<anonymous-schema-39>"
+                          },
+                          "team_lift_threshold_g": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 1,
+                            "description": "ADDITIVE (ADR 0035). CASE standards only: the weight in grams above which a case needs a team lift (two operators). Present only together with team_lift_expected_seconds.",
+                            "example": 18000,
+                            "x-parser-schema-id": "<anonymous-schema-40>"
+                          },
+                          "team_lift_expected_seconds": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 1,
+                            "description": "ADDITIVE (ADR 0035). CASE standards only: the engineered elapsed seconds of a team lift. Present only together with team_lift_threshold_g.",
+                            "example": 75,
+                            "x-parser-schema-id": "<anonymous-schema-41>"
                           },
                           "effective_from": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the new standard came into force — the same instant the prior one was closed. The BUSINESS time the projector buckets this event on.",
                             "example": "2026-09-05T10:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-34>"
+                            "x-parser-schema-id": "<anonymous-schema-42>"
                           }
                         },
                         "x-parser-schema-id": "LaborStandardRevisedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-26>"
+                    "x-parser-schema-id": "<anonymous-schema-31>"
                   }
                 ],
                 "x-parser-schema-id": "LaborStandardRevisedCloudEvent"
@@ -522,11 +642,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded",
-                        "x-parser-schema-id": "<anonymous-schema-36>"
+                        "x-parser-schema-id": "<anonymous-schema-44>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:labor-performance:analytics:TaskPerformanceRecorded:v1",
-                        "x-parser-schema-id": "<anonymous-schema-37>"
+                        "x-parser-schema-id": "<anonymous-schema-45>"
                       },
                       "data": {
                         "type": "object",
@@ -541,19 +661,19 @@
                             "type": "string",
                             "description": "fulfillment-execution's task id, treated as an opaque foreign reference. This context does not own or validate it.",
                             "example": "task-10231",
-                            "x-parser-schema-id": "<anonymous-schema-38>"
+                            "x-parser-schema-id": "<anonymous-schema-46>"
                           },
                           "associate_id": {
                             "type": "string",
                             "description": "The associate who completed the task. The EMPTY STRING is a legitimate, expected value: the completing station had no checked-in occupant (e.g. a robot station). Such a task is still counted in task-type reporting; it is only excluded from per-associate scorecards.",
                             "example": "assoc-4471",
-                            "x-parser-schema-id": "<anonymous-schema-39>"
+                            "x-parser-schema-id": "<anonymous-schema-47>"
                           },
                           "task_type": {
                             "type": "string",
                             "description": "PICK, PACK, SLAM, or the empty string when the task type could not be resolved. Empty is the normal case TODAY: fulfillment-execution's TaskCompleted payload carries no task_type field yet. The projector labels the empty case `UNCLASSIFIED` rather than dropping the row or keying its fact table on an empty string.",
                             "example": "PICK",
-                            "x-parser-schema-id": "<anonymous-schema-40>"
+                            "x-parser-schema-id": "<anonymous-schema-48>"
                           },
                           "efficiency_pct": {
                             "type": "number",
@@ -561,14 +681,14 @@
                             "nullable": true,
                             "description": "100 * standard_seconds_at_completion / actual_seconds, or NULL when the task could not be scored — no active standard for its TaskType at completion time, or a non-positive duration. NULL is a real business fact (\"unmeasurable\"), never an error and never to be coerced to 0 by a consumer.",
                             "example": 86.5,
-                            "x-parser-schema-id": "<anonymous-schema-41>"
+                            "x-parser-schema-id": "<anonymous-schema-49>"
                           },
                           "actual_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "description": "The measured duration, from the inbound event's duration_seconds. `0` means unmeasurable and is excluded from any mean-duration aggregate.",
                             "example": 52,
-                            "x-parser-schema-id": "<anonymous-schema-42>"
+                            "x-parser-schema-id": "<anonymous-schema-50>"
                           },
                           "idle_seconds_before": {
                             "type": "integer",
@@ -576,20 +696,37 @@
                             "nullable": true,
                             "description": "The measured idle gap immediately preceding this task's claim (previous completion -> this claim instant), added by the idleness feature (ADR 0014-labor-utilization-idleness). NULL — never a fabricated number — when there was no prior completion to measure from (this associate's first- ever observation), the gap was negative/zero (out-of-order Kafka delivery), or the completing station had no checked-in occupant. ADDITIVE field: a Conformist unmarshaling unknown-field-tolerant JSON is unaffected by its presence.",
                             "example": 90,
-                            "x-parser-schema-id": "<anonymous-schema-43>"
+                            "x-parser-schema-id": "<anonymous-schema-51>"
+                          },
+                          "handling_unit": {
+                            "type": "string",
+                            "enum": [
+                              "EACH",
+                              "CASE",
+                              "PALLET"
+                            ],
+                            "description": "ADDITIVE (ADR 0035). The handling unit the completed task carried; omitted entirely (not null) when the TaskCompleted event carried none, so a completion without one keeps the pre-ADR-0035 payload byte-for-byte.",
+                            "example": "CASE",
+                            "x-parser-schema-id": "<anonymous-schema-52>"
+                          },
+                          "team_lift": {
+                            "type": "boolean",
+                            "description": "ADDITIVE (ADR 0035). Present only together with handling_unit. True when the completion was scored against the CASE standard's team-lift time (the case was heavier than the declared threshold).",
+                            "example": false,
+                            "x-parser-schema-id": "<anonymous-schema-53>"
                           },
                           "completed_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the associate actually finished the task. The BUSINESS time the projector buckets this event on — NOT the CloudEvents `time`, so a replayed or late-ingested event lands in the hour the work really happened.",
                             "example": "2026-09-05T09:30:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-44>"
+                            "x-parser-schema-id": "<anonymous-schema-54>"
                           }
                         },
                         "x-parser-schema-id": "TaskPerformanceRecordedAnalyticsData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-35>"
+                    "x-parser-schema-id": "<anonymous-schema-43>"
                   }
                 ],
                 "x-parser-schema-id": "TaskPerformanceRecordedAnalyticsCloudEvent"
@@ -681,11 +818,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded",
-                    "x-parser-schema-id": "<anonymous-schema-46>"
+                    "x-parser-schema-id": "<anonymous-schema-56>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:labor-performance:events:TaskPerformanceRecorded:v1",
-                    "x-parser-schema-id": "<anonymous-schema-47>"
+                    "x-parser-schema-id": "<anonymous-schema-57>"
                   },
                   "data": {
                     "type": "object",
@@ -700,19 +837,19 @@
                         "type": "string",
                         "description": "fulfillment-execution's task id, treated as an opaque foreign reference. This context does not own or validate it.",
                         "example": "task-10231",
-                        "x-parser-schema-id": "<anonymous-schema-48>"
+                        "x-parser-schema-id": "<anonymous-schema-58>"
                       },
                       "associate_id": {
                         "type": "string",
                         "description": "The associate who completed the task, and the partition key of this topic. The EMPTY STRING is a legitimate, expected value: the completing station had no checked-in occupant (e.g. a robot station).",
                         "example": "assoc-4471",
-                        "x-parser-schema-id": "<anonymous-schema-49>"
+                        "x-parser-schema-id": "<anonymous-schema-59>"
                       },
                       "task_type": {
                         "type": "string",
                         "description": "PICK, PACK, SLAM, or the empty string when the task type could not be resolved (see the analytics payload's identical field for why this is common today).",
                         "example": "PICK",
-                        "x-parser-schema-id": "<anonymous-schema-50>"
+                        "x-parser-schema-id": "<anonymous-schema-60>"
                       },
                       "efficiency_pct": {
                         "type": "number",
@@ -720,14 +857,14 @@
                         "nullable": true,
                         "description": "100 * standard_seconds_at_completion / actual_seconds, or NULL when the task could not be scored. NULL is a real business fact (\"unmeasurable\"); a consumer MUST NOT coerce it to 0.",
                         "example": 91.2,
-                        "x-parser-schema-id": "<anonymous-schema-51>"
+                        "x-parser-schema-id": "<anonymous-schema-61>"
                       },
                       "actual_seconds": {
                         "type": "integer",
                         "format": "int64",
                         "description": "The measured duration. `0` means unmeasurable.",
                         "example": 41,
-                        "x-parser-schema-id": "<anonymous-schema-52>"
+                        "x-parser-schema-id": "<anonymous-schema-62>"
                       },
                       "idle_seconds_before": {
                         "type": "integer",
@@ -735,20 +872,37 @@
                         "nullable": true,
                         "description": "The measured idle gap immediately preceding this task's claim, added by the idleness feature (ADR 0014-labor-utilization-idleness). NULL — never a fabricated number — when there was no prior completion, the gap was negative/zero (out-of-order Kafka delivery), or the completing station had no checked-in occupant. ADDITIVE field: a Conformist unmarshaling unknown-field- tolerant JSON (e.g. workforce-management's laborperformancecache) is unaffected by its presence.",
                         "example": 90,
-                        "x-parser-schema-id": "<anonymous-schema-53>"
+                        "x-parser-schema-id": "<anonymous-schema-63>"
+                      },
+                      "handling_unit": {
+                        "type": "string",
+                        "enum": [
+                          "EACH",
+                          "CASE",
+                          "PALLET"
+                        ],
+                        "description": "ADDITIVE (ADR 0035). The handling unit the completed task carried; omitted entirely (not null) when the TaskCompleted event carried none, so a completion without one keeps the pre-ADR-0035 payload byte-for-byte.",
+                        "example": "CASE",
+                        "x-parser-schema-id": "<anonymous-schema-64>"
+                      },
+                      "team_lift": {
+                        "type": "boolean",
+                        "description": "ADDITIVE (ADR 0035). Present only together with handling_unit. True when the completion was scored against the CASE standard's team-lift time (the case was heavier than the declared threshold).",
+                        "example": false,
+                        "x-parser-schema-id": "<anonymous-schema-65>"
                       },
                       "completed_at": {
                         "type": "string",
                         "format": "date-time",
                         "description": "When the associate actually finished the task — the BUSINESS time, distinct from the CloudEvents `time` attribute.",
                         "example": "2026-09-05T09:30:00Z",
-                        "x-parser-schema-id": "<anonymous-schema-54>"
+                        "x-parser-schema-id": "<anonymous-schema-66>"
                       }
                     },
                     "x-parser-schema-id": "TaskPerformanceRecordedEventsData"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-45>"
+                "x-parser-schema-id": "<anonymous-schema-55>"
               }
             ],
             "x-parser-schema-id": "TaskPerformanceRecordedEventsCloudEvent"
@@ -797,6 +951,31 @@
                   "actual_seconds": 0,
                   "idle_seconds_before": null,
                   "completed_at": "2026-09-05T09:45:00Z"
+                }
+              }
+            },
+            {
+              "name": "heavyCaseTeamLiftIntegration",
+              "summary": "A CASE pick scored against the team-lift standard (ADR 0035): handling_unit and team_lift are present because the completion carried a handling unit.",
+              "payload": {
+                "specversion": "1.0",
+                "id": "9e4b7c15-2a68-4d03-8f51-6c0a3b9d2e78",
+                "source": "/warehouse/labor-performance",
+                "type": "com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded",
+                "subject": "assoc-4471",
+                "time": "2026-10-24T11:00:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:labor-performance:events:TaskPerformanceRecorded:v1",
+                "data": {
+                  "task_id": "task-20877",
+                  "associate_id": "assoc-4471",
+                  "task_type": "PICK",
+                  "efficiency_pct": 100,
+                  "actual_seconds": 75,
+                  "idle_seconds_before": null,
+                  "completed_at": "2026-10-24T09:30:00Z",
+                  "handling_unit": "CASE",
+                  "team_lift": true
                 }
               }
             }

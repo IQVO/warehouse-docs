@@ -40,11 +40,15 @@ stateDiagram-v2
   [*] --> Registered: Register(sku, description, now), version 1
   Registered --> Registered: ChangeDescription with other text
   Registered --> ClassifiedNative: Classify(c)
-  Registered --> ClassifiedLegacy: ImportLegacyClassification(c)
-  ClassifiedLegacy --> ClassifiedLegacy: ImportLegacyClassification with another c
+  [*] --> ClassifiedLegacy: Rehydrate of a stored legacy-import row
   ClassifiedLegacy --> ClassifiedNative: Classify(c), even with the same c
   ClassifiedNative --> ClassifiedNative: Classify with another c
-  ClassifiedNative --> ClassifiedNative: ImportLegacyClassification is no change
+  note right of ClassifiedLegacy
+    Rehydrated rows only: source
+    legacy-import from the ADR 0003
+    importer, removed at stage E.
+    No command enters this state.
+  end note
 ```
 
 ```mermaid
@@ -66,8 +70,12 @@ stateDiagram-v2
 ```
 
 Source: `internal/domain/product/product.go` (`Register`, `ChangeDescription`,
-`Classify`, `ImportLegacyClassification`, `setClassification`,
-`DeclareDimensions`, `RecordMeasurement`), `internal/domain/product/physical.go`.
+`Classify`, `setClassification`, `DeclareDimensions`, `RecordMeasurement`),
+`internal/domain/product/physical.go`. `ClassifiedLegacy` is reachable only
+through `Rehydrate`: a row whose `classification_source` is `legacy-import` was
+written by the ADR 0003 importer before stage E (2026-10-17) removed it, and no
+command sets that source any more (`SourceLegacyImport` in
+`internal/domain/product/classification.go` stays a valid stored value).
 Omits: `Rehydrate` (rebuilds a stored product without events) and the absence
 of any delete, unclassify or unregister operation in v1. Identical commands
 are no change in every state (no event, no version bump).
@@ -85,7 +93,6 @@ are no change in every state (no event, no version bump).
 | Dimensions 1..20000 mm, weight 1..2000000 g | `NewUnitDimensions` (`ErrInvalidDimension`, `ErrInvalidWeight`) |
 | A measurement has `measuredAt`, not after the clock; device id at most 64 runes, no control characters | `NewMeasurement` (`ErrMissingMeasuredAt`, `ErrMeasuredAtInFuture`, `ErrInvalidDeviceID`) |
 | The latest measurement is never replaced by an older one | `RecordMeasurement` (`ErrStaleMeasurement`) |
-| A legacy import never replaces a `native` classification | `ImportLegacyClassification` |
 | `version` starts at 1, +1 per accepted change, unchanged by a no-op | `Register`, `bump`; `CHECK (version >= 1)`; the version-guarded `Save` |
 
 ### 5. Corrective Policies
@@ -95,8 +102,6 @@ are no change in every state (no event, no version bump).
   older reading, or `409 concurrent-modification` when another writer saved a
   newer version first; it must re-fetch and retry
   (`internal/adapters/inbound/http/errors.go`).
-- An invalid legacy message (`ErrInvalidLegacyImport`) is logged at WARN and
-  committed past; it is never retried.
 - A discrepancy above 10 % is **not** corrected automatically: the
   measurement is recorded and becomes effective, and the flag is published
   for stewards (ADR 0002).
@@ -109,7 +114,9 @@ are no change in every state (no event, no version bump).
 | `ClassifyProductCommand` | `ClassifyProduct.Handle` (`Classify`) | `PUT /products/{sku}/classification` |
 | `DeclareDimensionsCommand` | `DeclareDimensions.Handle` (`DeclareDimensions`) | `PUT /products/{sku}/dimensions/declared` |
 | `RecordMeasurementCommand` | `RecordMeasurement.Handle` (`RecordMeasurement`) | `PUT /products/{sku}/dimensions/measured` |
-| import of a legacy message | `ImportLegacyClassification.Handle` (`Register` if absent, then `ImportLegacyClassification`) | `LegacyImporter` on `warehouse.inventory.events` |
+| `DeclarePackLevelCommand` | `DeclarePackLevel.Handle` (`DeclarePackLevel`) | `PUT /products/{sku}/pack-levels/{level}`, MCP `declare_pack_level` |
+| `RetirePackLevelCommand` | `RetirePackLevel.Handle` (`RetirePackLevel`) | `POST /products/{sku}/pack-levels/{level}:retire`, MCP `retire_pack_level` |
+| `RecordPackLevelMeasurementCommand` | `RecordPackLevelMeasurement.Handle` (`RecordPackLevelMeasurement`) | `PUT /products/{sku}/pack-levels/{level}/measured` |
 
 ### 7. Created Events
 
@@ -117,19 +124,25 @@ are no change in every state (no event, no version bump).
 | --- | --- | --- |
 | `ProductRegistered` | `Register` | `com.warehouse.wms.product-master.product.ProductRegistered` |
 | `ProductDescriptionChanged` | `ChangeDescription` with different text | `com.warehouse.wms.product-master.product.ProductDescriptionChanged` |
-| `ProductClassified` | `Classify` or `ImportLegacyClassification` that changes the classification or its source | `com.warehouse.wms.product-master.product.ProductClassified` |
+| `ProductClassified` | `Classify` that changes the classification or its source (confirming a `legacy-import` row makes it `native`) | `com.warehouse.wms.product-master.product.ProductClassified` |
 | `ProductDimensionsDeclared` | `DeclareDimensions` with different values | `com.warehouse.wms.product-master.product.ProductDimensionsDeclared` |
 | `ProductMeasured` | `RecordMeasurement` with a new reading | `com.warehouse.wms.product-master.product.ProductMeasured` |
+| `ProductPackLevelDeclared` | `DeclarePackLevel` that declares a level or changes its flags or declared dimensions | `com.warehouse.wms.product-master.product.ProductPackLevelDeclared` |
+| `ProductPackLevelRetired` | `RetirePackLevel`, or `DeclarePackLevel` with a new GTIN at an active level (reason `superseded`) | `com.warehouse.wms.product-master.product.ProductPackLevelRetired` |
+| `ProductPackLevelMeasured` | `RecordPackLevelMeasurement` with a new reading | `com.warehouse.wms.product-master.product.ProductPackLevelMeasured` |
 
-Each command raises at most one event; a legacy import of an unknown SKU
-raises two (`ProductRegistered` at version 1, then `ProductClassified` at
-version 2) in the same unit of work.
+The `Product` aggregate also holds its `PackagingHierarchy` (ADR 0011): every pack level the SKU ever declared, retired ones kept. Its invariants: a GTIN is valid and identifies one (sku, level); an ACTIVE level's content quantity never changes; every level above EACH has an active lower child level and `qtyOfChild` of at least 2; a pack weighs at least its contents when both weights are known; at most one active level per `PackLevel`.
+
+Each command raises at most one event, except `DeclarePackLevel` with a new GTIN at an active level, which raises two (Retired, then Declared, one `version` apart). The `FanoutEncoder` writes each unit event
+as two outbox rows (and each pack level event as one, on the integration topic only) in the same unit of work (one on
+`warehouse.product-master.events`, one on `warehouse.product-master.analytics`,
+same CloudEvents id; ADR 0006).
 
 ### 8. Throughput (estimate)
 
 *Estimate, not measured.* Writes are stewardship actions: registrations and
-classifications when SKUs are onboarded (bursts during a catalogue load or the
-migration backfill), measurements when a unit passes a dimensioning device.
+classifications when SKUs are onboarded (bursts during a catalogue load),
+measurements when a unit passes a dimensioning device.
 One SKU is rarely written twice in the same second, so version conflicts
 should be rare. Reads by operators are occasional; services do not read it at
 request time.
@@ -139,7 +152,7 @@ request time.
 *Estimate.* One row per SKU, a fixed number of scalar columns plus a short tag
 array (at most five tags). The aggregate never grows: there is no measurement
 history and no child collection. Events per instance grow with its edit count;
-each is one outbox row.
+each is two outbox rows (integration and analytics topic).
 
 ## Not aggregates: value objects and technical tables
 
@@ -147,5 +160,5 @@ each is one outbox row.
 | --- | --- | --- | --- |
 | `Classification` | Value object | `classification.go` | Immutable, replaced whole, no identity |
 | `UnitDimensions`, `Measurement`, `PhysicalProfile` | Value objects | `physical.go` | Immutable parts of `Product`, replaced whole |
-| `processed_events` | Idempotency guard | migration `0001`, `ProcessedEventRepo` | Claims of the legacy importer |
+| `processed_events` | Idempotency guard | migration `0001`, `ProcessedEventRepo` | Held the claims of the legacy importer; since stage E no inbound consumer of `cmd/api` claims into it (the repo is still constructed in `cmd/api/adapters.go`, with no caller) |
 | `outbox_events` | Transactional outbox | migration `0001`, `OutboxRepo` | Encoded messages awaiting the relay |

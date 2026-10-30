@@ -8,7 +8,7 @@ description: Why Customer Ordering sits in the Generic quadrant, moderate model 
 # Core Domain Chart
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 Following the ddd-crew [Core Domain Charts](https://github.com/ddd-crew/core-domain-charts):

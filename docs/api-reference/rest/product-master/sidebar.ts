@@ -86,6 +86,46 @@ const sidebar: SidebarsConfig = {
     },
     {
       type: "category",
+      label: "Packaging",
+      link: {
+        type: "doc",
+        id: "api-reference/rest/product-master/packaging",
+      },
+      items: [
+        {
+          type: "doc",
+          id: "api-reference/rest/product-master/resolve-gtin",
+          label: "Resolve a GTIN to its SKU and pack level",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/product-master/list-pack-levels",
+          label: "List a product's pack levels",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/product-master/declare-pack-level",
+          label: "Declare a pack level",
+          className: "api-method put",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/product-master/retire-pack-level",
+          label: "Retire a pack level",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/product-master/record-pack-level-measurement",
+          label: "Record a measurement of one pack",
+          className: "api-method put",
+        },
+      ],
+    },
+    {
+      type: "category",
       label: "Health",
       link: {
         type: "doc",

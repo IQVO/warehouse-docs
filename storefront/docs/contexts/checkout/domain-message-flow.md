@@ -7,8 +7,8 @@ description: Five Checkout scenarios as ddd-crew domain message flows, covering 
 
 # Domain Message Flow
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `checkout` service is built on develop ([`IQVO/checkout`](https://github.com/IQVO/checkout) at `ab4f0e9`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/checkout#service-and-operations) section lists it.
 :::
 
 Following ddd-crew [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling).
@@ -179,10 +179,12 @@ The void is why `REQUOTE_REQUIRED` and `FAILED` can be recorded: both follow a
 successful void (REST contract description). What the session does when the
 void itself fails is not in the model (hotspot H5). The shopper starts the
 next attempt from the cart, with a new session. The REST contract says the BFF
-writes the requoted offers into the cart as a new quote, but the cart has no
-command that accepts an offer set from outside (hotspot H10). Omitted:
-the network's actual wire shapes (`offer-not-quotable`, `requotedOffers`),
-which are the ACL's concern and are not yet in the network model (hotspot H8).
+writes the requoted offers into the cart as a new quote; the cart's
+`AcceptRequotedOffers` (`POST /carts/{cartId}/delivery/requoted`, hotspot H10)
+takes them, though `storefront-bff` has no route for it yet. Omitted:
+the network's wire shapes (`offer-not-quotable`, `requotedOffers`), which are
+the ACL's concern; they are in the network model and customer-ordering's
+contract on develop (hotspot H8, resolved).
 
 ## 5. An in-doubt placement, resolved by replay
 

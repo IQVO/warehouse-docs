@@ -23,6 +23,8 @@ import slottingOptimizationSidebar from './docs/api-reference/rest/slotting-opti
 import pickFaceReplenishmentSidebar from './docs/api-reference/rest/pick-face-replenishment/sidebar';
 import taskInterleavingSidebar from './docs/api-reference/rest/task-interleaving/sidebar';
 import networkInventoryPlanningSidebar from './docs/api-reference/rest/network-inventory-planning/sidebar';
+import returnsProcessingSidebar from './docs/api-reference/rest/returns-processing/sidebar';
+import exceptionManagementSidebar from './docs/api-reference/rest/exception-management/sidebar';
 
 /**
  * Every bounded context's category lists the same page set, in the same
@@ -105,30 +107,11 @@ const ASYNC_NARRATIVE = new Set([
 // and the operational pages).
 const CONTEXT_EXTRA_PAGES: Record<string, string[]> = {};
 
-// Contexts that list only pages written for this site instead of the synced
-// artifact pack (a context whose repository does not ship the pack yet).
-// Add an entry only while a context's repository does not ship its pack.
-const CONTEXT_PAGE_OVERRIDES: Record<string, string[]> = {
-  // returns-processing and exception-management ship ADRs, rules and API
-  // specs but not yet a ddd-crew artifact pack: their repositories were
-  // built 2026-10-20/21 and their context pages are written for this site
-  // (index, business context, language, canvases, domain events, async
-  // narrative — no Operations group either).
-  'returns-processing': [
-    'business-context',
-    'ubiquitous-language',
-    'bounded-context-canvas',
-    'aggregate-design-canvas',
-    'domain-events',
-  ],
-  'exception-management': [
-    'business-context',
-    'ubiquitous-language',
-    'bounded-context-canvas',
-    'aggregate-design-canvas',
-    'domain-events',
-  ],
-};
+// Contexts whose repository ships only part of the synced page set: they list
+// exactly the pages that exist instead of the shared set. Remove an entry once
+// the context's repository ships the full pack.
+const CONTEXT_PAGE_OVERRIDES: Record<string, string[]> = {};
+
 
 function contextCategory(ctx: string, hasAsyncNarrative: boolean) {
   const base = CONTEXT_PAGE_OVERRIDES[ctx] ?? [...CONTEXT_PAGES, ...(CONTEXT_EXTRA_PAGES[ctx] ?? [])];
@@ -351,6 +334,16 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'task-interleaving',
       items: [...taskInterleavingSidebar, 'api-reference/async/task-interleaving'],
+    },
+    {
+      type: 'category',
+      label: 'returns-processing',
+      items: [...returnsProcessingSidebar, 'api-reference/async/returns-processing'],
+    },
+    {
+      type: 'category',
+      label: 'exception-management',
+      items: [...exceptionManagementSidebar, 'api-reference/async/exception-management'],
     },
   ],
 };

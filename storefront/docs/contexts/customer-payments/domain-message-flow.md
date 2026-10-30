@@ -7,8 +7,8 @@ description: Six Customer Payments scenarios as ddd-crew domain message flows, c
 
 # Domain Message Flow
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `customer-payments` service is built on develop ([`IQVO/customer-payments`](https://github.com/IQVO/customer-payments) at `530c7cb`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/customer-payments#service-and-operations) section lists it.
 :::
 
 Following ddd-crew [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling).
@@ -61,7 +61,7 @@ Omitted: the saga around it (the binding `PriceQuote`, the offer pre-check,
 the place-order step, the requote path, gap S3: checkout's own pages), the
 outbox write and relay (see
 [Sequence Diagrams](/storefront/contexts/customer-payments/sequence-diagrams)),
-and the provider timeout, which the proposed REST contract answers with a
+and the provider timeout, which the REST contract answers with a
 503 to retry under the same `Idempotency-Key`.
 
 ## 2. A shipped group is captured

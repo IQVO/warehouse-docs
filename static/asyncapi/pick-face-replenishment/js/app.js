@@ -41,6 +41,10 @@
       "description": "Events raised by the ReplenishmentPolicy aggregate."
     },
     {
+      "name": "analytics",
+      "description": "This service's own analytics stream and read side (ADR 0008)."
+    },
+    {
       "name": "consumed",
       "description": "Events produced by sibling contexts that this service consumes (ADR 0003)."
     }
@@ -233,6 +237,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "ledger mirror of inventory-storage's StockRelocated; consumed on demand",
               "name": "ReplenishmentCompleted",
               "title": "Replenishment completed",
               "summary": "The relocation of a request was recorded on the stock ledger.",
@@ -418,109 +423,418 @@
       }
     },
     "warehouse.pick-face-replenishment.analytics": {
-      "description": "This service's analytics topic, read only by its own analytics side. It\ncarries the three request events again (same `type`, same `id` per\noccurrence, dataschema `...:analytics:<EventName>:v1`) and the\nanalytics-only `ReplenishmentPolicyDeclared` (key and subject\n`<site_id>/<sku>`), declared below.\n",
+      "description": "This service's own analytics stream (ADR 0008), written by the SAME\ntransactional outbox as the integration topic: every request event\nappears here too, under the SAME CloudEvents id and `type`, with only the\n`dataschema` stream segment different\n(urn:warehouse:pick-face-replenishment:analytics:<EventName>:v1), plus the\nanalytics-only `ReplenishmentPolicyDeclared` (key and subject\n`<site_id>/<sku>`). It is NOT an integration contract: the only consumer\nis this service's cmd/pfr-projector (fixed group from\n`ANALYTICS_CONSUMER_GROUP`), which folds the events into the analytical\ndatabase; its deterministic poison goes to\nwarehouse.pick-face-replenishment.analytics.dlq. Other contexts keep\nreading warehouse.pick-face-replenishment.events.\n",
       "subscribe": {
         "operationId": "receiveReplenishmentAnalytics",
-        "summary": "Receive the analytics-only policy event.",
-        "description": "`ReplenishmentPolicyDeclared` is raised each time a policy is declared or\nchanged, with the new version. Removing a policy raises no event of its\nown; its open requests are cancelled with reason `POLICY_REMOVED`.\n",
+        "summary": "Receive the analytics twin of every request event and the policy declaration.",
+        "description": "Request payloads are byte-for-byte the integration payloads (ADR 0008\nsection 2); only the dataschema names the analytics stream.\n`ReplenishmentPolicyDeclared` is raised each time a policy is declared\nor changed, with the new version. Removing a policy raises no event of\nits own; its open requests are cancelled with reason `POLICY_REMOVED`.\n",
         "tags": [
           {
-            "name": "policy"
+            "name": "analytics"
           }
         ],
         "message": {
-          "name": "ReplenishmentPolicyDeclared",
-          "title": "Replenishment policy declared",
-          "summary": "A min/max policy was declared or changed (analytics only).",
-          "description": "`type` = `com.warehouse.wms.pick-face-replenishment.policy.ReplenishmentPolicyDeclared`;\nsubject and key = `<site_id>/<sku>`. Analytics topic only.\n",
-          "contentType": "application/cloudevents+json",
-          "tags": [
+          "oneOf": [
             {
-              "name": "policy"
-            }
-          ],
-          "payload": {
-            "allOf": [
-              "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[0].payload.allOf[0]",
-              {
-                "type": "object",
-                "properties": {
-                  "data": {
+              "name": "ReplenishmentRequested",
+              "title": "Replenishment requested (analytics twin)",
+              "summary": "The analytics-stream twin of ReplenishmentRequested (ADR 0008).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:pick-face-replenishment:analytics:ReplenishmentRequested:v1`. Consumed only by cmd/pfr-projector.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[0].payload",
+              "examples": [
+                {
+                  "name": "requested",
+                  "summary": "The analytics twin of the requested example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1d2c3b-4a5e-4b7c-8d9e-0a1b2c3d4e5f",
+                    "source": "/warehouse/pick-face-replenishment",
+                    "type": "com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentRequested",
+                    "subject": "repl-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                    "time": "2026-10-17T09:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:pick-face-replenishment:analytics:ReplenishmentRequested:v1",
+                    "data": {
+                      "request_id": "repl-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                      "site_id": "WH1",
+                      "sku": "SKU-1",
+                      "forward_bin": "WH1-FWD-A01-01-01-A",
+                      "source_bin": "WH1-RSV-A07-03-02-B",
+                      "quantity": 24,
+                      "priority": "NORMAL",
+                      "policy_min": 10,
+                      "policy_max": 60,
+                      "requested_at": "2026-10-17T09:30:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ReplenishmentCompleted",
+              "title": "Replenishment completed (analytics twin)",
+              "summary": "The analytics-stream twin of ReplenishmentCompleted (ADR 0008).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:pick-face-replenishment:analytics:ReplenishmentCompleted:v1`. Consumed only by cmd/pfr-projector.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[1].payload",
+              "examples": [
+                {
+                  "name": "completed",
+                  "summary": "The analytics twin of the completed example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "0b9a8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d",
+                    "source": "/warehouse/pick-face-replenishment",
+                    "type": "com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentCompleted",
+                    "subject": "repl-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                    "time": "2026-10-17T10:05:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:pick-face-replenishment:analytics:ReplenishmentCompleted:v1",
+                    "data": {
+                      "request_id": "repl-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                      "site_id": "WH1",
+                      "sku": "SKU-1",
+                      "forward_bin": "WH1-FWD-A01-01-01-A",
+                      "source_bin": "WH1-RSV-A07-03-02-B",
+                      "quantity": 24,
+                      "completed_at": "2026-10-17T10:05:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ReplenishmentCancelled",
+              "title": "Replenishment cancelled (analytics twin)",
+              "summary": "The analytics-stream twin of ReplenishmentCancelled (ADR 0008).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:pick-face-replenishment:analytics:ReplenishmentCancelled:v1`. Consumed only by cmd/pfr-projector.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[2].payload",
+              "examples": [
+                {
+                  "name": "cancelled",
+                  "summary": "The analytics twin of the cancelled example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "4d3c2b1a-0f9e-4d8c-8b7a-6f5e4d3c2b1a",
+                    "source": "/warehouse/pick-face-replenishment",
+                    "type": "com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentCancelled",
+                    "subject": "repl-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                    "time": "2026-10-17T09:50:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:pick-face-replenishment:analytics:ReplenishmentCancelled:v1",
+                    "data": {
+                      "request_id": "repl-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                      "site_id": "WH1",
+                      "sku": "SKU-1",
+                      "reason": "ASSIGNMENT_CHANGED",
+                      "cancelled_at": "2026-10-17T09:50:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ReplenishmentPolicyDeclared",
+              "title": "Replenishment policy declared",
+              "summary": "A min/max policy was declared or changed (analytics only).",
+              "description": "`type` = `com.warehouse.wms.pick-face-replenishment.policy.ReplenishmentPolicyDeclared`;\nsubject and key = `<site_id>/<sku>`. Analytics topic only.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "policy"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
                     "type": "object",
-                    "required": [
-                      "site_id",
-                      "sku",
-                      "min_qty",
-                      "max_qty",
-                      "multiple",
-                      "version",
-                      "declared_at"
-                    ],
                     "properties": {
-                      "site_id": {
-                        "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-39>"
-                      },
-                      "sku": {
-                        "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-40>"
-                      },
-                      "min_qty": {
-                        "type": "integer",
-                        "minimum": 0,
-                        "x-parser-schema-id": "<anonymous-schema-41>"
-                      },
-                      "max_qty": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-42>"
-                      },
-                      "multiple": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-43>"
-                      },
-                      "version": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-44>"
-                      },
-                      "declared_at": {
-                        "type": "string",
-                        "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-45>"
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "site_id",
+                          "sku",
+                          "min_qty",
+                          "max_qty",
+                          "multiple",
+                          "version",
+                          "declared_at"
+                        ],
+                        "properties": {
+                          "site_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-39>"
+                          },
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-40>"
+                          },
+                          "min_qty": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "x-parser-schema-id": "<anonymous-schema-41>"
+                          },
+                          "max_qty": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-42>"
+                          },
+                          "multiple": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-43>"
+                          },
+                          "multiple_source": {
+                            "type": "string",
+                            "enum": [
+                              "DECLARED",
+                              "PACK_DERIVED"
+                            ],
+                            "description": "Optional; absent on facts that do not say.",
+                            "x-parser-schema-id": "<anonymous-schema-44>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-45>"
+                          },
+                          "declared_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-46>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-38>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-38>"
+                    "x-parser-schema-id": "<anonymous-schema-37>"
                   }
-                },
-                "x-parser-schema-id": "<anonymous-schema-37>"
-              }
-            ],
-            "x-parser-schema-id": "ReplenishmentPolicyDeclaredEvent"
-          },
-          "examples": [
-            {
-              "name": "declared",
-              "summary": "SKU-1 at WH1 declared 10 to 60 in multiples of 6.",
-              "payload": {
-                "specversion": "1.0",
-                "id": "2b1a0f9e-8d7c-4b6a-a594-837261504f3e",
-                "source": "/warehouse/pick-face-replenishment",
-                "type": "com.warehouse.wms.pick-face-replenishment.policy.ReplenishmentPolicyDeclared",
-                "subject": "WH1/SKU-1",
-                "time": "2026-10-17T09:00:00Z",
-                "datacontenttype": "application/json",
-                "dataschema": "urn:warehouse:pick-face-replenishment:analytics:ReplenishmentPolicyDeclared:v1",
-                "data": {
-                  "site_id": "WH1",
-                  "sku": "SKU-1",
-                  "min_qty": 10,
-                  "max_qty": 60,
-                  "multiple": 6,
-                  "version": 1,
-                  "declared_at": "2026-10-17T09:00:00Z"
+                ],
+                "x-parser-schema-id": "ReplenishmentPolicyDeclaredEvent"
+              },
+              "examples": [
+                {
+                  "name": "declared",
+                  "summary": "SKU-1 at WH1 declared 10 to 60 in multiples of 6.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "2b1a0f9e-8d7c-4b6a-a594-837261504f3e",
+                    "source": "/warehouse/pick-face-replenishment",
+                    "type": "com.warehouse.wms.pick-face-replenishment.policy.ReplenishmentPolicyDeclared",
+                    "subject": "WH1/SKU-1",
+                    "time": "2026-10-17T09:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:pick-face-replenishment:analytics:ReplenishmentPolicyDeclared:v1",
+                    "data": {
+                      "site_id": "WH1",
+                      "sku": "SKU-1",
+                      "min_qty": 10,
+                      "max_qty": 60,
+                      "multiple": 6,
+                      "version": 1,
+                      "declared_at": "2026-10-17T09:00:00Z"
+                    }
+                  }
                 }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.product-master.events": {
+      "description": "product-master's integration topic. Consumed for `ProductPackLevelDeclared`\nand `ProductPackLevelRetired` (packaging view: the eaches factor per pack\nlevel that min/max and request quantities are converted with), consumer\ngroup from env `PRODUCT_MASTER_CONSUMER_GROUP`.\n",
+      "publish": {
+        "operationId": "applyProductMasterPackLevel",
+        "summary": "Apply product-master pack-level facts to the local packaging copy.",
+        "description": "Upserts the packaging view in one transaction with the CloudEvents `id`\nclaim; unknown types on the topic are skipped.\n",
+        "message": {
+          "oneOf": [
+            {
+              "name": "ProductPackLevelDeclared",
+              "title": "product-master ProductPackLevelDeclared (consumed)",
+              "summary": "A pack level (EACH, INNER, CASE or PALLET) of a SKU was declared, or one of its mutable attributes changed.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelDeclared`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductPackLevelDeclared:v1`; subject and\nkey = the SKU. Produced by product-master; consumed into the local\npackaging view (pack level -> eaches factor for case-level scans).\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "units_per_pack",
+                          "is_orderable",
+                          "is_despatch_unit",
+                          "effective_from",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-49>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "EACH",
+                              "INNER",
+                              "CASE",
+                              "PALLET"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-50>"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "pattern": "^[0-9]{14}$",
+                            "x-parser-schema-id": "<anonymous-schema-51>"
+                          },
+                          "child_gtin": {
+                            "type": "string",
+                            "pattern": "^[0-9]{14}$",
+                            "x-parser-schema-id": "<anonymous-schema-52>"
+                          },
+                          "qty_of_child": {
+                            "type": "integer",
+                            "minimum": 2,
+                            "maximum": 1000000,
+                            "description": "Absent for EACH.",
+                            "x-parser-schema-id": "<anonymous-schema-53>"
+                          },
+                          "units_per_pack": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 1000000,
+                            "description": "Direct factor to eaches; 1 for EACH.",
+                            "x-parser-schema-id": "<anonymous-schema-54>"
+                          },
+                          "is_orderable": {
+                            "type": "boolean",
+                            "x-parser-schema-id": "<anonymous-schema-55>"
+                          },
+                          "is_despatch_unit": {
+                            "type": "boolean",
+                            "x-parser-schema-id": "<anonymous-schema-56>"
+                          },
+                          "effective_from": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-57>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-58>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-48>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-47>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelDeclaredEvent"
+              }
+            },
+            {
+              "name": "ProductPackLevelRetired",
+              "title": "product-master ProductPackLevelRetired (consumed)",
+              "summary": "A pack level of a SKU was retired.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelRetired`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductPackLevelRetired:v1`; subject and\nkey = the SKU. Produced by product-master; consumed into the local\npackaging view (retired levels are no longer valid scan targets).\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "effective_to",
+                          "reason",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-61>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "EACH",
+                              "INNER",
+                              "CASE",
+                              "PALLET"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-62>"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "pattern": "^[0-9]{14}$",
+                            "x-parser-schema-id": "<anonymous-schema-63>"
+                          },
+                          "effective_to": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-64>"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 200,
+                            "x-parser-schema-id": "<anonymous-schema-65>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-66>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-60>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-59>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelRetiredEvent"
               }
             }
           ]
@@ -572,50 +886,50 @@
                         "properties": {
                           "site_code": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-48>"
+                            "x-parser-schema-id": "<anonymous-schema-69>"
                           },
                           "bin": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-49>"
+                            "x-parser-schema-id": "<anonymous-schema-70>"
                           },
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-50>"
+                            "x-parser-schema-id": "<anonymous-schema-71>"
                           },
                           "on_hand": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Absolute units in the bin after the change.",
-                            "x-parser-schema-id": "<anonymous-schema-51>"
+                            "x-parser-schema-id": "<anonymous-schema-72>"
                           },
                           "reserved": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Units of this bin bound by active reservations.",
-                            "x-parser-schema-id": "<anonymous-schema-52>"
+                            "x-parser-schema-id": "<anonymous-schema-73>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "Per-(bin",
                             "sku) monotonically increasing; keep the highest.": null,
-                            "x-parser-schema-id": "<anonymous-schema-53>"
+                            "x-parser-schema-id": "<anonymous-schema-74>"
                           },
                           "reason": {
                             "type": "string",
                             "description": "STOW, PICK, RELOCATE, REPLENISHMENT, COUNT, RESERVE, REVOKE or UNLOCATED; unknown values are ignored.",
-                            "x-parser-schema-id": "<anonymous-schema-54>"
+                            "x-parser-schema-id": "<anonymous-schema-75>"
                           },
                           "occurred_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-55>"
+                            "x-parser-schema-id": "<anonymous-schema-76>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-47>"
+                        "x-parser-schema-id": "<anonymous-schema-68>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-46>"
+                    "x-parser-schema-id": "<anonymous-schema-67>"
                   }
                 ],
                 "x-parser-schema-id": "BinStockLevelChangedEvent"
@@ -680,50 +994,50 @@
                         "properties": {
                           "relocation_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-58>"
+                            "x-parser-schema-id": "<anonymous-schema-79>"
                           },
                           "site_code": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-59>"
+                            "x-parser-schema-id": "<anonymous-schema-80>"
                           },
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-60>"
+                            "x-parser-schema-id": "<anonymous-schema-81>"
                           },
                           "from_bin": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-61>"
+                            "x-parser-schema-id": "<anonymous-schema-82>"
                           },
                           "to_bin": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-62>"
+                            "x-parser-schema-id": "<anonymous-schema-83>"
                           },
                           "quantity": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-63>"
+                            "x-parser-schema-id": "<anonymous-schema-84>"
                           },
                           "reason": {
                             "type": "string",
                             "description": "Act only on REPLENISHMENT; SLOTTING, CONSOLIDATION, MANUAL and any other value are ignored.",
-                            "x-parser-schema-id": "<anonymous-schema-64>"
+                            "x-parser-schema-id": "<anonymous-schema-85>"
                           },
                           "source_ref": {
                             "type": "string",
                             "maxLength": 200,
                             "description": "The request id on a replenishment; \"\" or another reference otherwise.",
-                            "x-parser-schema-id": "<anonymous-schema-65>"
+                            "x-parser-schema-id": "<anonymous-schema-86>"
                           },
                           "occurred_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-66>"
+                            "x-parser-schema-id": "<anonymous-schema-87>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-57>"
+                        "x-parser-schema-id": "<anonymous-schema-78>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-56>"
+                    "x-parser-schema-id": "<anonymous-schema-77>"
                   }
                 ],
                 "x-parser-schema-id": "StockRelocatedEvent"
@@ -800,21 +1114,21 @@
                     "properties": {
                       "plan_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-69>"
+                        "x-parser-schema-id": "<anonymous-schema-90>"
                       },
                       "site_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-70>"
+                        "x-parser-schema-id": "<anonymous-schema-91>"
                       },
                       "approved_at": {
                         "type": "string",
                         "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-71>"
+                        "x-parser-schema-id": "<anonymous-schema-92>"
                       },
                       "supersedes_plan_id": {
                         "type": "string",
                         "description": "Omitted when the site had no Approved plan.",
-                        "x-parser-schema-id": "<anonymous-schema-72>"
+                        "x-parser-schema-id": "<anonymous-schema-93>"
                       },
                       "assignments": {
                         "type": "array",
@@ -828,17 +1142,17 @@
                           "properties": {
                             "sku": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-74>"
+                              "x-parser-schema-id": "<anonymous-schema-95>"
                             },
                             "slot": {
                               "type": "string",
                               "description": "The facility-layout location code of the forward slot.",
-                              "x-parser-schema-id": "<anonymous-schema-75>"
+                              "x-parser-schema-id": "<anonymous-schema-96>"
                             }
                           },
                           "x-parser-schema-id": "SlotAssignment"
                         },
-                        "x-parser-schema-id": "<anonymous-schema-73>"
+                        "x-parser-schema-id": "<anonymous-schema-94>"
                       },
                       "moves": {
                         "type": "array",
@@ -851,17 +1165,17 @@
                           "properties": {
                             "sku": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-77>"
+                              "x-parser-schema-id": "<anonymous-schema-98>"
                             },
                             "from_slot": {
                               "type": "string",
                               "description": "Omitted for an Assign.",
-                              "x-parser-schema-id": "<anonymous-schema-78>"
+                              "x-parser-schema-id": "<anonymous-schema-99>"
                             },
                             "to_slot": {
                               "type": "string",
                               "description": "Omitted for a Vacate.",
-                              "x-parser-schema-id": "<anonymous-schema-79>"
+                              "x-parser-schema-id": "<anonymous-schema-100>"
                             },
                             "kind": {
                               "type": "string",
@@ -870,18 +1184,18 @@
                                 "Relocate",
                                 "Vacate"
                               ],
-                              "x-parser-schema-id": "<anonymous-schema-80>"
+                              "x-parser-schema-id": "<anonymous-schema-101>"
                             }
                           },
                           "x-parser-schema-id": "SlotMove"
                         },
-                        "x-parser-schema-id": "<anonymous-schema-76>"
+                        "x-parser-schema-id": "<anonymous-schema-97>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-68>"
+                    "x-parser-schema-id": "<anonymous-schema-89>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-67>"
+                "x-parser-schema-id": "<anonymous-schema-88>"
               }
             ],
             "x-parser-schema-id": "SlotPlanApprovedEvent"
@@ -975,19 +1289,19 @@
                         "properties": {
                           "zoneId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-83>"
+                            "x-parser-schema-id": "<anonymous-schema-104>"
                           },
                           "siteCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-84>"
+                            "x-parser-schema-id": "<anonymous-schema-105>"
                           },
                           "areaCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-85>"
+                            "x-parser-schema-id": "<anonymous-schema-106>"
                           },
                           "zoneCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-86>"
+                            "x-parser-schema-id": "<anonymous-schema-107>"
                           },
                           "temperatureClass": {
                             "type": "string",
@@ -996,17 +1310,17 @@
                               "Chilled",
                               "Frozen"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-87>"
+                            "x-parser-schema-id": "<anonymous-schema-108>"
                           },
                           "hazmat": {
                             "type": "boolean",
-                            "x-parser-schema-id": "<anonymous-schema-88>"
+                            "x-parser-schema-id": "<anonymous-schema-109>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-82>"
+                        "x-parser-schema-id": "<anonymous-schema-103>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-81>"
+                    "x-parser-schema-id": "<anonymous-schema-102>"
                   }
                 ],
                 "x-parser-schema-id": "ZoneRegisteredEvent"
@@ -1069,50 +1383,50 @@
                         "properties": {
                           "locationCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-91>"
+                            "x-parser-schema-id": "<anonymous-schema-112>"
                           },
                           "aisleId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-92>"
+                            "x-parser-schema-id": "<anonymous-schema-113>"
                           },
                           "zoneId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-93>"
+                            "x-parser-schema-id": "<anonymous-schema-114>"
                           },
                           "locationType": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-94>"
+                            "x-parser-schema-id": "<anonymous-schema-115>"
                           },
                           "role": {
                             "type": "string",
                             "description": "Absent means Storage.",
-                            "x-parser-schema-id": "<anonymous-schema-95>"
+                            "x-parser-schema-id": "<anonymous-schema-116>"
                           },
                           "dockFlow": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-96>"
+                            "x-parser-schema-id": "<anonymous-schema-117>"
                           },
                           "activities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-98>"
+                              "x-parser-schema-id": "<anonymous-schema-119>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-97>"
+                            "x-parser-schema-id": "<anonymous-schema-118>"
                           },
                           "maxWeightKg": {
                             "type": "number",
-                            "x-parser-schema-id": "<anonymous-schema-99>"
+                            "x-parser-schema-id": "<anonymous-schema-120>"
                           },
                           "maxVolumeM3": {
                             "type": "number",
-                            "x-parser-schema-id": "<anonymous-schema-100>"
+                            "x-parser-schema-id": "<anonymous-schema-121>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-90>"
+                        "x-parser-schema-id": "<anonymous-schema-111>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-89>"
+                    "x-parser-schema-id": "<anonymous-schema-110>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotRegisteredEvent"
@@ -1171,13 +1485,13 @@
                         "properties": {
                           "locationCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-103>"
+                            "x-parser-schema-id": "<anonymous-schema-124>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-102>"
+                        "x-parser-schema-id": "<anonymous-schema-123>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-101>"
+                    "x-parser-schema-id": "<anonymous-schema-122>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotDecommissionedEvent"
@@ -1215,20 +1529,27 @@
       "ReplenishmentRequested": "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[0]",
       "ReplenishmentCompleted": "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[1]",
       "ReplenishmentCancelled": "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[2]",
-      "ReplenishmentPolicyDeclared": "$ref:$.channels.warehouse.pick-face-replenishment.analytics.subscribe.message",
+      "ReplenishmentPolicyDeclared": "$ref:$.channels.warehouse.pick-face-replenishment.analytics.subscribe.message.oneOf[3]",
+      "ReplenishmentRequestedAnalytics": "$ref:$.channels.warehouse.pick-face-replenishment.analytics.subscribe.message.oneOf[0]",
+      "ReplenishmentCompletedAnalytics": "$ref:$.channels.warehouse.pick-face-replenishment.analytics.subscribe.message.oneOf[1]",
+      "ReplenishmentCancelledAnalytics": "$ref:$.channels.warehouse.pick-face-replenishment.analytics.subscribe.message.oneOf[2]",
       "BinStockLevelChanged": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0]",
       "StockRelocated": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1]",
       "SlotPlanApproved": "$ref:$.channels.warehouse.slotting-optimization.events.publish.message",
       "ZoneRegistered": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[0]",
       "LocationSlotRegistered": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1]",
-      "LocationSlotDecommissioned": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[2]"
+      "LocationSlotDecommissioned": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[2]",
+      "ProductPackLevelDeclared": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[0]",
+      "ProductPackLevelRetired": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[1]"
     },
     "schemas": {
+      "ProductPackLevelDeclaredEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[0].payload",
+      "ProductPackLevelRetiredEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[1].payload",
       "CloudEventEnvelope": "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[0].payload.allOf[0]",
       "ReplenishmentRequestedEvent": "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[0].payload",
       "ReplenishmentCompletedEvent": "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[1].payload",
       "ReplenishmentCancelledEvent": "$ref:$.channels.warehouse.pick-face-replenishment.events.subscribe.message.oneOf[2].payload",
-      "ReplenishmentPolicyDeclaredEvent": "$ref:$.channels.warehouse.pick-face-replenishment.analytics.subscribe.message.payload",
+      "ReplenishmentPolicyDeclaredEvent": "$ref:$.channels.warehouse.pick-face-replenishment.analytics.subscribe.message.oneOf[3].payload",
       "BinStockLevelChangedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0].payload",
       "StockRelocatedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1].payload",
       "SlotAssignment": "$ref:$.channels.warehouse.slotting-optimization.events.publish.message.payload.allOf[1].properties.data.properties.assignments.items",

@@ -8,7 +8,7 @@ description: The middle mile of the retail network, a proposed Supporting contex
 # Linehaul Transportation
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span className="badge-supporting">Supporting</span>
@@ -49,6 +49,24 @@ sortation centres into **loads**, and reports when loads depart and arrive:
 
 The REST contract is `apis/linehaul-transportation/openapi.yaml`, rendered
 under [API reference](/network/api-reference).
+
+## Service and operations
+
+- **Service:** [`IQVO/linehaul-transportation`](https://github.com/IQVO/linehaul-transportation) on `develop` (`e752832`,
+  2026-10-26): binaries `cmd/api` (REST) and `cmd/mcp` (read-only MCP), and the console
+  remote in `web/`.
+- **Deployment:** wired in warehouse-infra develop: a `terraform/apps.yaml` entry
+  (`database: true`, `frontend_remote: linehaul_mfe`) and `helm-values/linehaul-transportation.yaml`
+  (MCP enabled, gateway path `/api/mcp/linehaul-transportation`). The cluster itself was not checked in this
+  refresh.
+- **Observability:** [service ADR 0010](https://github.com/IQVO/linehaul-transportation/blob/develop/docs/adr/0010-fleet-observability-standard.md),
+  *Adopt the fleet observability standard*, Accepted 2026-10-26. Logs, metrics and traces leave
+  over OTLP to the otel-collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, chart default
+  `otel-collector.observability.svc.cluster.local:4317`; `OTEL_SERVICE_NAME`). The Tier-2
+  business counter is `linehaul.loads.dispatched` (unit `{load}`, in
+  `internal/adapters/outbound/telemetry/load_metrics.go`), with attribute `outcome` = `dispatched` or `rejected` and
+  `reason` on the outcomes that are not a success. The dashboard queries it as `linehaul_loads_dispatched_total` in warehouse-infra's
+  `terraform/dashboards/contexts/linehaul-transportation.json`, by `outcome`.
 
 ## Elsewhere
 

@@ -7,8 +7,8 @@ description: Customer Payments' slice of the storefront context map, with every 
 
 # Context Map
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `customer-payments` service is built on develop ([`IQVO/customer-payments`](https://github.com/IQVO/customer-payments) at `530c7cb`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/customer-payments#service-and-operations) section lists it.
 :::
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).
@@ -68,7 +68,7 @@ ACL. It never touches a `warehouse.*` topic (`meta.hard_boundary`).
 | `order-sourcing` (network, Core) | OS upstream, CP downstream | **Conformist** | Kafka `retailnetwork.order-sourcing.events` | `FulfillmentShipped`, `FulfillmentCancelled` | The shipment and cancellation facts are taken as published and drive capture and release; the context redefines nothing. |
 | `shipping-and-tracking` (network, Generic) | ST upstream, CP downstream | **Conformist** | Kafka `retailnetwork.shipping-and-tracking.events` | `PackageLost`, `PackageReturned` | The lost and returned facts are taken as published and drive refunds. |
 | `payment-provider` (external) | CP upstream, provider downstream (the provider answers) | **Anti-Corruption Layer** | Provider port: `Authorize`, `Capture`, `Void`, `Refund`, `Reauthorize`; the adapter calls the payment-provider simulator | the five provider verbs | The provider's vocabulary, errors and token handling stay in one adapter; swapping the simulator for a real provider changes nothing else. |
-| analytics consumers | CP upstream, analytics downstream | analytics stream | Kafka `retailnetwork.customer-payments.analytics` | `PaymentAuthorized`, `PaymentCaptured`, `PaymentReleased`, `PaymentAuthorizationExpired`, `PaymentDeclined`, `RefundIssued`, `RefundFailed` | Money facts for analytics only; no storefront or network context consumes a payment event (see notes). |
+| analytics consumers | CP upstream, analytics downstream | analytics stream | Kafka `retailnetwork.customer-payments.events` | `PaymentAuthorized`, `PaymentCaptured`, `PaymentReleased`, `PaymentAuthorizationExpired`, `PaymentDeclined`, `RefundIssued`, `RefundFailed` | Money facts for analytics only; no storefront or network context consumes a payment event (see notes). |
 
 ## Notes on the patterns
 

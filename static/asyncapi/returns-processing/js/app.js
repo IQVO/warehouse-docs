@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **returns-processing** bounded context (WMS\nsubdomain): the reverse flow of goods — authorize a return against a\nshipped order line (RMA), receive and grade it (ReturnReceipt), decide\nwhat happens to it (Disposition) and hand restockable units back to\ninventory-storage as a staged line (ADR 0001, ADR 0002).\n\n**Published.** Three aggregates raise seven event types, published to\n`warehouse.returns-processing.events` through a **transactional outbox**:\nthe aggregate row and its already-encoded events are written in ONE\ndatabase transaction and a relay drains them to Kafka (at-least-once; the\nCloudEvents `id` is stored with the outbox row, so a retry republishes the\nsame `id`). `ReturnLineStaged` is the only type that asks a sibling to do\nsomething: inventory-storage consumes it into its staged-receipt use case\n(same shape as its `ReceiptLineReceived` plus `rma_id`, `disposition_id`,\n`site_id`); `UnexpectedReturnReceived` is what exception-management turns\ninto a problem-solve case. An analytics mirror on\n`warehouse.returns-processing.analytics` is planned, not built (ADR 0004).\n\n**Consumed (ADR 0003).** `ProductClassified` from product-master, the\nallocated order lines (`OrderAllocated` / `OrderPartiallyAllocated`) from\norder-management and `PackageManifested` (the shipped fact per work unit,\n`order_ref` = `{order_id}-line-{line_no}`) from fulfillment-execution.\nEach feeds a durable local copy; no sibling is ever called live. Consumer\ngroups come from `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`,\n`ORDER_LINES_CONSUMER_GROUP` and `MANIFEST_CONSUMER_GROUP`. The consumed\nmessages below are the producers' own contracts, restated here and never\nimported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row; consumers may extract them, and must not require them.\n`specversion`, `id`, `source` (`/warehouse/returns-processing`), `type`,\n`subject`, `time`, `datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:returns-processing:events:<EventName>:v1`) are all\nrequired. Kafka key = the subject. Type =\n`com.warehouse.wms.returns-processing.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
+    "description": "Event catalog for the **returns-processing** bounded context (WMS\nsubdomain): the reverse flow of goods — authorize a return against a\nshipped order line (RMA), receive and grade it (ReturnReceipt), decide\nwhat happens to it (Disposition) and hand restockable units back to\ninventory-storage as a staged line (ADR 0001, ADR 0002).\n\n**Published.** Three aggregates raise seven event types, published to\n`warehouse.returns-processing.events` through a **transactional outbox**:\nthe aggregate row and its already-encoded events are written in ONE\ndatabase transaction and a relay drains them to Kafka (at-least-once; the\nCloudEvents `id` is stored with the outbox row, so a retry republishes the\nsame `id`). `ReturnLineStaged` is the only type that asks a sibling to do\nsomething: inventory-storage consumes it into its staged-receipt use case\n(same shape as its `ReceiptLineReceived` plus `rma_id`, `disposition_id`,\n`site_id`); `UnexpectedReturnReceived` is what exception-management turns\ninto a problem-solve case. Every one of the seven types is ALSO mirrored\non `warehouse.returns-processing.analytics` (dataschema\n`urn:warehouse:returns-processing:analytics:<EventName>:v1`), the stream\nthis service's own projector consumes (ADR 0007).\n\n**Consumed (ADR 0003).** `ProductClassified` from product-master, the\nallocated order lines (`OrderAllocated` / `OrderPartiallyAllocated`) from\norder-management and `PackageManifested` (the shipped fact per work unit,\n`order_ref` = `{order_id}-line-{line_no}`) from fulfillment-execution.\nEach feeds a durable local copy; no sibling is ever called live. Consumer\ngroups come from `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`,\n`ORDER_LINES_CONSUMER_GROUP` and `MANIFEST_CONSUMER_GROUP`. The consumed\nmessages below are the producers' own contracts, restated here and never\nimported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row; consumers may extract them, and must not require them.\n`specversion`, `id`, `source` (`/warehouse/returns-processing`), `type`,\n`subject`, `time`, `datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:returns-processing:<events|analytics>:<EventName>:v1`) are\nall required. Kafka key = the subject. Type =\n`com.warehouse.wms.returns-processing.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
   },
   "servers": {
     "production": {
@@ -45,6 +45,10 @@
       "description": "Events raised by the Disposition aggregate."
     },
     {
+      "name": "analytics",
+      "description": "This service's own analytics stream and read side (ADR 0007)."
+    },
+    {
       "name": "consumed",
       "description": "Events produced by sibling contexts that this service consumes (ADR 0003)."
     }
@@ -64,6 +68,7 @@
         "message": {
           "oneOf": [
             {
+              "x-no-consumer-reason": "returns ledger fact; analytics mirror planned, not built (ADR 0004); consumed on demand",
               "name": "ReturnAuthorized",
               "title": "Return authorized",
               "summary": "An RMA was opened for a shipped order line inside the return window.",
@@ -229,6 +234,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "returns ledger fact; analytics mirror planned, not built (ADR 0004); consumed on demand",
               "name": "ReturnAuthorizationRejected",
               "title": "Return authorization rejected",
               "summary": "An RMA request was refused: the line never shipped, the window closed or another RMA is open.",
@@ -330,6 +336,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "returns ledger fact; analytics mirror planned, not built (ADR 0004); consumed on demand",
               "name": "ReturnReceiptOpened",
               "title": "Return receipt opened",
               "summary": "Returned goods arrived; each line matches an RMA line or is explicitly unexpected.",
@@ -459,6 +466,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "returns ledger fact; analytics mirror planned, not built (ADR 0004); consumed on demand",
               "name": "ReturnLineInspected",
               "title": "Return line inspected",
               "summary": "A receipt line was graded A, B, C or SCRAP with its reason codes.",
@@ -657,6 +665,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "returns ledger fact; analytics mirror planned, not built (ADR 0004); consumed on demand",
               "name": "DispositionDecided",
               "title": "Disposition decided",
               "summary": "The policy outcome for one inspected line: RESTOCK, REFURBISH, LIQUIDATE, DISPOSE or RTV.",
@@ -890,6 +899,309 @@
                     "time": "2026-10-22T15:10:02Z",
                     "datacontenttype": "application/json",
                     "dataschema": "urn:warehouse:returns-processing:events:ReturnLineStaged:v1",
+                    "data": {
+                      "receipt_id": "rcpt-8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d",
+                      "line_no": 1,
+                      "sku": "SKU-1",
+                      "quantity": 2,
+                      "condition": "Good",
+                      "received_at": "2026-10-22T14:05:00Z",
+                      "rma_id": "rma-4d5e6f7a-8b9c-4d0e-a1f2-3b4c5d6e7f80",
+                      "disposition_id": "disp-0c1d2e3f-4a5b-4e6f-9a7b-8c9d0e1f2a3b",
+                      "site_id": "WH1"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.returns-processing.analytics": {
+      "description": "This service's own analytics stream (ADR 0007), written by the SAME\ntransactional outbox pass as the integration topic: every domain event\nappears here too, under the SAME CloudEvents id, `type`, `subject` and\nkey and with a byte-identical payload; only the `dataschema` stream\nsegment differs\n(urn:warehouse:returns-processing:analytics:<EventName>:v1). It is NOT\nan integration contract: the only consumer is this service's\ncmd/returns-projector (fixed group from `ANALYTICS_CONSUMER_GROUP`),\nwhich folds five of the seven types into the analytical database (the\ntwo authorization twins are acknowledged and ignored); its\ndeterministic poison goes to\nwarehouse.returns-processing.analytics.dlq. Other contexts keep reading\nwarehouse.returns-processing.events.\n",
+      "subscribe": {
+        "operationId": "receiveReturnsProcessingAnalytics",
+        "summary": "Receive the analytics twin of every domain event.",
+        "description": "Payloads are byte-for-byte the integration payloads (ADR 0007);\nonly the dataschema names the analytics stream. The projector folds\n`ReturnReceiptOpened`, `UnexpectedReturnReceived`,\n`ReturnLineInspected`, `DispositionDecided` and `ReturnLineStaged`\ninto the analytical facts; `ReturnAuthorized` and\n`ReturnAuthorizationRejected` answer no report and are ignored.\n",
+        "tags": [
+          {
+            "name": "analytics"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "ReturnAuthorized",
+              "title": "Return authorized (analytics twin)",
+              "summary": "The analytics-stream twin of ReturnAuthorized (ADR 0007).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:returns-processing:analytics:ReturnAuthorized:v1`. Consumed only by cmd/returns-projector, which ignores it (no report answers the authorization funnel today).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.returns-processing.events.subscribe.message.oneOf[0].payload",
+              "examples": [
+                {
+                  "name": "authorized",
+                  "summary": "The analytics twin of the authorized example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "9f2c1d3e-5a4b-4c6d-8e7f-1a2b3c4d5e6f",
+                    "source": "/warehouse/returns-processing",
+                    "type": "com.warehouse.wms.returns-processing.returnauthorization.ReturnAuthorized",
+                    "subject": "rma-4d5e6f7a-8b9c-4d0e-a1f2-3b4c5d6e7f80",
+                    "time": "2026-10-21T09:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:returns-processing:analytics:ReturnAuthorized:v1",
+                    "data": {
+                      "rma_id": "rma-4d5e6f7a-8b9c-4d0e-a1f2-3b4c5d6e7f80",
+                      "order_id": "ord-7c9e2f1a",
+                      "line_no": 1,
+                      "sku": "SKU-1",
+                      "quantity": 2,
+                      "site_id": "WH1",
+                      "reason_code": "DAMAGED",
+                      "window_ends_at": "2026-11-20T09:30:00Z",
+                      "authorized_at": "2026-10-21T09:30:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ReturnAuthorizationRejected",
+              "title": "Return authorization rejected (analytics twin)",
+              "summary": "The analytics-stream twin of ReturnAuthorizationRejected (ADR 0007).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:returns-processing:analytics:ReturnAuthorizationRejected:v1`. Consumed only by cmd/returns-projector, which ignores it.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.returns-processing.events.subscribe.message.oneOf[1].payload",
+              "examples": [
+                {
+                  "name": "rejected",
+                  "summary": "The analytics twin of the rejected example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "1e3f5a7c-9b1d-4f2a-8c3e-5d6f7a8b9c0d",
+                    "source": "/warehouse/returns-processing",
+                    "type": "com.warehouse.wms.returns-processing.returnauthorization.ReturnAuthorizationRejected",
+                    "subject": "rma-6f7a8b9c-0d1e-4f2a-9b3c-4d5e6f7a8b90",
+                    "time": "2026-10-21T09:31:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:returns-processing:analytics:ReturnAuthorizationRejected:v1",
+                    "data": {
+                      "rma_id": "rma-6f7a8b9c-0d1e-4f2a-9b3c-4d5e6f7a8b90",
+                      "order_id": "ord-7c9e2f1a",
+                      "line_no": 2,
+                      "sku": "SKU-2",
+                      "quantity": 1,
+                      "rejection_code": "LINE_NOT_MANIFESTED",
+                      "rejected_at": "2026-10-21T09:31:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ReturnReceiptOpened",
+              "title": "Return receipt opened (analytics twin)",
+              "summary": "The analytics-stream twin of ReturnReceiptOpened (ADR 0007).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:returns-processing:analytics:ReturnReceiptOpened:v1`. The projector folds every carried line into its return_line_facts (the opened milestone).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.returns-processing.events.subscribe.message.oneOf[2].payload",
+              "examples": [
+                {
+                  "name": "opened",
+                  "summary": "The analytics twin of the opened example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "2f4a6b8c-0d2e-4a3b-9c4d-6e7f8a9b0c1d",
+                    "source": "/warehouse/returns-processing",
+                    "type": "com.warehouse.wms.returns-processing.returnreceipt.ReturnReceiptOpened",
+                    "subject": "rcpt-8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d",
+                    "time": "2026-10-22T14:05:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:returns-processing:analytics:ReturnReceiptOpened:v1",
+                    "data": {
+                      "receipt_id": "rcpt-8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d",
+                      "rma_id": "rma-4d5e6f7a-8b9c-4d0e-a1f2-3b4c5d6e7f80",
+                      "site_id": "WH1",
+                      "opened_at": "2026-10-22T14:05:00Z",
+                      "lines": [
+                        {
+                          "line_no": 1,
+                          "sku": "SKU-1",
+                          "quantity": 2,
+                          "rma_id": "rma-4d5e6f7a-8b9c-4d0e-a1f2-3b4c5d6e7f80"
+                        },
+                        {
+                          "line_no": 2,
+                          "sku": "SKU-9",
+                          "quantity": 1,
+                          "rma_id": null
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ReturnLineInspected",
+              "title": "Return line inspected (analytics twin)",
+              "summary": "The analytics-stream twin of ReturnLineInspected (ADR 0007).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:returns-processing:analytics:ReturnLineInspected:v1`. The projector records the inspected milestone of the receipt line.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.returns-processing.events.subscribe.message.oneOf[3].payload",
+              "examples": [
+                {
+                  "name": "inspected",
+                  "summary": "The analytics twin of the inspected example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3a5b7c9d-1e2f-4b3c-8d4e-7f8a9b0c1d2e",
+                    "source": "/warehouse/returns-processing",
+                    "type": "com.warehouse.wms.returns-processing.returnreceipt.ReturnLineInspected",
+                    "subject": "rcpt-8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d",
+                    "time": "2026-10-22T15:10:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:returns-processing:analytics:ReturnLineInspected:v1",
+                    "data": {
+                      "receipt_id": "rcpt-8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d",
+                      "line_no": 1,
+                      "sku": "SKU-1",
+                      "quantity": 2,
+                      "grade": "B",
+                      "reason_codes": [
+                        "CUSTOMER_DAMAGE"
+                      ],
+                      "inspected_at": "2026-10-22T15:10:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "UnexpectedReturnReceived",
+              "title": "Unexpected return received (analytics twin)",
+              "summary": "The analytics-stream twin of UnexpectedReturnReceived (ADR 0007).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:returns-processing:analytics:UnexpectedReturnReceived:v1`. The projector opens a return-line fact for the unexpected line (the opened milestone).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.returns-processing.events.subscribe.message.oneOf[4].payload",
+              "examples": [
+                {
+                  "name": "unexpected",
+                  "summary": "The analytics twin of the unexpected example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "4b6c8d9e-2f3a-4c4d-9e5f-8a9b0c1d2e3f",
+                    "source": "/warehouse/returns-processing",
+                    "type": "com.warehouse.wms.returns-processing.returnreceipt.UnexpectedReturnReceived",
+                    "subject": "rcpt-8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d",
+                    "time": "2026-10-22T14:05:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:returns-processing:analytics:UnexpectedReturnReceived:v1",
+                    "data": {
+                      "receipt_id": "rcpt-8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d",
+                      "line_no": 2,
+                      "sku": "SKU-9",
+                      "quantity": 1,
+                      "site_id": "WH1",
+                      "received_at": "2026-10-22T14:05:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DispositionDecided",
+              "title": "Disposition decided (analytics twin)",
+              "summary": "The analytics-stream twin of DispositionDecided (ADR 0007).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:returns-processing:analytics:DispositionDecided:v1`. The projector records one disposition_facts row (the disposition-mix report's cell) and the decided milestone of the receipt line.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.returns-processing.events.subscribe.message.oneOf[5].payload",
+              "examples": [
+                {
+                  "name": "decided",
+                  "summary": "The analytics twin of the decided example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "5c7d9e0f-3a4b-4d5e-8f6a-9b0c1d2e3f4a",
+                    "source": "/warehouse/returns-processing",
+                    "type": "com.warehouse.wms.returns-processing.disposition.DispositionDecided",
+                    "subject": "disp-0c1d2e3f-4a5b-4e6f-9a7b-8c9d0e1f2a3b",
+                    "time": "2026-10-22T15:10:01Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:returns-processing:analytics:DispositionDecided:v1",
+                    "data": {
+                      "disposition_id": "disp-0c1d2e3f-4a5b-4e6f-9a7b-8c9d0e1f2a3b",
+                      "receipt_id": "rcpt-8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d",
+                      "line_no": 1,
+                      "sku": "SKU-1",
+                      "quantity": 2,
+                      "grade": "B",
+                      "outcome": "RESTOCK",
+                      "policy_version": 3,
+                      "supersedes": null,
+                      "reason": null,
+                      "decided_at": "2026-10-22T15:10:01Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ReturnLineStaged",
+              "title": "Return line staged (analytics twin)",
+              "summary": "The analytics-stream twin of ReturnLineStaged (ADR 0007).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:returns-processing:analytics:ReturnLineStaged:v1`. The projector records the staged milestone (the value-recovery and return-cycle-time reports' basis).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.returns-processing.events.subscribe.message.oneOf[6].payload",
+              "examples": [
+                {
+                  "name": "staged",
+                  "summary": "The analytics twin of the staged example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6d8e0f1a-4b5c-4e6f-9a7b-8c9d0e1f2a3c",
+                    "source": "/warehouse/returns-processing",
+                    "type": "com.warehouse.wms.returns-processing.disposition.ReturnLineStaged",
+                    "subject": "disp-0c1d2e3f-4a5b-4e6f-9a7b-8c9d0e1f2a3b",
+                    "time": "2026-10-22T15:10:02Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:returns-processing:analytics:ReturnLineStaged:v1",
                     "data": {
                       "receipt_id": "rcpt-8a9b0c1d-2e3f-4a5b-8c6d-7e8f9a0b1c2d",
                       "line_no": 1,
@@ -1318,6 +1630,13 @@
       "UnexpectedReturnReceived": "$ref:$.channels.warehouse.returns-processing.events.subscribe.message.oneOf[4]",
       "DispositionDecided": "$ref:$.channels.warehouse.returns-processing.events.subscribe.message.oneOf[5]",
       "ReturnLineStaged": "$ref:$.channels.warehouse.returns-processing.events.subscribe.message.oneOf[6]",
+      "ReturnAuthorizedAnalytics": "$ref:$.channels.warehouse.returns-processing.analytics.subscribe.message.oneOf[0]",
+      "ReturnAuthorizationRejectedAnalytics": "$ref:$.channels.warehouse.returns-processing.analytics.subscribe.message.oneOf[1]",
+      "ReturnReceiptOpenedAnalytics": "$ref:$.channels.warehouse.returns-processing.analytics.subscribe.message.oneOf[2]",
+      "ReturnLineInspectedAnalytics": "$ref:$.channels.warehouse.returns-processing.analytics.subscribe.message.oneOf[3]",
+      "UnexpectedReturnReceivedAnalytics": "$ref:$.channels.warehouse.returns-processing.analytics.subscribe.message.oneOf[4]",
+      "DispositionDecidedAnalytics": "$ref:$.channels.warehouse.returns-processing.analytics.subscribe.message.oneOf[5]",
+      "ReturnLineStagedAnalytics": "$ref:$.channels.warehouse.returns-processing.analytics.subscribe.message.oneOf[6]",
       "ProductClassified": "$ref:$.channels.warehouse.product-master.events.publish.message",
       "OrderAllocated": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[0]",
       "OrderPartiallyAllocated": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[1]",

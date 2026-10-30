@@ -33,9 +33,9 @@ slotting and labor as expected capabilities.
 | Tier | **WMS** (CloudEvents subdomain segment `wms`) |
 | Aggregate | `SlotPlan` (package `internal/domain/slotplan`, ADR 0002) |
 | Policy | `abc-velocity-v1` (package `internal/domain/planning`, ADR 0002) |
-| Binaries | two in one image: `cmd/api` (REST on `HTTP_ADDR`, default `:8080`, plus four Kafka consumers and the outbox relay as goroutines) and the read-only `cmd/mcp` (ADR 0005) |
-| Data store | one Postgres database (embedded migrations), or in-memory adapters when `DATABASE_URL` is unset |
-| Kafka | publishes `warehouse.slotting-optimization.events`; consumes `warehouse.order-management.events`, `warehouse.product-master.events`, `warehouse.facility.events` (ADR 0003, ADR 0004) and `warehouse.inventory.events` (`StockRelocated`, ADR 0010) |
+| Binaries | four: `cmd/api` (REST on `HTTP_ADDR`, default `:8080`, plus five Kafka consumers and the outbox relay as goroutines), the read-only `cmd/mcp` (ADR 0005), `cmd/slotting-projector` and `cmd/slotting-reports` (the analytics read side, ADR 0006) |
+| Data store | one Postgres database (embedded migrations) plus a separate analytics database written only by the projector. `DATABASE_URL` is required (no in-memory mode, ADR 0011) |
+| Kafka | publishes `warehouse.slotting-optimization.events` and its analytics mirror `warehouse.slotting-optimization.analytics`; consumes `warehouse.order-management.events`, `warehouse.product-master.events` (incl. pack levels, ADR 0012), `warehouse.facility.events` (ADR 0003, ADR 0004) and `warehouse.inventory.events` (`StockRelocated`, ADR 0010) |
 | Auth | none (fleet-wide decision) |
 | MCP | read-only `cmd/mcp` (ADR 0005): `get_slot_plan` (with `execution`), `list_slot_plans`, `get_forward_slots`, `get_sku_velocity` |
 
@@ -130,18 +130,18 @@ consumed `StockRelocated`. There is no edge to `inbound-receiving` or
 ## Honest scope today
 
 - The service is built on `IQVO/slotting-optimization` `develop`: REST API,
-  outbox and relay, the four consumers (demand, product, layout and
-  relocation) and the read-only MCP server. This site holds its
+  outbox and relay, the five consumers (demand, product, pack levels, layout
+  and relocation), the read-only MCP server, the analytics projector and
+  reports, and the console remote. This site holds its
   `apis/slotting-optimization/` specs, the generated references and the
   synced artifact pack.
-- It is **deployed in the reference cluster**: `warehouse-infra` `develop`
-  registers it (database, ArgoCD application, Kong route
-  `/api/slotting-optimization`) and `helm-values/slotting-optimization.yaml`
-  sets `EVENT_PUBLISHER=kafka` and `DEMAND_MODE`, `PRODUCT_MODE`,
-  `LAYOUT_MODE` and `RELOCATION_MODE` to `kafka`, each with a fixed consumer
-  group. That file also says the MCP server stays off, while `terraform/mcp.tf`
-  lists the context in `mcp_services`; nothing in `warehouse-ops-agent` calls
-  it either way.
+- It is **wired in `warehouse-infra` `develop`**: `terraform/apps.yaml`
+  registers it (database, analytics database, web remote `slotting_mfe`) and
+  `helm-values/slotting-optimization.yaml` sets `EVENT_PUBLISHER=kafka` and
+  `DEMAND_MODE`, `PRODUCT_MODE`, `LAYOUT_MODE`, `RELOCATION_MODE` and
+  `PACK_LEVEL_MODE` to `kafka`, each with a fixed consumer group, and enables
+  the MCP server, which `warehouse-ops-agent` calls through its MCP client. The
+  kind cluster was not checked for this page.
 - **The execution chain is live end to end**, given the `RELOCATE` process
   path in `process-path-management` (the `warehouse-infra` post-deploy seed)
   and `inventory-storage`'s `TaskCompleted` consumer
@@ -153,6 +153,5 @@ consumed `StockRelocated`. There is no edge to `inbound-receiving` or
 - **Progress is advisory.** A newer plan can be generated and approved while
   the previous one is half executed; `wes-work-planning` cancels the older
   plan's work that has not been released yet.
-- An analytics read side (`warehouse.slotting-optimization.analytics` is
-  reserved, nothing publishes there), a `warehouse-ops-agent` client and a
-  console remote are later phases. None of them exists yet.
+- The analytics topic `warehouse.slotting-optimization.analytics` is read only
+  by this context's own projector (ADR 0006).

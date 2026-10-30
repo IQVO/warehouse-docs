@@ -40,8 +40,8 @@ them is dropped, the logic belongs back in `fulfillment-execution`.
 | Tier | **WES** (CloudEvents subdomain segment `wes`) |
 | Aggregates | `InterleavingPolicy` (package `internal/domain/policy`, one per site) and `StationTrip` (package `internal/domain/stationtrip`, one per station), ADR 0002 |
 | Recommender | the pure function `recommend.Recommend`, with the `travel.Model` port (v1: `rectilinear-v1`) |
-| Binaries | one: `cmd/api` (REST on `HTTP_ADDR`, default `:8080`, plus up to two Kafka consumers, the hint-expiry worker and the outbox relay as goroutines). There is **no** `cmd/mcp` |
-| Data store | one Postgres database (embedded migrations), or in-memory adapters when `DATABASE_URL` is unset |
+| Binaries | four: `cmd/api` (REST on `HTTP_ADDR`, default `:8080`, plus two Kafka consumers, the hint-expiry worker and the outbox relay as goroutines), `cmd/mcp` (read-only MCP server, ADR 0007), `cmd/ti-projector` and `cmd/ti-reports` (the analytics read side, ADR 0008) |
+| Data store | one Postgres database (embedded migrations) plus a separate analytics database written only by the projector. `DATABASE_URL` is required: Postgres and Kafka are the only runtime (ADR 0006) |
 | Kafka | publishes `warehouse.task-interleaving.events` and `warehouse.task-interleaving.analytics`; consumes `warehouse.fulfillment.events` and `warehouse.facility.events` (ADR 0003, ADR 0004) |
 | Auth | none (fleet-wide decision) |
 
@@ -116,31 +116,28 @@ ordinary `TaskAvailable`.
 
 ## Honest scope today
 
-- The service is built on `IQVO/task-interleaving` `develop` (PR #7): REST API,
-  Postgres repositories, outbox and relay, the expiry worker, the two consumers
-  and the BDD and architecture fitness suites. This site holds its
+- The service is built on `IQVO/task-interleaving` `develop`: REST API,
+  Postgres repositories, outbox and relay, the expiry worker, the two consumers,
+  the read-only MCP server, the analytics projector and reports, the console
+  remote and the BDD and architecture fitness suites. This site holds its
   `apis/task-interleaving/` specs, the generated references and the synced
   artifact pack and operations pages.
-- It is **not deployed in the reference cluster.** `warehouse-infra` `develop`
-  has no database, Kong route, ArgoCD application, values file or dashboard for
-  it, and the repository has no Dockerfile or Helm chart on `develop` (its
-  Runbook says so). It runs only from a locally built binary. Its declared Kong
-  path, `/api/task-interleaving`, therefore routes nowhere yet.
-- **The inputs are built on both sides.** `fulfillment-execution` publishes
-  `TaskAvailable` and `TaskClaimed` (its ADR 0049) and `TaskCompleted`, and
-  `facility-layout` publishes the zone, location and geometry events. Both
-  consumers here are opt-in and nothing starts them in the cluster.
-  `TaskAvailable` is announced for `RELOCATE` and `REPLENISH` tasks only (its
-  ADR 0049 and ADR 0050), so the pool, and with it every hint, contains those
-  two task types today.
-- **The output has no consumer.** `fulfillment-execution` has no code that reads
-  `InterleavingHintIssued` (no consumer, no hint table, no tie-break in
-  `claimNext`; its ADR 0049 and ADR 0050 list it as out of scope). Until it
-  does, nothing on the floor changes.
+- It is **wired in `warehouse-infra` `develop`**: `terraform/apps.yaml`
+  registers it (database, analytics database, web remote) and
+  `helm-values/task-interleaving.yaml` sets both consumer groups. Its Kong path
+  is `/api/task-interleaving`. The kind cluster was not checked for this page.
+- **The inputs are built and wired on both sides.** `fulfillment-execution`
+  publishes `TaskAvailable` and `TaskClaimed` (its ADR 0049) and
+  `TaskCompleted`, and `facility-layout` publishes the zone, location and
+  geometry events. `TaskAvailable` is announced only for tasks that carry bins
+  (today `RELOCATE` and `REPLENISH`, its ADR 0049 and ADR 0050), so the pool,
+  and with it every hint, contains those task types.
+- **The output has a consumer.** `fulfillment-execution` reads
+  `InterleavingHintIssued` (its ADR 0051) and uses it only as a tie-break
+  inside one `claimNext` priority band; `warehouse-infra` `develop` sets
+  `TASK_INTERLEAVING_MODE=kafka` for it.
 - Live-data findings owed (ADR 0003): whether the pool's `site_id` values equal
   `facility-layout`'s `siteCode` values, what share of pool task locations has a
   geometry point, and whether the geometry frame is the same for every location
   of a site. None can be answered before the service runs against real rows.
-- An analytics read side (`warehouse.task-interleaving.analytics` is written,
-  but nothing reads it), a `warehouse-ops-agent` client and a console remote
-  are later phases. None of them exists yet.
+- The analytics topic is read only by this context's own projector.

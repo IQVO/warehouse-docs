@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **exception-management** bounded context (WES\nsubdomain): the Problem Solve lifecycle (ADR 0001, ADR 0002). Every case\nis opened by a fact another context published; this service owns the\ntriage, assignment, SLA and resolution of that case, never the producer's\nown state.\n\n**Published.** The `ExceptionCase` aggregate raises six events and the\n`ExceptionPolicy` aggregate one, all published to\n`warehouse.exception-management.events` through a **transactional\noutbox**: the aggregate row and its already-encoded events are written in\nONE database transaction and a relay drains them to Kafka (at-least-once;\nthe CloudEvents `id` is stored with the outbox row, so a retry republishes\nthe same `id`). Kafka key = case id (source type for the policy event), so\none case's history stays ordered on one partition.\n\n**Consumed (ADR 0003).** Exception facts from six sibling contexts:\nfulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,\n`WeightDiscrepancyDetected`), wes-work-planning\n(`BacklogThresholdBreached`), network-fulfillment\n(`AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled`),\norder-management (`OrderRepromised`, correlation for auto-resolve only),\nreturns-processing (`UnexpectedReturnReceived`) and inventory-storage\n(`DiscrepancyDetected`, `ItemUnlocated`). Each consumed message opens or\ntouches exactly one open case per dedup key (source type, source subject,\nsite); the source payload is frozen on the case, never re-fetched. The\nconsumed messages below are the producers' own contracts, restated here\nand never imported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\n`specversion`, `id`, `source` (`/warehouse/exception-management`), `type`,\n`subject` (the case id; the source type for the policy event), `time`,\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:exception-management:events:<EventName>:v1`) are all\nrequired. Kafka key = the subject. Type =\n`com.warehouse.wes.exception-management.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
+    "description": "Event catalog for the **exception-management** bounded context (WES\nsubdomain): the Problem Solve lifecycle (ADR 0001, ADR 0002). Every case\nis opened by a fact another context published; this service owns the\ntriage, assignment, SLA and resolution of that case, never the producer's\nown state.\n\n**Published.** The `ExceptionCase` aggregate raises six events and the\n`ExceptionPolicy` aggregate one, all published to\n`warehouse.exception-management.events` through a **transactional\noutbox**: the aggregate row and its already-encoded events are written in\nONE database transaction and a relay drains them to Kafka (at-least-once;\nthe CloudEvents `id` is stored with the outbox row, so a retry republishes\nthe same `id`). Kafka key = case id (source type for the policy event), so\none case's history stays ordered on one partition.\n\n**Consumed (ADR 0003, 0006).** Exception facts from seven sibling contexts:\nfulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,\n`WeightDiscrepancyDetected`), wes-work-planning\n(`BacklogThresholdBreached`), network-fulfillment\n(`AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled`),\norder-management (`OrderRepromised`, correlation for auto-resolve only),\nreturns-processing (`UnexpectedReturnReceived`), inbound-receiving\n(`CartonDiscrepancyRaised`, routed by `kind`, ADR 0006) and inventory-storage\n(`DiscrepancyDetected`, `ItemUnlocated`). Each consumed message opens or\ntouches exactly one open case per dedup key (source type, source subject,\nsite); the source payload is frozen on the case, never re-fetched. The\nconsumed messages below are the producers' own contracts, restated here\nand never imported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\n`specversion`, `id`, `source` (`/warehouse/exception-management`), `type`,\n`subject` (the case id; the source type for the policy event), `time`,\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:exception-management:events:<EventName>:v1`) are all\nrequired. Kafka key = the subject. Type =\n`com.warehouse.wes.exception-management.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
   },
   "servers": {
     "production": {
@@ -41,6 +41,10 @@
       "description": "Events raised by the ExceptionPolicy aggregate."
     },
     {
+      "name": "analytics",
+      "description": "The analytics read side of this context (ADR 0006): the analytics topic, its projector and the reports binary."
+    },
+    {
       "name": "consumed",
       "description": "Events produced by sibling contexts that this service consumes (ADR 0003)."
     }
@@ -60,6 +64,7 @@
         "message": {
           "oneOf": [
             {
+              "x-no-consumer-reason": "case lifecycle fact; console and ops-agent read cases via REST; no event consumer in v1",
               "name": "ExceptionOpened",
               "title": "Exception opened",
               "summary": "A source fact created a case (first occurrence of the dedup key).",
@@ -245,6 +250,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "case lifecycle fact; console and ops-agent read cases via REST; no event consumer in v1",
               "name": "ExceptionTriaged",
               "title": "Exception triaged",
               "summary": "Severity and queue were set (policy default or operator).",
@@ -333,6 +339,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "case lifecycle fact; console and ops-agent read cases via REST; no event consumer in v1",
               "name": "ExceptionAssigned",
               "title": "Exception assigned",
               "summary": "An owner took the case.",
@@ -410,6 +417,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "case lifecycle fact; console and ops-agent read cases via REST; no event consumer in v1",
               "name": "ExceptionEscalated",
               "title": "Exception escalated",
               "summary": "The SLA clock breached; the ESCALATED flag was set (work continues).",
@@ -480,6 +488,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "case lifecycle fact; console and ops-agent read cases via REST; no event consumer in v1",
               "name": "ExceptionResolved",
               "title": "Exception resolved",
               "summary": "A resolution code and root cause were recorded; the case is terminal.",
@@ -574,6 +583,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "case lifecycle fact; console and ops-agent read cases via REST; no event consumer in v1",
               "name": "ExceptionAutoResolved",
               "title": "Exception auto-resolved",
               "summary": "A declarative policy rule closed the case on a correlated fact.",
@@ -658,6 +668,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "policy declaration fact (append-only versions); no event consumer in v1",
               "name": "ExceptionPolicyDeclared",
               "title": "Exception policy declared",
               "summary": "A new version of the handling policy of a source type.",
@@ -766,6 +777,287 @@
                     "time": "2026-10-21T08:00:00Z",
                     "datacontenttype": "application/json",
                     "dataschema": "urn:warehouse:exception-management:events:ExceptionPolicyDeclared:v1",
+                    "data": {
+                      "source_type": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed",
+                      "version": 1,
+                      "severity": "HIGH",
+                      "queue": "cps-front",
+                      "sla_minutes": 30,
+                      "auto_resolve": {
+                        "on_type": "com.warehouse.wes.order-management.order.OrderRepromised",
+                        "within_minutes": 60
+                      }
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.exception-management.analytics": {
+      "description": "This service's own analytics stream (ADR 0006), written by the SAME\ntransactional outbox relay as the integration topic: every published\nfact appears here too, under the SAME CloudEvents id and `type`, with\nonly the `dataschema` stream segment different\n(urn:warehouse:exception-management:analytics:<EventName>:v1). It is NOT\nan integration contract: the only consumer is this service's\ncmd/exceptions-projector (fixed group from `ANALYTICS_CONSUMER_GROUP`,\nstarting at the earliest retained offset), which folds the events into\nthe analytical database; its deterministic poison goes to\nwarehouse.exception-management.analytics.dlq. Other contexts keep\nreading warehouse.exception-management.events.\n",
+      "subscribe": {
+        "operationId": "receiveExceptionAnalytics",
+        "summary": "Receive the analytics twin of every published fact.",
+        "description": "Payloads are byte-for-byte the integration payloads (ADR 0006); only\nthe dataschema names the analytics stream. The projector answers the\nroot-cause-frequency, mean-time-to-resolve, sla-breach-rate and\nfreshness reports from the folded facts.\n",
+        "tags": [
+          {
+            "name": "analytics"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "ExceptionOpened",
+              "title": "Exception opened (analytics twin)",
+              "summary": "The analytics-stream twin of ExceptionOpened (ADR 0006).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionOpened:v1`. Consumed only by cmd/exceptions-projector.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[0].payload",
+              "examples": [
+                {
+                  "name": "opened",
+                  "summary": "A TaskCPTMissed fact opened the case for task task-8a1f.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3f2a9c1e-6b48-4d17-9a0f-8e5d2c7b4a11",
+                    "source": "/warehouse/exception-management",
+                    "type": "com.warehouse.wes.exception-management.exceptioncase.ExceptionOpened",
+                    "subject": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
+                    "time": "2026-10-21T09:00:05Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:exception-management:analytics:ExceptionOpened:v1",
+                    "data": {
+                      "case_id": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
+                      "source_type": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed",
+                      "source_subject": "task-8a1f",
+                      "site_id": null,
+                      "severity": "HIGH",
+                      "queue": "cps-front",
+                      "opened_at": "2026-10-21T09:00:05Z",
+                      "sla_due_at": "2026-10-21T09:30:05Z",
+                      "source_event_id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                      "source_payload": {
+                        "task_id": "task-8a1f",
+                        "order_ref": "wu-8a1f",
+                        "task_type": "PICK",
+                        "cpt": "2026-09-30T14:55:00Z"
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ExceptionTriaged",
+              "title": "Exception triaged (analytics twin)",
+              "summary": "The analytics-stream twin of ExceptionTriaged (ADR 0006).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionTriaged:v1`. Consumed only by cmd/exceptions-projector.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[1].payload",
+              "examples": [
+                {
+                  "name": "triaged",
+                  "summary": "An operator moved the case to the inbound queue at high severity.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "5c4b2d8f-1a39-4e60-8b2d-7f6e5a4b3c22",
+                    "source": "/warehouse/exception-management",
+                    "type": "com.warehouse.wes.exception-management.exceptioncase.ExceptionTriaged",
+                    "subject": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
+                    "time": "2026-10-21T09:05:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:exception-management:analytics:ExceptionTriaged:v1",
+                    "data": {
+                      "case_id": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
+                      "severity": "CRITICAL",
+                      "queue": "cps-inbound",
+                      "actor": "op-jane",
+                      "at": "2026-10-21T09:05:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ExceptionAssigned",
+              "title": "Exception assigned (analytics twin)",
+              "summary": "The analytics-stream twin of ExceptionAssigned (ADR 0006).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionAssigned:v1`. Consumed only by cmd/exceptions-projector.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[2].payload",
+              "examples": [
+                {
+                  "name": "assigned",
+                  "summary": "op-marc took the case.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7e8f9a0b-2c4d-4e5f-8a9b-0c1d2e3f4a33",
+                    "source": "/warehouse/exception-management",
+                    "type": "com.warehouse.wes.exception-management.exceptioncase.ExceptionAssigned",
+                    "subject": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
+                    "time": "2026-10-21T09:10:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:exception-management:analytics:ExceptionAssigned:v1",
+                    "data": {
+                      "case_id": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
+                      "assignee": "op-marc",
+                      "actor": "op-jane",
+                      "at": "2026-10-21T09:10:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ExceptionEscalated",
+              "title": "Exception escalated (analytics twin)",
+              "summary": "The analytics-stream twin of ExceptionEscalated (ADR 0006).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionEscalated:v1`. Consumed only by cmd/exceptions-projector.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[3].payload",
+              "examples": [
+                {
+                  "name": "escalated",
+                  "summary": "The case breached its 30-minute SLA.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c44",
+                    "source": "/warehouse/exception-management",
+                    "type": "com.warehouse.wes.exception-management.exceptioncase.ExceptionEscalated",
+                    "subject": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
+                    "time": "2026-10-21T09:30:06Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:exception-management:analytics:ExceptionEscalated:v1",
+                    "data": {
+                      "case_id": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
+                      "sla_due_at": "2026-10-21T09:30:05Z",
+                      "at": "2026-10-21T09:30:06Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ExceptionResolved",
+              "title": "Exception resolved (analytics twin)",
+              "summary": "The analytics-stream twin of ExceptionResolved (ADR 0006).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionResolved:v1`. Consumed only by cmd/exceptions-projector.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[4].payload",
+              "examples": [
+                {
+                  "name": "resolved",
+                  "summary": "The task was re-run and the promise restored.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "1f2e3d4c-5b6a-4789-9abc-def012345678",
+                    "source": "/warehouse/exception-management",
+                    "type": "com.warehouse.wes.exception-management.exceptioncase.ExceptionResolved",
+                    "subject": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
+                    "time": "2026-10-21T09:25:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:exception-management:analytics:ExceptionResolved:v1",
+                    "data": {
+                      "case_id": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
+                      "resolution_code": "WORK_COMPLETED",
+                      "root_cause": "OPERATOR_UNAVAILABLE",
+                      "note": null,
+                      "actor": "op-marc",
+                      "at": "2026-10-21T09:25:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ExceptionAutoResolved",
+              "title": "Exception auto-resolved (analytics twin)",
+              "summary": "The analytics-stream twin of ExceptionAutoResolved (ADR 0006).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionAutoResolved:v1`. Consumed only by cmd/exceptions-projector.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[5].payload",
+              "examples": [
+                {
+                  "name": "autoResolved",
+                  "summary": "The repromised order closed the CPT-miss case.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "2e3f4a5b-6c7d-4899-a0bc-def012345678",
+                    "source": "/warehouse/exception-management",
+                    "type": "com.warehouse.wes.exception-management.exceptioncase.ExceptionAutoResolved",
+                    "subject": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
+                    "time": "2026-10-21T09:20:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:exception-management:analytics:ExceptionAutoResolved:v1",
+                    "data": {
+                      "case_id": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
+                      "rule_id": "cpt-missed-repromised-v1",
+                      "correlated_type": "com.warehouse.wes.order-management.order.OrderRepromised",
+                      "correlated_event_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+                      "at": "2026-10-21T09:20:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ExceptionPolicyDeclared",
+              "title": "Exception policy declared (analytics twin)",
+              "summary": "The analytics-stream twin of ExceptionPolicyDeclared (ADR 0006).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionPolicyDeclared:v1`. Consumed only by cmd/exceptions-projector.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[6].payload",
+              "examples": [
+                {
+                  "name": "declared",
+                  "summary": "TaskCPTMissed defaults to HIGH, cps-front, 30-minute SLA, repromise auto-resolve.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "4a5b6c7d-8e9f-4a0b-8c1d-2e3f4a5b6c55",
+                    "source": "/warehouse/exception-management",
+                    "type": "com.warehouse.wes.exception-management.exceptionpolicy.ExceptionPolicyDeclared",
+                    "subject": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed",
+                    "time": "2026-10-21T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:exception-management:analytics:ExceptionPolicyDeclared:v1",
                     "data": {
                       "source_type": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed",
                       "version": 1,
@@ -1458,6 +1750,105 @@
         }
       }
     },
+    "warehouse.inbound-receiving.events": {
+      "description": "inbound-receiving's integration topic. This service consumes ONLY\n`CartonDiscrepancyRaised` under a stable consumer group read from env\n`CARTON_DISCREPANCY_CONSUMER_GROUP` (ADR 0006). Every other type is\nignored.\n",
+      "publish": {
+        "operationId": "consumeInboundReceivingEvents",
+        "summary": "Consume carton discrepancies as routed cases.",
+        "description": "One case per (receipt_id, sscc or \"-\", kind). Missing, Duplicate,\nUnexpected, CaseQtyMismatch, MixedCaseDeclaredAsCasePack,\nMixedCartonContentMismatch, UnknownGtin and any unknown kind route to\nthe problem-solve policy; UnlabelledCarton and CartonOverLimit to the\nreceiving-lead policy (informational). The CloudEvents `id` claim and\nthe effect commit in one transaction.\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "name": "CartonDiscrepancyRaised",
+          "title": "CartonDiscrepancyRaised (consumed, inbound-receiving)",
+          "summary": "A carton did not match its ASN or failed a receiving check.",
+          "description": "`type` =\n`com.warehouse.wms.inbound-receiving.receipt.CartonDiscrepancyRaised`,\nsource `/warehouse/inbound-receiving`, subject and Kafka key = the\nreceipt id. `kind` is an open string (UnexpectedCarton, MissingCarton,\nDuplicateSscc, UnknownGtin, CaseQtyMismatch, MixedCaseDeclaredAsCasePack,\nUnlabelledCarton, CartonOverLimit, MixedCartonContentMismatch, ...).\n",
+          "contentType": "application/cloudevents+json",
+          "tags": [
+            {
+              "name": "consumed"
+            }
+          ],
+          "payload": {
+            "allOf": [
+              "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
+              {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "required": [
+                      "receipt_id",
+                      "kind",
+                      "at"
+                    ],
+                    "properties": {
+                      "receipt_id": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-111>"
+                      },
+                      "sscc": {
+                        "type": "string",
+                        "description": "The carton's SSCC-18; absent when the discrepancy is not about one carton.",
+                        "x-parser-schema-id": "<anonymous-schema-112>"
+                      },
+                      "kind": {
+                        "type": "string",
+                        "description": "Open string; unknown kinds route to problem-solve.",
+                        "x-parser-schema-id": "<anonymous-schema-113>"
+                      },
+                      "expected": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-114>"
+                      },
+                      "actual": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-115>"
+                      },
+                      "at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "x-parser-schema-id": "<anonymous-schema-116>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-110>"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-109>"
+              }
+            ],
+            "x-parser-schema-id": "CartonDiscrepancyRaisedEvent"
+          },
+          "examples": [
+            {
+              "name": "caseQtyMismatch",
+              "summary": "A case declared 12 units but 10 were counted.",
+              "payload": {
+                "specversion": "1.0",
+                "id": "5b2f0c1e-7a44-4b58-8f5d-2f6c1a9d3e10",
+                "source": "/warehouse/inbound-receiving",
+                "type": "com.warehouse.wms.inbound-receiving.receipt.CartonDiscrepancyRaised",
+                "subject": "rcpt-77",
+                "time": "2026-10-24T09:00:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:inbound-receiving:events:CartonDiscrepancyRaised:v1",
+                "data": {
+                  "receipt_id": "rcpt-77",
+                  "sscc": "340123450000000013",
+                  "kind": "CaseQtyMismatch",
+                  "expected": "12",
+                  "actual": "10",
+                  "at": "2026-10-24T09:00:00Z"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
     "warehouse.inventory.events": {
       "description": "inventory-storage's integration topic. This service consumes\n`DiscrepancyDetected` and `ItemUnlocated` under a stable consumer group\nread from env `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`. Both types arrive\nhere only after the producer's promotion PR (they are analytics-only\ntoday); the contracts below are pinned consumer-first. Every other type\nis ignored.\n",
       "publish": {
@@ -1499,25 +1890,25 @@
                           "bin_id": {
                             "type": "string",
                             "description": "The bin whose count did not match system records.",
-                            "x-parser-schema-id": "<anonymous-schema-111>"
+                            "x-parser-schema-id": "<anonymous-schema-119>"
                           },
                           "counted": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Quantity physically counted in the bin.",
-                            "x-parser-schema-id": "<anonymous-schema-112>"
+                            "x-parser-schema-id": "<anonymous-schema-120>"
                           },
                           "system": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Quantity the system believed was in the bin.",
-                            "x-parser-schema-id": "<anonymous-schema-113>"
+                            "x-parser-schema-id": "<anonymous-schema-121>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-110>"
+                        "x-parser-schema-id": "<anonymous-schema-118>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-109>"
+                    "x-parser-schema-id": "<anonymous-schema-117>"
                   }
                 ],
                 "x-parser-schema-id": "DiscrepancyDetectedEvent"
@@ -1573,28 +1964,28 @@
                           "stock_unit_id": {
                             "type": "string",
                             "description": "The StockUnit flagged Unlocated.",
-                            "x-parser-schema-id": "<anonymous-schema-116>"
+                            "x-parser-schema-id": "<anonymous-schema-124>"
                           },
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-117>"
+                            "x-parser-schema-id": "<anonymous-schema-125>"
                           },
                           "bin_id": {
                             "type": "string",
                             "description": "The bin the stock was believed to be in.",
-                            "x-parser-schema-id": "<anonymous-schema-118>"
+                            "x-parser-schema-id": "<anonymous-schema-126>"
                           },
                           "quantity": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "Quantity that could not be accounted for.",
-                            "x-parser-schema-id": "<anonymous-schema-119>"
+                            "x-parser-schema-id": "<anonymous-schema-127>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-115>"
+                        "x-parser-schema-id": "<anonymous-schema-123>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-114>"
+                    "x-parser-schema-id": "<anonymous-schema-122>"
                   }
                 ],
                 "x-parser-schema-id": "ItemUnlocatedEvent"
@@ -1644,8 +2035,16 @@
       "OrphanedHoldCancelled": "$ref:$.channels.warehouse.network-fulfillment.events.publish.message.oneOf[1]",
       "OrderRepromised": "$ref:$.channels.warehouse.order-management.events.publish.message",
       "UnexpectedReturnReceived": "$ref:$.channels.warehouse.returns-processing.events.publish.message",
+      "CartonDiscrepancyRaised": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message",
       "DiscrepancyDetected": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0]",
-      "ItemUnlocated": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1]"
+      "ItemUnlocated": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1]",
+      "ExceptionOpenedAnalytics": "$ref:$.channels.warehouse.exception-management.analytics.subscribe.message.oneOf[0]",
+      "ExceptionTriagedAnalytics": "$ref:$.channels.warehouse.exception-management.analytics.subscribe.message.oneOf[1]",
+      "ExceptionAssignedAnalytics": "$ref:$.channels.warehouse.exception-management.analytics.subscribe.message.oneOf[2]",
+      "ExceptionEscalatedAnalytics": "$ref:$.channels.warehouse.exception-management.analytics.subscribe.message.oneOf[3]",
+      "ExceptionResolvedAnalytics": "$ref:$.channels.warehouse.exception-management.analytics.subscribe.message.oneOf[4]",
+      "ExceptionAutoResolvedAnalytics": "$ref:$.channels.warehouse.exception-management.analytics.subscribe.message.oneOf[5]",
+      "ExceptionPolicyDeclaredAnalytics": "$ref:$.channels.warehouse.exception-management.analytics.subscribe.message.oneOf[6]"
     },
     "schemas": {
       "CloudEventEnvelope": "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
@@ -1665,6 +2064,7 @@
       "OrphanedHoldCancelledEvent": "$ref:$.channels.warehouse.network-fulfillment.events.publish.message.oneOf[1].payload",
       "OrderRepromisedEvent": "$ref:$.channels.warehouse.order-management.events.publish.message.payload",
       "UnexpectedReturnReceivedEvent": "$ref:$.channels.warehouse.returns-processing.events.publish.message.payload",
+      "CartonDiscrepancyRaisedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.payload",
       "DiscrepancyDetectedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0].payload",
       "ItemUnlocatedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1].payload"
     }

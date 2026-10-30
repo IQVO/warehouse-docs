@@ -33,9 +33,9 @@ starts from a fact another context published (ADR 0001).
 | Subdomain class | **Supporting** today; candidate Core once auto-resolution policies and agent recommendations run against it (ADR 0001) |
 | Tier | **WES** (CloudEvents subdomain segment `wes`; it shapes operator flow and holds no stock, layout or master data) |
 | Aggregates | `ExceptionCase` and `ExceptionPolicy` (ADR 0002) |
-| Binaries | two: `cmd/api` (REST, six Kafka consumers, the SLA sweeper, the outbox relay) and `cmd/mcp` (read-only MCP server over the four read use cases) |
+| Binaries | four: `cmd/api` (REST, seven Kafka consumers, the SLA sweeper, the outbox relay), `cmd/mcp` (read-only MCP server over the four read use cases), `cmd/exceptions-projector` and `cmd/exceptions-reports` (the analytics read side) |
 | Data store | one Postgres database (embedded migrations). `DATABASE_URL` and `KAFKA_BROKERS` are mandatory; real Postgres and real Kafka only |
-| Kafka | publishes `warehouse.exception-management.events` and its analytics mirror; consumes the exception facts of six sibling contexts (ADR 0003) |
+| Kafka | publishes `warehouse.exception-management.events` and its analytics mirror; consumes the exception facts of six sibling contexts (ADR 0003; `inbound-receiving`'s `CartonDiscrepancyRaised` since ADR 0006) plus the `OrderRepromised` correlation feed |
 | Auth | none (fleet-wide decision) |
 
 ## The lifecycle

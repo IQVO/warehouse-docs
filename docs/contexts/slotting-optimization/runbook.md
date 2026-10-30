@@ -19,14 +19,16 @@ tooling does not exist yet the page says so.
 
 | Item | State on `develop` |
 | --- | --- |
-| Binaries | two in one image: `cmd/api` (`/app/api`: REST, the three local-copy consumers and the outbox relay in one process, [Architecture](https://iqvo.github.io/slotting-optimization/docs/overview/architecture)) and `cmd/mcp` (`/app/mcp`: the read-only MCP server, ADR 0005) |
+| Binaries | five in one image: `cmd/api` (`/app/api`: REST, the four consumers and the outbox relay in one process, [Architecture](https://iqvo.github.io/slotting-optimization/docs/overview/architecture)), `cmd/mcp` (`/app/mcp`: the read-only MCP server, ADR 0005), `cmd/a2a` (`/app/a2a`: the read-only A2A agent, ADR 0013), `cmd/slotting-projector` (`/app/slotting-projector`) and `cmd/slotting-reports` (`/app/slotting-reports`): the analytics read side, ADR 0006 |
+| Web remote | `web/` is the Module Federation remote `slotting_mfe` (exposes `./App`, mounted by warehouse-console on `/slotting/*`). It has its own image, built from `web/Dockerfile` (nginx-unprivileged on `8080`), and the chart's `frontend` component serves it; see [Frontend image](#frontend-image-web-remote) |
 | Container image | built from the repository's `Dockerfile`; the `docker-publish` job of `.github/workflows/ci.yml` pushes `ghcr.io/iqvo/slotting-optimization:{latest,<short-sha>}` on a push to `main` |
-| Helm chart | `charts/slotting-optimization`: the api Deployment (always), the mcp Deployment and Service (`mcp.enabled`, off by default), an optional HPA, ingress or Gateway API route. The api Deployment renders every variable `cmd/api` reads as explicit `env` and also mounts the chart ConfigMap with `envFrom` (explicit `env` wins); `tests/render_test.sh` (CI job `chart-tests`) fails when a variable a binary reads is not rendered, when the mount disappears, or when the ConfigMap carries a key no binary reads. The `release` job packages and pushes the chart. `warehouse-infra` (`origin/develop`) has no values file, Kong route or ArgoCD application for this context yet (gap fix D10, infra part) |
-| Edge route | planned: Kong `:8000` under `/api/slotting-optimization` (ADR 0001). Not wired. |
+| Helm chart | `charts/slotting-optimization`: the api Deployment (always), the mcp Deployment, Service and Kong route (`mcp.enabled`, `mcp.route.enabled`, off by default), the projector Deployment (no Service) and the reports Deployment + Service `<fullname>-reports:80` (`analytics.enabled`, off by default), the web remote (`frontend.enabled`, off by default), an optional HPA for the api, ingress or Gateway API route. The api Deployment renders every variable `cmd/api` reads as explicit `env` and also mounts the chart ConfigMap with `envFrom` (explicit `env` wins); `tests/render_test.sh` (CI job `chart-tests`) fails when a variable a binary reads is not rendered into its Deployment, when the mount disappears, when the ConfigMap carries a key no binary reads, or when the analytics components render while `analytics.enabled` is false. The `release` job packages and pushes the chart. |
+| Deployment in the kind cluster | warehouse-infra (`origin/develop`): `terraform/apps.yaml` registers `slotting-optimization` (`kind: service`, `database: true`, `analytics: true`, no `frontend_remote`) and `helm-values/slotting-optimization.yaml` sets the four consumer groups, `kafka.enabled: true`, `mcp.enabled: true` with `mcp.route` on, `analytics.enabled: true` (`existingSecret: slotting-optimization-analytics-db`, group `slotting-optimization-analytics`) and `gatewayApi` on. So api, mcp, projector and reports are deployed; the web remote is not. |
+| Edge routes | Kong `:8000`: `/api/slotting-optimization` (the api, the chart's `gatewayApi` HTTPRoute, prefix stripped) and `/api/mcp/slotting-optimization` (rewritten to `/mcp`). The chart renders no route for the reports Service, so `/api/slotting-optimization/reports/...` reaches `cmd/api`, which has no `/reports` route (404). |
 | Auth | none, by fleet decision (REST and MCP are unauthenticated; `TestNoAuthMiddlewareReintroduced`) |
 
-Until `warehouse-infra` wires it the service runs from source, a locally
-built binary ([Quickstart](https://iqvo.github.io/slotting-optimization/docs/overview/quickstart)) or `helm install` of the
+Outside the kind cluster the service runs from source, a locally built
+binary ([Quickstart](https://iqvo.github.io/slotting-optimization/docs/overview/quickstart)) or `helm install` of the
 chart. The rest of this page describes the process behaviour any deployment
 must respect.
 
@@ -38,40 +40,48 @@ with one Service port, `HTTP_ADDR` (default `:8080`), serving:
 | Path | Purpose | Answer |
 | --- | --- | --- |
 | `GET /healthz` | liveness | always `200 {"status":"ok"}` while the process runs |
-| `GET /readyz` | readiness | `200 {"status":"ready"}`; `503 {"status":"not_ready"}` once shutdown began |
+| `GET /readyz` | readiness | `200 {"status":"ready"}`; `503 {"status":"not_ready"}` once shutdown began; `503` problem `dependency-unavailable` while Postgres or the Kafka broker is unreachable |
 | `GET /metrics` | Prometheus scrape | Go runtime and process collectors ([Observability](/contexts/slotting-optimization/observability)) |
 | everything else | the REST API of `apis/openapi.yaml` | see [API overview](https://iqvo.github.io/slotting-optimization/docs/api-reference) |
 
 ### What readiness waits for
 
-`/readyz` is a shutdown gate, not a dependency check
-(`internal/adapters/inbound/http/readiness.go`): its zero value is *ready*,
-and only `serveUntilSignal` flips it. It never probes Postgres or Kafka.
-Readiness still implies a working database, because the listener only opens
-after `buildAdapters` has run the migrations and pinged the pool: a process
-that cannot reach Postgres exits before it serves anything. Kafka is never a
-boot dependency: readers and writers dial lazily, so a broker outage shows up
-as consumer and relay errors in the logs, not as an unready pod.
+`/readyz` (`internal/adapters/inbound/http/readiness.go`, wired in
+`cmd/api/main.go` `newReadiness`) is the shutdown gate **and** a real
+dependency check: it is ready only while a Postgres ping succeeds and a Kafka
+broker answers a metadata request. The metadata request carries no topic, and
+an empty topic list is healthy: the service never requires topics (the relay
+writer auto-creates them). A failure is a 503 `dependency-unavailable` whose
+`detail` names `postgres` and/or `kafka`. The verdict is cached for 3 s and one
+round of checks is bounded at 2 s, so probes cannot hammer either dependency.
+Readiness also still implies a working database at boot: the listener only
+opens after `buildAdapters` has run the migrations and pinged the pool, so a
+process that cannot reach Postgres exits before it serves anything. Kafka is
+not a boot dependency (readers and writers dial lazily), but a broker outage
+makes the pod unready, and when the relay or a consumer returns on its own the
+process exits non-zero (`... stopped unexpectedly: exiting so the orchestrator
+restarts the service`) so the pod restarts.
 
 ### Boot sequence
 
-1. Logger (`LOG_LEVEL`), then OpenTelemetry (`OTEL_EXPORTER_OTLP_ENDPOINT`, non-blocking).
-2. With `DATABASE_URL` set: run the embedded migrations through
-   `MIGRATIONS_DATABASE_URL`, open the pool, ping it. Both steps retry 5 times
+1. Logger (`LOG_LEVEL`), then the environment is validated before anything is
+   opened or bound (`loadRuntime`): `DATABASE_URL`, `KAFKA_BROKERS` and the
+   four `*_CONSUMER_GROUP` are mandatory, `*_MODE` accepts only `kafka` and
+   `EVENT_PUBLISHER` only `kafka`. A violation exits 1 with an error naming
+   the variable (`service exited with error`).
+2. OpenTelemetry (`OTEL_EXPORTER_OTLP_ENDPOINT`, non-blocking).
+3. Run the embedded migrations through `MIGRATIONS_DATABASE_URL`, open the
+   pool, ping it (`postgres adapters configured`). Both steps retry 5 times
    with 1 s, 2 s, 4 s, 8 s waits (15 s of backoff in total; `internal/bootretry`) because a pod's first
    outbound dial can be reset by its Istio sidecar. The last error is returned
    and the process exits 1 (`service exited with error`).
-3. Without `DATABASE_URL`: in-memory adapters (log line
-   `DATABASE_URL not configured; using in-memory adapters`).
-4. Build the router, then start every consumer whose `*_MODE=kafka`
+4. Build the router, then start the four consumers
    (`consumer running` with `consumer`, `topic`, `group_id`, `brokers`), then
    the relay (`outbox relay running` with `publisher`, `interval`,
    `max_attempts`, `topic`).
 5. Listen (`http server listening`).
 
-A misconfiguration refuses to boot before the listener opens: an unknown
-`EVENT_PUBLISHER` or `*_MODE`, a `*_MODE=kafka` without its
-`*_CONSUMER_GROUP`, or Kafka needed without `KAFKA_BROKERS`.
+There is no in-memory fallback and no optional consumer ([ADR 0011](https://iqvo.github.io/slotting-optimization/docs/adr/0011-postgres-and-kafka-are-the-only-runtime)).
 
 ### Graceful shutdown
 
@@ -90,17 +100,65 @@ Give the pod a `terminationGracePeriodSeconds` of at least
 `SHUTDOWN_DRAIN_DELAY` + 10 + 10 + 10 + 5 seconds (40 s with the defaults) to
 cover the worst case.
 
+## Frontend image (web remote)
+
+`web/` holds the operator UI as a Module Federation remote, not a standalone
+app. The files that package it:
+
+| File | Role |
+| --- | --- |
+| `web/Dockerfile` | multi-stage build: `node:22-bookworm-slim` builds `@warehouse/ui-kit` (a sibling checkout, supplied as the named BuildKit context `uikit`), then `npm ci && npm run build` for the remote, then copies `dist/` into `nginxinc/nginx-unprivileged` |
+| `web/nginx.conf` | `listen 8080`; `GET /healthz` answers `200 ok`; `remoteEntry.js` and `index.html` are `Cache-Control: no-cache`; `/assets/` is `public, max-age=31536000, immutable` (one header); unknown paths fall back to `index.html` |
+| `web/.dockerignore` | keeps the host `node_modules` and `dist` out of the build context (a macOS `node_modules` would hide the linux native bindings) |
+
+Facts a deployer needs (from `web/vite.config.ts`):
+
+| Item | Value |
+| --- | --- |
+| Federation container name | `slotting_mfe` |
+| Exposed module | `./App` |
+| Entry file | `remoteEntry.js` |
+| Public base path (build) | `/mfes/slotting-optimization/` |
+| Container port | `8080` |
+| Dev / preview port | `5194` |
+| Image build context | `web/` with `--build-context uikit=<path to warehouse-ui-kit>` |
+| Chart component | `frontend` (`frontend.enabled`, default `false`; image `warehouse/slotting-optimization-frontend`) |
+
+Build and check it locally from the repository root:
+
+```bash
+docker build --build-context uikit=../warehouse-ui-kit \
+  -t warehouse/slotting-optimization-frontend:local web
+docker run --rm -p 18194:8080 warehouse/slotting-optimization-frontend:local
+curl -s localhost:18194/healthz                                  # ok
+curl -s -o /dev/null -w '%{http_code}\n' localhost:18194/remoteEntry.js   # 200
+```
+
+The Nginx web gateway of `warehouse-infra` strips the `/mfes/slotting-optimization`
+prefix before proxying to the pod, so the pod itself sees root-relative paths.
+The pod serves static bytes only: the SPA reaches the REST API at
+`${apiOrigin}/api/slotting-optimization`, with `apiOrigin` read at runtime
+from the console's `/config.json`. Kong never serves these assets. The CI job
+`web` runs lint, `tsc -b`, the vitest suite and the production build, then
+builds this image and requests `/healthz` and `remoteEntry.js` from it.
+
 ## Migrations
 
 | Fact | Value |
 | --- | --- |
 | Files | `internal/adapters/outbound/postgres/migrations/0001_slotting_schema.{up,down}.sql` and `0002_slot_plan_move_executions.{up,down}.sql` (additive, ADR 0010), embedded with `//go:embed` |
 | Runner | golang-migrate (`postgres.RunMigrations`), `Up()`; `ErrNoChange` is success |
-| When | at every boot, before the pool opens, only when `DATABASE_URL` is set |
+| When | at every boot of `cmd/api` and of `cmd/mcp`, before the pool opens (both binaries require `DATABASE_URL`) |
 | DSN | `MIGRATIONS_DATABASE_URL`, falling back to `DATABASE_URL`. Use a direct connection: the migrate advisory lock does not survive PgBouncer transaction pooling. |
 | Concurrency | several replicas booting together serialise on the advisory lock; the losers find `ErrNoChange` |
 | Bookkeeping | `schema_migrations` (golang-migrate's table) |
 | Tables created | `slot_plans`, `slot_plan_assignments`, `slot_plan_moves`, `slot_plan_unassigned`, `demand_lines`, `product_profiles`, `zones`, `slots`, `outbox_events`, `processed_events`, `idempotency_keys` (0001); `slot_plan_move_executions` (0002) ([Entity-relationship](/contexts/slotting-optimization/entity-relationship)) |
+
+The analytical database has its own set,
+`analytics/migrations/0001_slot_plan_funnel.{up,down}.sql` (tables
+`analytics_processed_events`, `slot_plan_facts`), applied only by
+`cmd/slotting-projector` at its boot through `ANALYTICS_DATABASE_URL`
+([Analytics read side](#analytics-read-side)).
 
 There is no separate migrate command or Job. A failed migration leaves
 `schema_migrations.dirty = true` and every later boot fails with the same error
@@ -118,6 +176,7 @@ message is a CloudEvents 1.0 structured-mode JSON value with the header
 | Topic | Types | Key | Producer settings |
 | --- | --- | --- | --- |
 | `warehouse.slotting-optimization.events` | `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanGenerated`, `...SlotPlanApproved`, `...SlotPlanRejected` | the plan id | outbox relay, `EVENT_PUBLISHER=kafka`; `RequireAll` acks, Hash balancer, 10 ms batch timeout, auto topic creation (`outbound/kafka/relay_sink.go`) |
+| `warehouse.slotting-optimization.analytics` | the same three types, same CloudEvents id per occurrence, `dataschema` `urn:warehouse:slotting-optimization:analytics:<EventName>:v1` (ADR 0006) | the plan id | the same relay and sink: `FanoutEncoder` writes the integration row then the analytics row in the use case's transaction |
 
 ### Consumed
 
@@ -127,8 +186,9 @@ message is a CloudEvents 1.0 structured-mode JSON value with the header
 | `warehouse.product-master.events` | `com.warehouse.wms.product-master.product.ProductClassified`, `...ProductDimensionsDeclared`, `...ProductMeasured` | `PRODUCT_MODE`, `PRODUCT_CONSUMER_GROUP` | `slotting-product` | `warehouse.product-master.events.dlq` |
 | `warehouse.facility.events` | `com.warehouse.wms.facility-layout.zone.ZoneRegistered`, `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered`, `...LocationSlotDecommissioned` | `LAYOUT_MODE`, `LAYOUT_CONSUMER_GROUP` | `slotting-layout` | `warehouse.facility.events.dlq` |
 | `warehouse.inventory.events` | `com.warehouse.wms.inventory-storage.stock.StockRelocated` (ADR 0010) | `RELOCATION_MODE`, `RELOCATION_CONSUMER_GROUP` | `slotting-relocation` | `warehouse.inventory.events.dlq` |
+| `warehouse.slotting-optimization.analytics` (`cmd/slotting-projector`) | the three `slotplan` types | `ANALYTICS_CONSUMER_GROUP` (default `slotting-optimization-analytics`) | `analytics_processed_events` in the analytical database (by CloudEvents id) | `warehouse.slotting-optimization.analytics.dlq` |
 
-There are no default group ids: the deployment chooses them (the chart's
+The four api consumers have no default group ids: the deployment chooses them (the chart's
 `config.relocationConsumerGroup`, e.g. `slotting-optimization-relocation`).
 Other types on the four topics are ignored silently. A new relocation group
 replays `warehouse.inventory.events` from the start; only `StockRelocated`
@@ -202,6 +262,53 @@ queue one per pass; re-arm all of them with
 broker is back. `OUTBOX_MAX_ATTEMPTS=0` restores unlimited retries (the
 relay then stalls behind a poison row instead).
 
+## Analytics read side
+
+`cmd/slotting-projector` and `cmd/slotting-reports` (ADR 0006) run as their
+own Deployments when `analytics.enabled` (warehouse-infra turns it on).
+
+| Fact | Projector | Reports |
+| --- | --- | --- |
+| Database | the analytical database only (`ANALYTICS_DATABASE_URL`, direct DSN), writer pool | the same database, read-only pool |
+| Migrations | applies `analytics/migrations/0001_slot_plan_funnel.up.sql` at boot (boot retry, then ping); `schema_migrations` in the analytical database | none |
+| Kafka | reads `warehouse.slotting-optimization.analytics`, dead letters to `.dlq` | none |
+| Probes | `:8091` `/healthz` (liveness, startup), `/readyz` (readiness; 503 from the first step of shutdown) | `:8092` `/healthz` for every probe |
+| Shutdown | flip `/readyz`, drain the admin server, cancel the consumer (the message in flight commits or dead-letters), close the pool; 10 s budget | `http.Server.Shutdown`, 10 s budget |
+| Scaling | one replica (one group, partition owners; no HPA block) | `analytics.reports.replicaCount`; stateless |
+
+Delivery on the projector: a message that is not CloudEvents 1.0 is skipped
+and committed (rate-limited WARN, one line per minute with the suppressed
+count); a CloudEvent of another type is ignored; a known type whose data
+cannot be decoded, whose `plan_id` differs from `subject`, that fails
+validation, or that Postgres rejects with a SQLSTATE class 22 / 23 error is
+dead-lettered at once to `warehouse.slotting-optimization.analytics.dlq`;
+any other failure retries the same message forever (200 ms doubling to 5 s)
+without committing. Each applied event records its id in
+`analytics_processed_events` in the same transaction as its upsert of
+`slot_plan_facts`, so a redelivery changes nothing, and every milestone
+keeps its EARLIEST time (`LEAST`), so arrival order does not matter.
+
+### Rebuild or backfill the projection
+
+The analytical database is a projection of the topic. To rebuild it, stop
+the projector, drop and recreate the analytical database (or
+`TRUNCATE analytics_processed_events, slot_plan_facts;`), and start it with a
+**new** `ANALYTICS_CONSUMER_GROUP` (chart `analytics.consumerGroup`): a group
+with no committed offset reads from the first retained offset. Plans older
+than the topic's retention are lost from the report; an approval whose
+generation is no longer retained counts as approved but has no latency.
+
+### Check freshness
+
+```bash
+kubectl -n warehouse-systems port-forward svc/slotting-optimization-reports 8092:80
+curl -s localhost:8092/reports/freshness     # {"as_of": ..., "lag_seconds": ...}
+```
+
+`lag_seconds` is now minus the CloudEvents time of the newest applied event:
+it grows when the projector is behind **or** when nobody decides plans. Check
+the projector's group lag on the analytics topic before acting.
+
 ## Housekeeping
 
 There is **no sweeper** on `develop`. Three tables only grow:
@@ -212,7 +319,11 @@ There is **no sweeper** on `develop`. Three tables only grow:
 | `idempotency_keys` | every `POST /slot-plans` | `idx_idempotency_keys_created_at` exists for this: `DELETE FROM idempotency_keys WHERE created_at < now() - interval '1 day';` (a client retrying with an older key then gets a fresh plan) |
 | `processed_events` | every consumed event | only delete claims older than the topic's retention; a younger claim protects against a redelivery |
 
-`slot_plans` keeps every plan by design (the audit trail of decisions).
+`slot_plans` keeps every plan by design (the audit trail of decisions). In
+the analytical database `analytics_processed_events` and `slot_plan_facts`
+also only grow (one claim row per event, one fact row per plan). There is
+no retention job; both are safe to drop together and rebuild from the topic
+(above).
 
 ## Scaling
 
@@ -260,13 +371,13 @@ WHERE subject = 'plan-...';
 The relay sends them again with their original CloudEvents ids, so
 consumers that dedupe by id see duplicates, not new events.
 
-### Turn on the execution progress (ADR 0010)
+### Execution progress (ADR 0010)
 
-1. Set `config.relocationMode: "kafka"` and
-   `config.relocationConsumerGroup: "slotting-optimization-relocation"` in the
-   deployment's values (warehouse-infra: `helm-values/slotting-optimization.yaml`
-   there); `kafka.enabled` must be true. The chart refuses the mode without a
-   group or without Kafka.
+1. The StockRelocated consumer is always on (ADR 0011): it needs
+   `config.relocationConsumerGroup` (for example
+   `slotting-optimization-relocation`, set in warehouse-infra's
+   `helm-values/slotting-optimization.yaml`); the chart refuses to render
+   without it, and `RELOCATION_MODE` accepts only `kafka`.
 2. The consumer starts at the first offset of `warehouse.inventory.events`
    and records every `StockRelocated` that executes a move of a known plan.
 3. Check: `GET /slot-plans/{planId}` shows `execution.movesExecuted` growing;

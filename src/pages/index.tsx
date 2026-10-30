@@ -31,6 +31,8 @@ const WMS_CONTEXTS: ContextCard[] = [
   {slug: 'network-inventory-planning', name: 'network-inventory-planning', tier: 'Core'},
   {slug: 'pick-face-replenishment', name: 'pick-face-replenishment', tier: 'Supporting'},
   {slug: 'task-interleaving', name: 'task-interleaving', tier: 'Supporting'},
+  {slug: 'returns-processing', name: 'returns-processing', tier: 'Supporting'},
+  {slug: 'exception-management', name: 'exception-management', tier: 'Supporting'},
 ];
 
 const NETWORK_CONTEXTS: ContextCard[] = [
@@ -44,6 +46,16 @@ const NETWORK_CONTEXTS: ContextCard[] = [
   {slug: 'last-mile-delivery', name: 'last-mile-delivery', tier: 'Supporting'},
   {slug: 'shipping-and-tracking', name: 'shipping-and-tracking', tier: 'Generic'},
   {slug: 'node-performance', name: 'node-performance', tier: 'Supporting'},
+  {slug: 'seller-inbound', name: 'seller-inbound', tier: 'Supporting'},
+];
+
+const STOREFRONT_CONTEXTS: ContextCard[] = [
+  {slug: 'pricing', name: 'pricing', tier: 'Core'},
+  {slug: 'product-content', name: 'product-content', tier: 'Generic'},
+  {slug: 'product-discovery', name: 'product-discovery', tier: 'Supporting'},
+  {slug: 'shopping-cart', name: 'shopping-cart', tier: 'Supporting'},
+  {slug: 'checkout', name: 'checkout', tier: 'Supporting'},
+  {slug: 'customer-payments', name: 'customer-payments', tier: 'Generic'},
 ];
 
 const TIER_CLASS: Record<ContextCard['tier'], string> = {
@@ -58,7 +70,7 @@ const SECTIONS = [
     name: 'WMS / WES',
     tagline: 'The warehouse execution fleet',
     description:
-      'Seventeen backend contexts — receiving, storage, slotting, picking, packing, shipping and the planning around them — one shared ubiquitous language and a single documented context map. Generated from each context\u2019s own OpenAPI and AsyncAPI specifications, ADRs and domain source.',
+      'Nineteen backend contexts — receiving, storage, slotting, picking, packing, shipping and the planning around them — one shared ubiquitous language and a single documented context map. Generated from each context\u2019s own OpenAPI and AsyncAPI specifications, ADRs and domain source.',
     links: [
       {label: 'Overview', to: '/overview'},
       {label: 'Strategic Design', to: '/strategic-design/domain-vision'},
@@ -71,12 +83,25 @@ const SECTIONS = [
     name: 'Retail Network',
     tagline: 'The large-scale retail & logistics network',
     description:
-      'Ten bounded contexts modelling catalogue, delivery promise, order sourcing, vendor connectivity, middle and last mile, tracking and node performance — the seam through which the network connects to the WMS/WES fleet. Source of truth: the retail-network domain model.',
+      'Eleven bounded contexts modelling catalogue, delivery promise, order sourcing, vendor connectivity, seller inbound, middle and last mile, tracking and node performance — the seam through which the network connects to the WMS/WES fleet. Source of truth: the retail-network domain model.',
     links: [
       {label: 'Network Overview', to: '/network'},
       {label: 'Domain Vision', to: '/network/strategic-design/domain-vision'},
       {label: 'Promise Model', to: '/network/network-model/promise-model'},
       {label: 'WMS/WES Integration', to: '/network/integration/wms-wes-integration'},
+    ],
+  },
+  {
+    key: 'storefront',
+    name: 'Digital Storefront',
+    tagline: 'The e-commerce storefront on the retail network',
+    description:
+      'Six bounded contexts (pricing, product content, product discovery, shopping cart, checkout, customer payments) plus the storefront-bff edge, the React SSR web app and a payment-provider simulator. Built on develop, not deployed yet. Source of truth: the storefront domain model.',
+    links: [
+      {label: 'Storefront Overview', to: '/storefront'},
+      {label: 'Strategic Design', to: '/storefront/strategic-design'},
+      {label: 'Context Map', to: '/storefront/strategic-design/context-map'},
+      {label: 'API Reference', to: '/storefront/api-reference'},
     ],
   },
 ];
@@ -92,9 +117,10 @@ function HomepageHeader() {
         </Heading>
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
         <p className={styles.heroLead}>
-          Two domains, one site: the WMS/WES warehouse execution fleet and the
-          retail network it serves. Every page is generated from each
-          context&rsquo;s own specifications and ADRs — never hand-transcribed.
+          Three domains, one site: the WMS/WES warehouse execution fleet, the
+          retail network it serves, and the digital storefront that sells on
+          that network. Every page is generated from each context&rsquo;s own
+          specifications and ADRs — never hand-transcribed.
         </p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/overview">
@@ -102,6 +128,9 @@ function HomepageHeader() {
           </Link>
           <Link className="button button--primary button--lg" to="/network">
             Retail Network docs
+          </Link>
+          <Link className="button button--primary button--lg" to="/storefront">
+            Storefront docs
           </Link>
         </div>
       </div>
@@ -181,6 +210,11 @@ export default function Home(): ReactNode {
           heading="Retail Network bounded contexts"
           basePath="/network/contexts"
           contexts={NETWORK_CONTEXTS}
+        />
+        <ContextGrid
+          heading="Digital Storefront bounded contexts"
+          basePath="/storefront/contexts"
+          contexts={STOREFRONT_CONTEXTS}
         />
       </main>
     </Layout>

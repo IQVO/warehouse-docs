@@ -7,8 +7,8 @@ description: Process-level EventStorming boards for Product Content, covering co
 
 # EventStorming
 
-:::info[Proposed design]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model carries the proposed contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `product-content` service is built on develop ([`IQVO/product-content`](https://github.com/IQVO/product-content) at `2f09dc0`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/product-content#service-and-operations) section lists it.
 :::
 
 Process-level boards in the ddd-crew
@@ -40,7 +40,7 @@ flowchart LR
     C1["CreateProductContent<br/>POST /product-contents"]:::command
     RM["CatalogItemView<br/>item known, not<br/>discontinued?"]:::readmodel
     G1["ProductContent<br/>DRAFT"]:::aggregate
-    C1b["ReviseDraft<br/>POST :revise-draft"]:::command
+    C1b["ReviseDraft<br/>POST :revise<br/>(state picks)"]:::command
     C1c["DiscardDraft<br/>POST :discard<br/>no event"]:::command
     C2["PublishContent<br/>POST :publish<br/>DRAFT or PUBLISHED"]:::command
     P1["Publish gate<br/>description, one PRIMARY<br/>medium, category"]:::policy
@@ -168,7 +168,7 @@ not a message from this context.
 
 | # | Hotspot | Where it comes from in the model |
 | --- | --- | --- |
-| H1 | **Resolved in the model-fix:** a DRAFT is editable and discardable. `ReviseDraft` (`DRAFT → DRAFT`, new revision, `POST .../{catalogItemId}:revise-draft`) and `DiscardDraft` (`DRAFT → RETIRED`, reason `DISCARDED`, `POST .../{catalogItemId}:discard`, no event because nothing was ever published). | `aggregates[ProductContent].transitions`, `.commands`, `.notes` |
+| H1 | **Resolved in the model-fix:** a DRAFT is editable and discardable. `ReviseDraft` (`DRAFT → DRAFT`, new revision, `POST .../{catalogItemId}:revise`; **as built** the one `:revise` route serves both revisions and the state picks the command) and `DiscardDraft` (`DRAFT → RETIRED`, reason `DISCARDED`, `POST .../{catalogItemId}:discard`, no event because nothing was ever published). | `aggregates[ProductContent].transitions`, `.commands`, `.notes` |
 | H2 | **Resolved in the model-fix:** re-publication is the transition `PUBLISHED → PUBLISHED` via `PublishContent`, carrying a new `revision` in `ProductContentPublished` (the revise-then-publish-again path). | `aggregates[ProductContent].transitions`, `publishes[ProductContentPublished]` |
 | H3 | **Resolved in the model-fix:** by design there is no remove-category command; categories are only renamed or moved. `ErrCategoryInUse` stays as the guard of a future removal and is no longer mapped to `:move`. | `aggregates[CategoryTree].invariants`, `.notes` |
 | H4 | **Resolved in the model-fix:** `ErrTooManyBullets`, `ErrTooManyAttributes` and `ErrTooManyMedia` (limits 10, 50, 12) join the `ProductContent` invariants. | `aggregates[ProductContent].invariants` |

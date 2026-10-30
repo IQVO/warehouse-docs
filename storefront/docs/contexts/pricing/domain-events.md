@@ -7,8 +7,8 @@ description: Every CloudEvents type Pricing publishes and consumes, with topics,
 
 # Domain Events
 
-:::info[Proposed design, docs only]
-Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). Nothing in this context is built; the model is the canonical design, and identifiers (`Err...` names, routes, CloudEvents types) are the names a future implementation must use.
+:::info[Built on develop, not deployed]
+Derived from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/storefront/model/model.yaml). The `pricing` service is built on develop ([`IQVO/pricing`](https://github.com/IQVO/pricing) at `5a18326`, checked 2026-10-27) and not deployed (no warehouse-infra entry). Every `Err...` name, REST route and CloudEvents type of this context named on this page exists in the service; where the built service differs from the model's design, the page says so (**As built**) or the context's [Service and operations](/storefront/contexts/pricing#service-and-operations) section lists it.
 :::
 
 Every event this context publishes and consumes, from
@@ -124,7 +124,7 @@ analytics-only: by `conventions.integration_rules` it goes to the
 | Full type | `com.retailnetwork.storefront.pricing.pricequote.PriceQuoteIssued` |
 | Topic | `retailnetwork.pricing.analytics` (analytics only) |
 | Subject / key | `quoteId` |
-| Dataschema | `urn:retailnetwork:pricing:events:PriceQuoteIssued:v1` |
+| Dataschema | `urn:retailnetwork:pricing:analytics:PriceQuoteIssued:v1` (pricing ADR 0006) |
 | Producing command / use case | `IssuePriceQuote` (REST `POST /price-quotes`, called by `checkout`) |
 | Consumers | analytics only |
 
@@ -146,7 +146,7 @@ exists in the model (open question on the
 Every consumer is idempotent on the CloudEvents `id`: the id is inserted
 into `processed_events` in the same transaction as the effect, and a
 duplicate is acknowledged without effect. Consumers dispatch on the **full
-type string**, never on a suffix. Proposed consumer group:
+type string**, never on a suffix. Consumer group names come from mandatory environment variables (`OFFER_AVAILABILITY_CONSUMER_GROUP`; the service refuses to start without them); the names the design suggests:
 `pricing.offer-availability`.
 
 ### From offer-availability (`retailnetwork.offer-availability.events`, Conformist)

@@ -60,6 +60,7 @@
         "message": {
           "oneOf": [
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "ChargeForecastReceived",
               "title": "Charge Forecast Received",
               "summary": "A shift's charge forecast was recorded for a process path.",
@@ -207,6 +208,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "ShiftPlanCommitted",
               "title": "Shift Plan Committed",
               "summary": "A path's headcount, rate and hours split was committed.",
@@ -748,6 +750,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "WorkUnitCompleted",
               "title": "Work Unit Completed",
               "summary": "A released work unit finished.",
@@ -909,6 +912,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "RateDeviationDetected",
               "title": "Rate Deviation Detected",
               "summary": "A path's actual throughput deviated materially from plan.",
@@ -986,6 +990,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "PathThrottled",
               "title": "Path Throttled",
               "summary": "Flow balancing decided to throttle upstream release into a path.",
@@ -1063,6 +1068,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "LaborReassignmentFlagged",
               "title": "Labor Reassignment Flagged",
               "summary": "Flow balancing recommended moving labor to relieve a path.",
@@ -1260,6 +1266,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "reserved, not emitted today (ADR 0020)",
               "name": "PathPlanDriftDetected",
               "title": "Path Plan Drift Detected",
               "summary": "This service's committed PathPlan and the labor plan Workforce Management committed for the same path disagree on planned heads.",
@@ -2603,145 +2610,641 @@
       }
     },
     "warehouse.product-master.events": {
-      "description": "product-master's integration topic, CONSUMED by this service (owned by that bounded context; listed here read-only for orientation, mirroring its own apis/asyncapi.yaml). Key = the SKU. This service consumes only ProductClassified and ignores every other type on the topic (ProductRegistered, ProductDescriptionChanged, ProductDimensionsDeclared, ProductMeasured). See ADR-0035.",
+      "description": "product-master's integration topic, CONSUMED by this service (owned by that bounded context; listed here read-only for orientation, mirroring its own apis/asyncapi.yaml). Key = the SKU. This service consumes only ProductClassified (ADR-0035) and the pack-level types ProductPackLevelDeclared, ProductPackLevelRetired and ProductPackLevelMeasured into the local PackView (ADR-0045), and ignores every other type on the topic (ProductRegistered, ProductDescriptionChanged, ProductDimensionsDeclared, ProductMeasured). A second consumer reads this topic under the STABLE `PACK_VIEW_CONSUMER_GROUP` (mandatory; it must differ from `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`, because a group that already committed past the pack events could never replay them).",
       "publish": {
         "operationId": "consumeProductClassified",
         "summary": "Consume product-master's ProductClassified into the local classification copy.",
         "description": "A dedicated consumer reads this topic under the stable consumer group `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` (only with `PRODUCT_CLASSIFICATION_MODE=kafka`) and keeps one row per SKU in `product_classification_copy`. It claims the CloudEvents `id` and applies the classification in ONE transaction, overwriting a stored row only when the incoming `version` is greater (an equal or older version is a no-op). Invalid CloudEvents and invalid payloads are WARN-logged and skipped; transient failures retry the same message and the offset is committed only after success.",
         "message": {
-          "name": "ProductClassified",
-          "title": "Product Classified (consumed)",
-          "summary": "product-master set or replaced a SKU's handling classification.",
-          "description": "CONSUMED from `warehouse.product-master.events` — this entry mirrors the producer's own contract read-only and is NOT published by this service. A full-state replacement of one SKU's classification at the producer's aggregate `version`; `temperature_class` and `dot_hazard_class` are omitted when unset. Applied to the local `product_classification_copy` only when `version` is greater than the stored one (ADR-0035); `classification_source` is ignored. The `WorkReleased` encoder maps `Hazmat` to `required_capabilities: [\"hazmat\"]` and `Fragile` to `fragile: true`.",
-          "contentType": "application/cloudevents+json",
-          "tags": [
+          "oneOf": [
             {
-              "name": "work-planning"
-            }
-          ],
-          "payload": {
-            "title": "ProductClassified CloudEvent (consumed)",
-            "description": "CloudEvent envelope of product-master's ProductClassified, mirrored read-only from the producer's own contract. This service consumes it; it never publishes it.",
-            "allOf": [
-              "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
-              {
-                "type": "object",
-                "required": [
-                  "type",
-                  "dataschema",
-                  "data"
-                ],
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "description": "Fixed event type (the producer's own).",
-                    "const": "com.warehouse.wms.product-master.product.ProductClassified",
-                    "x-parser-schema-id": "<anonymous-schema-219>"
-                  },
-                  "dataschema": {
-                    "type": "string",
-                    "description": "The producer's payload schema id. Overrides CloudEventBase's pattern (which only admits THIS repo's own urns): a consumed event carries the PRODUCER's urn.",
-                    "const": "urn:warehouse:product-master:events:ProductClassified:v1",
-                    "x-parser-schema-id": "<anonymous-schema-220>"
-                  },
-                  "data": {
+              "name": "ProductClassified",
+              "title": "Product Classified (consumed)",
+              "summary": "product-master set or replaced a SKU's handling classification.",
+              "description": "CONSUMED from `warehouse.product-master.events` — this entry mirrors the producer's own contract read-only and is NOT published by this service. A full-state replacement of one SKU's classification at the producer's aggregate `version`; `temperature_class` and `dot_hazard_class` are omitted when unset. Applied to the local `product_classification_copy` only when `version` is greater than the stored one (ADR-0035); `classification_source` is ignored. The `WorkReleased` encoder maps `Hazmat` to `required_capabilities: [\"hazmat\"]` and `Fragile` to `fragile: true`.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "work-planning"
+                }
+              ],
+              "payload": {
+                "title": "ProductClassified CloudEvent (consumed)",
+                "description": "CloudEvent envelope of product-master's ProductClassified, mirrored read-only from the producer's own contract. This service consumes it; it never publishes it.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
                     "type": "object",
-                    "description": "Full-state replacement of the SKU's classification. This service requires `sku` and a `version` of at least 1 and skips (WARN) anything else.",
                     "required": [
-                      "sku",
-                      "handling_tags",
-                      "classification_source",
-                      "version"
+                      "type",
+                      "dataschema",
+                      "data"
                     ],
                     "properties": {
-                      "sku": {
+                      "type": {
                         "type": "string",
-                        "description": "The classified SKU (also the Kafka key and the CloudEvents subject).",
-                        "x-parser-schema-id": "<anonymous-schema-222>"
+                        "description": "Fixed event type (the producer's own).",
+                        "const": "com.warehouse.wms.product-master.product.ProductClassified",
+                        "x-parser-schema-id": "<anonymous-schema-219>"
                       },
-                      "handling_tags": {
-                        "type": "array",
-                        "minItems": 1,
-                        "description": "Handling tags in stable order.",
-                        "items": {
-                          "type": "string",
-                          "enum": [
-                            "Hazmat",
-                            "Fragile",
-                            "TemperatureSensitive",
-                            "Oversized",
-                            "HighValue"
-                          ],
-                          "x-parser-schema-id": "<anonymous-schema-224>"
+                      "dataschema": {
+                        "type": "string",
+                        "description": "The producer's payload schema id. Overrides CloudEventBase's pattern (which only admits THIS repo's own urns): a consumed event carries the PRODUCER's urn.",
+                        "const": "urn:warehouse:product-master:events:ProductClassified:v1",
+                        "x-parser-schema-id": "<anonymous-schema-220>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Full-state replacement of the SKU's classification. This service requires `sku` and a `version` of at least 1 and skips (WARN) anything else.",
+                        "required": [
+                          "sku",
+                          "handling_tags",
+                          "classification_source",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "description": "The classified SKU (also the Kafka key and the CloudEvents subject).",
+                            "x-parser-schema-id": "<anonymous-schema-222>"
+                          },
+                          "handling_tags": {
+                            "type": "array",
+                            "minItems": 1,
+                            "description": "Handling tags in stable order.",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "Hazmat",
+                                "Fragile",
+                                "TemperatureSensitive",
+                                "Oversized",
+                                "HighValue"
+                              ],
+                              "x-parser-schema-id": "<anonymous-schema-224>"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-223>"
+                          },
+                          "temperature_class": {
+                            "type": "string",
+                            "description": "OPTIONAL. Present only with TemperatureSensitive.",
+                            "enum": [
+                              "Ambient",
+                              "Chilled",
+                              "Frozen"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-225>"
+                          },
+                          "dot_hazard_class": {
+                            "type": "integer",
+                            "description": "OPTIONAL. Present only with Hazmat. Stored, not surfaced.",
+                            "minimum": 1,
+                            "maximum": 9,
+                            "x-parser-schema-id": "<anonymous-schema-226>"
+                          },
+                          "classification_source": {
+                            "type": "string",
+                            "description": "Migration artefact of the producer; ignored here.",
+                            "enum": [
+                              "native",
+                              "legacy-import"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-227>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "description": "The producer's aggregate version after the change. The local copy applies a message only when this is greater than the stored version.",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-228>"
+                          }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-223>"
-                      },
-                      "temperature_class": {
-                        "type": "string",
-                        "description": "OPTIONAL. Present only with TemperatureSensitive.",
-                        "enum": [
-                          "Ambient",
-                          "Chilled",
-                          "Frozen"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-225>"
-                      },
-                      "dot_hazard_class": {
-                        "type": "integer",
-                        "description": "OPTIONAL. Present only with Hazmat. Stored, not surfaced.",
-                        "minimum": 1,
-                        "maximum": 9,
-                        "x-parser-schema-id": "<anonymous-schema-226>"
-                      },
-                      "classification_source": {
-                        "type": "string",
-                        "description": "Migration artefact of the producer; ignored here.",
-                        "enum": [
-                          "native",
-                          "legacy-import"
-                        ],
-                        "x-parser-schema-id": "<anonymous-schema-227>"
-                      },
-                      "version": {
-                        "type": "integer",
-                        "description": "The producer's aggregate version after the change. The local copy applies a message only when this is greater than the stored version.",
-                        "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-228>"
+                        "x-parser-schema-id": "<anonymous-schema-221>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-221>"
+                    "x-parser-schema-id": "<anonymous-schema-218>"
                   }
-                },
-                "x-parser-schema-id": "<anonymous-schema-218>"
-              }
-            ],
-            "x-parser-schema-id": "ProductClassifiedEvent"
-          },
-          "examples": [
-            {
-              "name": "hazmatFrozen",
-              "summary": "SKU-1 classified Hazmat + TemperatureSensitive (Frozen), DOT class 3.",
-              "payload": {
-                "specversion": "1.0",
-                "id": "0f6d8a2b-3c4e-4d5f-8a9b-7c6d5e4f3a2b",
-                "source": "/warehouse/product-master",
-                "type": "com.warehouse.wms.product-master.product.ProductClassified",
-                "subject": "SKU-1",
-                "time": "2026-10-06T21:02:00Z",
-                "datacontenttype": "application/json",
-                "dataschema": "urn:warehouse:product-master:events:ProductClassified:v1",
-                "data": {
-                  "sku": "SKU-1",
-                  "handling_tags": [
-                    "Hazmat",
-                    "TemperatureSensitive"
-                  ],
-                  "temperature_class": "Frozen",
-                  "dot_hazard_class": 3,
-                  "classification_source": "native",
-                  "version": 3
+                ],
+                "x-parser-schema-id": "ProductClassifiedEvent"
+              },
+              "examples": [
+                {
+                  "name": "hazmatFrozen",
+                  "summary": "SKU-1 classified Hazmat + TemperatureSensitive (Frozen), DOT class 3.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "0f6d8a2b-3c4e-4d5f-8a9b-7c6d5e4f3a2b",
+                    "source": "/warehouse/product-master",
+                    "type": "com.warehouse.wms.product-master.product.ProductClassified",
+                    "subject": "SKU-1",
+                    "time": "2026-10-06T21:02:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:product-master:events:ProductClassified:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "handling_tags": [
+                        "Hazmat",
+                        "TemperatureSensitive"
+                      ],
+                      "temperature_class": "Frozen",
+                      "dot_hazard_class": 3,
+                      "classification_source": "native",
+                      "version": 3
+                    }
+                  }
                 }
+              ]
+            },
+            {
+              "name": "ProductPackLevelDeclared",
+              "title": "ProductPackLevelDeclared (consumed)",
+              "summary": "product-master declared or revised a pack level of a SKU.",
+              "description": "CONSUMED from `warehouse.product-master.events` - this entry mirrors the producer's own contract read-only and is NOT published by this service. Feeds the local PackView (ADR-0045) under the stable `PACK_VIEW_CONSUMER_GROUP`. Payload pinned by product-master's `apis/asyncapi.yaml` on `develop`.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "work-planning"
+                }
+              ],
+              "payload": {
+                "title": "ProductPackLevelDeclared CloudEvent (consumed)",
+                "description": "CloudEvent envelope of product-master's ProductPackLevelDeclared, mirrored read-only from the producer's own contract. This service consumes it (ADR-0045); it never publishes it.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wms.product-master.product.ProductPackLevelDeclared",
+                        "x-parser-schema-id": "<anonymous-schema-230>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:product-master:events:ProductPackLevelDeclared:v1",
+                        "x-parser-schema-id": "<anonymous-schema-231>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "units_per_pack",
+                          "is_orderable",
+                          "is_despatch_unit",
+                          "effective_from",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-233>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-234>"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-235>"
+                          },
+                          "child_gtin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-236>"
+                          },
+                          "qty_of_child": {
+                            "type": "integer",
+                            "minimum": 2,
+                            "description": "Absent for EACH.",
+                            "x-parser-schema-id": "<anonymous-schema-237>"
+                          },
+                          "units_per_pack": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Direct factor to eaches; 1 for EACH.",
+                            "x-parser-schema-id": "<anonymous-schema-238>"
+                          },
+                          "is_orderable": {
+                            "type": "boolean",
+                            "x-parser-schema-id": "<anonymous-schema-239>"
+                          },
+                          "is_despatch_unit": {
+                            "type": "boolean",
+                            "x-parser-schema-id": "<anonymous-schema-240>"
+                          },
+                          "effective_from": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-241>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-242>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-232>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-229>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelDeclaredEvent"
               }
+            },
+            {
+              "name": "ProductPackLevelRetired",
+              "title": "ProductPackLevelRetired (consumed)",
+              "summary": "product-master retired a pack level of a SKU.",
+              "description": "CONSUMED from `warehouse.product-master.events` - this entry mirrors the producer's own contract read-only and is NOT published by this service. Feeds the local PackView (ADR-0045) under the stable `PACK_VIEW_CONSUMER_GROUP`. Payload pinned by product-master's `apis/asyncapi.yaml` on `develop`.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "work-planning"
+                }
+              ],
+              "payload": {
+                "title": "ProductPackLevelRetired CloudEvent (consumed)",
+                "description": "CloudEvent envelope of product-master's ProductPackLevelRetired, mirrored read-only from the producer's own contract. This service consumes it (ADR-0045); it never publishes it.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wms.product-master.product.ProductPackLevelRetired",
+                        "x-parser-schema-id": "<anonymous-schema-244>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:product-master:events:ProductPackLevelRetired:v1",
+                        "x-parser-schema-id": "<anonymous-schema-245>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "effective_to",
+                          "reason",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-247>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-248>"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-249>"
+                          },
+                          "effective_to": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-250>"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-251>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-252>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-246>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-243>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelRetiredEvent"
+              }
+            },
+            {
+              "name": "ProductPackLevelMeasured",
+              "title": "ProductPackLevelMeasured (consumed)",
+              "summary": "product-master measured a pack level of a SKU.",
+              "description": "CONSUMED from `warehouse.product-master.events` - this entry mirrors the producer's own contract read-only and is NOT published by this service. Feeds the local PackView (ADR-0045) under the stable `PACK_VIEW_CONSUMER_GROUP`. Payload pinned by product-master's `apis/asyncapi.yaml` on `develop`.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "work-planning"
+                }
+              ],
+              "payload": {
+                "title": "ProductPackLevelMeasured CloudEvent (consumed)",
+                "description": "CloudEvent envelope of product-master's ProductPackLevelMeasured, mirrored read-only from the producer's own contract. This service consumes it (ADR-0045); it never publishes it.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wms.product-master.product.ProductPackLevelMeasured",
+                        "x-parser-schema-id": "<anonymous-schema-254>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:product-master:events:ProductPackLevelMeasured:v1",
+                        "x-parser-schema-id": "<anonymous-schema-255>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "dims",
+                          "measured_at",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-257>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-258>"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-259>"
+                          },
+                          "dims": {
+                            "type": "object",
+                            "required": [
+                              "length_mm",
+                              "width_mm",
+                              "height_mm",
+                              "weight_g"
+                            ],
+                            "properties": {
+                              "length_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20000,
+                                "x-parser-schema-id": "<anonymous-schema-261>"
+                              },
+                              "width_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20000,
+                                "x-parser-schema-id": "<anonymous-schema-262>"
+                              },
+                              "height_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20000,
+                                "x-parser-schema-id": "<anonymous-schema-263>"
+                              },
+                              "weight_g": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2000000,
+                                "x-parser-schema-id": "<anonymous-schema-264>"
+                              }
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-260>"
+                          },
+                          "measured_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-265>"
+                          },
+                          "device_id": {
+                            "type": "string",
+                            "description": "Omitted for a manual measurement.",
+                            "x-parser-schema-id": "<anonymous-schema-266>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-267>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-256>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-253>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelMeasuredEvent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.inventory.events": {
+      "description": "inventory-storage's integration topic, CONSUMED by this service (owned by that bounded context; listed here read-only for orientation, mirroring its own apis/asyncapi.yaml). Key = the reservation id. This service consumes only StockReserved and ReservationRevoked (the integration payloads; both share one identical `data` shape) and ignores every other type on the topic.",
+      "publish": {
+        "operationId": "consumeInventoryReservationEvents",
+        "summary": "Keep the SKU-keyed usable-inventory projection current.",
+        "description": "The shared inbound consumer applies each event to the SKU-keyed UsableInventoryObserved projection: StockReserved decrements the SKU's usable quantity by `quantity`, ReservationRevoked increments it back. Messages are CloudEvents 1.0 structured-mode JSON (dataschema `urn:warehouse:inventory-storage:events:<EventName>:v1`). Every other CloudEvents `type` on the topic is ignored; a message that is not a valid CloudEvent is logged at WARN and skipped.",
+        "message": {
+          "oneOf": [
+            {
+              "name": "StockReserved",
+              "title": "Stock Reserved (consumed)",
+              "summary": "inventory-storage bound a SKU's quantity to a demand.",
+              "description": "CONSUMED from `warehouse.inventory.events` — this entry mirrors the producer's own contract (StockReservedEvent) read-only and is NOT published by this service. `sku`, `quantity` and `demand_ref` are read; the projection decrements usable inventory for the SKU by `quantity`.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "work-planning"
+                }
+              ],
+              "payload": {
+                "title": "StockReserved CloudEvent (consumed)",
+                "description": "Mirror of inventory-storage's StockReservedEvent, the integration-payload variant (read-only).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wms.inventory-storage.reservation.StockReserved",
+                        "x-parser-schema-id": "<anonymous-schema-269>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:inventory-storage:events:StockReserved:v1",
+                        "x-parser-schema-id": "<anonymous-schema-270>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Identical in shape to ReservationRevoked's payload.",
+                        "required": [
+                          "sku",
+                          "quantity",
+                          "demand_ref"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "description": "The stock keeping unit the quantity was reserved against.",
+                            "x-parser-schema-id": "<anonymous-schema-272>"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Quantity bound to the demand; decrements usable inventory.",
+                            "x-parser-schema-id": "<anonymous-schema-273>"
+                          },
+                          "demand_ref": {
+                            "type": "string",
+                            "description": "Opaque reference to the demand the reservation serves.",
+                            "x-parser-schema-id": "<anonymous-schema-274>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-271>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-268>"
+                  }
+                ],
+                "x-parser-schema-id": "StockReservedEvent"
+              },
+              "examples": [
+                {
+                  "name": "stockReserved",
+                  "summary": "12 units of SKU-1 reserved against an order.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+                    "source": "/warehouse/inventory-storage",
+                    "type": "com.warehouse.wms.inventory-storage.reservation.StockReserved",
+                    "subject": "resv-9f8e7d6c-5b4a-4c3d-2e1f-0a9b8c7d6e5f",
+                    "time": "2026-10-17T09:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inventory-storage:events:StockReserved:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "quantity": 12,
+                      "demand_ref": "order-88421"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ReservationRevoked",
+              "title": "Reservation Revoked (consumed)",
+              "summary": "inventory-storage released a reservation's quantity back to usable.",
+              "description": "CONSUMED from `warehouse.inventory.events` — this entry mirrors the producer's own contract (ReservationRevokedEvent) read-only and is NOT published by this service. `sku`, `quantity` and `demand_ref` are read; the projection increments usable inventory for the SKU back by `quantity`. The payload shape is identical to StockReserved's, so one handler applies both.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "work-planning"
+                }
+              ],
+              "payload": {
+                "title": "ReservationRevoked CloudEvent (consumed)",
+                "description": "Mirror of inventory-storage's ReservationRevokedEvent, the integration-payload variant (read-only).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wms.inventory-storage.reservation.ReservationRevoked",
+                        "x-parser-schema-id": "<anonymous-schema-276>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:inventory-storage:events:ReservationRevoked:v1",
+                        "x-parser-schema-id": "<anonymous-schema-277>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Identical in shape to StockReserved's payload.",
+                        "required": [
+                          "sku",
+                          "quantity",
+                          "demand_ref"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "description": "The stock keeping unit whose quantity returns to usable.",
+                            "x-parser-schema-id": "<anonymous-schema-279>"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Quantity released back into usable inventory.",
+                            "x-parser-schema-id": "<anonymous-schema-280>"
+                          },
+                          "demand_ref": {
+                            "type": "string",
+                            "description": "The demand reference the revoked reservation was serving.",
+                            "x-parser-schema-id": "<anonymous-schema-281>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-278>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-275>"
+                  }
+                ],
+                "x-parser-schema-id": "ReservationRevokedEvent"
+              },
+              "examples": [
+                {
+                  "name": "reservationRevoked",
+                  "summary": "The same 12 units return to usable after a cancellation.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e",
+                    "source": "/warehouse/inventory-storage",
+                    "type": "com.warehouse.wms.inventory-storage.reservation.ReservationRevoked",
+                    "subject": "resv-9f8e7d6c-5b4a-4c3d-2e1f-0a9b8c7d6e5f",
+                    "time": "2026-10-17T09:45:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inventory-storage:events:ReservationRevoked:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "quantity": 12,
+                      "demand_ref": "order-88421"
+                    }
+                  }
+                }
+              ]
             }
           ]
         }
@@ -2755,9 +3258,11 @@
       "WorkUnitCreated": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[2]",
       "WorkDemandReleased": "$ref:$.channels.warehouse.network-inventory-planning.events.publish.message",
       "SlotPlanApproved": "$ref:$.channels.warehouse.slotting-optimization.events.publish.message",
+      "StockReserved": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0]",
+      "ReservationRevoked": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1]",
       "ReplenishmentRequested": "$ref:$.channels.warehouse.pick-face-replenishment.events.publish.message.oneOf[0]",
       "ReplenishmentCancelled": "$ref:$.channels.warehouse.pick-face-replenishment.events.publish.message.oneOf[1]",
-      "ProductClassified": "$ref:$.channels.warehouse.product-master.events.publish.message",
+      "ProductClassified": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[0]",
       "WorkReleased": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[3]",
       "WorkUnitCompleted": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[4]",
       "BacklogThresholdBreached": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[5]",
@@ -2776,7 +3281,10 @@
       "PathThrottledAnalytics": "$ref:$.channels.warehouse.wes.analytics.subscribe.message.oneOf[7]",
       "LaborReassignmentFlaggedAnalytics": "$ref:$.channels.warehouse.wes.analytics.subscribe.message.oneOf[8]",
       "PathCapacityChangedAnalytics": "$ref:$.channels.warehouse.wes.analytics.subscribe.message.oneOf[9]",
-      "PathPlanDriftDetectedAnalytics": "$ref:$.channels.warehouse.wes.analytics.subscribe.message.oneOf[10]"
+      "PathPlanDriftDetectedAnalytics": "$ref:$.channels.warehouse.wes.analytics.subscribe.message.oneOf[10]",
+      "ProductPackLevelDeclared": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[1]",
+      "ProductPackLevelRetired": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[2]",
+      "ProductPackLevelMeasured": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[3]"
     },
     "schemas": {
       "CloudEventBase": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
@@ -2785,9 +3293,11 @@
       "WorkUnitCreatedEvent": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[2].payload",
       "WorkDemandReleasedEvent": "$ref:$.channels.warehouse.network-inventory-planning.events.publish.message.payload",
       "SlotPlanApprovedEvent": "$ref:$.channels.warehouse.slotting-optimization.events.publish.message.payload",
+      "StockReservedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0].payload",
+      "ReservationRevokedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1].payload",
       "ReplenishmentRequestedEvent": "$ref:$.channels.warehouse.pick-face-replenishment.events.publish.message.oneOf[0].payload",
       "ReplenishmentCancelledEvent": "$ref:$.channels.warehouse.pick-face-replenishment.events.publish.message.oneOf[1].payload",
-      "ProductClassifiedEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.payload",
+      "ProductClassifiedEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[0].payload",
       "WorkReleasedEvent": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[3].payload",
       "WorkUnitCompletedEvent": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[4].payload",
       "BacklogThresholdBreachedEvent": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[5].payload",
@@ -2806,7 +3316,10 @@
       "LaborReassignmentFlaggedAnalyticsEvent": "$ref:$.channels.warehouse.wes.analytics.subscribe.message.oneOf[8].payload",
       "PathCapacityChangedAnalyticsEvent": "$ref:$.channels.warehouse.wes.analytics.subscribe.message.oneOf[9].payload",
       "PathPlanDriftDetectedEvent": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[10].payload",
-      "PathPlanDriftDetectedAnalyticsEvent": "$ref:$.channels.warehouse.wes.analytics.subscribe.message.oneOf[10].payload"
+      "PathPlanDriftDetectedAnalyticsEvent": "$ref:$.channels.warehouse.wes.analytics.subscribe.message.oneOf[10].payload",
+      "ProductPackLevelDeclaredEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[1].payload",
+      "ProductPackLevelRetiredEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[2].payload",
+      "ProductPackLevelMeasuredEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[3].payload"
     }
   },
   "x-parser-spec-parsed": true,

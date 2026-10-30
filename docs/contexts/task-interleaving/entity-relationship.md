@@ -13,7 +13,7 @@ This page is a copy of [`docs/docs/ddd/entity-relationship.md`](https://github.c
 
 The Postgres schema of the service as created by the single embedded migration,
 `migrations/0001_interleaving_schema.up.sql` ([ADR 0005](https://iqvo.github.io/task-interleaving/docs/adr/0005-persistence-and-evaluation-semantics)).
-In-memory mode (no `DATABASE_URL`) keeps the same shapes in process memory.
+Postgres is the only runtime ([ADR 0006](https://iqvo.github.io/task-interleaving/docs/adr/0006-postgres-and-kafka-are-the-only-runtime)); the in-memory test doubles keep the same shapes in process memory.
 
 ```mermaid
 erDiagram
@@ -128,6 +128,41 @@ erDiagram
 Source: `migrations/0001_interleaving_schema.up.sql` (every column, key and index
 below), `internal/adapters/outbound/postgres/*.go` for the access paths. Types are
 shortened (`text COLLATE "C"` is shown as `text`).
+
+## Analytical database
+
+The hint-adoption read model ([ADR 0008](https://iqvo.github.io/task-interleaving/docs/adr/0008-analytics-read-side))
+is a separate database (`task_interleaving_analytics`), written only by
+`cmd/ti-projector` from `warehouse.task-interleaving.analytics` and read by
+`cmd/ti-reports`. Facts, not aggregates: it can be dropped and rebuilt by
+replaying the topic under a new consumer group.
+
+```mermaid
+erDiagram
+    analytics_processed_events {
+        text event_id PK "every applied CloudEvents id, claimed with its effect"
+        text event_type
+        timestamptz occurred_at "indexed; max() is the projection's freshness"
+        timestamptz applied_at
+    }
+    hint_facts {
+        text hint_id PK
+        text station_id
+        text site_id
+        timestamptz issued_at "nullable; earliest InterleavingHintIssued seen"
+        timestamptz expires_at "nullable"
+        int candidate_count "nullable"
+        timestamptz consumed_at "nullable; earliest InterleavingHintConsumed"
+        int consumed_rank "nullable"
+        float consumed_detour_m "nullable"
+        timestamptz expired_at "nullable"
+    }
+```
+
+Each milestone column keeps the CloudEvents time of the earliest such event
+(`LEAST` ignores NULLs), so arrival order never matters; a hint superseded by
+a newer one has no event of its own and stays without a `consumed_at` or
+`expired_at`. No foreign keys. Source: `analytics/migrations/0001_hint_adoption.up.sql`.
 
 ## Reading it
 

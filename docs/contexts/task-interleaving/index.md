@@ -30,26 +30,32 @@ Per this context's own [Context Map](/contexts/task-interleaving/context-map)
 and [integration page](https://iqvo.github.io/task-interleaving/docs/ecosystem/integration),
 checked against `develop` (and, for deployment, `warehouse-infra` `develop`):
 
-**Built on `develop`:** the REST API (eight operations), Postgres repositories
-with embedded migrations, the transactional outbox and relay, a hint-expiry
-worker (default sweep 5 s), and **two** opt-in Kafka consumers (open tasks and
-claims from `fulfillment-execution`, zones, locations and geometry from
-`facility-layout`) with retry, a dead-letter topic and processed-event
-de-duplication. There is one binary, `cmd/api`, and **no MCP server**. The
-service runs in memory when `DATABASE_URL` is unset.
+**Built on `develop` (`df901f1`):** the REST API (ten path × method pairs in
+`apis/openapi.yaml`, including the two analytics report routes, `/healthz` and
+`/readyz`), Postgres repositories with embedded migrations, the transactional
+outbox and relay, a hint-expiry worker (default sweep 5 s), and **two** Kafka
+consumers (open tasks, claims and completions from `fulfillment-execution`;
+zones, locations and geometry from `facility-layout`) with retry, a dead-letter
+topic and processed-event de-duplication. Postgres and Kafka are the only
+runtime (its ADR 0006): `DATABASE_URL` is required, each consumer's mode must be
+`kafka` (`permissive` is a boot error) and its group variable must be set. It
+ships four binaries: `cmd/api`, a read-only MCP server (`cmd/mcp`, ADR 0007)
+and the analytics read side `cmd/ti-projector` + `cmd/ti-reports` (ADR 0008),
+plus a Dockerfile, a Helm chart and the console remote
+`task_interleaving_mfe`.
 
-**Not deployed.** `warehouse-infra` `develop` has no entry for it: no database,
-no Kong route, no ArgoCD application, no values file, no dashboard. The
-repository itself has no Dockerfile, no Helm chart and no OpenTelemetry metric
-or trace. So both consumed edges are built on both sides but **wired-but-unused**
-in the reference cluster (`FULFILLMENT_MODE` and `LAYOUT_MODE` default to
-`permissive`, and nothing starts the service).
+**Wired in `warehouse-infra` `develop`:** `terraform/apps.yaml` registers it
+(database, analytics database, web remote) and
+`helm-values/task-interleaving.yaml` sets both consumer groups and the
+analytics projector, so the consumed edges K41, K45 and K46 are live.
+`warehouse-ops-agent` has an MCP client for it
+(`internal/adapters/outbound/mcpclient/task_interleaving.go`). The kind cluster
+was not checked.
 
-**The edge that is missing code on one end:** `fulfillment-execution` does **not**
-consume `InterleavingHintIssued` (its ADR 0049 and ADR 0050 list it as out of
-scope; there is no hint table and no `claimNext` tie-break). The hint is
-published and read by nobody, so nothing on the floor changes until that consumer
-exists (edge K47, absent-planned).
+**Its one output edge is live too:** `fulfillment-execution` consumes
+`InterleavingHintIssued` (its ADR 0051) and uses it only as a tie-break inside
+one `claimNext` priority band; `warehouse-infra` sets
+`TASK_INTERLEAVING_MODE=kafka` with its own consumer group for it (edge K47).
 
 **Only some tasks reach the pool.** `fulfillment-execution` announces
 `TaskAvailable` for `RELOCATE` and `REPLENISH` tasks only, because only those
@@ -57,9 +63,8 @@ carry bins. A `PICK`, `PACK`, `SLAM` or `REBIN` task has no location in that
 service. The candidate list is therefore made of those two task types, and a
 station's position is recorded only when it completes an announced task.
 
-**Planned, not built:** the hint consumer and tie-break in
-`fulfillment-execution`, an analytics read side, a `warehouse-ops-agent` or
-console client of the REST read side, and wider pool coverage.
+**Planned, not built:** wider pool coverage (tasks without bins are never
+announced).
 :::
 
 It owns two aggregates, a pure recommender and a travel model:
@@ -121,8 +126,9 @@ It owns two aggregates, a pure recommender and a travel model:
   Its ADRs live under `docs/adr/`: 0001 (bounded context), 0002 (the
   `StationTrip` and policy aggregates and their invariants), 0003 (event-fed
   local copies and the consumed contracts), 0004 (CloudEvents envelope and
-  type catalogue) and 0005 (persistence and evaluation semantics) are all
-  Accepted (2026-10-17).
+  type catalogue), 0005 (persistence and evaluation semantics), 0006
+  (Postgres and Kafka are the only runtime), 0007 (MCP server) and 0008
+  (analytics read side).
 - **Fleet-level**: [Context Map](/strategic-design/context-map) (K41 and K45 to
   K47), the [Event Standard](/strategic-design/event-standard-cloudevents)
   (subdomain table and type catalogue),

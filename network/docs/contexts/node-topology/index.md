@@ -8,7 +8,7 @@ description: "The authoritative registry of the retail network's physical shape:
 # Node Topology
 
 :::info[As built]
-Derived from [`model/model.yaml`](https://github.com/IQVO/retail-network-docs/blob/main/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
 <span class="badge-supporting">Supporting</span>
@@ -46,6 +46,24 @@ on `retailnetwork.node-topology.events`.
 
 The REST contract is `apis/node-topology/openapi.yaml`, rendered under the
 [API reference](/network/api-reference).
+
+## Service and operations
+
+- **Service:** [`IQVO/node-topology`](https://github.com/IQVO/node-topology) on `develop` (`f53353f`,
+  2026-10-26): binaries `cmd/api` (REST) and `cmd/mcp` (read-only MCP), and the console
+  remote in `web/`.
+- **Deployment:** wired in warehouse-infra develop: a `terraform/apps.yaml` entry
+  (`database: true`, `frontend_remote: node_topology_mfe`) and `helm-values/node-topology.yaml`
+  (MCP enabled, gateway path `/api/mcp/node-topology`). The cluster itself was not checked in this
+  refresh.
+- **Observability:** [service ADR 0010](https://github.com/IQVO/node-topology/blob/develop/docs/adr/0010-fleet-observability-standard.md),
+  *Adopt the fleet observability standard*, Accepted 2026-10-26. Logs, metrics and traces leave
+  over OTLP to the otel-collector (`OTEL_EXPORTER_OTLP_ENDPOINT`, chart default
+  `otel-collector.observability.svc.cluster.local:4317`; `OTEL_SERVICE_NAME`). The Tier-2
+  business counter is `topology.nodes.registered` (unit `{node}`, in
+  `internal/adapters/outbound/telemetry/node_metrics.go`), with attribute `outcome` = `registered` or `rejected` and
+  `reason` on the outcomes that are not a success. The dashboard queries it as `topology_nodes_registered_total` in warehouse-infra's
+  `terraform/dashboards/contexts/node-topology.json`, by `outcome`.
 
 ## Elsewhere
 

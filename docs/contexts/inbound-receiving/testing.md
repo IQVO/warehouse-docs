@@ -23,10 +23,10 @@ every push and pull request into `develop`/`main`.
 | Use-case unit tests | `internal/application/usecases/*_test.go` (fakes in `fakes_test.go`) | `make test` | nothing |
 | Adapter unit tests | `internal/adapters/**/*_test.go` (httptest handlers, MCP tools + `testdata/tool_registry.golden.json`, Kafka consumers with fake readers, encoders with golden CloudEvents, relay, telemetry, memory store) | `make test` | nothing |
 | Analytics rules | `internal/analytics/report/report_test.go` (range parsing, day windows, percentiles, freshness) | `make test` | nothing |
-| Composition roots | `cmd/*/main_test.go` (env validation, admin mux, drain delay) | `make test` | nothing |
+| Composition roots | `cmd/*/main_test.go` (env validation, admin mux, drain delay; the in-memory doubles come from `cmd/api/testdoubles_test.go`) | `make test` | nothing |
 | BDD acceptance (godog) | `features/*.feature`, steps in `features_test.go` + `features_wave2_test.go` | `make bdd` (also part of `make test`) | nothing: in-memory adapters behind an `httptest` server and a stepping clock |
-| Architecture fitness | `internal/architecture/*_test.go` | `make arch-test` (also part of `make test`) | nothing |
-| Integration (testcontainers) | 19 files with `//go:build integration` | `make integration` | Docker |
+| Architecture fitness | `internal/architecture/*_test.go` (including `TestRuntimeBinaryHasNoInMemoryAdapters`) | `make arch-test` (also part of `make test`) | nothing |
+| Integration (testcontainers) | files with `//go:build integration`, including `cmd/api/e2e_integration_test.go` (`TestRunOnRealPostgresAndKafka`) | `make integration` | Docker |
 | Mutation | gremlins over `internal/domain` | `make mutation` / `make mutation-full` | `gremlins` v0.6.0 |
 | Frontend remote | `web/` (vitest + Testing Library) | `npm test` in `web/` | Node 22, sibling `warehouse-ui-kit` checkout |
 | Chart render tests | `charts/inbound-receiving/tests/render_test.sh`, `charts/inbound-receiving/tests/test_service_selectors.py` | `bash .../render_test.sh`, `python3 .../test_service_selectors.py` (CI `chart-tests`) | `helm`, PyYAML |
@@ -74,6 +74,7 @@ gate (enforced by the fitness tests below).
 | `internal/adapters/inbound/http/rest_api_integration_test.go` | REST over Postgres |
 | `internal/adapters/inbound/mcp/streamable_http_integration_test.go` | MCP over Streamable HTTP |
 | `cmd/mcp/main_integration_test.go` | the MCP binary's wiring |
+| `cmd/a2a/main_integration_test.go` | the A2A binary's wiring: skills over the real router and Postgres, outbox unchanged |
 | `internal/application/usecases/usecases_wiring_integration_test.go` | use-case wiring |
 | `analytics_e2e_integration_test.go` | api → outbox → Kafka → projector → reports, end to end |
 
@@ -87,6 +88,7 @@ covered.
 |---|---|
 | `TestHexagonalArchitecture` | arch-go rules: domain imports nothing internal but itself; layers only point inwards; adapters never import each other |
 | `TestMCPAdapterDependencyRule` | the MCP adapter depends only on the application and domain layers, and nothing but `cmd/mcp` imports it |
+| `TestA2AAdapterDependencyRule`, `TestA2AAdapterIsReadOnlyAndHasNoOutboundClient`, `TestA2AReadOnlyBinaryWiresNoWriteUseCase`, `TestA2AReadOnlySensorBites` | the A2A adapter depends only on the application and domain layers, nothing imports it but `cmd/a2a`, and neither it nor the binary names a use case beyond the three reads, an outbox, a unit of work or an outbound A2A client ([ADR 0016](https://iqvo.github.io/inbound-receiving/docs/adr/0016-a2a-inbound-adapter)) |
 | `TestNoAuthMiddlewareReintroduced` | no auth middleware on REST or MCP (fleet rule) |
 | `TestKafkaConsumerGroupNeverHardcodedInline` | consumer group ids come from env, never literals |
 | `TestReplayConsumersSetCommitInterval` | a full-replay cache consumer (a per-process unique group) must set `CommitInterval`; this repo has none, so the rule is dormant |
