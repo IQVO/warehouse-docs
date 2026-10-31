@@ -171,7 +171,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Fleet health',
-      items: ['fleet-health/docs-coverage', 'fleet-health/ecosystem-gaps', 'fleet-health/readme-standard'],
+      items: ['fleet-health/application-portfolio', 'fleet-health/docs-coverage', 'fleet-health/ecosystem-gaps', 'fleet-health/readme-standard'],
     },
     {
       type: 'category',

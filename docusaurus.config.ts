@@ -417,6 +417,11 @@ const config: Config = {
           ],
         },
         {
+          to: 'pathname:///executive/application-portfolio.html',
+          label: 'Executive Summary',
+          position: 'right',
+        },
+        {
           href: 'https://github.com/IQVO/warehouse-docs',
           label: 'GitHub',
           position: 'right',
