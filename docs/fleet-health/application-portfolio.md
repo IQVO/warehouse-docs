@@ -7,7 +7,7 @@ description: Executive summary of architecture, clean-code and API quality for e
 
 # Application portfolio assessment
 
-An evidence-based engineering assessment of all 40 applications, measured on each repository's `origin/develop` on 2026-10-31.
+An evidence-based engineering assessment of all 40 applications, measured on each repository's `origin/develop` on 2026-11-02.
 
 :::tip Full executive page
 The detailed page, with one profile per application (architecture, clean code, every REST operation, event, MCP tool and A2A skill), is here:
