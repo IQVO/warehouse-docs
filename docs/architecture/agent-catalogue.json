@@ -1,0 +1,1408 @@
+{
+  "contexts": {
+    "checkout": {
+      "mcp": {
+        "tools": null,
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "checkout_session_status",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "customer-ordering": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_order",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_order_tracking",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_ship_to",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "get_order",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "get_order_tracking",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "customer-payments": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_payment_authorization",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_refund",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_payment_authorizations",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_refunds",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "get_payment_status",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "get_refund_status",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "delivery-promise": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_current_policy",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_delivery_offer",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_promise",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_promise_books",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_promises_by_order",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "promise_status",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "book_capacity",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "exception-management": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_exception",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_exception_policies",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_sla_report",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_open_exceptions",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "sla_status",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "find_exceptions",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "facility-layout": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "estimate_travel_distance",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_site_layout",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_zone_grid",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_zone_travel_graph",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_functional_locations",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_sites",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 1,
+        "prompts": 1
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "site_layout",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "travel_distance",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "fulfillment-execution": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "complete_task",
+            "readOnly": false,
+            "destructive": true,
+            "authority": null
+          },
+          {
+            "name": "diagnose_stuck_tasks",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "find_claimable_work",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_queue_status",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 1,
+        "prompts": 1
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "backlog_status",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "complete_task",
+            "kind": "write",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "inbound-receiving": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_appointment",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_asn",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_receipt",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_appointments",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_asns",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_docks",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_receipts",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "asn_receiving_status",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "dock_schedule",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "inventory-storage": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "check_availability",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_bin_occupancy",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_container",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_relocation",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "revoke_reservation",
+            "readOnly": false,
+            "destructive": true,
+            "authority": null
+          }
+        ],
+        "resources": 1,
+        "prompts": 1
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "check_availability",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "revoke_reservation",
+            "kind": "write",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "labor-performance": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_associate_scorecard",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_labor_standard",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_task_type_performance",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_task_type_utilization",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 1,
+        "prompts": 1
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "associate_scorecard",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "task_type_status",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "last-mile-delivery": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_route",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_wave_stops",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_waves",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "list_waves",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "get_route",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "linehaul-transportation": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_departure",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_departures",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "list_departures",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "get_departure",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "network-fulfillment": {
+      "mcp": {
+        "tools": null,
+        "resources": 1,
+        "prompts": 1
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "network_demand_status",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "advertised_availability",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "network-inventory-planning": {
+      "mcp": {
+        "tools": null,
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "transfer_status",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "find_stuck_transfers",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "node-performance": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_scorecard",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_scorecards_by_grade",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "node_performance",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "nodes_by_grade",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "node-topology": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_node",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_region",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_lanes",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_nodes",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_regions",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "resolve_service_area",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "serving_station",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "find_nodes",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "offer-availability": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "browse_catalog",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_catalog_item",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_inventory_feed",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_listings",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "check_availability",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "feed_outcome",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "order-management": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_order",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_promise_health",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "order_status",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "promise_health",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "order-sourcing": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_assignment",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_assignments",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "find_assignments",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "assignment_detail",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "pick-face-replenishment": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_policy",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_replenishment",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_pick_faces",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_policies",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_replenishments",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "pick_face_status",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "replenishment_lookup",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "pricing": {
+      "mcp": null,
+      "a2a": {
+        "skills": [
+          {
+            "id": "item_price",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "quote_status",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "process-path-management": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_cpt_schedule",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_process_path",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_process_paths",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "get_process_path",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "list_process_paths",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "product-content": {
+      "mcp": null,
+      "a2a": {
+        "skills": [
+          {
+            "id": "get_product_content",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "list_categories",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "product-discovery": {
+      "mcp": null,
+      "a2a": {
+        "skills": [
+          {
+            "id": "search_products",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "get_product",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "product-master": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "declare_pack_level",
+            "readOnly": false,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_pack_levels",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_physical_profile",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_product",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_product_classification",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_products",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "resolve_gtin",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "retire_pack_level",
+            "readOnly": false,
+            "destructive": true,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "product_profile",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "declare_pack_level",
+            "kind": "write",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "returns-processing": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_disposition_policy",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_return",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_returns_by_order",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "return_status",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "disposition_policy",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "seller-inbound": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_inbound_plan",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_inbound_shipment",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_seller_scorecard",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_shipment_labels",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "seller_compliance",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "inbound_status",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "shipping-and-tracking": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_journey",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "get_journey",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "shopping-cart": {
+      "mcp": null,
+      "a2a": {
+        "skills": [
+          {
+            "id": "get_cart",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "list_shopper_carts",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "slotting-optimization": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_forward_slots",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_sku_velocity",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_slot_plan",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_slot_plans",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "forward_slot_map",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "slot_plan_review",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "task-interleaving": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_hint",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_site_policy",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_station",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_hints",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "station_hint_status",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "site_interleaving_overview",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "vendor-connectivity": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_inbound_shipment",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_node_scorecard",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_purchase_order",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_transaction",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_vendor",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "get_vendor_node",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_vendor_nodes",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "poll_inbound_shipments",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "poll_purchase_orders",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          }
+        ],
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "get_purchase_order",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "get_node_scorecard",
+            "kind": "read",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "warehouse-ops-agent": {
+      "mcp": {
+        "tools": null,
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": null
+    },
+    "warehouse-planning": {
+      "mcp": {
+        "tools": null,
+        "resources": 0,
+        "prompts": 0
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "path_capacity",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "evaluate_capacity_plan",
+            "kind": "write",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "wes-work-planning": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_backlog_telemetry",
+            "readOnly": false,
+            "destructive": true,
+            "authority": null
+          },
+          {
+            "name": "get_rebalance_recommendation",
+            "readOnly": false,
+            "destructive": true,
+            "authority": null
+          },
+          {
+            "name": "release_next_work",
+            "readOnly": false,
+            "destructive": true,
+            "authority": null
+          }
+        ],
+        "resources": 1,
+        "prompts": 1
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "flow_status",
+            "kind": "read",
+            "authority": null
+          },
+          {
+            "id": "release_next_work",
+            "kind": "write",
+            "authority": null
+          }
+        ]
+      }
+    },
+    "workforce-management": {
+      "mcp": {
+        "tools": [
+          {
+            "name": "assign_labor",
+            "readOnly": false,
+            "destructive": true,
+            "authority": "L3"
+          },
+          {
+            "name": "get_staffing_gap",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L1"
+          },
+          {
+            "name": "propose_path_heads",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L2"
+          }
+        ],
+        "resources": 2,
+        "prompts": 1
+      },
+      "a2a": {
+        "skills": [
+          {
+            "id": "staffing_status",
+            "kind": "read",
+            "authority": "L1"
+          },
+          {
+            "id": "assign_labor",
+            "kind": "write",
+            "authority": "L3"
+          }
+        ]
+      }
+    }
+  }
+}

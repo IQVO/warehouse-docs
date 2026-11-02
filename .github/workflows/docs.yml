@@ -55,6 +55,11 @@ jobs:
       # (the registry of live Agent Cards): fail when the page and the registry disagree.
       # The live-card drift check needs a cluster and runs from e2e-tests.
       - run: python3 scripts/a2a-cards.py --check-page
+      # Agent catalogue (Agentic Standard v2): the page is generated from the registry built
+      # offline from each repo's pinned tool registry and the A2A card index. --check-authority
+      # (every tool and skill declares a level) is the rollout gate and is NOT run here yet.
+      - run: python3 scripts/test_agent_catalogue.py
+      - run: python3 scripts/agent-catalogue.py --check-page
       - run: pip install pyyaml
       - name: Network model consistency (network/model/model.yaml vs network/docs/)
         run: npm run check:model:network
