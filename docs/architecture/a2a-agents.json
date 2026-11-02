@@ -333,7 +333,8 @@
           "tags": [
             "workforce",
             "staffing",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"staffing_status\",\"arguments\":{\"siteCode\":\"WH1\",\"shiftId\":\"shift-1\",\"pathId\":\"PICK\"}}",
@@ -348,7 +349,8 @@
           "tags": [
             "workforce",
             "assignment",
-            "write"
+            "write",
+            "authority:L3"
           ],
           "examples": [
             "{\"skill\":\"assign_labor\",\"arguments\":{\"associateId\":\"assoc-1\",\"pathId\":\"PICK\"}}"

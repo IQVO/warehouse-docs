@@ -237,6 +237,7 @@ const sidebars: SidebarsConfig = {
         'architecture/runtime-flows',
         'architecture/a2a-agents',
         'architecture/agentic-standard',
+        'architecture/agent-catalogue',
       ],
     },
   ],
