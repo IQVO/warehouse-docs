@@ -17,24 +17,21 @@ The detailed page, with one profile per application (architecture, clean code, e
 ## At a glance
 
 - **40 applications**: 37 Go services and agents, 3 web frontends
-- **556k lines of production code**: 773k lines of test code (1.4 : 1)
+- **556k lines of production code**: 774k lines of test code (1.4 : 1)
 - **482 REST operations**: across 36 published OpenAPI contracts
 - **270 business event types published**: CloudEvents 1.0 over Kafka, transactional outbox
 - **159 MCP tools for AI agents**: 68 A2A agent skills
 - **0 layer-boundary violations**: domain and application code import no infrastructure
-- **17,895 Go test functions**: 2,389 BDD scenarios, 1,159 architecture fitness tests
-- **38/40 green on latest develop CI**: 1 failure, 1 in progress
+- **17,907 Go test functions**: 2,389 BDD scenarios, 1,159 architecture fitness tests
+- **32/40 green on latest develop CI**: 5 queued, 3 in progress
 
-Average ratings (1-5, hand review): architecture **3.9**, clean code **3.9**, API design **3.6**.
+Average ratings (1-5, hand review): architecture **3.9**, clean code **3.9**, API design **3.7**.
 
 ## Fleet-wide risks and gaps
 
 - All REST and MCP endpoints are unauthenticated (authentication was deliberately removed fleet-wide); acceptable for a closed lab, a blocker for any exposed deployment.
-- Latest develop CI is red for returns-processing (integration job) and should be fixed before the next release.
-- 92 open code-scanning alerts and 252 open Dependabot alerts across the repos that run those scanners.
-- 21 repos have no code-scanning (CodeQL) analysis on record, mostly the newer Retail Network and Storefront services.
-- 23 repos have no published documentation site of their own; their context docs live only in this central site.
-- 42 production Go files exceed 500 lines; the largest use cases and consumers are the main refactoring candidates.
+- 11 open code-scanning alerts and 18 open Dependabot alerts across the repos that run those scanners.
+- 39 production Go files exceed 500 lines; the largest use cases and consumers are the main refactoring candidates.
 
 ## Scorecard
 
@@ -55,7 +52,7 @@ Average ratings (1-5, hand review): architecture **3.9**, clean code **3.9**, AP
 | [Process Path Management](pathname:///executive/application-portfolio.html#app-process-path-management) | WES | Generic | 4 | 4 | 4 | 12 | 4 / 0 | 4 |
 | [Task Interleaving](pathname:///executive/application-portfolio.html#app-task-interleaving) | WES | Supporting | 4 | 4 | 4 | 10 | 4 / 7 | 4 |
 | [WES Work Planning & Release](pathname:///executive/application-portfolio.html#app-wes-work-planning) | WES | Core | 3 | 4 | 2 | 17 | 11 / 17 | 5 |
-| [Workforce Management](pathname:///executive/application-portfolio.html#app-workforce-management) | WES | Supporting | 4 | 3 | 3 | 16 | 10 / 4 | 5 |
+| [Workforce Management](pathname:///executive/application-portfolio.html#app-workforce-management) | WES | Supporting | 4 | 4 | 4 | 16 | 10 / 4 | 5 |
 | [Network Fulfillment](pathname:///executive/application-portfolio.html#app-network-fulfillment) | Network | Supporting | 4 | 4 | 3 | 10 | 7 / 8 | 5 |
 | [Network Inventory Planning](pathname:///executive/application-portfolio.html#app-network-inventory-planning) | Network | Core | 4 | 3 | 4 | 16 | 6 / 12 | 4 |
 | [Node Performance](pathname:///executive/application-portfolio.html#app-node-performance) | Network | Supporting | 4 | 5 | 4 | 2 | 2 / 15 | 2 |
