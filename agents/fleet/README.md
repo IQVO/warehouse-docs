@@ -12,6 +12,7 @@ when matching files are touched; OpenCode and Codex find them through each repo'
 | kafka-testing-and-consumers.md | tests, consumer groups |
 | no-auth-and-mcp.md | inbound adapters (REST, MCP) |
 | a2a.md | A2A adapters (server cmd/a2a, outbound client) |
+| agent-authority.md | MCP tools, A2A skills, MCP clients (authority level per tool) |
 | context-boundaries.md | outbound adapters, ports |
 | gitflow-and-ci.md | workflows, Makefile, branching |
 | idempotency-and-outbox.md | HTTP handlers, Postgres adapters |

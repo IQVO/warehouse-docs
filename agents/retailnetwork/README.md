@@ -12,8 +12,8 @@ Two sets, one discipline:
 - `agents/retailnetwork/` (this directory) — the retail network (`com.retailnetwork.<tier>.<context>...` types,
   `retailnetwork.<ctx>.events` / `.analytics` topics).
 
-Of the seven files, six are rules. Five of them — `context-boundaries.md`, `gitflow-and-ci.md`,
-`idempotency-and-outbox.md`, `kafka-testing-and-consumers.md`, `no-auth-and-mcp.md` — are **byte-identical** to
+Every rule except `cloudevents.md` — `a2a.md`, `agent-authority.md`, `context-boundaries.md`, `gitflow-and-ci.md`,
+`idempotency-and-outbox.md`, `kafka-testing-and-consumers.md`, `no-auth-and-mcp.md`, `readme-standard.md` — is **byte-identical** to
 their `agents/fleet/` counterparts and must stay that way: edit the shared text in one place and copy it verbatim
 to the other set in the same change. Only `cloudevents.md` differs between the sets (the network namespace,
 sources, dataschemas and topics); edit each set's `cloudevents.md` on its own.
@@ -24,6 +24,7 @@ sources, dataschemas and topics); edit each set's `cloudevents.md` on its own.
 | kafka-testing-and-consumers.md | tests, consumer groups |
 | no-auth-and-mcp.md | inbound adapters (REST, MCP) |
 | a2a.md | A2A adapters (server cmd/a2a, outbound client) |
+| agent-authority.md | MCP tools, A2A skills, MCP clients (authority level per tool) |
 | readme-standard.md | README edits (byte-identical twin of agents/fleet/readme-standard.md) |
 | context-boundaries.md | outbound adapters, ports |
 | gitflow-and-ci.md | workflows, Makefile, branching |
