@@ -25,3 +25,7 @@ with the network's own CloudEvents namespace (`com.retailnetwork.<tier>.<context
 files are byte-identical copies of the ones here. When you edit any of those five files, apply the identical edit
 to `agents/retailnetwork/` in the same change so the two sets never drift; edit each set's `cloudevents.md`
 independently.
+
+## Disclaimer
+
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.

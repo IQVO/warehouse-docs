@@ -28,3 +28,7 @@ sources, dataschemas and topics); edit each set's `cloudevents.md` on its own.
 | context-boundaries.md | outbound adapters, ports |
 | gitflow-and-ci.md | workflows, Makefile, branching |
 | idempotency-and-outbox.md | HTTP handlers, Postgres adapters |
+
+## Disclaimer
+
+This project is a domain-driven design study. It is not associated with, endorsed by or affiliated with any company, and it uses no company's code, data, logos or trademarks. All names, figures and examples are illustrative or synthetic.
