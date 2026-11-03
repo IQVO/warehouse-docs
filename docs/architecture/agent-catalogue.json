@@ -63,29 +63,29 @@
             "name": "get_payment_authorization",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_refund",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_payment_authorizations",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_refunds",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -109,35 +109,35 @@
             "name": "get_current_policy",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_delivery_offer",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_promise",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_promise_books",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_promises_by_order",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -161,29 +161,29 @@
             "name": "get_exception",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_exception_policies",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_sla_report",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_open_exceptions",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -311,47 +311,47 @@
             "name": "get_appointment",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_asn",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_receipt",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_appointments",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_asns",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_docks",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_receipts",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -623,41 +623,41 @@
             "name": "get_node",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_region",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_lanes",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_nodes",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_regions",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "resolve_service_area",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -795,35 +795,35 @@
             "name": "get_policy",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_replenishment",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_pick_faces",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_policies",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_replenishments",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -938,53 +938,53 @@
             "name": "declare_pack_level",
             "readOnly": false,
             "destructive": false,
-            "authority": null
+            "authority": "L3"
           },
           {
             "name": "get_pack_levels",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_physical_profile",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_product",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_product_classification",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_products",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "resolve_gtin",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "retire_pack_level",
             "readOnly": false,
             "destructive": true,
-            "authority": null
+            "authority": "L3"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -1226,59 +1226,59 @@
             "name": "get_inbound_shipment",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_node_scorecard",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_purchase_order",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_transaction",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_vendor",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_vendor_node",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_vendor_nodes",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "poll_inbound_shipments",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "poll_purchase_orders",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [

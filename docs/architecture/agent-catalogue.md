@@ -23,9 +23,9 @@ server to offer tools, at least one resource and at least one prompt. This page 
 
 | Measure | Declared | Total |
 |---|---|---|
-| MCP tools with an authority level | 3 | 110 |
+| MCP tools with an authority level | 51 | 110 |
 | A2A skills with an authority level | 2 | 68 |
-| MCP servers with a resource and a prompt | 7 | 32 |
+| MCP servers with a resource and a prompt | 15 | 32 |
 
 ## By context
 
@@ -33,12 +33,12 @@ server to offer tools, at least one resource and at least one prompt. This page 
 |---|---|---|---|---|---|---|
 | `checkout` | no pinned registry | unknown | 0 | 0 | 1 | none declared |
 | `customer-ordering` | 3 | none declared | 0 | 0 | 2 | none declared |
-| `customer-payments` | 4 | none declared | 0 | 0 | 2 | none declared |
-| `delivery-promise` | 5 | none declared | 0 | 0 | 2 | none declared |
-| `exception-management` | 4 | none declared | 0 | 0 | 2 | none declared |
+| `customer-payments` | 4 | L1 4 | 1 | 1 | 2 | none declared |
+| `delivery-promise` | 5 | L1 5 | 1 | 1 | 2 | none declared |
+| `exception-management` | 4 | L1 4 | 1 | 1 | 2 | none declared |
 | `facility-layout` | 6 | none declared | 1 | 1 | 2 | none declared |
 | `fulfillment-execution` | 4 | none declared | 1 | 1 | 2 | none declared |
-| `inbound-receiving` | 7 | none declared | 0 | 0 | 2 | none declared |
+| `inbound-receiving` | 7 | L1 7 | 1 | 1 | 2 | none declared |
 | `inventory-storage` | 5 | none declared | 1 | 1 | 2 | none declared |
 | `labor-performance` | 4 | none declared | 1 | 1 | 2 | none declared |
 | `last-mile-delivery` | 3 | none declared | 0 | 0 | 2 | none declared |
@@ -46,23 +46,23 @@ server to offer tools, at least one resource and at least one prompt. This page 
 | `network-fulfillment` | no pinned registry | unknown | 1 | 1 | 2 | none declared |
 | `network-inventory-planning` | no pinned registry | unknown | 0 | 0 | 2 | none declared |
 | `node-performance` | 2 | none declared | 0 | 0 | 2 | none declared |
-| `node-topology` | 6 | none declared | 0 | 0 | 2 | none declared |
+| `node-topology` | 6 | L1 6 | 1 | 1 | 2 | none declared |
 | `offer-availability` | 4 | none declared | 0 | 0 | 2 | none declared |
 | `order-management` | 2 | none declared | 0 | 0 | 2 | none declared |
 | `order-sourcing` | 2 | none declared | 0 | 0 | 2 | none declared |
-| `pick-face-replenishment` | 5 | none declared | 0 | 0 | 2 | none declared |
+| `pick-face-replenishment` | 5 | L1 5 | 1 | 1 | 2 | none declared |
 | `pricing` | no MCP server | - | - | - | 2 | none declared |
 | `process-path-management` | 3 | none declared | 0 | 0 | 2 | none declared |
 | `product-content` | no MCP server | - | - | - | 2 | none declared |
 | `product-discovery` | no MCP server | - | - | - | 2 | none declared |
-| `product-master` | 8 | none declared | 0 | 0 | 2 | none declared |
+| `product-master` | 8 | L1 6, L3 2 | 1 | 1 | 2 | none declared |
 | `returns-processing` | 3 | none declared | 0 | 0 | 2 | none declared |
 | `seller-inbound` | 4 | none declared | 0 | 0 | 2 | none declared |
 | `shipping-and-tracking` | 1 | none declared | 0 | 0 | 1 | none declared |
 | `shopping-cart` | no MCP server | - | - | - | 2 | none declared |
 | `slotting-optimization` | 4 | none declared | 0 | 0 | 2 | none declared |
 | `task-interleaving` | 4 | none declared | 0 | 0 | 2 | none declared |
-| `vendor-connectivity` | 9 | none declared | 0 | 0 | 2 | none declared |
+| `vendor-connectivity` | 9 | L1 9 | 1 | 1 | 2 | none declared |
 | `warehouse-ops-agent` | no pinned registry | unknown | 0 | 0 | no A2A agent | - |
 | `warehouse-planning` | no pinned registry | unknown | 0 | 0 | 2 | none declared |
 | `wes-work-planning` | 3 | none declared | 1 | 1 | 2 | none declared |
@@ -76,8 +76,8 @@ Write tools are L3 unless the owning context's ADR grants L4.
 |---|---|---|
 | `fulfillment-execution` | `complete_task` | not declared |
 | `inventory-storage` | `revoke_reservation` | not declared |
-| `product-master` | `declare_pack_level` | not declared |
-| `product-master` | `retire_pack_level` | not declared |
+| `product-master` | `declare_pack_level` | L3 |
+| `product-master` | `retire_pack_level` | L3 |
 | `wes-work-planning` | `get_backlog_telemetry` | not declared |
 | `wes-work-planning` | `get_rebalance_recommendation` | not declared |
 | `wes-work-planning` | `release_next_work` | not declared |
