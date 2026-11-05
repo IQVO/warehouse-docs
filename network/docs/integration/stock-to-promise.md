@@ -20,6 +20,7 @@ number reaches a promise is a one-way, eventually-consistent chain of four
 hops, each with its own clock and its own failure rule:
 
 ```mermaid
+%%{init: {"sequence": {"actorMargin": 8, "boxMargin": 8, "messageMargin": 24}}}%%
 sequenceDiagram
     autonumber
     participant IS as inventory-storage
@@ -28,18 +29,18 @@ sequenceDiagram
     participant OA as offer-availability
     participant DP as delivery-promise
 
-    loop every RECOMPUTE_INTERVAL (default 1 min)
-        NF->>IS: GET /inventory/{sku}/usable
-        IS-->>NF: usable = on-hand - reservations - held
-        NF->>NF: advertised = min(usable, throughputFeasible)
+    loop every RECOMPUTE_INTERVAL (1 min)
+        NF->>IS: usable stock per SKU
+        IS-->>NF: usable qty
+        NF->>NF: min(usable, throughput)
     end
-    loop every NETWORK_INVENTORY_INTERVAL (default 5 min)
-        NF->>VC: POST /vendor/inventory (only if content changed)
-        VC->>OA: POST /inventory-feeds (async relay)
-        OA->>DP: ListingAvailabilityChanged (Kafka)
-        DP->>DP: Listing read model update
+    loop every NETWORK_INVENTORY_INTERVAL (5 min)
+        NF->>VC: POST /vendor/inventory
+        VC->>OA: POST /inventory-feeds
+        OA->>DP: ListingAvailability<br/>Changed
+        DP->>DP: Listing read model
     end
-    Note over DP: quote: Available(node,item) = sum(availableQty) - holds<br/>Available < line qty - whole quote fails<br/>ITEM_QUANTITY_NOT_AVAILABLE
+    Note over DP: quote: sum(availableQty) - holds<br/>below line qty: quote fails<br/>ITEM_QUANTITY_NOT_AVAILABLE
 ```
 
 | Hop | Owner | Mechanism | Default cadence | Source |
@@ -131,16 +132,24 @@ classDiagram
     }
     class InventoryAvailability {
         <<Port>>
-        +UsableQuantity(ctx, sku) (int, error)
+        +UsableQuantity(sku) int
     }
     class PathCapacity {
         <<Port>>
-        +RemainingCapacity(pathId, cutoffAt) (int, bool)
+        +RemainingCapacity(path, cutoff) int
     }
     class CapabilityOfferRepo {
         <<Port>>
         +Save(offer) error
     }
+    RecomputeCapabilityOffers ..> InventoryAvailability : usable per SKU
+    RecomputeCapabilityOffers ..> PathCapacity : units before cutoff
+    RecomputeCapabilityOffers ..> CapabilityOfferRepo : upsert snapshot
+```
+
+```mermaid
+classDiagram
+    direction TB
     class CapabilityOffer {
         <<AggregateRoot>>
         -sku SKU
@@ -148,8 +157,8 @@ classDiagram
         -advertisedQuantity int
         -basis Basis
         -computedAt time.Time
-        +New(sku, siteId, advertised, physical, basis, at)$ (CapabilityOffer, error)
-        +Compute(sku, siteId, physical, throughput, known, at)$ (CapabilityOffer, error)
+        +New(sku, siteId, advertised, physical, basis, at)$ CapabilityOffer
+        +Compute(physical, throughput, known, at)$ CapabilityOffer
         +AdvertisedQuantity() int
         +Basis() Basis
     }
@@ -158,10 +167,6 @@ classDiagram
         PHYSICAL
         THROUGHPUT_CONSTRAINED
     }
-    RecomputeCapabilityOffers ..> InventoryAvailability : usable per SKU
-    RecomputeCapabilityOffers ..> PathCapacity : units before next feasible cutoff
-    RecomputeCapabilityOffers ..> CapabilityOffer : Compute$
-    RecomputeCapabilityOffers ..> CapabilityOfferRepo : upsert snapshot
     CapabilityOffer *-- Basis
 ```
 
@@ -427,17 +432,17 @@ Derived from `process-path-management internal/domain/processpath/process_path.g
 ### What consumers do with a cycle time
 
 ```mermaid
-flowchart LR
-    PPM["process-path-management.events<br/>(capability contract + CPT schedule)"]
+flowchart TB
+    PPM["process-path-management.events<br/>(capability + CPT)"]
     PPM --> NFC["network-fulfillment<br/>path + schedule cache"]
     PPM --> OMC["order-management<br/>catalogue cache"]
-    NFC --> ELIG["path fits cutoff iff<br/>cycleTimeP95 <= cutoff - now"]
-    ELIG --> TF["throughputFeasible =<br/>sum of remaining capacity<br/>of fitting paths"]
-    TF --> ADV["advertised =<br/>min(usable, throughputFeasible)"]
+    NFC --> ELIG["path fits cutoff iff<br/>cycleTimeP95 fits time left"]
+    ELIG --> TF["throughputFeasible =<br/>sum remaining capacity<br/>of fitting paths"]
+    TF --> ADV["advertised =<br/>min(usable, throughput)"]
     NFC --> HT["handlingTime = longest fitting<br/>cycleTimeP95, rounded up"]
     HT --> PROF["DeclareNodeProfile:<br/>cutoffs, handling, throughput/day"]
-    OMC --> PP["PromisePolicy: can an allocated<br/>line make its CPT window?"]
-    OMC --> PS["PathSelectionPolicy: only paths whose<br/>intake contains CUSTOMER_ORDER"]
+    OMC --> PP["PromisePolicy: allocated line<br/>vs CPT window"]
+    OMC --> PS["PathSelection: intake has<br/>CUSTOMER_ORDER"]
 ```
 
 Three rules govern every use (ADR 0017 in network-fulfillment):
@@ -478,7 +483,7 @@ determines whether the promise admits it before that execution happens.
 ```text
 WMS:         usable            = on-hand - active reservations - held/unlocated
 path gate:   pathFits(cutoff)  = cycleTimeP95 <= cutoff - now   (unknown => eligible)
-network-ful: advertised        = min(usable, sum of remaining capacity of fitting paths)
+network-ful: advertised        = min(usable, sum remaining capacity of fitting paths)
 profile:     handlingTime      = ceil(longest fitting cycleTimeP95)
 listing:     availableQty      = advertised        (+ basis, asOf, feedID)
 promise:     Available(node)   = sum(availableQty, LIVE listings, live items)
