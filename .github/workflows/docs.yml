@@ -79,6 +79,10 @@ jobs:
         run: npm run check:model:storefront
       - name: Storefront generated strategic pages match the model
         run: npm run check:pages:storefront
+      - name: Yard model consistency (yard/model/model.yaml vs the producer AsyncAPI copies in apis/)
+        run: npm run check:model:yard
+      - name: Yard generated strategic pages match the model
+        run: npm run check:pages:yard
       - name: Spectral lint of the storefront OpenAPI contracts (warn-clean, as the service repos)
         run: |
           npm install -g @stoplight/spectral-cli

@@ -1,0 +1,30 @@
+---
+id: index
+title: Strategic Design
+sidebar_label: Overview
+description: "Strategic design of the yard domain, generated from the model: subdomains, context map, ubiquitous language and the event standard."
+---
+
+# Strategic Design
+
+:::info[Generated from the model]
+This page is generated from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml) by `scripts/gen_pages.py`. Edit the model, then regenerate; CI fails when the page and the model disagree.
+:::
+
+The yard is the enclosed area outside a site's four walls. It is modelled as two bounded contexts:
+
+| Context | Code | Classification | Purpose |
+| --- | --- | --- | --- |
+| `dock-scheduling` | DS | Supporting | Owns the door calendar of every site: every booked time window on every dock door, inbound and outbound, from booking through arrival to door release, the no-double-booking rule, door opening hours and closures, ETA-driven risk and no-shows. |
+| `yard-management` | YM | Supporting | Owns everything physically on site outside the four walls: who passed the gate (visits), which trailer is where (spot, door or an open move), its load, seal and hold state, the moves hostlers and visiting drivers make, door work at the door, and yard checks. The source of dwell, door occupancy and yard truck productivity facts. |
+
+Pages: [Subdomain Classification](/yard/strategic-design/subdomain-classification), [Context Map](/yard/strategic-design/context-map), [Ubiquitous Language](/yard/strategic-design/ubiquitous-language), [Event Standard](/yard/strategic-design/event-standard-cloudevents), [Model Gap Register](/yard/strategic-design/model-gap-register).
+
+## Counts
+
+| Fact | Value |
+| --- | --- |
+| `dock-scheduling` aggregates / invariants | 2 / 13 |
+| `dock-scheduling` published events / REST routes | 11 / 14 |
+| `yard-management` aggregates / invariants | 5 / 22 |
+| `yard-management` published events / REST routes | 18 / 28 |

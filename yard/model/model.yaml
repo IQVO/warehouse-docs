@@ -1,0 +1,595 @@
+# Yard management canonical domain model (PROPOSED, nothing built)
+#
+# Single source of truth for the yard design, in the same shape as
+# warehouse-docs network/model/model.yaml and storefront/model/model.yaml:
+# every aggregate, invariant, command, event, consumer, relationship and
+# ubiquitous-language term printed in the yard docs must exist here first.
+#
+# This is a MODEL derived from public yard-management research (research.md,
+# Gartner Market Guide for Yard Management 2025 and the vendors it profiles)
+# plus the warehouse-systems estate on origin/develop (2026-11-05). It makes no
+# claim about any vendor's internal design. Fields of CONSUMED events were read
+# from each producer's apis/asyncapi.yaml on origin/develop; scripts/check_model.py
+# re-checks them.
+
+meta:
+  domain: Yard Management
+  slug: yard
+  organization: >-
+    Part of the warehouse-systems fleet (the vendor V-WS side). The yard is the
+    enclosed area outside the four walls of a site: gate, parking spots and dock
+    doors. Two new bounded contexts own it; existing contexts keep everything
+    inside the walls.
+  scope_rule: >-
+    dock-scheduling owns the FUTURE of a door (booked time); yard-management owns
+    the PRESENT of the yard (who and what is physically where). Neither records
+    the other's facts; each keeps an event-fed local copy of what it needs.
+  hard_boundary: >-
+    No yard context consumes a retailnetwork.* topic or calls a retail-network
+    service; the only channel to the network stays network-fulfillment and the
+    Vendor API. Outbound carrier pickups are known from the fleet's own CPT
+    schedule (process-path-management CPTScheduleChanged), which the network
+    integration page defines as the network's pickup cutoff.
+  status: DECIDED 2026-11-05, build in progress. Decisions D1-D8 are FINAL (PLAN.md section 9). The model gap register decisions (S1/S2 resolved here) are in docs strategic-design/model-gap-register.
+
+conventions:
+  cloudevents:
+    spec: CloudEvents 1.0, structured JSON, mandatory on every Kafka message (fleet rule)
+    type: "com.warehouse.<subdomain>.<context>.<entity>.<EventName>"
+    subdomain: "wms for both contexts (PROPOSED, decision D2)"
+    entity_rule: "`<entity>` is the lower-case aggregate that raises the event, no separators (dockappointment, dockcalendar, yardvisit, trailer, yardmove, yardcheck)."
+    source: "/warehouse/<context>"
+    dataschema: "urn:warehouse:<context>:events:<EventName>:v1"
+    subject: aggregate root id (also the Kafka partition key)
+    topic: "warehouse.<context>.events"
+    analytics_topic: "warehouse.<context>.analytics"
+    payload_case: snake_case (inbound-receiving precedent)
+    version_field: "every event carries the aggregate `version` (starts 1, +1 per accepted change); readers apply only version > stored"
+  site_key: >-
+    `site_id` on every yard event is facility-layout's `siteCode`. A door or spot
+    is mapped to its site through LocationSlotRegistered.zoneId and
+    ZoneRegistered{zoneId, siteCode}; never by parsing a location code.
+  integration_rules:
+    - Every context owns its database; no shared tables.
+    - Every published event leaves through a transactional outbox (attempt cap, DLQ).
+    - Every consumer is idempotent on the CloudEvents id (inbox table) and dispatches on the full type string.
+    - Sibling data used in a decision is a local, event-fed read model; no synchronous sibling call at request time, in either direction.
+    - Postgres and Kafka are the only runtime (no in-memory mode, real-wiring rule).
+    - Every state-changing POST/PUT takes an Idempotency-Key; mutable aggregates carry an optimistic-concurrency version (ETag / If-Match).
+    - REST follows the fleet guideline (sub-resource nouns for actions, problem+json errors).
+  no_auth: Consistent with the fleet (no auth on REST or MCP). No driver PII is stored; a driver is an opaque `driver_ref`.
+  errors:
+    - {error: ErrNotFound, status: 404, problem: not-found, rule: "an addressed aggregate does not exist"}
+    - {error: ErrIllegalTransition, status: 409, problem: illegal-transition, rule: "the command is not allowed from the aggregate's current state"}
+    - {error: ErrConcurrentUpdate, status: 409, problem: concurrent-update, rule: "optimistic-concurrency version mismatch"}
+    - {error: ErrValidation, status: 422, problem: validation-failed, rule: "well-formed JSON that violates a value-object rule"}
+  analytics_rule: "Events marked `analytics only` go ONLY to warehouse.<context>.analytics; integration events go to warehouse.<context>.events (and are mirrored to analytics by the projector pattern)."
+
+contexts:
+  # -------------------------------------------------------------------------
+  - id: dock-scheduling
+    name: Dock Scheduling
+    code: DS
+    tier: wms
+    classification: Supporting
+    chart:
+      differentiation: 0.40
+      complexity: 0.45
+      evolution: Product
+    business_model: Cost reducer (carrier wait, detention, idle dock labour) and revenue protector (on-time inbound)
+    purpose: >-
+      Owns the door calendar of every site: every booked time window on every
+      dock door, inbound and outbound, from booking through arrival to door
+      release, the no-double-booking rule, door opening hours and closures,
+      ETA-driven risk and no-shows.
+    roles: [Specification (door calendar), Gateway for carriers (Open Host Service), Analysis (adherence)]
+    business_decisions:
+      - One owner of door time. Inbound and outbound appointments share one calendar per door; a door whose dockFlow is Both takes either direction.
+      - No two active (BOOKED or CHECKED_IN) appointments overlap on the same door. Windows are half-open, so [10:00, 12:00) and [12:00, 14:00) are compatible.
+      - An appointment's direction must be allowed by the door's dockFlow.
+      - A window lies inside the door's operating hours and outside every closure of that door.
+      - Arrival and door release are physical facts owned by yard-management; this context applies them from events and never records them from its own API.
+      - A BOOKED appointment with no arrival by window_end plus the site's no-show grace becomes NO_SHOW (sweep).
+      - An ETA later than window_start plus the arrival tolerance raises an advisory DockAppointmentAtRisk; nothing reschedules automatically.
+    aggregates:
+      - name: DockAppointment
+        root_id: appointmentId
+        description: "One booked door window for one carrier visit: direction, door, window, the ASNs (inbound) or CPT / shipment references (outbound) it covers."
+        states: [BOOKED, CHECKED_IN, COMPLETED, CANCELLED, NO_SHOW]
+        transitions:
+          - [BOOKED, BOOKED, RescheduleAppointment]
+          - [BOOKED, CHECKED_IN, RecordArrival]
+          - [CHECKED_IN, COMPLETED, RecordDoorRelease]
+          - [BOOKED, COMPLETED, RecordDoorRelease]
+          - [BOOKED, CANCELLED, CancelAppointment]
+          - [CHECKED_IN, CANCELLED, CancelAppointment]
+          - [BOOKED, NO_SHOW, MarkNoShow]
+        value_objects:
+          - Direction(INBOUND|OUTBOUND)
+          - "Window{start, end}, half-open"
+          - "Carrier{name, scac?}"
+          - "InboundRefs{asn_numbers[]}"
+          - "OutboundRefs{cpt_id?, shipment_refs[]}"
+          - ArrivalStatus(EARLY|ON_TIME|LATE), computed against the window with the site's arrival tolerance
+          - "Eta{eta_at, reported_at, source}"
+          - "ExpectedSeal{seal_number?}, the seal the carrier declares when booking"
+        invariants:
+          - {rule: "door code 1..64 characters, no whitespace, control characters or /", error: ErrInvalidDoorCode}
+          - {rule: "carrier name non-blank, at most 100 characters; scac 2..4 upper-case letters when given", error: ErrInvalidCarrier}
+          - {rule: "end > start and end - start <= MaxWindow (4 h)", error: ErrInvalidWindow}
+          - {rule: "a booked or rescheduled window does not start before now", error: ErrWindowInPast}
+          - {rule: "the door is a known, active Dock slot of the site", error: ErrUnknownDoor}
+          - {rule: "the door's dockFlow allows the direction (Inbound, Outbound or Both)", error: ErrDoorFlowMismatch}
+          - {rule: "no overlap with another BOOKED or CHECKED_IN appointment on the same door (domain service DoorSchedule.CheckNoOverlap under a per-door advisory lock)", error: ErrDoorDoubleBooked}
+          - {rule: "the window is inside the door's operating hours and outside its closures", error: ErrDoorUnavailable}
+          - {rule: "INBOUND covers at least one ASN, each known and not cancelled in the local ASN copy", error: ErrUnknownAsn}
+          - {rule: "OUTBOUND names a cpt_id known in the local CPT copy or at least one shipment_ref", error: ErrMissingOutboundRef}
+        commands: [BookAppointment, RescheduleAppointment, CancelAppointment, ReportEta, RecordArrival, ReassignDoor, RecordDoorRelease, MarkNoShow, ImportLegacyAppointment]
+        events: [DockAppointmentBooked, DockAppointmentRescheduled, DockAppointmentCancelled, DockAppointmentCheckedIn, DockAppointmentDoorReassigned, DockAppointmentCompleted, DockAppointmentNoShow, DockAppointmentAtRisk]
+        throughput_estimate: medium (bookings, ETA reports)
+        size_estimate: doors x appointments/day x horizon (14 days) plus history
+      - name: DockCalendar
+        root_id: siteId
+        description: The per-site door calendar settings that every booking is checked against.
+        states: [ACTIVE]
+        transitions: []
+        value_objects:
+          - "OperatingHours{door_code or site default, weekday, opens_at, closes_at, timezone}"
+          - "Closure{closure_id, door_code, from, to, reason}"
+          - "Settings{max_window_minutes (240), slot_granularity_minutes (15), arrival_tolerance_minutes, no_show_grace_minutes}"
+        invariants:
+          - {rule: "opens_at < closes_at for every operating-hours row", error: ErrInvalidOperatingHours}
+          - {rule: "closures do not overlap on one door", error: ErrOverlappingClosure}
+          - {rule: "a closure may not cover an active appointment of that door (the refusal lists the appointment ids)", error: ErrClosureConflictsWithAppointments}
+        commands: [DeclareOperatingHours, ScheduleDoorClosure, LiftDoorClosure, DeclareCalendarSettings]
+        events: [DoorOperatingHoursDeclared, DoorClosureScheduled, DoorClosureLifted]
+        throughput_estimate: low
+        size_estimate: one per site
+    read_models:
+      - {name: DoorView, source: "facility-layout LocationSlotRegistered (role=Dock, dockFlow), LocationSlotDecommissioned, ZoneRegistered (zoneId -> siteCode)"}
+      - {name: AsnView, source: "inbound-receiving ASNRegistered, ASNCancelled"}
+      - {name: CutoffView, source: process-path-management CPTScheduleChanged}
+      - {name: DoorAvailabilityView, source: "own DockAppointment and DockCalendar state; answers free windows per door"}
+      - {name: AdherenceReport, source: "own events on the analytics topic: on-time, early, late and no-show share per site and carrier"}
+    policies:
+      - {name: ArrivalFromGate, rule: "on yard-management VisitCheckedIn naming an appointment_id, RecordArrival with arrival_status from the window and the arrival tolerance; an unknown or terminal appointment is ignored and counted"}
+      - {name: ActualDoorWins, rule: "on yard-management TrailerDocked whose door differs from the booked door, ReassignDoor without the overlap refusal (the physical fact wins); any later appointment now overlapping on the new door gets DockAppointmentAtRisk"}
+      - {name: CompleteOnDoorRelease, rule: "on yard-management TrailerUndocked naming an appointment_id, RecordDoorRelease"}
+      - {name: OutOfOrderYardFacts, rule: "yard events are keyed by visit or trailer id, not by appointment, so they can arrive in any order across partitions. A door release applied to a BOOKED appointment completes it and records the arrival as implicit (BOOKED -> COMPLETED); a late VisitCheckedIn for a COMPLETED appointment is ignored; any yard fact for a CANCELLED or NO_SHOW appointment is ignored and counted"}
+      - {name: CancelOnVisitRejected, rule: "on yard-management VisitRejected naming an appointment_id of a BOOKED appointment, CancelAppointment with reason TURNED_AWAY; any other state is ignored and counted"}
+      - {name: NoShowSweep, rule: "POST /no-show-sweeps marks BOOKED appointments past window_end + no_show_grace as NO_SHOW (cron, idempotent)"}
+      - {name: EtaRisk, rule: "ReportEta with eta_at > window_start + arrival_tolerance raises DockAppointmentAtRisk once per ETA report"}
+      - {name: CancelWhenAllAsnsCancelled, rule: "on inbound-receiving ASNCancelled, an INBOUND BOOKED appointment whose ASNs are all cancelled is cancelled with reason ASN_CANCELLED"}
+      - {name: PickupFromCutoffs, phase: 2, rule: "on CPTScheduleChanged, keep one OUTBOUND appointment per cutoff and operating day on a 7-day horizon, on the door the site's PickupDoorRule names for the ship_method, window [cutoff - pickup_lead, cutoff)"}
+      - {name: LegacyImport, rule: "strangler stage A: consume inbound-receiving DockAppointment* and import each appointment once (provenance legacy-import, direction INBOUND); off when its group env is unset"}
+    inbound:
+      - {from: carrier scheduler (carrier portal), type: cmd, channel: REST, routes: ["POST /appointments", "POST /appointments/{appointmentId}/reschedules", "POST /appointments/{appointmentId}/cancellations", "POST /appointments/{appointmentId}/eta-reports"], message: "BookAppointment, RescheduleAppointment, CancelAppointment, ReportEta", relationship: OHS}
+      - {from: dock planner, type: cmd, channel: REST, routes: ["PUT /sites/{siteId}/dock-calendar/operating-hours", "PUT /sites/{siteId}/dock-calendar/settings", "POST /sites/{siteId}/dock-calendar/closures", "POST /sites/{siteId}/dock-calendar/closures/{closureId}/lifts"], message: "DeclareOperatingHours, DeclareCalendarSettings, ScheduleDoorClosure, LiftDoorClosure", relationship: UI}
+      - {from: any context, type: qry, channel: REST, routes: ["GET /appointments", "GET /appointments/{appointmentId}", "GET /doors/{doorCode}/availability", "GET /sites/{siteId}/dock-calendar"], message: "ListAppointments, GetAppointment, GetDoorAvailability, GetDockCalendar", relationship: OHS}
+      - {from: scheduler (cron), type: cmd, channel: REST, routes: ["POST /no-show-sweeps"], message: MarkNoShow, relationship: UI}
+      - {from: yard-management, type: evt, channel: Kafka warehouse.yard-management.events, message: "VisitCheckedIn, VisitRejected, TrailerDocked, TrailerUndocked", relationship: Customer/Supplier}
+      - {from: facility-layout, type: evt, channel: Kafka warehouse.facility.events, message: "LocationSlotRegistered, LocationSlotDecommissioned, ZoneRegistered", relationship: Conformist}
+      - {from: inbound-receiving, type: evt, channel: Kafka warehouse.inbound-receiving.events, message: "ASNRegistered, ASNCancelled", relationship: Conformist}
+      - {from: process-path-management, type: evt, channel: Kafka warehouse.process-path-management.events, message: CPTScheduleChanged, relationship: Conformist}
+    rest:
+      - POST /appointments
+      - GET /appointments
+      - GET /appointments/{appointmentId}
+      - POST /appointments/{appointmentId}/reschedules
+      - POST /appointments/{appointmentId}/cancellations
+      - POST /appointments/{appointmentId}/eta-reports
+      - GET /doors/{doorCode}/availability
+      - GET /sites/{siteId}/dock-calendar
+      - PUT /sites/{siteId}/dock-calendar/operating-hours
+      - PUT /sites/{siteId}/dock-calendar/settings
+      - POST /sites/{siteId}/dock-calendar/closures
+      - POST /sites/{siteId}/dock-calendar/closures/{closureId}/lifts
+      - POST /no-show-sweeps
+      - GET /reports/schedule-adherence
+    publishes:
+      - event: DockAppointmentBooked
+        entity: dockappointment
+        data: [appointment_id, site_id, direction, door_code, carrier, carrier_scac, window_start, window_end, asn_numbers, cpt_id, shipment_refs, expected_seal_number, arrival_tolerance_minutes, provenance, version]
+        consumers: [yard-management, warehouse-planning, inbound-receiving]
+      - event: DockAppointmentRescheduled
+        entity: dockappointment
+        data: [appointment_id, site_id, door_code, previous_door_code, window_start, window_end, previous_window_start, previous_window_end, arrival_tolerance_minutes, version]
+        consumers: [yard-management, warehouse-planning]
+      - event: DockAppointmentCancelled
+        entity: dockappointment
+        data: [appointment_id, site_id, door_code, reason, version]
+        consumers: [yard-management, warehouse-planning, inbound-receiving]
+      - event: DockAppointmentNoShow
+        entity: dockappointment
+        data: [appointment_id, site_id, door_code, direction, carrier_scac, window_end, version]
+        consumers: [yard-management, warehouse-planning, exception-management]
+      - event: DockAppointmentCheckedIn
+        entity: dockappointment
+        data: [appointment_id, site_id, door_code, checked_in_at, arrival_status, visit_id, version]
+        consumers: [analytics only]
+      - event: DockAppointmentDoorReassigned
+        entity: dockappointment
+        data: [appointment_id, site_id, from_door_code, to_door_code, version]
+        consumers: [analytics only]
+      - event: DockAppointmentCompleted
+        entity: dockappointment
+        data: [appointment_id, site_id, door_code, completed_at, version]
+        consumers: [analytics only]
+      - event: DockAppointmentAtRisk
+        entity: dockappointment
+        data: [appointment_id, site_id, door_code, eta_at, window_start, window_end, cause]
+        consumers: [analytics only]
+      - event: DoorClosureScheduled
+        entity: dockcalendar
+        data: [site_id, closure_id, door_code, from, to, reason, version]
+        consumers: [yard-management]
+      - event: DoorClosureLifted
+        entity: dockcalendar
+        data: [site_id, closure_id, door_code, version]
+        consumers: [yard-management]
+      - event: DoorOperatingHoursDeclared
+        entity: dockcalendar
+        data: [site_id, door_code, operating_hours, version]
+        consumers: [analytics only]
+    reasons:
+      - {name: CancellationReason, values: [CARRIER_REQUEST, SITE_REQUEST, ASN_CANCELLED, TURNED_AWAY]}
+      - {name: AtRiskCause, values: [LATE_ETA, DOOR_REASSIGNED_OVERLAP]}
+    consumes:
+      - {producer: yard-management, topic: warehouse.yard-management.events, events: [VisitCheckedIn, VisitRejected, TrailerDocked, TrailerUndocked]}
+      - {producer: facility-layout, topic: warehouse.facility.events, events: [LocationSlotRegistered, LocationSlotDecommissioned, ZoneRegistered], fields: {LocationSlotRegistered: [locationCode, zoneId, role, dockFlow], ZoneRegistered: [zoneId, siteCode]}}
+      - {producer: inbound-receiving, topic: warehouse.inbound-receiving.events, events: [ASNRegistered, ASNCancelled], fields: {ASNRegistered: [asn_number, expected_arrival, lines], ASNCancelled: [asn_number]}}
+      - {producer: process-path-management, topic: warehouse.process-path-management.events, events: [CPTScheduleChanged], fields: {CPTScheduleChanged: [site_id, timezone, cutoffs]}}
+      - {producer: inbound-receiving, topic: warehouse.inbound-receiving.events, events: [DockAppointmentBooked, DockAppointmentCheckedIn, DockAppointmentCancelled, DockAppointmentCompleted], stage: legacy-import (strangler A-D, removed at E)}
+    sync_calls: []
+    ul:
+      - {term: Dock Appointment, definition: "A booked window on one door for one carrier visit, inbound or outbound.", code: dockappointment.DockAppointment}
+      - {term: Door Window, definition: "The half-open interval [start, end) an appointment holds on its door.", code: dockappointment.Window}
+      - {term: Door Calendar, definition: "A site's door opening hours, closures and booking settings.", code: dockcalendar.DockCalendar}
+      - {term: Closure, definition: "A period a door cannot be booked (maintenance, damage).", code: dockcalendar.Closure}
+      - {term: Arrival Status, definition: "EARLY, ON_TIME or LATE, from the gate arrival against the window and the tolerance.", code: dockappointment.ArrivalStatus}
+      - {term: No-Show, definition: "A booked appointment whose carrier did not arrive by window end plus grace.", code: dockappointment.NoShow}
+      - {term: SCAC, definition: "Standard Carrier Alpha Code identifying the carrier.", code: shared.SCAC}
+      - {term: CPT, definition: "Critical pull time: the fleet's outbound cutoff, which the network uses as its pickup cutoff.", code: "consumed from process-path-management"}
+
+  # -------------------------------------------------------------------------
+  - id: yard-management
+    name: Yard Management
+    code: YM
+    tier: wms
+    classification: Supporting
+    chart:
+      differentiation: 0.50
+      complexity: 0.60
+      evolution: Custom-built
+    business_model: Cost reducer (detention, demurrage, lost trailers, idle dock labour) and throughput enabler
+    purpose: >-
+      Owns everything physically on site outside the four walls: who passed the
+      gate (visits), which trailer is where (spot, door or an open move), its
+      load, seal and hold state, the moves hostlers and visiting drivers make,
+      door work at the door, and yard checks. The source of dwell, door
+      occupancy and yard truck productivity facts.
+    roles: [Execution (gate, moves, docking), Analysis (dwell, door utilisation)]
+    business_decisions:
+      - A trailer on site is at exactly one place - one yard spot, one door, or one open move.
+      - A spot or a door holds at most one trailer.
+      - A trailer has at most one open move, and a move's destination is reserved when the move is requested.
+      - Moves are pulled by hostlers (claim-next with a lease), never pushed, as in fulfillment-execution.
+      - A visit checks out only when every trailer it takes is released (not docked, no open move) and every loaded outbound trailer carries a seal.
+      - Walk-ins are allowed into a holding spot unless the site's policy requires an appointment.
+      - A seal mismatch at the gate raises SealExceptionRaised; whether it also rejects the visit is site policy (FLAG or REJECT).
+    aggregates:
+      - name: YardVisit
+        root_id: visitId
+        description: "One tractor and driver passing the gate, from check-in to check-out, with the trailers it brings and takes."
+        states: [CHECKED_IN, CHECKED_OUT, REJECTED]
+        transitions:
+          - [CHECKED_IN, CHECKED_OUT, CheckOutVisit]
+        value_objects:
+          - "Carrier{name, scac?}"
+          - "TractorPlate"
+          - "DriverRef (opaque, no PII)"
+          - Purpose(DROP|LIVE_UNLOAD|LIVE_LOAD|PICKUP|BOBTAIL)
+          - "AppointmentRef?"
+          - "TrailersIn[], TrailersOut[]"
+        invariants:
+          - {rule: "carrier name non-blank, at most 100 characters; scac 2..4 upper-case letters when given", error: ErrInvalidCarrier}
+          - {rule: "at most one CHECKED_IN visit per tractor plate per site", error: ErrVisitAlreadyOpen}
+          - {rule: "when the site requires appointments, the visit names one; the named appointment is BOOKED for this site in the local copy (marked used from the yard's own VisitCheckedIn and TrailerUndocked)", error: ErrAppointmentRequired}
+          - {rule: "a named appointment exists in the local copy and covers exactly one trailer of the visit", error: ErrUnknownAppointment}
+          - {rule: "every trailer taken out is on site and released: no open move, and either parked or docked with door work DONE", error: ErrTrailerNotReleased}
+          - {rule: "every LOADED trailer taken out on an OUTBOUND purpose carries a seal", error: ErrSealRequired}
+        commands: [CheckInVisit, RejectAtGate, CheckOutVisit]
+        events: [VisitCheckedIn, VisitRejected, VisitCheckedOut]
+        throughput_estimate: medium (gate events)
+        size_estimate: visits/day x retention
+      - name: Trailer
+        root_id: trailerId
+        description: "A towable unit on site (trailer, or container on a chassis): where it is, what it holds, its seal and hold."
+        states: [PARKED, IN_MOVE, DOCKED, DEPARTED]
+        transitions:
+          - [PARKED, IN_MOVE, StartMoving]
+          - [IN_MOVE, PARKED, ArriveAt]
+          - [IN_MOVE, DOCKED, ArriveAt]
+          - [DOCKED, IN_MOVE, StartMoving]
+          - [IN_MOVE, PARKED, ReturnToOrigin]
+          - [IN_MOVE, DOCKED, ReturnToOrigin]
+          - [PARKED, DEPARTED, Depart]
+          - [DOCKED, DEPARTED, Depart]
+        value_objects:
+          - TrailerKind(DRY_VAN|REEFER|FLATBED|CONTAINER)
+          - "UnitNumber{carrier_scac, number}, natural key on site"
+          - LoadState(EMPTY|LOADED|PARTIAL)
+          - "Contents{asn_numbers[] inbound, outbound_ref?}"
+          - "Seal{number, state INTACT|BROKEN|NONE}"
+          - "Hold{reason}"
+          - "Location{kind SPOT|DOOR, code}"
+          - "DoorWork(WAITING|IN_PROGRESS|DONE), only while DOCKED"
+          - "ArrivedAt, the dwell clock start"
+          - "AppointmentRef?, set at RecordArrival; one appointment covers one trailer"
+          - "DwellAlertedAt?, the marker that makes the dwell sweep raise TrailerDwellExceeded once per threshold crossing"
+        notes: "RecordArrival creates the trailer IN_MOVE with its first move already CLAIMED (performer VISITING_DRIVER, from = none, no lease; such a move cannot expire or be cancelled). ReturnToOrigin is invoked by ExpireLease and CancelMove on a CLAIMED hostler move, in the same unit of work, and puts the trailer back where StartMoving found it. Origin is released at StartMoving; a destination is validated at RequestMove (known slot, closure, flow, hold) and again at ArriveAt, where an occupied location is refused and the move stays CLAIMED. ArriveAt raises TrailerParked or TrailerDocked; leaving a door (StartMoving or Depart from DOCKED) raises TrailerUndocked; CheckOutVisit calls Depart per trailer taken out. Door work: WAITING, IN_PROGRESS, DONE; AutoCompleteUnload may go WAITING to DONE once every ASN on the trailer has a closed receipt (joined through receipt_id from ReceiptOpened). StartMoving and ArriveAt are invoked only by the YardMove use cases (claim and complete) in the same unit of work as the move, the fleet precedent of closing a receipt together with its ASN."
+        invariants:
+          - {rule: "a spot or door holds at most one trailer (domain service Occupancy.CheckFree under a per-location advisory lock, plus a partial unique index)", error: ErrLocationOccupied}
+          - {rule: "the location is a known, active Yard or Dock slot of the trailer's site", error: ErrUnknownLocation}
+          - {rule: "a door under a closure takes no trailer", error: ErrDoorClosed}
+          - {rule: "a LOADED inbound trailer docks only at an Inbound or Both door, an outbound one only at an Outbound or Both door", error: ErrDoorFlowMismatch}
+          - {rule: "a trailer on hold is not docked", error: ErrTrailerOnHold}
+          - {rule: "a DOCKED trailer departs only when its door work is DONE", error: ErrDoorWorkOpen}
+          - {rule: "the natural key (scac, number) is unique among trailers on site", error: ErrTrailerAlreadyOnSite}
+        commands: [RecordArrival, StartMoving, ArriveAt, ReturnToOrigin, StartDoorWork, CompleteDoorWork, RecordSeal, BreakSeal, PlaceHold, ReleaseHold, RecordLoadState, Depart]
+        events: [TrailerParked, TrailerDocked, DoorWorkStarted, DoorWorkCompleted, TrailerUndocked, TrailerDeparted, SealExceptionRaised, TrailerHeld, TrailerHoldReleased, TrailerDwellExceeded]
+        throughput_estimate: high (every move and door step)
+        size_estimate: trailers on site (hundreds per site) plus history
+      - name: YardMove
+        root_id: moveId
+        description: "One instruction to take a trailer from where it is to a spot or a door, done by a hostler or by the visiting driver."
+        states: [REQUESTED, CLAIMED, COMPLETED, CANCELLED]
+        transitions:
+          - [REQUESTED, CLAIMED, ClaimNextMove]
+          - [CLAIMED, REQUESTED, ExpireLease]
+          - [CLAIMED, COMPLETED, CompleteMove]
+          - [REQUESTED, CANCELLED, CancelMove]
+          - [CLAIMED, CANCELLED, CancelMove]
+        value_objects:
+          - Performer(HOSTLER|VISITING_DRIVER)
+          - "From/To Location{kind, code}"
+          - "Priority{band 1..9, due_by}"
+          - Reason(TO_DOOR|FROM_DOOR|TO_SPOT|RELOCATE|TO_HOLDING)
+          - "AppointmentRef?, so CallToDoor and NoShowFreesHolding can find the move"
+          - "hostler_ref is null for a VISITING_DRIVER move; ErrNotLeaseHolder and ErrHostlerBusy apply to HOSTLER moves only"
+          - "Lease{hostler_ref, expires_at}"
+        invariants:
+          - {rule: "a trailer has at most one REQUESTED or CLAIMED move", error: ErrTrailerHasOpenMove}
+          - {rule: "no two open moves share a destination, and the destination is free when requested", error: ErrDestinationReserved}
+          - {rule: "a hostler holds at most one CLAIMED move", error: ErrHostlerBusy}
+          - {rule: "only the lease holder completes a CLAIMED move", error: ErrNotLeaseHolder}
+          - {rule: "completion records the actual location; a location other than the destination needs a reason", error: ErrUnexplainedDestination}
+        commands: [RequestMove, ClaimNextMove, CompleteMove, CancelMove, ExpireLease]
+        events: [YardMoveRequested, YardMoveClaimed, YardMoveCompleted, YardMoveCancelled]
+        throughput_estimate: high
+        size_estimate: moves/day x retention
+      - name: YardCheck
+        root_id: yardCheckId
+        description: "A yard audit: walk the spots and doors, record what is really there, reconcile with the model."
+        states: [OPEN, CLOSED]
+        transitions:
+          - [OPEN, CLOSED, CloseYardCheck]
+        value_objects:
+          - "Observation{location_code, unit_number?}"
+          - "Discrepancy{kind MISSING|UNEXPECTED|WRONG_LOCATION, location_code, trailer_id?, unit_number?}"
+        invariants:
+          - {rule: "at most one OPEN yard check per site", error: ErrYardCheckOpen}
+          - {rule: "a location is observed at most once per check", error: ErrLocationAlreadyObserved}
+        commands: [OpenYardCheck, RecordObservation, CloseYardCheck]
+        events: [YardCheckClosed]
+        throughput_estimate: low
+        size_estimate: one per site per shift
+      - name: YardPolicy
+        root_id: siteId
+        description: The per-site yard rules every gate and move decision reads.
+        states: [ACTIVE]
+        transitions: []
+        value_objects:
+          - "require_appointment (bool), holding_spot_codes[], parking_zone_ids[]"
+          - "dwell_threshold_minutes per TrailerKind, lease_seconds, seal_mismatch_action FLAG|REJECT"
+          - "free_time_minutes (detention clock, optional, no default)"
+        invariants:
+          - {rule: "holding spots are known Yard slots of the site", error: ErrUnknownLocation}
+          - {rule: "thresholds and lease are positive", error: ErrValidation}
+        commands: [DeclareYardPolicy]
+        events: []
+        throughput_estimate: low
+        size_estimate: one per site
+    read_models:
+      - {name: LocationView, source: "facility-layout LocationSlotRegistered (role Yard or Dock, dockFlow), LocationSlotDecommissioned, ZoneRegistered (zoneId -> siteCode)"}
+      - {name: AppointmentView, source: "dock-scheduling DockAppointmentBooked, DockAppointmentRescheduled, DockAppointmentCancelled, DockAppointmentNoShow"}
+      - {name: DoorClosureView, source: "dock-scheduling DoorClosureScheduled, DoorClosureLifted"}
+      - {name: AsnContentView, source: "inbound-receiving ASNRegistered, ASNCancelled (what an inbound trailer holds)"}
+      - {name: ReceiptAtDoorView, source: "inbound-receiving ReceiptOpened (receipt_id, appointment_id, door_code), ReceiptClosed"}
+      - {name: YardBoardView, source: "own Trailer and YardMove state: the live spot and door map"}
+      - {name: YardKpiReport, source: "own events on the analytics topic: dwell by kind, door utilisation, moves per hostler hour, driver wait (arrival to door work started)"}
+    policies:
+      - {name: DirectOnCheckIn, rule: "at CheckInVisit, a trailer with an appointment whose door is free, not closed and flow-compatible gets a VISITING_DRIVER move TO_DOOR; otherwise a move to the first free spot of the site's parking zones (by location code; nearest-to-door is phase 2); a walk-in or an arrival earlier than the tolerance goes TO_HOLDING"}
+      - {name: CallToDoor, rule: "on TrailerUndocked, the next BOOKED or CHECKED_IN appointment of that door whose trailer is PARKED gets a HOSTLER move TO_DOOR, due_by = window_start, priority by window_start"}
+      - {name: AutoCompleteUnload, rule: "on inbound-receiving ReceiptClosed for a receipt opened on an appointment whose trailer is DOCKED, CompleteDoorWork and set load_state EMPTY"}
+      - {name: ClearDoorAfterWork, rule: "on DoorWorkCompleted, a DROP trailer gets a HOSTLER move FROM_DOOR to a free spot; a LIVE trailer stays until its visit checks out"}
+      - {name: SealCheckAtGate, rule: "a recorded seal that differs from the appointment's expected_seal_number raises SealExceptionRaised; REJECT policy also rejects the visit"}
+      - {name: DwellSweep, rule: "POST /dwell-sweeps raises TrailerDwellExceeded once per trailer and threshold crossing"}
+      - {name: LeaseExpirySweep, rule: "POST /move-lease-sweeps returns expired CLAIMED moves to REQUESTED"}
+      - {name: VisitingDriverMove, rule: "the first move of a trailer from the gate is created CLAIMED with performer VISITING_DRIVER (no lease); the dock operator or gate clerk completes it when the trailer is at the door or spot. Departures leave from a spot or, for a live visit, from the door; there is no move to the gate"}
+      - {name: NoShowFreesHolding, rule: "on DockAppointmentNoShow or DockAppointmentCancelled, an open TO_DOOR move for that appointment is cancelled"}
+    inbound:
+      - {from: gate clerk or kiosk, type: cmd, channel: REST, routes: ["POST /visits", "POST /visit-rejections", "POST /visits/{visitId}/check-outs"], message: "CheckInVisit, RejectAtGate, CheckOutVisit", relationship: UI}
+      - {from: gate clerk or dock operator, type: cmd, channel: REST, routes: ["POST /moves/{moveId}/completions"], message: CompleteMove, relationship: UI}
+      - {from: hostler (floor client), type: cmd, channel: REST, routes: ["POST /moves/claims", "POST /moves/{moveId}/completions"], message: "ClaimNextMove, CompleteMove", relationship: UI}
+      - {from: dock operator (floor client), type: cmd, channel: REST, routes: ["POST /trailers/{trailerId}/door-work-starts", "POST /trailers/{trailerId}/door-work-completions"], message: "StartDoorWork, CompleteDoorWork", relationship: UI}
+      - {from: yard supervisor, type: cmd, channel: REST, routes: ["POST /moves", "POST /moves/{moveId}/cancellations", "POST /trailers/{trailerId}/holds", "POST /trailers/{trailerId}/hold-releases", "POST /trailers/{trailerId}/seals", "PUT /sites/{siteId}/yard-policy", "POST /yard-checks", "POST /yard-checks/{yardCheckId}/observations", "POST /yard-checks/{yardCheckId}/closures"], message: "RequestMove, CancelMove, PlaceHold, ReleaseHold, RecordSeal, DeclareYardPolicy, OpenYardCheck, RecordObservation, CloseYardCheck", relationship: UI}
+      - {from: any context, type: qry, channel: REST, routes: ["GET /visits", "GET /visits/{visitId}", "GET /trailers", "GET /trailers/{trailerId}", "GET /moves", "GET /sites/{siteId}/yard-board", "GET /sites/{siteId}/yard-policy"], message: "ListVisits, GetVisit, ListTrailers, GetTrailer, ListMoves, GetYardBoard, GetYardPolicy", relationship: OHS}
+      - {from: scheduler (cron), type: cmd, channel: REST, routes: ["POST /dwell-sweeps", "POST /move-lease-sweeps"], message: "DwellSweep, ExpireLease", relationship: UI}
+      - {from: dock-scheduling, type: evt, channel: Kafka warehouse.dock-scheduling.events, message: "DockAppointmentBooked, DockAppointmentRescheduled, DockAppointmentCancelled, DockAppointmentNoShow, DoorClosureScheduled, DoorClosureLifted", relationship: Customer/Supplier}
+      - {from: facility-layout, type: evt, channel: Kafka warehouse.facility.events, message: "LocationSlotRegistered, LocationSlotDecommissioned, ZoneRegistered", relationship: Conformist}
+      - {from: inbound-receiving, type: evt, channel: Kafka warehouse.inbound-receiving.events, message: "ASNRegistered, ASNCancelled, ReceiptOpened, ReceiptClosed", relationship: Conformist}
+    rest:
+      - POST /visits
+      - GET /visits
+      - GET /visits/{visitId}
+      - POST /visits/{visitId}/check-outs
+      - POST /visit-rejections
+      - GET /trailers
+      - GET /trailers/{trailerId}
+      - POST /trailers/{trailerId}/door-work-starts
+      - POST /trailers/{trailerId}/door-work-completions
+      - POST /trailers/{trailerId}/holds
+      - POST /trailers/{trailerId}/hold-releases
+      - POST /trailers/{trailerId}/seals
+      - POST /moves
+      - GET /moves
+      - POST /moves/claims
+      - POST /moves/{moveId}/completions
+      - POST /moves/{moveId}/cancellations
+      - POST /yard-checks
+      - POST /yard-checks/{yardCheckId}/observations
+      - POST /yard-checks/{yardCheckId}/closures
+      - GET /sites/{siteId}/yard-board
+      - GET /sites/{siteId}/yard-policy
+      - PUT /sites/{siteId}/yard-policy
+      - POST /dwell-sweeps
+      - POST /move-lease-sweeps
+      - GET /reports/yard-dwell
+      - GET /reports/door-utilisation
+      - GET /reports/hostler-productivity
+    publishes:
+      - event: VisitCheckedIn
+        entity: yardvisit
+        data: [visit_id, site_id, carrier, carrier_scac, purpose, appointment_id, trailers, arrived_at, version]
+        consumers: [dock-scheduling]
+      - event: VisitRejected
+        entity: yardvisit
+        data: [visit_id, site_id, carrier_scac, appointment_id, reason, rejected_at]
+        consumers: [dock-scheduling, exception-management]
+      - event: VisitCheckedOut
+        entity: yardvisit
+        data: [visit_id, site_id, trailers_out, departed_at, on_site_minutes, version]
+        consumers: [analytics only]
+      - event: TrailerDocked
+        entity: trailer
+        data: [trailer_id, site_id, door_code, appointment_id, asn_numbers, visit_id, docked_at, version]
+        consumers: [dock-scheduling, inbound-receiving]
+      - event: TrailerUndocked
+        entity: trailer
+        data: [trailer_id, site_id, door_code, appointment_id, undocked_at, version]
+        consumers: [dock-scheduling]
+      - event: TrailerParked
+        entity: trailer
+        data: [trailer_id, site_id, spot_code, version]
+        consumers: [analytics only]
+      - event: DoorWorkStarted
+        entity: trailer
+        data: [trailer_id, site_id, door_code, appointment_id, started_at, version]
+        consumers: [analytics only]
+      - event: DoorWorkCompleted
+        entity: trailer
+        data: [trailer_id, site_id, door_code, appointment_id, completed_at, load_state, version]
+        consumers: [analytics only]
+      - event: TrailerDeparted
+        entity: trailer
+        data: [trailer_id, site_id, visit_id, departed_at, dwell_minutes, load_state, seal_number, version]
+        consumers: [analytics only]
+      - event: SealExceptionRaised
+        entity: trailer
+        data: [trailer_id, site_id, appointment_id, expected_seal_number, found_seal_number, raised_at]
+        consumers: [exception-management]
+      - event: TrailerDwellExceeded
+        entity: trailer
+        data: [trailer_id, site_id, kind, dwell_minutes, threshold_minutes, location_code]
+        consumers: [exception-management]
+      - event: TrailerHeld
+        entity: trailer
+        data: [trailer_id, site_id, reason, version]
+        consumers: [analytics only]
+      - event: TrailerHoldReleased
+        entity: trailer
+        data: [trailer_id, site_id, version]
+        consumers: [analytics only]
+      - event: YardMoveRequested
+        entity: yardmove
+        data: [move_id, site_id, trailer_id, performer, from_location, to_location, reason, due_by, version]
+        consumers: [analytics only]
+      - event: YardMoveClaimed
+        entity: yardmove
+        data: [move_id, site_id, hostler_ref, claimed_at, version]
+        consumers: [analytics only]
+      - event: YardMoveCompleted
+        entity: yardmove
+        data: [move_id, site_id, trailer_id, performer, hostler_ref, from_location, actual_location, completed_at, duration_seconds, version]
+        consumers: [analytics only]
+      - event: YardMoveCancelled
+        entity: yardmove
+        data: [move_id, site_id, reason, version]
+        consumers: [analytics only]
+      - event: YardCheckClosed
+        entity: yardcheck
+        data: [yard_check_id, site_id, closed_at, discrepancies]
+        consumers: [exception-management]
+    reasons:
+      - {name: RejectionReason, values: [APPOINTMENT_REQUIRED, UNKNOWN_APPOINTMENT, SEAL_MISMATCH, TRAILER_ALREADY_ON_SITE, SITE_REQUEST]}
+      - {name: HoldReason, values: [DAMAGED, SEAL_BROKEN, NOT_FOUND, QUALITY, SECURITY]}
+    consumes:
+      - {producer: dock-scheduling, topic: warehouse.dock-scheduling.events, events: [DockAppointmentBooked, DockAppointmentRescheduled, DockAppointmentCancelled, DockAppointmentNoShow, DoorClosureScheduled, DoorClosureLifted]}
+      - {producer: facility-layout, topic: warehouse.facility.events, events: [LocationSlotRegistered, LocationSlotDecommissioned, ZoneRegistered], fields: {LocationSlotRegistered: [locationCode, zoneId, role, dockFlow], ZoneRegistered: [zoneId, siteCode]}}
+      - {producer: inbound-receiving, topic: warehouse.inbound-receiving.events, events: [ASNRegistered, ASNCancelled, ReceiptOpened, ReceiptClosed], fields: {ASNRegistered: [asn_number, lines], ReceiptOpened: [receipt_id, asn_number, appointment_id, door_code], ReceiptClosed: [receipt_id, asn_number, closed_at]}}
+    sync_calls: []
+    ul:
+      - {term: Yard, definition: "The enclosed area outside a site's four walls: gate, parking spots and dock doors.", code: "-"}
+      - {term: Yard Visit, definition: "One tractor and driver passing the gate, from check-in to check-out.", code: yardvisit.YardVisit}
+      - {term: Trailer, definition: "Any towable unit on site, including a container on a chassis (SAP calls it a transportation unit).", code: trailer.Trailer}
+      - {term: Spot, definition: "A Yard location (facility-layout role Yard) a trailer parks on.", code: trailer.Location}
+      - {term: Holding Spot, definition: "A spot for walk-ins and early arrivals, named in the yard policy.", code: yardpolicy.YardPolicy}
+      - {term: Dock Door, definition: "A Dock location (facility-layout role Dock) with a dockFlow of Inbound, Outbound or Both.", code: trailer.Location}
+      - {term: Live Load / Live Unload, definition: "The tractor waits at the door while the trailer is worked.", code: yardvisit.Purpose}
+      - {term: Drop, definition: "The trailer is left in the yard and the tractor leaves without it.", code: yardvisit.Purpose}
+      - {term: Bobtail, definition: "A tractor without a trailer.", code: yardvisit.Purpose}
+      - {term: Hostler, definition: "Yard driver (also jockey, spotter, shunter) who moves trailers with a yard truck.", code: yardmove.Performer}
+      - {term: Yard Move, definition: "An instruction to take one trailer to a spot or a door.", code: yardmove.YardMove}
+      - {term: Door Work, definition: "Unloading or loading while a trailer is docked; WAITING, IN_PROGRESS, DONE.", code: trailer.DoorWork}
+      - {term: Dwell, definition: "Time on site from gate-in to gate-out (per trailer: arrival to departure).", code: trailer.ArrivedAt}
+      - {term: Seal, definition: "The numbered seal on a trailer's doors; INTACT, BROKEN or NONE.", code: trailer.Seal}
+      - {term: Yard Check, definition: "A yard audit reconciling observed trailers with the model.", code: yardcheck.YardCheck}
+      - {term: Detention, definition: "Carrier waiting time charged beyond the agreed free time; the free time is a site setting.", code: yardpolicy.free_time_minutes}
+
+# Changes the yard contexts need in EXISTING contexts (each its own PR and ADR).
+fleet_changes:
+  - {context: inbound-receiving, kind: ownership-transfer, summary: "DockAppointment moves to dock-scheduling (strangler A-E). Stage C: appointment write routes answer 410 appointment-moved; a local copy fed by dock-scheduling events validates Receipt.Open(appointment_id); closing a receipt no longer completes the appointment (yard door release does). Optional: consume TrailerDocked to confirm the door on an open receipt."}
+  - {context: warehouse-planning, kind: consumer-source-switch, summary: "ADR 0017 inbound demand switches from inbound-receiving DockAppointmentBooked/Cancelled to dock-scheduling DockAppointmentBooked/Rescheduled/Cancelled/NoShow; it gains site_id and direction, closing ADR 0017's no-site limitation."}
+  - {context: exception-management, kind: new-consumer, summary: "Open problem cases from VisitRejected, SealExceptionRaised, TrailerDwellExceeded, YardCheckClosed (one per discrepancy) and DockAppointmentNoShow; routing per source type."}
+  - {context: facility-layout, kind: additive-ask, phase: 2, summary: "Yard slot attribute spotKind (PARKING, HOLDING, REEFER_PLUG, STAGING_LANE) on LocationSlotRegistered; until then holding spots live in yard-management's YardPolicy."}
+  - {context: warehouse-ops-agent, kind: read-only-client, summary: "MCP read tools of both contexts (yard board, appointments at risk, dwell); no write tools."}
+  - {context: warehouse-console, kind: new-remote, summary: "Yard Board MFE (spot and door map, arrivals, at-risk appointments) and Dock Calendar MFE."}
+  - {context: warehouse-floor-client, kind: new-screens, summary: "Gate clerk check-in/out, hostler claim/complete move, dock operator door work."}
+
+future_contexts:
+  - {id: outbound-shipping, classification: Supporting, note: "Trailer load planning, loading, bill of lading and ship-confirm (Gartner lists truck loading and manifesting as WMS capabilities). Until it exists, outbound door work is completed by the dock operator in yard-management."}
+  - {id: transport-visibility, classification: Generic, note: "ACL to a real-time transportation visibility platform for ETAs; stub mode first (network-fulfillment *_MODE=stub precedent). Feeds dock-scheduling ReportEta."}
+  - {id: yard-billing, classification: Generic, note: "Detention and yard service charges; out of scope."}
+
+not_contexts:
+  - {item: gate camera / ANPR / kiosk, reason: "an inbound adapter that issues CheckInVisit (hexagonal), not a context"}
+  - {item: reefer temperature telemetry, reason: "phase 3 measurement value object on Trailer fed by an IoT adapter"}
+  - {item: yard of yards network view, reason: "a cross-site read model of YardBoardView (ops agent, console), not a context"}
+  - {item: autonomous yard trucks, reason: "a device-control seam like WCS, reserved and unbuilt"}
+
+external:
+  - {id: carrier scheduler, kind: person or carrier system (portal)}
+  - {id: gate clerk or kiosk, kind: person / device}
+  - {id: hostler, kind: person (floor client)}
+  - {id: dock operator, kind: person (floor client)}
+  - {id: yard supervisor, kind: person (console)}
+  - {id: dock planner, kind: person (console)}
+  - {id: scheduler (cron), kind: Kubernetes CronJob}
+
+decisions:
+  - {id: YD-0001, title: "Two bounded contexts: dock-scheduling (door time, future) and yard-management (yard state, present)"}
+  - {id: YD-0002, title: "DockAppointment moves from inbound-receiving to dock-scheduling; one owner of door time for both directions"}
+  - {id: YD-0003, title: "Every location change of a trailer is a YardMove, including the visiting driver's first move from the gate"}
+  - {id: YD-0004, title: "Physical facts win: arrival, docking and door release are recorded only by yard-management"}
+  - {id: YD-0005, title: "Outbound pickups come from the fleet's CPT schedule, never from the retail network"}

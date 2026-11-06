@@ -23,9 +23,11 @@
     "check:pages:network": "python3 network/scripts/gen_pages.py --check",
     "check:model:storefront": "python3 storefront/scripts/check_model.py --pages",
     "check:pages:storefront": "python3 storefront/scripts/gen_pages.py --check",
+    "check:model:yard": "python3 yard/scripts/check_model.py",
+    "check:pages:yard": "python3 yard/scripts/gen_pages.py --check",
     "gen-async-docs:all": "node scripts/gen-async-docs.mjs",
     "gen-alert-catalogue": "node scripts/gen-alert-catalogue.mjs",
-    "validate:mermaid": "node scripts/validate-mermaid.cjs $(grep -rl '```mermaid' docs network/docs storefront/docs --include='*.md' --include='*.mdx')",
+    "validate:mermaid": "node scripts/validate-mermaid.cjs $(grep -rl '```mermaid' docs network/docs storefront/docs yard/docs --include='*.md' --include='*.mdx')",
     "postinstall": "npm --prefix tools/asyncapi-gen install --no-audit --no-fund"
   },
   "dependencies": {
