@@ -1,0 +1,68 @@
+[
+ {
+  "file": "docs/contexts/inventory-storage/eventstorming.md",
+  "class": "route-missing",
+  "text": "POST /stock/",
+  "reason": "UPSTREAM STALE: IQVO/inventory-storage docs/docs/ddd/eventstorming.md:214 cites the glob POST /stock/*; develop only has POST /stock-receipts. Fix there, re-sync, delete this entry."
+ },
+ {
+  "file": "docs/contexts/network-fulfillment/domain-message-flow.md",
+  "class": "route-missing",
+  "text": "POST /orders/id/release",
+  "reason": "UPSTREAM STALE: IQVO/network-fulfillment docs/docs/ddd/domain-message-flow.md:35 (also ddd/context-map.md:22, ecosystem/integration.md:34): order-management serves POST /orders/{id}/releases. Fix there, re-sync, delete this entry."
+ },
+ {
+  "file": "docs/contexts/network-fulfillment/troubleshooting.md",
+  "class": "route-missing",
+  "text": "POST /network-orders//shipment-confirmation",
+  "reason": "Deliberate: the doubled slash is the empty-network-ref test case."
+ },
+ {
+  "file": "docs/contexts/process-path-management/ubiquitous-language.md",
+  "class": "route-missing",
+  "text": "DELETE /process-paths",
+  "reason": "Method-list shorthand (`POST`, `PUT`, `DELETE /process-paths...`), not a collection DELETE."
+ },
+ {
+  "file": "docs/contexts/product-master/troubleshooting.md",
+  "class": "retired-shape",
+  "text": "nextToken",
+  "reason": "Deliberate: names the retired paging parameters the service rejects with 400."
+ },
+ {
+  "file": "docs/contexts/warehouse-ops-agent/bounded-context-canvas.md",
+  "class": "route-missing",
+  "text": "GET /loki/api/v1/query_range",
+  "reason": "External: an outbound call to Loki or the Anthropic Messages API, not a route of this service."
+ },
+ {
+  "file": "docs/contexts/warehouse-ops-agent/bounded-context-canvas.md",
+  "class": "route-missing",
+  "text": "POST /v1/messages",
+  "reason": "External: an outbound call to Loki or the Anthropic Messages API, not a route of this service."
+ },
+ {
+  "file": "docs/contexts/warehouse-ops-agent/configuration.md",
+  "class": "route-missing",
+  "text": "POST /v1/messages",
+  "reason": "External: an outbound call to Loki or the Anthropic Messages API, not a route of this service."
+ },
+ {
+  "file": "docs/contexts/warehouse-ops-agent/context-map.md",
+  "class": "route-missing",
+  "text": "POST /v1/messages",
+  "reason": "External: an outbound call to Loki or the Anthropic Messages API, not a route of this service."
+ },
+ {
+  "file": "docs/contexts/warehouse-ops-agent/domain-message-flow.md",
+  "class": "route-missing",
+  "text": "POST /v1/messages",
+  "reason": "External: an outbound call to Loki or the Anthropic Messages API, not a route of this service."
+ },
+ {
+  "file": "docs/contexts/warehouse-ops-agent/sequence-diagrams.md",
+  "class": "route-missing",
+  "text": "GET /loki/api/v1/query_range",
+  "reason": "External: an outbound call to Loki or the Anthropic Messages API, not a route of this service."
+ }
+]

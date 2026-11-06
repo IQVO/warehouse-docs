@@ -163,12 +163,28 @@ class RoutesAndVocabulary(unittest.TestCase):
 
     def test_allow_marker_line_block_and_file(self):
         bad = "POST /vendors/{vendorId}:suspend"
-        self.assertEqual(self.run_pages(f"`{bad}` {{/* drift-allow: retired in 2026-11-01 rollout */}}\n"), [])
+        self.assertEqual(self.run_pages(f"`{bad}` {{/* drift-allow: kept for the migration table */}}\n"), [])
         self.assertEqual(self.run_pages(f"{{/* drift-allow: history table */}}\n```\n{bad}\n\n{bad}\n```\n"), [])
         self.assertEqual(self.run_pages(f"{{/* drift-allow-file: migration page */}}\n`{bad}`\n"), [])
         # a marker covers only its own block
         f = self.run_pages(f"{{/* drift-allow: x */}}\n`{bad}`\n\n`{bad}`\n")
         self.assertEqual([x["line"] for x in f], [4])
+
+    def test_sentence_that_says_the_shape_is_gone_is_not_a_citation(self):
+        bad = "`POST /vendors/{vendorId}:suspend`"
+        self.assertEqual(self.run_pages(f"{bad} no longer exists; `nextToken` was retired.\n"), [])
+        self.assertEqual(len(self.run_pages(f"{bad} suspends a vendor.\n")), 1)
+
+    def test_allowlist_filters_and_goes_stale(self):
+        f = [dd.finding("route-missing", "x", "docs/a.md", 3, "POST /x", "d")]
+        entry = {"file": "docs/a.md", "class": "route-missing", "text": "POST /x", "reason": "external"}
+        kept, stale = dd.apply_allowlist(f, [entry])
+        self.assertEqual((kept, stale), ([], []))
+        kept, stale = dd.apply_allowlist([], [entry])
+        self.assertEqual([s["class"] for s in stale], ["allow-stale"])
+        kept, stale = dd.apply_allowlist(f, [dict(entry, text="POST /y")])
+        self.assertEqual(len(kept), 1)
+        self.assertEqual(len(stale), 1)
 
     def test_historical_fence_is_skipped(self):
         bad = "POST /vendors/{vendorId}:suspend"

@@ -27,7 +27,10 @@ Escape hatches (a page that cites a retired route on purpose):
   `{/* drift-allow: reason */}` at the end of a line allows that line; alone on a line it
   allows the next block (a fence, or lines up to the next blank line);
   `{/* drift-allow-file: reason */}` anywhere allows the whole page;
-  a fence whose info string contains the word `historical` is skipped.
+  a fence whose info string contains the word `historical` is skipped; a line that says the shape is gone
+  (retired, no longer, formerly, previously, renamed from, replaced by, removed, legacy) is skipped;
+  `scripts/develop-drift-allow.json` allows findings on pages this repo cannot edit (synced copies)
+  and fails the gate when an entry no longer matches anything, so it cannot rot.
 ADR bodies (immutable) and generated api-reference output are never scanned.
 """
 from __future__ import annotations
@@ -111,6 +114,13 @@ def dir_fetcher(base: str):
 
 
 # --------------------------------------------------------------------------- contexts
+# Repos whose develop OpenAPI is a valid target for a cited route although this site keeps no copy of it
+# (warehouse-ops-agent ships apis/openapi.yaml but is documented in prose; the simulator backs the storefront
+# payments pages). They feed route resolution only: no copy comparison, no copy required.
+ROUTE_ONLY = [("warehouse-ops-agent", "wms", "docs/contexts/warehouse-ops-agent"),
+              ("payment-provider-simulator", "storefront", "storefront/docs/contexts/payment-provider-simulator")]
+
+
 def discover_contexts(root: Path) -> list[dict]:
     out = []
     for section, (copy_dir, page_dir, names) in SECTIONS.items():
@@ -120,6 +130,9 @@ def discover_contexts(root: Path) -> list[dict]:
         for d in sorted(p for p in base.iterdir() if p.is_dir()):
             out.append({"repo": d.name, "section": section, "copy_dir": f"{copy_dir}/{d.name}",
                         "page_dir": f"{page_dir}/{d.name}", "expect": names})
+    for repo, section, page_dir in ROUTE_ONLY:
+        out.append({"repo": repo, "section": section, "copy_dir": None, "page_dir": page_dir,
+                    "expect": (), "route_only": True})
     return out
 
 
@@ -142,13 +155,23 @@ def fetch_develop(contexts: list[dict], fetch) -> dict:
 
 
 # --------------------------------------------------------------------------- spec copies (a)
+def expected_copy(repo: str, dev: bytes) -> bytes:
+    """What the copy must equal. Only transformation: root-relative `](/docs/..)` links in a
+    spec description become absolute site links (the aggregator's build fails on dead internal links)."""
+    return re.sub(rb"\]\((/docs/[^)\s]+)\)", lambda m: b"](https://iqvo.github.io/" + repo.encode() + m.group(1) + b")", dev)
+
+
 def check_spec_copies(root: Path, contexts: list[dict], develop: dict) -> list[dict]:
     findings = []
     for c in contexts:
+        if c.get("route_only"):
+            continue
         copy_dir = root / c["copy_dir"]
         have = {p.name for p in copy_dir.glob("*.yaml")}
         for name in sorted(have | set(c["expect"])):
             dev = develop[c["repo"]].get(name)
+            if dev is not None:
+                dev = expected_copy(c["repo"], dev)
             copy = (copy_dir / name).read_bytes() if (copy_dir / name).is_file() else None
             rel = f"{c['copy_dir']}/{name}"
             if copy is not None and dev is None:
@@ -184,8 +207,18 @@ def norm_path(path: str) -> tuple[str, ...]:
     return tuple(out)
 
 
+PAGE_ID_VERB = re.compile(r"^[A-Za-z]\w*:([a-z][a-z\-]*)$")
+NOT_ROUTES = {"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD", "IQVO"}
+
+
+def norm_page_path(path: str) -> tuple[str, ...]:
+    """norm_path for a PAGE citation: diagrams drop the braces (`/waves/waveId:dispatch`)."""
+    return tuple("{}:" + m.group(1) if (m := PAGE_ID_VERB.match(s)) and not s.startswith(":") else s
+                 for s in norm_path(path))
+
+
 def seg_match(page: str, spec: str) -> bool:
-    return page == spec or spec == "{}" or page == "{}"
+    return page == spec or spec == "{}" or page == "{}" or (page.startswith("{}:") and spec.endswith(page[2:]))
 
 
 def build_routes(spec_bytes_list: list[bytes]) -> dict:
@@ -210,9 +243,11 @@ def build_routes(spec_bytes_list: list[bytes]) -> dict:
     return {"routes": routes, "bases": bases, "text": text}
 
 
-def route_exists(idx: dict | None, method: str, segs: tuple[str, ...]) -> bool:
+def route_exists(idx: dict | None, method: str, segs: tuple[str, ...], prefix: bool = False) -> bool:
     if idx is None:
         return False
+    if prefix:  # `/stock/` names a route family: any operation below it counts
+        return any(len(s) >= len(segs) and all(seg_match(a, b) for a, b in zip(segs, s)) for _, s in idx["routes"])
     if "/" + "/".join(segs) in INFRA_PATHS:
         return True
     cands = [segs]
@@ -233,13 +268,16 @@ FENCE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
 ROUTE = re.compile(
     r"(?<![A-Za-z0-9_])(?:(?P<ctx>[a-z][a-z0-9-]*):\s*`?\s*)?"
     r"(?P<m>GET|POST|PUT|PATCH|DELETE)(?![A-Za-z0-9_])[`\s|*_]*"
-    r"(?:https?://[^/\s`|)\"']+|\$\{?[A-Za-z_]+\}?)?"
-    r"(?P<p>/[^\s`|)\"'\\]*)"
+    r"(?:https?://(?P<host>[^/\s`|)\"']+)|\$\{?[A-Za-z_]+\}?)?"
+    r"(?P<p>/[^\s`|)\"'\\\[\]]*)"
 )
+EXTERNAL_HOST = re.compile(r"github\.com|github\.io|githubusercontent", re.I)
 CURL = re.compile(r"\bcurl\b")
 CURL_URL = re.compile(r"(?:https?://[^/\s'\"]+|\$\{?[A-Za-z_]+\}?)(?P<p>/[^\s'\"\\]*)")
 CURL_X = re.compile(r"(?:-X|--request)\s+['\"]?(GET|POST|PUT|PATCH|DELETE)")
 BARE_VERB_PATH = re.compile(r"(?<![\w:/.])(?P<p>/(?:[\w{}<>.\-]+/)*[\w{}<>.\-]*[\w}>]:[a-z][a-z\-]+)(?![\w:/])")
+# A sentence that says the shape is gone cites it on purpose ("`POST /x:y` no longer exists").
+DELIBERATE = re.compile(r"\b(retired|no longer|formerly|previously|renamed from|replaced by|removed|legacy)\b", re.I)
 ALLOW_LINE = re.compile(r"\{/\*\s*drift-allow:\s*\S.*?\*/\}")
 ALLOW_FILE = re.compile(r"\{/\*\s*drift-allow-file:\s*\S.*?\*/\}")
 RETIRED_TOKENS = [
@@ -251,8 +289,8 @@ RETIRED_TOKENS = [
 
 
 def clean_path(p: str) -> str:
-    p = re.split(r"[?#]", p, maxsplit=1)[0]
-    return re.sub(r"[`*_.,;:)\]]+$", "", p)
+    p = re.split(r"[?#]|<br|\{\{", p, maxsplit=1)[0]
+    return re.sub(r"[`*_.,;:)\]…]+$", "", p)
 
 
 def logical_lines(lines: list[str], in_fence: list[bool]):
@@ -308,10 +346,12 @@ def scan_page(text: str) -> list[dict]:
     cites: list[dict] = []
     for ln_no, ltext, fenced in logical_lines(lines, in_fence):
         idx = ln_no - 1
-        if allowed[idx] or historical[idx]:
+        if allowed[idx] or historical[idx] or DELIBERATE.search(ltext):
             continue
         seen = set()
         for m in ROUTE.finditer(ltext):
+            if m.group("host") and EXTERNAL_HOST.search(m.group("host")):
+                continue
             path = clean_path(m.group("p"))
             if len(path) < 2 or (m.group("m"), path) in seen:
                 continue
@@ -361,7 +401,8 @@ def owner_of(rel: str, contexts: list[dict]) -> str | None:
     for c in contexts:
         if rel.startswith(c["page_dir"] + "/"):
             return c["repo"]
-    return None
+    m = re.match(r"(?:network/|storefront/)?docs/contexts/([^/]+)/", rel)
+    return f"~{m.group(1)}" if m else None  # a context folder without an OpenAPI (warehouse-ops-agent)
 
 
 def check_pages(root: Path, contexts: list[dict], develop: dict, files: list[Path] | None = None) -> tuple[list[dict], dict]:
@@ -391,22 +432,29 @@ def check_pages(root: Path, contexts: list[dict], develop: dict, files: list[Pat
 
 
 def _route(findings, stats, c, rel, owner, idx, repos, synced):
-    segs = norm_path(c["path"])
-    if not segs:
+    segs = norm_page_path(c["path"])
+    prefix = c["path"].endswith("/")
+    if not segs or segs[0] in NOT_ROUTES or segs[0] == "{}":
         return
     explicit = c["ctx"] if c["ctx"] in repos else None
+    if segs[0] == "api" and len(segs) > 1:  # gateway form /api/<context>/...
+        if segs[1] not in repos:
+            return
+        explicit, segs = segs[1], segs[2:]
+        if not segs:
+            return
     target = explicit or owner
     if target is not None and idx.get(target) is None:
         stats["unchecked_no_spec"] += 1
         return
     if target is not None:
-        if route_exists(idx[target], c["method"], segs):
+        if route_exists(idx[target], c["method"], segs, prefix):
             return
-        if not explicit and any(route_exists(i, c["method"], segs) for r, i in idx.items() if r != target):
+        if not explicit and any(route_exists(i, c["method"], segs, prefix) for r, i in idx.items() if r != target):
             return  # an owner page citing a sibling's route without a prefix
         where = f"{target} {BRANCH} openapi"
     else:
-        if any(route_exists(i, c["method"], segs) for i in idx.values()):
+        if any(route_exists(i, c["method"], segs, prefix) for i in idx.values()):
             return
         where = f"any context's {BRANCH} openapi"
     findings.append(finding("route-missing", target or "(fleet)", rel, c["line"], f"{c['method']} {c['path']}",
@@ -414,7 +462,7 @@ def _route(findings, stats, c, rel, owner, idx, repos, synced):
 
 
 def _bare_verb(findings, c, rel, owner, idx, repos, synced):
-    segs = norm_path(c["path"])
+    segs = norm_page_path(c["path"])
     pool = [idx[owner]] if owner and idx.get(owner) else list(idx.values())
     if any(i and any(s == segs and True for _, s in i["routes"]) for i in pool if i):
         return
@@ -449,6 +497,23 @@ def run(root: Path, fetch, only: set[str] | None = None, pages: bool = True) -> 
     return findings, stats
 
 
+def apply_allowlist(findings: list[dict], allow: list[dict]) -> tuple[list[dict], list[dict]]:
+    """Entries: {file, class, text, reason}. Returns (remaining findings, stale allow findings)."""
+    used = [False] * len(allow)
+    kept = []
+    for f in findings:
+        hit = next((i for i, a in enumerate(allow)
+                    if a["file"] == f["file"] and a["class"] == f["class"] and a["text"] == f["text"]), None)
+        if hit is None:
+            kept.append(f)
+        else:
+            used[hit] = True
+    stale = [finding("allow-stale", "(allowlist)", a["file"], 0, a["text"],
+                     f"allow entry matches nothing any more ({a['class']}); delete it from scripts/develop-drift-allow.json")
+             for a, u in zip(allow, used) if not u]
+    return kept, stale
+
+
 def summarize(findings: list[dict]) -> dict:
     out: dict = {}
     for f in findings:
@@ -464,6 +529,7 @@ def main(argv=None) -> int:
     ap.add_argument("--only", nargs="*", help="limit to these context repos")
     ap.add_argument("--json", help="write findings + summary to this file")
     ap.add_argument("--no-pages", action="store_true", help="only compare spec copies")
+    ap.add_argument("--allow", help="allowlist JSON (default: scripts/develop-drift-allow.json when present)")
     a = ap.parse_args(argv)
     root = Path(a.root)
     fetch = dir_fetcher(a.from_dir) if a.from_dir else GithubFetcher()
@@ -477,6 +543,14 @@ def main(argv=None) -> int:
     except Unreadable as e:
         print(f"UNREADABLE PRODUCER: {e}\nThe gate fails closed: a spec it cannot read is not a spec that matches.", file=sys.stderr)
         return EXIT_UNREADABLE
+    allow_path = Path(a.allow) if a.allow else Path(__file__).with_name("develop-drift-allow.json")
+    allowed = 0
+    if allow_path.is_file() and not a.no_pages:
+        allow = json.loads(allow_path.read_text())
+        before = len(findings)
+        findings, stale = apply_allowlist(findings, allow)
+        allowed = before - len(findings)
+        findings += stale
     summary = summarize(findings)
     if a.json:
         Path(a.json).write_text(json.dumps({"stats": stats, "summary": summary, "findings": findings}, indent=1))
@@ -484,7 +558,8 @@ def main(argv=None) -> int:
         tag = " [synced copy: fix upstream, re-sync]" if f["synced"] else ""
         loc = f"{f['file']}:{f['line']}" if f["line"] else f["file"]
         print(f"{f['class']:14} {f['ctx']:26} {loc}  {f['text']}  -- {f['detail']}{tag}")
-    print(f"\n{len(findings)} finding(s) across {stats['contexts']} contexts"
+    print(f"\n{allowed} finding(s) allowed by {allow_path.name}")
+    print(f"{len(findings)} finding(s) across {stats['contexts']} contexts"
           f" ({stats.get('pages', 0)} pages, {stats.get('citations', 0)} citations,"
           f" {stats.get('unchecked_no_spec', 0)} route citations unchecked: owner has no OpenAPI)")
     for ctx in sorted(summary):

@@ -136,7 +136,10 @@ Seven contexts also ship an `apis/openapi-reports.yaml` for their separate
 `sidebars.ts`. The fleet-ops skill's `sync_docs_pack_to_aggregator.py` copies
 all three specs plus the synced context pages in one run.
 
-`warehouse-ops-agent` has no `apis/` directory. Eighteen contexts ship both an
+`warehouse-ops-agent` has no `apis/` copy here: its `develop` now ships an
+`apis/openapi.yaml`, but this site documents it in prose
+(`docs/api-reference/warehouse-ops-agent.md`) and the gate below only reads that
+spec to resolve routes cited on its pages. Eighteen contexts ship both an
 `openapi.yaml` and an `asyncapi.yaml` (`inbound-receiving`,
 `slotting-optimization`, `pick-face-replenishment`, `task-interleaving`,
 `returns-processing` and `exception-management` were added to the sync
@@ -146,6 +149,47 @@ loop above, `docusaurus.config.ts`, `sidebars.ts` and
 Next, regenerate the API reference pages (see below). Commit the refreshed
 specs and the regenerated docs together. If a spec is wrong, fix it in the
 owning repository and re-sync. Never hand-edit the copy.
+
+### Gate against develop (`scripts/check-develop-drift.py`)
+
+Docs go stale when they are checked against what was last synced instead of
+what is on each repo's `develop`. `build-check` (every PR) and the nightly
+`Develop drift` workflow (`.github/workflows/develop-drift.yml`, which also
+catches `develop` moving after a docs PR merged) run one script that reads
+`apis/openapi.yaml`, `apis/asyncapi.yaml` and `apis/openapi-reports.yaml` from
+`IQVO/<repo>` `develop` through the GitHub contents API and fails on:
+
+| class | meaning |
+| --- | --- |
+| `spec-drift` / `spec-missing` | a spec copy under `apis/`, `network/apis/` or `storefront/apis/` is not byte-equal to develop's file (the only transformation: root-relative `](/docs/..)` links in a description become absolute site links), or exists/is missing against develop |
+| `route-missing` | a page cites `METHOD /path` (inline code, table cell, Mermaid message, `curl` example) that is not an operation of the owning context's develop OpenAPI. Owner = the page's `contexts/<ctx>/` folder or an explicit `<ctx>:` prefix; a page with no owner must match some context; `/api/<ctx>/...` gateway paths and `/prefix/` families are understood |
+| `retired-shape` | a page shows a shape the 2026-11-01 REST guideline retired: `:verb` suffix routes, `X-Action-Id`, `nextToken`, the `purchaseOrders` / `inboundShipments` list envelopes (only for a context whose develop spec adopted the guideline) |
+
+Exit codes: `0` clean, `1` findings, `2` a producer file could not be read
+(the gate fails closed), `3` usage. Run it locally with
+`GITHUB_TOKEN=$(gh auth token) python3 scripts/check-develop-drift.py` (add
+`--json out.json` for the per-context counts, `--from-dir <dir>` to read
+`<dir>/<repo>/apis/...` offline, `--only <repo>...` to narrow). Its tests
+(`python3 scripts/test_check_develop_drift.py`) use an injected fetcher and a
+temp tree, no network.
+
+When it goes red:
+
+- `spec-drift`: re-sync (above) and regenerate the reference for that context.
+- `route-missing` / `retired-shape` on a hand-written page: fix the page. A
+  generated page is fixed at its source (`network/model/model.yaml`,
+  `storefront/model/model.yaml`, `scripts/capability-map/capabilities.py`),
+  then regenerate.
+- On a synced copy: fix the service repo's own doc and re-sync; never edit the copy.
+- A page that cites a retired shape on purpose: put `{/* drift-allow: reason */}`
+  at the end of the line (or alone on the line above a paragraph or fence), or
+  mark the fence ```` ```http historical ````. A sentence that says the shape is gone
+  ("retired", "no longer", "formerly", "previously", "removed", "legacy") is
+  skipped automatically. ADR bodies and `docs/api-reference/**` are never scanned.
+- A synced copy that cannot be fixed here (external endpoints such as Loki, or an
+  upstream doc still stale): add an entry with a reason to
+  `scripts/develop-drift-allow.json`. An entry that matches nothing any more
+  fails the gate, so the list cannot rot.
 
 ### Alert rules
 
