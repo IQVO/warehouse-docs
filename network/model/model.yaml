@@ -277,6 +277,7 @@ contexts:
       - {event: NodeSuspended, entity: node, data: [nodeId, reason, suspendedAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity, seller-inbound]}
       - {event: NodeRetired, entity: node, data: [nodeId, retiredAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity, seller-inbound]}
       - {event: LaneOpened, entity: lane, data: [laneId, originNodeId, destinationNodeId, mode, nominalTransitMinutes], consumers: [linehaul-transportation, delivery-promise, order-sourcing]}
+      - {event: LaneCostDeclared, entity: lane, data: [laneId, costPerUnitCents, declaredAt], consumers: [order-sourcing]}
       - {event: LaneClosed, entity: lane, data: [laneId, closedAt], consumers: [linehaul-transportation, delivery-promise, order-sourcing]}
       - {event: ServiceAreaAssigned, entity: servicearea, data: [postalPrefix, deliveryStationNodeId, regionId, assignmentVersion], consumers: [delivery-promise, order-sourcing, last-mile-delivery]}
       - {event: RegionDefined, entity: region, data: [regionId, code, name], consumers: [delivery-promise, order-sourcing]}
@@ -857,7 +858,7 @@ contexts:
       - {name: PromiseBookPressureView, source: "delivery-promise PromiseBookExhausted"}
     policies:
       - {name: VirtualQueue, rule: "releaseAt = pickup cutoff of the best candidate - node handling time - vendor ack budget; release immediately for SAME_DAY"}
-      - {name: AssignmentCost, rule: "cost = legs + crossRegionPenalty + scorecardPenalty + bookPressurePenalty; ties go to the witness node"}
+      - {name: AssignmentCost, rule: "estimatedCostCents = lane costPerUnitCents over the path legs + the final wave costPerStopCents (planner-declared, consumed from LaneCostDeclared and WaveCostDeclared; a cost arriving before its lane or wave is known is kept); an undeclared component contributes 0 and marks the estimate incomplete; the comparator leads with estimatedCostCents (lower wins) and the ordinal penalties (legs, crossRegionPenalty, scorecardPenalty, bookPressurePenalty) are tie-breakers, then the witness node; FulfillmentReleasedToNode carries estimatedCostCents only when the estimate is complete (ADR 0011, F7)"}
       - {name: ReassignOnRefusal, rule: "on PurchaseOrderRejected or PurchaseOrderExpired, exclude the node and re-queue; if no candidate meets deliverByLatest, UNSOURCEABLE"}
       - {name: LockOnCommit, rule: "on PurchaseOrderAccepted the assignment is LOCKED (the vendor-node equivalent of the item being picked)"}
       - {name: CancelDecision, rule: "CustomerOrderCancelled is a request, and order-sourcing decides per group. From QUEUED, RELEASED or UNSOURCEABLE it cancels (CancelAssignment) and publishes FulfillmentCancelled. From LOCKED, SHIPPED or DELIVERED it publishes FulfillmentCancelRefused with reason CANCEL_AFTER_LOCK and changes no state; the lock is the vendor's acceptance of the purchase order, so after a refusal the vendor ships and the shopper's refusal becomes a return. A repeated request on a CANCELLED assignment is a no-op. customer-ordering consumes both events and vendor-connectivity consumes FulfillmentCancelled"}
@@ -880,7 +881,7 @@ contexts:
       - "POST /assignments/{assignmentId}:reoptimise"
     publishes:
       - {event: FulfillmentQueued, entity: assignment, data: [assignmentId, orderId, groupNo, promiseId, deliverByLatest, lines], consumers: [analytics only]}
-      - {event: FulfillmentReleasedToNode, entity: assignment, data: [assignmentId, releaseNo, orderId, groupNo, nodeId, pickupDepartureId, requiredShipBy, promisedDeliverByLatest, tier, lines(catalogItemId, listingId, quantity)], consumers: [vendor-connectivity, linehaul-transportation]}
+      - {event: FulfillmentReleasedToNode, entity: assignment, data: [assignmentId, releaseNo, orderId, groupNo, nodeId, pickupDepartureId, requiredShipBy, promisedDeliverByLatest, tier, lines(catalogItemId, listingId, quantity), estimatedCostCents (optional, omitted when the estimate is incomplete)], consumers: [vendor-connectivity, linehaul-transportation]}
       - {event: FulfillmentReassigned, entity: assignment, data: [assignmentId, fromNodeId, toNodeId, reason, assignmentVersion], consumers: [linehaul-transportation]}
       - {event: FulfillmentLocked, entity: assignment, data: [assignmentId, orderId, groupNo, nodeId, pickupDepartureId, lockedAt, lockReason, promiseId], consumers: [delivery-promise, customer-ordering, linehaul-transportation]}
       - {event: FulfillmentShipped, entity: assignment, data: [assignmentId, orderId, groupNo, nodeId, trackingNumbers, shippedAt], consumers: [customer-ordering, delivery-promise]}
@@ -946,6 +947,7 @@ contexts:
       - {event: NodeRetired, from: node-topology}
       - {event: LaneOpened, from: node-topology}
       - {event: LaneClosed, from: node-topology}
+      - {event: LaneCostDeclared, from: node-topology}
       - {event: ServiceAreaAssigned, from: node-topology}
       - {event: RegionDefined, from: node-topology}
       - {event: ListingCreated, from: offer-availability}
@@ -957,6 +959,7 @@ contexts:
       - {event: DepartureCapacityChanged, from: linehaul-transportation}
       - {event: DepartureCancelled, from: linehaul-transportation}
       - {event: DeliveryWaveScheduled, from: last-mile-delivery}
+      - {event: WaveCostDeclared, from: last-mile-delivery}
       - {event: DeliveryWaveCapacityChanged, from: last-mile-delivery}
       - {event: NodeScorecardUpdated, from: node-performance}
       - {event: DeliveryWaveCancelled, from: last-mile-delivery}
@@ -1381,6 +1384,7 @@ contexts:
       - "POST /partners/{dspId}:deactivate"
     publishes:
       - {event: DeliveryWaveScheduled, entity: wave, data: [waveId, stationNodeId, serviceDate, inductCutoffAt, windowStart, windowEnd, stopCapacity], consumers: [delivery-promise, order-sourcing]}
+      - {event: WaveCostDeclared, entity: wave, data: [waveId, costPerStopCents, declaredAt], consumers: [order-sourcing]}
       - {event: DeliveryWaveCapacityChanged, entity: wave, data: [waveId, stopCapacity, assignedStops, remainingStops], consumers: [delivery-promise, order-sourcing]}
       - {event: DeliveryWaveCancelled, entity: wave, data: [waveId, reason], consumers: [delivery-promise, order-sourcing]}
       - {event: RoutePlanned, entity: route, data: [routeId, waveId, dspId, stopCount], consumers: [analytics only]}
@@ -1652,6 +1656,10 @@ contexts:
       - Stock a seller sends is owned by that seller (ownerRef = sellerId) and stays segregated from every other owner's; commingling is not designed.
       - A receipt discrepancy or compliance violation is recorded as a fact; the context never edits the manifest to match what arrived.
     aggregates:
+      - name: PlacementPlan
+        description: "One placement advisory for a (seller, item): where forward stock belongs, computed from the DemandHeatView (ADR 0012, F6). States SUGGESTED/ACCEPTED/SUPERSEDED; a new plan for the same (seller, item) supersedes the previous; acceptance is advisory-only in v1."
+        events: [PlacementPlanSuggested]
+
       - name: SellerAccount
         root_id: sellerId
         description: "A seller organisation allowed to send stock to the network; the seller of record (owner) of the stock it sends."
@@ -1719,6 +1727,7 @@ contexts:
         throughput_estimate: "medium: cartons dominate (tens to thousands per shipment)"
         size_estimate: "one row per shipment + one per carton + contents; retained for audit"
     read_models:
+      - {name: DemandHeatView, source: "order-sourcing FulfillmentLocked (per item+region, the node region from node-topology profiles), offer-availability listing availability (per item+node); ADR 0012"}
       - {name: NodeInboundView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
       - {name: CatalogPackagingView, source: "offer-availability CatalogItemPackagingDeclared, CatalogItemPackLevelRetired"}
       - {name: SellerScorecard, source: "own facts only (no consumer, no event): one row per closed shipment and one per InboundDiscrepancyRecorded or SellerComplianceViolationRecorded, written in the receipt's unit of work (seller-inbound ADR 0005)"}
@@ -1735,6 +1744,7 @@ contexts:
       - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans/{planId}/shipments, POST /inbound-shipments/{shipmentId}/cartons, POST /inbound-shipments/{shipmentId}:label, POST /inbound-shipments/{shipmentId}:ship", routes: ["POST /inbound-plans/{planId}/shipments", "POST /inbound-shipments/{shipmentId}/cartons", "POST /inbound-shipments/{shipmentId}:label", "POST /inbound-shipments/{shipmentId}:ship"], message: "CreateInboundShipment, AddCarton, LabelShipment, ShipInboundShipment", relationship: OHS}
       - {from: seller / seller portal, type: qry, channel: "REST GET /inbound-plans/{planId}, GET /inbound-shipments/{shipmentId}, GET /inbound-shipments/{shipmentId}/labels", routes: ["GET /inbound-plans/{planId}", "GET /inbound-shipments/{shipmentId}", "GET /inbound-shipments/{shipmentId}/labels"], message: "GetInboundPlan, GetInboundShipment, GetLabels", relationship: OHS}
       - {from: "seller / seller portal, network partner managers (human)", type: qry, channel: "REST GET /sellers/{sellerId}/scorecard?window=", routes: ["GET /sellers/{sellerId}/scorecard"], message: "GetSellerScorecard (informational, seller-inbound ADR 0005)", relationship: OHS}
+      - {from: seller / network partner manager, type: cmd, channel: "REST POST /placement-plans (compute), GET /placement-plans, GET /placement-plans/{planId}, POST /placement-plans/{planId}/acceptances", routes: ["POST /placement-plans", "GET /placement-plans", "GET /placement-plans/{planId}", "POST /placement-plans/{planId}/acceptances"], message: "ComputePlacementPlan, ListPlacementPlans, GetPlacementPlan, AcceptPlacementPlan", relationship: OHS}
       - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: InboundReceiptSubmitted, relationship: Customer/Supplier}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired", relationship: Conformist}
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemPackagingDeclared, CatalogItemPackLevelRetired", relationship: Conformist}
@@ -1753,8 +1763,13 @@ contexts:
       - "GET /inbound-shipments/{shipmentId}/labels"
       - "POST /inbound-shipments/{shipmentId}:ship"
       - "GET /inbound-shipments/{shipmentId}"
+      - "POST /placement-plans"
+      - "GET /placement-plans"
+      - "GET /placement-plans/{planId}"
+      - "POST /placement-plans/{planId}/acceptances"
     publishes:
       - {event: SellerOnboarded, entity: seller, data: [sellerId, name, onboardedAt], consumers: [analytics only]}
+      - {event: PlacementPlanSuggested, entity: placementplan, data: [planId, sellerId, catalogItemId, basis, suggestions(nodeId, regionId, suggestedUnits, regionDemandUnits, nodeAvailabilityUnits), createdAt], consumers: [analytics only in v1 (ADR 0012)]}
       - {event: SellerSuspended, entity: seller, data: [sellerId, suspendedAt, reason], consumers: [analytics only]}
       - {event: SellerReinstated, entity: seller, data: [sellerId, reinstatedAt], consumers: [analytics only]}
       - {event: InboundPlanConfirmed, entity: inboundplan, data: [planId, sellerId, destinationNodeId, packingOption, lines(catalogItemId, gtin, qtyEaches), confirmedAt], consumers: [analytics only]}

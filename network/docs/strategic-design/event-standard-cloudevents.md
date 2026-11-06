@@ -88,6 +88,7 @@ Topic `retailnetwork.node-topology.events`.
 | `NodeSuspended` | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound` |
 | `NodeRetired` | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound` |
 | `LaneOpened` | `com.retailnetwork.logistics.node-topology.lane.LaneOpened` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
+| `LaneCostDeclared` | `com.retailnetwork.logistics.node-topology.lane.LaneCostDeclared` | `order-sourcing` |
 | `LaneClosed` | `com.retailnetwork.logistics.node-topology.lane.LaneClosed` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
 | `ServiceAreaAssigned` | `com.retailnetwork.logistics.node-topology.servicearea.ServiceAreaAssigned` | `delivery-promise`, `order-sourcing`, `last-mile-delivery` |
 | `RegionDefined` | `com.retailnetwork.logistics.node-topology.region.RegionDefined` | `delivery-promise`, `order-sourcing` |
@@ -195,6 +196,7 @@ Topic `retailnetwork.last-mile-delivery.events`.
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
 | `DeliveryWaveScheduled` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveScheduled` | `delivery-promise`, `order-sourcing` |
+| `WaveCostDeclared` | `com.retailnetwork.logistics.last-mile-delivery.wave.WaveCostDeclared` | `order-sourcing` |
 | `DeliveryWaveCapacityChanged` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCapacityChanged` | `delivery-promise`, `order-sourcing` |
 | `DeliveryWaveCancelled` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCancelled` | `delivery-promise`, `order-sourcing` |
 | `RoutePlanned` | `com.retailnetwork.logistics.last-mile-delivery.route.RoutePlanned` | analytics only |
@@ -234,6 +236,7 @@ Topic `retailnetwork.seller-inbound.events`.
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
 | `SellerOnboarded` | `com.retailnetwork.partner.seller-inbound.seller.SellerOnboarded` | analytics only |
+| `PlacementPlanSuggested` | `com.retailnetwork.partner.seller-inbound.placementplan.PlacementPlanSuggested` | analytics only in v1 (ADR 0012) |
 | `SellerSuspended` | `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | analytics only |
 | `SellerReinstated` | `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | analytics only |
 | `InboundPlanConfirmed` | `com.retailnetwork.partner.seller-inbound.inboundplan.InboundPlanConfirmed` | analytics only |
