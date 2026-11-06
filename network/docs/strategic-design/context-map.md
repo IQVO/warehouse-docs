@@ -175,7 +175,7 @@ flowchart TB
     DP ==>|"CF 2e"| NP
     OS ==>|"C/S 4e"| LH
     OS ==>|"? + C/S 3e"| DP
-    LH ==>|"? + CF 5e"| DP
+    LH ==>|"? + CF 7e"| DP
     LH ==>|"? + CF 5e"| OS
     LH ==>|"C/S 1e"| LM
     LM ==>|"? + CF 4e"| DP
@@ -199,7 +199,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `last-mile-delivery` | `delivery-promise` | ? + CF | `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged`, `DeliveryWaveCancelled`, `PackageInductionDeferred` | - |
 | `last-mile-delivery` | `order-sourcing` | ? + CF | `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged`, `DeliveryWaveCancelled` | - |
 | `last-mile-delivery` | `shipping-and-tracking` | ? + CF | `PackageOutForDelivery`, `DeliveryAttempted`, `PackageReturnInitiated` | - |
-| `linehaul-transportation` | `delivery-promise` | ? + CF | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`, `BookingMoved`, `BookingFailed` | - |
+| `linehaul-transportation` | `delivery-promise` | ? + CF | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`, `LoadDeparted`, `LoadArrived`, `BookingMoved`, `BookingFailed` | - |
 | `linehaul-transportation` | `last-mile-delivery` | C/S | `LoadArrived` | - |
 | `linehaul-transportation` | `order-sourcing` | ? + CF | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`, `BookingMoved`, `BookingFailed` | - |
 | `linehaul-transportation` | `shipping-and-tracking` | CF | `LoadDeparted`, `LoadArrived` | - |

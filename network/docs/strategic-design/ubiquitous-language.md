@@ -82,7 +82,7 @@ are the proposed Go package and type names. Each context's own
 | **Path Lock** | `order-sourcing` | The point after which an assignment never changes node: the vendor's acceptance. | `assignment.Lock` |
 | **Pickup Departure** | `linehaul-transportation` | The departure that collects packages at a vendor node at one of its declared cutoffs. | `departure.KindPickup` |
 | **Promise** | `delivery-promise` | The network's commitment of a delivery window for one shipment group. | `promise.Promise` |
-| **Promise Basis** | `delivery-promise` | SCHEDULED (from real departures and waves) or NOMINAL (STANDARD tier from nominal lane times). | `promise.Basis` |
+| **Promise Basis** | `delivery-promise` | SCHEDULED (from real departures and waves), MEASURED (a leg stretched by its measured P-serviceLevel transit, ADR 0014) or NOMINAL (STANDARD tier from nominal lane times). | `promise.Basis` |
 | **Promise Book** | `delivery-promise` | Capacity ledger of one node pickup cutoff on the promise side. | `book.PromiseBook` |
 | **Promise Kept / Broken** | `delivery-promise` | The judgement at delivery against deliverByLatest. | `promise.Judgement` |
 | **Purchase Order (PO)** | `vendor-connectivity` | The instruction to one vendor node to ship one shipment group in full by requiredShipBy. | `po.PurchaseOrder` |

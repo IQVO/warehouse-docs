@@ -445,7 +445,7 @@ contexts:
     roles: [Execution (promising), Analysis (feasibility search), Enforcer (capacity holds)]
     business_decisions:
       - A delivery offer exists only if at least one feasible path exists now; no path means no offer at that tier, with the constraint that blocked it.
-      - Fast tiers (SAME_DAY, NEXT_DAY, TWO_DAY) are never quoted from nominal lane times; only STANDARD may fall back to nominal transit, and the promise records basis NOMINAL.
+      - Fast tiers (SAME_DAY, NEXT_DAY, TWO_DAY) are never quoted from nominal lane times; only STANDARD may fall back to nominal transit, and the promise records basis NOMINAL. A leg whose measured transit (ADR 0014) exceeds the schedule stretches the arrival and the promise records basis MEASURED.
       - A promise reserves capacity on the node's pickup cutoff (PromiseBook); provisional holds expire if the order is not placed.
       - A promise is per shipment group; a multi-node order gets one promise per group.
       - A poorly performing node is handicapped (later shipBy) by its scorecard grade, never silently excluded.
@@ -488,12 +488,12 @@ contexts:
           - [AT_RISK, CANCELLED, CancelPromise]
         value_objects:
           - "ShipmentGroup{lines[{catalogItemId, quantity}]}"
-          - "PromiseTerms{tier, shipBy, deliverByEarliest, deliverByLatest, basis(SCHEDULED|NOMINAL), policyVersion}"
+          - "PromiseTerms{tier, shipBy, deliverByEarliest, deliverByLatest, basis(SCHEDULED|MEASURED|NOMINAL), policyVersion}"
           - "WitnessPath{nodeId, pickupDepartureId, legs[departureId], deliveryWaveId}"
           - "Revision{revisionNo, previousTerms, reason, revisedAt}"
         invariants:
           - {rule: "deliverByEarliest <= deliverByLatest and shipBy < deliverByEarliest", error: ErrInvalidPromiseTerms}
-          - {rule: "a fast-tier promise has basis SCHEDULED", error: ErrNominalBasisNotAllowedForTier}
+          - {rule: "a fast-tier promise never has basis NOMINAL (it is SCHEDULED, or MEASURED when ADR 0014 stretched a leg)", error: ErrNominalBasisNotAllowedForTier}
           - {rule: "a provisional promise is confirmed only before holdExpiresAt", error: ErrPromiseHoldExpired}
           - {rule: "a revision never moves deliverByLatest earlier", error: ErrRevisionMovesEarlier}
           - {rule: "KEPT, BROKEN, RELEASED and CANCELLED are terminal", error: ErrPromiseClosed}
@@ -526,6 +526,7 @@ contexts:
       - {name: LaneView, source: "node-topology LaneOpened, LaneClosed"}
       - {name: AvailabilityView, source: "offer-availability ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored, CatalogItemCreated, CatalogItemDiscontinued"}
       - {name: DepartureView, source: "linehaul-transportation DepartureScheduled, DepartureCapacityChanged, DepartureCancelled"}
+      - {name: TransitActualsView, source: "linehaul-transportation LoadDeparted, LoadArrived (paired by loadId; ADR 0014)"}
       - {name: DeliveryWaveView, source: "last-mile-delivery DeliveryWaveScheduled, DeliveryWaveCapacityChanged"}
       - {name: ScorecardView, source: "node-performance NodeScorecardUpdated"}
     policies:
@@ -538,7 +539,8 @@ contexts:
       - {name: LazyBookOpening, rule: "a PromiseBook is opened (OpenBook) by the first HoldCapacity for a (node, pickup departure); MakePromise opens the book, holds it, consumes the offer and creates the promise in one local transaction. The book takes cutoffAt from the pickup departure, holdDeadline = cutoffAt minus handling time (business minutes) and a share computed once by BookShare"}
       - {name: BookShare, rule: "share = ceil(min(CutoffSlot.maxOrders, throughputCap x window) x capacitySharePercent / 100), at least 1. maxOrders applies only when the cutoff slot sets it. window is the node's operating time between its previous cutoff and this one: a HOUR cap gives value x minutes / 60 and a DAY cap value x minutes / operating minutes of the cutoff's day. capacitySharePercent is a PromisePolicy field (default 100). Every hold that makes provisional + confirmed equal to share raises PromiseBookExhausted"}
       - {name: CloseBooksAtCutoff, rule: "a clock job closes every OPEN book at its cutoffAt (CloseBook). Holds are already refused from holdDeadline, before the job runs, and confirm and release stay legal on a CLOSED book"}
-      - {name: PromisePolicyParameters, rule: "the versioned PromisePolicy record (POST /promise-policies, event PromisePolicyPublished) carries policyVersion ('v' + version), version, offerTtlMinutes, holdTtlMinutes, packagesPerOrder, capacitySharePercent, orderDeadlines[{tier, regionId?, localTime}] and publishedAt. The current policy is the highest version. Without a published policy version 0 applies: offerTtl 10, holdTtl 15, packagesPerOrder 1, capacitySharePercent 100, no deadlines. holdExpiresAt = now + holdTtlMinutes; each order needs packagesPerOrder packages of room on the pickup and on every linehaul departure of the witness path"}
+      - {name: PromisePolicyParameters, rule: "the versioned PromisePolicy record (POST /promise-policies, event PromisePolicyPublished) carries policyVersion ('v' + version), version, offerTtlMinutes, holdTtlMinutes, packagesPerOrder, capacitySharePercent, transitWindowDays (default 28), transitServiceLevelPercent (default 90), minTransitObservations (default 20), orderDeadlines[{tier, regionId?, localTime}] and publishedAt. The current policy is the highest version. Without a published policy version 0 applies: offerTtl 10, holdTtl 15, packagesPerOrder 1, capacitySharePercent 100, transitWindowDays 28, transitServiceLevelPercent 90, minTransitObservations 20, no deadlines. holdExpiresAt = now + holdTtlMinutes; each order needs packagesPerOrder packages of room on the pickup and on every linehaul departure of the witness path"}
+      - {name: MeasuredTransit, rule: "ADR 0014: TransitActualsView pairs LoadDeparted/LoadArrived by loadId into observed transits per (origin, destination) (ring of 200, read-side pruned to transitWindowDays). When a pair has at least minTransitObservations in-window observations and its transitServiceLevelPercent nearest-rank transit exceeds a departure leg's scheduled transit (arrivesAt - departsAt), the leg's arrival becomes arrivesAt + (measured - scheduled): one-sided, measured transit never promises earlier than the timetable. A candidate whose witness path used at least one measured adjustment is quoted basis MEASURED; the pickup leg counts as a departure leg; below minTransitObservations the timetable stands"}
     inbound:
       - {from: customer-ordering, type: qry, channel: "REST POST /delivery-offers:quote (in-org)", routes: ["POST /delivery-offers:quote"], message: "QuoteDeliveryOffers", relationship: Customer/Supplier}
       - {from: customer-ordering, type: cmd, channel: "REST POST /promises, POST /promises/{promiseId}:confirm, POST /promises/{promiseId}:cancel (in-org)", routes: ["POST /promises", "POST /promises/{promiseId}:confirm", "POST /promises/{promiseId}:cancel"], message: "MakePromise, ConfirmPromise, CancelPromise", relationship: Customer/Supplier}
@@ -626,6 +628,8 @@ contexts:
       - {event: DepartureScheduled, from: linehaul-transportation}
       - {event: DepartureCapacityChanged, from: linehaul-transportation}
       - {event: DepartureCancelled, from: linehaul-transportation}
+      - {event: LoadDeparted, from: linehaul-transportation}
+      - {event: LoadArrived, from: linehaul-transportation}
       - {event: DeliveryWaveScheduled, from: last-mile-delivery}
       - {event: DeliveryWaveCapacityChanged, from: last-mile-delivery}
       - {event: NodeRegistered, from: node-topology}
@@ -659,7 +663,7 @@ contexts:
       - {term: Ship-By, definition: "The pickup cutoff at the witness node the package must be ready for.", code: "promise.PromiseTerms.ShipBy"}
       - {term: Deliver-By Window, definition: "deliverByEarliest..deliverByLatest shown to the customer.", code: "promise.PromiseTerms"}
       - {term: Witness Path, definition: "The concrete node, pickup, departures and delivery wave that prove a promise is feasible; order-sourcing may choose a different path later.", code: "promise.WitnessPath"}
-      - {term: Promise Basis, definition: "SCHEDULED (from real departures and waves) or NOMINAL (STANDARD tier from nominal lane times).", code: "promise.Basis"}
+      - {term: Promise Basis, definition: "SCHEDULED (from real departures and waves), MEASURED (a leg stretched by its measured P-serviceLevel transit, ADR 0014) or NOMINAL (STANDARD tier from nominal lane times).", code: "promise.Basis"}
       - {term: Promise Book, definition: "Capacity ledger of one node pickup cutoff on the promise side.", code: "book.PromiseBook"}
       - {term: Capacity Hold, definition: "A provisional reservation on a promise book released if the order is not placed in time.", code: "book.Capacity.Provisional"}
       - {term: Book Share, definition: "The number of orders a promise book may hold for one pickup cutoff: the node's declared limit for the window, scaled by the policy's capacitySharePercent, at least 1.", code: "book.Capacity.Share"}
@@ -1246,8 +1250,8 @@ contexts:
       - {event: DepartureDeparted, entity: departure, data: [departureId, departedAt], consumers: [analytics only]}
       - {event: DepartureArrived, entity: departure, data: [departureId, arrivedAt], consumers: [analytics only]}
       - {event: LoadClosed, entity: load, data: [loadId, departureId, packageCount], consumers: [analytics only]}
-      - {event: LoadDeparted, entity: load, data: [loadId, departureId, originNodeId, trackingNumbers, departedAt, departureKind, nodeType], consumers: [shipping-and-tracking]}
-      - {event: LoadArrived, entity: load, data: [loadId, departureId, destinationNodeId, trackingNumbers, arrivedAt, departureKind, nodeType], consumers: [shipping-and-tracking, last-mile-delivery]}
+      - {event: LoadDeparted, entity: load, data: [loadId, departureId, originNodeId, trackingNumbers, departedAt, departureKind, nodeType], consumers: [shipping-and-tracking, delivery-promise]}
+      - {event: LoadArrived, entity: load, data: [loadId, departureId, destinationNodeId, trackingNumbers, arrivedAt, departureKind, nodeType], consumers: [shipping-and-tracking, last-mile-delivery, delivery-promise]}
       - {event: BookingMoved, entity: departure, data: [assignmentId, fromDepartureId, toDepartureId], consumers: [delivery-promise, order-sourcing]}
       - {event: BookingFailed, entity: departure, data: [assignmentId, departureId, reason], consumers: [delivery-promise, order-sourcing]}
     reasons:

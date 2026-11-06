@@ -183,8 +183,8 @@ Topic `retailnetwork.linehaul-transportation.events`.
 | `DepartureDeparted` | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureDeparted` | analytics only |
 | `DepartureArrived` | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureArrived` | analytics only |
 | `LoadClosed` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadClosed` | analytics only |
-| `LoadDeparted` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted` | `shipping-and-tracking` |
-| `LoadArrived` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived` | `shipping-and-tracking`, `last-mile-delivery` |
+| `LoadDeparted` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted` | `shipping-and-tracking`, `delivery-promise` |
+| `LoadArrived` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived` | `shipping-and-tracking`, `last-mile-delivery`, `delivery-promise` |
 | `BookingMoved` | `com.retailnetwork.logistics.linehaul-transportation.departure.BookingMoved` | `delivery-promise`, `order-sourcing` |
 | `BookingFailed` | `com.retailnetwork.logistics.linehaul-transportation.departure.BookingFailed` | `delivery-promise`, `order-sourcing` |
 
