@@ -304,6 +304,16 @@ const config: Config = {
     [
       '@docusaurus/plugin-content-docs',
       {
+        id: 'yard',
+        path: 'yard/docs',
+        routeBasePath: 'yard',
+        sidebarPath: './yard-sidebars.ts',
+        editUrl: 'https://github.com/IQVO/warehouse-docs/tree/main/',
+      },
+    ],
+    [
+      '@docusaurus/plugin-content-docs',
+      {
         id: 'storefront',
         path: 'storefront/docs',
         routeBasePath: 'storefront',
@@ -407,6 +417,16 @@ const config: Config = {
         },
         {
           type: 'dropdown',
+          label: 'Yard',
+          position: 'left',
+          items: [
+            {type: 'docSidebar', sidebarId: 'strategicSidebar', docsPluginId: 'yard', label: 'Strategic Design'},
+            {type: 'docSidebar', sidebarId: 'contextsSidebar', docsPluginId: 'yard', label: 'Bounded Contexts'},
+            {to: '/yard/adr', label: 'ADRs'},
+          ],
+        },
+        {
+          type: 'dropdown',
           label: 'Storefront',
           position: 'left',
           items: [
@@ -453,6 +473,17 @@ const config: Config = {
             {label: 'Bounded Contexts', to: '/network/contexts'},
             {label: 'API Reference', to: '/network/api-reference'},
             {label: 'ADRs', to: '/network/adr'},
+          ],
+        },
+        {
+          title: 'yard management',
+          items: [
+            {label: 'Yard Overview', to: '/yard/'},
+            {label: 'Subdomain Classification', to: '/yard/strategic-design/subdomain-classification'},
+            {label: 'Context Map', to: '/yard/strategic-design/context-map'},
+            {label: 'Bounded Contexts', to: '/yard/contexts'},
+            {label: 'ADRs', to: '/yard/adr'},
+            {label: 'Benchmarks', to: '/yard/research/benchmarks'},
           ],
         },
         {
