@@ -86,7 +86,7 @@ not released by this context; `delivery-promise` releases them at
 `holdExpiresAt`. There is no version conflict on an insert. A second
 insert with the same `orderId` cannot happen, because the id is minted here.
 
-## 2. CancelOrder (REST POST /orders/orderId:cancel)
+## 2. CancelOrder (REST POST /orders/orderId/cancellations)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%

@@ -523,7 +523,7 @@ contexts:
       - {event: TaxTableChanged, from: pricing, fields: [version, bands]}
       - {event: CheckoutCompleted, from: checkout, fields: [cartId, sessionId]}
     sync_calls:
-      - {to: delivery-promise, type: qry, message: QuoteDeliveryOffers, channel: "REST POST /delivery-offers:quote"}
+      - {to: delivery-promise, type: qry, message: QuoteDeliveryOffers, channel: "REST POST /delivery-quotes"}
     ul:
       - {term: "Cart", definition: "One shopper's held intent: lines, destination, delivery quote and selections.", code: "cart.Cart"}
       - {term: "Delivery Quote (cart)", definition: "The offers delivery-promise returned for the cart's lines and destination, held by the cart; a quote holds no capacity.", code: "cart.DeliveryQuote", not_to_be_confused_with: "the network's DeliveryOffer (one offer)"}
@@ -617,7 +617,7 @@ contexts:
       - {to: delivery-promise, type: qry, message: GetDeliveryOffer, channel: "REST GET /delivery-offers/{offerId}", note: "pre-authorize check that every selected offer is still QUOTED, with margin; a failure is ErrOfferNotQuotable (422 offer-not-quotable), no state change"}
       - {to: pricing, type: cmd, message: IssuePriceQuote, channel: "REST POST /price-quotes"}
       - {to: customer-payments, type: cmd, message: AuthorizePayment, channel: "REST POST /payment-authorizations", note: "Idempotency-Key <sessionId>:auth:<authAttempt>, allocations per group"}
-      - {to: customer-payments, type: cmd, message: VoidAuthorization, channel: "REST POST /payment-authorizations/{authorizationId}:void", note: "Idempotency-Key <sessionId>:void; only after a definitive rejection; recorded as voidOwed and retried by RetryOwedVoids"}
+      - {to: customer-payments, type: cmd, message: VoidAuthorization, channel: "REST POST /payment-authorizations/{authorizationId}/voids", note: "Idempotency-Key <sessionId>:void; only after a definitive rejection; recorded as voidOwed and retried by RetryOwedVoids"}
       - {to: customer-ordering, type: cmd, message: PlaceOrder, channel: "REST POST /checkout", note: "ACL (internal/adapters/outbound/customerordering); Idempotency-Key is the sessionId; shipToAddressId (NG1), never an inline address"}
     ul:
       - {term: "Checkout Session", definition: "The purchase transaction from review to placed order.", code: "checkoutsession.CheckoutSession", not_to_be_confused_with: "the network's \"Checkout\" (customer-ordering PlaceOrder), which is the session's place-order step"}
@@ -714,7 +714,7 @@ contexts:
       - {name: ReauthorizeBeforeExpiry, rule: "scheduled at expiresAt minus 24 h [9]: call Reauthorize for the uncaptured allocations (raises PaymentReauthorized with the new expiresAt and providerAuthorizationId); a provider decline moves the authorization to EXPIRED and raises PaymentDeclined{reason: REAUTH_DECLINED}"}
       - {name: VoidUnboundAuthorizations, rule: "no CheckoutCompleted after 24 h: void (covers a checkout crash after authorize)"}
     inbound:
-      - {from: checkout, type: cmd, channel: "REST POST /payment-authorizations, POST /payment-authorizations/{authorizationId}:void", message: "AuthorizePayment, VoidAuthorization", relationship: Customer/Supplier}
+      - {from: checkout, type: cmd, channel: "REST POST /payment-authorizations, POST /payment-authorizations/{authorizationId}/voids", message: "AuthorizePayment, VoidAuthorization", relationship: Customer/Supplier}
       - {from: checkout, type: qry, channel: "REST GET /payment-authorizations/{authorizationId}", message: GetAuthorization, relationship: Customer/Supplier}
       - {from: "storefront ops (human)", type: cmd, channel: "REST POST /refunds", message: RequestRefund, relationship: UI}
       - {from: "storefront ops (human)", type: qry, channel: "REST GET /payment-authorizations?orderId=|checkoutSessionId=, GET /refunds?orderId=", message: "ListAuthorizations, ListRefunds", relationship: UI}
@@ -725,7 +725,7 @@ contexts:
       - "POST /payment-authorizations"
       - "GET /payment-authorizations/{authorizationId}"
       - "GET /payment-authorizations?orderId=|checkoutSessionId="
-      - "POST /payment-authorizations/{authorizationId}:void"
+      - "POST /payment-authorizations/{authorizationId}/voids"
       - "GET /refunds?orderId="
       - "POST /refunds"
     publishes:
@@ -777,7 +777,7 @@ experience:
 # ---------------------------------------------------------------------------
 external:
   - {id: offer-availability, org: retail-network, kind: upstream context, note: "Catalogue item master and listing availability; Conformist (Published Language); only catalogItemId is the join key. OHS reads GET /catalog, GET /catalog/{catalogItemId}."}
-  - {id: delivery-promise, org: retail-network, kind: upstream context, note: "Delivery offers and promises. OHS / PL, Conformist: POST /delivery-offers:quote (cart and product-page dates)."}
+  - {id: delivery-promise, org: retail-network, kind: upstream context, note: "Delivery offers and promises. OHS / PL, Conformist: POST /delivery-quotes (cart and product-page dates)."}
   - {id: customer-ordering, org: retail-network, kind: upstream context, note: "Order capture, history, tracking; holds the (synthetic) PII. OHS + ACL in checkout. EXTENDs NG1-NG3 are prerequisites for checkout and the account area."}
   - {id: order-sourcing, org: retail-network, kind: upstream context, note: "FulfillmentShipped and FulfillmentCancelled drive capture and release (Conformist)."}
   - {id: shipping-and-tracking, org: retail-network, kind: upstream context, note: "PackageLost and PackageReturned drive refunds (Conformist)."}

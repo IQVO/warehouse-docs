@@ -60,8 +60,8 @@ contexts with no edge to this one (below).
 | `delivery-promise` | Core | Downstream (we are U) | **OHS + PL / Conformist** | Kafka `retailnetwork.last-mile-delivery.events` | `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged` | The promise conforms to the published wave and keeps a local `DeliveryWaveView`. The hot path makes no synchronous call (model integration rule). |
 | `order-sourcing` | Core | Downstream (we are U) | **OHS + PL / Conformist** | Kafka `retailnetwork.last-mile-delivery.events` | `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged` | Same wave facts, kept in its `NetworkGraphView` to pick a `deliveryWaveId` per candidate. |
 | `shipping-and-tracking` | Generic | Downstream (we are U) | **OHS + PL / Conformist** | Kafka `retailnetwork.last-mile-delivery.events` | `PackageOutForDelivery`, `DeliveryAttempted` | The journey conforms to our facts and turns them into scans; the model marks its row `Conformist`. |
-| Station planner | person | Calls us | **UI on Open Host** | REST `POST /waves`, `GET /waves`, `POST /waves/{waveId}:close-induction`, `POST /waves/{waveId}:dispatch`, `POST /routes`, `POST /partners` | `ScheduleWave`, `CloseInduction`, `DispatchWave`, `PlanRoute`, `ContractPartner`, list waves | Model relationship `UI`. |
-| DSP driver app | external organisation | Calls us | **UI on Open Host** | REST `POST /routes/{routeId}:start`, `POST /routes/{routeId}/attempts` | `StartRoute`, `RecordAttempt` | Model relationship `UI`. A partner is an independent business using our published API. |
+| Station planner | person | Calls us | **UI on Open Host** | REST `POST /waves`, `GET /waves`, `POST /waves/{waveId}/induction-closures`, `POST /waves/{waveId}/dispatches`, `POST /routes`, `POST /partners` | `ScheduleWave`, `CloseInduction`, `DispatchWave`, `PlanRoute`, `ContractPartner`, list waves | Model relationship `UI`. |
+| DSP driver app | external organisation | Calls us | **UI on Open Host** | REST `POST /routes/{routeId}/starts`, `POST /routes/{routeId}/attempts` | `StartRoute`, `RecordAttempt` | Model relationship `UI`. A partner is an independent business using our published API. |
 
 ## Separate Ways
 

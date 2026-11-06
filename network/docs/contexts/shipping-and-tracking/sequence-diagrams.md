@@ -87,7 +87,7 @@ sequenceDiagram
     participant A as ShippingLabel
     participant DB as DB transaction
     participant RL as Relay to Kafka
-    Note over H: caller not named in the model, POST /labels/labelRef:void
+    Note over H: caller not named in the model, POST /labels/labelRef/voids
     H->>UC: Execute labelRef, reason
     UC->>DB: load label
     alt not found

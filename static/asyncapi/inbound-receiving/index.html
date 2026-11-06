@@ -25,12 +25,14 @@ it and books <code>condition=Good</code> quantities into stock (ADR 0003); Damag
 quantities are recorded here and not booked.</p>
 <p><strong>Consumed (ADR 0003).</strong> <code>ProductRegistered</code> from
 <code>warehouse.product-master.events</code> feeds the <code>known_skus</code> local copy
-(<code>PRODUCT_MODE</code>, group from env <code>PRODUCT_CONSUMER_GROUP</code>).
+(group from env <code>PRODUCT_CONSUMER_GROUP</code>); <code>ProductPackLevelDeclared</code> and
+<code>ProductPackLevelRetired</code> from the same topic feed the packaging view
+(group from env <code>PACKAGING_CONSUMER_GROUP</code>).
 <code>LocationSlotRegistered</code> and <code>LocationSlotDecommissioned</code> from
 <code>warehouse.facility.events</code> feed the <code>dock_doors</code> local copy
-(<code>DOCK_DOOR_MODE</code>, group from env <code>DOCK_DOOR_CONSUMER_GROUP</code>). Both modes
-default to <code>permissive</code> (consumer not started); a <code>kafka</code> mode with an
-unset group is a boot error.</p>
+(group from env <code>DOCK_DOOR_CONSUMER_GROUP</code>). The three consumers always
+run: <code>PRODUCT_MODE</code> / <code>DOCK_DOOR_MODE</code> accept only <code>kafka</code> (or unset) and
+<code>permissive</code> / <code>off</code> are boot errors, as is an unset group variable.</p>
 <p><strong>Analytics (ADR 0006).</strong> The same eleven events are ALSO written, in the
 same transaction, to <code>warehouse.inbound-receiving.analytics</code> with the same
 <code>type</code> and the same <code>id</code> per occurrence, <code>dataschema</code>
@@ -615,7 +617,7 @@ event; an accepted carton can raise it too (for example
 </code></pre>
 </div></div></li></ul></div></div></div></div></div></li></ul></div></div></div></li><li class="mb-12" id="operation-receive-consumeProductRegistered"><div><div class="panel-item--center px-8"><div class="mb-4"><h3><span class="font-mono text-white uppercase p-1 rounded mr-2 bg-green-600" title="receive">PUB</span> <span class="font-mono text-base">warehouse.product-master.events</span></h3></div><div class="mt-2"><div class="prose max-w-none text-sm"><p>product-master's integration topic. <code>ProductRegistered</code> feeds the
 <code>known_skus</code> local copy (ADR 0003, group from env <code>PRODUCT_CONSUMER_GROUP</code>,
-started only when <code>PRODUCT_MODE=kafka</code>); <code>ProductPackLevelDeclared</code> and
+always running); <code>ProductPackLevelDeclared</code> and
 <code>ProductPackLevelRetired</code> feed the packaging view (group from env
 <code>PACKAGING_CONSUMER_GROUP</code>). Every other type on the topic is ignored.</p>
 </div></div><p class="text-gray-600 text-sm mt-2">Consume product-master&#x27;s ProductRegistered.</p><div class="mt-2"><div class="prose max-w-none text-sm"><p>Upserts the SKU into <code>known_skus</code>. The CloudEvents <code>id</code> claim and the
@@ -697,8 +699,7 @@ packaging view (retired levels are no longer valid scan targets).</p>
 </div><h6 class="text-xs font-bold text-gray-600 italic mt-2">This example has been generated automatically.</h6></div></div></div></div></div></div></li></ul></div></div></div></li><li class="mb-12" id="operation-receive-consumeDockDoorEvents"><div><div class="panel-item--center px-8"><div class="mb-4"><h3><span class="font-mono text-white uppercase p-1 rounded mr-2 bg-green-600" title="receive">PUB</span> <span class="font-mono text-base">warehouse.facility.events</span></h3></div><div class="mt-2"><div class="prose max-w-none text-sm"><p>facility-layout's integration topic. Consumed ONLY for
 <code>LocationSlotRegistered</code> and <code>LocationSlotDecommissioned</code> (ADR 0003),
 into the <code>dock_doors</code> local copy, with a stable consumer group read from
-env <code>DOCK_DOOR_CONSUMER_GROUP</code>; the consumer is started only when
-<code>DOCK_DOOR_MODE=kafka</code>. Every other type on the topic is ignored. Key =
+env <code>DOCK_DOOR_CONSUMER_GROUP</code>; the consumer always runs. Every other type on the topic is ignored. Key =
 <code>locationCode</code>.</p>
 </div></div><p class="text-gray-600 text-sm mt-2">Consume facility-layout&#x27;s slot registrations and decommissions.</p><div class="mt-2"><div class="prose max-w-none text-sm"><p>A registration with <code>role=Dock</code> and <code>dockFlow</code> of <code>Inbound</code> or <code>Both</code>
 upserts a door; any other registration is ignored. A decommission

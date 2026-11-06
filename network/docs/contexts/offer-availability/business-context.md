@@ -53,7 +53,7 @@ context never talks to the fleet. See
 
 | Actor | What they do here |
 | --- | --- |
-| Network merchandising (human) | Creates catalogue items, discontinues them, and creates listings (`POST /catalog-items`, `POST /catalog-items/{catalogItemId}:discontinue`, `POST /listings`). |
+| Network merchandising (human) | Creates catalogue items, discontinues them, and creates listings (`POST /catalog-items`, `POST /catalog-items/{catalogItemId}/discontinuations`, `POST /listings`). |
 | Vendor, through `vendor-connectivity` | Sends inventory feeds for its nodes. `vendor-connectivity` owns the asynchronous Vendor API transaction and calls `POST /inventory-feeds` in-organization to apply each feed. |
 | Shopper / storefront | Browses the catalogue (`GET /catalog`, `GET /catalog/{catalogItemId}`). |
 | `node-topology` | Tells this context which nodes exist and whether each is `ACTIVE`. |

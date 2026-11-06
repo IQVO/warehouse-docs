@@ -26,7 +26,7 @@ is not a use case either: it changes no aggregate.
 
 | Use case | Command(s) | Trigger | Inbound adapter |
 | --- | --- | --- | --- |
-| `QuoteDeliveryOffers` | `QuoteDeliveryOffers` | shopper / storefront, `customer-ordering` | REST `POST /delivery-offers:quote` |
+| `QuoteDeliveryOffers` | `QuoteDeliveryOffers` | shopper / storefront, `customer-ordering` | REST `POST /delivery-quotes` |
 | `MakePromise` | `MakePromise`, `HoldCapacity` | `customer-ordering` checkout | REST `POST /promises` |
 | `ConfirmPromise` | `ConfirmPromise`, `ConfirmCapacity` | `CustomerOrderPlaced` | Kafka consumer `promise-lifecycle` |
 | `CancelPromise` | `CancelPromise`, `ReleaseCapacity` | `CustomerOrderCancelled` | Kafka consumer `promise-lifecycle` |
@@ -82,7 +82,7 @@ no HTTP reply: the error column says what the consumer does instead.
 
 - **Actor / trigger**: a shopper on a product page or cart (storefront), or
   `customer-ordering` at checkout.
-- **Inbound adapter**: REST `POST /delivery-offers:quote`
+- **Inbound adapter**: REST `POST /delivery-quotes`
   (`internal/adapters/inbound/http`).
 - **Input**: `destinationPostalPrefix`, `lines[]` (`catalogItemId`, `quantity`),
   optional `tiers[]` (default: all four).

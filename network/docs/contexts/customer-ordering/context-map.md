@@ -26,7 +26,7 @@ flowchart LR
     ST["shipping-and-tracking<br/>Generic"]
 
     CO -->|"U to D: OHS<br/>REST /checkout, /orders, /shoppers"| SH
-    DP -->|"U to D: C/S, CO is Customer<br/>REST POST /promises,<br/>POST /delivery-offers:quote"| CO
+    DP -->|"U to D: C/S, CO is Customer<br/>REST POST /promises,<br/>POST /delivery-quotes"| CO
     CO ==>|"U to D: C/S<br/>Kafka CustomerOrderPlaced,<br/>CustomerOrderCancelled"| DP
     DP ==>|"U to D: C/S<br/>Kafka PromiseAtRisk, PromiseRevised,<br/>PromiseKept, PromiseBroken"| CO
     CO ==>|"U to D: C/S<br/>Kafka CustomerOrderPlaced,<br/>CustomerOrderCancelled"| OS
@@ -53,7 +53,7 @@ storefront queries its catalogue directly, and order lines carry only
 (Supporting), `last-mile-delivery` (Supporting), `node-performance`
 (Supporting), and the warehouse-systems `network-fulfillment` context
 (Supporting in the fleet, external organization). The shopper also queries
-`delivery-promise` directly for offers (`POST /delivery-offers:quote`, OHS).
+`delivery-promise` directly for offers (`POST /delivery-quotes`, OHS).
 That edge belongs to `delivery-promise` and is not drawn here. Also omitted:
 `shipping-and-tracking` lists "shopper / customer-ordering" as a caller of
 `GET /journeys/{trackingNumber}`, but this context's `sync_calls` do not
@@ -63,8 +63,8 @@ include it, so the tracking view is event-fed only (see Notes).
 
 | Neighbour | Direction | Pattern | Channel | Messages | Why this pattern |
 | --- | --- | --- | --- | --- | --- |
-| Shopper / storefront (e2e-tests, console remote) | CO upstream, storefront downstream | **Open Host Service** | REST `POST /checkout`, `GET /orders/{orderId}`, `GET /orders/{orderId}/tracking`, `POST /orders/{orderId}:cancel`, `POST /shoppers` | `PlaceOrder`, `GetOrder`, `GetTracking`, `CancelOrder`, `RegisterShopper` | Many clients (tests, the console remote) use one published, versioned API; none negotiates it. |
-| `delivery-promise` (Core) | DP upstream, CO downstream | **Customer/Supplier** (CO is the Customer) | REST `POST /delivery-offers:quote`, `POST /promises` (in-org, synchronous) | `QuoteDeliveryOffers`, `MakePromise` | Checkout needs an answer inside the shopper's request. DP serves this caller deliberately: its `inbound` names `customer-ordering` on both routes. |
+| Shopper / storefront (e2e-tests, console remote) | CO upstream, storefront downstream | **Open Host Service** | REST `POST /checkout`, `GET /orders/{orderId}`, `GET /orders/{orderId}/tracking`, `POST /orders/{orderId}/cancellations`, `POST /shoppers` | `PlaceOrder`, `GetOrder`, `GetTracking`, `CancelOrder`, `RegisterShopper` | Many clients (tests, the console remote) use one published, versioned API; none negotiates it. |
+| `delivery-promise` (Core) | DP upstream, CO downstream | **Customer/Supplier** (CO is the Customer) | REST `POST /delivery-quotes`, `POST /promises` (in-org, synchronous) | `QuoteDeliveryOffers`, `MakePromise` | Checkout needs an answer inside the shopper's request. DP serves this caller deliberately: its `inbound` names `customer-ordering` on both routes. |
 | `delivery-promise` (Core) | CO upstream, DP downstream | **Customer/Supplier** | Kafka `retailnetwork.customer-ordering.events` | `CustomerOrderPlaced`, `CustomerOrderCancelled` | DP needs the placement to confirm the hold (`ConfirmPromise`) and the cancellation to release it (`CancelPromise`). |
 | `delivery-promise` (Core) | DP upstream, CO downstream | **Customer/Supplier** | Kafka `retailnetwork.delivery-promise.events` | `PromiseAtRisk`, `PromiseRevised`, `PromiseKept`, `PromiseBroken` | DP lists CO as a named consumer; CO keeps each group's window current (`UpdateGroupPromise`) and shows the verdict. |
 | `order-sourcing` (Core) | CO upstream, OS downstream | **Customer/Supplier** | Kafka `retailnetwork.customer-ordering.events` | `CustomerOrderPlaced`, `CustomerOrderCancelled` | OS queues one assignment per group from the placement. The event carries each group's promise snapshot so OS does not have to correlate it with DP's stream; that payload shape is negotiated for OS. |

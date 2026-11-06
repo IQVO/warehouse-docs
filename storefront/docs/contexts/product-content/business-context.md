@@ -37,7 +37,7 @@ comes from the item master, not from here.
 
 | Actor | What they do here | Channel |
 | --- | --- | --- |
-| Storefront content manager (human) | Creates and revises content, publishes and retires it; creates, moves and renames categories | REST `POST /product-contents`, `POST /product-contents/{catalogItemId}:revise`, `:publish`, `:retire`, `POST /categories`, `POST /categories/{categoryId}:move`, `:rename` |
+| Storefront content manager (human) | Creates and revises content, publishes and retires it; creates, moves and renames categories | REST `POST /product-contents`, `POST /product-contents/{catalogItemId}/revisions`, `:publish`, `:retire`, `POST /categories`, `PUT /categories/{categoryId}/parent`, `:rename` |
 | `product-discovery` | Reads content and categories to bootstrap its projections (paged snapshot + catch-up) | REST `GET /product-contents`, `GET /product-contents/{catalogItemId}`, `GET /categories` |
 | `offer-availability` (network) | Reports items created and discontinued | Kafka `retailnetwork.offer-availability.events` |
 

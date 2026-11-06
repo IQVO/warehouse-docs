@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **task-interleaving** bounded context (WES subdomain):\nwhen a station completes a task, which open task nearby could the operator do\nnext with the smallest detour (ADR 0001, ADR 0002). The output is an\n**advisory hint**, never an assignment.\n\n**Published.** The `StationTrip` aggregate (one per station) raises\n`InterleavingHintIssued` when it issues a hint, `InterleavingHintConsumed`\nwhen the hinted station claims one of the candidates, and\n`InterleavingHintExpired` when an unclaimed hint reaches its `expires_at`;\nthe `InterleavingPolicy` aggregate raises `InterleavingPolicyDeclared`.\nOnly `InterleavingHintIssued` is on the integration topic\n`warehouse.task-interleaving.events` (fulfillment-execution reads it, ADR\n0002). All four types are on the analytics topic\n`warehouse.task-interleaving.analytics`. Events are written through a\n**transactional outbox**: the aggregate row and its already-encoded events\nare written in ONE database transaction and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is stored with the outbox row, so a retry\nrepublishes the same `id`). A superseded hint raises no event of its own: a\nconsumer learns of it from the next `InterleavingHintIssued` of the same\nstation.\n\n**Consumed (ADR 0003).** `TaskAvailable`, `TaskClaimed` and `TaskCompleted`\nfrom fulfillment-execution (`TaskAvailable` and `TaskClaimed` have been published on\nits integration topic since its ADR 0049; `TaskAvailable` is announced only\nfor the task types that carry bins, RELOCATE and REPLENISH, ADR 0050), and `ZoneRegistered`,\n`LocationSlotRegistered`, `LocationSlotDecommissioned` and\n`LocationGeometryUpdated` from facility-layout. Each feeds a durable local\ncopy (modes `FULFILLMENT_MODE` and `LAYOUT_MODE`, default `permissive`;\nconsumer groups from `FULFILLMENT_CONSUMER_GROUP` and\n`LAYOUT_CONSUMER_GROUP`). The consumed messages below are the producers' own\ncontracts, decoded independently here and never imported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`. Optional\nW3C trace-context headers (`traceparent`, and `tracestate` / `baggage` when\npresent) carry the trace of the writing request; consumers may extract them\nand must not require them. `specversion`, `id`, `source`\n(`/warehouse/task-interleaving`), `type`, `subject`, `time`,\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:task-interleaving:<events|analytics>:<EventName>:v1`) are all\nrequired. Kafka key and `subject` = the station id for hint events and the\nsite id for the policy event. Type =\n`com.warehouse.wes.task-interleaving.<entity>.<EventName>` where `<entity>`\nis the raising aggregate, lowercase, no separators: `stationtrip` or\n`policy`. `data` is snake_case, optional fields are omitted when unset and\ntimestamps are RFC 3339 UTC. A breaking payload change is a new `.v2` type,\nnever a mutation.\n"
+    "description": "Event catalog for the **task-interleaving** bounded context (WES subdomain):\nwhen a station completes a task, which open task nearby could the operator do\nnext with the smallest detour (ADR 0001, ADR 0002). The output is an\n**advisory hint**, never an assignment.\n\n**Published.** The `StationTrip` aggregate (one per station) raises\n`InterleavingHintIssued` when it issues a hint, `InterleavingHintConsumed`\nwhen the hinted station claims one of the candidates, and\n`InterleavingHintExpired` when an unclaimed hint reaches its `expires_at`;\nthe `InterleavingPolicy` aggregate raises `InterleavingPolicyDeclared`.\nOnly `InterleavingHintIssued` is on the integration topic\n`warehouse.task-interleaving.events` (fulfillment-execution reads it, ADR\n0002). All four types are on the analytics topic\n`warehouse.task-interleaving.analytics`. Events are written through a\n**transactional outbox**: the aggregate row and its already-encoded events\nare written in ONE database transaction and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is stored with the outbox row, so a retry\nrepublishes the same `id`). A superseded hint raises no event of its own: a\nconsumer learns of it from the next `InterleavingHintIssued` of the same\nstation.\n\n**Consumed (ADR 0003).** `TaskAvailable`, `TaskClaimed` and `TaskCompleted`\nfrom fulfillment-execution (`TaskAvailable` and `TaskClaimed` have been published on\nits integration topic since its ADR 0049; `TaskAvailable` is announced only\nfor the task types that carry bins, RELOCATE and REPLENISH, ADR 0050), and `ZoneRegistered`,\n`LocationSlotRegistered`, `LocationSlotDecommissioned` and\n`LocationGeometryUpdated` from facility-layout. Each feeds a durable local\ncopy. Both consumers are always on (`FULFILLMENT_MODE` and `LAYOUT_MODE` only\naccept `kafka`, ADR 0006); the consumer groups are mandatory env\n`FULFILLMENT_CONSUMER_GROUP` and `LAYOUT_CONSUMER_GROUP`. A transient handler\nfailure is retried up to five times, then the message is dead-lettered to\n`<topic>.dlq` with `x-dlq-*` headers; a payload of a handled type that can\nnever be applied (a missing required field, malformed `data`) is\ndead-lettered at once; a message that is not a valid CloudEvents 1.0 event is\nskipped with a WARN and committed past; an unknown type is ignored. The consumed messages below are the producers' own\ncontracts, decoded independently here and never imported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`. Optional\nW3C trace-context headers (`traceparent`, and `tracestate` / `baggage` when\npresent) carry the trace of the writing request; consumers may extract them\nand must not require them. `specversion`, `id`, `source`\n(`/warehouse/task-interleaving`), `type`, `subject`, `time`,\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:task-interleaving:<events|analytics>:<EventName>:v1`) are all\nrequired. Kafka key and `subject` = the station id for hint events and the\nsite id for the policy event. Type =\n`com.warehouse.wes.task-interleaving.<entity>.<EventName>` where `<entity>`\nis the raising aggregate, lowercase, no separators: `stationtrip` or\n`policy`. `data` is snake_case, optional fields are omitted when unset and\ntimestamps are RFC 3339 UTC. A breaking payload change is a new `.v2` type,\nnever a mutation.\n"
   },
   "servers": {
     "production": {
@@ -698,7 +698,7 @@
       }
     },
     "warehouse.fulfillment.events": {
-      "description": "fulfillment-execution's integration topic (key and subject = the task id).\nThis service consumes `TaskAvailable`, `TaskClaimed` and `TaskCompleted`\nunder a stable consumer group read from env `FULFILLMENT_CONSUMER_GROUP` when\n`FULFILLMENT_MODE=kafka`. Every other type on the topic is ignored.\n",
+      "description": "fulfillment-execution's integration topic (key and subject = the task id).\nThis service consumes `TaskAvailable`, `TaskClaimed` and `TaskCompleted`\nunder a stable consumer group read from the mandatory env\n`FULFILLMENT_CONSUMER_GROUP`; dead letters go to `warehouse.fulfillment.events.dlq`. Every other type on the topic is ignored.\n",
       "publish": {
         "operationId": "consumeFulfillmentTaskEvents",
         "summary": "Consume task availability, claims and completions.",
@@ -737,15 +737,12 @@
                       },
                       "data": {
                         "type": "object",
+                        "description": "This consumer rejects (dead-letters) a payload without task_id, task_type, site_id or from_location. cpt and available_at are never read.",
                         "required": [
                           "task_id",
                           "task_type",
                           "site_id",
-                          "from_location",
-                          "to_location",
-                          "required_capabilities",
-                          "priority_band",
-                          "available_at"
+                          "from_location"
                         ],
                         "properties": {
                           "task_id": {
@@ -768,7 +765,7 @@
                           },
                           "to_location": {
                             "type": "string",
-                            "description": "Where the operator ends.",
+                            "description": "Where the operator ends. Optional for this consumer: a task without it leaves the station no position when completed.",
                             "x-parser-schema-id": "<anonymous-schema-66>"
                           },
                           "required_capabilities": {
@@ -782,7 +779,7 @@
                           "cpt": {
                             "type": "string",
                             "format": "date-time",
-                            "description": "Omitted when the task has no CPT.",
+                            "description": "Omitted when the task has no CPT. Not read by this service.",
                             "x-parser-schema-id": "<anonymous-schema-69>"
                           },
                           "priority_band": {
@@ -793,6 +790,7 @@
                           "available_at": {
                             "type": "string",
                             "format": "date-time",
+                            "description": "Not read by this service.",
                             "x-parser-schema-id": "<anonymous-schema-71>"
                           }
                         },
@@ -861,11 +859,10 @@
                       },
                       "data": {
                         "type": "object",
+                        "description": "This consumer requires task_id and a valid station_id (else the message is dead-lettered); a missing claimed_at falls back to the CloudEvents time.",
                         "required": [
                           "task_id",
-                          "task_type",
-                          "station_id",
-                          "claimed_at"
+                          "station_id"
                         ],
                         "properties": {
                           "task_id": {
@@ -921,7 +918,7 @@
               "name": "TaskCompleted",
               "title": "TaskCompleted (consumed, fulfillment-execution)",
               "summary": "A station finished a claimed task.",
-              "description": "`type` = `com.warehouse.wes.fulfillment-execution.task.TaskCompleted`,\nsource `/warehouse/fulfillment-execution`, dataschema\n`urn:warehouse:fulfillment-execution:events:TaskCompleted:v1`. Subject and\nKafka key = the task id; the CloudEvents `time` is the completion time.\nVerified on fulfillment-execution's `origin/develop`: `task_id`,\n`station_id` and `work_unit_id` are required. This context reads `task_id`\nand `station_id` (the producer's contract carries `station_id` on every\ncompletion, which the plan's table omitted) and ignores every other field\n(`task_type`, `order_ref`, `line_no`, the RELOCATE `sku`, `from_bin`,\n`to_bin`, `quantity`, `relocation_ref`, ...). The station's new position is\nthe completed task's `to_location` from the local pool copy, with its site;\na completion of a task absent from the copy is ignored (counted, never\ndead-lettered).\n",
+              "description": "`type` = `com.warehouse.wes.fulfillment-execution.task.TaskCompleted`,\nsource `/warehouse/fulfillment-execution`, dataschema\n`urn:warehouse:fulfillment-execution:events:TaskCompleted:v1`. Subject and\nKafka key = the task id; the CloudEvents `time` is the completion time.\nVerified on fulfillment-execution's `origin/develop`: `task_id`,\n`station_id` and `work_unit_id` are required by the producer. This context\nreads `task_id` (required) and `station_id` and ignores every other field\n(`task_type`, `order_ref`, `line_no`, the RELOCATE `sku`, `from_bin`,\n`to_bin`, `quantity`, `relocation_ref`, ...). The station's new position is\nthe completed task's `to_location` from the local pool copy, with its site;\na completion of a task absent from the copy (or without a `to_location`) is\nrecorded as completed and otherwise ignored (no position, no hint; never\ndead-lettered). `station_id` is optional here: when blank, the claimer\nrecorded in the pool copy is the completing station.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -946,8 +943,7 @@
                         "type": "object",
                         "description": "Only the fields this service reads; every other field of the producer's payload is ignored.",
                         "required": [
-                          "task_id",
-                          "station_id"
+                          "task_id"
                         ],
                         "properties": {
                           "task_id": {
@@ -956,7 +952,7 @@
                           },
                           "station_id": {
                             "type": "string",
-                            "description": "The station that completed the task.",
+                            "description": "The station that completed the task; optional here, the pool copy's claimer is used when blank.",
                             "x-parser-schema-id": "<anonymous-schema-85>"
                           }
                         },
@@ -998,7 +994,7 @@
       }
     },
     "warehouse.facility.events": {
-      "description": "facility-layout's integration topic. This service consumes `ZoneRegistered`\n(key `zoneId`), `LocationSlotRegistered`, `LocationSlotDecommissioned` and\n`LocationGeometryUpdated` (key `locationCode`) under a stable consumer group\nread from env `LAYOUT_CONSUMER_GROUP` when `LAYOUT_MODE=kafka`. Every other\ntype is ignored.\n",
+      "description": "facility-layout's integration topic. This service consumes `ZoneRegistered`\n(key `zoneId`), `LocationSlotRegistered`, `LocationSlotDecommissioned` and\n`LocationGeometryUpdated` (key `locationCode`) under a stable consumer group\nread from the mandatory env `LAYOUT_CONSUMER_GROUP`; dead letters go to\n`warehouse.facility.events.dlq`. Every other\ntype is ignored.\n",
       "publish": {
         "operationId": "consumeFacilityLayoutEvents",
         "summary": "Consume zones, location slots and location geometry.",
@@ -1014,7 +1010,7 @@
               "name": "ZoneRegistered",
               "title": "ZoneRegistered (consumed, facility-layout)",
               "summary": "A behavioural zone was added inside a site's area.",
-              "description": "`type` = `com.warehouse.wms.facility-layout.zone.ZoneRegistered`, source\n`/warehouse/facility-layout`, dataschema\n`urn:warehouse:facility-layout:events:ZoneRegistered:v1`. Subject and Kafka\nkey = `zoneId`. Only `zoneId` and `siteCode` are used: they give the site of\na location. `data` also carries `eventName`, `eventType` and `occurredAt`,\nwhich are ignored.\n",
+              "description": "`type` = `com.warehouse.wms.facility-layout.zone.ZoneRegistered`, source\n`/warehouse/facility-layout`, dataschema\n`urn:warehouse:facility-layout:events:ZoneRegistered:v1`. Subject and Kafka\nkey = `zoneId`. Only `zoneId`, `siteCode` (both required) and `zoneCode` (stored) are used:\nthey give the site of a location. `data` also carries `eventName`, `eventType` and `occurredAt`,\nwhich are ignored.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -1049,6 +1045,11 @@
                           "siteCode": {
                             "type": "string",
                             "x-parser-schema-id": "<anonymous-schema-91>"
+                          },
+                          "zoneCode": {
+                            "type": "string",
+                            "description": "Stored with the zone; optional.",
+                            "x-parser-schema-id": "<anonymous-schema-92>"
                           }
                         },
                         "x-parser-schema-id": "<anonymous-schema-89>"
@@ -1106,11 +1107,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered",
-                        "x-parser-schema-id": "<anonymous-schema-93>"
+                        "x-parser-schema-id": "<anonymous-schema-94>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:LocationSlotRegistered:v1",
-                        "x-parser-schema-id": "<anonymous-schema-94>"
+                        "x-parser-schema-id": "<anonymous-schema-95>"
                       },
                       "data": {
                         "type": "object",
@@ -1121,17 +1122,17 @@
                         "properties": {
                           "locationCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-96>"
+                            "x-parser-schema-id": "<anonymous-schema-97>"
                           },
                           "zoneId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-97>"
+                            "x-parser-schema-id": "<anonymous-schema-98>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-95>"
+                        "x-parser-schema-id": "<anonymous-schema-96>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-92>"
+                    "x-parser-schema-id": "<anonymous-schema-93>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotRegisteredEvent"
@@ -1184,11 +1185,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned",
-                        "x-parser-schema-id": "<anonymous-schema-99>"
+                        "x-parser-schema-id": "<anonymous-schema-100>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:LocationSlotDecommissioned:v1",
-                        "x-parser-schema-id": "<anonymous-schema-100>"
+                        "x-parser-schema-id": "<anonymous-schema-101>"
                       },
                       "data": {
                         "type": "object",
@@ -1198,13 +1199,13 @@
                         "properties": {
                           "locationCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-102>"
+                            "x-parser-schema-id": "<anonymous-schema-103>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-101>"
+                        "x-parser-schema-id": "<anonymous-schema-102>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-98>"
+                    "x-parser-schema-id": "<anonymous-schema-99>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotDecommissionedEvent"
@@ -1251,11 +1252,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.LocationGeometryUpdated",
-                        "x-parser-schema-id": "<anonymous-schema-104>"
+                        "x-parser-schema-id": "<anonymous-schema-105>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:LocationGeometryUpdated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-105>"
+                        "x-parser-schema-id": "<anonymous-schema-106>"
                       },
                       "data": {
                         "type": "object",
@@ -1268,28 +1269,28 @@
                         "properties": {
                           "locationCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-107>"
+                            "x-parser-schema-id": "<anonymous-schema-108>"
                           },
                           "xM": {
                             "type": "number",
                             "description": "Position in the site's local coordinate frame, in metres.",
-                            "x-parser-schema-id": "<anonymous-schema-108>"
+                            "x-parser-schema-id": "<anonymous-schema-109>"
                           },
                           "yM": {
                             "type": "number",
-                            "x-parser-schema-id": "<anonymous-schema-109>"
+                            "x-parser-schema-id": "<anonymous-schema-110>"
                           },
                           "zM": {
                             "type": "number",
                             "description": "Height above floor level",
                             "in metres. Never negative.": null,
-                            "x-parser-schema-id": "<anonymous-schema-110>"
+                            "x-parser-schema-id": "<anonymous-schema-111>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-106>"
+                        "x-parser-schema-id": "<anonymous-schema-107>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-103>"
+                    "x-parser-schema-id": "<anonymous-schema-104>"
                   }
                 ],
                 "x-parser-schema-id": "LocationGeometryUpdatedEvent"

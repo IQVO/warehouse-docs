@@ -17,7 +17,7 @@ authority where they differ from this page.
 ## The gap
 
 The fleet has nothing before the first stow. `inventory-storage` receives
-stock through `POST /stock/receive`, which is a bare quantity acknowledgement:
+stock through `POST /stock-receipts`, which is a bare quantity acknowledgement:
 there is no record of what was announced, which carrier arrived at which door
 and when, what was counted, or what did not match. The competitor research
 that started this work (Manhattan Active SCE 26.2, Blue Yonder WMS Oct-2025,
@@ -101,12 +101,12 @@ Every event is CloudEvents 1.0 in structured mode with
 REST, behind Kong at `/api/inbound-receiving` (problem type base
 `https://errors.inbound-receiving.warehouse-systems.dev/<slug>`):
 `POST /asns`, `GET /asns`, `GET /asns/{asnNumber}`,
-`POST /asns/{asnNumber}/cancel`; `POST /appointments`, `GET /appointments`
+`POST /asns/{asnNumber}/cancellations`; `POST /appointments`, `GET /appointments`
 (filters door, state, from, to), `GET /appointments/{id}`,
-`POST /appointments/{id}/check-in`, `POST /appointments/{id}/cancel`;
+`POST /appointments/{id}/check-ins`, `POST /appointments/{id}/cancellations`;
 `POST /receipts` (opened from an ASN number and an optional appointment id),
 `GET /receipts`, `GET /receipts/{id}`, `POST /receipts/{id}/lines`,
-`POST /receipts/{id}/close`; and `GET /docks`.
+`POST /receipts/{id}/closures`; and `GET /docks`.
 
 ## Honest scope today
 

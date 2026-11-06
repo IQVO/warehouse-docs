@@ -542,9 +542,9 @@ contexts:
       - {name: PromisePolicyParameters, rule: "the versioned PromisePolicy record (POST /promise-policies, event PromisePolicyPublished) carries policyVersion ('v' + version), version, offerTtlMinutes, holdTtlMinutes, packagesPerOrder, capacitySharePercent, transitWindowDays (default 28), transitServiceLevelPercent (default 90), minTransitObservations (default 20), orderDeadlines[{tier, regionId?, localTime}] and publishedAt. The current policy is the highest version. Without a published policy version 0 applies: offerTtl 10, holdTtl 15, packagesPerOrder 1, capacitySharePercent 100, transitWindowDays 28, transitServiceLevelPercent 90, minTransitObservations 20, no deadlines. holdExpiresAt = now + holdTtlMinutes; each order needs packagesPerOrder packages of room on the pickup and on every linehaul departure of the witness path"}
       - {name: MeasuredTransit, rule: "ADR 0014: TransitActualsView pairs LoadDeparted/LoadArrived by loadId into observed transits per (origin, destination) (ring of 200, read-side pruned to transitWindowDays). When a pair has at least minTransitObservations in-window observations and its transitServiceLevelPercent nearest-rank transit exceeds a departure leg's scheduled transit (arrivesAt - departsAt), the leg's arrival becomes arrivesAt + (measured - scheduled): one-sided, measured transit never promises earlier than the timetable. A candidate whose witness path used at least one measured adjustment is quoted basis MEASURED; the pickup leg counts as a departure leg; below minTransitObservations the timetable stands"}
     inbound:
-      - {from: customer-ordering, type: qry, channel: "REST POST /delivery-offers:quote (in-org)", routes: ["POST /delivery-offers:quote"], message: "QuoteDeliveryOffers", relationship: Customer/Supplier}
-      - {from: customer-ordering, type: cmd, channel: "REST POST /promises, POST /promises/{promiseId}:confirm, POST /promises/{promiseId}:cancel (in-org)", routes: ["POST /promises", "POST /promises/{promiseId}:confirm", "POST /promises/{promiseId}:cancel"], message: "MakePromise, ConfirmPromise, CancelPromise", relationship: Customer/Supplier}
-      - {from: shopper / storefront, type: qry, channel: "REST POST /delivery-offers:quote", routes: ["POST /delivery-offers:quote"], message: "QuoteDeliveryOffers", relationship: OHS}
+      - {from: customer-ordering, type: qry, channel: "REST POST /delivery-quotes (in-org)", routes: ["POST /delivery-quotes"], message: "QuoteDeliveryOffers", relationship: Customer/Supplier}
+      - {from: customer-ordering, type: cmd, channel: "REST POST /promises, POST /promises/{promiseId}/confirmations, POST /promises/{promiseId}/cancellations (in-org)", routes: ["POST /promises", "POST /promises/{promiseId}/confirmations", "POST /promises/{promiseId}/cancellations"], message: "MakePromise, ConfirmPromise, CancelPromise", relationship: Customer/Supplier}
+      - {from: shopper / storefront, type: qry, channel: "REST POST /delivery-quotes", routes: ["POST /delivery-quotes"], message: "QuoteDeliveryOffers", relationship: OHS}
       # caller inferred: the spec names no caller for these three reads; attributed to the actor of the sibling quote route
       - {from: shopper / storefront, type: qry, channel: "REST GET /delivery-offers/{offerId}, GET /promises/{promiseId}, GET /promises?orderId=", routes: ["GET /delivery-offers/{offerId}", "GET /promises/{promiseId}", "GET /promises"], message: "GetDeliveryOffer, GetPromise, ListPromisesByOrder", relationship: OHS}
       # caller inferred: the spec and ADR 0002 A21 name no caller; a policy is published by network operations, not by a service or the storefront
@@ -560,16 +560,16 @@ contexts:
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated, CatalogItemDiscontinued, ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored", relationship: Conformist}
       - {from: node-performance, type: evt, channel: "Kafka retailnetwork.node-performance.events", message: "NodeScorecardUpdated", relationship: Conformist}
     rest:
-      - "POST /delivery-offers:quote"
+      - "POST /delivery-quotes"
       - "GET /delivery-offers/{offerId}"
       - "POST /promises"
       - "GET /promises/{promiseId}"
       - "GET /promises?orderId="
       - "GET /promise-books?nodeId=&date="
-      - "POST /promises/{promiseId}:confirm"
+      - "POST /promises/{promiseId}/confirmations"
       - "POST /promise-policies"
       - "GET /promise-policies/current"
-      - "POST /promises/{promiseId}:cancel"
+      - "POST /promises/{promiseId}/cancellations"
     publishes:
       - {event: PromiseMade, entity: promise, data: [promiseId, offerId, tier, nodeId, pickupDepartureId, shipBy, deliverByEarliest, deliverByLatest, basis, policyVersion, holdExpiresAt, lines], consumers: [analytics only]}
       - {event: PromiseConfirmed, entity: promise, data: [promiseId, orderId, groupNo], consumers: [analytics only]}
@@ -782,8 +782,8 @@ contexts:
       - {event: PackageLost, from: shipping-and-tracking}
       - {event: PackageReturned, from: shipping-and-tracking}
     sync_calls:
-      - {to: delivery-promise, type: qry, message: QuoteDeliveryOffers, channel: "REST POST /delivery-offers:quote"}
-      - {to: delivery-promise, type: cmd, message: "MakePromise, ConfirmPromise, CancelPromise", channel: "REST POST /promises, POST /promises/{promiseId}:confirm, POST /promises/{promiseId}:cancel"}
+      - {to: delivery-promise, type: qry, message: QuoteDeliveryOffers, channel: "REST POST /delivery-quotes"}
+      - {to: delivery-promise, type: cmd, message: "MakePromise, ConfirmPromise, CancelPromise", channel: "REST POST /promises, POST /promises/{promiseId}/confirmations, POST /promises/{promiseId}/cancellations"}
     ul:
       - {term: Shopper, definition: "The (synthetic) customer placing orders.", code: "shopper.Shopper"}
       - {term: Customer Order, definition: "What the shopper bought, with a promise per shipment group.", code: "order.CustomerOrder"}

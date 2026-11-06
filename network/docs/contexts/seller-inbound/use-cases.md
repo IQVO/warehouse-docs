@@ -57,7 +57,7 @@ informational scorecard from this service's own facts and changes nothing.
 
 ## SuspendSeller / ReinstateSeller
 
-- **Actor:** network partner manager. REST `POST /sellers/{sellerId}:suspend`
+- **Actor:** network partner manager. REST `POST /sellers/{sellerId}/suspensions`
   and `:reinstate`.
 - **Flow:** `ACTIVE` ↔ `SUSPENDED`. A suspended seller's later `CreateInboundPlan`,
   `ConfirmInboundPlan`, `CreateInboundShipment`, `AddCarton`, `LabelShipment` and
@@ -80,7 +80,7 @@ informational scorecard from this service's own facts and changes nothing.
 
 ## ConfirmInboundPlan / CancelInboundPlan
 
-- **REST:** `POST /inbound-plans/{planId}:confirm`, `:cancel`.
+- **REST:** `POST /inbound-plans/{planId}/confirmations`, `:cancel`.
 - **Flow:** `DRAFT → CONFIRMED` re-checks seller and node; `DRAFT → CANCELLED`.
 - **Errors:** `ErrSellerSuspended`, `ErrNodeCannotReceive`, `ErrIllegalTransition`.
 - **Events:** `InboundPlanConfirmed` (confirm only).
@@ -117,7 +117,7 @@ informational scorecard from this service's own facts and changes nothing.
 
 ## LabelShipment
 
-- **REST:** `POST /inbound-shipments/{shipmentId}:label`.
+- **REST:** `POST /inbound-shipments/{shipmentId}/labels`.
 - **Flow:** `DRAFT → LABELLED`. Checks that the eaches per item and GTIN over
   this shipment's cartons equal the confirmed plan's lines, every line exactly
   and no extra item (service ADR 0002 A10). After this, `GET .../labels` returns one printable
@@ -127,7 +127,7 @@ informational scorecard from this service's own facts and changes nothing.
 
 ## ShipInboundShipment
 
-- **REST:** `POST /inbound-shipments/{shipmentId}:ship`.
+- **REST:** `POST /inbound-shipments/{shipmentId}/dispatches`.
 - **Flow:** `LABELLED → SHIPPED`, re-checks the node and the seller.
 - **Errors:** `ErrShipmentNotLabelled`, `ErrNodeCannotReceive`, `ErrSellerSuspended`.
 - **Events:** `InboundShipmentShipped` (`shippedAt`; the manifest was published on `InboundShipmentLabelled`).

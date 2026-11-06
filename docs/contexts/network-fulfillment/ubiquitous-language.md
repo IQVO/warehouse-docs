@@ -7,7 +7,7 @@ sidebar_label: Ubiquitous Language
 # Ubiquitous Language
 
 :::info[Synced from network-fulfillment]
-This page is a copy of [`docs/ddd/ubiquitous-language.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/ddd/ubiquitous-language.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+This page is a copy of [`docs/docs/ddd/ubiquitous-language.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/docs/ddd/ubiquitous-language.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
 

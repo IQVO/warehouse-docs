@@ -132,7 +132,7 @@ sequenceDiagram
     participant UC as CloseInduction
     participant REPO as WaveRepo
     participant AGG as DeliveryWave
-    HTTP->>UC: POST /waves/waveId<br/>:close-induction
+    HTTP->>UC: POST /waves/waveId/induction-closures
     alt key stored
         UC-->>HTTP: stored reply
     else new key
@@ -169,7 +169,7 @@ sequenceDiagram
     participant UC as DispatchWave
     participant REPO as WaveRepo
     participant AGG as DeliveryWave
-    HTTP->>UC: POST /waves/waveId<br/>:dispatch
+    HTTP->>UC: POST /waves/waveId/dispatches
     alt key stored
         UC-->>HTTP: stored reply
     else new key

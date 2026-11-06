@@ -32,7 +32,7 @@ filters (422 `validation-failed` otherwise).
 | Use case | Trigger | Inbound adapter | Emits |
 | --- | --- | --- | --- |
 | `AuthorizePayment` | `checkout` | REST `POST /payment-authorizations` | `PaymentAuthorized` or `PaymentDeclined` |
-| `VoidAuthorization` | `checkout` after a definitive rejection; policy `VoidUnboundAuthorizations` | REST `POST /payment-authorizations/{authorizationId}:void`; scheduler | `PaymentReleased` (reason `VOIDED`) |
+| `VoidAuthorization` | `checkout` after a definitive rejection; policy `VoidUnboundAuthorizations` | REST `POST /payment-authorizations/{authorizationId}/voids`; scheduler | `PaymentReleased` (reason `VOIDED`) |
 | `RequestRefund` | Storefront ops; policies `RefundOnLostPackage`, `RefundOnReturnToSender` | REST `POST /refunds`; Kafka consumer, `retailnetwork.shipping-and-tracking.events` | `RefundIssued` or `RefundFailed` after the outcome |
 | `RecordRefundOutcome` | The provider's answer to `Refund` | the provider port (inside `RequestRefund`) | `RefundIssued` or `RefundFailed` |
 | `RetryRefund` | Storefront ops or an automatic retry of a `FAILED` refund (max 5 attempts) | internal; the model's `rest` list has no route | `RefundIssued` or `RefundFailed` after the outcome |
@@ -112,7 +112,7 @@ is still written, which is a proposed disposition the model does not state.
   place-order step (never while the outcome is in doubt); or the clock,
   policy `VoidUnboundAuthorizations` (no `CheckoutCompleted` after 24 h).
 - **Inbound adapter:** REST
-  `POST /payment-authorizations/{authorizationId}:void`, header
+  `POST /payment-authorizations/{authorizationId}/voids`, header
   `Idempotency-Key` required (`<sessionId>:void`); an internal scheduler for
   the policy.
 - **Preconditions:** the authorization is `AUTHORIZED` (no capture yet).

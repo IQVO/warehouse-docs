@@ -50,8 +50,8 @@ Case-aware picking ([ADR 0054](https://github.com/IQVO/fulfillment-execution/blo
 GTIN against a `PICK` task, resolved against the local copy of `product-master`'s
 pack levels, and counts the eaches confirmed so far. When an each pick finds only
 a sealed case at its source, a `BREAK_CASE` task is created;
-`POST /tasks/{id}/break-case` (`completeCaseBreak`) asks `inventory-storage` to
-break the container (`POST /containers/{lpn}:break`, with an `Idempotency-Key`
+`POST /tasks/{id}/case-breaks` (`completeCaseBreak`) asks `inventory-storage` to
+break the container (`POST /containers/{lpn}/case-breaks`, with an `Idempotency-Key`
 stable per task) and only then completes the task. If `inventory-storage` cannot
 be reached the task stays claimed (`503`).
 

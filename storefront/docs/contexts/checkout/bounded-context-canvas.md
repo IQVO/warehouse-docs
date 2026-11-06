@@ -141,7 +141,7 @@ To run the purchase saga. The context:
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
 | Shopper via `storefront-bff` | `OpenSession` | Command | REST `POST /checkout-sessions` | UI |
-| Shopper via `storefront-bff` | `ConfirmSession` | Command | REST `POST /checkout-sessions/{sessionId}:confirm` | UI |
+| Shopper via `storefront-bff` | `ConfirmSession` | Command | REST `POST /checkout-sessions/{sessionId}/confirmations` | UI |
 | Shopper via `storefront-bff` | `GetSession` | Query | REST `GET /checkout-sessions/{sessionId}` | UI |
 
 Route-to-command note: the three routes map onto `OpenSession`,
@@ -159,7 +159,7 @@ the answers of its outbound calls and from the two policies.
 | `delivery-promise` (network) | `GetDeliveryOffer` | Query | REST `GET /delivery-offers/{offerId}` (pre-check that every selected offer is still `QUOTED`, with margin) | Open Host Service; we are the Customer |
 | `pricing` | `IssuePriceQuote` | Command | REST `POST /price-quotes` | Customer/Supplier (we are the Customer) |
 | `customer-payments` | `AuthorizePayment` | Command | REST `POST /payment-authorizations` (`Idempotency-Key` `<sessionId>:auth`, allocations per group) | Customer/Supplier (we are the Customer) |
-| `customer-payments` | `VoidAuthorization` | Command | REST `POST /payment-authorizations/{authorizationId}:void` (`Idempotency-Key` `<sessionId>:void`; only after a definitive rejection) | Customer/Supplier (we are the Customer) |
+| `customer-payments` | `VoidAuthorization` | Command | REST `POST /payment-authorizations/{authorizationId}/voids` (`Idempotency-Key` `<sessionId>:void`; only after a definitive rejection) | Customer/Supplier (we are the Customer) |
 | `customer-ordering` (network) | `PlaceOrder` | Command | REST `POST /checkout` through the ACL (`internal/adapters/outbound/customerordering`); `Idempotency-Key` is the `sessionId`; `shipToAddressId` (NG1), never an inline address | Open Host Service behind an Anti-Corruption Layer; we are the Customer |
 | `shopping-cart`, `customer-payments` | `CheckoutCompleted` | Event | Kafka `retailnetwork.checkout.events`, `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutCompleted` | Customer/Supplier (we are the Supplier) |
 | analytics only | `CheckoutOpened` | Event | Kafka `retailnetwork.checkout.analytics`, `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutOpened` | analytics stream |
@@ -270,6 +270,6 @@ Top terms: **Checkout Session**, **Place-Order Step** (the network's
   quote through `delivery-promise` (`QuoteDelivery`); none accepts an offer set
   from outside (hotspot H10). The model now has
   `AcceptRequotedOffers`, and **as built** shopping-cart serves
-  `POST /carts/{cartId}/delivery/requoted` (`acceptRequotedOffers`), but
+  `POST /carts/{cartId}/delivery-requote-acceptances` (`acceptRequotedOffers`), but
   `storefront-bff` exposes no route that calls it, so the requote path is
   not reachable from the web app yet.

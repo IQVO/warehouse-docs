@@ -271,7 +271,7 @@
               "name": "CapacityPlanPublished",
               "title": "Capacity plan published",
               "summary": "A DRAFT CapacityPlan was published.",
-              "description": "Raised by `CapacityPlan.Publish` on `POST /capacity-plans/{id}/publish`.\nAlways accompanied by `CapacityShortageDetected` and `BottleneckDetected`\nwhen the plan has a shortage. A plan is published at most once. `type` =\n`com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanPublished`.\n",
+              "description": "Raised by `CapacityPlan.Publish` on `POST /capacity-plans/{id}/publications`.\nAlways accompanied by `CapacityShortageDetected` and `BottleneckDetected`\nwhen the plan has a shortage. A plan is published at most once. `type` =\n`com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanPublished`.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -1348,7 +1348,7 @@
       }
     },
     "warehouse.workforce.events": {
-      "description": "workforce-management's integration topic (`LaborTopic`). This service\nconsumes it with its own consumer group (env `LABOR_CAPACITY_CONSUMER_GROUP`).\n",
+      "description": "workforce-management's integration topic (`LaborTopic`). This service\nconsumes it with its own consumer group (env `LABOR_CAPACITY_CONSUMER_GROUP`).\nOnly `ShiftPlanCommitted` is acted on; every other `type`, a message that is not\nCloudEvents 1.0, or an unusable payload is skipped (WARN) and its offset committed. A\ntransient failure is retried up to 5 attempts, then the message is published to\n`warehouse.workforce.events.dlq` (raw bytes plus `x-dlq-*` headers).\n",
       "publish": {
         "operationId": "consumeShiftPlanCommitted",
         "summary": "Consume workforce-management's ShiftPlanCommitted.",
@@ -1389,12 +1389,10 @@
                   },
                   "data": {
                     "type": "object",
-                    "description": "Fields this service reads from one fanned-out ShiftPlanCommitted message (one per PathPlan line).",
+                    "description": "Fields this service reads from one fanned-out ShiftPlanCommitted message (one per PathPlan line). A message with a blank building_id or path_id is skipped (WARN). The LABOR constraint is planned_heads x planned_rate UNIT per HOUR at location building_id for the window [CloudEvents time, time + planned_hours); heads, rate and hours are not range-checked here (a value the domain rejects is skipped). shift_id is not read.",
                     "required": [
-                      "path_id",
-                      "planned_heads",
-                      "planned_rate",
-                      "planned_hours"
+                      "building_id",
+                      "path_id"
                     ],
                     "properties": {
                       "building_id": {
@@ -1467,7 +1465,7 @@
       }
     },
     "warehouse.facility.events": {
-      "description": "facility-layout's integration topic (`FacilityTopic`). This service\nconsumes it with its own consumer group (env `STORAGE_CAPACITY_CONSUMER_GROUP`).\n",
+      "description": "facility-layout's integration topic (`FacilityTopic`). This service\nconsumes it with its own consumer group (env `STORAGE_CAPACITY_CONSUMER_GROUP`).\nOnly `LocationSlotRegistered` and `LocationSlotDecommissioned` are acted on; every other\n`type`, a message that is not CloudEvents 1.0, or an unusable payload is skipped (WARN)\nand its offset committed. A transient failure is retried up to 5 attempts, then the\nmessage is published to `warehouse.facility.events.dlq` (raw bytes plus `x-dlq-*` headers).\n",
       "publish": {
         "operationId": "consumeLocationSlotEvents",
         "summary": "Consume facility-layout's location slot events.",
@@ -1510,11 +1508,10 @@
                       },
                       "data": {
                         "type": "object",
-                        "description": "Fields this service reads from LocationSlotRegistered.",
+                        "description": "Fields this service reads from LocationSlotRegistered. A message with a blank locationCode or zoneId, an unrecognized role, a Storage slot with a blank locationType or a WorkCenter slot with no activities is skipped (WARN); an already-tallied locationCode is a no-op.",
                         "required": [
                           "locationCode",
-                          "zoneId",
-                          "locationType"
+                          "zoneId"
                         ],
                         "properties": {
                           "locationCode": {
@@ -1529,18 +1526,23 @@
                           },
                           "locationType": {
                             "type": "string",
+                            "description": "Required (non-blank) when role is Storage or absent; not read for WorkCenter.",
                             "example": "BULK",
                             "x-parser-schema-id": "<anonymous-schema-120>"
                           },
                           "role": {
                             "type": "string",
-                            "description": "Storage (default) tallies storage positions per locationType; WorkCenter tallies stations per activity.",
+                            "enum": [
+                              "Storage",
+                              "WorkCenter"
+                            ],
+                            "description": "Storage (default when absent or empty) tallies storage positions per locationType; WorkCenter tallies stations per activity. Any other value is skipped.",
                             "example": "Storage",
                             "x-parser-schema-id": "<anonymous-schema-121>"
                           },
                           "activities": {
                             "type": "array",
-                            "description": "Present only when role is WorkCenter.",
+                            "description": "Required (at least one) when role is WorkCenter; each is upper-cased to form the station tally key.",
                             "items": {
                               "type": "string",
                               "x-parser-schema-id": "<anonymous-schema-123>"
@@ -2059,6 +2061,7 @@
                     "properties": {
                       "task_id": {
                         "type": "string",
+                        "description": "Must equal the CloudEvents `subject`; a mismatch or a blank value is dead-lettered.",
                         "x-parser-schema-id": "<anonymous-schema-154>"
                       },
                       "task_type": {

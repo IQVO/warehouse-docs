@@ -91,7 +91,7 @@ flowchart LR
     C3["RenameCategory<br/>POST :rename"]:::command
     G2["CategoryTree<br/>live tree, PUBLISHED"]:::aggregate
     P2["Structural rules<br/>no cycle, depth 4,<br/>unique sibling names"]:::policy
-    C4["PublishCategoryTree<br/>POST /categories:publish"]:::command
+    C4["PublishCategoryTree<br/>POST /category-tree-publications"]:::command
     E2["CategoryTreePublished<br/>whole tree, version bumped"]:::event
     PD["product-discovery<br/>CategoryView"]:::external
 
@@ -173,6 +173,6 @@ not a message from this context.
 | H3 | **Resolved in the model-fix:** by design there is no remove-category command; categories are only renamed or moved. `ErrCategoryInUse` stays as the guard of a future removal and is no longer mapped to `:move`. | `aggregates[CategoryTree].invariants`, `.notes` |
 | H4 | **Resolved in the model-fix:** `ErrTooManyBullets`, `ErrTooManyAttributes` and `ErrTooManyMedia` (limits 10, 50, 12) join the `ProductContent` invariants. | `aggregates[ProductContent].invariants` |
 | H5 | **Resolved in the model-fix:** the `CategoryTree` is a single published aggregate with no draft state. Every command applies to the live tree and publishes a new version; the DRAFT/PUBLISHED tree-state reading is removed. | `aggregates[CategoryTree].states`, `.transitions`, `.notes` |
-| H6 | **Resolved in the model-fix:** `PublishCategoryTree` gets the route `POST /categories:publish` (content manager, cmd channel) and an inbound row. | `contexts[product-content].rest`, `.inbound` |
+| H6 | **Resolved in the model-fix:** `PublishCategoryTree` gets the route `POST /category-tree-publications` (content manager, cmd channel) and an inbound row. | `contexts[product-content].rest`, `.inbound` |
 | H7 | **Resolved in the model-fix:** `RetireOnDiscontinue` also moves a DRAFT to RETIRED (reason `DISCONTINUED`, no event); a discontinued item can never publish. | `policies[RetireOnDiscontinue]` |
 | H8 | **Resolved in the model-fix:** `ErrItemDiscontinued` is added to `CreateProductContent` and `PublishContent`; the local `CatalogItemView` knows the state. | `aggregates[ProductContent].invariants` |

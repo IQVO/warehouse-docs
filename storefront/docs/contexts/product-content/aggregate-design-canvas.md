@@ -105,11 +105,11 @@ attributes, media) are the named invariants `ErrTooManyBullets`,
 | Command | Trigger | Transition |
 | --- | --- | --- |
 | `CreateProductContent` | Content manager, REST `POST /product-contents` | `[*] → DRAFT` |
-| `ReviseDraft` | Content manager, REST `POST /product-contents/{catalogItemId}:revise` (**As built:** one route for both revisions; the content state picks ReviseDraft or ReviseContent, product-content ADR 0002) | `DRAFT → DRAFT` |
-| `ReviseContent` | Content manager, REST `POST /product-contents/{catalogItemId}:revise` | `PUBLISHED → PUBLISHED` |
-| `PublishContent` | Content manager, REST `POST /product-contents/{catalogItemId}:publish` | `DRAFT → PUBLISHED`, `PUBLISHED → PUBLISHED` |
-| `DiscardDraft` | Content manager, REST `POST /product-contents/{catalogItemId}:discard` | `DRAFT → RETIRED` (reason `DISCARDED`) |
-| `RetireContent` | Content manager, REST `POST /product-contents/{catalogItemId}:retire`; or the `RetireOnDiscontinue` policy on `CatalogItemDiscontinued` | `PUBLISHED → RETIRED`, `DRAFT → RETIRED` (policy, reason `DISCONTINUED`) |
+| `ReviseDraft` | Content manager, REST `POST /product-contents/{catalogItemId}/revisions` (**As built:** one route for both revisions; the content state picks ReviseDraft or ReviseContent, product-content ADR 0002) | `DRAFT → DRAFT` |
+| `ReviseContent` | Content manager, REST `POST /product-contents/{catalogItemId}/revisions` | `PUBLISHED → PUBLISHED` |
+| `PublishContent` | Content manager, REST `POST /product-contents/{catalogItemId}/publications` | `DRAFT → PUBLISHED`, `PUBLISHED → PUBLISHED` |
+| `DiscardDraft` | Content manager, REST `DELETE /product-contents/{catalogItemId}/draft` | `DRAFT → RETIRED` (reason `DISCARDED`) |
+| `RetireContent` | Content manager, REST `POST /product-contents/{catalogItemId}/retirements`; or the `RetireOnDiscontinue` policy on `CatalogItemDiscontinued` | `PUBLISHED → RETIRED`, `DRAFT → RETIRED` (policy, reason `DISCONTINUED`) |
 
 Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent].commands`,
 `.inbound`, `.policies`.
@@ -208,9 +208,9 @@ None in the model. Structural invariants are refused, not repaired.
 | Command | Trigger | Transition |
 | --- | --- | --- |
 | `CreateCategory` | Content manager, REST `POST /categories` | `PUBLISHED → PUBLISHED` |
-| `MoveCategory` | Content manager, REST `POST /categories/{categoryId}:move` | `PUBLISHED → PUBLISHED` |
-| `RenameCategory` | Content manager, REST `POST /categories/{categoryId}:rename` | `PUBLISHED → PUBLISHED` |
-| `PublishCategoryTree` | Content manager, REST `POST /categories:publish` | `PUBLISHED → PUBLISHED` |
+| `MoveCategory` | Content manager, REST `PUT /categories/{categoryId}/parent` | `PUBLISHED → PUBLISHED` |
+| `RenameCategory` | Content manager, REST `PUT /categories/{categoryId}/name` | `PUBLISHED → PUBLISHED` |
+| `PublishCategoryTree` | Content manager, REST `POST /category-tree-publications` | `PUBLISHED → PUBLISHED` |
 
 Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree].commands`,
 `.rest`. Each command applies to the live tree and bumps the `version`.

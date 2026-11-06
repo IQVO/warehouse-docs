@@ -107,8 +107,8 @@ open breaker) is *ambiguous*: the reservation may or may not exist upstream.
 The pass therefore stops, saves what it already allocated, and publishes
 `OrderAllocationPartiallyFailed` rather than inventing a backorder. The
 request still returns `201`, because the order was received. The response
-shows whatever was saved. `POST /orders/{id}/retry-allocation` and
-`POST /orders/{id}/release` (for held orders) re-enter the same allocation
+shows whatever was saved. `POST /orders/{id}/allocation-retries` and
+`POST /orders/{id}/releases` (for held orders) re-enter the same allocation
 pass.
 
 No outcome event is published when the order ends fully `Backordered`. Its
@@ -130,7 +130,7 @@ sequenceDiagram
     participant K as Kafka
     participant FE as fulfillment-execution
 
-    Caller->>+WP: POST /paths/{pathId}/release
+    Caller->>+WP: POST /paths/{pathId}/work-releases
     WP->>WP: ReleasePolicy picks the earliest-CPT pending entry
     alt pool empty, or release-fed pool at its WIP limit
         WP-->>Caller: ErrEmptyPool or ErrWIPLimitReached
@@ -164,7 +164,7 @@ sequenceDiagram
     actor S as Station client
     participant FE as fulfillment-execution
 
-    S->>+FE: POST /stations/{id}/claim-next with taskType
+    S->>+FE: POST /stations/{id}/task-claims with taskType
     alt station unknown
         FE-->>S: 404 ErrStationNotFound
     end
@@ -206,7 +206,7 @@ sequenceDiagram
     participant LP as labor-performance
     participant WFM as workforce-management
 
-    S->>FE: POST /tasks/{id}/complete
+    S->>FE: POST /tasks/{id}/completions
     FE->>FE: Task.Complete, lease released
     FE-)K: TaskCompleted with work_unit_id, task_type, associate_id
 
@@ -301,7 +301,7 @@ sequenceDiagram
     WPL->>WPL: compose path capacity, shortage and bottleneck
     WPL-)K: CapacityPlanCreated on warehouse.warehouse-planning.events
     WPL-->>-Planner: 201 plan, status DRAFT
-    Planner->>+WPL: POST /capacity-plans/{id}/publish
+    Planner->>+WPL: POST /capacity-plans/{id}/publications
     WPL-)K: CapacityPlanPublished, plus ShortageDetected and BottleneckDetected when short
     WPL-->>-Planner: 200 plan, status PUBLISHED
 
@@ -357,7 +357,7 @@ sequenceDiagram
     NF->>NET: SubmissionStatus
     alt SUCCESS
         NF-)K: NetworkOrderAcknowledged
-        NF->>OM: POST /orders/{id}/release
+        NF->>OM: POST /orders/{id}/releases
     else FAILURE
         NF->>OM: DELETE /orders/{id}
         NF-)K: NetworkOrderRejected
@@ -452,7 +452,7 @@ sequenceDiagram
     participant WP as wes-work-planning
     participant FE as fulfillment-execution
 
-    Op->>NIP: POST /v1/transfers:approve with Idempotency-Key
+    Op->>NIP: POST /v1/transfer-approvals with Idempotency-Key
     Note over NIP: fail-closed snapshot and ValidateApproval, then one transaction: saga ALLOCATING and two outbox rows
     NIP--)INV: TransferAllocationRequested
     INV--)NIP: TransferStockAllocated

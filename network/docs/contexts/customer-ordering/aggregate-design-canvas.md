@@ -118,7 +118,7 @@ aggregate exists; see [Use Cases](/network/contexts/customer-ordering/use-cases)
 | `MarkInFulfillment` | Kafka `FulfillmentLocked` (`order-sourcing`) | `PLACED → IN_FULFILLMENT` (a later group: no status change) |
 | `MarkGroupShipped` | Kafka `FulfillmentShipped` (`order-sourcing`) | `IN_FULFILLMENT → PARTIALLY_SHIPPED` or `→ SHIPPED`; `PARTIALLY_SHIPPED → SHIPPED` |
 | `MarkGroupDelivered` | Kafka `PackageDelivered` (`shipping-and-tracking`) | `SHIPPED → DELIVERED` once every group is delivered |
-| `CancelOrder` | Shopper, REST `POST /orders/{orderId}:cancel`; or the `CancelOnUnfulfillable` policy on `FulfillmentUnsourceable` | `PLACED → CANCELLED`, `IN_FULFILLMENT → CANCELLED` |
+| `CancelOrder` | Shopper, REST `POST /orders/{orderId}/cancellations`; or the `CancelOnUnfulfillable` policy on `FulfillmentUnsourceable` | `PLACED → CANCELLED`, `IN_FULFILLMENT → CANCELLED` |
 | `UpdateGroupPromise` | Kafka `PromiseRevised` (`delivery-promise`) | none (the group's window changes) |
 
 Derived from: `model.yaml → contexts[customer-ordering].aggregates[CustomerOrder].commands`,

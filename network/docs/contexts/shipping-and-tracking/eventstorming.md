@@ -83,7 +83,7 @@ Omitted: the duplicate-label and ship-to-unavailable branches (see
 %%{init: {"flowchart": {"nodeSpacing": 14, "rankSpacing": 30}}}%%
 flowchart TB
     U["caller not named<br/>in the model"]:::external
-    C3["VoidLabel<br/>POST /labels/labelRef:void"]:::command
+    C3["VoidLabel<br/>POST /labels/labelRef/voids"]:::command
     G1["ShippingLabel<br/>ISSUED to VOIDED"]:::aggregate
     E2["LabelVoided<br/>analytics only"]:::event
     H4["Hotspot: void caller unnamed,<br/>journey left LABELLED"]:::hotspot
@@ -273,7 +273,7 @@ Omitted: `ErrJourneyClosed` on a closed journey; the analytics sink for
 | Request fields of `IssueLabel`; no `orderId` reaches this context by event | 1 | `sync_calls[GetShipTo]` needs `orderId`; `publishes[PackageDelivered].data` has `orderId`; `publishes[LabelIssued].data` and `vendor-connectivity` `publishes[PurchaseOrderIssued].data` have none |
 | Printable label not modelled | 1 | `vendor-connectivity` `po.Label` is `labelRef + trackingNumber + carrier`; no route here renders a label |
 | `StartJourney` has no trigger | 1 | `aggregates[PackageJourney].commands` lists it; no policy, route or event starts it |
-| `VoidLabel` caller and journey effect | 1b | `rest` has `POST /labels/{labelRef}:void`; no `inbound` row; `PackageJourney` has no exit from `LABELLED` |
+| `VoidLabel` caller and journey effect | 1b | `rest` has `POST /labels/{labelRef}/voids`; no `inbound` row; `PackageJourney` has no exit from `LABELLED` |
 | Resolved (G3): node types | 2a | `LoadArrived` carries `nodeType`; policy `ScanTypeFromLoadFacts` |
 | Resolved (G3): `HANDED_OVER -> AT_STATION` | 2b | `lane_rules.allowed` has `FULFILLMENT_CENTER -> DELIVERY_STATION`; `PackageJourney.transitions` now has the edge (direct injection) |
 | Resolved (G3): departure kind; `VendorShipmentConfirmed` effect still open | 2a | `policies[HandoverOnFirstScan]` reads `departureKind` PICKUP from `LoadDeparted`; no `LABELLED -> LABELLED` edge |

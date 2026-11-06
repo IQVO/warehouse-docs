@@ -197,7 +197,8 @@
                             "type": "object",
                             "required": [
                               "siteCode",
-                              "siteName"
+                              "siteName",
+                              "siteRole"
                             ],
                             "properties": {
                               "siteCode": {
@@ -564,8 +565,7 @@
                             "type": "object",
                             "required": [
                               "locationType",
-                              "maxWeightKg",
-                              "maxVolumeM3"
+                              "role"
                             ],
                             "properties": {
                               "locationType": {
@@ -704,8 +704,7 @@
                               "aisleId",
                               "zoneId",
                               "locationType",
-                              "maxWeightKg",
-                              "maxVolumeM3"
+                              "role"
                             ],
                             "properties": {
                               "locationCode": {
@@ -1323,10 +1322,12 @@
       "subscribe": {
         "operationId": "onFacilityAnalyticsEvent",
         "summary": "Consume facility-layout's analytics stream (internal data product).",
-        "description": "The only supported consumer is this service's own `cmd/facility-projector` (single writer of the analytical database, ADR-0010). It follows the same at-least-once discipline: per-process-unique consumer group, FirstOffset replay, idempotent projection keyed on the CloudEvent `id`, readiness gated on catching up to the high watermark observed at start.\n",
+        "description": "The only supported consumer is this service's own `cmd/facility-projector` (single writer of the analytical database, ADR-0010). It follows the same at-least-once discipline: per-process-unique consumer group, FirstOffset replay, idempotent projection keyed on the CloudEvent `id`, readiness gated on catching up to the high watermark observed at start. The topic carries every event type; the projector derives its report from SiteRegistered, ZoneRegistered, AisleRegistered, LocationTypeRegistered, PlacementRuleDefined, LocationSlotRegistered, LocationSlotDecommissioned and FacilityLayoutImported, and ignores the other types. A message that fails CloudEvents validation goes to the `.dlq` topic (`warehouse.facility.analytics.dlq`).\n",
         "message": {
           "oneOf": [
             "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[0]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[1]",
+            "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[2]",
             "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[3]",
             "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[4]",
             "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[5]",

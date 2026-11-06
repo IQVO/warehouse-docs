@@ -102,7 +102,7 @@ flowchart TB
 
 Derived from: model.yaml → `contexts[order-sourcing].read_models`,
 `.policies[AssignmentCost]`, `.business_decisions` (1 and 5),
-`.rest` (`POST /assignments/{assignmentId}:reoptimise`),
+`.rest` (`POST /assignments/{assignmentId}/reoptimisations`),
 `.aggregates[FulfillmentAssignment].throughput_estimate` (the sweeps);
 `contexts[linehaul-transportation].read_models[ExpectedVolumeView]`;
 `contexts[delivery-promise].aggregates[PromiseBook]`.

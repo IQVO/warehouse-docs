@@ -159,7 +159,7 @@ Derived from: `model.yaml → contexts[shopping-cart].aggregates[Cart].commands`
 One diagram covers both commands: the shape is identical; only the line
 mutation differs. Omitted: the version-conflict retry and the relay.
 
-## 4. SetDestination (REST POST /carts/cartId:set-destination)
+## 4. SetDestination (REST PUT /carts/cartId/destination)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
@@ -194,7 +194,7 @@ Derived from: `model.yaml → contexts[shopping-cart].aggregates[Cart].commands[
 Omitted: the version-conflict retry. The destination is a prefix, never an
 address; `EstimateView`'s tax band is keyed on it at read time.
 
-## 5. QuoteDelivery (REST POST /carts/cartId:quote-delivery)
+## 5. QuoteDelivery (REST POST /carts/cartId/delivery-quotes)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
@@ -217,7 +217,7 @@ sequenceDiagram
         else no destination prefix
             UC-->>H: 422 no-destination<br/>ErrNoDestination
         else prefix set
-            UC->>DP: QuoteDeliveryOffers<br/>POST /delivery-offers:quote<br/>lines, prefix
+            UC->>DP: QuoteDeliveryOffers<br/>POST /delivery-quotes<br/>lines, prefix
             alt the OHS call fails
                 DP-->>UC: error
                 UC-->>H: 503 delivery-promise-unavailable<br/>lines and prefix kept, no quote
@@ -253,7 +253,7 @@ returned and stores the unavailable tiers with their constraints. A failed
 OHS call leaves the cart's lines and prefix intact: the shopper retries the
 quote, not the cart.
 
-## 6. SelectDelivery (REST POST /carts/cartId:select-delivery)
+## 6. SelectDelivery (REST PUT /carts/cartId/delivery-selection)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
@@ -292,7 +292,7 @@ Omitted: the version-conflict retry and the estimate arithmetic
 band of the destination prefix). Expiry is checked by comparing
 `expiresAt` with the clock; no event announces an expiry.
 
-## 7. MergeInto (REST POST /carts/cartId:merge-into)
+## 7. MergeInto (REST POST /carts/cartId/merges)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%

@@ -131,7 +131,7 @@ cross-aisles, fixed structures, location types, coded location slots with
 geometry and functional roles (dock, yard, staging, QC, consolidation,
 shipping), and placement rules that say which location types are legal in
 which zone (`POST /sites`, `POST /sites/{siteCode}/zones`, `POST /locations`,
-`POST /locations/import`, `POST /placement-rules`). It also derives a travel
+`POST /location-imports`, `POST /placement-rules`). It also derives a travel
 graph and shortest travel distance (`GET /zones/{zoneId}/travel-graph`,
 `GET /distance`).
 
@@ -205,9 +205,9 @@ flowchart LR
 **Why WMS core.** It is the stock ledger, and it owns four of Gartner's core
 functions:[1]
 
-- **Receive and put away.** Books received stock (`POST /stock/receive`, and
+- **Receive and put away.** Books received stock (`POST /stock-receipts`, and
   `ReceiptLineReceived` from inbound-receiving), then stows it into a bin
-  (`POST /stock/stow`). The stow is validated against the zone and location
+  (`POST /stowages`). The stow is validated against the zone and location
   attributes it keeps from facility-layout's events and the handling
   classification it keeps from product-master, including hazmat placement and
   DOT segregation.
@@ -215,11 +215,11 @@ functions:[1]
   `GET /bins/{binId}`) and the usable-inventory answer every promise rests on
   (`GET /inventory/{sku}/usable`).
 - **Count.** Cycle counts and discrepancies
-  (`POST /bins/{binId}/cycle-count`, `CycleCountCompleted`,
+  (`POST /bins/{binId}/cycle-counts`, `CycleCountCompleted`,
   `DiscrepancyDetected`).
 - **Allocate.** Revocable reservations against usable inventory
   (`POST /reservations`, `DELETE /reservations/{id}`), confirmed on pick
-  (`POST /reservations/{id}/confirm-pick`, or the `TaskCompleted` consumer).
+  (`POST /reservations/{id}/pick-confirmations`, or the `TaskCompleted` consumer).
 
 It also moves stock inside a site (`POST /relocations`, `StockRelocated`,
 including the completion of slot-plan `RELOCATE` tasks) and handles the
@@ -262,9 +262,9 @@ flowchart LR
 context owns everything before the first stow: the advance ship notice
 (`POST /asns`), the receipt and its lines with discrepancies (short, over,
 damaged) (`POST /receipts`, `POST /receipts/{receiptId}/lines`,
-`POST /receipts/{receiptId}/close`), and the handover of good units to
+`POST /receipts/{receiptId}/closures`), and the handover of good units to
 inventory-storage as `ReceiptLineReceived`. Its dock appointments
-(`POST /appointments`, `POST /appointments/{appointmentId}/check-in`, `GET /docks`)
+(`POST /appointments`, `POST /appointments/{appointmentId}/check-ins`, `GET /docks`)
 are what Gartner lists as a dock/appointment scheduling component that
 supplements a WMS, so that part is WMS extended.[2]
 
@@ -303,7 +303,7 @@ optimization" as a specialist component that supplements a WMS.[2] This
 context ranks SKUs by pick velocity (`GET /sku-velocity`, fed by
 `SiteSkuDemandChanged`), proposes a slot plan under the `abc-velocity-v1`
 policy (`POST /slot-plans`), lets a human approve or reject it
-(`POST /slot-plans/{planId}/approve`, `/reject`) and publishes the approved
+(`POST /slot-plans/{planId}/approvals`, `/reject`) and publishes the approved
 forward-pick map (`GET /forward-slots`, `SlotPlanApproved`).
 
 **Why not WES.** It plans where stock should live; it does not execute the

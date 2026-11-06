@@ -90,7 +90,7 @@ no plan.
 **2. Pull makes "who is free" self-reporting, not inferred.** Under pull,
 availability is not modelled at all. A station that calls `claimNext` is,
 by construction, free. This is why the endpoint is
-`POST /stations/{stationId}/claim-next` and not a query — the call *is* the
+`POST /stations/{stationId}/task-claims` and not a query — the call *is* the
 declaration of availability.
 
 **3. It keeps this context out of the workforce business.** A push

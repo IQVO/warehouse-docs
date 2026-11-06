@@ -81,7 +81,7 @@ demand and feeds each unit to `ReceiveNetworkDemand`, which:
    `PromisePolicy.FeasibleBy`: a returned `promiseDate` means the deadline
    is makeable; a null one means it is not. No promise math is done here.
 4. **Answers and commits** — acknowledge and release
-   (`POST /orders/{id}/release`), or reject and cancel
+   (`POST /orders/{id}/releases`), or reject and cancel
    (`DELETE /orders/{id}`), so reservations never outlive the decision.
 
 A separate `SweepAcknowledgementDeadlines` ticker rejects any order still

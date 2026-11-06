@@ -252,7 +252,7 @@ Two groups of optional, additive fields keep the event at v1:
 }
 ```
 
-Completing a `RELOCATE` task takes those inputs on `POST /tasks/{id}/complete`
+Completing a `RELOCATE` task takes those inputs on `POST /tasks/{id}/completions`
 (`quantity`, `fromBin`, `toBin`) and the MCP `complete_task` tool; without
 them the completion is refused with a `422` (`relocation-confirmation-required`,
 `invalid-relocation-confirmation`, or `not-relocation-task` for a task of
@@ -272,7 +272,7 @@ topic, same CloudEvents envelope, same publisher:
 
 | `type` | `data` | Raised when |
 | --- | --- | --- |
-| `com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed` | `task_id`, `order_ref`, `task_type`, `cpt` | `POST /tasks/sweep-cpt-misses` finds a task still open (Pending or Claimed) at or past its CPT; re-fires every pass while overdue. Nothing inside this service schedules the sweep. |
+| `com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed` | `task_id`, `order_ref`, `task_type`, `cpt` | `POST /cpt-miss-sweeps` finds a task still open (Pending or Claimed) at or past its CPT; re-fires every pass while overdue. Nothing inside this service schedules the sweep. |
 | `com.warehouse.wes.fulfillment-execution.package.PackageManifested` | `package_id`, `order_ref` | SLAM passes, alongside `LabelApplied` |
 
 Every field comes straight off the domain event — no repository enrichment.
@@ -319,7 +319,7 @@ flowchart LR
   stock between the two bins (its ADR-0039).
 
 This is a deliberate choice, not an accident: `labor-performance` could
-instead poll a new `GET /tasks/{id}/completion-details`-style endpoint, but
+instead poll a new read endpoint for task completion details, but
 that would duplicate the completion signal across two mechanisms that could
 disagree, and would add a new synchronous inbound dependency onto this
 service's completion path. Enriching the one existing event both consumers

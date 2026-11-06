@@ -143,7 +143,7 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[checkout].aggregates[CheckoutSession]`
 (`transitions`, `invariants`), `.sync_calls[AuthorizePayment]`,
-`.rest["POST /checkout-sessions/{sessionId}:confirm"]`,
+`.rest["POST /checkout-sessions/{sessionId}/confirmations"]`,
 `.publishes[CheckoutDeclined]`, `.policies[ResolveStuckAuthorizations, RetryOwedVoids]`.
 
 Omitted: the `404` for an unknown session, a version conflict retried once

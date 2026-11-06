@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **returns-processing** bounded context (WMS\nsubdomain): the reverse flow of goods — authorize a return against a\nshipped order line (RMA), receive and grade it (ReturnReceipt), decide\nwhat happens to it (Disposition) and hand restockable units back to\ninventory-storage as a staged line (ADR 0001, ADR 0002).\n\n**Published.** Three aggregates raise seven event types, published to\n`warehouse.returns-processing.events` through a **transactional outbox**:\nthe aggregate row and its already-encoded events are written in ONE\ndatabase transaction and a relay drains them to Kafka (at-least-once; the\nCloudEvents `id` is stored with the outbox row, so a retry republishes the\nsame `id`). `ReturnLineStaged` is the only type that asks a sibling to do\nsomething: inventory-storage consumes it into its staged-receipt use case\n(same shape as its `ReceiptLineReceived` plus `rma_id`, `disposition_id`,\n`site_id`); `UnexpectedReturnReceived` is what exception-management turns\ninto a problem-solve case. Every one of the seven types is ALSO mirrored\non `warehouse.returns-processing.analytics` (dataschema\n`urn:warehouse:returns-processing:analytics:<EventName>:v1`), the stream\nthis service's own projector consumes (ADR 0007).\n\n**Consumed (ADR 0003).** `ProductClassified` from product-master, the\nallocated order lines (`OrderAllocated` / `OrderPartiallyAllocated`) from\norder-management and `PackageManifested` (the shipped fact per work unit,\n`order_ref` = `{order_id}-line-{line_no}`) from fulfillment-execution.\nEach feeds a durable local copy; no sibling is ever called live. Consumer\ngroups come from `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`,\n`ORDER_LINES_CONSUMER_GROUP` and `MANIFEST_CONSUMER_GROUP`. The consumed\nmessages below are the producers' own contracts, restated here and never\nimported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row; consumers may extract them, and must not require them.\n`specversion`, `id`, `source` (`/warehouse/returns-processing`), `type`,\n`subject`, `time`, `datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:returns-processing:<events|analytics>:<EventName>:v1`) are\nall required. Kafka key = the subject. Type =\n`com.warehouse.wms.returns-processing.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
+    "description": "Event catalog for the **returns-processing** bounded context (WMS\nsubdomain): the reverse flow of goods — authorize a return against a\nshipped order line (RMA), receive and grade it (ReturnReceipt), decide\nwhat happens to it (Disposition) and hand restockable units back to\ninventory-storage as a staged line (ADR 0001, ADR 0002).\n\n**Published.** Three aggregates define seven event types (six are raised\nby a use case today; `ReturnAuthorizationRejected` is declared and\nencodable but no use case raises it), published to\n`warehouse.returns-processing.events` through a **transactional outbox**:\nthe aggregate row and its already-encoded events are written in ONE\ndatabase transaction and a relay drains them to Kafka (at-least-once; the\nCloudEvents `id` is stored with the outbox row, so a retry republishes the\nsame `id`). `ReturnLineStaged` is the only type that asks a sibling to do\nsomething: inventory-storage consumes it into its staged-receipt use case\n(same shape as its `ReceiptLineReceived` plus `rma_id`, `disposition_id`,\n`site_id`); `UnexpectedReturnReceived` is what exception-management turns\ninto a problem-solve case. Every one of the seven types is ALSO mirrored\non `warehouse.returns-processing.analytics` (dataschema\n`urn:warehouse:returns-processing:analytics:<EventName>:v1`), the stream\nthis service's own projector consumes (ADR 0007).\n\n**Consumed (ADR 0003).** `ProductClassified` from product-master, the\nallocated order lines (`OrderAllocated` / `OrderPartiallyAllocated`) from\norder-management and `PackageManifested` (the shipped fact per work unit,\n`order_ref` = `{order_id}-line-{line_no}`) from fulfillment-execution.\nEach feeds a durable local copy; no sibling is ever called live. A message\nthat is not a valid CloudEvents 1.0 event is skipped with a WARN log (its\noffset is committed); a valid event of an unlisted `type` is ignored; a\npayload that can never be applied (undecodable `data`, blank ids, a\n`order_ref` that is not `{order_id}-line-{line_no}`) is dead-lettered to\n`<consumed topic>.dlq` without retry; any other handler error is retried\nand dead-lettered after 5 attempts. Consumer groups come from `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`,\n`ORDER_LINES_CONSUMER_GROUP` and `MANIFEST_CONSUMER_GROUP`. The consumed\nmessages below are the producers' own contracts, restated here and never\nimported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nThe relay sets that one header only: no W3C trace-context headers\n(`traceparent` / `tracestate`) are written. `specversion`, `id`, `source` (`/warehouse/returns-processing`), `type`,\n`subject`, `time`, `datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:returns-processing:<events|analytics>:<EventName>:v1`) are\nall required. Kafka key = the subject. Type =\n`com.warehouse.wms.returns-processing.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
   },
   "servers": {
     "production": {
@@ -55,7 +55,7 @@
   ],
   "channels": {
     "warehouse.returns-processing.events": {
-      "description": "This service's integration topic. Written by the outbox relay; key = the\nevent's subject; every message carries the CloudEvents content-type\nheader (plus the optional W3C `traceparent` of the writing request).\nDispatch on the full `type`, ignore unknown types, dedupe on `id`.\n",
+      "description": "This service's integration topic. Written by the outbox relay; key = the\nevent's subject; every message carries the CloudEvents content-type\nheader. An outbox row that can never be encoded (malformed payload, an\nevent the service does not publish, an empty aggregate id) is written\nverbatim to `warehouse.returns-processing.events.dlq` (headers\n`content-type: application/json` and `dlq-reason`) instead.\nDispatch on the full `type`, ignore unknown types, dedupe on `id`.\n",
       "subscribe": {
         "operationId": "receiveReturnsProcessingEvents",
         "summary": "Receive RMA, receipt and disposition events.",
@@ -68,7 +68,7 @@
         "message": {
           "oneOf": [
             {
-              "x-no-consumer-reason": "returns ledger fact; analytics mirror planned, not built (ADR 0004); consumed on demand",
+              "x-no-consumer-reason": "returns ledger fact with no fleet consumer; its analytics twin is read only by this service's own projector (ADR 0007); consumed on demand",
               "name": "ReturnAuthorized",
               "title": "Return authorized",
               "summary": "An RMA was opened for a shipped order line inside the return window.",
@@ -234,11 +234,11 @@
               ]
             },
             {
-              "x-no-consumer-reason": "returns ledger fact; analytics mirror planned, not built (ADR 0004); consumed on demand",
+              "x-no-consumer-reason": "returns ledger fact with no fleet consumer; its analytics twin is read only by this service's own projector (ADR 0007); consumed on demand",
               "name": "ReturnAuthorizationRejected",
               "title": "Return authorization rejected",
               "summary": "An RMA request was refused: the line never shipped, the window closed or another RMA is open.",
-              "description": "`type` = `com.warehouse.wms.returns-processing.returnauthorization.ReturnAuthorizationRejected`;\nsubject and key = the rmaId. `rejection_code` is `LINE_NOT_MANIFESTED`,\n`RETURN_WINDOW_EXPIRED`, `OPEN_RMA_EXISTS` or\n`QUANTITY_EXCEEDS_POLICY`.\n",
+              "description": "`type` = `com.warehouse.wms.returns-processing.returnauthorization.ReturnAuthorizationRejected`;\nsubject and key = the rmaId. `rejection_code` is `LINE_NOT_MANIFESTED`,\n`RETURN_WINDOW_EXPIRED`, `OPEN_RMA_EXISTS` or\n`QUANTITY_EXCEEDS_POLICY`. **Not raised today:** the domain, the\noutbox payload mapping and the encoder support it, but no use case\ncalls the rejecting transition; `POST /returns` answers a refusal\nwith 409 and persists and publishes nothing. Declared for the day a\nRejectReturn use case exists.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -336,7 +336,7 @@
               ]
             },
             {
-              "x-no-consumer-reason": "returns ledger fact; analytics mirror planned, not built (ADR 0004); consumed on demand",
+              "x-no-consumer-reason": "returns ledger fact with no fleet consumer; its analytics twin is read only by this service's own projector (ADR 0007); consumed on demand",
               "name": "ReturnReceiptOpened",
               "title": "Return receipt opened",
               "summary": "Returned goods arrived; each line matches an RMA line or is explicitly unexpected.",
@@ -466,7 +466,7 @@
               ]
             },
             {
-              "x-no-consumer-reason": "returns ledger fact; analytics mirror planned, not built (ADR 0004); consumed on demand",
+              "x-no-consumer-reason": "returns ledger fact with no fleet consumer; its analytics twin is read only by this service's own projector (ADR 0007); consumed on demand",
               "name": "ReturnLineInspected",
               "title": "Return line inspected",
               "summary": "A receipt line was graded A, B, C or SCRAP with its reason codes.",
@@ -526,11 +526,12 @@
                           },
                           "reason_codes": {
                             "type": "array",
+                            "nullable": true,
                             "items": {
                               "type": "string",
                               "x-parser-schema-id": "<anonymous-schema-48>"
                             },
-                            "description": "Why the grade; e.g. CUSTOMER_DAMAGE, OPENED_BOX, MISSING_PARTS.",
+                            "description": "Why the grade; e.g. CUSTOMER_DAMAGE, OPENED_BOX, MISSING_PARTS. null when the inspection request sent no reasonCodes.",
                             "x-parser-schema-id": "<anonymous-schema-47>"
                           },
                           "inspected_at": {
@@ -665,7 +666,7 @@
               ]
             },
             {
-              "x-no-consumer-reason": "returns ledger fact; analytics mirror planned, not built (ADR 0004); consumed on demand",
+              "x-no-consumer-reason": "returns ledger fact with no fleet consumer; its analytics twin is read only by this service's own projector (ADR 0007); consumed on demand",
               "name": "DispositionDecided",
               "title": "Disposition decided",
               "summary": "The policy outcome for one inspected line: RESTOCK, REFURBISH, LIQUIDATE, DISPOSE or RTV.",
@@ -1236,7 +1237,7 @@
           "name": "ProductClassified",
           "title": "ProductClassified (consumed, product-master)",
           "summary": "The handling classification of a SKU, with a monotonically increasing version.",
-          "description": "`type` = `com.warehouse.wms.product-master.product.ProductClassified`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductClassified:v1`. Subject and\nKafka key = the SKU. `handling_tags` can carry `Hazmat` and\n`TemperatureSensitive`; `dot_hazard_class` is 0 when the SKU carries\nno rating; `classification_source` is `native` or `imported`. Apply\nonly when `version` is greater than the stored one for the SKU.\nRestated from product-master's contract, never imported.\n",
+          "description": "`type` = `com.warehouse.wms.product-master.product.ProductClassified`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductClassified:v1`. Subject and\nKafka key = the SKU. `handling_tags` can carry `Hazmat` and\n`TemperatureSensitive`; `dot_hazard_class` is 0 when the SKU carries\nno rating; `classification_source` is `native` or `imported`. Apply\nonly when `version` is greater than the stored one for the SKU. This\nservice reads `sku`, `handling_tags`, `temperature_class`,\n`dot_hazard_class` and `version` and ignores `classification_source`;\n`handling_tags` are stored verbatim (a `dot:<n>` tag is appended for a\nnon-zero `dot_hazard_class`). Restated from product-master's contract,\nnever imported.\n",
           "contentType": "application/cloudevents+json",
           "tags": [
             {
@@ -1351,7 +1352,7 @@
               "name": "OrderAllocated",
               "title": "OrderAllocated (consumed, order-management)",
               "summary": "Every line of an order was allocated; the lines carry no quantity.",
-              "description": "`type` = `com.warehouse.wes.order-management.order.OrderAllocated`,\nsource `/warehouse/order-management`, dataschema\n`urn:warehouse:order-management:events:OrderAllocated:v1`. Subject and\nKafka key = the order id. The `lines` carry `line_no`, `sku`, `path_id`,\n`gift_wrap` and `fulfillment_class` but NO quantity. Restated from\norder-management's contract, never imported.\n",
+              "description": "`type` = `com.warehouse.wes.order-management.order.OrderAllocated`,\nsource `/warehouse/order-management`, dataschema\n`urn:warehouse:order-management:events:OrderAllocated:v1`. Subject and\nKafka key = the order id. The `lines` carry `line_no`, `sku`, `path_id`,\n`gift_wrap` and `fulfillment_class` but NO quantity; this service\nreads only `order_id` and each line's `line_no` and `sku`. Restated\nfrom order-management's contract, never imported.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -1559,7 +1560,7 @@
           "name": "PackageManifested",
           "title": "PackageManifested (consumed, fulfillment-execution)",
           "summary": "A package was manifested for a work unit: the shipped fact returns v1 authorizes against.",
-          "description": "`type` = `com.warehouse.wes.fulfillment-execution.package.PackageManifested`,\nsource `/warehouse/fulfillment-execution`, dataschema\n`urn:warehouse:fulfillment-execution:events:PackageManifested:v1`.\nSubject and Kafka key = the package id. `order_ref` is the WES work\nunit id `{order_id}-line-{line_no}`; this service reverses it into\n(order_id, line_no) to build its `manifested_work_units` copy.\nRestated from fulfillment-execution's contract, never imported.\n",
+          "description": "`type` = `com.warehouse.wes.fulfillment-execution.package.PackageManifested`,\nsource `/warehouse/fulfillment-execution`, dataschema\n`urn:warehouse:fulfillment-execution:events:PackageManifested:v1`.\nSubject and Kafka key = the package id. `order_ref` is the WES work\nunit id `{order_id}-line-{line_no}`; this service reverses it into\n(order_id, line_no) to build its `manifested_work_units` copy.\nThis service reads `package_id`, `order_ref` and the CloudEvents\n`time` (the manifest instant). Restated from fulfillment-execution's\ncontract, never imported.\n",
           "contentType": "application/cloudevents+json",
           "tags": [
             {

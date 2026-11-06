@@ -96,9 +96,9 @@ allocated orders (`OrderAllocated`), transfer demand (`WorkDemandReleased`)
 and approved slot plans (`SlotPlanApproved`), or directly
 (`POST /paths/{pathId}/work-units`). It is released continuously in priority
 order, earliest CPT first, with a WIP limit on release-fed pools
-(`POST /paths/{pathId}/release`, `PUT /paths/{pathId}/pool`, `WorkReleased`).
+(`POST /paths/{pathId}/work-releases`, `PUT /paths/{pathId}/pool`, `WorkReleased`).
 Flow balancing watches backlog and rates and recommends or throttles
-(`GET /paths/{pathId}/telemetry`, `GET /paths/{pathId}/rebalance`,
+(`GET /paths/{pathId}/telemetry`, `POST /paths/{pathId}/rebalance-decisions`,
 `BacklogThresholdBreached`, `RateDeviationDetected`, `PathThrottled`,
 `LaborReassignmentFlagged`). That is the "smart order release … to create a
 level flow of work" the trade press describes as the reason WES exists.[8]
@@ -135,15 +135,15 @@ flowchart LR
 **Why WES.** It decides *where* released work runs. Released work becomes a
 task (`WorkReleased`, `POST /tasks`), and a station pulls the best-fit pending
 task for its capability, earliest CPT first, under a lease
-(`POST /stations/{stationId}/claim-next`, `POST /tasks/{id}/renew-lease`,
-`POST /tasks/expire-leases`). It sweeps tasks that missed their cutoff
-(`POST /tasks/sweep-cpt-misses`, `TaskCPTMissed`).
+(`POST /stations/{stationId}/task-claims`, `POST /tasks/{id}/lease-renewals`,
+`POST /task-lease-expirations`). It sweeps tasks that missed their cutoff
+(`POST /cpt-miss-sweeps`, `TaskCPTMissed`).
 
 **Why it also carries WMS core functions.** Gartner's pick, pack and ship
 happen here as task types: `PICK`, `REBIN` consolidation
-(`POST /rebin/arrivals`), `PACK` (`POST /tasks/{id}/seal-package` with a
+(`POST /rebin/arrivals`), `PACK` (`POST /tasks/{id}/package-seals` with a
 segregation check), and `SLAM`, the scan, label, apply and manifest weigh-check
-(`POST /packages/{id}/slam`, `PackageManifested`).[1] The transfer task kinds
+(`POST /packages/{id}/slam-runs`, `PackageManifested`).[1] The transfer task kinds
 (`TransferPicked`, `TransferDispatched`, `TransferArrived`) and slot-plan
 `RELOCATE` tasks run the same way.
 
@@ -225,7 +225,7 @@ runs.
 **Why WMS extended.** It owns the associate (certifications, shifts, breaks:
 `POST /associates/{id}/certifications`, `/start-shift`, `/break/start`), the
 shift plan that splits headcount across process paths
-(`POST /paths/{pathId}/plan/propose`, `POST /shift-plans`,
+(`POST /paths/{pathId}/plan-proposals`, `POST /shift-plans`,
 `ShiftPlanCommitted`), the staffing gap per path
 (`GET /sites/{siteCode}/shifts/{shiftId}/staffing-gap`, `PathUnderstaffed`) and
 assignments (`POST /associates/{id}/assignments`, `LaborAssigned`). The plan is
@@ -310,7 +310,7 @@ constraints and station standards (`POST /process-capacities`,
 (`GET /demand`, from `OrderAllocated`), committed labor (`ShiftPlanCommitted`)
 and storage positions (`GET /storage-capacity`) into a capacity plan with
 shortage and bottleneck detection (`POST /capacity-plans`,
-`POST /capacity-plans/{id}/publish`, `CapacityShortageDetected`,
+`POST /capacity-plans/{id}/publications`, `CapacityShortageDetected`,
 `BottleneckDetected`, `CapacityPlanPublished`).
 
 ```mermaid
@@ -341,7 +341,7 @@ flowchart LR
 | DDD class | Generic/Supporting |
 
 **Why above the WMS.** It is the front door for customer demand: order intake
-(`POST /orders`), hold and release (`POST /orders/{id}/release`), cancellation
+(`POST /orders`), hold and release (`POST /orders/{id}/releases`), cancellation
 (`DELETE /orders/{id}`), a ship promise derived from the CPT schedule, path
 capacity and published capacity plans (`GET /planned-capacity`), and
 re-promising when a task misses its cutoff (`OrderRepromised`). It also
@@ -351,7 +351,7 @@ planning read.
 **The WMS part.** Gartner lists order allocation as a WMS capability.[2] Here
 it is a reservation against inventory-storage's usable stock
 (`POST /reservations`), with backorder retry
-(`POST /orders/{id}/retry-allocation`).
+(`POST /orders/{id}/allocation-retries`).
 
 **Why not WES.** It hands allocated orders to the WES (`OrderAllocated`) but
 does not decide when they are released.
@@ -387,10 +387,10 @@ flowchart LR
 **Why above the WMS.** It decides whether stock should move *between*
 warehouses, which APQC files as "Manage and track inventory deployment" and
 "Manage warehouse transfers".[14] It proposes and simulates transfers
-(`POST /v1/transfer-proposals:generate`, `GET /v1/transfer-simulations`), runs
+(`POST /v1/transfer-proposal-runs`, `GET /v1/transfer-simulations`), runs
 scheduled rebalances under a policy and lane catalogue
 (`PUT /v1/rebalance-policies`, `PUT /v1/transfer-lanes`), and carries an
-approved transfer as a saga (`POST /v1/transfers:approve`,
+approved transfer as a saga (`POST /v1/transfer-approvals`,
 `TransferAllocationRequested`, `WorkDemandReleased`, `TransferStuckDetected`)
 without ever moving stock itself: the WMS and WES contexts at each site do the
 physical work.

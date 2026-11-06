@@ -34,7 +34,7 @@ sequenceDiagram
     CM->>PC: cmd: CreateProductContent<br/>POST /product-contents
     Note over PC: check CatalogItemView,<br/>state DRAFT
     PC-->>CM: cmd: reply 201 DRAFT
-    CM->>PC: cmd: PublishContent<br/>POST /product-contents/catalogItemId:publish
+    CM->>PC: cmd: PublishContent<br/>POST /product-contents/catalogItemId/publications
     Note over PC: publish gate, state PUBLISHED,<br/>revision bumped
     PC->>K: evt: productcontent.<br/>ProductContentPublished
     PC-->>CM: cmd: reply 200 PUBLISHED
@@ -90,9 +90,9 @@ sequenceDiagram
     participant PD as product-discovery
     CM->>PC: cmd: CreateCategory<br/>POST /categories
     PC-->>CM: cmd: reply 201 category
-    CM->>PC: cmd: MoveCategory<br/>POST /categories/categoryId:move
+    CM->>PC: cmd: MoveCategory<br/>PUT /categories/categoryId/parent
     PC-->>CM: cmd: reply 200 category
-    CM->>PC: cmd: RenameCategory<br/>POST /categories/categoryId:rename
+    CM->>PC: cmd: RenameCategory<br/>PUT /categories/categoryId/name
     PC-->>CM: cmd: reply 200 category
     CM->>PC: cmd: PublishCategoryTree<br/>trigger not modelled
     Note over PC: state PUBLISHED,<br/>tree version bumped

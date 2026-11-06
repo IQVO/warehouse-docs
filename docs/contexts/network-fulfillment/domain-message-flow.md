@@ -7,7 +7,7 @@ sidebar_label: Domain Message Flow
 # Domain Message Flow
 
 :::info[Synced from network-fulfillment]
-This page is a copy of [`docs/ddd/domain-message-flow.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/ddd/domain-message-flow.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+This page is a copy of [`docs/docs/ddd/domain-message-flow.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/docs/ddd/domain-message-flow.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
 

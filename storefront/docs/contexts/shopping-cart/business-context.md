@@ -45,7 +45,7 @@ a `shopperId` reference when the shopper is signed in.
 | `checkout` (again) | Closes the cart when the purchase completes | Kafka `retailnetwork.checkout.events`, `CheckoutCompleted` |
 | `pricing` | Keeps the cart's views current: effective prices, tier charges, tax bands, withdrawals | Kafka `retailnetwork.pricing.events` |
 | `offer-availability` (network) | Reports catalogue items created and discontinued | Kafka `retailnetwork.offer-availability.events` |
-| `delivery-promise` (network) | Answers `QuoteDeliveryOffers` for the cart's lines and destination — the only synchronous call out | REST `POST /delivery-offers:quote` |
+| `delivery-promise` (network) | Answers `QuoteDeliveryOffers` for the cart's lines and destination — the only synchronous call out | REST `POST /delivery-quotes` |
 | Analytics consumers | Follow add-to-cart, quote, abandon and checkout funnels | Kafka `retailnetwork.shopping-cart.analytics` |
 
 The shopper is a synthetic person reached through `storefront-web` and the

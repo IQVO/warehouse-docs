@@ -65,7 +65,7 @@ reservation, and a transfer cannot be cancelled once the reservation exists.
 That is why REST and MCP stay unauthenticated fleet-wide yet the MCP server is
 read-only (ADR 0008): handing the approve action to an unauthenticated agent
 endpoint would let any in-cluster caller move stock. The Idempotency-Key header
-on `POST /v1/transfers:approve` makes retries safe, and a replay of the same
+on `POST /v1/transfer-approvals` makes retries safe, and a replay of the same
 key and payload returns the original transfer.
 
 ## No live cross-context calls
@@ -79,7 +79,7 @@ by the saga's audit trail and stuck detection, not by distributed transactions.
 
 - **The planner is only reachable with an explicit snapshot.** Positions,
   safety stock, target stock and lanes are request-body inputs to the diagnostic
-  `POST /v1/transfer-proposals:generate`. There is no persisted lane or policy
+  `POST /v1/transfer-proposal-runs`. There is no persisted lane or policy
   catalogue and no stock-position read model yet, so the read-model path
   (`GET /v1/transfer-simulations`) reports per-site demand, capacity and
   headroom rather than quantities to move, and the scheduled rebalance runs

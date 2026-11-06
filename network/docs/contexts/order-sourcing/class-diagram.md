@@ -322,7 +322,7 @@ projections, which are not domain classes.
 %%{init: {"flowchart": {"nodeSpacing": 14, "rankSpacing": 30}}}%%
 flowchart TB
     subgraph IN["internal/adapters/inbound"]
-        HTTP["http<br/>GET /assignments<br/>GET /assignments/id<br/>POST /assignments/id:reoptimise"]
+        HTTP["http<br/>GET /assignments<br/>GET /assignments/id<br/>POST /assignments/id/reoptimisations"]
         KC["kafka<br/>one consumer per topic,<br/>dispatch on full type"]
         SCHED["cmd/order-sourcing<br/>release timer, sweeps"]
     end

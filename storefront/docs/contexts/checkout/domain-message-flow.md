@@ -180,7 +180,7 @@ successful void (REST contract description). What the session does when the
 void itself fails is not in the model (hotspot H5). The shopper starts the
 next attempt from the cart, with a new session. The REST contract says the BFF
 writes the requoted offers into the cart as a new quote; the cart's
-`AcceptRequotedOffers` (`POST /carts/{cartId}/delivery/requoted`, hotspot H10)
+`AcceptRequotedOffers` (`POST /carts/{cartId}/delivery-requote-acceptances`, hotspot H10)
 takes them, though `storefront-bff` has no route for it yet. Omitted:
 the network's wire shapes (`offer-not-quotable`, `requotedOffers`), which are
 the ACL's concern; they are in the network model and customer-ordering's

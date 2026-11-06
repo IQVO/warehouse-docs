@@ -3334,7 +3334,7 @@
               "name": "OrderRepromised",
               "title": "Order Repromised (analytics)",
               "summary": "The promise for a shipment group moved — the re-promise-rate KPI's source fact (ADR 0014 §6 / ADR 0019).",
-              "description": "Published on the analytics topic since ADR 0019, closing a gap left when ADR 0018 shipped the RepromiseOrder consumer: this event was raised on the integration topic (warehouse.order-management.events) but never reached the analytics publisher's marshalData switch. Deliberately carries NO path_id, unlike every other analytics message on this channel — OrderRepromised itself has no process-path dimension in its domain event, and this data product tracks the re-promise-rate KPI fleet-wide rather than adding an OrderRepo lookup for a dimension nothing asked for (see ADR 0019's Decision §2 for the full reasoning). cpt_id_old/cpt_id_new are both omitempty for a LeadTime-basis promise on that side, same as the integration-topic message.",
+              "description": "Published on the analytics topic since ADR 0019, closing a gap left when ADR 0018 shipped the RepromiseOrder consumer: this event was raised on the integration topic (warehouse.order-management.events) but never reached the analytics publisher's marshalData switch. Deliberately carries NO path_id, unlike every other analytics message on this channel — OrderRepromised itself has no process-path dimension in its domain event, and this data product tracks the re-promise-rate KPI fleet-wide rather than adding an OrderRepo lookup for a dimension nothing asked for (see ADR 0019's Decision §2 for the full reasoning). Unlike the integration-topic message, cpt_id_old/cpt_id_new are ALWAYS present on the analytics payload (no omitempty): the empty string for a LeadTime-basis promise on that side.",
               "tags": [
                 {
                   "name": "order"
@@ -3370,6 +3370,8 @@
                         "additionalProperties": false,
                         "required": [
                           "order_id",
+                          "cpt_id_old",
+                          "cpt_id_new",
                           "reason"
                         ],
                         "properties": {
@@ -3379,12 +3381,12 @@
                           },
                           "cpt_id_old": {
                             "type": "string",
-                            "description": "The CPT identity the affected group targeted BEFORE the recompute. Absent for a LeadTime-basis previous promise.",
+                            "description": "The CPT identity the affected group targeted BEFORE the recompute. Always present on the analytics payload; the empty string for a LeadTime-basis previous promise.",
                             "x-parser-schema-id": "<anonymous-schema-366>"
                           },
                           "cpt_id_new": {
                             "type": "string",
-                            "description": "The CPT identity the affected group targets AFTER the recompute. Absent for a LeadTime-basis new promise.",
+                            "description": "The CPT identity the affected group targets AFTER the recompute. Always present on the analytics payload; the empty string for a LeadTime-basis new promise.",
                             "x-parser-schema-id": "<anonymous-schema-367>"
                           },
                           "reason": {
@@ -3462,7 +3464,7 @@
               "name": "OrderReleaseUnconfirmed",
               "title": "Order Release Unconfirmed (analytics)",
               "summary": "A released line was never confirmed by wes-work-planning within the timeout.",
-              "description": "ADR 0043. Raised ONCE per line, by the housekeeping sweep, when a PENDING release confirmation is older than `RELEASE_CONFIRMATION_TIMEOUT` (default 15m) without a WorkUnitCreated naming it. A FACT, never an action: nothing is cancelled, re-released or retried because of it, and it is not retracted if a late confirmation arrives. Analytics-only — the integration topic `warehouse.order-management.events` keeps its three-event contract — and the in-repo projector ignores the type. `subject` and the Kafka key are the order id; `time` is when the line was flagged, `released_at` when it was released.",
+              "description": "ADR 0043. Raised ONCE per line, by the housekeeping sweep, when a PENDING release confirmation is older than `RELEASE_CONFIRMATION_TIMEOUT` (default 15m) without a WorkUnitCreated naming it. A FACT, never an action: nothing is cancelled, re-released or retried because of it, and it is not retracted if a late confirmation arrives. Analytics-only — the integration topic `warehouse.order-management.events` keeps its four-event contract (OrderAllocated, OrderPartiallyAllocated, OrderRepromised, SiteSkuDemandChanged) — and the in-repo projector ignores the type. `subject` and the Kafka key are the order id; `time` is when the line was flagged, `released_at` when it was released.",
               "tags": [
                 {
                   "name": "order-line"

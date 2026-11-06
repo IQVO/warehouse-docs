@@ -1,0 +1,30 @@
+name: Develop drift
+
+# Nightly run of the gate that build-check runs on every PR: warehouse-docs must agree with the `develop`
+# branch of every context repo (spec copies, cited REST routes, retired REST-guideline vocabulary).
+# A docs PR can be green and still go stale the day a producer merges; this job is what notices.
+# It is deliberately a separate workflow: docs.yml builds and deploys Pages on every non-PR event.
+
+on:
+  schedule:
+    - cron: "23 6 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: pip install pyyaml
+      - run: python3 scripts/test_check_develop_drift.py
+      - name: Compare with develop
+        run: python3 scripts/check-develop-drift.py --json drift.json
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+      - name: Findings (on failure)
+        if: failure()
+        run: test -f drift.json && python3 -c "import json;d=json.load(open('drift.json'));print(json.dumps(d['summary'],indent=1))" || true

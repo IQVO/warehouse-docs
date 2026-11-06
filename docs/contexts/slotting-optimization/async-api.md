@@ -73,8 +73,8 @@ Example from the spec (`SlotPlanRejected`):
 | Type (after `com.warehouse.wms.slotting-optimization.`) | Raised by | Payload |
 | --- | --- | --- |
 | `slotplan.SlotPlanGenerated` | `slotplan.Generate` through `POST /slot-plans` (`GeneratePlan`) | sizes only: `plan_id`, `site_id`, `window_from`, `window_to`, `policy`, `assignment_count`, `move_count`, `unassigned_count` |
-| `slotplan.SlotPlanApproved` | `SlotPlan.Approve` through `POST /slot-plans/{planId}/approve` (`ApprovePlan`) | the FULL `assignments` map (`{sku, slot}`), the `moves` (`Assign`, `Relocate`, `Vacate`), `approved_at`, and `supersedes_plan_id` when the site had an Approved plan |
-| `slotplan.SlotPlanRejected` | `SlotPlan.Reject` through `POST /slot-plans/{planId}/reject` (`RejectPlan`) | `rejected_at` and an optional `reason` |
+| `slotplan.SlotPlanApproved` | `SlotPlan.Approve` through `POST /slot-plans/{planId}/approvals` (`ApprovePlan`) | the FULL `assignments` map (`{sku, slot}`), the `moves` (`Assign`, `Relocate`, `Vacate`), `approved_at`, and `supersedes_plan_id` when the site had an Approved plan |
+| `slotplan.SlotPlanRejected` | `SlotPlan.Reject` through `POST /slot-plans/{planId}/rejections` (`RejectPlan`) | `rejected_at` and an optional `reason` |
 
 `Supersede` raises **no** event: consumers learn it from
 `supersedes_plan_id` on the newer `SlotPlanApproved`. Only `SlotPlanApproved`

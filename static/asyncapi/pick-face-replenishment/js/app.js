@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **pick-face-replenishment** bounded context (WMS\nsubdomain): min/max replenishment of forward pick faces from reserve bins\n(ADR 0001, ADR 0002).\n\n**Published.** The `ReplenishmentRequest` aggregate raises three events,\npublished to `warehouse.pick-face-replenishment.events` through a\n**transactional outbox**: the request row and its already-encoded events are\nwritten in ONE database transaction and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is stored with the outbox row, so a retry\nrepublishes the same `id`). `ReplenishmentRequested` is what wes-work-planning\nturns into `REPLENISH` work; `ReplenishmentCompleted` and\n`ReplenishmentCancelled` close the request. The same three types are mirrored\non `warehouse.pick-face-replenishment.analytics` (dataschema\n`urn:warehouse:pick-face-replenishment:analytics:<EventName>:v1`), together\nwith `ReplenishmentPolicyDeclared`, which is analytics-only.\n\n**Consumed (ADR 0003).** `BinStockLevelChanged` (pending producer change P1)\nand `StockRelocated` from inventory-storage, `SlotPlanApproved` from\nslotting-optimization, and `ZoneRegistered`, `LocationSlotRegistered` and\n`LocationSlotDecommissioned` from facility-layout. Each feeds a durable local\ncopy or closes a request (modes `INVENTORY_MODE`, `SLOTTING_MODE`,\n`LAYOUT_MODE`, default `permissive`; consumer groups from\n`INVENTORY_CONSUMER_GROUP`, `SLOTTING_CONSUMER_GROUP`,\n`LAYOUT_CONSUMER_GROUP`). The consumed messages below are the producers' own\ncontracts, decoded independently here and never imported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the outbox\nrow; consumers may extract them, and must not require them.\n`specversion`, `id`, `source` (`/warehouse/pick-face-replenishment`), `type`,\n`subject` (the request id; `<site_id>/<sku>` for the policy event), `time`,\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:pick-face-replenishment:<events|analytics>:<EventName>:v1`)\nare all required. Kafka key = the subject. Type =\n`com.warehouse.wms.pick-face-replenishment.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
+    "description": "Event catalog for the **pick-face-replenishment** bounded context (WMS\nsubdomain): min/max replenishment of forward pick faces from reserve bins\n(ADR 0001, ADR 0002).\n\n**Published.** The `ReplenishmentRequest` aggregate raises three events,\npublished to `warehouse.pick-face-replenishment.events` through a\n**transactional outbox**: the request row and its already-encoded events are\nwritten in ONE database transaction and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is stored with the outbox row, so a retry\nrepublishes the same `id`). `ReplenishmentRequested` is what wes-work-planning\nturns into `REPLENISH` work; `ReplenishmentCompleted` and\n`ReplenishmentCancelled` close the request. The same three types are mirrored\non `warehouse.pick-face-replenishment.analytics` (dataschema\n`urn:warehouse:pick-face-replenishment:analytics:<EventName>:v1`), together\nwith `ReplenishmentPolicyDeclared`, which is analytics-only.\n\n**Consumed (ADR 0003).** `BinStockLevelChanged` (pending producer change P1)\nand `StockRelocated` from inventory-storage, `SlotPlanApproved` from\nslotting-optimization, and `ZoneRegistered`, `LocationSlotRegistered` and\n`LocationSlotDecommissioned` from facility-layout. Each feeds a durable local\ncopy or closes a request (modes `INVENTORY_MODE`, `SLOTTING_MODE`,\n`LAYOUT_MODE`, `PACK_LEVEL_MODE`: default and only accepted value `kafka`,\n`permissive` is rejected at boot; consumer groups are required, from\n`INVENTORY_CONSUMER_GROUP`, `SLOTTING_CONSUMER_GROUP`,\n`LAYOUT_CONSUMER_GROUP`, `PACK_LEVEL_CONSUMER_GROUP`). A message that fails\ndeterministically, or after the bounded retries, is published to\n`<topic>.dlq` with `x-dlq-*` headers. `ProductPackLevelDeclared` and\n`ProductPackLevelRetired` from product-master are consumed as well. The consumed messages below are the producers' own\ncontracts, decoded independently here and never imported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the outbox\nrow; consumers may extract them, and must not require them.\n`specversion`, `id`, `source` (`/warehouse/pick-face-replenishment`), `type`,\n`subject` (the request id; `<site_id>/<sku>` for the policy event), `time`,\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:pick-face-replenishment:<events|analytics>:<EventName>:v1`)\nare all required. Kafka key = the subject. Type =\n`com.warehouse.wms.pick-face-replenishment.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
   },
   "servers": {
     "production": {
@@ -661,7 +661,7 @@
       }
     },
     "warehouse.product-master.events": {
-      "description": "product-master's integration topic. Consumed for `ProductPackLevelDeclared`\nand `ProductPackLevelRetired` (packaging view: the eaches factor per pack\nlevel that min/max and request quantities are converted with), consumer\ngroup from env `PRODUCT_MASTER_CONSUMER_GROUP`.\n",
+      "description": "product-master's integration topic. Consumed for `ProductPackLevelDeclared`\nand `ProductPackLevelRetired` (packaging view: the eaches factor per pack\nlevel that min/max and request quantities are converted with), consumer\ngroup from env `PACK_LEVEL_CONSUMER_GROUP` (when `PACK_LEVEL_MODE=kafka`).\n",
       "publish": {
         "operationId": "applyProductMasterPackLevel",
         "summary": "Apply product-master pack-level facts to the local packaging copy.",
@@ -672,7 +672,7 @@
               "name": "ProductPackLevelDeclared",
               "title": "product-master ProductPackLevelDeclared (consumed)",
               "summary": "A pack level (EACH, INNER, CASE or PALLET) of a SKU was declared, or one of its mutable attributes changed.",
-              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelDeclared`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductPackLevelDeclared:v1`; subject and\nkey = the SKU. Produced by product-master; consumed into the local\npackaging view (pack level -> eaches factor for case-level scans).\n",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelDeclared`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductPackLevelDeclared:v1`; subject and\nkey = the SKU. Produced by product-master; consumed into the local\npackaging view (pack level -> eaches factor for case-level scans).\nNOTE: the consumer decodes camelCase keys (`unitsPerPack`, `effectiveFrom`),\nwhile product-master's encoder writes snake_case (`units_per_pack`,\n`effective_from`); see the PR notes.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -691,10 +691,8 @@
                           "sku",
                           "level",
                           "gtin",
-                          "units_per_pack",
-                          "is_orderable",
-                          "is_despatch_unit",
-                          "effective_from",
+                          "unitsPerPack",
+                          "effectiveFrom",
                           "version"
                         ],
                         "properties": {
@@ -729,11 +727,11 @@
                             "description": "Absent for EACH.",
                             "x-parser-schema-id": "<anonymous-schema-53>"
                           },
-                          "units_per_pack": {
+                          "unitsPerPack": {
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 1000000,
-                            "description": "Direct factor to eaches; 1 for EACH.",
+                            "description": "Direct factor to eaches; 1 for EACH. The consumer decodes this camelCase key (see the product-master note in the message).",
                             "x-parser-schema-id": "<anonymous-schema-54>"
                           },
                           "is_orderable": {
@@ -744,9 +742,10 @@
                             "type": "boolean",
                             "x-parser-schema-id": "<anonymous-schema-56>"
                           },
-                          "effective_from": {
+                          "effectiveFrom": {
                             "type": "string",
                             "format": "date-time",
+                            "description": "camelCase key as decoded by the consumer.",
                             "x-parser-schema-id": "<anonymous-schema-57>"
                           },
                           "version": {
@@ -787,8 +786,7 @@
                           "sku",
                           "level",
                           "gtin",
-                          "effective_to",
-                          "reason",
+                          "effectiveTo",
                           "version"
                         ],
                         "properties": {
@@ -811,15 +809,17 @@
                             "pattern": "^[0-9]{14}$",
                             "x-parser-schema-id": "<anonymous-schema-63>"
                           },
-                          "effective_to": {
+                          "effectiveTo": {
                             "type": "string",
                             "format": "date-time",
+                            "description": "camelCase key as decoded by the consumer.",
                             "x-parser-schema-id": "<anonymous-schema-64>"
                           },
                           "reason": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 200,
+                            "description": "Sent by the producer; this consumer does not read it.",
                             "x-parser-schema-id": "<anonymous-schema-65>"
                           },
                           "version": {
@@ -858,7 +858,7 @@
               "name": "BinStockLevelChanged",
               "title": "BinStockLevelChanged (consumed, inventory-storage)",
               "summary": "The absolute on-hand and reserved level of one SKU in one bin changed.",
-              "description": "PENDING PRODUCER CHANGE P1: inventory-storage does not publish this type\nyet; this contract is pinned consumer-first and the producer will match it.\n`type` = `com.warehouse.wms.inventory-storage.stock.BinStockLevelChanged`,\nsource `/warehouse/inventory-storage`, dataschema\n`urn:warehouse:inventory-storage:events:BinStockLevelChanged:v1`. Subject\nand Kafka key = `<bin>:<sku>`. `on_hand` and `reserved` are ABSOLUTE\nlevels after the change, not deltas; `reserved` is the units of this bin\nbound by active reservations. Keep the highest `version` per bin and SKU\nand ignore lower ones. Ignore unknown `reason` values.\n",
+              "description": "PENDING PRODUCER CHANGE P1: inventory-storage does not publish this type\nyet; this contract is pinned consumer-first and the producer will match it.\n`type` = `com.warehouse.wms.inventory-storage.stock.BinStockLevelChanged`,\nsource `/warehouse/inventory-storage`, dataschema\n`urn:warehouse:inventory-storage:events:BinStockLevelChanged:v1`. Subject\nand Kafka key = `<bin>:<sku>`. `on_hand` and `reserved` are ABSOLUTE\nlevels after the change, not deltas; `reserved` is the units of this bin\nbound by active reservations. Keep the highest `version` per bin and SKU\nand ignore lower ones. The consumer reads only `site_code`, `bin`, `sku`,\n`on_hand`, `reserved` and `version`; `reason` is not read.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -879,9 +879,7 @@
                           "sku",
                           "on_hand",
                           "reserved",
-                          "version",
-                          "reason",
-                          "occurred_at"
+                          "version"
                         ],
                         "properties": {
                           "site_code": {
@@ -917,12 +915,13 @@
                           },
                           "reason": {
                             "type": "string",
-                            "description": "STOW, PICK, RELOCATE, REPLENISHMENT, COUNT, RESERVE, REVOKE or UNLOCATED; unknown values are ignored.",
+                            "description": "Sent by the producer; this consumer does not read it.",
                             "x-parser-schema-id": "<anonymous-schema-75>"
                           },
                           "occurred_at": {
                             "type": "string",
                             "format": "date-time",
+                            "description": "Sent by the producer; this consumer does not read it.",
                             "x-parser-schema-id": "<anonymous-schema-76>"
                           }
                         },
@@ -988,8 +987,7 @@
                           "to_bin",
                           "quantity",
                           "reason",
-                          "source_ref",
-                          "occurred_at"
+                          "source_ref"
                         ],
                         "properties": {
                           "relocation_id": {
@@ -1031,6 +1029,7 @@
                           "occurred_at": {
                             "type": "string",
                             "format": "date-time",
+                            "description": "Sent by the producer; this consumer does not read it.",
                             "x-parser-schema-id": "<anonymous-schema-87>"
                           }
                         },
@@ -1108,8 +1107,7 @@
                       "plan_id",
                       "site_id",
                       "approved_at",
-                      "assignments",
-                      "moves"
+                      "assignments"
                     ],
                     "properties": {
                       "plan_id": {
@@ -1127,7 +1125,7 @@
                       },
                       "supersedes_plan_id": {
                         "type": "string",
-                        "description": "Omitted when the site had no Approved plan.",
+                        "description": "Sent by the producer; this consumer does not read it.",
                         "x-parser-schema-id": "<anonymous-schema-93>"
                       },
                       "assignments": {
@@ -1156,6 +1154,7 @@
                       },
                       "moves": {
                         "type": "array",
+                        "description": "Sent by the producer; this consumer does not read it.",
                         "items": {
                           "type": "object",
                           "required": [
@@ -1281,10 +1280,7 @@
                         "required": [
                           "zoneId",
                           "siteCode",
-                          "areaCode",
-                          "zoneCode",
-                          "temperatureClass",
-                          "hazmat"
+                          "zoneCode"
                         ],
                         "properties": {
                           "zoneId": {
@@ -1374,11 +1370,7 @@
                         "type": "object",
                         "required": [
                           "locationCode",
-                          "aisleId",
-                          "zoneId",
-                          "locationType",
-                          "maxWeightKg",
-                          "maxVolumeM3"
+                          "zoneId"
                         ],
                         "properties": {
                           "locationCode": {

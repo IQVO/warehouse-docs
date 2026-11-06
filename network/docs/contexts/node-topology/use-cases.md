@@ -28,11 +28,11 @@ read the repositories directly; an unknown id answers 404.
 | --- | --- | --- | --- |
 | `RegisterNode` | `vendor-connectivity` (vendor node) or network-ops planner (network node) | REST `POST /nodes` | `NodeRegistered` |
 | `DeclareOperationalProfile` | `vendor-connectivity` (`declaredBy` `VENDOR`) or network-ops planner (`declaredBy` `NETWORK_OPS`) | REST `PUT /nodes/{nodeId}/operational-profile` | `NodeOperationalProfileDeclared` |
-| `ActivateNode` | network-ops planner | REST `POST /nodes/{nodeId}:activate` | `NodeActivated` |
-| `SuspendNode` | network-ops planner | REST `POST /nodes/{nodeId}:suspend` | `NodeSuspended` |
-| `RetireNode` | network-ops planner | REST `POST /nodes/{nodeId}:retire` | `NodeRetired` |
+| `ActivateNode` | network-ops planner | REST `POST /nodes/{nodeId}/activations` | `NodeActivated` |
+| `SuspendNode` | network-ops planner | REST `POST /nodes/{nodeId}/suspensions` | `NodeSuspended` |
+| `RetireNode` | network-ops planner | REST `POST /nodes/{nodeId}/retirements` | `NodeRetired` |
 | `OpenLane` | network-ops planner | REST `POST /lanes` | `LaneOpened` |
-| `CloseLane` | network-ops planner | REST `POST /lanes/{laneId}:close` | `LaneClosed` |
+| `CloseLane` | network-ops planner | REST `POST /lanes/{laneId}/closures` | `LaneClosed` |
 | `AssignServiceArea` | network-ops planner | REST `PUT /service-areas/{postalPrefix}` | `ServiceAreaAssigned` |
 | `DefineRegion` | network-ops planner | REST `POST /regions` | `RegionDefined` |
 
@@ -156,7 +156,7 @@ Problems are `application/problem+json` (RFC 9457) with `type`, `title`,
 ## ActivateNode
 
 - **Actor / trigger**: network-ops planner.
-- **Inbound adapter**: REST `POST /nodes/{nodeId}:activate`.
+- **Inbound adapter**: REST `POST /nodes/{nodeId}/activations`.
 - **Preconditions**: the node is `PROPOSED` or `SUSPENDED`. A
   `FULFILLMENT_CENTER` has a current profile with at least one cutoff and a
   handling time above zero.
@@ -181,7 +181,7 @@ Problems are `application/problem+json` (RFC 9457) with `type`, `title`,
 ## SuspendNode
 
 - **Actor / trigger**: network-ops planner.
-- **Inbound adapter**: REST `POST /nodes/{nodeId}:suspend`.
+- **Inbound adapter**: REST `POST /nodes/{nodeId}/suspensions`.
 - **Input**: `reason`.
 - **Preconditions**: the node is `ACTIVE`.
 - **Main flow**:
@@ -203,7 +203,7 @@ Problems are `application/problem+json` (RFC 9457) with `type`, `title`,
 ## RetireNode
 
 - **Actor / trigger**: network-ops planner.
-- **Inbound adapter**: REST `POST /nodes/{nodeId}:retire`.
+- **Inbound adapter**: REST `POST /nodes/{nodeId}/retirements`.
 - **Preconditions**: the node is `ACTIVE` or `SUSPENDED`.
 - **Main flow**:
   1. Load the `Node`.
@@ -256,7 +256,7 @@ Problems are `application/problem+json` (RFC 9457) with `type`, `title`,
 ## CloseLane
 
 - **Actor / trigger**: network-ops planner.
-- **Inbound adapter**: REST `POST /lanes/{laneId}:close`.
+- **Inbound adapter**: REST `POST /lanes/{laneId}/closures`.
 - **Preconditions**: the lane is `OPEN`.
 - **Main flow**:
   1. Load the `Lane`.

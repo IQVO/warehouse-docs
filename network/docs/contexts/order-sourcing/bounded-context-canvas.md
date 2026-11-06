@@ -206,7 +206,7 @@ It holds no PII and calls no other context synchronously.
 | `node-performance` | `NodeScorecardUpdated` | Event | Kafka `retailnetwork.node-performance.events`, `com.retailnetwork.partner.node-performance.scorecard.NodeScorecardUpdated` | Conformist |
 | Network-ops planner | `ListAssignments` | Query | REST `GET /assignments?state=&nodeId=&orderId=` | UI |
 | Network-ops planner | `GetAssignment` | Query | REST `GET /assignments/{assignmentId}` | UI |
-| Network-ops planner | `ReoptimiseAssignment` | Command | REST `POST /assignments/{assignmentId}:reoptimise` | UI (the route is in `rest`; the model's `inbound` list names only the two queries, see Open Questions) |
+| Network-ops planner | `ReoptimiseAssignment` | Command | REST `POST /assignments/{assignmentId}/reoptimisations` | UI (the route is in `rest`; the model's `inbound` list names only the two queries, see Open Questions) |
 | Own scheduler | `ReleaseToNode` | Command | internal timer at `releaseAt` (`VirtualQueue`); immediately for `SAME_DAY` | Internal |
 | Own scheduler | `ReoptimiseAssignment` | Command | internal re-optimisation sweep over `QUEUED` assignments | Internal |
 
@@ -337,7 +337,7 @@ resolved here.
   `PackageDelivered` is per package. Whether `MarkDelivered` waits for every
   package is not stated.
 - **The re-optimise route has no `inbound` row.**
-  `POST /assignments/{assignmentId}:reoptimise` is in `rest`; the `inbound`
+  `POST /assignments/{assignmentId}/reoptimisations` is in `rest`; the `inbound`
   list names only the planner's two queries.
 - **Reason vocabularies.** `FulfillmentReassigned.reason`,
   `FulfillmentLocked.lockReason`, `FulfillmentUnsourceable.reason`,

@@ -53,7 +53,7 @@ The ability to draft, check and publish a capacity plan with its shortages and b
 | --- | --- | --- | --- | --- | --- |
 | 1.3.1 | Capacity Plan Drafting | The ability to create a draft capacity plan and compute its shortage. | [warehouse-planning](/contexts/warehouse-planning) | `REST POST /capacity-plans`<br/>`event CapacityPlanCreated`<br/>`event CapacityShortageDetected`<br/>`MCP create_capacity_plan` | Implemented |
 | 1.3.2 | Bottleneck Detection | The ability to name the step and binding constraint that limit a plan. | [warehouse-planning](/contexts/warehouse-planning) | `event BottleneckDetected` | Implemented |
-| 1.3.3 | Capacity Plan Publication | The ability to publish a plan so that order promising and network planning can act on it. | [warehouse-planning](/contexts/warehouse-planning) | `REST POST /capacity-plans/{id}/publish`<br/>`event CapacityPlanPublished`<br/>`MCP publish_capacity_plan` | Implemented |
+| 1.3.3 | Capacity Plan Publication | The ability to publish a plan so that order promising and network planning can act on it. | [warehouse-planning](/contexts/warehouse-planning) | `REST POST /capacity-plans/{id}/publications`<br/>`event CapacityPlanPublished`<br/>`MCP publish_capacity_plan` | Implemented |
 
 ## L1 2 Operations Performance Management
 
@@ -106,7 +106,7 @@ The ability to commit usable stock to an order's lines.
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
 | 3.2.1 | Stock Allocation | The ability to reserve usable inventory for each order line, fully or partially. | [order-management](/contexts/order-management), [inventory-storage](/contexts/inventory-storage) | `REST POST /reservations (called on inventory-storage)`<br/>`event OrderAllocated`<br/>`event OrderPartiallyAllocated` | Implemented |
-| 3.2.2 | Backorder Recovery | The ability to re-attempt allocation of backordered lines and then release. | [order-management](/contexts/order-management) | `REST POST /orders/{id}/retry-allocation`<br/>`event OrderLineBackordered (analytics)` | Implemented |
+| 3.2.2 | Backorder Recovery | The ability to re-attempt allocation of backordered lines and then release. | [order-management](/contexts/order-management) | `REST POST /orders/{id}/allocation-retries`<br/>`event OrderLineBackordered (analytics)` | Implemented |
 | 3.2.3 | Demand Signal Publication | The ability to tell planners how demand per site and SKU changes. | [order-management](/contexts/order-management) | `event SiteSkuDemandChanged` | Implemented |
 
 ### L2 3.3 Order Promising
@@ -125,7 +125,7 @@ The ability to hold an order at intake, release it, or cancel it.
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 3.4.1 | Held Order Release | The ability to release an order held at intake. | [order-management](/contexts/order-management) | `REST POST /orders/{id}/release`<br/>`event OrderReleased (analytics)` | Implemented |
+| 3.4.1 | Held Order Release | The ability to release an order held at intake. | [order-management](/contexts/order-management) | `REST POST /orders/{id}/releases`<br/>`event OrderReleased (analytics)` | Implemented |
 | 3.4.2 | Order Cancellation | The ability to cancel an order and revoke its reservations. | [order-management](/contexts/order-management) | `REST DELETE /orders/{id}`<br/>`event OrderCancelled (analytics)` | Implemented |
 
 ## L1 4 Channel Management
@@ -177,7 +177,7 @@ The ability to know what is coming before it arrives.
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
 | 5.1.1 | ASN Registration | The ability to register, read and list advance ship notices. | [inbound-receiving](/contexts/inbound-receiving) | `REST POST /asns`<br/>`REST GET /asns/{asnNumber}`<br/>`event ASNRegistered`<br/>`MCP get_asn` | Implemented |
-| 5.1.2 | ASN Cancellation | The ability to cancel an advance ship notice. | [inbound-receiving](/contexts/inbound-receiving) | `REST POST /asns/{asnNumber}/cancel`<br/>`event ASNCancelled` | Implemented |
+| 5.1.2 | ASN Cancellation | The ability to cancel an advance ship notice. | [inbound-receiving](/contexts/inbound-receiving) | `REST POST /asns/{asnNumber}/cancellations`<br/>`event ASNCancelled` | Implemented |
 
 ### L2 5.2 Dock Appointment Scheduling
 
@@ -185,8 +185,8 @@ The ability to book dock doors and windows and track carriers through them.
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 5.2.1 | Appointment Booking | The ability to book and cancel a dock appointment against a dock door. | [inbound-receiving](/contexts/inbound-receiving) | `REST POST /appointments`<br/>`REST POST /appointments/{appointmentId}/cancel`<br/>`REST GET /docks`<br/>`event DockAppointmentBooked` | Implemented |
-| 5.2.2 | Carrier Check-in | The ability to check a carrier in and complete the appointment when its receipt closes. | [inbound-receiving](/contexts/inbound-receiving) | `REST POST /appointments/{appointmentId}/check-in`<br/>`event DockAppointmentCheckedIn`<br/>`event DockAppointmentCompleted` | Implemented |
+| 5.2.1 | Appointment Booking | The ability to book and cancel a dock appointment against a dock door. | [inbound-receiving](/contexts/inbound-receiving) | `REST POST /appointments`<br/>`REST POST /appointments/{appointmentId}/cancellations`<br/>`REST GET /docks`<br/>`event DockAppointmentBooked` | Implemented |
+| 5.2.2 | Carrier Check-in | The ability to check a carrier in and complete the appointment when its receipt closes. | [inbound-receiving](/contexts/inbound-receiving) | `REST POST /appointments/{appointmentId}/check-ins`<br/>`event DockAppointmentCheckedIn`<br/>`event DockAppointmentCompleted` | Implemented |
 
 ### L2 5.3 Receiving
 
@@ -194,7 +194,7 @@ The ability to count what arrived against what was expected and record the discr
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 5.3.1 | Receipt Management | The ability to open and close a receipt. | [inbound-receiving](/contexts/inbound-receiving) | `REST POST /receipts`<br/>`REST POST /receipts/{receiptId}/close`<br/>`event ReceiptOpened`<br/>`event ReceiptClosed` | Implemented |
+| 5.3.1 | Receipt Management | The ability to open and close a receipt. | [inbound-receiving](/contexts/inbound-receiving) | `REST POST /receipts`<br/>`REST POST /receipts/{receiptId}/closures`<br/>`event ReceiptOpened`<br/>`event ReceiptClosed` | Implemented |
 | 5.3.2 | Receipt Line Recording | The ability to receive a quantity against a line with its condition: good, short, over or damaged. | [inbound-receiving](/contexts/inbound-receiving) | `REST POST /receipts/{receiptId}/lines`<br/>`event ReceiptLineReceived` | Implemented |
 
 ### L2 5.4 Inbound Handover
@@ -203,7 +203,7 @@ The ability to hand received good units to inventory.
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 5.4.1 | Received Stock Booking | The ability to book received good units into the stock ledger. | [inventory-storage](/contexts/inventory-storage), [inbound-receiving](/contexts/inbound-receiving) | `event ReceiptLineReceived (consumed by inventory-storage)`<br/>`REST POST /stock/receive`<br/>`event StockReceived (analytics)` | Implemented |
+| 5.4.1 | Received Stock Booking | The ability to book received good units into the stock ledger. | [inventory-storage](/contexts/inventory-storage), [inbound-receiving](/contexts/inbound-receiving) | `event ReceiptLineReceived (consumed by inventory-storage)`<br/>`REST POST /stock-receipts`<br/>`event StockReceived (analytics)` | Implemented |
 
 ## L1 6 Inventory Management
 
@@ -215,7 +215,7 @@ The ability to place received stock into a bin that is allowed to hold it.
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 6.1.1 | Validated Stow | The ability to stow stock into a bin, checked against zone and location attributes and the product's handling class, hazmat placement and DOT segregation included. | [inventory-storage](/contexts/inventory-storage) | `REST POST /stock/stow`<br/>`event ItemStowed (analytics)` | Implemented |
+| 6.1.1 | Validated Stow | The ability to stow stock into a bin, checked against zone and location attributes and the product's handling class, hazmat placement and DOT segregation included. | [inventory-storage](/contexts/inventory-storage) | `REST POST /stowages`<br/>`event ItemStowed (analytics)` | Implemented |
 
 ### L2 6.2 Inventory Reservation
 
@@ -225,7 +225,7 @@ The ability to commit usable stock to demand and to release that commitment.
 | --- | --- | --- | --- | --- | --- |
 | 6.2.1 | Reservation | The ability to create a revocable reservation against usable inventory. | [inventory-storage](/contexts/inventory-storage) | `REST POST /reservations`<br/>`event StockReserved` | Implemented |
 | 6.2.2 | Reservation Revocation and Expiry | The ability to revoke a reservation or let it expire. | [inventory-storage](/contexts/inventory-storage) | `REST DELETE /reservations/{id}`<br/>`event ReservationRevoked`<br/>`event ReservationExpired (analytics)`<br/>`MCP revoke_reservation` | Implemented |
-| 6.2.3 | Pick Confirmation | The ability to confirm the physical pick of a reservation. | [inventory-storage](/contexts/inventory-storage) | `REST POST /reservations/{id}/confirm-pick`<br/>`event TaskCompleted (consumed)`<br/>`event StockPicked (analytics)` | Implemented |
+| 6.2.3 | Pick Confirmation | The ability to confirm the physical pick of a reservation. | [inventory-storage](/contexts/inventory-storage) | `REST POST /reservations/{id}/pick-confirmations`<br/>`event TaskCompleted (consumed)`<br/>`event StockPicked (analytics)` | Implemented |
 
 ### L2 6.3 Inventory Visibility
 
@@ -244,7 +244,7 @@ The ability to keep the ledger equal to what is physically in the bins.
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
 | 6.4.1 | Bin Registration | The ability to register a bin or converge it to a capacity. | [inventory-storage](/contexts/inventory-storage) | `REST PUT /bins/{binId}` | Implemented |
-| 6.4.2 | Cycle Counting | The ability to record a physical count and detect discrepancies. | [inventory-storage](/contexts/inventory-storage) | `REST POST /bins/{binId}/cycle-count`<br/>`event CycleCountCompleted (analytics)`<br/>`event DiscrepancyDetected (analytics)` | Implemented |
+| 6.4.2 | Cycle Counting | The ability to record a physical count and detect discrepancies. | [inventory-storage](/contexts/inventory-storage) | `REST POST /bins/{binId}/cycle-counts`<br/>`event CycleCountCompleted (analytics)`<br/>`event DiscrepancyDetected (analytics)` | Implemented |
 
 ### L2 6.5 Internal Stock Movement
 
@@ -261,7 +261,7 @@ The ability to perform the inventory legs of an inter-warehouse transfer.
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
 | 6.6.1 | Transfer Stock Allocation | The ability to allocate or reject stock for a transfer at the origin. | [inventory-storage](/contexts/inventory-storage) | `event TransferAllocationRequested (consumed)`<br/>`event TransferStockAllocated`<br/>`event TransferStockAllocationRejected` | Implemented |
-| 6.6.2 | Transfer Receipt and Stow | The ability to count a transfer's arrival and stow it at the destination. | [inventory-storage](/contexts/inventory-storage) | `REST POST /transfers/{transferLineId}/receipt`<br/>`REST POST /transfers/{transferLineId}/stow`<br/>`event TransferReceiptStaged`<br/>`event TransferStockStowed` | Implemented |
+| 6.6.2 | Transfer Receipt and Stow | The ability to count a transfer's arrival and stow it at the destination. | [inventory-storage](/contexts/inventory-storage) | `REST POST /transfers/{transferLineId}/receipt`<br/>`REST POST /transfers/{transferLineId}/stowages`<br/>`event TransferReceiptStaged`<br/>`event TransferStockStowed` | Implemented |
 
 ## L1 7 Warehouse Work Orchestration
 
@@ -284,7 +284,7 @@ The ability to admit work into the floor continuously, in priority order, within
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 7.2.1 | Waveless Priority Release | The ability to release the next highest-priority work unit, earliest CPT first. | [wes-work-planning](/contexts/wes-work-planning) | `REST POST /paths/{pathId}/release`<br/>`event WorkReleased`<br/>`MCP release_next_work` | Implemented |
+| 7.2.1 | Waveless Priority Release | The ability to release the next highest-priority work unit, earliest CPT first. | [wes-work-planning](/contexts/wes-work-planning) | `REST POST /paths/{pathId}/work-releases`<br/>`event WorkReleased`<br/>`MCP release_next_work` | Implemented |
 | 7.2.2 | Work Pool Configuration | The ability to set a path's feed mode and WIP limit. | [wes-work-planning](/contexts/wes-work-planning) | `REST PUT /paths/{pathId}/pool` | Implemented |
 | 7.2.3 | Path Throttling | The ability to throttle release on a path that is overloading the flow. | [wes-work-planning](/contexts/wes-work-planning) | `event PathThrottled` | Implemented |
 
@@ -295,7 +295,7 @@ The ability to watch the flow across paths and correct it.
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
 | 7.3.1 | Backlog Telemetry | The ability to sample a path's live backlog and flag a breached threshold. | [wes-work-planning](/contexts/wes-work-planning) | `REST GET /paths/{pathId}/telemetry`<br/>`event BacklogThresholdBreached`<br/>`MCP get_backlog_telemetry` | Implemented |
-| 7.3.2 | Rebalance Recommendation | The ability to recommend moving labor between paths. | [wes-work-planning](/contexts/wes-work-planning) | `REST GET /paths/{pathId}/rebalance`<br/>`event LaborReassignmentFlagged`<br/>`MCP get_rebalance_recommendation`<br/>`MCP balance_flow` | Implemented |
+| 7.3.2 | Rebalance Recommendation | The ability to recommend moving labor between paths. | [wes-work-planning](/contexts/wes-work-planning) | `REST POST /paths/{pathId}/rebalance-decisions`<br/>`event LaborReassignmentFlagged`<br/>`MCP get_rebalance_recommendation`<br/>`MCP balance_flow` | Implemented |
 | 7.3.3 | Rate Deviation Detection | The ability to detect a path running off its expected rate. | [wes-work-planning](/contexts/wes-work-planning) | `event RateDeviationDetected` | Implemented |
 | 7.3.4 | Path Capacity Publication | The ability to publish a path's current capacity to order promising. | [wes-work-planning](/contexts/wes-work-planning) | `event PathCapacityChanged` | Implemented |
 
@@ -315,7 +315,7 @@ The ability to close the loop from released work back to completed work.
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 7.5.1 | Work Unit Completion | The ability to record that a released work unit is complete. | [wes-work-planning](/contexts/wes-work-planning) | `REST POST /work-units/{id}/complete`<br/>`event TaskCompleted (consumed)`<br/>`event WorkUnitCompleted` | Implemented |
+| 7.5.1 | Work Unit Completion | The ability to record that a released work unit is complete. | [wes-work-planning](/contexts/wes-work-planning) | `REST POST /work-units/{id}/completions`<br/>`event TaskCompleted (consumed)`<br/>`event WorkUnitCompleted` | Implemented |
 | 7.5.2 | Work Unit Inquiry | The ability to find work units by identity or by order line. | [wes-work-planning](/contexts/wes-work-planning) | `REST GET /work-units`<br/>`REST GET /work-units/{id}` | Implemented |
 
 ## L1 8 Warehouse Task Execution
@@ -329,10 +329,10 @@ The ability to give each station the best-fit task and keep tasks moving.
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
 | 8.1.1 | Task Creation | The ability to turn released work into a task in the pool. | [fulfillment-execution](/contexts/fulfillment-execution) | `event WorkReleased (consumed)`<br/>`REST POST /tasks`<br/>`event TaskCreated (analytics)` | Implemented |
-| 8.1.2 | Pull Dispatch | The ability to hand the best-fit pending task, earliest CPT first, to the station that asks. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /stations/{stationId}/claim-next`<br/>`MCP find_claimable_work` | Implemented |
-| 8.1.3 | Lease Management | The ability to keep a claimed task leased, renew it, and return expired leases to the pool. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /tasks/{id}/renew-lease`<br/>`REST POST /tasks/expire-leases`<br/>`event LeaseExpired (analytics)` | Implemented |
-| 8.1.4 | Task Completion | The ability to complete a task for the station that claimed it. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /tasks/{id}/complete`<br/>`event TaskCompleted`<br/>`MCP complete_task` | Implemented |
-| 8.1.5 | Cutoff Miss Detection | The ability to report every open task whose CPT has passed. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /tasks/sweep-cpt-misses`<br/>`event TaskCPTMissed` | Implemented |
+| 8.1.2 | Pull Dispatch | The ability to hand the best-fit pending task, earliest CPT first, to the station that asks. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /stations/{stationId}/task-claims`<br/>`MCP find_claimable_work` | Implemented |
+| 8.1.3 | Lease Management | The ability to keep a claimed task leased, renew it, and return expired leases to the pool. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /tasks/{id}/lease-renewals`<br/>`REST POST /task-lease-expirations`<br/>`event LeaseExpired (analytics)` | Implemented |
+| 8.1.4 | Task Completion | The ability to complete a task for the station that claimed it. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /tasks/{id}/completions`<br/>`event TaskCompleted`<br/>`MCP complete_task` | Implemented |
+| 8.1.5 | Cutoff Miss Detection | The ability to report every open task whose CPT has passed. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /cpt-miss-sweeps`<br/>`event TaskCPTMissed` | Implemented |
 
 ### L2 8.2 Station Management
 
@@ -341,7 +341,7 @@ The ability to know which stations exist, what they can do and who occupies them
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
 | 8.2.1 | Station Registration | The ability to register a station with its capabilities. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /stations` | Implemented |
-| 8.2.2 | Station Occupancy | The ability to check a worker or robot into and out of a station. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /stations/{stationId}/check-in`<br/>`REST POST /stations/{stationId}/check-out` | Partial: Robots are modelled as occupants; no robot or equipment integration exists. |
+| 8.2.2 | Station Occupancy | The ability to check a worker or robot into and out of a station. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /stations/{stationId}/check-ins`<br/>`REST POST /stations/{stationId}/check-outs` | Partial: Robots are modelled as occupants; no robot or equipment integration exists. |
 | 8.2.3 | Installed Capacity Inquiry | The ability to answer how many stations hold a capability. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST GET /capacity/{capability}` | Implemented |
 
 ### L2 8.3 Outbound Order Processing
@@ -352,8 +352,8 @@ The ability to pick, consolidate, pack and verify an order's units.
 | --- | --- | --- | --- | --- | --- |
 | 8.3.1 | Picking | The ability to execute pick tasks. | [fulfillment-execution](/contexts/fulfillment-execution) | `task type PICK`<br/>`event ItemPicked (analytics)` | Implemented |
 | 8.3.2 | Rebin Consolidation | The ability to consolidate an order's picked lines into its rebin slot. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /rebin/arrivals`<br/>`task type REBIN` | Implemented |
-| 8.3.3 | Package Sealing | The ability to seal a package with a segregation check of its contents. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /tasks/{id}/seal-package`<br/>`event PackageSealed (analytics)` | Implemented |
-| 8.3.4 | Shipment Verification | The ability to weigh-check a sealed package, then label and manifest it or divert it. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /packages/{id}/slam`<br/>`event PackageManifested`<br/>`event WeightDiscrepancyDetected (analytics)`<br/>`event PackageDiverted (analytics)` | Implemented |
+| 8.3.3 | Package Sealing | The ability to seal a package with a segregation check of its contents. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /tasks/{id}/package-seals`<br/>`event PackageSealed (analytics)` | Implemented |
+| 8.3.4 | Shipment Verification | The ability to weigh-check a sealed package, then label and manifest it or divert it. | [fulfillment-execution](/contexts/fulfillment-execution) | `REST POST /packages/{id}/slam-runs`<br/>`event PackageManifested`<br/>`event WeightDiscrepancyDetected (analytics)`<br/>`event PackageDiverted (analytics)` | Implemented |
 
 ### L2 8.4 Special Work Execution
 
@@ -383,7 +383,7 @@ The ability to find and propose inter-warehouse transfers from reproducible fact
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 9.1.1 | Transfer Proposal Generation | The ability to generate advisory transfer proposals from an explicit snapshot. | [network-inventory-planning](/contexts/network-inventory-planning) | `REST POST /v1/transfer-proposals:generate` | Implemented |
+| 9.1.1 | Transfer Proposal Generation | The ability to generate advisory transfer proposals from an explicit snapshot. | [network-inventory-planning](/contexts/network-inventory-planning) | `REST POST /v1/transfer-proposal-runs` | Implemented |
 | 9.1.2 | Transfer Simulation | The ability to simulate transfer options from local read models. | [network-inventory-planning](/contexts/network-inventory-planning) | `REST GET /v1/transfer-simulations`<br/>`MCP simulate_transfer_options` | Implemented |
 | 9.1.3 | Scheduled Rebalance Run | The ability to run rebalancing on a schedule and keep the result. | [network-inventory-planning](/contexts/network-inventory-planning) | `REST GET /v1/rebalance-runs`<br/>`event rebalanceRunCompleted (analytics)` | Implemented |
 
@@ -402,7 +402,7 @@ The ability to carry an approved transfer through allocation, floor work and des
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 9.3.1 | Transfer Approval | The ability to approve a proposal and start the transfer saga. | [network-inventory-planning](/contexts/network-inventory-planning) | `REST POST /v1/transfers:approve`<br/>`event TransferPlanApproved` | Implemented |
+| 9.3.1 | Transfer Approval | The ability to approve a proposal and start the transfer saga. | [network-inventory-planning](/contexts/network-inventory-planning) | `REST POST /v1/transfer-approvals`<br/>`event TransferPlanApproved` | Implemented |
 | 9.3.2 | Transfer Saga Coordination | The ability to request allocation, release transfer work and follow the facts each site publishes. | [network-inventory-planning](/contexts/network-inventory-planning) | `event TransferAllocationRequested`<br/>`event WorkDemandReleased`<br/>`event TransferPicked, TransferArrived, TransferStockStowed (consumed)` | Implemented |
 | 9.3.3 | Stuck Transfer Detection | The ability to detect a transfer that dwells too long in a state. | [network-inventory-planning](/contexts/network-inventory-planning) | `event TransferStuckDetected (analytics)`<br/>`MCP find_stuck_transfers` | Implemented |
 | 9.3.4 | Transfer Audit Trail | The ability to read a transfer with its audit trail. | [network-inventory-planning](/contexts/network-inventory-planning) | `REST GET /v1/transfers/{id}`<br/>`REST GET /v1/transfers`<br/>`MCP get_transfer` | Implemented |
@@ -418,8 +418,8 @@ The ability to know who is qualified and who is working right now.
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
 | 10.1.1 | Certification Management | The ability to add a certification to an associate. | [workforce-management](/contexts/workforce-management) | `REST POST /associates/{id}/certifications`<br/>`event AssociateCertified (analytics)` | Implemented |
-| 10.1.2 | Shift Attendance | The ability to start and end an associate's shift. | [workforce-management](/contexts/workforce-management) | `REST POST /associates/{id}/start-shift`<br/>`REST POST /associates/{id}/end-shift` | Implemented |
-| 10.1.3 | Break Tracking | The ability to log an associate's breaks. | [workforce-management](/contexts/workforce-management) | `REST POST /associates/{id}/break/start`<br/>`REST POST /associates/{id}/break/end` | Implemented |
+| 10.1.2 | Shift Attendance | The ability to start and end an associate's shift. | [workforce-management](/contexts/workforce-management) | `REST POST /associates/{id}/shift-starts`<br/>`REST POST /associates/{id}/shift-ends` | Implemented |
+| 10.1.3 | Break Tracking | The ability to log an associate's breaks. | [workforce-management](/contexts/workforce-management) | `REST POST /associates/{id}/break-starts`<br/>`REST POST /associates/{id}/break-ends` | Implemented |
 
 ### L2 10.2 Labor Planning
 
@@ -427,7 +427,7 @@ The ability to split a shift's headcount across process paths within installed c
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 10.2.1 | Path Head Proposal | The ability to propose planned heads for a path without committing them. | [workforce-management](/contexts/workforce-management) | `REST POST /paths/{pathId}/plan/propose`<br/>`MCP propose_path_heads` | Implemented |
+| 10.2.1 | Path Head Proposal | The ability to propose planned heads for a path without committing them. | [workforce-management](/contexts/workforce-management) | `REST POST /paths/{pathId}/plan-proposals`<br/>`MCP propose_path_heads` | Implemented |
 | 10.2.2 | Shift Plan Commitment | The ability to commit a shift's headcount split, capped by installed station capacity. | [workforce-management](/contexts/workforce-management) | `REST POST /shift-plans`<br/>`event ShiftPlanCommitted` | Implemented |
 | 10.2.3 | Staffing Gap Analysis | The ability to show where a committed plan is understaffed. | [workforce-management](/contexts/workforce-management) | `REST GET /sites/{siteCode}/shifts/{shiftId}/staffing-gap`<br/>`event PathUnderstaffed (analytics)`<br/>`MCP cover_staffing_gaps` | Implemented |
 
@@ -481,7 +481,7 @@ The ability to describe zones, aisles and fixed structures.
 | 11.2.1 | Zone Management | The ability to register behavioural zones inside a site. | [facility-layout](/contexts/facility-layout) | `REST POST /sites/{siteCode}/zones`<br/>`event ZoneRegistered` | Implemented |
 | 11.2.2 | Aisle Management | The ability to register aisles, cross-aisles and their travel centrelines. | [facility-layout](/contexts/facility-layout) | `REST POST /zones/{zoneId}/aisles`<br/>`REST POST /zones/{zoneId}/cross-aisles`<br/>`REST PUT /zones/{zoneId}/aisles/{aisleCode}/geometry` | Implemented |
 | 11.2.3 | Fixed Structure Management | The ability to register fixed structures of a site. | [facility-layout](/contexts/facility-layout) | `REST POST /sites/{siteCode}/structures`<br/>`event FixedStructureRegistered` | Implemented |
-| 11.2.4 | Layout Import | The ability to bulk-import a whole building's layout. | [facility-layout](/contexts/facility-layout) | `REST POST /locations/import`<br/>`event FacilityLayoutImported` | Implemented |
+| 11.2.4 | Layout Import | The ability to bulk-import a whole building's layout. | [facility-layout](/contexts/facility-layout) | `REST POST /location-imports`<br/>`event FacilityLayoutImported` | Implemented |
 
 ### L2 11.3 Location Management
 
@@ -490,7 +490,7 @@ The ability to define every coded location, its type, geometry, role and classif
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
 | 11.3.1 | Location Type Catalogue | The ability to register reusable slot classifications. | [facility-layout](/contexts/facility-layout) | `REST POST /location-types`<br/>`event LocationTypeRegistered` | Implemented |
-| 11.3.2 | Location Slot Lifecycle | The ability to register, shape and decommission a location slot. | [facility-layout](/contexts/facility-layout) | `REST POST /locations`<br/>`REST PUT /locations/{locationCode}/geometry`<br/>`REST POST /locations/{locationCode}/decommission`<br/>`event LocationSlotRegistered`<br/>`event LocationSlotDecommissioned` | Implemented |
+| 11.3.2 | Location Slot Lifecycle | The ability to register, shape and decommission a location slot. | [facility-layout](/contexts/facility-layout) | `REST POST /locations`<br/>`REST PUT /locations/{locationCode}/geometry`<br/>`REST POST /locations/{locationCode}/decommissionings`<br/>`event LocationSlotRegistered`<br/>`event LocationSlotDecommissioned` | Implemented |
 | 11.3.3 | Functional Location Roles | The ability to list docks, yard spots, work centres, staging, QC, consolidation and shipping locations. | [facility-layout](/contexts/facility-layout) | `REST GET /sites/{siteCode}/locations`<br/>`MCP list_functional_locations` | Implemented |
 | 11.3.4 | Location Classification | The ability to resolve a slot's hazmat and temperature attributes. | [facility-layout](/contexts/facility-layout) | `REST GET /locations/{locationCode}/classification` | Implemented |
 
@@ -580,7 +580,7 @@ The ability to propose a slot plan and have a person approve or reject it.
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
 | 14.2.1 | Slot Plan Generation | The ability to generate a slot plan under the abc-velocity-v1 policy. | [slotting-optimization](/contexts/slotting-optimization) | `REST POST /slot-plans`<br/>`event SlotPlanGenerated` | Implemented |
-| 14.2.2 | Slot Plan Approval | The ability to approve or reject a draft slot plan. | [slotting-optimization](/contexts/slotting-optimization) | `REST POST /slot-plans/{planId}/approve`<br/>`REST POST /slot-plans/{planId}/reject`<br/>`event SlotPlanApproved`<br/>`event SlotPlanRejected` | Implemented |
+| 14.2.2 | Slot Plan Approval | The ability to approve or reject a draft slot plan. | [slotting-optimization](/contexts/slotting-optimization) | `REST POST /slot-plans/{planId}/approvals`<br/>`REST POST /slot-plans/{planId}/rejections`<br/>`event SlotPlanApproved`<br/>`event SlotPlanRejected` | Implemented |
 
 ### L2 14.3 Forward Slot Map
 

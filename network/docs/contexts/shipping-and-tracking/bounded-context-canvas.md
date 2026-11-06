@@ -187,7 +187,7 @@ address ([ADR 0006](/network/adr/0006-pii-confinement)). It publishes no address
 | `offer-availability` | `CatalogItemCreated` | Event | Kafka `retailnetwork.offer-availability.events`, `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | Conformist |
 | Shopper / `customer-ordering` | `GetJourney` | Query | REST `GET /journeys/{trackingNumber}` | Open Host |
 | Not named in the model | `RecordScan` | Command | REST `POST /journeys/{trackingNumber}/scans` | Not modelled (Open Questions) |
-| Not named in the model | `VoidLabel` | Command | REST `POST /labels/{labelRef}:void` | Not modelled (Open Questions) |
+| Not named in the model | `VoidLabel` | Command | REST `POST /labels/{labelRef}/voids` | Not modelled (Open Questions) |
 | Itself (silence sweep) | `RaiseException` | Command | internal scheduler (`ExceptionOnSilence`) | Internal |
 
 ## Outbound Communication
@@ -269,7 +269,7 @@ These come from gaps in `model.yaml`. They are listed for the model owner
 and are not resolved on these pages.
 
 - **Who calls `RecordScan` and `VoidLabel` over REST?** The routes exist
-  (`POST /journeys/{trackingNumber}/scans`, `POST /labels/{labelRef}:void`);
+  (`POST /journeys/{trackingNumber}/scans`, `POST /labels/{labelRef}/voids`);
   no inbound row or neighbour `sync_calls` entry names a caller.
 - **What does `IssueLabel` carry?** `GetShipTo` needs an `orderId`, and
   `PackageDelivered` publishes one, but `LabelIssued` and the purchase-order

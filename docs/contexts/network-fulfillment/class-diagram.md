@@ -7,7 +7,7 @@ sidebar_label: Class diagrams
 # Class diagrams
 
 :::info[Synced from network-fulfillment]
-This page is a copy of [`docs/ddd/class-diagram.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/ddd/class-diagram.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+This page is a copy of [`docs/docs/ddd/class-diagram.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/docs/ddd/class-diagram.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
 

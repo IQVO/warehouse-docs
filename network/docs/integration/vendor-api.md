@@ -38,8 +38,8 @@ acceptance, confirm shipment) in this network's own vocabulary, as the fleet's
 | `POST /vendor/inbound-receipts` | a carton-level receipt for one inbound shipment | `202 {transactionId}` |
 
 Account administration, outside the vendor's own protocol: `POST /vendors`
-(onboard), `GET /vendors/{vendorId}`, `POST /vendors/{vendorId}:suspend` and
-`POST /vendors/{vendorId}:reinstate`. The inbound routes are the seller-inbound delta
+(onboard), `GET /vendors/{vendorId}`, `POST /vendors/{vendorId}/suspensions` and
+`POST /vendors/{vendorId}/reinstatements`. The inbound routes are the seller-inbound delta
 ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments),
 `vendor-connectivity` ADR 0005). Every read takes `vendorId` as a query
 parameter: ownership is checked against it (a consistency check, gap G32).

@@ -7,7 +7,7 @@ sidebar_label: Runbook
 # Runbook
 
 :::info[Synced from network-fulfillment]
-This page is a copy of [`docs/operations/runbook.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/operations/runbook.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+This page is a copy of [`docs/docs/operations/runbook.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/docs/operations/runbook.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
 
@@ -199,7 +199,7 @@ CloudEvents 1.0 structured-mode event with header
 | `warehouse.network-fulfillment.analytics.dlq` | `netfulfil-projector` | the source message key | poison analytics messages (see below) |
 
 Both writers set `AllowAutoTopicCreation: true`. Event types are listed in
-[ecosystem/integration.md](https://github.com/IQVO/network-fulfillment/blob/develop/docs/ecosystem/integration.md#events-published).
+[ecosystem/integration.md](https://iqvo.github.io/network-fulfillment/docs/ecosystem/integration#events-published).
 
 ### Consumed
 
@@ -222,7 +222,7 @@ pile up on the broker; they hold no partitions and can be deleted.
   whose claim+apply step fails 3 times (backoff from 100 ms, max 2 s) also goes
   there; the log line carries `phase=claim_and_apply`. The dedupe claim
   (`analytics_consumed_events`) and the projection write commit in one
-  analytics transaction ([ADR 0023](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0023-analytics-claim-and-apply-in-one-transaction.md)),
+  analytics transaction ([ADR 0023](https://iqvo.github.io/network-fulfillment/docs/adr/0023-analytics-claim-and-apply-in-one-transaction)),
   so a failed attempt or a projector stop leaves no claim behind and the
   redelivered message is applied exactly once. A shutdown is never
   dead-lettered. The DLQ message keeps the original key, value and headers
@@ -247,7 +247,7 @@ Always active (ADR 0025).
   `published_at`. On the first send failure it records `attempts` and
   `last_error` on that row, commits, logs a WARN and stops the pass so later
   events do not overtake it. An empty pass sleeps `OUTBOX_RELAY_INTERVAL`.
-- **Attempt cap** ([ADR 0021](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0021-outbox-relay-attempt-cap.md)): once
+- **Attempt cap** ([ADR 0021](https://iqvo.github.io/network-fulfillment/docs/adr/0021-outbox-relay-attempt-cap)): once
   a row has failed `OUTBOX_MAX_ATTEMPTS` sends (default 20, `0` = unlimited)
   the relay logs it **at ERROR** and excludes it from future claims, so one
   poison row cannot stop the relay forever. Later rows, **including rows for
@@ -349,7 +349,7 @@ the first clean pass; `overdue` should be 0. See
 ### Confirm a shipment
 
 ```bash
-curl -i -X POST http://localhost:8000/api/network-fulfillment/network-orders/po-local-1/shipment-confirmation
+curl -i -X POST -H "Idempotency-Key: $(uuidgen)" http://localhost:8000/api/network-fulfillment/network-orders/po-local-1/shipment-confirmation
 ```
 
 `204` on success or when the order is already `CONFIRMED`; `409
@@ -418,10 +418,10 @@ whose rejection never freed its stock.
 Why it happens: `ReceiveNetworkDemand` raises the order as a **held** order
 (`releaseOnAllocation: false`), which reserves real inventory, and
 order-management has no timeout of its own (its ADR 0020). Only this context
-decides the hold, by release (`POST /orders/{id}/release`) or cancel
+decides the hold, by release (`POST /orders/{id}/releases`) or cancel
 (`DELETE /orders/{id}`). If neither happens, for example because the cancel
 failed while order-management was down, the reservation would last forever.
-[ADR 0024](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0024-orphaned-order-management-hold-sweep.md) records the
+[ADR 0024](https://iqvo.github.io/network-fulfillment/docs/adr/0024-orphaned-order-management-hold-sweep) records the
 order-management order id on the `network_orders` row as soon as the hold
 exists, and `SweepOrphanedHolds` cancels the ones nobody decided.
 
@@ -539,7 +539,7 @@ the delay, set `ORPHAN_HOLD_GRACE` (a Go duration, `0` = none).
    `SUCCESS`. List them with `list_network_orders` `state=SUBMITTED`.
 2. `ACKNOWLEDGED` order whose release call failed (the failure is not logged
    and nothing retries it): release it in order-management with
-   `POST /orders/{localOrderId}/release`. Never cancel it: the network was told
+   `POST /orders/{localOrderId}/releases`. Never cancel it: the network was told
    we will ship.
 3. A hold raised before this context could record its id (a crash between
    order-management's commit and this context's write) and not re-delivered
@@ -551,7 +551,7 @@ the delay, set `ORPHAN_HOLD_GRACE` (a Go duration, `0` = none).
 
 ## The live retail-network adapter
 
-`NETWORK_MODE=live` ([ADR 0026](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0026-live-retail-network-adapter-demand-loop.md))
+`NETWORK_MODE=live` ([ADR 0026](https://iqvo.github.io/network-fulfillment/docs/adr/0026-live-retail-network-adapter-demand-loop))
 makes the gateway call the retail network's Vendor API. The chart's default, the
 kind cluster and every e2e run stay `stub`; the flip to `live` in an environment
 is a values change (`config.networkMode`, `config.networkBaseUrl`,
@@ -677,7 +677,7 @@ no test that kills the process (ADR 0026, As built 8).
 ### The node profile
 
 In live mode a worker declares each site's operational profile
-([ADR 0027](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0027-supply-loop-node-profile-and-inventory-feed.md), part 1):
+([ADR 0027](https://iqvo.github.io/network-fulfillment/docs/adr/0027-supply-loop-node-profile-and-inventory-feed), part 1):
 once at boot and then every `NETWORK_PROFILE_INTERVAL` (default `5m`; `0`
 disables it, with a `WARN`). The network judges our acknowledgement deadlines by
 the declared handling time (`ackBy = min(issuedAt + ackWindow, requiredShipBy -
@@ -737,7 +737,7 @@ records the last profile it was handed and sends nothing.
 ### The inventory feed
 
 In live mode a second worker feeds each site's inventory
-([ADR 0027](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0027-supply-loop-node-profile-and-inventory-feed.md), part 2):
+([ADR 0027](https://iqvo.github.io/network-fulfillment/docs/adr/0027-supply-loop-node-profile-and-inventory-feed), part 2):
 once at boot and then every `NETWORK_INVENTORY_INTERVAL` (default `5m`; `0` disables
 it, with a `WARN`). It reads local data only: the `capability_offers` the last
 `RECOMPUTE_INTERVAL` pass persisted and the product dictionary. It sends nothing a

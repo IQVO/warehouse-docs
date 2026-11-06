@@ -61,12 +61,12 @@ the flow feeds, which is why the context is **Supporting**, not Core.
    line references an RMA line or is explicitly `UNEXPECTED` — there is no
    silent third state — and each `UNEXPECTED` line also raises
    `UnexpectedReturnReceived` for `exception-management`.
-3. **Inspect.** `POST /receipts/{receiptId}/lines/{lineNo}/inspect` records
+3. **Inspect.** `POST /receipts/{receiptId}/lines/{lineNo}/inspections` records
    the grade (`A`, `B`, `C`, `SCRAP`) with reason codes; a line is inspected
    exactly once, and the disposition is decided in the same transaction.
 4. **Dispose.** `DispositionDecided` records the pure function
    `Decide(grade, classification, policy version)` — or an operator override
-   (`POST /dispositions/{dispositionId}/override`), which creates a
+   (`POST /dispositions/{dispositionId}/overrides`), which creates a
    *superseding* Disposition with a mandatory reason. All five outcomes are
    recorded; only `RESTOCK` has a downstream effect.
 5. **Restock.** A `RESTOCK` raises `ReturnLineStaged` exactly once:

@@ -38,7 +38,7 @@ and [ADR 0002](https://github.com/IQVO/storefront-bff/blob/develop/docs/adr/0002
   the `sf_state` cookie. There is no authentication anywhere.
 - **Idempotency.** The BFF mints an `Idempotency-Key` per user action
   (deterministic per route, subject and payload inside a ten-minute window, or
-  pinned by the page with the `X-Action-Id` header) and forwards it to upstream
+  pinned by the page with the `Idempotency-Key` header) and forwards it to upstream
   commands.
 - **No PII at rest.** Saved addresses pass through without being stored or
   logged; request and response bodies are never logged; only PSP payment-method
@@ -62,22 +62,22 @@ The upstream column is read from `internal/application/usecases/*.go`.
 | --- | --- |
 | `GET /products` | product-discovery `GET /products` (allow-listed search filters only) |
 | `GET /products/{id}` | product-discovery `GET /products/{catalogItemId}` |
-| `POST /products/{id}:delivery-dates` | delivery-promise `POST /delivery-offers:quote`, joined with pricing `GET /delivery-charge-schedules/current` (a missing schedule only drops the charge) |
+| `POST /products/{id}/delivery-date-quotes` | delivery-promise `POST /delivery-quotes`, joined with pricing `GET /delivery-charge-schedules/current` (a missing schedule only drops the charge) |
 | `POST /carts` | shopping-cart `POST /carts` |
 | `GET /carts` | shopping-cart `GET /carts` |
 | `GET /carts/{id}` | shopping-cart `GET /carts/{cartId}` |
 | `POST /carts/{id}/lines` | shopping-cart `POST /carts/{cartId}/lines` |
-| `PATCH /carts/{id}/lines/{item}` | shopping-cart `POST /carts/{cartId}/lines/{catalogItemId}:set-quantity` |
-| `DELETE /carts/{id}/lines/{item}` | shopping-cart `POST /carts/{cartId}/lines/{catalogItemId}:remove` |
-| `POST /carts/{id}/destination` | shopping-cart `POST /carts/{cartId}:set-destination` |
-| `POST /carts/{id}/delivery:quote` | shopping-cart `POST /carts/{cartId}:quote-delivery` |
-| `POST /carts/{id}/delivery:select` | shopping-cart `POST /carts/{cartId}:select-delivery` |
+| `PATCH /carts/{id}/lines/{item}` | shopping-cart `PUT /carts/{cartId}/lines/{catalogItemId}` |
+| `DELETE /carts/{id}/lines/{item}` | shopping-cart `DELETE /carts/{cartId}/lines/{catalogItemId}` |
+| `PUT /carts/{id}/destination` | shopping-cart `PUT /carts/{cartId}/destination` |
+| `POST /carts/{id}/delivery-quotes` | shopping-cart `POST /carts/{cartId}/delivery-quotes` |
+| `PUT /carts/{id}/delivery-selection` | shopping-cart `PUT /carts/{cartId}/delivery-selection` |
 | `POST /checkout` | checkout `POST /checkout-sessions` |
 | `GET /checkout/{id}` | checkout `GET /checkout-sessions/{sessionId}` |
-| `POST /checkout/{id}:confirm` | checkout `POST /checkout-sessions/{sessionId}:confirm` (15 s budget) |
+| `POST /checkout/{id}/confirmations` | checkout `POST /checkout-sessions/{sessionId}/confirmations` (15 s budget) |
 | `GET /orders` | customer-ordering `GET /orders?shopperId=` |
 | `GET /orders/{id}` | customer-ordering `GET /orders/{orderId}` plus `GET /orders/{orderId}/tracking`, and checkout `GET /checkout-sessions/{sessionId}` for the totals when the cookie's last checkout placed this order |
-| `POST /orders/{id}:cancel` | customer-ordering `POST /orders/{orderId}:cancel` |
+| `POST /orders/{id}/cancellations` | customer-ordering `POST /orders/{orderId}/cancellations` |
 | `POST /shoppers` | customer-ordering `POST /shoppers` |
 | `POST /sessions` | customer-ordering `GET /shoppers?email=` (sets the cookie's shopper id; not a login) |
 | `GET /me` | customer-ordering `GET /shoppers/{shopperId}` |
@@ -126,9 +126,9 @@ A16): its `apis/asyncapi.yaml` declares no channels and no operations.
 | --- | --- |
 | `POST /tokens` | issue a scenario token `tok_<scenario>_<suffix>` |
 | `POST /authorizations` | place a hold: `201` with id and expiry, or `402` decline |
-| `POST /authorizations/{id}/void` | release the remaining hold |
-| `POST /authorizations/{id}/reauthorize` | replace by a new hold (new id and expiry) |
-| `POST /authorizations/{id}/reduce` | lower the remaining hold (partial release) |
+| `POST /authorizations/{id}/voids` | release the remaining hold |
+| `POST /authorizations/{id}/reauthorizations` | replace by a new hold (new id and expiry) |
+| `POST /authorizations/{id}/reductions` | lower the remaining hold (partial release) |
 | `POST /authorizations/{id}/captures` | capture |
 | `POST /authorizations/{id}/refunds` | refund captured money |
 | `GET /authorizations/{id}` | read a hold (test aid) |

@@ -32,7 +32,7 @@ sequenceDiagram
     participant ST as shipping-<br/>and-tracking
     participant CO as customer-<br/>ordering
     participant LH as linehaul-<br/>transportation
-    NF->>VC: cmd: RequestLabel<br/>POST /vendor<br/>/shipping-labels
+    NF->>VC: cmd: RequestLabel<br/>POST /vendor/shipping-labels
     VC->>ST: cmd: IssueLabel<br/>POST /labels
     ST->>CO: qry: GetShipTo GET<br/>/orders/orderId<br/>/ship-to
     CO-->>ST: qry: reply ship-to

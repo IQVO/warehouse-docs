@@ -131,8 +131,8 @@ const sidebar: SidebarsConfig = {
         {
           type: "doc",
           id: "api-reference/rest/wes-work-planning/rebalance-decision",
-          label: "Get the flow-balancing recommendation for a process path",
-          className: "api-method get",
+          label: "Decide the flow-balancing recommendation for a process path",
+          className: "api-method post",
         },
       ],
     },

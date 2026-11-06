@@ -46,8 +46,8 @@ before the shopper pays ([ADR 0008](/network/adr/0008-capacity-held-at-promise-t
 
 | Actor | What they want from this context | Channel |
 | --- | --- | --- |
-| Shopper, through the storefront | A delivery date per tier on a product page or in the cart | `POST /delivery-offers:quote` (Open Host) |
-| `customer-ordering` (checkout) | Offers for the cart, then one promise per shipment group, then updates when a promise changes | `POST /delivery-offers:quote`, `POST /promises`; Kafka `PromiseAtRisk`, `PromiseRevised`, `PromiseKept`, `PromiseBroken` |
+| Shopper, through the storefront | A delivery date per tier on a product page or in the cart | `POST /delivery-quotes` (Open Host) |
+| `customer-ordering` (checkout) | Offers for the cart, then one promise per shipment group, then updates when a promise changes | `POST /delivery-quotes`, `POST /promises`; Kafka `PromiseAtRisk`, `PromiseRevised`, `PromiseKept`, `PromiseBroken` |
 | `order-sourcing` | Revised constraints when a promise moves, and a signal when a pickup cutoff is full | Kafka `PromiseRevised`, `PromiseBookExhausted` |
 | `node-performance` | The kept / broken judgement per node, to grade it | Kafka `PromiseKept`, `PromiseBroken` |
 | The network's own clock | Expired offers and expired holds cleaned up, books closed at their cutoff | internal sweeps (`ExpireOffers`, `ReleaseExpiredHolds`, `CloseBook`) |

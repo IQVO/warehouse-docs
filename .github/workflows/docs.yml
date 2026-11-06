@@ -61,6 +61,16 @@ jobs:
       - run: python3 scripts/test_agent_catalogue.py
       - run: python3 scripts/agent-catalogue.py --check-page
       - run: pip install pyyaml
+      # Gate against develop: spec copies byte-equal to each repo's develop, every REST route a page cites
+      # exists in the owning context's develop OpenAPI, no retired REST-guideline shapes. Reads the repos'
+      # public develop through the GitHub API (no cache); exit 2 = a producer was unreadable (fails closed).
+      # The same script runs nightly from develop-drift.yml, which also catches develop moving after merge.
+      - name: Develop drift gate (unit tests, then the live check)
+        run: |
+          python3 scripts/test_check_develop_drift.py
+          python3 scripts/check-develop-drift.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
       - name: Network model consistency (network/model/model.yaml vs network/docs/)
         run: npm run check:model:network
       - name: Network generated strategic pages match the model

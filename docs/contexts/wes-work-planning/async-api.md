@@ -189,7 +189,7 @@ SKU-scoped and a SKU-to-path mapping does not exist in the domain. Read at
 
 `data.work_unit_id` maps to `RecordCompletionRequest.WorkUnitId` and calls
 the **existing** `RecordCompletion` use case — the exact code path
-`POST /work-units/{id}/complete` uses. This closes the control loop's
+`POST /work-units/{id}/completions` uses. This closes the control loop's
 feedback edge: WIP drops, and the next release call can proceed. For a
 `RELOCATE` work unit (below) the completion also admits the moves of the same
 slot plan that were waiting on it into the pool, in the same transaction.

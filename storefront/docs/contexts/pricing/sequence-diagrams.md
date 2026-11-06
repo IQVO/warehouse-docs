@@ -205,7 +205,7 @@ Derived from: `model.yaml → contexts[pricing].aggregates[ItemPrice]`
 (`WithdrawPrice`, transitions), `.publishes[ItemPriceWithdrawn]`.
 
 Omitted: the HTTP adapter detail. The route is
-`POST /item-prices/{catalogItemId}:withdraw`.
+`POST /item-prices/{catalogItemId}/withdrawals`.
 
 ## 5. WithdrawPrice by policy WithdrawOnDiscontinue (Kafka)
 

@@ -85,7 +85,7 @@ adapter before the use case. A lagging
 `CatalogItemView` rejects content for a brand-new item: the manager retries
 after the projection catches up.
 
-## 2. ReviseContent (REST POST /product-contents/catalogItemId:revise)
+## 2. ReviseContent (REST POST /product-contents/catalogItemId/revisions)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
@@ -134,7 +134,7 @@ Omitted: the DRAFT case, which is `ReviseDraft` (diagram 10). The revision
 reaches `product-discovery` through the next `PublishContent`
 (`PUBLISHED → PUBLISHED`, diagram 3).
 
-## 3. PublishContent (REST POST /product-contents/catalogItemId:publish)
+## 3. PublishContent (REST POST /product-contents/catalogItemId/publications)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
@@ -332,7 +332,7 @@ Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree]
 Omitted: the 404 for an unknown `parentId`: **as built** the API answers an
 unknown parent with 422 `unknown-category`, not a not-found.
 
-## 7. MoveCategory (REST POST /categories/categoryId:move)
+## 7. MoveCategory (REST PUT /categories/categoryId/parent)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
@@ -380,7 +380,7 @@ design, and the guard is for a future removal.
 
 Omitted: nothing beyond the shared notes.
 
-## 8. RenameCategory (REST POST /categories/categoryId:rename)
+## 8. RenameCategory (REST PUT /categories/categoryId/name)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
@@ -423,7 +423,7 @@ Derived from: `model.yaml → contexts[product-content].aggregates[CategoryTree]
 
 Omitted: nothing beyond the shared notes.
 
-## 9. PublishCategoryTree (REST POST /categories:publish)
+## 9. PublishCategoryTree (REST POST /category-tree-publications)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%

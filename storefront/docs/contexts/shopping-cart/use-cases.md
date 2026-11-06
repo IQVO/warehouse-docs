@@ -29,12 +29,12 @@ Reads are not use cases here: `GET /carts/{cartId}` (`GetCart`, with the
 | --- | --- | --- | --- |
 | `CreateCart` | Shopper via `storefront-bff` | REST `POST /carts` | none |
 | `AddLine` | Shopper via `storefront-bff` | REST `POST /carts/{cartId}/lines` | `CartLineAdded` |
-| `SetLineQuantity` | Shopper via `storefront-bff` | REST `POST /carts/{cartId}/lines/{catalogItemId}:set-quantity` | none |
-| `RemoveLine` | Shopper via `storefront-bff` | REST `POST /carts/{cartId}/lines/{catalogItemId}:remove` | none |
-| `SetDestination` | Shopper via `storefront-bff` | REST `POST /carts/{cartId}:set-destination` | none |
-| `QuoteDelivery` | Shopper via `storefront-bff` | REST `POST /carts/{cartId}:quote-delivery` | `CartDeliveryQuoted` |
-| `SelectDelivery` | Shopper via `storefront-bff` | REST `POST /carts/{cartId}:select-delivery` | none |
-| `MergeInto` | Shopper via `storefront-bff` (the sign-in moment, D4) | REST `POST /carts/{cartId}:merge-into` | none |
+| `SetLineQuantity` | Shopper via `storefront-bff` | REST `PUT /carts/{cartId}/lines/{catalogItemId}` | none |
+| `RemoveLine` | Shopper via `storefront-bff` | REST `DELETE /carts/{cartId}/lines/{catalogItemId}` | none |
+| `SetDestination` | Shopper via `storefront-bff` | REST `PUT /carts/{cartId}/destination` | none |
+| `QuoteDelivery` | Shopper via `storefront-bff` | REST `POST /carts/{cartId}/delivery-quotes` | `CartDeliveryQuoted` |
+| `SelectDelivery` | Shopper via `storefront-bff` | REST `PUT /carts/{cartId}/delivery-selection` | none |
+| `MergeInto` | Shopper via `storefront-bff` (the sign-in moment, D4) | REST `POST /carts/{cartId}/merges` | none |
 | `AbandonInactive` | Clock, policy `AbandonInactive` (30 days) | scheduler | `CartAbandoned` |
 | `CloseOnCheckoutCompleted` | `checkout` `CheckoutCompleted` | Kafka consumer, `retailnetwork.checkout.events` | `CartCheckedOut` |
 | Project `PurchasabilityView`, `EstimateView` | `offer-availability`, `pricing` | Kafka consumers, `retailnetwork.offer-availability.events`, `retailnetwork.pricing.events` | none |
@@ -104,7 +104,7 @@ Every write route takes an `Idempotency-Key` header, minted by the BFF.
 
 - **Actor / trigger:** the shopper, through `storefront-bff`.
 - **Inbound adapter:** REST
-  `POST /carts/{cartId}/lines/{catalogItemId}:set-quantity`, header
+  `PUT /carts/{cartId}/lines/{catalogItemId}`, header
   `Idempotency-Key` required.
 - **Main flow:** load the cart (404), set the line's quantity
   (`ErrQuantityOutOfRange`; unknown line → 404 `not-found`), clear quote
@@ -119,7 +119,7 @@ Every write route takes an `Idempotency-Key` header, minted by the BFF.
 
 - **Actor / trigger:** the shopper, through `storefront-bff`.
 - **Inbound adapter:** REST
-  `POST /carts/{cartId}/lines/{catalogItemId}:remove`, header
+  `DELETE /carts/{cartId}/lines/{catalogItemId}`, header
   `Idempotency-Key` required.
 - **Main flow:** load the cart (404), remove the line (unknown line → 404),
   clear quote and selections, save (version-checked), one transaction.
@@ -132,7 +132,7 @@ Every write route takes an `Idempotency-Key` header, minted by the BFF.
 ## SetDestination
 
 - **Actor / trigger:** the shopper, through `storefront-bff`.
-- **Inbound adapter:** REST `POST /carts/{cartId}:set-destination`, header
+- **Inbound adapter:** REST `PUT /carts/{cartId}/destination`, header
   `Idempotency-Key` required.
 - **Input:** `destinationPostalPrefix` — a prefix, never an address.
 - **Main flow:** load the cart (404), set the prefix, clear quote and
@@ -147,14 +147,14 @@ Every write route takes an `Idempotency-Key` header, minted by the BFF.
 
 - **Actor / trigger:** the shopper (or the BFF on their behalf), through
   `storefront-bff`.
-- **Inbound adapter:** REST `POST /carts/{cartId}:quote-delivery`, header
+- **Inbound adapter:** REST `POST /carts/{cartId}/delivery-quotes`, header
   `Idempotency-Key` required.
 - **Preconditions:** the cart is `OPEN` and a destination prefix is set.
 - **Main flow:**
   1. `Idempotency-Key` lookup.
   2. Load `Cart` (404); `ErrNoDestination` without a prefix (422).
   3. Call `delivery-promise` `QuoteDeliveryOffers`
-     (`REST POST /delivery-offers:quote`, the network's Open Host Service
+     (`REST POST /delivery-quotes`, the network's Open Host Service
      route for the `shopper / storefront` caller) with the cart's lines
      and the prefix — the cart's only synchronous call.
   4. `Cart.QuoteDelivery(quote, now)`: hold the groups with their lines,
@@ -178,7 +178,7 @@ Every write route takes an `Idempotency-Key` header, minted by the BFF.
 ## SelectDelivery
 
 - **Actor / trigger:** the shopper, through `storefront-bff`.
-- **Inbound adapter:** REST `POST /carts/{cartId}:select-delivery`, header
+- **Inbound adapter:** REST `PUT /carts/{cartId}/delivery-selection`, header
   `Idempotency-Key` required.
 - **Input:** `groupNo`, `offerId`.
 - **Preconditions:** the cart is `OPEN` and holds a current quote.
@@ -200,7 +200,7 @@ Every write route takes an `Idempotency-Key` header, minted by the BFF.
 
 - **Actor / trigger:** the shopper at the sign-in moment (D4): the BFF
   merges the guest cart into the shopper's open cart.
-- **Inbound adapter:** REST `POST /carts/{cartId}:merge-into`, header
+- **Inbound adapter:** REST `POST /carts/{cartId}/merges`, header
   `Idempotency-Key` required.
 - **Input:** `targetCartId`.
 - **Preconditions:** the target is an `OPEN` cart of the same shopper,

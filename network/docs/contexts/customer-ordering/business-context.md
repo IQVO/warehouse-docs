@@ -40,7 +40,7 @@ What this context does own is the transaction record:
 
 | Actor | What they do here | Channel |
 | --- | --- | --- |
-| Shopper (synthetic), through the storefront | Registers, checks out, reads the order and its tracking, cancels | REST `POST /shoppers`, `POST /checkout`, `GET /orders/{orderId}`, `GET /orders/{orderId}/tracking`, `POST /orders/{orderId}:cancel` |
+| Shopper (synthetic), through the storefront | Registers, checks out, reads the order and its tracking, cancels | REST `POST /shoppers`, `POST /checkout`, `GET /orders/{orderId}`, `GET /orders/{orderId}/tracking`, `POST /orders/{orderId}/cancellations` |
 | e2e-tests and the console remote | Drive the same storefront API as the shopper | the same REST routes |
 | `delivery-promise` | Quotes offers and makes promises for checkout; later reports a promise at risk, revised, kept or broken | sync REST (called by us); Kafka (consumed by us) |
 | `order-sourcing` | Reports when a group is locked to a node, shipped, or unsourceable | Kafka |

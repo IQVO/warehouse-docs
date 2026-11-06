@@ -42,7 +42,7 @@ live in the network's [customer-ordering](/network/contexts/customer-ordering).
 
 | Actor | What they do here | Channel |
 | --- | --- | --- |
-| Shopper (via `storefront-bff`, the experience layer) | Reviews the binding total, opens a session, confirms it, reads the session to learn whether it completed, needs a requote or failed | REST `POST /checkout-sessions`, `POST /checkout-sessions/{sessionId}:confirm`, `GET /checkout-sessions/{sessionId}` |
+| Shopper (via `storefront-bff`, the experience layer) | Reviews the binding total, opens a session, confirms it, reads the session to learn whether it completed, needs a requote or failed | REST `POST /checkout-sessions`, `POST /checkout-sessions/{sessionId}/confirmations`, `GET /checkout-sessions/{sessionId}` |
 | `shopping-cart` | Supplies the cart (with its checkout readiness) at session open; closes the cart when the purchase completes | REST `GET /carts/{cartId}`; Kafka `CheckoutCompleted` |
 | `pricing` | Issues the binding, expiring `PriceQuote` the session confirms against | REST `POST /price-quotes` |
 | `customer-payments` | Authorizes the quote total with allocations per group; voids on a definitive rejection; binds the order on `CheckoutCompleted` | REST `POST /payment-authorizations`, `:void`; Kafka `CheckoutCompleted` |

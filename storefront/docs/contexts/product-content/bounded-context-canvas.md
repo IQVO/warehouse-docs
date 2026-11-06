@@ -79,7 +79,7 @@ Derived from: `model.yaml → contexts[product-content].inbound`,
 The diagrams omit assumptions, verification metrics, open questions and the
 ubiquitous language (sections below), the relationship pattern per message
 (see the tables), and the synchronous replies. `PublishCategoryTree` is
-triggered by the content manager through `POST /categories:publish`. This context makes **no
+triggered by the content manager through `POST /category-tree-publications`. This context makes **no
 synchronous calls** (`sync_calls: []`): the item data it needs is the local,
 event-fed `CatalogItemView`.
 
@@ -124,7 +124,7 @@ needs and the item master does not have. The context:
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
 | Storefront content manager (human) | `CreateProductContent`, `ReviseDraft`, `ReviseContent`, `PublishContent`, `DiscardDraft`, `RetireContent`, `CreateCategory`, `MoveCategory`, `RenameCategory` | Command | REST `/product-contents`, `/categories` | UI |
-| Storefront content manager (human) | `PublishCategoryTree` | Command | REST `POST /categories:publish` | UI |
+| Storefront content manager (human) | `PublishCategoryTree` | Command | REST `POST /category-tree-publications` | UI |
 | Storefront content manager (human) | `GetProductContent` | Query | REST `GET /product-contents/{catalogItemId}` | UI |
 | `product-discovery` | `ListProductContents`, `ListCategories` | Query | REST `GET /product-contents` (bootstrap, paged), `GET /categories` (`product-discovery` does not call `GetProductContent`) | Customer/Supplier (we are the Supplier) |
 | `offer-availability` | `CatalogItemCreated` | Event | Kafka `retailnetwork.offer-availability.events`, `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | Conformist |
@@ -202,7 +202,7 @@ Top terms: **Product Content**, **Revision**, **Primary Medium**,
 ## Open Questions
 
 None remain from the model-fix. The eight earlier gaps are resolved in the
-model: `POST /categories:publish` triggers `PublishCategoryTree`; a DRAFT is
+model: `POST /category-tree-publications` triggers `PublishCategoryTree`; a DRAFT is
 editable (`ReviseDraft`) and discardable (`DiscardDraft`); re-publication is
 `PUBLISHED → PUBLISHED` via `PublishContent`; there is no remove-category
 command by design (`ErrCategoryInUse` guards a future removal); the

@@ -7,7 +7,7 @@ sidebar_label: Aggregate Design Canvas
 # Aggregate Design Canvas
 
 :::info[Synced from network-fulfillment]
-This page is a copy of [`docs/ddd/aggregate-design-canvas.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/ddd/aggregate-design-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+This page is a copy of [`docs/docs/ddd/aggregate-design-canvas.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/docs/ddd/aggregate-design-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
 

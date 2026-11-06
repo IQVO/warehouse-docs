@@ -26,7 +26,7 @@ Reads are not use cases here: `GET /orders/{orderId}` (`GetOrder`),
 | Use case | Trigger | Inbound adapter | Emits |
 | --- | --- | --- | --- |
 | `PlaceOrder` | Shopper | REST `POST /checkout` | `CustomerOrderPlaced` |
-| `CancelOrder` | Shopper | REST `POST /orders/{orderId}:cancel` | `CustomerOrderCancelled` |
+| `CancelOrder` | Shopper | REST `POST /orders/{orderId}/cancellations` | `CustomerOrderCancelled` |
 | `CancelOrder` (policy) | `CancelOnUnfulfillable` | Kafka consumer, `FulfillmentUnsourceable` | `CustomerOrderCancelled` |
 | `RegisterShopper` | Storefront (assumed; no `inbound` row) | REST `POST /shoppers` | none |
 | `MarkInFulfillment` | `order-sourcing` | Kafka consumer, `FulfillmentLocked` | none |
@@ -76,7 +76,7 @@ Error responses use `application/problem+json` (RFC 9457) with `type`
      node), `shipBy`, `deliverByEarliest`, `deliverByLatest`, `holdExpiresAt`.
   4. If a group's offer is expired or consumed (`ErrOfferNotQuotable`), apply
      `CheckoutPromising`. Call `QuoteDeliveryOffers`
-     (`POST /delivery-offers:quote`) for that group's lines and the ship-to's
+     (`POST /delivery-quotes`) for that group's lines and the ship-to's
      destination postal prefix, and answer 409 with the new offers. Nothing is
      saved.
   5. `CustomerOrder.PlaceOrder(...)`: it checks
@@ -110,7 +110,7 @@ Error responses use `application/problem+json` (RFC 9457) with `type`
 ## CancelOrder (shopper)
 
 - **Actor / trigger:** the shopper.
-- **Inbound adapter:** REST `POST /orders/{orderId}:cancel`, header
+- **Inbound adapter:** REST `POST /orders/{orderId}/cancellations`, header
   `Idempotency-Key` required; body `reason`.
 - **Preconditions:** the order exists; no group is locked.
 - **Main flow:**

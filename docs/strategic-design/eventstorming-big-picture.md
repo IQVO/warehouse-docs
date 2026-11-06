@@ -594,7 +594,7 @@ flowchart LR
     P2 --> E2
     E3 --> RN
     E3 --> P3
-    P3 -- "POST /orders/id/release" --> C3 --> E6
+    P3 -- "POST /orders/id/releases" --> C3 --> E6
     E2 -- "DELETE /orders/id" --> E8
     E8 --> E10
 
@@ -903,7 +903,7 @@ this site, and the corroborating context page is linked instead.
 | ~~H16~~ | workforce-management | ~~The headcount proposal divides by `MeanActualSeconds`, a duration, where a per-head rate is expected~~ **Resolved 2026-10-06.** Now converts to a per-hour rate, 3600 / seconds (ADR 0033). | [workforce-management Ubiquitous Language](/contexts/workforce-management/ubiquitous-language) |
 | H17 | fulfillment-execution | A claim does not require a station check-in | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H18 | fulfillment-execution | `ItemPicked` is defined but never raised | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
-| ~~H19~~ | inventory-storage | ~~No sibling context calls `POST /reservations/{id}/confirm-pick`~~ **Resolved 2026-10-07.** A consumer confirms an order's reservations on its last completed PICK, driven by `TaskCompleted.order_ref` (inventory-storage ADR 0035, fulfillment-execution ADR 0040), and since ADR 0036 per picked line. It is off by default in the binary and on (`taskCompletedConsumerMode: kafka`) in the reference deployment, where it also applies RELOCATE moves (K37). | [inventory-storage EventStorming](/contexts/inventory-storage/eventstorming) |
+| ~~H19~~ | inventory-storage | ~~No sibling context calls `POST /reservations/{id}/pick-confirmations`~~ **Resolved 2026-10-07.** A consumer confirms an order's reservations on its last completed PICK, driven by `TaskCompleted.order_ref` (inventory-storage ADR 0035, fulfillment-execution ADR 0040), and since ADR 0036 per picked line. It is off by default in the binary and on (`taskCompletedConsumerMode: kafka`) in the reference deployment, where it also applies RELOCATE moves (K37). | [inventory-storage EventStorming](/contexts/inventory-storage/eventstorming) |
 | H20 | fulfillment-execution | Rebin events never leave the process | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H21 | fulfillment-execution | The sort lane is decided, but no WCS acts on it | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H22 | labor-performance | `REBIN` and other unknown task types are never scored | [labor-performance EventStorming](/contexts/labor-performance/eventstorming) |

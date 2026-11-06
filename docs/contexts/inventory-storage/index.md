@@ -75,8 +75,8 @@ at `product-master` ADR 0003 stage E (2026-10-17): product classification is
 `product-master`'s alone (ADR-0034).
 
 Sealed cases are tracked as containers (LPNs, ADR-0045 and ADR-0046):
-`GET /containers/{lpn}`, `POST /containers/{lpn}:stow` into a case bin,
-`POST /containers/{lpn}:break` into loose eaches and
+`GET /containers/{lpn}`, `POST /containers/{lpn}/stowages` into a case bin,
+`POST /containers/{lpn}/case-breaks` into loose eaches and
 `GET /bins/{binId}/containers`. They raise `ContainerRegistered`,
 `ContainerStowed`, `CaseBroken` and `ContainerEmptied` on
 `warehouse.inventory.events`, keyed by LPN, with no consumer yet.

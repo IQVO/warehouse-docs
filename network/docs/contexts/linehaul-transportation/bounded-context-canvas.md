@@ -147,13 +147,13 @@ loads depart and arrive. Promises (`delivery-promise`) and assignments
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
 | Network-ops planner | `DefineLaneSchedule` | Command | REST `POST /lane-schedules` | UI |
-| Network-ops planner | `RetireLaneSchedule` | Command | REST `POST /lane-schedules/{laneId}:retire` (route in `rest`; the `inbound` row does not name this message, see Open Questions) | UI |
-| Network-ops planner | `CancelDeparture` | Command | REST `POST /departures/{departureId}:cancel` | UI |
+| Network-ops planner | `RetireLaneSchedule` | Command | REST `POST /lane-schedules/{laneId}/retirements` (route in `rest`; the `inbound` row does not name this message, see Open Questions) | UI |
+| Network-ops planner | `CancelDeparture` | Command | REST `POST /departures/{departureId}/cancellations` | UI |
 | Sort-centre and station operators | `OpenLoad` | Command | REST `POST /loads` | UI |
 | Sort-centre and station operators | `AddPackage` | Command | REST `POST /loads/{loadId}/packages` | UI |
-| Sort-centre and station operators | `CloseLoad` | Command | REST `POST /loads/{loadId}:close` | UI |
-| Sort-centre and station operators | `DispatchLoad` | Command | REST `POST /loads/{loadId}:dispatch` | UI |
-| Sort-centre and station operators | `ReceiveLoad` | Command | REST `POST /loads/{loadId}:receive` | UI |
+| Sort-centre and station operators | `CloseLoad` | Command | REST `POST /loads/{loadId}/closures` | UI |
+| Sort-centre and station operators | `DispatchLoad` | Command | REST `POST /loads/{loadId}/dispatches` | UI |
+| Sort-centre and station operators | `ReceiveLoad` | Command | REST `POST /loads/{loadId}/receipts` | UI |
 | Any context | `ListDepartures` | Query | REST `GET /departures?origin=&destination=&from=&to=` | OHS |
 | Any context | Get one departure (no message name in the model) | Query | REST `GET /departures/{departureId}` | OHS |
 | Scheduler (internal) | `GenerateDepartures` | Command | nightly timer (policy `HorizonRoll`) | Internal |

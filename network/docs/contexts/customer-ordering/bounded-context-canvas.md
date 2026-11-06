@@ -138,7 +138,7 @@ To turn a shopper's cart into a customer order. The context:
 | Role | Applies? | Evidence in the model |
 | --- | --- | --- |
 | **Execution (checkout)** | **Yes, primary** | `PlaceOrder`, the `CheckoutPromising` policy, the sync calls `MakePromise` and `QuoteDeliveryOffers`. |
-| **Gateway (storefront)** | **Yes** | The storefront routes `POST /checkout`, `GET /orders/{orderId}`, `GET /orders/{orderId}/tracking`, `POST /orders/{orderId}:cancel` are the shopper's way into the network's order flow (Open Host). |
+| **Gateway (storefront)** | **Yes** | The storefront routes `POST /checkout`, `GET /orders/{orderId}`, `GET /orders/{orderId}/tracking`, `POST /orders/{orderId}/cancellations` are the shopper's way into the network's order flow (Open Host). |
 | Analysis | No | `OrderTrackingView` is a projection for display, not a decision. |
 | Specification / Enforcer | No | Promise rules and capacity belong to `delivery-promise`. |
 
@@ -147,7 +147,7 @@ To turn a shopper's cart into a customer order. The context:
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
 | Shopper / storefront | `PlaceOrder` | Command | REST `POST /checkout` | Open Host |
-| Shopper / storefront | `CancelOrder` | Command | REST `POST /orders/{orderId}:cancel` | Open Host |
+| Shopper / storefront | `CancelOrder` | Command | REST `POST /orders/{orderId}/cancellations` | Open Host |
 | Shopper / storefront (assumed; no `inbound` row) | `RegisterShopper` | Command | REST `POST /shoppers` | Open Host |
 | Shopper / storefront | `GetOrder` | Query | REST `GET /orders/{orderId}` | Open Host |
 | Shopper / storefront | `GetTracking` | Query | REST `GET /orders/{orderId}/tracking` | Open Host |
@@ -168,7 +168,7 @@ To turn a shopper's cart into a customer order. The context:
 
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
-| `delivery-promise` | `QuoteDeliveryOffers` | Query | REST `POST /delivery-offers:quote` (in-org) | Customer/Supplier (we are the Customer) |
+| `delivery-promise` | `QuoteDeliveryOffers` | Query | REST `POST /delivery-quotes` (in-org) | Customer/Supplier (we are the Customer) |
 | `delivery-promise` | `MakePromise` | Command | REST `POST /promises` (in-org) | Customer/Supplier (we are the Customer) |
 | `order-sourcing`, `delivery-promise` | `CustomerOrderPlaced` | Event | Kafka `retailnetwork.customer-ordering.events`, `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderPlaced` | Customer/Supplier (we are the Supplier) |
 | `order-sourcing`, `delivery-promise` | `CustomerOrderCancelled` | Event | Kafka `retailnetwork.customer-ordering.events`, `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderCancelled` | Customer/Supplier (we are the Supplier) |

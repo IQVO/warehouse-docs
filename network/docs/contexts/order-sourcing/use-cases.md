@@ -23,7 +23,7 @@ network-level walk-through with times is the
 | Use case | Trigger | Inbound adapter (proposed) |
 | --- | --- | --- |
 | `QueueAssignment` | `CustomerOrderPlaced` | `internal/adapters/inbound/kafka`, topic `retailnetwork.customer-ordering.events` |
-| `ReoptimiseAssignment` | re-optimisation sweep; network-ops planner | scheduler in `cmd/order-sourcing`; `internal/adapters/inbound/http` `POST /assignments/{assignmentId}:reoptimise` |
+| `ReoptimiseAssignment` | re-optimisation sweep; network-ops planner | scheduler in `cmd/order-sourcing`; `internal/adapters/inbound/http` `POST /assignments/{assignmentId}/reoptimisations` |
 | `ReleaseToNode` | `releaseAt` reached; `SAME_DAY` right after queueing | scheduler in `cmd/order-sourcing` (release timer) |
 | `HandleNodeRefusal` | `PurchaseOrderRejected`, `PurchaseOrderExpired` | Kafka, topic `retailnetwork.vendor-connectivity.events` |
 | `LockAssignment` | `PurchaseOrderAccepted` | Kafka, topic `retailnetwork.vendor-connectivity.events` |
@@ -96,7 +96,7 @@ retried forever.
 - **Actor / trigger:** the re-optimisation sweep over `QUEUED` assignments;
   the network-ops planner.
 - **Inbound adapter:** scheduler; REST
-  `POST /assignments/{assignmentId}:reoptimise` with `Idempotency-Key`.
+  `POST /assignments/{assignmentId}/reoptimisations` with `Idempotency-Key`.
 - **Preconditions:** state `QUEUED`.
 - **Main flow:**
   1. Load the assignment (404 if unknown).

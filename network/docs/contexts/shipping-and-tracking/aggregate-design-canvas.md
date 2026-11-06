@@ -73,7 +73,7 @@ is not modelled (a `LABELLED` journey has no exit; see the
 | Command | Issued by | Inbound adapter (proposed) |
 | --- | --- | --- |
 | `IssueLabel` | `vendor-connectivity`, inside a vendor's label request | REST `POST /labels` (in-org) |
-| `VoidLabel` | Not named in the model | REST `POST /labels/{labelRef}:void` |
+| `VoidLabel` | Not named in the model | REST `POST /labels/{labelRef}/voids` |
 
 ### 7. Created Events
 

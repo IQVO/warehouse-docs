@@ -179,7 +179,7 @@ are not use cases: the HTTP adapter reads the departure repository directly.
 
 - **Actor / trigger:** network-ops planner; policy `PickupFromCutoffs` on
   `NodeSuspended` or `NodeRetired` (every future pickup of the node).
-- **Inbound adapter:** REST `POST /departures/{departureId}:cancel` (body
+- **Inbound adapter:** REST `POST /departures/{departureId}/cancellations` (body
   `reason`); Kafka consumer of `retailnetwork.node-topology.events`.
 - **Preconditions:** the departure is `SCHEDULED`.
 - **Main flow:**
@@ -226,7 +226,7 @@ are not use cases: the HTTP adapter reads the departure repository directly.
 
 - **Actor / trigger:** not named on an `inbound` row; the route exists.
   Presumably the network-ops planner.
-- **Inbound adapter:** REST `POST /lane-schedules/{laneId}:retire`.
+- **Inbound adapter:** REST `POST /lane-schedules/{laneId}/retirements`.
 - **Preconditions:** the schedule is `ACTIVE`.
 - **Main flow:**
   1. Load the schedule.
@@ -309,7 +309,7 @@ are not use cases: the HTTP adapter reads the departure repository directly.
 ## CloseLoad
 
 - **Actor / trigger:** sort-centre or station operator.
-- **Inbound adapter:** REST `POST /loads/{loadId}:close`.
+- **Inbound adapter:** REST `POST /loads/{loadId}/closures`.
 - **Preconditions:** the load is `OPEN`.
 - **Main flow:**
   1. Transition `OPEN → CLOSED`.
@@ -329,7 +329,7 @@ are not use cases: the HTTP adapter reads the departure repository directly.
 
 - **Actor / trigger:** sort-centre or station operator, when the truck
   leaves.
-- **Inbound adapter:** REST `POST /loads/{loadId}:dispatch`.
+- **Inbound adapter:** REST `POST /loads/{loadId}/dispatches`.
 - **Preconditions:** the load is `CLOSED`.
 - **Main flow:**
   1. Transition `CLOSED → DEPARTED`, stamp `departedAt`.
@@ -349,7 +349,7 @@ are not use cases: the HTTP adapter reads the departure repository directly.
 
 - **Actor / trigger:** operator at the destination node (for example a
   delivery station).
-- **Inbound adapter:** REST `POST /loads/{loadId}:receive`.
+- **Inbound adapter:** REST `POST /loads/{loadId}/receipts`.
 - **Preconditions:** the load is `DEPARTED`.
 - **Main flow:**
   1. Transition `DEPARTED → ARRIVED`, stamp `arrivedAt`.
