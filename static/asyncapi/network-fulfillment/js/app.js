@@ -1504,7 +1504,7 @@
       }
     },
     "warehouse.process-path-management.events": {
-      "description": "process-path-management's integration topic, CONSUMED by this service,\nnot published (the `Topic` constant in\n`internal/adapters/outbound/processpathcache/consumer.go`). The\nprocess-path capability cache replays it from the earliest offset under\na per-process unique group\n(`network-fulfillment-process-path-capability-cache`), started only when\n`CAPABILITY_OFFER_ENABLED=true`. It acts on `ProcessPathCreated`,\n`ProcessPathUpdated`, `ProcessPathDeactivated` and `CPTScheduleChanged`\nand ignores every other type.\n",
+      "description": "process-path-management's integration topic, CONSUMED by this service,\nnot published (the `Topic` constant in\n`internal/adapters/outbound/processpathcache/consumer.go`). The\nprocess-path capability cache replays it from the earliest offset under\na per-process unique group\n(group id prefix `network-fulfillment-process-path-capability-cache`,\nsuffixed with hostname, PID and a timestamp), always started (ADR 0025;\n`CAPABILITY_OFFER_ENABLED=false` is refused at boot). A message that is\nnot a valid CloudEvent is logged and skipped (no DLQ). It acts on `ProcessPathCreated`,\n`ProcessPathUpdated`, `ProcessPathDeactivated` and `CPTScheduleChanged`\nand ignores every other type.\n",
       "subscribe": {
         "operationId": "consumeProcessPathEvents",
         "summary": "Keep the local process-path and CPT-schedule capability cache current.",
@@ -1931,7 +1931,7 @@
       }
     },
     "warehouse.work-planning.events": {
-      "description": "wes-work-planning's integration topic, CONSUMED by this service, not\npublished (the `Topic` constant in\n`internal/adapters/outbound/pathcapacitycache/consumer.go`). The path\ncapacity cache replays it under a per-process unique group, started only\nwhen `CAPABILITY_OFFER_ENABLED=true`, and acts only on\n`PathCapacityChanged`.\n",
+      "description": "wes-work-planning's integration topic, CONSUMED by this service, not\npublished (the `Topic` constant in\n`internal/adapters/outbound/pathcapacitycache/consumer.go`). The path\ncapacity cache replays it under a per-process unique group (prefix\n`network-fulfillment-path-capacity-cache`, suffixed with hostname, PID\nand a timestamp), always started (ADR 0025; `CAPABILITY_OFFER_ENABLED=false`\nis refused at boot), and acts only on `PathCapacityChanged`. A message\nthat is not a valid CloudEvent is logged and skipped (no DLQ).\n",
       "subscribe": {
         "operationId": "consumeWorkPlanningEvents",
         "summary": "Keep the local remaining-admission-capacity read model current.",
@@ -2034,7 +2034,7 @@
       }
     },
     "warehouse.inbound-receiving.events": {
-      "description": "inbound-receiving's integration topic, CONSUMED by this service, not\npublished (the inbound loop of ADR 0028: `TypeReceiptCartonReceived`,\n`TypeCartonDiscrepancyRaised`, `TypeReceiptClosed` in\n`internal/adapters/inbound/kafka/receipt_consumer.go`). The consumer\nbooks the vendor's seller-shipment cartons onto inbound-receiving's ASNs\nand reports the receipts back to the network, under the stable group\n`INBOUND_RECEIPT_CONSUMER_GROUP` (set in warehouse-infra develop as\n`network-fulfillment-inbound-receiving`).\n",
+      "description": "inbound-receiving's integration topic, CONSUMED by this service, not\npublished (the inbound loop of ADR 0028: `TypeReceiptCartonReceived`,\n`TypeCartonDiscrepancyRaised`, `TypeReceiptClosed` in\n`internal/adapters/inbound/kafka/receipt_consumer.go`). The consumer\nbooks the vendor's seller-shipment cartons onto inbound-receiving's ASNs\nand reports the receipts back to the network, under the stable group\n`INBOUND_RECEIPT_CONSUMER_GROUP` (set in warehouse-infra develop as\n`network-fulfillment-inbound-receiving`), reading from the first offset\nwhen the group is new. The Kafka key is the ASN number (used when the\npayload carries no `asn_number`). A message that is not a valid\nCloudEvent, or whose data breaks inbound-receiving's contract, is\ndead-lettered to `warehouse.inbound-receiving.events.dlq` (headers\n`x-dlq-source-topic`, `x-dlq-error`, `x-dlq-failed-at`) and committed\npast; other failures are retried with backoff first and dead-lettered\nwhen exhausted. Unknown types are skipped.\n",
       "subscribe": {
         "operationId": "consumeInboundReceiptEvents",
         "summary": "Apply the receipt handover of the inbound loop (ADR 0028).",
@@ -2109,10 +2109,6 @@
                     "description": "The fields this service reads (receipt, ASN, carton identity); the full contents stay with inbound-receiving.",
                     "required": [
                       "receipt_id",
-                      "asn_number",
-                      "sealed",
-                      "lpn",
-                      "contents",
                       "received_at"
                     ],
                     "properties": {
@@ -2122,20 +2118,45 @@
                       },
                       "asn_number": {
                         "type": "string",
+                        "description": "Falls back to the Kafka key when empty; the event is rejected when both are empty.",
                         "x-parser-schema-id": "<anonymous-schema-169>"
                       },
                       "sscc": {
                         "type": "string",
+                        "description": "At least one of `sscc` and `lpn` must be non-empty, else the event is rejected.",
                         "x-parser-schema-id": "<anonymous-schema-170>"
                       },
                       "lpn": {
                         "type": "string",
                         "x-parser-schema-id": "<anonymous-schema-171>"
                       },
+                      "contents": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "properties": {
+                            "gtin": {
+                              "type": "string",
+                              "x-parser-schema-id": "<anonymous-schema-174>"
+                            },
+                            "qty": {
+                              "type": "integer",
+                              "format": "int64",
+                              "x-parser-schema-id": "<anonymous-schema-175>"
+                            },
+                            "condition": {
+                              "type": "string",
+                              "x-parser-schema-id": "<anonymous-schema-176>"
+                            }
+                          },
+                          "x-parser-schema-id": "<anonymous-schema-173>"
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-172>"
+                      },
                       "received_at": {
                         "type": "string",
                         "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-172>"
+                        "x-parser-schema-id": "<anonymous-schema-177>"
                       }
                     },
                     "x-parser-schema-id": "<anonymous-schema-167>"
@@ -2169,44 +2190,44 @@
                     "enum": [
                       "1.0"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-173>"
+                    "x-parser-schema-id": "<anonymous-schema-178>"
                   },
                   "id": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-174>"
+                    "x-parser-schema-id": "<anonymous-schema-179>"
                   },
                   "source": {
                     "type": "string",
                     "enum": [
                       "/warehouse/inbound-receiving"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-175>"
+                    "x-parser-schema-id": "<anonymous-schema-180>"
                   },
                   "type": {
                     "type": "string",
                     "const": "com.warehouse.wms.inbound-receiving.receipt.CartonDiscrepancyRaised",
-                    "x-parser-schema-id": "<anonymous-schema-176>"
+                    "x-parser-schema-id": "<anonymous-schema-181>"
                   },
                   "subject": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-177>"
+                    "x-parser-schema-id": "<anonymous-schema-182>"
                   },
                   "time": {
                     "type": "string",
                     "format": "date-time",
-                    "x-parser-schema-id": "<anonymous-schema-178>"
+                    "x-parser-schema-id": "<anonymous-schema-183>"
                   },
                   "datacontenttype": {
                     "type": "string",
                     "enum": [
                       "application/json"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-179>"
+                    "x-parser-schema-id": "<anonymous-schema-184>"
                   },
                   "dataschema": {
                     "type": "string",
                     "const": "urn:warehouse:inbound-receiving:events:CartonDiscrepancyRaised:v1",
-                    "x-parser-schema-id": "<anonymous-schema-180>"
+                    "x-parser-schema-id": "<anonymous-schema-185>"
                   },
                   "data": {
                     "type": "object",
@@ -2218,31 +2239,31 @@
                     "properties": {
                       "receipt_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-182>"
+                        "x-parser-schema-id": "<anonymous-schema-187>"
                       },
                       "sscc": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-183>"
+                        "x-parser-schema-id": "<anonymous-schema-188>"
                       },
                       "kind": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-184>"
+                        "x-parser-schema-id": "<anonymous-schema-189>"
                       },
                       "expected": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-185>"
+                        "x-parser-schema-id": "<anonymous-schema-190>"
                       },
                       "actual": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-186>"
+                        "x-parser-schema-id": "<anonymous-schema-191>"
                       },
                       "at": {
                         "type": "string",
                         "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-187>"
+                        "x-parser-schema-id": "<anonymous-schema-192>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-181>"
+                    "x-parser-schema-id": "<anonymous-schema-186>"
                   }
                 },
                 "x-parser-schema-id": "CartonDiscrepancyRaisedEvent"
@@ -2273,44 +2294,44 @@
                     "enum": [
                       "1.0"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-188>"
+                    "x-parser-schema-id": "<anonymous-schema-193>"
                   },
                   "id": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-189>"
+                    "x-parser-schema-id": "<anonymous-schema-194>"
                   },
                   "source": {
                     "type": "string",
                     "enum": [
                       "/warehouse/inbound-receiving"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-190>"
+                    "x-parser-schema-id": "<anonymous-schema-195>"
                   },
                   "type": {
                     "type": "string",
                     "const": "com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed",
-                    "x-parser-schema-id": "<anonymous-schema-191>"
+                    "x-parser-schema-id": "<anonymous-schema-196>"
                   },
                   "subject": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-192>"
+                    "x-parser-schema-id": "<anonymous-schema-197>"
                   },
                   "time": {
                     "type": "string",
                     "format": "date-time",
-                    "x-parser-schema-id": "<anonymous-schema-193>"
+                    "x-parser-schema-id": "<anonymous-schema-198>"
                   },
                   "datacontenttype": {
                     "type": "string",
                     "enum": [
                       "application/json"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-194>"
+                    "x-parser-schema-id": "<anonymous-schema-199>"
                   },
                   "dataschema": {
                     "type": "string",
                     "const": "urn:warehouse:inbound-receiving:events:ReceiptClosed:v1",
-                    "x-parser-schema-id": "<anonymous-schema-195>"
+                    "x-parser-schema-id": "<anonymous-schema-200>"
                   },
                   "data": {
                     "type": "object",
@@ -2323,27 +2344,27 @@
                     "properties": {
                       "receipt_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-197>"
+                        "x-parser-schema-id": "<anonymous-schema-202>"
                       },
                       "asn_number": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-198>"
+                        "x-parser-schema-id": "<anonymous-schema-203>"
                       },
                       "closed_at": {
                         "type": "string",
                         "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-199>"
+                        "x-parser-schema-id": "<anonymous-schema-204>"
                       },
                       "discrepancies": {
                         "type": "array",
                         "items": {
                           "type": "object",
-                          "x-parser-schema-id": "<anonymous-schema-201>"
+                          "x-parser-schema-id": "<anonymous-schema-206>"
                         },
-                        "x-parser-schema-id": "<anonymous-schema-200>"
+                        "x-parser-schema-id": "<anonymous-schema-205>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-196>"
+                    "x-parser-schema-id": "<anonymous-schema-201>"
                   }
                 },
                 "x-parser-schema-id": "ReceiptClosedEvent"

@@ -55,7 +55,7 @@
       "subscribe": {
         "operationId": "consumeFulfillmentIntegrationEvents",
         "summary": "Consume Fulfillment Execution integration events.",
-        "description": "Receive the TaskAvailable, TaskClaimed, TaskCompleted, TaskCPTMissed, PackageManifested, PackageDiverted and WeightDiscrepancyDetected CloudEvents this bounded context publishes.",
+        "description": "Receive the TaskAvailable, TaskClaimed, TaskCompleted, TaskCPTMissed, PackageManifested, PackageDiverted, WeightDiscrepancyDetected, TransferPicked, TransferDispatched and TransferArrived CloudEvents this bounded context publishes.",
         "tags": [
           {
             "name": "fulfillment-execution"
@@ -703,7 +703,7 @@
               "name": "TaskCPTMissed",
               "title": "TaskCPTMissed",
               "summary": "A task is still open (Pending or Claimed) past its CPT deadline.",
-              "description": "Raised by the CPT-missed sweep (`POST /tasks/sweep-cpt-misses`, ADR-0025). Re-fires on every sweep pass while the task stays open past its CPT, so consumers must dedupe on their own (order-management's RepromiseOrder is idempotent by design). Published on `warehouse.fulfillment.events`, keyed by task id. Consumed by order-management.",
+              "description": "Raised by the CPT-missed sweep (`POST /cpt-miss-sweeps`, ADR-0025). Re-fires on every sweep pass while the task stays open past its CPT, so consumers must dedupe on their own (order-management's RepromiseOrder is idempotent by design). Published on `warehouse.fulfillment.events`, keyed by task id. Consumed by order-management.",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -2721,6 +2721,82 @@
                           }
                         },
                         "x-parser-schema-id": "<anonymous-schema-235>"
+                      },
+                      "pick": {
+                        "type": "object",
+                        "description": "Present ONLY on work released on the PICK path with scan confirmation (ADR 0054; additive, the event stays v1). The pick plan the station scans against (`POST /tasks/{id}/scans`). Absent on every other release and on a PICK released without scan confirmation. A present object that is not a valid plan (blank sku, missing or non-positive quantity, a unit other than EACH or CASE) is rejected and dead-lettered; no task is created.",
+                        "required": [
+                          "sku",
+                          "quantity",
+                          "unit"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "The SKU to pick.",
+                            "x-parser-schema-id": "<anonymous-schema-243>"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "The planned quantity in EACHES (the ledger unit), whatever the unit.",
+                            "x-parser-schema-id": "<anonymous-schema-244>"
+                          },
+                          "unit": {
+                            "type": "string",
+                            "enum": [
+                              "EACH",
+                              "CASE"
+                            ],
+                            "description": "The unit the operator scans.",
+                            "x-parser-schema-id": "<anonymous-schema-245>"
+                          },
+                          "from_bin": {
+                            "type": "string",
+                            "description": "Optional source bin.",
+                            "x-parser-schema-id": "<anonymous-schema-246>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-242>"
+                      },
+                      "case_break": {
+                        "type": "object",
+                        "description": "Present ONLY on work released on the BREAK_CASE path (ADR 0054; additive, the event stays v1). Break the sealed case `lpn` of `sku` into `loose_bin` for the EACH pick `pick_task_id`. Absent on every other release. An object with a blank field or an `lpn` that is not 1-64 characters of [A-Za-z0-9._-] is rejected and dead-lettered; no task is created.",
+                        "required": [
+                          "lpn",
+                          "sku",
+                          "loose_bin",
+                          "pick_task_id"
+                        ],
+                        "properties": {
+                          "lpn": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64,
+                            "pattern": "^[A-Za-z0-9._-]+$",
+                            "description": "The sealed case's licence plate number.",
+                            "x-parser-schema-id": "<anonymous-schema-248>"
+                          },
+                          "sku": {
+                            "type": "string",
+                            "minLength": 1,
+                            "x-parser-schema-id": "<anonymous-schema-249>"
+                          },
+                          "loose_bin": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "The bin the case is broken into.",
+                            "x-parser-schema-id": "<anonymous-schema-250>"
+                          },
+                          "pick_task_id": {
+                            "type": "string",
+                            "minLength": 1,
+                            "description": "The EACH pick task this break serves.",
+                            "x-parser-schema-id": "<anonymous-schema-251>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-247>"
                       }
                     },
                     "x-parser-schema-id": "<anonymous-schema-215>"
@@ -2824,7 +2900,7 @@
       }
     },
     "warehouse.process-path-management.events": {
-      "description": "process-path-management's integration topic; this service replays ProcessPath* events into its local catalogue.",
+      "description": "process-path-management's integration topic; this service replays ProcessPath* events into its local catalogue only when `PATH_CATALOGUE_SOURCE=kafka` (default `file`). The consumer is group-less (it reads the whole topic from the earliest offset on every start to rebuild an in-memory cache), so it declares no consumer group.",
       "publish": {
         "operationId": "receiveProcessPathEvents",
         "summary": "Receive process-path catalogue events.",
@@ -2863,17 +2939,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathCreated",
-                        "x-parser-schema-id": "<anonymous-schema-244>"
+                        "x-parser-schema-id": "<anonymous-schema-254>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/process-path-management",
-                        "x-parser-schema-id": "<anonymous-schema-245>"
+                        "x-parser-schema-id": "<anonymous-schema-255>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:process-path-management:events:ProcessPathCreated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-246>"
+                        "x-parser-schema-id": "<anonymous-schema-256>"
                       },
                       "data": {
                         "type": "object",
@@ -2884,40 +2960,40 @@
                           "path_id": {
                             "type": "string",
                             "description": "Process path id.",
-                            "x-parser-schema-id": "<anonymous-schema-248>"
+                            "x-parser-schema-id": "<anonymous-schema-258>"
                           },
                           "match_prefix": {
                             "type": "string",
                             "description": "Case-insensitive path_id prefix this path matches.",
-                            "x-parser-schema-id": "<anonymous-schema-249>"
+                            "x-parser-schema-id": "<anonymous-schema-259>"
                           },
                           "direct": {
                             "type": "boolean",
                             "description": "Direct (non-sortable) path.",
-                            "x-parser-schema-id": "<anonymous-schema-250>"
+                            "x-parser-schema-id": "<anonymous-schema-260>"
                           },
                           "required_capabilities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-252>"
+                              "x-parser-schema-id": "<anonymous-schema-262>"
                             },
                             "description": "Station capabilities required.",
-                            "x-parser-schema-id": "<anonymous-schema-251>"
+                            "x-parser-schema-id": "<anonymous-schema-261>"
                           },
                           "destination_location_role": {
                             "type": "string",
                             "description": "Optional destination location role.",
-                            "x-parser-schema-id": "<anonymous-schema-253>"
+                            "x-parser-schema-id": "<anonymous-schema-263>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-247>"
+                        "x-parser-schema-id": "<anonymous-schema-257>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-243>"
+                    "x-parser-schema-id": "<anonymous-schema-253>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-242>"
+                "x-parser-schema-id": "<anonymous-schema-252>"
               },
               "examples": [
                 {
@@ -2974,17 +3050,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated",
-                        "x-parser-schema-id": "<anonymous-schema-256>"
+                        "x-parser-schema-id": "<anonymous-schema-266>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/process-path-management",
-                        "x-parser-schema-id": "<anonymous-schema-257>"
+                        "x-parser-schema-id": "<anonymous-schema-267>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:process-path-management:events:ProcessPathUpdated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-258>"
+                        "x-parser-schema-id": "<anonymous-schema-268>"
                       },
                       "data": {
                         "type": "object",
@@ -2995,40 +3071,40 @@
                           "path_id": {
                             "type": "string",
                             "description": "Process path id.",
-                            "x-parser-schema-id": "<anonymous-schema-260>"
+                            "x-parser-schema-id": "<anonymous-schema-270>"
                           },
                           "match_prefix": {
                             "type": "string",
                             "description": "Case-insensitive path_id prefix this path matches.",
-                            "x-parser-schema-id": "<anonymous-schema-261>"
+                            "x-parser-schema-id": "<anonymous-schema-271>"
                           },
                           "direct": {
                             "type": "boolean",
                             "description": "Direct (non-sortable) path.",
-                            "x-parser-schema-id": "<anonymous-schema-262>"
+                            "x-parser-schema-id": "<anonymous-schema-272>"
                           },
                           "required_capabilities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-264>"
+                              "x-parser-schema-id": "<anonymous-schema-274>"
                             },
                             "description": "Station capabilities required.",
-                            "x-parser-schema-id": "<anonymous-schema-263>"
+                            "x-parser-schema-id": "<anonymous-schema-273>"
                           },
                           "destination_location_role": {
                             "type": "string",
                             "description": "Optional destination location role.",
-                            "x-parser-schema-id": "<anonymous-schema-265>"
+                            "x-parser-schema-id": "<anonymous-schema-275>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-259>"
+                        "x-parser-schema-id": "<anonymous-schema-269>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-255>"
+                    "x-parser-schema-id": "<anonymous-schema-265>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-254>"
+                "x-parser-schema-id": "<anonymous-schema-264>"
               },
               "examples": [
                 {
@@ -3086,17 +3162,17 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated",
-                        "x-parser-schema-id": "<anonymous-schema-268>"
+                        "x-parser-schema-id": "<anonymous-schema-278>"
                       },
                       "source": {
                         "type": "string",
                         "const": "/warehouse/process-path-management",
-                        "x-parser-schema-id": "<anonymous-schema-269>"
+                        "x-parser-schema-id": "<anonymous-schema-279>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:process-path-management:events:ProcessPathDeactivated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-270>"
+                        "x-parser-schema-id": "<anonymous-schema-280>"
                       },
                       "data": {
                         "type": "object",
@@ -3107,40 +3183,40 @@
                           "path_id": {
                             "type": "string",
                             "description": "Process path id.",
-                            "x-parser-schema-id": "<anonymous-schema-272>"
+                            "x-parser-schema-id": "<anonymous-schema-282>"
                           },
                           "match_prefix": {
                             "type": "string",
                             "description": "Case-insensitive path_id prefix this path matches.",
-                            "x-parser-schema-id": "<anonymous-schema-273>"
+                            "x-parser-schema-id": "<anonymous-schema-283>"
                           },
                           "direct": {
                             "type": "boolean",
                             "description": "Direct (non-sortable) path.",
-                            "x-parser-schema-id": "<anonymous-schema-274>"
+                            "x-parser-schema-id": "<anonymous-schema-284>"
                           },
                           "required_capabilities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-276>"
+                              "x-parser-schema-id": "<anonymous-schema-286>"
                             },
                             "description": "Station capabilities required.",
-                            "x-parser-schema-id": "<anonymous-schema-275>"
+                            "x-parser-schema-id": "<anonymous-schema-285>"
                           },
                           "destination_location_role": {
                             "type": "string",
                             "description": "Optional destination location role.",
-                            "x-parser-schema-id": "<anonymous-schema-277>"
+                            "x-parser-schema-id": "<anonymous-schema-287>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-271>"
+                        "x-parser-schema-id": "<anonymous-schema-281>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-267>"
+                    "x-parser-schema-id": "<anonymous-schema-277>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-266>"
+                "x-parser-schema-id": "<anonymous-schema-276>"
               },
               "examples": [
                 {
@@ -3170,154 +3246,386 @@
       }
     },
     "warehouse.product-master.events": {
-      "description": "product-master's integration topic (key and `subject` = SKU). This service consumes only ProductClassified from it, into its local classification copy (ADR-0039), under the consumer group from `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`, only when `PRODUCT_CLASSIFICATION_MODE=kafka`. Every other type on the topic (ProductRegistered, ProductDescriptionChanged, ProductDimensionsDeclared, ProductMeasured) is ignored.",
+      "description": "product-master's integration topic (key and `subject` = SKU). This service runs two independent consumers on it, each under its own consumer group (the two must differ). ProductClassified feeds the local classification copy (ADR-0039) under `PRODUCT_CLASSIFICATION_CONSUMER_GROUP`, only when `PRODUCT_CLASSIFICATION_MODE=kafka`. ProductPackLevelDeclared and ProductPackLevelRetired feed the local PackView (ADR 0054) under the required `PACK_VIEW_CONSUMER_GROUP`, always on. Every other type on the topic (ProductRegistered, ProductDescriptionChanged, ProductDimensionsDeclared, ProductMeasured) is ignored.",
       "publish": {
         "operationId": "receiveProductClassified",
-        "summary": "Receive ProductClassified from product-master.",
-        "description": "product-master publishes the full classification of a SKU here. The CloudEvents `id` claim and the version-guarded upsert of `product_classification_copy` commit in one transaction; the offset is committed afterwards. A message is applied only when its `version` is greater than the stored one. A message that is not a valid CloudEvent, or whose payload breaks the contract, is logged at WARN and skipped. SealPackage reads the copy for its DOT hazard segregation check.",
+        "summary": "Receive ProductClassified, ProductPackLevelDeclared and ProductPackLevelRetired from product-master.",
+        "description": "product-master publishes the full classification of a SKU here. The CloudEvents `id` claim and the version-guarded upsert of `product_classification_copy` commit in one transaction; the offset is committed afterwards. A message is applied only when its `version` is greater than the stored one. A message that is not a valid CloudEvent, or whose payload breaks the contract, is logged at WARN and skipped. SealPackage reads the copy for its DOT hazard segregation check. The pack-level events follow the same delivery contract (CloudEvents `id` claim and version-guarded write in one transaction, offset committed afterwards; invalid payloads are logged at WARN and skipped).",
         "tags": [
           {
             "name": "consumed"
           }
         ],
         "message": {
-          "name": "ProductClassified",
-          "title": "ProductClassified",
-          "summary": "product-master set or replaced a SKU's handling classification (consumed).",
-          "description": "Published by product-master on `warehouse.product-master.events` (its AsyncAPI is the source of truth); consumed here into the local classification copy (ADR-0039). Full-state replacement of the classification; optional fields are omitted when unset. Applied only when `version` is greater than the stored version; dedupe on the CloudEvents `id`.",
-          "contentType": "application/cloudevents+json",
-          "tags": [
+          "oneOf": [
             {
-              "name": "consumed"
-            }
-          ],
-          "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
-          "payload": {
-            "allOf": [
-              "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
-              {
-                "type": "object",
-                "required": [
-                  "type",
-                  "source",
-                  "dataschema",
-                  "data"
-                ],
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "const": "com.warehouse.wms.product-master.product.ProductClassified",
-                    "x-parser-schema-id": "<anonymous-schema-280>"
-                  },
-                  "source": {
-                    "type": "string",
-                    "const": "/warehouse/product-master",
-                    "x-parser-schema-id": "<anonymous-schema-281>"
-                  },
-                  "dataschema": {
-                    "type": "string",
-                    "const": "urn:warehouse:product-master:events:ProductClassified:v1",
-                    "x-parser-schema-id": "<anonymous-schema-282>"
-                  },
-                  "data": {
+              "name": "ProductClassified",
+              "title": "ProductClassified",
+              "summary": "product-master set or replaced a SKU's handling classification (consumed).",
+              "description": "Published by product-master on `warehouse.product-master.events` (its AsyncAPI is the source of truth); consumed here into the local classification copy (ADR-0039). Full-state replacement of the classification; optional fields are omitted when unset. Applied only when `version` is greater than the stored version; dedupe on the CloudEvents `id`.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
                     "type": "object",
                     "required": [
-                      "sku",
-                      "handling_tags",
-                      "classification_source",
-                      "version"
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
                     ],
                     "properties": {
-                      "sku": {
+                      "type": {
                         "type": "string",
-                        "description": "The SKU (also the Kafka key and the CloudEvents `subject`).",
-                        "x-parser-schema-id": "<anonymous-schema-284>"
-                      },
-                      "handling_tags": {
-                        "type": "array",
-                        "minItems": 1,
-                        "items": {
-                          "type": "string",
-                          "enum": [
-                            "Hazmat",
-                            "Fragile",
-                            "TemperatureSensitive",
-                            "Oversized",
-                            "HighValue"
-                          ],
-                          "x-parser-schema-id": "<anonymous-schema-286>"
-                        },
-                        "description": "Handling tags in stable order. Hazmat and Fragile feed ClassificationInfo; the others are stored but unused here.",
-                        "x-parser-schema-id": "<anonymous-schema-285>"
-                      },
-                      "temperature_class": {
-                        "type": "string",
-                        "enum": [
-                          "Ambient",
-                          "Chilled",
-                          "Frozen"
-                        ],
-                        "description": "Omitted when unset.",
-                        "x-parser-schema-id": "<anonymous-schema-287>"
-                      },
-                      "dot_hazard_class": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "maximum": 9,
-                        "description": "DOT hazard class; omitted when unset. Drives SealPackage's same-package segregation (ADR-0010).",
-                        "x-parser-schema-id": "<anonymous-schema-288>"
-                      },
-                      "classification_source": {
-                        "type": "string",
-                        "enum": [
-                          "native",
-                          "legacy-import"
-                        ],
-                        "description": "Migration artefact of product-master (its ADR 0003); not used here.",
-                        "x-parser-schema-id": "<anonymous-schema-289>"
-                      },
-                      "version": {
-                        "type": "integer",
-                        "minimum": 1,
-                        "format": "int64",
-                        "description": "Product aggregate version after the change; the local copy's guard.",
+                        "const": "com.warehouse.wms.product-master.product.ProductClassified",
                         "x-parser-schema-id": "<anonymous-schema-290>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/product-master",
+                        "x-parser-schema-id": "<anonymous-schema-291>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:product-master:events:ProductClassified:v1",
+                        "x-parser-schema-id": "<anonymous-schema-292>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "description": "The SKU (also the Kafka key and the CloudEvents `subject`). An empty sku makes the payload invalid.",
+                            "x-parser-schema-id": "<anonymous-schema-294>"
+                          },
+                          "handling_tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "Hazmat",
+                                "Fragile",
+                                "TemperatureSensitive",
+                                "Oversized",
+                                "HighValue"
+                              ],
+                              "x-parser-schema-id": "<anonymous-schema-296>"
+                            },
+                            "description": "Handling tags in stable order. Hazmat and Fragile feed ClassificationInfo; the others are stored but unused here.",
+                            "x-parser-schema-id": "<anonymous-schema-295>"
+                          },
+                          "temperature_class": {
+                            "type": "string",
+                            "enum": [
+                              "Ambient",
+                              "Chilled",
+                              "Frozen"
+                            ],
+                            "description": "Omitted when unset.",
+                            "x-parser-schema-id": "<anonymous-schema-297>"
+                          },
+                          "dot_hazard_class": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9,
+                            "description": "DOT hazard class; omitted when unset. Drives SealPackage's same-package segregation (ADR-0010).",
+                            "x-parser-schema-id": "<anonymous-schema-298>"
+                          },
+                          "classification_source": {
+                            "type": "string",
+                            "enum": [
+                              "native",
+                              "legacy-import"
+                            ],
+                            "description": "Migration artefact of product-master (its ADR 0003); optional and not used here.",
+                            "x-parser-schema-id": "<anonymous-schema-299>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "format": "int64",
+                            "description": "Product aggregate version after the change; the local copy's guard.",
+                            "x-parser-schema-id": "<anonymous-schema-300>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-293>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-283>"
+                    "x-parser-schema-id": "<anonymous-schema-289>"
                   }
-                },
-                "x-parser-schema-id": "<anonymous-schema-279>"
-              }
-            ],
-            "x-parser-schema-id": "<anonymous-schema-278>"
-          },
-          "examples": [
-            {
-              "name": "productClassified",
-              "headers": {
-                "content-type": "application/cloudevents+json; charset=UTF-8"
+                ],
+                "x-parser-schema-id": "<anonymous-schema-288>"
               },
-              "payload": {
-                "specversion": "1.0",
-                "id": "0f6d8a2b-3c4e-4d5f-8a9b-7c6d5e4f3a2b",
-                "source": "/warehouse/product-master",
-                "type": "com.warehouse.wms.product-master.product.ProductClassified",
-                "subject": "SKU-1",
-                "time": "2026-10-06T21:02:00Z",
-                "datacontenttype": "application/json",
-                "dataschema": "urn:warehouse:product-master:events:ProductClassified:v1",
-                "data": {
-                  "sku": "SKU-1",
-                  "handling_tags": [
-                    "Hazmat",
-                    "TemperatureSensitive"
-                  ],
-                  "temperature_class": "Frozen",
-                  "dot_hazard_class": 3,
-                  "classification_source": "native",
-                  "version": 3
+              "examples": [
+                {
+                  "name": "productClassified",
+                  "headers": {
+                    "content-type": "application/cloudevents+json; charset=UTF-8"
+                  },
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "0f6d8a2b-3c4e-4d5f-8a9b-7c6d5e4f3a2b",
+                    "source": "/warehouse/product-master",
+                    "type": "com.warehouse.wms.product-master.product.ProductClassified",
+                    "subject": "SKU-1",
+                    "time": "2026-10-06T21:02:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:product-master:events:ProductClassified:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "handling_tags": [
+                        "Hazmat",
+                        "TemperatureSensitive"
+                      ],
+                      "temperature_class": "Frozen",
+                      "dot_hazard_class": 3,
+                      "classification_source": "native",
+                      "version": 3
+                    }
+                  }
                 }
+              ]
+            },
+            {
+              "name": "ProductPackLevelDeclared",
+              "title": "ProductPackLevelDeclared",
+              "summary": "product-master declared or revised a pack level of a SKU (consumed).",
+              "description": "Published by product-master on `warehouse.product-master.events` (its AsyncAPI is the source of truth); consumed here into the local PackView read per scanned GTIN at scan time (ADR 0054), by the always-on consumer under the required `PACK_VIEW_CONSUMER_GROUP`.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wms.product-master.product.ProductPackLevelDeclared",
+                        "x-parser-schema-id": "<anonymous-schema-303>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/product-master",
+                        "x-parser-schema-id": "<anonymous-schema-304>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:product-master:events:ProductPackLevelDeclared:v1",
+                        "x-parser-schema-id": "<anonymous-schema-305>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "units_per_pack",
+                          "effective_from",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "description": "The SKU (also the Kafka key and the CloudEvents `subject`). Must not be blank.",
+                            "x-parser-schema-id": "<anonymous-schema-307>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "enum": [
+                              "EACH",
+                              "INNER",
+                              "CASE",
+                              "PALLET"
+                            ],
+                            "description": "Any other level makes the payload invalid.",
+                            "x-parser-schema-id": "<anonymous-schema-308>"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "description": "Must parse as a GTIN (normalised to 14 digits).",
+                            "x-parser-schema-id": "<anonymous-schema-309>"
+                          },
+                          "child_gtin": {
+                            "type": "string",
+                            "description": "Optional; must parse as a GTIN when present.",
+                            "x-parser-schema-id": "<anonymous-schema-310>"
+                          },
+                          "qty_of_child": {
+                            "type": "integer",
+                            "minimum": 2,
+                            "description": "Absent for EACH.",
+                            "x-parser-schema-id": "<anonymous-schema-311>"
+                          },
+                          "units_per_pack": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Direct factor to eaches; 1 for EACH.",
+                            "x-parser-schema-id": "<anonymous-schema-312>"
+                          },
+                          "is_orderable": {
+                            "type": "boolean",
+                            "description": "Carried by the producer; ignored by this consumer.",
+                            "x-parser-schema-id": "<anonymous-schema-313>"
+                          },
+                          "is_despatch_unit": {
+                            "type": "boolean",
+                            "description": "Carried by the producer; ignored by this consumer.",
+                            "x-parser-schema-id": "<anonymous-schema-314>"
+                          },
+                          "dims": {
+                            "type": "object",
+                            "description": "Optional DECLARED dimensions and weight of the level, used by ship-in-own-container (ADR 0056). Kept only when all four measures are positive; otherwise dropped (the level is still applied, but cannot ship in its own container).",
+                            "properties": {
+                              "length_mm": {
+                                "type": "integer",
+                                "description": "Length in millimetres.",
+                                "x-parser-schema-id": "<anonymous-schema-316>"
+                              },
+                              "width_mm": {
+                                "type": "integer",
+                                "description": "Width in millimetres.",
+                                "x-parser-schema-id": "<anonymous-schema-317>"
+                              },
+                              "height_mm": {
+                                "type": "integer",
+                                "description": "Height in millimetres.",
+                                "x-parser-schema-id": "<anonymous-schema-318>"
+                              },
+                              "weight_g": {
+                                "type": "integer",
+                                "description": "Weight in grams.",
+                                "x-parser-schema-id": "<anonymous-schema-319>"
+                              }
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-315>"
+                          },
+                          "effective_from": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-320>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-321>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-306>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-302>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-301>"
+              }
+            },
+            {
+              "name": "ProductPackLevelRetired",
+              "title": "ProductPackLevelRetired",
+              "summary": "product-master retired a pack level of a SKU (consumed).",
+              "description": "Published by product-master on `warehouse.product-master.events` (its AsyncAPI is the source of truth); consumed here into the local PackView read per scanned GTIN at scan time (ADR 0054), by the always-on consumer under the required `PACK_VIEW_CONSUMER_GROUP`.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "required": [
+                      "type",
+                      "source",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wms.product-master.product.ProductPackLevelRetired",
+                        "x-parser-schema-id": "<anonymous-schema-324>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/product-master",
+                        "x-parser-schema-id": "<anonymous-schema-325>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:product-master:events:ProductPackLevelRetired:v1",
+                        "x-parser-schema-id": "<anonymous-schema-326>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "effective_to",
+                          "reason",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-328>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-329>"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-330>"
+                          },
+                          "effective_to": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-331>"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-332>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-333>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-327>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-323>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-322>"
               }
             }
           ]
@@ -3362,17 +3670,17 @@
                   "type": {
                     "type": "string",
                     "const": "com.warehouse.wes.task-interleaving.stationtrip.InterleavingHintIssued",
-                    "x-parser-schema-id": "<anonymous-schema-293>"
+                    "x-parser-schema-id": "<anonymous-schema-336>"
                   },
                   "source": {
                     "type": "string",
                     "const": "/warehouse/task-interleaving",
-                    "x-parser-schema-id": "<anonymous-schema-294>"
+                    "x-parser-schema-id": "<anonymous-schema-337>"
                   },
                   "dataschema": {
                     "type": "string",
                     "const": "urn:warehouse:task-interleaving:events:InterleavingHintIssued:v1",
-                    "x-parser-schema-id": "<anonymous-schema-295>"
+                    "x-parser-schema-id": "<anonymous-schema-338>"
                   },
                   "data": {
                     "type": "object",
@@ -3387,38 +3695,38 @@
                       "hint_id": {
                         "type": "string",
                         "description": "The hint id.",
-                        "x-parser-schema-id": "<anonymous-schema-297>"
+                        "x-parser-schema-id": "<anonymous-schema-340>"
                       },
                       "station_id": {
                         "type": "string",
                         "description": "The station the hint is for (also the Kafka key and the CloudEvents `subject`).",
-                        "x-parser-schema-id": "<anonymous-schema-298>"
+                        "x-parser-schema-id": "<anonymous-schema-341>"
                       },
                       "site_id": {
                         "type": "string",
                         "description": "The site the station belongs to.",
-                        "x-parser-schema-id": "<anonymous-schema-299>"
+                        "x-parser-schema-id": "<anonymous-schema-342>"
                       },
                       "after_task_id": {
                         "type": "string",
                         "description": "The task whose completion triggered the hint. Not used here.",
-                        "x-parser-schema-id": "<anonymous-schema-300>"
+                        "x-parser-schema-id": "<anonymous-schema-343>"
                       },
                       "origin_location": {
                         "type": "string",
                         "description": "Where the operator finished `after_task_id`. Not used here.",
-                        "x-parser-schema-id": "<anonymous-schema-301>"
+                        "x-parser-schema-id": "<anonymous-schema-344>"
                       },
                       "expires_at": {
                         "type": "string",
                         "format": "date-time",
                         "description": "The hint is ignored at and after this instant (fail-open).",
-                        "x-parser-schema-id": "<anonymous-schema-302>"
+                        "x-parser-schema-id": "<anonymous-schema-345>"
                       },
                       "policy_version": {
                         "type": "integer",
                         "description": "The interleaving policy version the hint was issued under. Not used here.",
-                        "x-parser-schema-id": "<anonymous-schema-303>"
+                        "x-parser-schema-id": "<anonymous-schema-346>"
                       },
                       "candidates": {
                         "type": "array",
@@ -3434,41 +3742,41 @@
                               "type": "integer",
                               "minimum": 1,
                               "description": "1 = the producer's preferred candidate.",
-                              "x-parser-schema-id": "<anonymous-schema-306>"
+                              "x-parser-schema-id": "<anonymous-schema-349>"
                             },
                             "task_id": {
                               "type": "string",
                               "description": "A task of this context's open pool.",
-                              "x-parser-schema-id": "<anonymous-schema-307>"
+                              "x-parser-schema-id": "<anonymous-schema-350>"
                             },
                             "task_type": {
                               "type": "string",
                               "description": "Not used here (claimNext scans one type per call).",
-                              "x-parser-schema-id": "<anonymous-schema-308>"
+                              "x-parser-schema-id": "<anonymous-schema-351>"
                             },
                             "location": {
                               "type": "string",
                               "description": "Not used here.",
-                              "x-parser-schema-id": "<anonymous-schema-309>"
+                              "x-parser-schema-id": "<anonymous-schema-352>"
                             },
                             "detour_m": {
                               "type": "number",
                               "description": "Not used here.",
-                              "x-parser-schema-id": "<anonymous-schema-310>"
+                              "x-parser-schema-id": "<anonymous-schema-353>"
                             }
                           },
-                          "x-parser-schema-id": "<anonymous-schema-305>"
+                          "x-parser-schema-id": "<anonymous-schema-348>"
                         },
-                        "x-parser-schema-id": "<anonymous-schema-304>"
+                        "x-parser-schema-id": "<anonymous-schema-347>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-296>"
+                    "x-parser-schema-id": "<anonymous-schema-339>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-292>"
+                "x-parser-schema-id": "<anonymous-schema-335>"
               }
             ],
-            "x-parser-schema-id": "<anonymous-schema-291>"
+            "x-parser-schema-id": "<anonymous-schema-334>"
           },
           "examples": [
             {
@@ -3543,202 +3851,9 @@
       "ProcessPathCreated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0]",
       "ProcessPathUpdated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[1]",
       "ProcessPathDeactivated": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[2]",
-      "ProductPackLevelDeclared": {
-        "name": "ProductPackLevelDeclared",
-        "title": "ProductPackLevelDeclared",
-        "summary": "product-master declared or revised a pack level of a SKU (consumed).",
-        "description": "Published by product-master on `warehouse.product-master.events` (its AsyncAPI is the source of truth); consumed here into the local PackView read per scanned GTIN at scan time (ADR 0054), by the always-on consumer under the required `PACK_VIEW_CONSUMER_GROUP`.",
-        "contentType": "application/cloudevents+json",
-        "tags": [
-          {
-            "name": "consumed"
-          }
-        ],
-        "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
-        "payload": {
-          "allOf": [
-            "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
-            {
-              "type": "object",
-              "required": [
-                "type",
-                "source",
-                "dataschema",
-                "data"
-              ],
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "const": "com.warehouse.wms.product-master.product.ProductPackLevelDeclared",
-                  "x-parser-schema-id": "<anonymous-schema-313>"
-                },
-                "source": {
-                  "type": "string",
-                  "const": "/warehouse/product-master",
-                  "x-parser-schema-id": "<anonymous-schema-314>"
-                },
-                "dataschema": {
-                  "type": "string",
-                  "const": "urn:warehouse:product-master:events:ProductPackLevelDeclared:v1",
-                  "x-parser-schema-id": "<anonymous-schema-315>"
-                },
-                "data": {
-                  "type": "object",
-                  "required": [
-                    "sku",
-                    "level",
-                    "gtin",
-                    "units_per_pack",
-                    "is_orderable",
-                    "is_despatch_unit",
-                    "effective_from",
-                    "version"
-                  ],
-                  "properties": {
-                    "sku": {
-                      "type": "string",
-                      "description": "The SKU (also the Kafka key and the CloudEvents `subject`).",
-                      "x-parser-schema-id": "<anonymous-schema-317>"
-                    },
-                    "level": {
-                      "type": "string",
-                      "x-parser-schema-id": "<anonymous-schema-318>"
-                    },
-                    "gtin": {
-                      "type": "string",
-                      "x-parser-schema-id": "<anonymous-schema-319>"
-                    },
-                    "child_gtin": {
-                      "type": "string",
-                      "x-parser-schema-id": "<anonymous-schema-320>"
-                    },
-                    "qty_of_child": {
-                      "type": "integer",
-                      "minimum": 2,
-                      "description": "Absent for EACH.",
-                      "x-parser-schema-id": "<anonymous-schema-321>"
-                    },
-                    "units_per_pack": {
-                      "type": "integer",
-                      "minimum": 1,
-                      "description": "Direct factor to eaches; 1 for EACH.",
-                      "x-parser-schema-id": "<anonymous-schema-322>"
-                    },
-                    "is_orderable": {
-                      "type": "boolean",
-                      "x-parser-schema-id": "<anonymous-schema-323>"
-                    },
-                    "is_despatch_unit": {
-                      "type": "boolean",
-                      "x-parser-schema-id": "<anonymous-schema-324>"
-                    },
-                    "effective_from": {
-                      "type": "string",
-                      "format": "date-time",
-                      "x-parser-schema-id": "<anonymous-schema-325>"
-                    },
-                    "version": {
-                      "type": "integer",
-                      "minimum": 1,
-                      "x-parser-schema-id": "<anonymous-schema-326>"
-                    }
-                  },
-                  "x-parser-schema-id": "<anonymous-schema-316>"
-                }
-              },
-              "x-parser-schema-id": "<anonymous-schema-312>"
-            }
-          ],
-          "x-parser-schema-id": "<anonymous-schema-311>"
-        }
-      },
-      "ProductPackLevelRetired": {
-        "name": "ProductPackLevelRetired",
-        "title": "ProductPackLevelRetired",
-        "summary": "product-master retired a pack level of a SKU (consumed).",
-        "description": "Published by product-master on `warehouse.product-master.events` (its AsyncAPI is the source of truth); consumed here into the local PackView read per scanned GTIN at scan time (ADR 0054), by the always-on consumer under the required `PACK_VIEW_CONSUMER_GROUP`.",
-        "contentType": "application/cloudevents+json",
-        "tags": [
-          {
-            "name": "consumed"
-          }
-        ],
-        "headers": "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].headers",
-        "payload": {
-          "allOf": [
-            "$ref:$.channels.warehouse.fulfillment.events.subscribe.message.oneOf[0].payload.allOf[0]",
-            {
-              "type": "object",
-              "required": [
-                "type",
-                "source",
-                "dataschema",
-                "data"
-              ],
-              "properties": {
-                "type": {
-                  "type": "string",
-                  "const": "com.warehouse.wms.product-master.product.ProductPackLevelRetired",
-                  "x-parser-schema-id": "<anonymous-schema-329>"
-                },
-                "source": {
-                  "type": "string",
-                  "const": "/warehouse/product-master",
-                  "x-parser-schema-id": "<anonymous-schema-330>"
-                },
-                "dataschema": {
-                  "type": "string",
-                  "const": "urn:warehouse:product-master:events:ProductPackLevelRetired:v1",
-                  "x-parser-schema-id": "<anonymous-schema-331>"
-                },
-                "data": {
-                  "type": "object",
-                  "required": [
-                    "sku",
-                    "level",
-                    "gtin",
-                    "effective_to",
-                    "reason",
-                    "version"
-                  ],
-                  "properties": {
-                    "sku": {
-                      "type": "string",
-                      "x-parser-schema-id": "<anonymous-schema-333>"
-                    },
-                    "level": {
-                      "type": "string",
-                      "x-parser-schema-id": "<anonymous-schema-334>"
-                    },
-                    "gtin": {
-                      "type": "string",
-                      "x-parser-schema-id": "<anonymous-schema-335>"
-                    },
-                    "effective_to": {
-                      "type": "string",
-                      "format": "date-time",
-                      "x-parser-schema-id": "<anonymous-schema-336>"
-                    },
-                    "reason": {
-                      "type": "string",
-                      "x-parser-schema-id": "<anonymous-schema-337>"
-                    },
-                    "version": {
-                      "type": "integer",
-                      "minimum": 1,
-                      "x-parser-schema-id": "<anonymous-schema-338>"
-                    }
-                  },
-                  "x-parser-schema-id": "<anonymous-schema-332>"
-                }
-              },
-              "x-parser-schema-id": "<anonymous-schema-328>"
-            }
-          ],
-          "x-parser-schema-id": "<anonymous-schema-327>"
-        }
-      },
-      "ProductClassified": "$ref:$.channels.warehouse.product-master.events.publish.message",
+      "ProductPackLevelDeclared": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[1]",
+      "ProductPackLevelRetired": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[2]",
+      "ProductClassified": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[0]",
       "InterleavingHintIssued": "$ref:$.channels.warehouse.task-interleaving.events.publish.message"
     },
     "schemas": {

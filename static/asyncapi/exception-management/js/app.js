@@ -51,7 +51,7 @@
   ],
   "channels": {
     "warehouse.exception-management.events": {
-      "description": "This service's integration topic. Written by the outbox relay; key = case\nid (source type for the policy event); every message carries the\nCloudEvents content-type header (plus the optional W3C `traceparent` of\nthe writing request). Dispatch on the full `type`, ignore unknown types,\ndedupe on `id`.\n",
+      "description": "This service's integration topic. Written by the outbox relay; key = case\nid (source type for the policy event); the only Kafka header on every\nmessage is the CloudEvents `content-type` (the relay sets no\n`traceparent`). Rows the relay can never encode are parked raw on\n`warehouse.exception-management.events.dlq`. Dispatch on the full\n`type`, ignore unknown types, dedupe on `id`.\n",
       "subscribe": {
         "operationId": "receiveExceptionEvents",
         "summary": "Receive ExceptionCase and ExceptionPolicy events.",
@@ -587,7 +587,7 @@
               "name": "ExceptionAutoResolved",
               "title": "Exception auto-resolved",
               "summary": "A declarative policy rule closed the case on a correlated fact.",
-              "description": "`type` = `com.warehouse.wes.exception-management.exceptioncase.ExceptionAutoResolved`;\nsubject and key = the case id. `rule_id` names the policy's\nauto-resolve rule that fired; `correlated_type` and\n`correlated_event_id` are the full CloudEvents type and id of the\ncorrelated fact that satisfied the rule (for example an\n`OrderRepromised` for the same work unit within the window).\n",
+              "description": "`type` = `com.warehouse.wes.exception-management.exceptioncase.ExceptionAutoResolved`;\nsubject and key = the case id. `rule_id` names the policy's\nauto-resolve rule that fired; it is derived, `<governed source\ntype>-><correlated type>`; `correlated_type` and\n`correlated_event_id` are the full CloudEvents type and id of the\ncorrelated fact that satisfied the rule (for example an\n`OrderRepromised` for the same work unit within the window).\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -658,7 +658,7 @@
                     "dataschema": "urn:warehouse:exception-management:events:ExceptionAutoResolved:v1",
                     "data": {
                       "case_id": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
-                      "rule_id": "cpt-missed-repromised-v1",
+                      "rule_id": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed->com.warehouse.wes.order-management.order.OrderRepromised",
                       "correlated_type": "com.warehouse.wes.order-management.order.OrderRepromised",
                       "correlated_event_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
                       "at": "2026-10-21T09:20:00Z"
@@ -1024,7 +1024,7 @@
                     "dataschema": "urn:warehouse:exception-management:analytics:ExceptionAutoResolved:v1",
                     "data": {
                       "case_id": "case-1d2e3f4a-5b6c-4789-9abc-def012345678",
-                      "rule_id": "cpt-missed-repromised-v1",
+                      "rule_id": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed->com.warehouse.wes.order-management.order.OrderRepromised",
                       "correlated_type": "com.warehouse.wes.order-management.order.OrderRepromised",
                       "correlated_event_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
                       "at": "2026-10-21T09:20:00Z"
@@ -1262,13 +1262,13 @@
                             "x-parser-schema-id": "<anonymous-schema-75>"
                           },
                           "expected_g": {
-                            "type": "number",
-                            "format": "double",
+                            "type": "integer",
+                            "format": "int64",
                             "x-parser-schema-id": "<anonymous-schema-76>"
                           },
                           "actual_g": {
-                            "type": "number",
-                            "format": "double",
+                            "type": "integer",
+                            "format": "int64",
                             "x-parser-schema-id": "<anonymous-schema-77>"
                           }
                         },
@@ -1653,7 +1653,7 @@
       "publish": {
         "operationId": "consumeReturnsEvents",
         "summary": "Consume unexpected returns as problem-solve facts.",
-        "description": "A return line that arrived with no authorization opens one case per\nreceipt line. The CloudEvents `id` claim and the effect commit in one\ntransaction.\n",
+        "description": "A return that arrived with no authorization opens one case per\n(receipt id, site): the dedup subject is `receipt_id` alone, so\nfurther lines of the same receipt touch the open case (`line_no`\nstays in the frozen payload only). The CloudEvents `id` claim and the effect commit in one\ntransaction.\n",
         "tags": [
           {
             "name": "consumed"
@@ -1755,7 +1755,7 @@
       "publish": {
         "operationId": "consumeInboundReceivingEvents",
         "summary": "Consume carton discrepancies as routed cases.",
-        "description": "One case per (receipt_id, sscc or \"-\", kind). Missing, Duplicate,\nUnexpected, CaseQtyMismatch, MixedCaseDeclaredAsCasePack,\nMixedCartonContentMismatch, UnknownGtin and any unknown kind route to\nthe problem-solve policy; UnlabelledCarton and CartonOverLimit to the\nreceiving-lead policy (informational). The CloudEvents `id` claim and\nthe effect commit in one transaction.\n",
+        "description": "One case per (receipt_id, sscc or \"-\", kind); the dedup subject is\n`<receipt_id>/<sscc or ->/<kind>`. The kinds MissingCarton,\nDuplicateSscc, UnexpectedCarton, CaseQtyMismatch, MixedCaseDeclaredAsCasePack,\nMixedCartonContentMismatch, UnknownGtin and any unknown kind route to\nthe problem-solve policy; UnlabelledCarton and CartonOverLimit to the\nreceiving-lead policy (informational). The CloudEvents `id` claim and\nthe effect commit in one transaction.\n",
         "tags": [
           {
             "name": "consumed"

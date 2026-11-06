@@ -4,7 +4,7 @@
   "info": {
     "title": "Labor Performance — Event Contracts",
     "version": "2.0.0",
-    "description": "Event contracts for the **Labor Performance** bounded context, in\nthree directions:\n\n- **Inbound (`warehouse.fulfillment.events`)** — the integration\n  contract this service consumes. Documented below in full; this is what\n  the original v1 of this file covered.\n- **Outbound analytics (`warehouse.labor-performance.analytics`)** — the\n  ANALYTICS stream this service publishes its own domain events to,\n  feeding its own analytical data product's projector (ADR 0007). It is\n  consumed today only by this repo's own `cmd/labor-projector`; no other\n  service subscribes. Publishing is opt-in via `EVENT_PUBLISHER=kafka`,\n  with the log publisher as the default.\n- **Outbound integration (`warehouse.labor-performance.events`)** — this\n  service's first Open-Host-Service topic for OTHER bounded contexts\n  (ADR 0013). Before this topic existed, labor-performance was the\n  fleet's only pure event sink: it consumed `TaskCompleted` from\n  fulfillment-execution but published nothing any sibling service could\n  subscribe to. `TaskPerformanceRecorded` is published here so\n  workforce-management (the first intended consumer) can build an\n  event-fed local cache instead of calling this service synchronously\n  over REST. Publishing is opt-in via `EVENT_PUBLISHER=kafka`, same as\n  the analytics stream.\n\nThe three are deliberately separate topics so the integration contracts\n(inbound and outbound) and the analytical stream all evolve\nindependently.\n\n## Inbound: a pure consumer of fulfillment-execution\n\nUnlike every other `apis/asyncapi.yaml` in this fleet (which document\nonly what a service PUBLISHES), this section describes what this\nservice SUBSCRIBES TO: it is a **pure Kafka consumer** of\n`fulfillment-execution`'s already-published `TaskCompleted` integration\nevent. This service has no REST or Go-import dependency on\nfulfillment-execution — everything it needs (`associate_id`, `task_id`,\n`duration_seconds`) already travels on the Kafka event (see the\nbounded-context-boundary decision in ADR\n0003-kafka-choreography-consumer-of-fulfillment-execution.md).\n\n## Message format: CloudEvents 1.0 (mandatory, ADR 0021)\n\nEvery message on every channel below — inbound and outbound,\nintegration and analytics — is a **CloudEvents 1.0** event in\nstructured content mode (Kafka message value =\n`application/cloudevents+json`, Kafka header\n`content-type: application/cloudevents+json; charset=UTF-8`). There is\nno other envelope: the retired flat envelope is rejected by every\nconsumer (dead-lettered on `warehouse.fulfillment.events`, skipped with\na WARN on the analytics topic).\n\n```json\n{\n  \"specversion\": \"1.0\",\n  \"id\": \"4f1c2a7e-9d31-4a6b-8f0e-6b2c1d5e7a90\",\n  \"source\": \"/warehouse/fulfillment-execution\",\n  \"type\": \"com.warehouse.wes.fulfillment-execution.task.TaskCompleted\",\n  \"subject\": \"task-10231\",\n  \"time\": \"2026-08-29T22:00:00Z\",\n  \"datacontenttype\": \"application/json\",\n  \"dataschema\": \"urn:warehouse:fulfillment-execution:events:TaskCompleted:v1\",\n  \"data\": { ... }\n}\n```\n\nAll attributes are required. `id` is the de-duplication key this\nservice uses (the `ProcessedEvents` idempotency gate) — NOT `task_id`.\nConsumers dispatch on the FULL `type` string and ignore unknown types.\n`dataschema` distinguishes the integration (`:events:`) payload from\nthe analytics (`:analytics:`) payload of the same occurrence, which\nshare one `type`.\n\n## Shared, fan-out topic\n\n`warehouse.fulfillment.events` is the SAME topic `wes-work-planning`\nalready consumes from, under its own consumer group. This service uses\nits own consumer group id (`labor-performance` by default,\n`KAFKA_CONSUMER_GROUP` env), so both consumers see every message\nindependently. Only `type ==\n\"com.warehouse.wes.fulfillment-execution.task.TaskCompleted\"` is acted on — every\nother event type on this shared topic (there are none from\nfulfillment-execution today, but the topic is shared/fan-out by\nconvention) is silently skipped, not an error.\n\n## `task_type` on the inbound wire\n\nfulfillment-execution's TaskCompleted carries `task_type` (its\nADR-0023). An unrecognized or absent value resolves to `\"\"`\n(unclassified) via `shared.ParseTaskTypeLenient`, never a rejection.\n\n## Graceful degradation on an older payload\n\n`associate_id` and `duration_seconds` are the two fields added by\nfulfillment-execution's `feature/labor-performance-hooks` change. Both\nare optional on the wire (`omitempty` on the publisher's own struct):\nan older payload that predates that enrichment simply omits them, and\nthis service's JSON unmarshaling already degrades those absent fields\nto their Go zero values (`\"\"` / `0`) — exactly the \"no checked-in\noccupant\" / \"unmeasurable duration\" business facts this service's own\naggregate invariants already model, not an error.\n",
+    "description": "Event contracts for the **Labor Performance** bounded context, in\nthree directions:\n\n- **Inbound (`warehouse.fulfillment.events`)** — the integration\n  contract this service consumes. Documented below in full; this is what\n  the original v1 of this file covered.\n- **Outbound analytics (`warehouse.labor-performance.analytics`)** — the\n  ANALYTICS stream this service publishes its own domain events to,\n  feeding its own analytical data product's projector (ADR 0007). It is\n  consumed today only by this repo's own `cmd/labor-projector`; no other\n  service subscribes. Publishing is not optional: events are written to\n  a transactional outbox and drained onto Kafka by the relay inside\n  `cmd/labor`; `EVENT_PUBLISHER=log` is rejected at boot.\n- **Outbound integration (`warehouse.labor-performance.events`)** — this\n  service's first Open-Host-Service topic for OTHER bounded contexts\n  (ADR 0013). Before this topic existed, labor-performance was the\n  fleet's only pure event sink: it consumed `TaskCompleted` from\n  fulfillment-execution but published nothing any sibling service could\n  subscribe to. `TaskPerformanceRecorded` is published here so\n  workforce-management (the first intended consumer) can build an\n  event-fed local cache instead of calling this service synchronously\n  over REST. Published through the same transactional outbox relay as\n  the analytics stream (not opt-in).\n\nThe three are deliberately separate topics so the integration contracts\n(inbound and outbound) and the analytical stream all evolve\nindependently.\n\n## Inbound: a pure consumer of fulfillment-execution\n\nUnlike every other `apis/asyncapi.yaml` in this fleet (which document\nonly what a service PUBLISHES), this section describes what this\nservice SUBSCRIBES TO: it is a **pure Kafka consumer** of\n`fulfillment-execution`'s already-published `TaskCompleted` integration\nevent. This service has no REST or Go-import dependency on\nfulfillment-execution — everything it needs (`associate_id`, `task_id`,\n`duration_seconds`) already travels on the Kafka event (see the\nbounded-context-boundary decision in ADR\n0003-kafka-choreography-consumer-of-fulfillment-execution.md).\n\n## Message format: CloudEvents 1.0 (mandatory, ADR 0021)\n\nEvery message on every channel below — inbound and outbound,\nintegration and analytics — is a **CloudEvents 1.0** event in\nstructured content mode (Kafka message value =\n`application/cloudevents+json`, Kafka header\n`content-type: application/cloudevents+json; charset=UTF-8`). There is\nno other envelope: the retired flat envelope is rejected by every\nconsumer (dead-lettered on `warehouse.fulfillment.events`, skipped with\na WARN on the analytics topic).\n\n```json\n{\n  \"specversion\": \"1.0\",\n  \"id\": \"4f1c2a7e-9d31-4a6b-8f0e-6b2c1d5e7a90\",\n  \"source\": \"/warehouse/fulfillment-execution\",\n  \"type\": \"com.warehouse.wes.fulfillment-execution.task.TaskCompleted\",\n  \"subject\": \"task-10231\",\n  \"time\": \"2026-08-29T22:00:00Z\",\n  \"datacontenttype\": \"application/json\",\n  \"dataschema\": \"urn:warehouse:fulfillment-execution:events:TaskCompleted:v1\",\n  \"data\": { ... }\n}\n```\n\nAll attributes are required. `id` is the de-duplication key this\nservice uses (the `ProcessedEvents` idempotency gate) — NOT `task_id`.\nConsumers dispatch on the FULL `type` string and ignore unknown types.\n`dataschema` distinguishes the integration (`:events:`) payload from\nthe analytics (`:analytics:`) payload of the same occurrence, which\nshare one `type`.\n\n## Shared, fan-out topic\n\n`warehouse.fulfillment.events` is the SAME topic `wes-work-planning`\nalready consumes from, under its own consumer group. This service uses\nits own consumer group id (`KAFKA_CONSUMER_GROUP` env, REQUIRED:\nthe service refuses to boot without it), so both consumers see every message\nindependently. Only `type ==\n\"com.warehouse.wes.fulfillment-execution.task.TaskCompleted\"` is acted on — every\nother event type on this shared topic (there are none from\nfulfillment-execution today, but the topic is shared/fan-out by\nconvention) is silently skipped, not an error.\n\n## `task_type` on the inbound wire\n\nfulfillment-execution's TaskCompleted carries `task_type` (its\nADR-0023). An unrecognized or absent value resolves to `\"\"`\n(unclassified) via `shared.ParseTaskTypeLenient`, never a rejection.\n\n## Graceful degradation on an older payload\n\n`associate_id` and `duration_seconds` are the two fields added by\nfulfillment-execution's `feature/labor-performance-hooks` change. Both\nare optional on the wire (`omitempty` on the publisher's own struct):\nan older payload that predates that enrichment simply omits them, and\nthis service's JSON unmarshaling already degrades those absent fields\nto their Go zero values (`\"\"` / `0`) — exactly the \"no checked-in\noccupant\" / \"unmeasurable duration\" business facts this service's own\naggregate invariants already model, not an error.\n",
     "contact": {
       "name": "Labor Performance Team",
       "url": "https://github.com/IQVO/labor-performance",
@@ -38,7 +38,7 @@
       "subscribe": {
         "operationId": "consumeTaskCompleted",
         "summary": "Consume TaskCompleted events from fulfillment-execution.",
-        "description": "Feeds each TaskCompleted message into the RecordTaskPerformance use case, which is idempotent on the CloudEvents `id` and resolves whichever LaborStandard was active for the task's type AS OF the CloudEvents `time` attribute (not \"active right now\"), so a possibly out-of-order or replayed message is scored against the standard genuinely in force when the task completed. Every other event type on this topic is silently skipped; a message that is not a valid CloudEvent is sent to `warehouse.fulfillment.events.dlq` and committed past.",
+        "description": "Feeds each TaskCompleted message into the RecordTaskPerformance use case, which is idempotent on the CloudEvents `id` and resolves whichever LaborStandard was active for the task's type AS OF the CloudEvents `time` attribute (not \"active right now\"), so a possibly out-of-order or replayed message is scored against the standard genuinely in force when the task completed. Every other event type on this topic is silently skipped. A message that is not a valid CloudEvent, or whose handling still fails after 3 attempts (exponential backoff), is copied to `warehouse.fulfillment.events.dlq` (headers `x-dlq-source-topic`, `x-dlq-error`, `x-dlq-failed-at` added) and committed past. The consumer group is `KAFKA_CONSUMER_GROUP` (required, no default).",
         "tags": [
           {
             "name": "task"
@@ -140,10 +140,9 @@
                   "data": {
                     "type": "object",
                     "required": [
-                      "task_id",
-                      "station_id",
-                      "work_unit_id"
+                      "task_id"
                     ],
+                    "description": "Only task_id is required by this consumer (an empty one fails handling and is dead-lettered); station_id and work_unit_id are published by fulfillment-execution but never read here. Unknown fields are ignored.",
                     "properties": {
                       "task_id": {
                         "type": "string",
@@ -173,6 +172,12 @@
                         "example": 52,
                         "x-parser-schema-id": "<anonymous-schema-17>"
                       },
+                      "task_type": {
+                        "type": "string",
+                        "description": "OPTIONAL. PICK, PACK or SLAM. Parsed leniently: an absent or unrecognized value (e.g. REBIN) resolves to unclassified (`\"\"`) and is still recorded, never rejected.",
+                        "example": "PICK",
+                        "x-parser-schema-id": "<anonymous-schema-18>"
+                      },
                       "handling_unit": {
                         "type": "string",
                         "enum": [
@@ -182,7 +187,7 @@
                         ],
                         "description": "OPTIONAL, ADDITIVE (ADR 0035). The handling unit the completed task handled. fulfillment-execution's TaskCompleted v1 does NOT publish this field today, so on every payload published so far it is absent; this service reads it when it appears (a future additive field on the producer) and scores the completion against the standard declared for (task_type, handling_unit), falling back to the task-type-only standard. Absent, null, not a string or any other value (e.g. INNER) is treated as absent: the completion is scored exactly as before ADR 0035.",
                         "example": "CASE",
-                        "x-parser-schema-id": "<anonymous-schema-18>"
+                        "x-parser-schema-id": "<anonymous-schema-19>"
                       },
                       "weight_g": {
                         "type": "integer",
@@ -190,7 +195,7 @@
                         "minimum": 1,
                         "description": "OPTIONAL, ADDITIVE (ADR 0035). The weight in grams of the handled case. Only meaningful with handling_unit CASE: when the CASE standard declares a team lift and weight_g is strictly greater than its threshold, the team-lift standard time scores the completion. Absent, null, non-integer or non-positive means unknown, never a team lift (a weight is never guessed). Not published by fulfillment-execution's TaskCompleted v1 today.",
                         "example": 20000,
-                        "x-parser-schema-id": "<anonymous-schema-19>"
+                        "x-parser-schema-id": "<anonymous-schema-20>"
                       }
                     },
                     "x-parser-schema-id": "TaskCompletedData"
@@ -292,7 +297,7 @@
       }
     },
     "warehouse.labor-performance.analytics": {
-      "description": "The dedicated ANALYTICS topic this service owns and publishes to, feeding its own analytical data product's projector (cmd/labor-projector). Separate from any integration topic so the analytical stream and the integration contract evolve independently (ADR 0007). Publishing is opt-in via `EVENT_PUBLISHER=kafka`; the default remains the log publisher.",
+      "description": "The dedicated ANALYTICS topic this service owns and publishes to, feeding its own analytical data product's projector (cmd/labor-projector). Separate from any integration topic so the analytical stream and the integration contract evolve independently (ADR 0007). Published through the transactional outbox relay; the log publisher is rejected at boot (`EVENT_PUBLISHER=log`).",
       "publish": {
         "operationId": "publishLaborAnalyticsEvents",
         "summary": "Publish this service's own domain events for its analytical read model.",
@@ -324,11 +329,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.labor-performance.standard.LaborStandardDefined",
-                        "x-parser-schema-id": "<anonymous-schema-21>"
+                        "x-parser-schema-id": "<anonymous-schema-22>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:labor-performance:analytics:LaborStandardDefined:v1",
-                        "x-parser-schema-id": "<anonymous-schema-22>"
+                        "x-parser-schema-id": "<anonymous-schema-23>"
                       },
                       "data": {
                         "type": "object",
@@ -343,7 +348,7 @@
                             "type": "string",
                             "description": "Identifies this one record in the standard's append-only history. A revision mints a new id rather than reusing the prior one.",
                             "example": "std-0001",
-                            "x-parser-schema-id": "<anonymous-schema-23>"
+                            "x-parser-schema-id": "<anonymous-schema-24>"
                           },
                           "task_type": {
                             "type": "string",
@@ -354,14 +359,14 @@
                             ],
                             "description": "The task type this standard applies to.",
                             "example": "PICK",
-                            "x-parser-schema-id": "<anonymous-schema-24>"
+                            "x-parser-schema-id": "<anonymous-schema-25>"
                           },
                           "expected_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "description": "The engineered expected duration. Always greater than zero.",
                             "example": 45,
-                            "x-parser-schema-id": "<anonymous-schema-25>"
+                            "x-parser-schema-id": "<anonymous-schema-26>"
                           },
                           "travel_component_seconds": {
                             "type": "integer",
@@ -369,7 +374,7 @@
                             "minimum": 0,
                             "description": "Optional declaration of how much of expected_seconds is attributable to travel between locations for this task type. Omitted entirely (not present, not null) when the standard never declared one — the default, most common case. This service never computes or validates it against a live location lookup (ADR 0015).",
                             "example": 15,
-                            "x-parser-schema-id": "<anonymous-schema-26>"
+                            "x-parser-schema-id": "<anonymous-schema-27>"
                           },
                           "handling_unit": {
                             "type": "string",
@@ -380,7 +385,7 @@
                             ],
                             "description": "ADDITIVE (ADR 0035). Present only when the standard is declared for one handling unit; omitted entirely (not null) for a task-type-only standard.",
                             "example": "CASE",
-                            "x-parser-schema-id": "<anonymous-schema-27>"
+                            "x-parser-schema-id": "<anonymous-schema-28>"
                           },
                           "team_lift_threshold_g": {
                             "type": "integer",
@@ -388,7 +393,7 @@
                             "minimum": 1,
                             "description": "ADDITIVE (ADR 0035). CASE standards only: the weight in grams above which a case needs a team lift (two operators). Present only together with team_lift_expected_seconds.",
                             "example": 18000,
-                            "x-parser-schema-id": "<anonymous-schema-28>"
+                            "x-parser-schema-id": "<anonymous-schema-29>"
                           },
                           "team_lift_expected_seconds": {
                             "type": "integer",
@@ -396,20 +401,20 @@
                             "minimum": 1,
                             "description": "ADDITIVE (ADR 0035). CASE standards only: the engineered elapsed seconds of a team lift. Present only together with team_lift_threshold_g.",
                             "example": 75,
-                            "x-parser-schema-id": "<anonymous-schema-29>"
+                            "x-parser-schema-id": "<anonymous-schema-30>"
                           },
                           "effective_from": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the standard came into force. The BUSINESS time the projector buckets this event on.",
                             "example": "2026-09-05T09:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-30>"
+                            "x-parser-schema-id": "<anonymous-schema-31>"
                           }
                         },
                         "x-parser-schema-id": "LaborStandardDefinedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-20>"
+                    "x-parser-schema-id": "<anonymous-schema-21>"
                   }
                 ],
                 "x-parser-schema-id": "LaborStandardDefinedCloudEvent"
@@ -501,11 +506,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.labor-performance.standard.LaborStandardRevised",
-                        "x-parser-schema-id": "<anonymous-schema-32>"
+                        "x-parser-schema-id": "<anonymous-schema-33>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:labor-performance:analytics:LaborStandardRevised:v1",
-                        "x-parser-schema-id": "<anonymous-schema-33>"
+                        "x-parser-schema-id": "<anonymous-schema-34>"
                       },
                       "data": {
                         "type": "object",
@@ -521,7 +526,7 @@
                             "type": "string",
                             "description": "The id of the NEW standard record opened by this revision.",
                             "example": "std-0002",
-                            "x-parser-schema-id": "<anonymous-schema-34>"
+                            "x-parser-schema-id": "<anonymous-schema-35>"
                           },
                           "task_type": {
                             "type": "string",
@@ -531,21 +536,21 @@
                               "SLAM"
                             ],
                             "example": "PICK",
-                            "x-parser-schema-id": "<anonymous-schema-35>"
+                            "x-parser-schema-id": "<anonymous-schema-36>"
                           },
                           "previous_expected_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "description": "The now-closed standard's expected duration, carried so a consumer can see the size of the change without joining back to the prior event.",
                             "example": 45,
-                            "x-parser-schema-id": "<anonymous-schema-36>"
+                            "x-parser-schema-id": "<anonymous-schema-37>"
                           },
                           "expected_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "description": "The newly effective expected duration.",
                             "example": 40,
-                            "x-parser-schema-id": "<anonymous-schema-37>"
+                            "x-parser-schema-id": "<anonymous-schema-38>"
                           },
                           "travel_component_seconds": {
                             "type": "integer",
@@ -553,7 +558,7 @@
                             "minimum": 0,
                             "description": "Optional declaration of how much of the NEW (revised) expected_seconds is attributable to travel — always the revision's own value, never carried over from the closed prior standard. Omitted entirely when the revision does not declare one.",
                             "example": 20,
-                            "x-parser-schema-id": "<anonymous-schema-38>"
+                            "x-parser-schema-id": "<anonymous-schema-39>"
                           },
                           "handling_unit": {
                             "type": "string",
@@ -564,7 +569,7 @@
                             ],
                             "description": "ADDITIVE (ADR 0035). Describes the NEW standard. Present only when the standard is declared for one handling unit; omitted entirely (not null) for a task-type-only standard.",
                             "example": "CASE",
-                            "x-parser-schema-id": "<anonymous-schema-39>"
+                            "x-parser-schema-id": "<anonymous-schema-40>"
                           },
                           "team_lift_threshold_g": {
                             "type": "integer",
@@ -572,7 +577,7 @@
                             "minimum": 1,
                             "description": "ADDITIVE (ADR 0035). CASE standards only: the weight in grams above which a case needs a team lift (two operators). Present only together with team_lift_expected_seconds.",
                             "example": 18000,
-                            "x-parser-schema-id": "<anonymous-schema-40>"
+                            "x-parser-schema-id": "<anonymous-schema-41>"
                           },
                           "team_lift_expected_seconds": {
                             "type": "integer",
@@ -580,20 +585,20 @@
                             "minimum": 1,
                             "description": "ADDITIVE (ADR 0035). CASE standards only: the engineered elapsed seconds of a team lift. Present only together with team_lift_threshold_g.",
                             "example": 75,
-                            "x-parser-schema-id": "<anonymous-schema-41>"
+                            "x-parser-schema-id": "<anonymous-schema-42>"
                           },
                           "effective_from": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the new standard came into force — the same instant the prior one was closed. The BUSINESS time the projector buckets this event on.",
                             "example": "2026-09-05T10:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-42>"
+                            "x-parser-schema-id": "<anonymous-schema-43>"
                           }
                         },
                         "x-parser-schema-id": "LaborStandardRevisedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-31>"
+                    "x-parser-schema-id": "<anonymous-schema-32>"
                   }
                 ],
                 "x-parser-schema-id": "LaborStandardRevisedCloudEvent"
@@ -642,18 +647,21 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded",
-                        "x-parser-schema-id": "<anonymous-schema-44>"
+                        "x-parser-schema-id": "<anonymous-schema-45>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:labor-performance:analytics:TaskPerformanceRecorded:v1",
-                        "x-parser-schema-id": "<anonymous-schema-45>"
+                        "x-parser-schema-id": "<anonymous-schema-46>"
                       },
                       "data": {
                         "type": "object",
                         "required": [
                           "task_id",
+                          "associate_id",
                           "task_type",
+                          "efficiency_pct",
                           "actual_seconds",
+                          "idle_seconds_before",
                           "completed_at"
                         ],
                         "properties": {
@@ -661,34 +669,34 @@
                             "type": "string",
                             "description": "fulfillment-execution's task id, treated as an opaque foreign reference. This context does not own or validate it.",
                             "example": "task-10231",
-                            "x-parser-schema-id": "<anonymous-schema-46>"
+                            "x-parser-schema-id": "<anonymous-schema-47>"
                           },
                           "associate_id": {
                             "type": "string",
                             "description": "The associate who completed the task. The EMPTY STRING is a legitimate, expected value: the completing station had no checked-in occupant (e.g. a robot station). Such a task is still counted in task-type reporting; it is only excluded from per-associate scorecards.",
                             "example": "assoc-4471",
-                            "x-parser-schema-id": "<anonymous-schema-47>"
+                            "x-parser-schema-id": "<anonymous-schema-48>"
                           },
                           "task_type": {
                             "type": "string",
-                            "description": "PICK, PACK, SLAM, or the empty string when the task type could not be resolved. Empty is the normal case TODAY: fulfillment-execution's TaskCompleted payload carries no task_type field yet. The projector labels the empty case `UNCLASSIFIED` rather than dropping the row or keying its fact table on an empty string.",
+                            "description": "PICK, PACK, SLAM, or the empty string when the task type could not be resolved (absent or unrecognized on the inbound TaskCompleted). The projector labels the empty case `UNCLASSIFIED` rather than dropping the row or keying its fact table on an empty string.",
                             "example": "PICK",
-                            "x-parser-schema-id": "<anonymous-schema-48>"
+                            "x-parser-schema-id": "<anonymous-schema-49>"
                           },
                           "efficiency_pct": {
                             "type": "number",
                             "format": "double",
                             "nullable": true,
-                            "description": "100 * standard_seconds_at_completion / actual_seconds, or NULL when the task could not be scored — no active standard for its TaskType at completion time, or a non-positive duration. NULL is a real business fact (\"unmeasurable\"), never an error and never to be coerced to 0 by a consumer.",
+                            "description": "Always present on the wire (explicit null, never omitted). 100 * standard_seconds_at_completion / actual_seconds, or NULL when the task could not be scored — no active standard for its TaskType at completion time, or a non-positive duration. NULL is a real business fact (\"unmeasurable\"), never an error and never to be coerced to 0 by a consumer.",
                             "example": 86.5,
-                            "x-parser-schema-id": "<anonymous-schema-49>"
+                            "x-parser-schema-id": "<anonymous-schema-50>"
                           },
                           "actual_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "description": "The measured duration, from the inbound event's duration_seconds. `0` means unmeasurable and is excluded from any mean-duration aggregate.",
                             "example": 52,
-                            "x-parser-schema-id": "<anonymous-schema-50>"
+                            "x-parser-schema-id": "<anonymous-schema-51>"
                           },
                           "idle_seconds_before": {
                             "type": "integer",
@@ -696,7 +704,7 @@
                             "nullable": true,
                             "description": "The measured idle gap immediately preceding this task's claim (previous completion -> this claim instant), added by the idleness feature (ADR 0014-labor-utilization-idleness). NULL — never a fabricated number — when there was no prior completion to measure from (this associate's first- ever observation), the gap was negative/zero (out-of-order Kafka delivery), or the completing station had no checked-in occupant. ADDITIVE field: a Conformist unmarshaling unknown-field-tolerant JSON is unaffected by its presence.",
                             "example": 90,
-                            "x-parser-schema-id": "<anonymous-schema-51>"
+                            "x-parser-schema-id": "<anonymous-schema-52>"
                           },
                           "handling_unit": {
                             "type": "string",
@@ -707,26 +715,26 @@
                             ],
                             "description": "ADDITIVE (ADR 0035). The handling unit the completed task carried; omitted entirely (not null) when the TaskCompleted event carried none, so a completion without one keeps the pre-ADR-0035 payload byte-for-byte.",
                             "example": "CASE",
-                            "x-parser-schema-id": "<anonymous-schema-52>"
+                            "x-parser-schema-id": "<anonymous-schema-53>"
                           },
                           "team_lift": {
                             "type": "boolean",
                             "description": "ADDITIVE (ADR 0035). Present only together with handling_unit. True when the completion was scored against the CASE standard's team-lift time (the case was heavier than the declared threshold).",
                             "example": false,
-                            "x-parser-schema-id": "<anonymous-schema-53>"
+                            "x-parser-schema-id": "<anonymous-schema-54>"
                           },
                           "completed_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the associate actually finished the task. The BUSINESS time the projector buckets this event on — NOT the CloudEvents `time`, so a replayed or late-ingested event lands in the hour the work really happened.",
                             "example": "2026-09-05T09:30:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-54>"
+                            "x-parser-schema-id": "<anonymous-schema-55>"
                           }
                         },
                         "x-parser-schema-id": "TaskPerformanceRecordedAnalyticsData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-43>"
+                    "x-parser-schema-id": "<anonymous-schema-44>"
                   }
                 ],
                 "x-parser-schema-id": "TaskPerformanceRecordedAnalyticsCloudEvent"
@@ -782,10 +790,27 @@
             }
           ]
         }
+      },
+      "subscribe": {
+        "operationId": "consumeLaborAnalyticsEvents",
+        "summary": "Consumed by this repo's own cmd/labor-projector (the only subscriber).",
+        "description": "Consumer group `labor-performance-analytics`, starting from the first offset. Dispatches on the full CloudEvents `type` and ignores unknown types. A message that is not a valid CloudEvent, or whose `data` cannot be decoded, is skipped with a WARN (no DLQ). Each event is de-duplicated on the CloudEvents `id` and applied in one unit of work with the de-duplication mark; any other failure is retried with exponential backoff (200ms up to 5s) without committing past the message.",
+        "tags": [
+          {
+            "name": "labor-performance"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            "$ref:$.channels.warehouse.labor-performance.analytics.publish.message.oneOf[0]",
+            "$ref:$.channels.warehouse.labor-performance.analytics.publish.message.oneOf[1]",
+            "$ref:$.channels.warehouse.labor-performance.analytics.publish.message.oneOf[2]"
+          ]
+        }
       }
     },
     "warehouse.labor-performance.events": {
-      "description": "The dedicated INTEGRATION topic this service owns and publishes to (ADR 0013) — its first Open-Host-Service Published Language for OTHER bounded contexts to consume. Separate from the analytics topic above (which feeds only this repo's own projector) so the two streams evolve independently. Before this topic existed, labor-performance was the fleet's only pure event sink: it consumed `TaskCompleted` from fulfillment-execution but published nothing any sibling service could subscribe to. Publishing is opt-in via `EVENT_PUBLISHER=kafka`; the default remains the log publisher. The first consumer is workforce-management, whose event-fed local cache (`laborperformancecache`) already consumes this topic in place of a synchronous HTTP call.",
+      "description": "The dedicated INTEGRATION topic this service owns and publishes to (ADR 0013) — its first Open-Host-Service Published Language for OTHER bounded contexts to consume. Separate from the analytics topic above (which feeds only this repo's own projector) so the two streams evolve independently. Before this topic existed, labor-performance was the fleet's only pure event sink: it consumed `TaskCompleted` from fulfillment-execution but published nothing any sibling service could subscribe to. Published through the transactional outbox relay; the log publisher is rejected at boot. The first consumer is workforce-management, whose event-fed local cache (`laborperformancecache`) already consumes this topic in place of a synchronous HTTP call.",
       "publish": {
         "operationId": "publishLaborIntegrationEvents",
         "summary": "Publish TaskPerformanceRecorded for other bounded contexts to consume.",
@@ -818,18 +843,21 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded",
-                    "x-parser-schema-id": "<anonymous-schema-56>"
+                    "x-parser-schema-id": "<anonymous-schema-57>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:labor-performance:events:TaskPerformanceRecorded:v1",
-                    "x-parser-schema-id": "<anonymous-schema-57>"
+                    "x-parser-schema-id": "<anonymous-schema-58>"
                   },
                   "data": {
                     "type": "object",
                     "required": [
                       "task_id",
+                      "associate_id",
                       "task_type",
+                      "efficiency_pct",
                       "actual_seconds",
+                      "idle_seconds_before",
                       "completed_at"
                     ],
                     "properties": {
@@ -837,19 +865,19 @@
                         "type": "string",
                         "description": "fulfillment-execution's task id, treated as an opaque foreign reference. This context does not own or validate it.",
                         "example": "task-10231",
-                        "x-parser-schema-id": "<anonymous-schema-58>"
+                        "x-parser-schema-id": "<anonymous-schema-59>"
                       },
                       "associate_id": {
                         "type": "string",
                         "description": "The associate who completed the task, and the partition key of this topic. The EMPTY STRING is a legitimate, expected value: the completing station had no checked-in occupant (e.g. a robot station).",
                         "example": "assoc-4471",
-                        "x-parser-schema-id": "<anonymous-schema-59>"
+                        "x-parser-schema-id": "<anonymous-schema-60>"
                       },
                       "task_type": {
                         "type": "string",
                         "description": "PICK, PACK, SLAM, or the empty string when the task type could not be resolved (see the analytics payload's identical field for why this is common today).",
                         "example": "PICK",
-                        "x-parser-schema-id": "<anonymous-schema-60>"
+                        "x-parser-schema-id": "<anonymous-schema-61>"
                       },
                       "efficiency_pct": {
                         "type": "number",
@@ -857,14 +885,14 @@
                         "nullable": true,
                         "description": "100 * standard_seconds_at_completion / actual_seconds, or NULL when the task could not be scored. NULL is a real business fact (\"unmeasurable\"); a consumer MUST NOT coerce it to 0.",
                         "example": 91.2,
-                        "x-parser-schema-id": "<anonymous-schema-61>"
+                        "x-parser-schema-id": "<anonymous-schema-62>"
                       },
                       "actual_seconds": {
                         "type": "integer",
                         "format": "int64",
                         "description": "The measured duration. `0` means unmeasurable.",
                         "example": 41,
-                        "x-parser-schema-id": "<anonymous-schema-62>"
+                        "x-parser-schema-id": "<anonymous-schema-63>"
                       },
                       "idle_seconds_before": {
                         "type": "integer",
@@ -872,7 +900,7 @@
                         "nullable": true,
                         "description": "The measured idle gap immediately preceding this task's claim, added by the idleness feature (ADR 0014-labor-utilization-idleness). NULL — never a fabricated number — when there was no prior completion, the gap was negative/zero (out-of-order Kafka delivery), or the completing station had no checked-in occupant. ADDITIVE field: a Conformist unmarshaling unknown-field- tolerant JSON (e.g. workforce-management's laborperformancecache) is unaffected by its presence.",
                         "example": 90,
-                        "x-parser-schema-id": "<anonymous-schema-63>"
+                        "x-parser-schema-id": "<anonymous-schema-64>"
                       },
                       "handling_unit": {
                         "type": "string",
@@ -883,26 +911,26 @@
                         ],
                         "description": "ADDITIVE (ADR 0035). The handling unit the completed task carried; omitted entirely (not null) when the TaskCompleted event carried none, so a completion without one keeps the pre-ADR-0035 payload byte-for-byte.",
                         "example": "CASE",
-                        "x-parser-schema-id": "<anonymous-schema-64>"
+                        "x-parser-schema-id": "<anonymous-schema-65>"
                       },
                       "team_lift": {
                         "type": "boolean",
                         "description": "ADDITIVE (ADR 0035). Present only together with handling_unit. True when the completion was scored against the CASE standard's team-lift time (the case was heavier than the declared threshold).",
                         "example": false,
-                        "x-parser-schema-id": "<anonymous-schema-65>"
+                        "x-parser-schema-id": "<anonymous-schema-66>"
                       },
                       "completed_at": {
                         "type": "string",
                         "format": "date-time",
                         "description": "When the associate actually finished the task — the BUSINESS time, distinct from the CloudEvents `time` attribute.",
                         "example": "2026-09-05T09:30:00Z",
-                        "x-parser-schema-id": "<anonymous-schema-66>"
+                        "x-parser-schema-id": "<anonymous-schema-67>"
                       }
                     },
                     "x-parser-schema-id": "TaskPerformanceRecordedEventsData"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-55>"
+                "x-parser-schema-id": "<anonymous-schema-56>"
               }
             ],
             "x-parser-schema-id": "TaskPerformanceRecordedEventsCloudEvent"

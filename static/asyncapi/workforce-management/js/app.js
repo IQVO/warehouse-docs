@@ -460,7 +460,7 @@
                     "id": "3d4a1f60-2b8e-4c17-8a55-0c6f9d2b41aa",
                     "source": "/warehouse/workforce-management",
                     "type": "com.warehouse.wes.workforce-management.shiftplan.ShiftPlanProposed",
-                    "subject": "BLD1/pack",
+                    "subject": "pack",
                     "time": "2026-08-21T21:30:00Z",
                     "datacontenttype": "application/json",
                     "dataschema": "urn:warehouse:workforce-management:analytics:ShiftPlanProposed:v1",
@@ -1008,7 +1008,7 @@
               "name": "LaborAssigned",
               "title": "Labor assigned",
               "summary": "An associate was placed on a process path for an interval.",
-              "description": "Raised by the `LaborAssignment` aggregate when an associate is\nassigned to a process path. The domain enforces two hard invariants\nbefore this event exists: the associate holds the path's required\ncertification, and the associate has no other ACTIVE assignment (no\ndouble-booking across paths).\n\nNote the path boundary: this places an associate on a *path*, never\non a specific task. Dispatching individual tasks belongs to\nFulfillment Execution.\n\n**Not on the integration topic.** Published only to the internal\nanalytics topic `warehouse.workforce.analytics` (dataschema\n`urn:warehouse:workforce-management:analytics:<EventName>:v1`).\n",
+              "description": "Raised by the `LaborAssignment` aggregate when an associate is\nassigned to a process path. The domain enforces two hard invariants\nbefore this event exists: the associate holds the path's required\ncertification, and the associate has no other ACTIVE assignment (no\ndouble-booking across paths).\n\nNote the path boundary: this places an associate on a *path*, never\non a specific task. Dispatching individual tasks belongs to\nFulfillment Execution.\n\n**Attribution (additive).** When the assignment was requested through\nthe MCP `assign_labor` tool or the A2A `assign_labor` skill, `data`\nalso carries `initiated_by` (`via` = `mcp` or `a2a`, set by the\nadapter, plus the caller's optional `proposal_id`, `approved_by` and\n`agent_id`). It is absent for REST and every other caller: absence\nmeans \"not agent-initiated\". It is event data only; no CloudEvents\nextension attribute is added, and the `v1` dataschema is unchanged.\n\n**Not on the integration topic.** Published only to the internal\nanalytics topic `warehouse.workforce.analytics` (dataschema\n`urn:warehouse:workforce-management:analytics:<EventName>:v1`).\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -1060,6 +1060,43 @@
                             "type": "string",
                             "description": "Process path the associate now works, e.g. \"pack\". Never a task id.",
                             "x-parser-schema-id": "<anonymous-schema-76>"
+                          },
+                          "initiated_by": {
+                            "type": "object",
+                            "description": "Attribution of an agent-initiated assignment (additive, event data\nonly). Present on `LaborAssigned` / `LaborReassigned` only when the\ncall arrived through the MCP `assign_labor` tool or the A2A\n`assign_labor` skill; absent for REST. `via` is stamped by the\nadapter, never supplied by the caller. The other members are the\ncaller's optional free-form labels (trimmed, at most 128\ncharacters); they carry no authority and are omitted when not given.\n",
+                            "required": [
+                              "via"
+                            ],
+                            "properties": {
+                              "via": {
+                                "type": "string",
+                                "enum": [
+                                  "mcp",
+                                  "a2a"
+                                ],
+                                "description": "The agent surface the call arrived through; set by the adapter.",
+                                "x-parser-schema-id": "<anonymous-schema-77>"
+                              },
+                              "proposal_id": {
+                                "type": "string",
+                                "maxLength": 128,
+                                "description": "Identifier of the proposal the agent executed, when given.",
+                                "x-parser-schema-id": "<anonymous-schema-78>"
+                              },
+                              "approved_by": {
+                                "type": "string",
+                                "maxLength": 128,
+                                "description": "Identifier of the human who approved the proposal, when given.",
+                                "x-parser-schema-id": "<anonymous-schema-79>"
+                              },
+                              "agent_id": {
+                                "type": "string",
+                                "maxLength": 128,
+                                "description": "Identifier of the calling agent, when given.",
+                                "x-parser-schema-id": "<anonymous-schema-80>"
+                              }
+                            },
+                            "x-parser-schema-id": "InitiatedBy"
                           }
                         },
                         "x-parser-schema-id": "<anonymous-schema-74>"
@@ -1088,6 +1125,30 @@
                       "path_id": "pack"
                     }
                   }
+                },
+                {
+                  "name": "assignedByAgent",
+                  "summary": "Associate A-1001 is assigned to the pack path by the warehouse-ops-agent over A2A, executing an approved proposal.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "5e1d9c34-7a2b-4c58-b0f6-3a8e2d1c9b47",
+                    "source": "/warehouse/workforce-management",
+                    "type": "com.warehouse.wes.workforce-management.assignment.LaborAssigned",
+                    "subject": "A-1001",
+                    "time": "2026-08-21T22:15:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:workforce-management:analytics:LaborAssigned:v1",
+                    "data": {
+                      "associate_id": "A-1001",
+                      "path_id": "pack",
+                      "initiated_by": {
+                        "via": "a2a",
+                        "proposal_id": "prop-7f3a",
+                        "approved_by": "supervisor-12",
+                        "agent_id": "warehouse-ops-agent"
+                      }
+                    }
+                  }
                 }
               ]
             },
@@ -1095,7 +1156,7 @@
               "name": "LaborReassigned",
               "title": "Labor reassigned",
               "summary": "An associate's active assignment was ended in favour of another path.",
-              "description": "Raised by the `LaborAssignment` aggregate when an associate's prior\nactive assignment is closed and a new one opened on a different path\n— the intra-shift move that keeps the one-ACTIVE-assignment invariant\nintact. The move is always a human call recorded here; this context\nnever decides a rebalance on its own.\n\n**Not on the integration topic.** Published only to the internal\nanalytics topic `warehouse.workforce.analytics` (dataschema\n`urn:warehouse:workforce-management:analytics:<EventName>:v1`).\n",
+              "description": "Raised by the `LaborAssignment` aggregate when an associate's prior\nactive assignment is closed and a new one opened on a different path\n— the intra-shift move that keeps the one-ACTIVE-assignment invariant\nintact. The move is always a human call recorded here; this context\nnever decides a rebalance on its own.\n\n**Attribution (additive).** Like `LaborAssigned`, `data` carries\n`initiated_by` when the move was requested through the MCP or A2A\n`assign_labor` surface, and omits it otherwise (REST). An agent\nreallocating an associate who is already on a path raises this event,\nnot `LaborAssigned`, so the attribution must be here too.\n\n**Not on the integration topic.** Published only to the internal\nanalytics topic `warehouse.workforce.analytics` (dataschema\n`urn:warehouse:workforce-management:analytics:<EventName>:v1`).\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -1122,13 +1183,13 @@
                         "type": "string",
                         "description": "Fixed type for this event.",
                         "const": "com.warehouse.wes.workforce-management.assignment.LaborReassigned",
-                        "x-parser-schema-id": "<anonymous-schema-78>"
+                        "x-parser-schema-id": "<anonymous-schema-82>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed dataschema for this event.",
                         "const": "urn:warehouse:workforce-management:analytics:LaborReassigned:v1",
-                        "x-parser-schema-id": "<anonymous-schema-79>"
+                        "x-parser-schema-id": "<anonymous-schema-83>"
                       },
                       "data": {
                         "type": "object",
@@ -1142,23 +1203,24 @@
                           "associate_id": {
                             "type": "string",
                             "description": "Identifier of the reassigned associate.",
-                            "x-parser-schema-id": "<anonymous-schema-81>"
+                            "x-parser-schema-id": "<anonymous-schema-85>"
                           },
                           "from_path_id": {
                             "type": "string",
                             "description": "Process path whose active assignment was ended.",
-                            "x-parser-schema-id": "<anonymous-schema-82>"
+                            "x-parser-schema-id": "<anonymous-schema-86>"
                           },
                           "to_path_id": {
                             "type": "string",
                             "description": "Process path the associate was moved onto.",
-                            "x-parser-schema-id": "<anonymous-schema-83>"
-                          }
+                            "x-parser-schema-id": "<anonymous-schema-87>"
+                          },
+                          "initiated_by": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[8].payload.allOf[1].properties.data.properties.initiated_by"
                         },
-                        "x-parser-schema-id": "<anonymous-schema-80>"
+                        "x-parser-schema-id": "<anonymous-schema-84>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-77>"
+                    "x-parser-schema-id": "<anonymous-schema-81>"
                   }
                 ],
                 "x-parser-schema-id": "LaborReassignedEvent"
@@ -1180,6 +1242,31 @@
                       "associate_id": "A-1001",
                       "from_path_id": "pack",
                       "to_path_id": "pick"
+                    }
+                  }
+                },
+                {
+                  "name": "movedByAgent",
+                  "summary": "Associate A-1001 is moved from pack to pick by the warehouse-ops-agent over A2A, executing an approved proposal.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "c3a4f7d2-91be-4e60-8d15-6b2f0a9e7c13",
+                    "source": "/warehouse/workforce-management",
+                    "type": "com.warehouse.wes.workforce-management.assignment.LaborReassigned",
+                    "subject": "A-1001",
+                    "time": "2026-08-22T02:25:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:workforce-management:analytics:LaborReassigned:v1",
+                    "data": {
+                      "associate_id": "A-1001",
+                      "from_path_id": "pack",
+                      "to_path_id": "pick",
+                      "initiated_by": {
+                        "via": "a2a",
+                        "proposal_id": "prop-7f3a",
+                        "approved_by": "supervisor-12",
+                        "agent_id": "warehouse-ops-agent"
+                      }
                     }
                   }
                 }
@@ -1233,46 +1320,46 @@
                 "enum": [
                   "1.0"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-84>"
+                "x-parser-schema-id": "<anonymous-schema-88>"
               },
               "id": {
                 "type": "string",
                 "description": "CloudEvents id; the cache's dedupe key.",
-                "x-parser-schema-id": "<anonymous-schema-85>"
+                "x-parser-schema-id": "<anonymous-schema-89>"
               },
               "source": {
                 "type": "string",
                 "enum": [
                   "/warehouse/labor-performance"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-86>"
+                "x-parser-schema-id": "<anonymous-schema-90>"
               },
               "type": {
                 "type": "string",
                 "const": "com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded",
-                "x-parser-schema-id": "<anonymous-schema-87>"
+                "x-parser-schema-id": "<anonymous-schema-91>"
               },
               "subject": {
                 "type": "string",
                 "description": "The associate id (also the Kafka key); the task id when the task could not be scored.",
-                "x-parser-schema-id": "<anonymous-schema-88>"
+                "x-parser-schema-id": "<anonymous-schema-92>"
               },
               "time": {
                 "type": "string",
                 "format": "date-time",
-                "x-parser-schema-id": "<anonymous-schema-89>"
+                "x-parser-schema-id": "<anonymous-schema-93>"
               },
               "datacontenttype": {
                 "type": "string",
                 "enum": [
                   "application/json"
                 ],
-                "x-parser-schema-id": "<anonymous-schema-90>"
+                "x-parser-schema-id": "<anonymous-schema-94>"
               },
               "dataschema": {
                 "type": "string",
                 "description": "urn:warehouse:labor-performance:events:TaskPerformanceRecorded:v1",
-                "x-parser-schema-id": "<anonymous-schema-91>"
+                "x-parser-schema-id": "<anonymous-schema-95>"
               },
               "data": {
                 "type": "object",
@@ -1287,46 +1374,46 @@
                   "task_id": {
                     "type": "string",
                     "description": "fulfillment-execution's task id, an opaque foreign reference.",
-                    "x-parser-schema-id": "<anonymous-schema-93>"
+                    "x-parser-schema-id": "<anonymous-schema-97>"
                   },
                   "associate_id": {
                     "type": "string",
                     "description": "The associate who completed the task; the empty string means no checked-in occupant (e.g. a robot station).",
-                    "x-parser-schema-id": "<anonymous-schema-94>"
+                    "x-parser-schema-id": "<anonymous-schema-98>"
                   },
                   "task_type": {
                     "type": "string",
                     "description": "PICK, PACK, SLAM, or the empty string when the type could not be resolved.",
-                    "x-parser-schema-id": "<anonymous-schema-95>"
+                    "x-parser-schema-id": "<anonymous-schema-99>"
                   },
                   "efficiency_pct": {
                     "type": "number",
                     "format": "double",
                     "nullable": true,
                     "description": "100 * standard_seconds / actual_seconds, or NULL when unscorable; never coerced to 0.",
-                    "x-parser-schema-id": "<anonymous-schema-96>"
+                    "x-parser-schema-id": "<anonymous-schema-100>"
                   },
                   "actual_seconds": {
                     "type": "integer",
                     "format": "int64",
                     "description": "The measured duration; 0 means unmeasurable.",
-                    "x-parser-schema-id": "<anonymous-schema-97>"
+                    "x-parser-schema-id": "<anonymous-schema-101>"
                   },
                   "idle_seconds_before": {
                     "type": "integer",
                     "format": "int64",
                     "nullable": true,
                     "description": "The idle gap immediately before this task's claim; NULL when not observed (additive field).",
-                    "x-parser-schema-id": "<anonymous-schema-98>"
+                    "x-parser-schema-id": "<anonymous-schema-102>"
                   },
                   "completed_at": {
                     "type": "string",
                     "format": "date-time",
                     "description": "When the associate finished — the business time, distinct from the CloudEvents `time`.",
-                    "x-parser-schema-id": "<anonymous-schema-99>"
+                    "x-parser-schema-id": "<anonymous-schema-103>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-92>"
+                "x-parser-schema-id": "<anonymous-schema-96>"
               }
             },
             "x-parser-schema-id": "TaskPerformanceRecordedEvent"
@@ -1405,45 +1492,45 @@
                     "enum": [
                       "1.0"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-100>"
+                    "x-parser-schema-id": "<anonymous-schema-104>"
                   },
                   "id": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-101>"
+                    "x-parser-schema-id": "<anonymous-schema-105>"
                   },
                   "source": {
                     "type": "string",
                     "enum": [
                       "/warehouse/process-path-management"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-102>"
+                    "x-parser-schema-id": "<anonymous-schema-106>"
                   },
                   "type": {
                     "type": "string",
                     "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathCreated",
-                    "x-parser-schema-id": "<anonymous-schema-103>"
+                    "x-parser-schema-id": "<anonymous-schema-107>"
                   },
                   "subject": {
                     "type": "string",
                     "description": "The path id (also the Kafka key).",
-                    "x-parser-schema-id": "<anonymous-schema-104>"
+                    "x-parser-schema-id": "<anonymous-schema-108>"
                   },
                   "time": {
                     "type": "string",
                     "format": "date-time",
-                    "x-parser-schema-id": "<anonymous-schema-105>"
+                    "x-parser-schema-id": "<anonymous-schema-109>"
                   },
                   "datacontenttype": {
                     "type": "string",
                     "enum": [
                       "application/json"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-106>"
+                    "x-parser-schema-id": "<anonymous-schema-110>"
                   },
                   "dataschema": {
                     "type": "string",
                     "const": "urn:warehouse:process-path-management:events:ProcessPathCreated:v1",
-                    "x-parser-schema-id": "<anonymous-schema-107>"
+                    "x-parser-schema-id": "<anonymous-schema-111>"
                   },
                   "data": {
                     "type": "object",
@@ -1454,24 +1541,24 @@
                     "properties": {
                       "path_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-109>"
+                        "x-parser-schema-id": "<anonymous-schema-113>"
                       },
                       "match_prefix": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-110>"
+                        "x-parser-schema-id": "<anonymous-schema-114>"
                       },
                       "direct": {
                         "type": "boolean",
                         "description": "Decoded and discarded; absent means false.",
-                        "x-parser-schema-id": "<anonymous-schema-111>"
+                        "x-parser-schema-id": "<anonymous-schema-115>"
                       },
                       "required_capabilities": {
                         "type": "array",
                         "items": {
                           "type": "string",
-                          "x-parser-schema-id": "<anonymous-schema-113>"
+                          "x-parser-schema-id": "<anonymous-schema-117>"
                         },
-                        "x-parser-schema-id": "<anonymous-schema-112>"
+                        "x-parser-schema-id": "<anonymous-schema-116>"
                       },
                       "destination_location_role": {
                         "type": "string",
@@ -1481,10 +1568,10 @@
                           "Shipping"
                         ],
                         "description": "Omitted when the path declares none.",
-                        "x-parser-schema-id": "<anonymous-schema-114>"
+                        "x-parser-schema-id": "<anonymous-schema-118>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-108>"
+                    "x-parser-schema-id": "<anonymous-schema-112>"
                   }
                 },
                 "x-parser-schema-id": "ProcessPathCreatedEvent"
@@ -1522,45 +1609,45 @@
                     "enum": [
                       "1.0"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-115>"
+                    "x-parser-schema-id": "<anonymous-schema-119>"
                   },
                   "id": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-116>"
+                    "x-parser-schema-id": "<anonymous-schema-120>"
                   },
                   "source": {
                     "type": "string",
                     "enum": [
                       "/warehouse/process-path-management"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-117>"
+                    "x-parser-schema-id": "<anonymous-schema-121>"
                   },
                   "type": {
                     "type": "string",
                     "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated",
-                    "x-parser-schema-id": "<anonymous-schema-118>"
+                    "x-parser-schema-id": "<anonymous-schema-122>"
                   },
                   "subject": {
                     "type": "string",
                     "description": "The path id (also the Kafka key).",
-                    "x-parser-schema-id": "<anonymous-schema-119>"
+                    "x-parser-schema-id": "<anonymous-schema-123>"
                   },
                   "time": {
                     "type": "string",
                     "format": "date-time",
-                    "x-parser-schema-id": "<anonymous-schema-120>"
+                    "x-parser-schema-id": "<anonymous-schema-124>"
                   },
                   "datacontenttype": {
                     "type": "string",
                     "enum": [
                       "application/json"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-121>"
+                    "x-parser-schema-id": "<anonymous-schema-125>"
                   },
                   "dataschema": {
                     "type": "string",
                     "const": "urn:warehouse:process-path-management:events:ProcessPathUpdated:v1",
-                    "x-parser-schema-id": "<anonymous-schema-122>"
+                    "x-parser-schema-id": "<anonymous-schema-126>"
                   },
                   "data": {
                     "type": "object",
@@ -1571,24 +1658,24 @@
                     "properties": {
                       "path_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-124>"
+                        "x-parser-schema-id": "<anonymous-schema-128>"
                       },
                       "match_prefix": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-125>"
+                        "x-parser-schema-id": "<anonymous-schema-129>"
                       },
                       "direct": {
                         "type": "boolean",
                         "description": "Decoded and discarded; absent means false.",
-                        "x-parser-schema-id": "<anonymous-schema-126>"
+                        "x-parser-schema-id": "<anonymous-schema-130>"
                       },
                       "required_capabilities": {
                         "type": "array",
                         "items": {
                           "type": "string",
-                          "x-parser-schema-id": "<anonymous-schema-128>"
+                          "x-parser-schema-id": "<anonymous-schema-132>"
                         },
-                        "x-parser-schema-id": "<anonymous-schema-127>"
+                        "x-parser-schema-id": "<anonymous-schema-131>"
                       },
                       "destination_location_role": {
                         "type": "string",
@@ -1598,10 +1685,10 @@
                           "Shipping"
                         ],
                         "description": "Omitted when the path declares none.",
-                        "x-parser-schema-id": "<anonymous-schema-129>"
+                        "x-parser-schema-id": "<anonymous-schema-133>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-123>"
+                    "x-parser-schema-id": "<anonymous-schema-127>"
                   }
                 },
                 "x-parser-schema-id": "ProcessPathUpdatedEvent"
@@ -1639,45 +1726,45 @@
                     "enum": [
                       "1.0"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-130>"
+                    "x-parser-schema-id": "<anonymous-schema-134>"
                   },
                   "id": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-131>"
+                    "x-parser-schema-id": "<anonymous-schema-135>"
                   },
                   "source": {
                     "type": "string",
                     "enum": [
                       "/warehouse/process-path-management"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-132>"
+                    "x-parser-schema-id": "<anonymous-schema-136>"
                   },
                   "type": {
                     "type": "string",
                     "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated",
-                    "x-parser-schema-id": "<anonymous-schema-133>"
+                    "x-parser-schema-id": "<anonymous-schema-137>"
                   },
                   "subject": {
                     "type": "string",
                     "description": "The path id (also the Kafka key).",
-                    "x-parser-schema-id": "<anonymous-schema-134>"
+                    "x-parser-schema-id": "<anonymous-schema-138>"
                   },
                   "time": {
                     "type": "string",
                     "format": "date-time",
-                    "x-parser-schema-id": "<anonymous-schema-135>"
+                    "x-parser-schema-id": "<anonymous-schema-139>"
                   },
                   "datacontenttype": {
                     "type": "string",
                     "enum": [
                       "application/json"
                     ],
-                    "x-parser-schema-id": "<anonymous-schema-136>"
+                    "x-parser-schema-id": "<anonymous-schema-140>"
                   },
                   "dataschema": {
                     "type": "string",
                     "const": "urn:warehouse:process-path-management:events:ProcessPathDeactivated:v1",
-                    "x-parser-schema-id": "<anonymous-schema-137>"
+                    "x-parser-schema-id": "<anonymous-schema-141>"
                   },
                   "data": {
                     "type": "object",
@@ -1687,10 +1774,10 @@
                     "properties": {
                       "path_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-139>"
+                        "x-parser-schema-id": "<anonymous-schema-143>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-138>"
+                    "x-parser-schema-id": "<anonymous-schema-142>"
                   }
                 },
                 "x-parser-schema-id": "ProcessPathDeactivatedEvent"
@@ -1730,6 +1817,7 @@
       "AssociateBreakStartedEvent": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[5].payload",
       "AssociateBreakEndedEvent": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[6].payload",
       "AssociateShiftEndedEvent": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[7].payload",
+      "InitiatedBy": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[8].payload.allOf[1].properties.data.properties.initiated_by",
       "LaborAssignedEvent": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[8].payload",
       "LaborReassignedEvent": "$ref:$.channels.warehouse.workforce.analytics.subscribe.message.oneOf[9].payload",
       "TaskPerformanceRecordedEvent": "$ref:$.channels.warehouse.labor-performance.events.subscribe.message.payload",
