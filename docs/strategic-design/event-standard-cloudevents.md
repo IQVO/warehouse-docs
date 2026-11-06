@@ -132,6 +132,8 @@ Subdomain and bounded-context segments (authoritative):
 | slotting-optimization    | wms       | slotting-optimization    | /warehouse/slotting-optimization |
 | pick-face-replenishment  | wms       | pick-face-replenishment  | /warehouse/pick-face-replenishment |
 | returns-processing       | wms       | returns-processing       | /warehouse/returns-processing |
+| dock-scheduling          | wms       | dock-scheduling          | /warehouse/dock-scheduling |
+| yard-management          | wms       | yard-management          | /warehouse/yard-management |
 | order-management         | wes       | order-management         | /warehouse/order-management |
 | process-path-management  | wes       | process-path-management  | /warehouse/process-path-management |
 | warehouse-planning       | wes       | warehouse-planning       | /warehouse/warehouse-planning |
@@ -143,6 +145,16 @@ Subdomain and bounded-context segments (authoritative):
 | network-inventory-planning | wes     | network-inventory-planning | /warehouse/network-inventory-planning |
 | task-interleaving        | wes       | task-interleaving        | /warehouse/task-interleaving |
 | exception-management     | wes       | exception-management     | /warehouse/exception-management |
+
+`dock-scheduling` and `yard-management` (wms, PROPOSED 2026-11-05, nothing built):
+the type prefixes `com.warehouse.wms.dock-scheduling.` and
+`com.warehouse.wms.yard-management.` and the topics
+`warehouse.dock-scheduling.events` / `.analytics` and
+`warehouse.yard-management.events` / `.analytics` are pinned here before any event
+ships, so producers and consumers build against identical strings. The design is
+the [yard instance](/yard/). The managed fleet rule `agents/fleet/cloudevents.md`
+and its template copy gain the two names in a separate coordinated change when the
+first service repo is bootstrapped.
 
 `pick-face-replenishment` and `task-interleaving`: both merged on `develop`
 2026-10-17 (each publishes through a transactional outbox) and both run in the

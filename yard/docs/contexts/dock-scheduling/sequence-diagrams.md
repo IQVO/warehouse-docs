@@ -1,0 +1,614 @@
+---
+id: sequence-diagrams
+title: Sequence Diagrams
+sidebar_label: Sequence Diagrams
+description: "One proposed UML sequence diagram per Dock Scheduling command use case, from the inbound adapter through the aggregate, repository and outbox to Kafka."
+---
+
+# Sequence Diagrams
+
+:::info[Proposed design]
+Derived from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml). This context's service is not built yet; identifiers (`Err...` names, REST paths, CloudEvents types) are the names the service will use.
+:::
+
+One UML sequence diagram per command use case of
+[Use Cases](/yard/contexts/dock-scheduling/use-cases), in the proposed
+hexagonal layout: inbound adapter → use case → aggregate → repositories and
+views → outbox (same transaction) → relay → Kafka. The outbox, the relay and Kafka
+share one lifeline ("outbox and relay to Kafka") to keep each diagram at five
+participants.
+`alt` blocks show error branches, optimistic-concurrency `version` checks and
+idempotency (REST `Idempotency-Key`, Kafka inbox on the CloudEvents `id`).
+Errors named `ErrNotFound`, `ErrIllegalTransition`, `ErrConcurrentUpdate` and
+`ErrValidation` carry the model's status and problem slug; the status of every
+other `Err...` is proposed (gap `DS-G17`). Route parameters are written
+without braces. The relay publishes to `warehouse.dock-scheduling.events` for
+integration events and to `warehouse.dock-scheduling.analytics` for events
+marked `analytics only`, keyed by the aggregate root id.
+
+## 1. BookAppointment
+
+Carrier scheduler, REST `POST /appointments`.
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as http<br/>handler
+    participant U as use case
+    participant A as Dock<br/>Appointment
+    participant R as repositories<br/>and views
+    participant O as outbox and<br/>relay to Kafka
+    H->>U: BookAppointment door,<br/>direction, window,<br/>carrier, refs,<br/>Idempotency-Key
+    U->>R: Idempotency-Key seen?
+    alt replay
+        R-->>U: first response
+        U-->>H: first response
+    else new key
+        U->>A: build door code, carrier,<br/>window
+        alt value object invalid or window in the past
+            A-->>U: ErrInvalidDoorCode,<br/>ErrInvalidCarrier,<br/>ErrInvalidWindow or<br/>ErrWindowInPast
+            U-->>H: 422 problem+json
+        else valid
+            U->>R: DoorView, DockCalendar of<br/>the site,<br/>AsnView or CutoffView
+            alt unknown door or flow mismatch
+                R-->>U: ErrUnknownDoor or<br/>ErrDoorFlowMismatch
+                U-->>H: 422 problem+json
+            else outside hours or inside a closure
+                R-->>U: ErrDoorUnavailable
+                U-->>H: 409 problem+json
+            else ASN or CPT reference not known
+                R-->>U: ErrUnknownAsn or<br/>ErrMissingOutboundRef
+                U-->>H: 422 problem+json
+            else references fine
+                U->>R: per-door advisory lock,<br/>DoorSchedule.CheckNoOverlap
+                alt overlaps a BOOKED or CHECKED_IN appointment
+                    R-->>U: ErrDoorDoubleBooked
+                    U-->>H: 409 problem+json
+                else door free in the window
+                    U->>A: BookAppointment
+                    A-->>U: BOOKED, version 1
+                    Note over U,O: one transaction
+                    U->>R: insert appointment, ASNs,<br/>shipment refs
+                    U->>O: insert<br/>DockAppointmentBooked
+                    U->>R: store Idempotency-Key<br/>response
+                    U-->>H: 201 appointment and ETag
+                end
+            end
+        end
+    end
+    Note over O: after commit the relay<br/>publishes to warehouse.<br/>dock-scheduling.events
+
+```
+
+Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockAppointment]` (`commands`, `invariants`), `.publishes[DockAppointmentBooked]`, `conventions.integration_rules`.
+
+Omitted: the per-door lock is released at commit (not drawn). The order of the checks and the HTTP statuses are proposed (gap `DS-G17`). `slot_granularity_minutes` is checked nowhere in the model (gap `DS-G21`).
+
+## 2. RescheduleAppointment
+
+Carrier scheduler, REST `POST /appointments/appointmentId/reschedules`.
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as http<br/>handler
+    participant U as use case
+    participant A as Dock<br/>Appointment
+    participant R as repositories<br/>and views
+    participant O as outbox and<br/>relay to Kafka
+    H->>U: RescheduleAppointment<br/>window, If-Match version,<br/>Idempotency-Key
+    U->>R: Get appointment
+    alt not found
+        U-->>H: 404 not-found
+    else found
+        U->>A: RescheduleAppointment new<br/>window, now
+        alt state not BOOKED
+            A-->>U: ErrIllegalTransition
+            U-->>H: 409 illegal-transition
+        else window invalid or in the past
+            A-->>U: ErrInvalidWindow or<br/>ErrWindowInPast
+            U-->>H: 422 problem+json
+        else BOOKED
+            U->>R: DoorView flow,<br/>DockCalendar hours and<br/>closures
+            alt flow mismatch or door unavailable
+                R-->>U: ErrDoorFlowMismatch or<br/>ErrDoorUnavailable
+                U-->>H: 422 or 409 problem+json
+            else allowed
+                U->>R: per-door advisory lock,<br/>CheckNoOverlap ignoring<br/>this appointment
+                alt overlap
+                    R-->>U: ErrDoorDoubleBooked
+                    U-->>H: 409 problem+json
+                else free
+                    A-->>U: BOOKED, new window,<br/>previous window
+                    Note over U,O: one transaction
+                    U->>R: update where version<br/>matches
+                    alt version changed
+                        R-->>U: conflict
+                        U-->>H: 409 concurrent-update
+                    else saved
+                        U->>O: insert<br/>DockAppointmentRescheduled
+                        U-->>H: 200 appointment and ETag
+                    end
+                end
+            end
+        end
+    end
+    Note over O: after commit the relay<br/>publishes to warehouse.<br/>dock-scheduling.events
+
+```
+
+Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockAppointment].transitions` (`BOOKED` to `BOOKED`), `.invariants`, `.publishes[DockAppointmentRescheduled]`.
+
+Omitted: the idempotency replay branch (drawn in diagram 1); whether the door can change (gap `DS-G06`).
+
+## 3. CancelAppointment
+
+Carrier scheduler, REST `POST /appointments/appointmentId/cancellations`. The policy `CancelWhenAllAsnsCancelled` calls the same use case with reason `ASN_CANCELLED` from the Kafka consumer of `ASNCancelled`.
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as http handler<br/>or consumer
+    participant U as use case
+    participant A as Dock<br/>Appointment
+    participant R as repositories<br/>and views
+    participant O as outbox and<br/>relay to Kafka
+    H->>U: CancelAppointment reason,<br/>If-Match version
+    U->>R: Get appointment
+    alt not found
+        U-->>H: 404 not-found
+    else found
+        U->>A: CancelAppointment reason
+        alt state not BOOKED or CHECKED_IN
+            A-->>U: ErrIllegalTransition
+            U-->>H: 409 illegal-transition
+        else reason outside CancellationReason
+            A-->>U: ErrValidation
+            U-->>H: 422 validation-failed
+        else cancellable
+            A-->>U: CANCELLED
+            Note over U,O: one transaction
+            U->>R: update where version<br/>matches
+            alt version changed
+                R-->>U: conflict
+                U-->>H: 409 concurrent-update
+            else saved
+                U->>O: insert<br/>DockAppointmentCancelled
+                U-->>H: 200 appointment
+            end
+        end
+    end
+    Note over O: after commit the relay<br/>publishes to warehouse.<br/>dock-scheduling.events
+
+```
+
+Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockAppointment].transitions`, `.policies[CancelWhenAllAsnsCancelled]`, `.reasons[CancellationReason]`.
+
+Omitted: the inbox check on the policy path (drawn in diagram 5) and the idempotency replay on the REST path (diagram 1). On the policy path there is no HTTP reply: a non-cancellable appointment is skipped.
+
+## 4. ReportEta
+
+Carrier scheduler, REST `POST /appointments/appointmentId/eta-reports`. Policy `EtaRisk` decides whether the report raises an advisory.
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as http<br/>handler
+    participant U as use case
+    participant A as Dock<br/>Appointment
+    participant R as repositories<br/>and views
+    participant O as outbox and<br/>relay to Kafka
+    H->>U: ReportEta eta_at, source,<br/>Idempotency-Key
+    U->>R: Get appointment and<br/>arrival tolerance
+    alt not found
+        U-->>H: 404 not-found
+    else found
+        U->>A: ReportEta eta_at,<br/>tolerance
+        alt state not BOOKED
+            A-->>U: ErrIllegalTransition
+            U-->>H: 409 illegal-transition
+        else BOOKED
+            A-->>U: Eta stored, late or not
+            Note over U,O: one transaction
+            U->>R: update where version<br/>matches
+            alt version changed
+                R-->>U: conflict
+                U-->>H: 409 concurrent-update
+            else saved
+                opt eta_at later than window_start plus tolerance
+                    U->>O: insert<br/>DockAppointmentAtRisk<br/>cause LATE_ETA
+                end
+                U-->>H: 200 appointment
+            end
+        end
+    end
+    Note over O: after commit the relay<br/>publishes to warehouse.<br/>dock-scheduling.analytics
+
+```
+
+Derived from: `model.yaml → contexts[dock-scheduling].policies[EtaRisk]`, `.aggregates[DockAppointment].value_objects[Eta]`, `.publishes[DockAppointmentAtRisk]`.
+
+Omitted: the relay step publishes only when an `AtRisk` row exists; nothing is rescheduled. That `BOOKED` is the only state that accepts an ETA is this pack's reading.
+
+## 5. RecordArrival
+
+Policy `ArrivalFromGate` on `VisitCheckedIn` naming an `appointment_id`.
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as kafka<br/>consumer
+    participant U as use case
+    participant A as Dock<br/>Appointment
+    participant R as repositories<br/>and views
+    participant O as outbox and<br/>relay to Kafka
+    H->>U: VisitCheckedIn event id,<br/>appointment_id, arrived_at
+    U->>O: processed_events contains<br/>event id?
+    alt already processed
+        U-->>H: ack, no effect
+    else new
+        U->>R: Get appointment by<br/>appointment_id
+        alt unknown or terminal
+            R-->>U: not found, COMPLETED,<br/>CANCELLED or NO_SHOW
+            U->>O: insert processed_events<br/>row
+            U-->>H: ack, ignored and counted
+        else found and active
+            U->>A: RecordArrival arrived_at,<br/>tolerance
+            A-->>U: CHECKED_IN with<br/>arrival_status
+            Note over U,O: one transaction
+            U->>R: update where version<br/>matches
+            alt version changed
+                R-->>U: conflict
+                U-->>H: rollback, redeliver
+            else saved
+                U->>O: insert<br/>DockAppointmentCheckedIn
+                U->>O: insert processed_events<br/>row
+                U-->>H: ack
+            end
+        end
+    end
+    Note over O: after commit the relay<br/>publishes to warehouse.<br/>dock-scheduling.analytics
+
+```
+
+Derived from: `model.yaml → contexts[dock-scheduling].policies[ArrivalFromGate, OutOfOrderYardFacts]`, `contexts[yard-management].publishes[VisitCheckedIn]`.
+
+Omitted: an appointment already `CHECKED_IN` is not covered by the model (gap `DS-G19`), so only `BOOKED` reaches the aggregate. The `arrival_status` formula is this pack's reading (gap `DS-G09`).
+
+## 6. ReassignDoor
+
+Policy `ActualDoorWins` on `TrailerDocked` whose door differs from the booked door.
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as kafka<br/>consumer
+    participant U as use case
+    participant A as Dock<br/>Appointment
+    participant R as repositories<br/>and views
+    participant O as outbox and<br/>relay to Kafka
+    H->>U: TrailerDocked event id,<br/>appointment_id, door_code
+    U->>O: processed_events contains<br/>event id?
+    alt already processed
+        U-->>H: ack, no effect
+    else new
+        U->>R: Get appointment
+        alt unknown, CANCELLED or NO_SHOW
+            U->>O: insert processed_events<br/>row
+            U-->>H: ack, ignored and counted
+        else door equals the booked door
+            U->>O: insert processed_events<br/>row
+            U-->>H: ack, no change
+        else door differs
+            U->>A: ReassignDoor to door_code,<br/>no overlap refusal
+            A-->>U: door changed
+            U->>R: later appointments<br/>overlapping on the new<br/>door
+            Note over U,O: one transaction
+            U->>R: update where version<br/>matches
+            alt version changed
+                R-->>U: conflict
+                U-->>H: rollback, redeliver
+            else saved
+                U->>O: insert<br/>DockAppointmentDoorReassigned
+                U->>O: insert<br/>DockAppointmentAtRisk per<br/>overlapped appointment
+                U->>O: insert processed_events<br/>row
+                U-->>H: ack
+            end
+        end
+    end
+    Note over O: after commit the relay<br/>publishes to warehouse.<br/>dock-scheduling.analytics
+
+```
+
+Derived from: `model.yaml → contexts[dock-scheduling].policies[ActualDoorWins]`, `.publishes[DockAppointmentDoorReassigned, DockAppointmentAtRisk]`.
+
+Omitted: `ErrDoorDoubleBooked` is deliberately not raised: the physical fact wins. Which states accept the command and what a same-door event does are this pack's reading (gap `DS-G19`).
+
+## 7. RecordDoorRelease
+
+Policy `CompleteOnDoorRelease` on `TrailerUndocked` naming an `appointment_id`.
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as kafka<br/>consumer
+    participant U as use case
+    participant A as Dock<br/>Appointment
+    participant R as repositories<br/>and views
+    participant O as outbox and<br/>relay to Kafka
+    H->>U: TrailerUndocked event id,<br/>appointment_id,<br/>undocked_at
+    U->>O: processed_events contains<br/>event id?
+    alt already processed
+        U-->>H: ack, no effect
+    else new
+        U->>R: Get appointment
+        alt unknown, CANCELLED or NO_SHOW
+            U->>O: insert processed_events<br/>row
+            U-->>H: ack, ignored and counted
+        else COMPLETED already
+            U->>O: insert processed_events<br/>row
+            U-->>H: ack, no change
+        else CHECKED_IN or BOOKED
+            U->>A: RecordDoorRelease<br/>undocked_at
+            A-->>U: COMPLETED, arrival<br/>implicit if it was BOOKED
+            Note over U,O: one transaction
+            U->>R: update where version<br/>matches
+            alt version changed
+                R-->>U: conflict
+                U-->>H: rollback, redeliver
+            else saved
+                U->>O: insert<br/>DockAppointmentCompleted
+                U->>O: insert processed_events<br/>row
+                U-->>H: ack
+            end
+        end
+    end
+    Note over O: after commit the relay<br/>publishes to warehouse.<br/>dock-scheduling.analytics
+
+```
+
+Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockAppointment].transitions`, `.policies[CompleteOnDoorRelease, OutOfOrderYardFacts]`.
+
+Omitted: no `DockAppointmentCheckedIn` is written for an implicit arrival (gap `DS-G19`); a visit with several trailers completes on the first release (gap `DS-G03`).
+
+## 8. MarkNoShow
+
+Scheduler (cron), REST `POST /no-show-sweeps`, policy `NoShowSweep`.
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as http<br/>handler
+    participant U as use case
+    participant A as Dock<br/>Appointment
+    participant R as repositories<br/>and views
+    participant O as outbox and<br/>relay to Kafka
+    H->>U: MarkNoShow POST /no-show-<br/>sweeps
+    U->>R: BOOKED appointments past<br/>window_end<br/>plus no-show grace
+    loop each qualifying appointment
+        U->>A: MarkNoShow now, grace
+        A-->>U: NO_SHOW
+        Note over U,O: one transaction per<br/>appointment
+        U->>R: update where version<br/>matches
+        alt version changed
+            R-->>U: conflict
+            Note over U: skipped, the next sweep<br/>retries
+        else saved
+            U->>O: insert<br/>DockAppointmentNoShow
+        end
+    end
+    U-->>H: 200 number marked
+    Note over O: after commit the relay<br/>publishes to warehouse.<br/>dock-scheduling.events
+
+```
+
+Derived from: `model.yaml → contexts[dock-scheduling].policies[NoShowSweep]`, `.aggregates[DockAppointment].transitions` (`BOOKED` to `NO_SHOW`), `.publishes[DockAppointmentNoShow]`.
+
+Omitted: the idempotency replay (diagram 1). A rerun selects only what still qualifies. The response body is not in the model.
+
+## 9. ImportLegacyAppointment
+
+Policy `LegacyImport` (strangler stage A), on `inbound-receiving` `DockAppointment*` events; off when its group env is unset.
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as kafka<br/>consumer
+    participant U as use case
+    participant A as Dock<br/>Appointment
+    participant R as repositories<br/>and views
+    participant O as outbox and<br/>relay to Kafka
+    H->>U: legacy<br/>DockAppointmentBooked<br/>event id, door, window
+    U->>O: processed_events contains<br/>event id?
+    alt already processed
+        U-->>H: ack, no effect
+    else new
+        U->>R: legacy_appointment_id<br/>already imported?
+        alt imported
+            U->>O: insert processed_events<br/>row
+            U-->>H: ack, import once
+        else not yet
+            U->>R: DoorView for the site of<br/>the door
+            U->>A: ImportLegacyAppointment<br/>provenance legacy-import,<br/>direction INBOUND
+            A-->>U: appointment
+            Note over U,O: one transaction
+            U->>R: insert appointment
+            U->>O: insert<br/>DockAppointmentBooked
+            U->>O: insert processed_events<br/>row
+            U-->>H: ack
+        end
+    end
+    Note over O: after commit the relay<br/>publishes to warehouse.<br/>dock-scheduling.events
+
+```
+
+Derived from: `model.yaml → contexts[dock-scheduling].policies[LegacyImport]`, `.consumes` (legacy-import entry), `fleet_changes`.
+
+Omitted: which invariants an import enforces, how the legacy check-in, cancel and complete events are applied and whether the import raises `DockAppointmentBooked` are open (gap `DS-G08`); the diagram shows this pack's reading.
+
+## 10. DeclareOperatingHours
+
+Dock planner, REST `PUT /sites/siteId/dock-calendar/operating-hours`.
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as http<br/>handler
+    participant U as use case
+    participant A as Dock<br/>Calendar
+    participant R as repositories<br/>and views
+    participant O as outbox and<br/>relay to Kafka
+    H->>U: DeclareOperatingHours<br/>site, door, weekday rows,<br/>Idempotency-Key
+    U->>R: Get DockCalendar of the<br/>site
+    U->>A: DeclareOperatingHours rows
+    alt opens_at not before closes_at
+        A-->>U: ErrInvalidOperatingHours
+        U-->>H: 422 problem+json
+    else valid
+        A-->>U: hours replaced
+        Note over U,O: one transaction
+        U->>R: upsert calendar where<br/>version matches
+        alt version changed
+            R-->>U: conflict
+            U-->>H: 409 concurrent-update
+        else saved
+            U->>O: insert<br/>DoorOperatingHoursDeclared
+            U-->>H: 200 calendar and ETag
+        end
+    end
+    Note over O: after commit the relay<br/>publishes to warehouse.<br/>dock-scheduling.analytics
+
+```
+
+Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockCalendar]` (`invariants`, `commands`, `events`).
+
+Omitted: the idempotency replay (diagram 1). How a calendar is created at first use is not in the model (gap `DS-G07`); appointments already outside the new hours are not refused (gap `DS-G13`).
+
+## 11. DeclareCalendarSettings
+
+Dock planner, REST `PUT /sites/siteId/dock-calendar/settings`.
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as http<br/>handler
+    participant U as use case
+    participant A as Dock<br/>Calendar
+    participant R as repositories<br/>and views
+    H->>U: DeclareCalendarSettings<br/>max window, granularity,<br/>tolerance, grace,<br/>Idempotency-Key
+    U->>R: Get DockCalendar of the<br/>site
+    U->>A: DeclareCalendarSettings<br/>settings
+    alt a value is not valid
+        A-->>U: ErrValidation
+        U-->>H: 422 validation-failed
+    else valid
+        A-->>U: settings replaced
+        U->>R: upsert calendar where<br/>version matches
+        alt version changed
+            R-->>U: conflict
+            U-->>H: 409 concurrent-update
+        else saved
+            U-->>H: 200 calendar and ETag
+        end
+    end
+
+```
+
+Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockCalendar]` (`value_objects[Settings]`, `commands`, `events`).
+
+Omitted: no outbox row and no relay: the model lists no event for this command (gap `DS-G01`, gap `DS-G21`). The idempotency replay is as in diagram 1.
+
+## 12. ScheduleDoorClosure
+
+Dock planner, REST `POST /sites/siteId/dock-calendar/closures`.
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as http<br/>handler
+    participant U as use case
+    participant A as Dock<br/>Calendar
+    participant R as repositories<br/>and views
+    participant O as outbox and<br/>relay to Kafka
+    H->>U: ScheduleDoorClosure door,<br/>from, to, reason,<br/>Idempotency-Key
+    U->>R: Get DockCalendar of the<br/>site
+    U->>A: ScheduleDoorClosure<br/>closure
+    alt overlaps a closure of the door
+        A-->>U: ErrOverlappingClosure
+        U-->>H: 409 problem+json
+    else no closure overlap
+        U->>R: active appointments of the<br/>door in the period
+        alt at least one active appointment
+            R-->>U: appointment ids
+            U-->>H: 409<br/>ErrClosureConflictsWithAppointments<br/>lists the ids
+        else none
+            A-->>U: closure added
+            Note over U,O: one transaction
+            U->>R: update calendar where<br/>version matches
+            alt version changed
+                R-->>U: conflict
+                U-->>H: 409 concurrent-update
+            else saved
+                U->>O: insert<br/>DoorClosureScheduled
+                U-->>H: 201 closure
+            end
+        end
+    end
+    Note over O: after commit the relay<br/>publishes to warehouse.<br/>dock-scheduling.events
+
+```
+
+Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockCalendar].invariants`, `.publishes[DoorClosureScheduled]`.
+
+Omitted: the idempotency replay (diagram 1). The appointments are read from another aggregate; a booking that commits between the read and the save is not prevented in the model (this pack's reading).
+
+## 13. LiftDoorClosure
+
+Dock planner, REST `POST /sites/siteId/dock-calendar/closures/closureId/lifts`.
+
+```mermaid
+%%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
+sequenceDiagram
+    autonumber
+    participant H as http<br/>handler
+    participant U as use case
+    participant A as Dock<br/>Calendar
+    participant R as repositories<br/>and views
+    participant O as outbox and<br/>relay to Kafka
+    H->>U: LiftDoorClosure closureId,<br/>Idempotency-Key
+    U->>R: Get DockCalendar of the<br/>site
+    U->>A: LiftDoorClosure closureId
+    alt closure not found
+        A-->>U: ErrNotFound
+        U-->>H: 404 not-found
+    else found
+        A-->>U: closure removed
+        Note over U,O: one transaction
+        U->>R: update calendar where<br/>version matches
+        alt version changed
+            R-->>U: conflict
+            U-->>H: 409 concurrent-update
+        else saved
+            U->>O: insert DoorClosureLifted
+            U-->>H: 200 calendar
+        end
+    end
+    Note over O: after commit the relay<br/>publishes to warehouse.<br/>dock-scheduling.events
+
+```
+
+Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockCalendar].commands`, `.publishes[DoorClosureLifted]`.
+
+Omitted: the idempotency replay (diagram 1).

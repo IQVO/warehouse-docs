@@ -1,0 +1,562 @@
+---
+id: class-diagram
+title: Class Diagram
+sidebar_label: Class Diagram
+description: "Proposed UML class diagrams of the Yard Management domain (YardVisit, Trailer, YardMove, YardCheck, YardPolicy, Occupancy, events, policies) and its hexagonal ports and adapters."
+---
+
+# Class Diagram
+
+:::info[Proposed design]
+Derived from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml). This context's service is not built yet; identifiers (`Err...` names, REST paths, CloudEvents types) are the names the service will use.
+:::
+
+UML class diagrams of the **proposed** `internal/domain/**` packages (`yardvisit`,
+`trailer`, `yardmove`, `yardcheck`, `yardpolicy`), then the hexagonal ports and
+adapters in the Go layout the fleet uses. Type and field names come from
+`model.yaml`; method names are the model's commands. Fields are shown `-`
+(unexported), methods `+`.
+
+## 1. Trailer aggregate and the Occupancy service
+
+```mermaid
+classDiagram
+    direction LR
+    class Trailer {
+        <<AggregateRoot>>
+        -trailerId string
+        -siteId string
+        -kind TrailerKind
+        -unit UnitNumber
+        -state TrailerState
+        -loadState LoadState
+        -contents Contents
+        -seal Seal
+        -hold Hold
+        -location Location
+        -doorWork DoorWork
+        -arrivedAt time
+        -version int
+        +RecordArrival(unit, kind, contents)$ Trailer
+        +StartMoving() error
+        +ArriveAt(location, facts, occupancy) error
+        +StartDoorWork(at) error
+        +CompleteDoorWork(at, loadState) error
+        +RecordSeal(seal) error
+        +BreakSeal() error
+        +PlaceHold(reason) error
+        +ReleaseHold() error
+        +RecordLoadState(state) error
+        +Depart(at) error
+    }
+    class TrailerState {
+        <<Enumeration>>
+        PARKED
+        IN_MOVE
+        DOCKED
+        DEPARTED
+    }
+    class TrailerKind {
+        <<Enumeration>>
+        DRY_VAN
+        REEFER
+        FLATBED
+        CONTAINER
+    }
+    class LoadState {
+        <<Enumeration>>
+        EMPTY
+        LOADED
+        PARTIAL
+    }
+    class DoorWork {
+        <<Enumeration>>
+        WAITING
+        IN_PROGRESS
+        DONE
+    }
+    class UnitNumber {
+        <<ValueObject>>
+        carrierScac string
+        number string
+    }
+    class Contents {
+        <<ValueObject>>
+        asnNumbers string[]
+        outboundRef string
+    }
+    class Seal {
+        <<ValueObject>>
+        number string
+        state SealState
+    }
+    class Hold {
+        <<ValueObject>>
+        reason HoldReason
+    }
+    class Location {
+        <<ValueObject>>
+        kind SPOT or DOOR
+        code string
+    }
+    class Occupancy {
+        <<DomainService>>
+        +CheckFree(siteId, location) error
+    }
+    Trailer --> TrailerState
+    Trailer --> TrailerKind
+    Trailer --> LoadState
+    Trailer --> DoorWork
+    Trailer *-- UnitNumber
+    Trailer *-- Contents
+    Trailer *-- Seal
+    Trailer *-- Hold
+    Trailer *-- Location
+    Trailer ..> Occupancy : uses at ArriveAt
+```
+
+Derived from: `model.yaml → contexts[yard-management].aggregates[Trailer]`
+(`value_objects`, `states`, `commands`, `invariants`), `.publishes[TrailerDeparted].data`.
+
+Omitted: the error variables (see
+[Aggregate Design Canvas](/yard/contexts/yard-management/aggregate-design-canvas)),
+`HoldReason` (`DAMAGED`, `SEAL_BROKEN`, `NOT_FOUND`, `QUALITY`, `SECURITY`) and
+`SealState` (`INTACT`, `BROKEN`, `NONE`) enumerations, read accessors. `ArriveAt`
+receives the facts it cannot know alone (closure, door flow, active slot) from the use
+case; `Occupancy.CheckFree` runs under a per-location advisory lock, with a partial
+unique index as backstop. `RecordArrival` is drawn as a constructor; the model names no
+initial state (gap YM-G2), so `state` is set by the use case.
+
+## 2. YardVisit and YardMove aggregates
+
+```mermaid
+classDiagram
+    direction LR
+    class YardVisit {
+        <<AggregateRoot>>
+        -visitId string
+        -siteId string
+        -carrier Carrier
+        -plate TractorPlate
+        -driverRef DriverRef
+        -purpose Purpose
+        -appointment AppointmentRef
+        -trailersIn TrailerRef[]
+        -trailersOut TrailerRef[]
+        -state VisitState
+        -version int
+        +CheckInVisit(carrier, plate, purpose, policy)$ YardVisit
+        +RejectAtGate(carrier, reason)$ YardVisit
+        +CheckOutVisit(trailersOut, released) error
+    }
+    class VisitState {
+        <<Enumeration>>
+        CHECKED_IN
+        CHECKED_OUT
+        REJECTED
+    }
+    class Purpose {
+        <<Enumeration>>
+        DROP
+        LIVE_UNLOAD
+        LIVE_LOAD
+        PICKUP
+        BOBTAIL
+    }
+    class YardMove {
+        <<AggregateRoot>>
+        -moveId string
+        -siteId string
+        -trailerId string
+        -performer Performer
+        -from Location
+        -to Location
+        -priority Priority
+        -reason Reason
+        -lease Lease
+        -state MoveState
+        -version int
+        +RequestMove(trailer, to, reason, priority)$ YardMove
+        +VisitingDriverMove(trailer, to, reason)$ YardMove
+        +ClaimNextMove(hostlerRef, leaseSeconds, now) error
+        +CompleteMove(by, actual, reason, now) error
+        +CancelMove(reason) error
+        +ExpireLease(now) error
+    }
+    class MoveState {
+        <<Enumeration>>
+        REQUESTED
+        CLAIMED
+        COMPLETED
+        CANCELLED
+    }
+    class Performer {
+        <<Enumeration>>
+        HOSTLER
+        VISITING_DRIVER
+    }
+    class Reason {
+        <<Enumeration>>
+        TO_DOOR
+        FROM_DOOR
+        RELOCATE
+        TO_HOLDING
+    }
+    class Priority {
+        <<ValueObject>>
+        band int
+        dueBy time
+    }
+    class Lease {
+        <<ValueObject>>
+        hostlerRef string
+        expiresAt time
+    }
+    YardVisit --> VisitState
+    YardVisit --> Purpose
+    YardMove --> MoveState
+    YardMove --> Performer
+    YardMove --> Reason
+    YardMove *-- Priority
+    YardMove *-- Lease
+```
+
+Derived from: `model.yaml → contexts[yard-management].aggregates[YardVisit, YardMove]`
+(`value_objects`, `states`, `commands`), `.publishes[YardMoveCompleted].data`.
+
+Omitted: `Carrier{name, scac?}`, `TractorPlate`, `DriverRef`, `AppointmentRef`,
+`RejectionReason` and `TrailerRef` (the shape of `TrailersIn[]` and `TrailersOut[]` is
+not given in the model, gap YM-G15); the error variables. `VisitingDriverMove` is
+drawn as a constructor named after the policy: the model gives that creation no command
+name (gaps YM-G2, YM-G3). `ClaimNextMove` is a method of the aggregate and its selection
+is the repository's `ClaimableFor` (order proposed, gap YM-G19). `released` is the fact
+the use case computes from the trailers and moves.
+
+## 3. YardCheck and YardPolicy aggregates
+
+```mermaid
+classDiagram
+    direction LR
+    class YardCheck {
+        <<AggregateRoot>>
+        -yardCheckId string
+        -siteId string
+        -observations Observation[]
+        -discrepancies Discrepancy[]
+        -state CheckState
+        -version int
+        +OpenYardCheck(siteId)$ YardCheck
+        +RecordObservation(locationCode, unitNumber) error
+        +CloseYardCheck(expected) error
+    }
+    class CheckState {
+        <<Enumeration>>
+        OPEN
+        CLOSED
+    }
+    class Observation {
+        <<ValueObject>>
+        locationCode string
+        unitNumber string
+    }
+    class Discrepancy {
+        <<ValueObject>>
+        kind MISSING, UNEXPECTED, WRONG_LOCATION
+        locationCode string
+        trailerId string
+        unitNumber string
+    }
+    class YardPolicy {
+        <<AggregateRoot>>
+        -siteId string
+        -requireAppointment bool
+        -holdingSpotCodes string[]
+        -parkingZoneIds string[]
+        -dwellThresholds map
+        -leaseSeconds int
+        -sealAction SealMismatchAction
+        -freeTimeMinutes int
+        -version int
+        +DeclareYardPolicy(settings) error
+    }
+    class SealMismatchAction {
+        <<Enumeration>>
+        FLAG
+        REJECT
+    }
+    YardCheck --> CheckState
+    YardCheck *-- Observation
+    YardCheck *-- Discrepancy
+    YardPolicy --> SealMismatchAction
+```
+
+Derived from: `model.yaml → contexts[yard-management].aggregates[YardCheck, YardPolicy]`.
+
+Omitted: `ErrYardCheckOpen`, `ErrLocationAlreadyObserved`, `ErrUnknownLocation`,
+`ErrValidation`. `expected` in `CloseYardCheck` is the places the model holds for the
+observed locations, passed in by the use case (the discrepancy rules are not spelled
+out, gap YM-G18). The model states no defaults for `YardPolicy` (gap YM-G24).
+
+### Repositories
+
+```mermaid
+classDiagram
+    direction LR
+    class VisitRepository {
+        <<Repository>>
+        +Get(visitId) YardVisit
+        +Save(visit, events) error
+        +FindOpenByPlate(siteId, plate) YardVisit
+    }
+    class TrailerRepository {
+        <<Repository>>
+        +Get(trailerId) Trailer
+        +Save(trailer, events) error
+        +FindOnSite(siteId, unit) Trailer
+        +ListOnSite(siteId) Trailer[]
+    }
+    class MoveRepository {
+        <<Repository>>
+        +Get(moveId) YardMove
+        +Save(move, events) error
+        +ClaimableFor(siteId) YardMove
+        +OpenForTrailer(trailerId) YardMove
+        +ExpiredLeases(now) YardMove[]
+    }
+    class YardCheckRepository {
+        <<Repository>>
+        +Get(yardCheckId) YardCheck
+        +Save(check, events) error
+        +FindOpen(siteId) YardCheck
+    }
+    class YardPolicyRepository {
+        <<Repository>>
+        +Get(siteId) YardPolicy
+        +Save(policy) error
+    }
+```
+
+One repository per aggregate root (the ports of the next view). `ClaimableFor` backs
+`ClaimNextMove` (order proposed, gap YM-G19); `OpenForTrailer` and `FindOpenByPlate`
+back `ErrTrailerHasOpenMove` and `ErrVisitAlreadyOpen`.
+
+## 4. Events and policies
+
+Visit and trailer events:
+
+```mermaid
+classDiagram
+    direction LR
+    class VisitCheckedIn {
+        <<DomainEvent>>
+        visit_id, site_id, carrier
+        carrier_scac, purpose
+        appointment_id, trailers
+        arrived_at, version
+    }
+    class VisitRejected {
+        <<DomainEvent>>
+        visit_id, site_id
+        carrier_scac, appointment_id
+        reason, rejected_at
+    }
+    class TrailerDocked {
+        <<DomainEvent>>
+        trailer_id, site_id, door_code
+        appointment_id, asn_numbers
+        visit_id, docked_at, version
+    }
+    class TrailerUndocked {
+        <<DomainEvent>>
+        trailer_id, site_id, door_code
+        appointment_id, undocked_at
+        version
+    }
+    class SealExceptionRaised {
+        <<DomainEvent>>
+        trailer_id, site_id
+        appointment_id
+        expected_seal_number
+        found_seal_number, raised_at
+    }
+    class TrailerDwellExceeded {
+        <<DomainEvent>>
+        trailer_id, site_id, kind
+        dwell_minutes
+        threshold_minutes
+        location_code
+    }
+    class DirectOnCheckIn {
+        <<Policy>>
+        +OnCheckIn()
+    }
+    class SealCheckAtGate {
+        <<Policy>>
+        +OnSealRecorded()
+    }
+    class DwellSweep {
+        <<Policy>>
+        +OnSweep()
+    }
+    DirectOnCheckIn ..> VisitCheckedIn : via CheckInVisit
+    SealCheckAtGate ..> SealExceptionRaised : via Trailer
+    SealCheckAtGate ..> VisitRejected : REJECT
+    DwellSweep ..> TrailerDwellExceeded : via Trailer
+```
+
+Move, door-work and check events:
+
+```mermaid
+classDiagram
+    direction LR
+    class YardMoveRequested {
+        <<DomainEvent>>
+        move_id, site_id, trailer_id
+        performer, from_location
+        to_location, reason
+        due_by, version
+    }
+    class YardMoveClaimed {
+        <<DomainEvent>>
+        move_id, site_id
+        hostler_ref, claimed_at
+        version
+    }
+    class YardMoveCompleted {
+        <<DomainEvent>>
+        move_id, site_id, trailer_id
+        performer, hostler_ref
+        from_location, actual_location
+        completed_at, duration_seconds
+        version
+    }
+    class DoorWorkCompleted {
+        <<DomainEvent>>
+        trailer_id, site_id, door_code
+        appointment_id, completed_at
+        load_state, version
+    }
+    class YardCheckClosed {
+        <<DomainEvent>>
+        yard_check_id, site_id
+        closed_at, discrepancies
+    }
+    class CallToDoor {
+        <<Policy>>
+        +OnTrailerUndocked()
+    }
+    class ClearDoorAfterWork {
+        <<Policy>>
+        +OnDoorWorkCompleted()
+    }
+    class AutoCompleteUnload {
+        <<Policy>>
+        +OnReceiptClosed()
+    }
+    class YardMoveCancelled {
+        <<DomainEvent>>
+        move_id, site_id
+        reason, version
+    }
+    class NoShowFreesHolding {
+        <<Policy>>
+        +OnNoShowOrCancelled()
+    }
+    CallToDoor ..> YardMoveRequested : via RequestMove
+    ClearDoorAfterWork ..> YardMoveRequested : via RequestMove
+    AutoCompleteUnload ..> DoorWorkCompleted : via CompleteDoorWork
+    NoShowFreesHolding ..> YardMoveCancelled : via CancelMove
+```
+
+Derived from: `model.yaml → contexts[yard-management].publishes`, `.policies`.
+
+Omitted: the CloudEvents envelope (see
+[Domain Events](/yard/contexts/yard-management/domain-events)); the events not drawn
+(`VisitCheckedOut`, `TrailerParked`, `DoorWorkStarted`, `TrailerDeparted`, `TrailerHeld`,
+`TrailerHoldReleased`) are raised directly by their commands, not by a policy, and carry
+the fields listed there; the policies `VisitingDriverMove` and `LeaseExpirySweep` (the
+sweep returns expired moves to `REQUESTED` and raises no event, gap YM-G14). The seven
+read models (`LocationView`, `AppointmentView`, `DoorClosureView`, `AsnContentView`,
+`ReceiptAtDoorView`, `YardBoardView`, `YardKpiReport`) are projections, shown in the
+ports view below.
+
+## 5. Hexagonal ports and adapters
+
+Inbound side: adapters, use cases and domain packages.
+
+```mermaid
+flowchart LR
+    subgraph IN["adapters/inbound"]
+        HTTP["http<br/>and cron sweeps"]
+        KAF["kafka"]
+    end
+    subgraph APP["application/usecases"]
+        UC1["Visit<br/>CheckIn, Reject,<br/>CheckOut"]
+        UC2["Trailer<br/>door work, seal,<br/>hold, dwell sweep"]
+        UC3["Move<br/>Request, ClaimNext,<br/>Complete, Cancel,<br/>ExpireLease"]
+        UC4["YardCheck,<br/>YardPolicy"]
+    end
+    subgraph DOM["domain"]
+        D1["yardvisit"]
+        D2["trailer<br/>with Occupancy"]
+        D3["yardmove"]
+        D4["yardcheck<br/>yardpolicy"]
+    end
+    HTTP --> UC1
+    HTTP --> UC2
+    HTTP --> UC3
+    HTTP --> UC4
+    KAF --> UC2
+    KAF --> UC3
+    UC1 --> D1
+    UC2 --> D2
+    UC3 --> D3
+    UC4 --> D4
+```
+
+Outbound side: the ports every use case calls and their adapters.
+
+```mermaid
+flowchart LR
+    APP["use cases<br/>and projectors"]
+    subgraph PORTS["application/ports"]
+        P1["Visit, Trailer, Move,<br/>YardCheck, YardPolicy<br/>repositories"]
+        P2["ReadModelStore"]
+        P3["EventPublisher<br/>outbox"]
+        P4["Inbox, UnitOfWork,<br/>Clock, LocationLock"]
+    end
+    subgraph OUT["adapters/outbound"]
+        PG["postgres"]
+        KP["kafka relay"]
+    end
+    APP -.-> P1
+    APP -.-> P2
+    APP -.-> P3
+    APP -.-> P4
+    P1 --- PG
+    P2 --- PG
+    P3 --- PG
+    P4 --- PG
+    PG --> KP
+```
+
+Derived from: `model.yaml → contexts[yard-management].inbound`, `.consumes`,
+`.read_models`, `.policies`, `conventions.integration_rules` (own database,
+transactional outbox, idempotent consumers, Postgres and Kafka only).
+
+All paths are under `internal/` (`internal/adapters/inbound/{http,kafka}`,
+`internal/application/usecases`, `internal/domain`, `internal/application/ports`,
+`internal/adapters/outbound/{postgres,kafka}`). The dashed arrows mean every use case
+calls ports only: the repository of its aggregate, the event publisher (outbox), the
+inbox, the unit of work and, for occupancy, the per-location lock. `http` drives the gate,
+hostler, dock operator and supervisor commands and the two sweeps (a CronJob calls
+`POST /dwell-sweeps` and `POST /move-lease-sweeps`, so there is no `scheduler` adapter),
+`kafka` drives the event policies (`CallToDoor`, `AutoCompleteUnload`,
+`NoShowFreesHolding`), which call the trailer and move use cases, and the read-model
+projectors (updates of `LocationView`, `AppointmentView` and the other views, not drawn
+as a node).
+
+Omitted: the HTTP read path (the `GET` routes read the repositories and read models
+directly); `Clock` has no adapter package. There are no outbound HTTP clients:
+`sync_calls` is empty. A gate camera, ANPR or kiosk is a further inbound adapter that
+issues `CheckInVisit`, not a new context.
