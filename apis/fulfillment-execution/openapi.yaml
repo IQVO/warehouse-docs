@@ -49,7 +49,7 @@ tags:
   - name: Work Planning Delegation
     description: >
       The A2A seam to the Work Planning & Release context (see
-      [ADR-0058](https://iqvo.github.io/fulfillment-execution/docs/adr/0058-a2a-work-planning-delegation)): execution
+      [ADR-0058](/docs/adr/0058-a2a-work-planning-delegation)): execution
       PULLS the next unit for a process path by delegating to the
       wes-work-planning agent over the Agent2Agent protocol. Planning keeps
       every release decision; the authoritative fact returns as the
@@ -66,7 +66,7 @@ tags:
       occupied by at most one worker/robot at a time. Covers registration
       (which also serves as idempotent re-certification), check-in/
       check-out of the occupant (see
-      [ADR-0014](https://iqvo.github.io/fulfillment-execution/docs/adr/0014-labor-performance-integration-hooks)), and
+      [ADR-0014](/docs/adr/0014-labor-performance-integration-hooks)), and
       is the entry point for PULL dispatch (`task-claims` is a Station
       action).
   - name: Packages
@@ -82,7 +82,7 @@ tags:
     description: >
       The OrderConsolidation aggregate: the Rebin / put-wall fan-in point
       between Pick and Pack (see
-      [ADR-0016](https://iqvo.github.io/fulfillment-execution/docs/adr/0016-rebin-and-order-consolidation)). A
+      [ADR-0016](/docs/adr/0016-rebin-and-order-consolidation)). A
       multi-line order picked from different pods produces independent PICK
       completions; each picked line is scanned into the order's
       consolidation slot (`POST /rebin/arrivals`), and the order's PACK task
@@ -460,7 +460,7 @@ paths:
         `CheckIn` invariant enforced through the application layer: one
         occupant at a time. This is operational state, not a
         labor-performance domain event in its own right (see
-        [ADR-0014](https://iqvo.github.io/fulfillment-execution/docs/adr/0014-labor-performance-integration-hooks)):
+        [ADR-0014](/docs/adr/0014-labor-performance-integration-hooks)):
         no domain event is published by this endpoint. The checked-in
         occupant is instead surfaced, best-effort, as `associateId` on the
         `TaskCompleted` Kafka event when a task claimed by this station is
@@ -534,7 +534,7 @@ paths:
         Clears a station's occupant — the Station aggregate's `CheckOut`
         invariant enforced through the application layer. Takes no request
         body. Like check-in, this publishes no domain event (see
-        [ADR-0014](https://iqvo.github.io/fulfillment-execution/docs/adr/0014-labor-performance-integration-hooks)).
+        [ADR-0014](/docs/adr/0014-labor-performance-integration-hooks)).
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
         - name: stationId
@@ -1068,7 +1068,7 @@ paths:
 
 
         **Ship in own container (opt-in,
-        [ADR-0056](https://iqvo.github.io/fulfillment-execution/docs/adr/0056-ship-in-own-container)).** With
+        [ADR-0056](/docs/adr/0056-ship-in-own-container)).** With
         `shipInOwnContainer: true` and the order line's `lineQuantity` (in
         eaches), a line that is exactly one full active CASE of its SKU
         (`lineQuantity` equal to the `unitsPerPack` of the SKU's active CASE
@@ -1175,18 +1175,18 @@ paths:
             One of: `stationId` has no active claim on this task — it was
             never claimed, or the lease has expired, whichever station held it
             (`task-not-claimed`, the same type `complete` and `lease-renewals`
-            return for that condition; [ADR-0038](https://iqvo.github.io/fulfillment-execution/docs/adr/0038-seal-package-expired-lease-is-not-claimed));
+            return for that condition; [ADR-0038](/docs/adr/0038-seal-package-expired-lease-is-not-claimed));
             an ACTIVE lease on the task is held by a different station
             (`task-not-owner`); or a scanned item's live DOT
             hazard classification lookup found it incompatible — per the
             class-level 49 CFR §177.848-derived segregation matrix — with an
             item already scanned into this same package
             (`package-segregation-violation`, see
-            [ADR-0010](https://iqvo.github.io/fulfillment-execution/docs/adr/0010-package-segregation-and-sort-lane)).
+            [ADR-0010](/docs/adr/0010-package-segregation-and-sort-lane)).
             The segregation check only runs when the deployment has
             `PRODUCT_CLASSIFICATION_MODE=kafka` configured (a local copy of
             product-master's classifications,
-            [ADR-0039](https://iqvo.github.io/fulfillment-execution/docs/adr/0039-product-classification-local-copy));
+            [ADR-0039](/docs/adr/0039-product-classification-local-copy));
             the default permissive mode never rejects on this basis.
             The same `Idempotency-Key` reused with a different method, path or body is also a 409, problem type `idempotency-key-reused`.
           content:
@@ -1277,7 +1277,7 @@ paths:
         but a multi-carton order or a re-pack after a SLAM diversion yields
         several, so treat the response as a set. Ordered by package id.
         Side-effect-free (see
-        [ADR-0033](https://iqvo.github.io/fulfillment-execution/docs/adr/0033-package-read-model)).
+        [ADR-0033](/docs/adr/0033-package-read-model)).
       parameters:
         - name: orderRef
           in: query
@@ -1343,7 +1343,7 @@ paths:
         applied and when the package was diverted, so read `status` here —
         `LABELED` means the carton goes to the truck by its `sortLane`,
         `DIVERTED` means it goes to problem-solve. Side-effect-free (see
-        [ADR-0033](https://iqvo.github.io/fulfillment-execution/docs/adr/0033-package-read-model)).
+        [ADR-0033](/docs/adr/0033-package-read-model)).
       parameters:
         - name: id
           in: path
@@ -1424,7 +1424,7 @@ paths:
             both are successful outcomes of this call). No response body;
             read `GET /packages/{id}` afterwards to see which outcome
             occurred (`status` `LABELED` or `DIVERTED`, see
-            [ADR-0033](https://iqvo.github.io/fulfillment-execution/docs/adr/0033-package-read-model)).
+            [ADR-0033](/docs/adr/0033-package-read-model)).
         "400":
           $ref: "#/components/responses/BadRequest"
         "404":
@@ -1695,7 +1695,7 @@ paths:
         A Rebin / put-wall associate (or automation signal) scans one picked
         line of an order into that order's consolidation slot. This is the
         pick -> pack handoff of
-        [ADR-0016](https://iqvo.github.io/fulfillment-execution/docs/adr/0016-rebin-and-order-consolidation): once every
+        [ADR-0016](/docs/adr/0016-rebin-and-order-consolidation): once every
         required line of the order has arrived, this call creates the
         order's PACK task (through the same `CreateTask` use case as
         `POST /tasks`, so it appears in `GET /tasks?orderRef=` and is
@@ -2116,7 +2116,7 @@ components:
       type: string
       description: >
         Package's derived WES-tier sortation routing decision (see
-        [ADR-0010](https://iqvo.github.io/fulfillment-execution/docs/adr/0010-package-segregation-and-sort-lane)):
+        [ADR-0010](/docs/adr/0010-package-segregation-and-sort-lane)):
         `HAZMAT_LANE` if any scanned item carried a DOT hazard class from
         the live per-scanned-item classification lookup, else
         `FRAGILE_NO_TILT` if `fragileHandling` is true, else `STANDARD`.
@@ -2663,7 +2663,7 @@ components:
             service — carried through to the `associateId` field of a
             later `TaskCompleted` Kafka event for any task this station
             completes while the occupant remains checked in (see
-            [ADR-0014](https://iqvo.github.io/fulfillment-execution/docs/adr/0014-labor-performance-integration-hooks)).
+            [ADR-0014](/docs/adr/0014-labor-performance-integration-hooks)).
             Must be non-empty: the API treats "" as a missing field and
             rejects it with 400.
           example: worker-42
