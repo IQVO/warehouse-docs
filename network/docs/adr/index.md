@@ -94,6 +94,7 @@ agent authority levels and the complete MCP surface (2026-11-02).
 | [0011](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0011-the-delivery-window-names-its-local-time-zone.md) | The delivery window names its local time zone | Accepted |
 | [0012](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0012-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 | [0013](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0013-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
+| [0014](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0014-measured-transit-basis.md) | Measured-transit promising (basis MEASURED) | Accepted |
 
 ### customer-ordering
 
