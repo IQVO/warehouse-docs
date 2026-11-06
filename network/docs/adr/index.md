@@ -33,12 +33,13 @@ accepts it.
 ## Service ADRs (one sequence per context repository)
 
 Each of the eleven context repositories records its own decisions on top of
-the domain-level ones above: 95 ADRs on `develop` as of 2026-10-26. They are
+the domain-level ones above: 125 ADRs on `develop` as of 2026-11-04. They are
 linked, never copied; the *Status* column is the word from each ADR's own
-status line. Every repository's newest ADR adopts the fleet observability
-standard (logs, metrics, traces, exported over OTLP to the otel-collector, plus
-one Tier-2 business counter per context), accepted on 2026-10-26
-(`customer-ordering`: 2026-10-25).
+status line. Since the fleet observability standard (accepted 2026-10-26),
+every repository added an A2A inbound adapter and adopted the fleet REST API
+guideline, and six (`node-topology`, `offer-availability`, `delivery-promise`,
+`customer-ordering`, `vendor-connectivity`, `seller-inbound`) also record
+agent authority levels and the complete MCP surface (2026-11-02).
 
 
 ### node-topology
@@ -55,6 +56,9 @@ one Tier-2 business counter per context), accepted on 2026-10-26
 | [0008](https://github.com/IQVO/node-topology/blob/develop/docs/adr/0008-mcp-server-adoption.md) | A read-only MCP server | Accepted |
 | [0009](https://github.com/IQVO/node-topology/blob/develop/docs/adr/0009-console-remote.md) | A web console remote | Accepted |
 | [0010](https://github.com/IQVO/node-topology/blob/develop/docs/adr/0010-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
+| [0011](https://github.com/IQVO/node-topology/blob/develop/docs/adr/0011-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
+| [0012](https://github.com/IQVO/node-topology/blob/develop/docs/adr/0012-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
+| [0013](https://github.com/IQVO/node-topology/blob/develop/docs/adr/0013-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
 
 ### offer-availability
 
@@ -69,6 +73,9 @@ one Tier-2 business counter per context), accepted on 2026-10-26
 | [0007](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0007-mcp-server-adoption.md) | A read-only MCP server | Accepted |
 | [0008](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0008-console-remote.md) | The console remote (offer_availability_mfe) — read-only screens over the existing REST | Accepted |
 | [0009](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0009-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
+| [0010](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0010-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
+| [0011](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0011-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
+| [0012](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0012-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
 
 ### delivery-promise
 
@@ -83,6 +90,10 @@ one Tier-2 business counter per context), accepted on 2026-10-26
 | [0007](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0007-mcp-server-adoption.md) | A read-only MCP server | Accepted |
 | [0008](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0008-console-remote.md) | A warehouse-console web remote | Accepted |
 | [0009](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0009-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
+| [0010](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0010-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
+| [0011](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0011-the-delivery-window-names-its-local-time-zone.md) | The delivery window names its local time zone | Accepted |
+| [0012](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0012-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
+| [0013](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0013-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
 
 ### customer-ordering
 
@@ -95,6 +106,10 @@ one Tier-2 business counter per context), accepted on 2026-10-26
 | [0005](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0005-mcp-server-adoption.md) | A read-only MCP server | Accepted |
 | [0006](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0006-console-remote.md) | The console remote (customer_ordering_mfe) — a read-only screen over the existing REST | Accepted |
 | [0007](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0007-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
+| [0008](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0008-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
+| [0009](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0009-delivery-window-time-zone.md) | The delivery window carries its local time zone | Accepted |
+| [0010](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
+| [0011](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0011-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
 
 ### order-sourcing
 
@@ -108,6 +123,8 @@ one Tier-2 business counter per context), accepted on 2026-10-26
 | [0006](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0006-mcp-server-adoption.md) | A read-only MCP server | Accepted |
 | [0007](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0007-console-remote.md) | A web console remote | Accepted |
 | [0008](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0008-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
+| [0009](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0009-a2a-inbound-adapter.md) | An A2A inbound adapter (read-only) | Accepted |
+| [0010](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 
 ### vendor-connectivity
 
@@ -121,6 +138,9 @@ one Tier-2 business counter per context), accepted on 2026-10-26
 | [0006](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0006-mcp-server-adoption.md) | A read-only MCP server | Accepted |
 | [0007](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0007-console-remote.md) | A warehouse-console remote (web MFE) | Accepted |
 | [0008](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0008-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
+| [0009](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0009-a2a-inbound-adapter.md) | An A2A inbound adapter (a read-only third driving adapter) | Accepted |
+| [0010](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
+| [0011](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0011-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
 
 ### linehaul-transportation
 
@@ -136,6 +156,8 @@ one Tier-2 business counter per context), accepted on 2026-10-26
 | [0008](https://github.com/IQVO/linehaul-transportation/blob/develop/docs/adr/0008-mcp-server-adoption.md) | A read-only MCP server | Accepted |
 | [0009](https://github.com/IQVO/linehaul-transportation/blob/develop/docs/adr/0009-console-remote.md) | The console remote (linehaul_mfe) — a read-only screen over the existing REST | Accepted |
 | [0010](https://github.com/IQVO/linehaul-transportation/blob/develop/docs/adr/0010-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
+| [0011](https://github.com/IQVO/linehaul-transportation/blob/develop/docs/adr/0011-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
+| [0012](https://github.com/IQVO/linehaul-transportation/blob/develop/docs/adr/0012-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 
 ### last-mile-delivery
 
@@ -149,6 +171,8 @@ one Tier-2 business counter per context), accepted on 2026-10-26
 | [0006](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0006-mcp-server-adoption.md) | A read-only MCP server | Accepted |
 | [0007](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0007-console-remote.md) | A console web remote | Accepted |
 | [0008](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0008-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
+| [0009](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0009-a2a-inbound-adapter.md) | An A2A inbound adapter (a read-only agent) | Accepted |
+| [0010](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 
 ### shipping-and-tracking
 
@@ -162,6 +186,8 @@ one Tier-2 business counter per context), accepted on 2026-10-26
 | [0006](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0006-mcp-server-adoption.md) | A read-only MCP server | Accepted |
 | [0007](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0007-console-remote.md) | The console remote (shipping_mfe) — a read-only screen over the existing REST | Accepted |
 | [0008](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0008-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
+| [0009](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0009-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
+| [0010](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 
 ### node-performance
 
@@ -177,6 +203,8 @@ one Tier-2 business counter per context), accepted on 2026-10-26
 | [0008](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0008-console-remote.md) | A web console remote | Accepted |
 | [0009](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0009-inbound-timeliness-and-accuracy-metrics.md) | Inbound timeliness and accuracy, two informational scorecard metrics | Accepted |
 | [0010](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0010-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
+| [0011](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0011-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
+| [0012](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0012-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 
 ### seller-inbound
 
@@ -190,3 +218,6 @@ one Tier-2 business counter per context), accepted on 2026-10-26
 | [0006](https://github.com/IQVO/seller-inbound/blob/develop/docs/adr/0006-read-only-mcp-server.md) | A read-only MCP server | Accepted |
 | [0007](https://github.com/IQVO/seller-inbound/blob/develop/docs/adr/0007-console-web-remote.md) | A web console remote | Accepted |
 | [0008](https://github.com/IQVO/seller-inbound/blob/develop/docs/adr/0008-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
+| [0009](https://github.com/IQVO/seller-inbound/blob/develop/docs/adr/0009-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
+| [0010](https://github.com/IQVO/seller-inbound/blob/develop/docs/adr/0010-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
+| [0011](https://github.com/IQVO/seller-inbound/blob/develop/docs/adr/0011-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
