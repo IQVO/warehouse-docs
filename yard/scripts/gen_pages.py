@@ -58,9 +58,9 @@ def page_index():
     for c in M["contexts"]:
         out += f"| `{c['id']}` | {c['code']} | {c['classification']} | {esc(c['purpose'])} |\n"
     out += "\n"
-    out += "Pages: [Subdomain Classification](./subdomain-classification), [Context Map](./context-map), "
-    out += "[Ubiquitous Language](./ubiquitous-language), [Event Standard](./event-standard-cloudevents), "
-    out += "[Model Gap Register](./model-gap-register).\n"
+    out += "Pages: [Subdomain Classification](/yard/strategic-design/subdomain-classification), [Context Map](/yard/strategic-design/context-map), "
+    out += "[Ubiquitous Language](/yard/strategic-design/ubiquitous-language), [Event Standard](/yard/strategic-design/event-standard-cloudevents), "
+    out += "[Model Gap Register](/yard/strategic-design/model-gap-register).\n"
     out += "\n## Counts\n\n| Fact | Value |\n| --- | --- |\n"
     for c in M["contexts"]:
         aggs = len(c["aggregates"])

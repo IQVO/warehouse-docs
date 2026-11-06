@@ -18,7 +18,7 @@ The yard is the enclosed area outside a site's four walls. It is modelled as two
 | `dock-scheduling` | DS | Supporting | Owns the door calendar of every site: every booked time window on every dock door, inbound and outbound, from booking through arrival to door release, the no-double-booking rule, door opening hours and closures, ETA-driven risk and no-shows. |
 | `yard-management` | YM | Supporting | Owns everything physically on site outside the four walls: who passed the gate (visits), which trailer is where (spot, door or an open move), its load, seal and hold state, the moves hostlers and visiting drivers make, door work at the door, and yard checks. The source of dwell, door occupancy and yard truck productivity facts. |
 
-Pages: [Subdomain Classification](./subdomain-classification), [Context Map](./context-map), [Ubiquitous Language](./ubiquitous-language), [Event Standard](./event-standard-cloudevents), [Model Gap Register](./model-gap-register).
+Pages: [Subdomain Classification](/yard/strategic-design/subdomain-classification), [Context Map](/yard/strategic-design/context-map), [Ubiquitous Language](/yard/strategic-design/ubiquitous-language), [Event Standard](/yard/strategic-design/event-standard-cloudevents), [Model Gap Register](/yard/strategic-design/model-gap-register).
 
 ## Counts
 
