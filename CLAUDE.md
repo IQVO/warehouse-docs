@@ -262,11 +262,14 @@ git -C labor-performance show origin/develop:apis/openapi-reports.yaml \
 ```
 
 All eighteen domain contexts in the loop ship BOTH files (network-fulfillment and
-order-management included). `warehouse-ops-agent` has neither — it's a
-Customer, not an Open Host Service, with no `apis/` dir of its own (see its
-own CLAUDE.md); its surface is documented in prose at
+order-management included). `warehouse-ops-agent` has no copy here: its
+`develop` ships an `apis/openapi.yaml`, but this site documents it in prose at
 `docs/api-reference/warehouse-ops-agent.md`, sourced from its
-`docs/docs/api-surface.md`. The REST spec list lives in
+`docs/docs/api-surface.md`; `scripts/check-develop-drift.py` reads that spec
+only to resolve routes cited on its pages. The one transformation a copy may
+carry: root-relative `](/docs/..)` links in a description become absolute
+`https://iqvo.github.io/<repo>/docs/..` links (fulfillment-execution), which the
+gate applies before comparing. The REST spec list lives in
 `docusaurus.config.ts` (the `docusaurus-plugin-openapi-docs` config); the
 async list is the `CONTEXTS` array in `scripts/gen-async-docs.mjs`.
 
@@ -327,6 +330,8 @@ npm run gen-async-docs:all   # regenerate AsyncAPI static HTML from apis/*/async
 npm run validate:mermaid     # parse + render every Mermaid diagram in a real browser
 python3 scripts/capability-map/generate.py          # regenerate the 4 BCA pages from the model
 python3 scripts/capability-map/generate.py --check  # exit 1 if a page drifted (CI build-check runs it)
+python3 scripts/check-develop-drift.py   # gate against develop (needs GITHUB_TOKEN; exit 2 = producer unreadable)
+python3 scripts/test_check_develop_drift.py   # its offline tests
 npm run build                 # runs both generation steps, then docusaurus build
 npm start                     # dev server at http://localhost:3000
 ```
@@ -335,6 +340,25 @@ npm start                     # dev server at http://localhost:3000
 on `npm install`/`npm ci` at the repo root — but CI (`.github/workflows/docs.yml`)
 also runs `npm --prefix tools/asyncapi-gen ci` explicitly as a separate
 step, because a plain `npm ci` at the repo root does NOT recurse into it.
+
+## Gate against develop (`scripts/check-develop-drift.py`)
+
+`build-check` runs it on every PR and `.github/workflows/develop-drift.yml` runs it
+nightly (it also catches `develop` moving after a docs PR merged). It reads the
+`apis/*.yaml` of every context repo's `develop` through the GitHub API and fails on
+(1) a spec copy that is not byte-equal to develop (`spec-drift`), (2) a REST route a
+page cites (`METHOD /path` in code spans, tables, Mermaid, curl) that is not in the
+owning context's develop OpenAPI (`route-missing`), (3) retired REST-guideline
+vocabulary: `:verb` routes, `X-Action-Id`, `nextToken`, `purchaseOrders` /
+`inboundShipments` envelopes (`retired-shape`). Fix a hit at its source: re-sync a
+copy, edit a hand-written page, edit `network/model/model.yaml`,
+`storefront/model/model.yaml` or `scripts/capability-map/capabilities.py` for a
+generated page, fix the service repo for a synced copy. Deliberate citations take
+`{/* drift-allow: reason */}` (end of line, or alone above a block), a
+` ```http historical ` fence, or a reasoned entry in
+`scripts/develop-drift-allow.json` (an entry that stops matching fails the gate).
+ADR bodies and `docs/api-reference/**` are never scanned. Exit 2 means a producer
+could not be read: the gate fails closed.
 
 ## Why the AsyncAPI toolchain is isolated (`tools/asyncapi-gen/`)
 
@@ -384,7 +408,8 @@ Don't report "the site is built" from a green `npm run build` alone.
 
 1. `npm run build` locally, fix every broken link before pushing;
    `npm run validate:mermaid` must end with `0 failed`, and
-   `python3 scripts/capability-map/generate.py --check` must pass. Keep
+   `python3 scripts/capability-map/generate.py --check` and
+   `python3 scripts/check-develop-drift.py` must pass. Keep
    every diagram on the WMS & WES and capability pages <= ~1020 px wide
    (github.com renders Mermaid in a ~1010 px frame).
 2. Commit + push, then confirm the `docs.yml` run actually completed green
