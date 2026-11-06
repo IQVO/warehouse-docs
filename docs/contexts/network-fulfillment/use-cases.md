@@ -7,7 +7,7 @@ sidebar_label: Use cases
 # Application use cases
 
 :::info[Synced from network-fulfillment]
-This page is a copy of [`docs/ddd/use-cases.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/ddd/use-cases.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+This page is a copy of [`docs/docs/ddd/use-cases.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/docs/ddd/use-cases.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
 
@@ -16,7 +16,7 @@ on `develop`: what triggers each one, what it takes, which invariants it
 relies on, what it calls and which events it raises. The step-by-step
 sequence diagrams are in [sequence-diagrams.md](/contexts/network-fulfillment/sequence-diagrams); the
 event payloads are in
-[ecosystem/integration.md](https://github.com/IQVO/network-fulfillment/blob/develop/docs/ecosystem/integration.md#events-published).
+[ecosystem/integration.md](https://iqvo.github.io/network-fulfillment/docs/ecosystem/integration#events-published).
 
 Reads are not use cases here. `GET /network-orders`,
 `GET /network-orders/{networkRef}`, `GET /capability-offers` and the MCP
@@ -138,7 +138,7 @@ answered order.
 - **Per order**: `NetworkGateway.SubmissionStatus(ref)`:
   - `SUCCESS`: `ConfirmAcknowledgement` (to `ACKNOWLEDGED`), save and publish
     `NetworkOrderAcknowledged` (v2) in one scope, then
-    `POST /orders/{localOrderId}/release`.
+    `POST /orders/{localOrderId}/releases`.
   - `FAILURE`: `freeHold` first (`DELETE /orders/{localOrderId}`, then the hold
     outcome `CANCELLED` is recorded), then `Reject`, save and publish
     `NetworkOrderRejected` (`SUBMISSION_FAILED`). The outcome is saved in the
@@ -259,12 +259,15 @@ context would advertise per SKU at `SITE_ID`. Always on.
 - **Per SKU**:
   - `physicalAvailable` = inventory-storage `GET /inventory/{sku}/usable`.
   - `throughputFeasible` = the sum of `RemainingCapacity(pathId, cutoffAt)`
-    over the paths eligible for the site's next cutoff
+    over the paths eligible for the site's next **feasible** cutoff
     (`ProcessPathCapability.NextCutoff`), counting only paths whose
     capacity is known. A path is eligible only if its `CycleTimeP95` fits
     the time left to the cutoff; unknown or zero cycle time stays eligible.
-    No schedule, or no known capacity, means "unknown". Every path ruled out
-    by cycle time is a proven zero.
+    No schedule, or no known capacity, means "unknown". When every path is
+    ruled out by cycle time for the next cutoff, the pass walks to the
+    following cutoff, and on, up to 7 days ahead (ADR 0031); only no
+    feasible cutoff inside that bound is a proven zero. Resolved once per
+    pass, not per SKU.
   - `capabilityoffer.Compute`: `advertisedQuantity = min(physical,
     throughputFeasible)` with basis `THROUGHPUT_CONSTRAINED` when throughput
     is known and lower, else `physical` with basis `PHYSICAL`.

@@ -170,7 +170,7 @@ it to a different subject:
 | --- | --- |
 | `order-management` | A pure domain transition. Allocated lines are marked `Released` once ship-complete rules allow, and announced on `OrderAllocated` or `OrderPartiallyAllocated`. It is not a call to wes-work-planning (ADR 0005). |
 | `wes-work-planning` | Continuous, priority-ordered, waveless admission of a work unit into its pool (`ReleaseNextWork`), which publishes `WorkReleased`. |
-| `network-fulfillment` | Committing the held order to the floor (`POST /orders/{id}/release` on order-management) after the network reports `SUCCESS`. |
+| `network-fulfillment` | Committing the held order to the floor (`POST /orders/{id}/releases` on order-management) after the network reports `SUCCESS`. |
 
 ### "Allocation" and "Reservation"
 
@@ -270,7 +270,7 @@ it to a different subject:
 
 - **`order-management`**: a *held order* is received with
   `releaseOnAllocation=false`. It allocates, must be ship-complete, and
-  waits for `POST /orders/{id}/release` or a cancel. It is not a status.
+  waits for `POST /orders/{id}/releases` or a cancel. It is not a status.
 - **`network-fulfillment`** sees the same order through its
   `FulfillmentPlanner` port and calls the order-management id its
   `LocalOrderId`. Its own "acknowledged" has a trap: the

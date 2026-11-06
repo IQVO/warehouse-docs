@@ -38,7 +38,7 @@ the aggregates name.
 | **notBefore** | `receivedAt + TX_PROCESSING_DELAY`; a submission is never processed earlier. | `submission.Submission.NotBefore` | — |
 | **Label** | `labelRef + trackingNumber + carrier`; never the address. | `po.Label` | **Shipping Label** in shipping-and-tracking, the aggregate that also holds the encrypted ship-to snapshot |
 | **Vendor API** | The Open Host Service of this context; its JSON schemas are the Published Language. | `apis/vendor-connectivity/openapi.yaml` | The in-org REST of other contexts, which vendors never call |
-| **nextToken** | Opaque continuation token of the PO poll. | query parameter `nextToken` | A timestamp watermark (`createdAfter`) |
+| **nextCursor** | Opaque continuation token of the PO poll. | query parameter `nextCursor` | A timestamp watermark (`createdAfter`) |
 | **Simulation knobs** | `TX_PROCESSING_DELAY`, `TX_FAILURE_RATE`, `RATE_LIMIT_RPS`, `PO_REDELIVERY_RATE`; all default to well-behaved. | policy `SimulationKnobs` | Production configuration |
 
 ## Neighbour terms this context uses
@@ -92,7 +92,7 @@ the changes the fleet needs are on [Fleet changes](/network/integration/fleet-ch
 | Label (`labelRef`, `trackingNumber`, `carrier`) | `LabelResult` | No address on either side of the seam |
 | Promise / deliver-by window | none | The fleet never sees the delivery promise; it sees only `requiredShipBy` |
 | `ackBy` | `acknowledgeBy` | The fleet fixes `receivedAt + 24h`; the network's `ackBy` can be earlier, so the fleet must read it from the PO |
-| `GET /vendor/purchase-orders` with `nextToken` | `PollDemand` | The fleet polls "since watermark" |
+| `GET /vendor/purchase-orders` with `nextCursor` | `PollDemand` | The fleet polls "since watermark" |
 | `POST /vendor/acknowledgements` | `SubmitAcknowledgement(accepted)` | Fill-or-kill on both sides; the fleet's port has no reason-code argument today |
 | `POST /vendor/inventory` | `SubmitAvailability` | Carries the fleet's `CapabilityOffer` quantity and `Basis` |
 | `PUT /vendor/nodes/{nodeId}/profile` | `DeclareCapability` | A documented no-op in the fleet today |

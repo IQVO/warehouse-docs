@@ -167,8 +167,8 @@ to make that date true by construction:
 
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
-| Shopper / storefront | `QuoteDeliveryOffers` | Query | REST `POST /delivery-offers:quote` | Open Host |
-| `customer-ordering` | `QuoteDeliveryOffers` | Query | REST `POST /delivery-offers:quote` (in-org) | Customer/Supplier (DP is the Supplier) |
+| Shopper / storefront | `QuoteDeliveryOffers` | Query | REST `POST /delivery-quotes` | Open Host |
+| `customer-ordering` | `QuoteDeliveryOffers` | Query | REST `POST /delivery-quotes` (in-org) | Customer/Supplier (DP is the Supplier) |
 | `customer-ordering` | `MakePromise` | Command | REST `POST /promises` (in-org) | Customer/Supplier (DP is the Supplier) |
 | `customer-ordering` | `CustomerOrderPlaced` | Event | Kafka `retailnetwork.customer-ordering.events`, `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderPlaced` | Customer/Supplier |
 | `customer-ordering` | `CustomerOrderCancelled` | Event | Kafka `retailnetwork.customer-ordering.events`, `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderCancelled` | Customer/Supplier |
@@ -285,7 +285,7 @@ Top terms: **Delivery Offer**, **Service Tier**, **Promise**, **Ship-By**,
 | At-risk rate | `PromiseAtRisk / PromiseConfirmed` | own events topic |
 | Hold leakage | `PromiseReleased / PromiseMade`; a high value means checkout abandons or the hold is too short | own events topic |
 | No-offer share by constraint | share of quotes per tier with no offer, split by `OfferConstraint` | analytics topic (`DeliveryOfferQuoted`) |
-| Quote latency | p99 of `POST /delivery-offers:quote`; a target to set before build | HTTP metrics |
+| Quote latency | p99 of `POST /delivery-quotes`; a target to set before build | HTTP metrics |
 | Read-model lag | `now - time` of the last applied CloudEvent, per consumed topic | inbox (`processed_events`) |
 | `NOMINAL` share | share of `STANDARD` promises with basis `NOMINAL` | own events topic |
 | Book exhaustion | `PromiseBookExhausted` per node per day | own events topic |

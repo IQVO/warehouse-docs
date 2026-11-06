@@ -7,7 +7,7 @@ sidebar_label: EventStorming (design level)
 # EventStorming (design level)
 
 :::info[Synced from network-fulfillment]
-This page is a copy of [`docs/ddd/eventstorming.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/ddd/eventstorming.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+This page is a copy of [`docs/docs/ddd/eventstorming.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/docs/ddd/eventstorming.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
 
@@ -36,6 +36,9 @@ flowchart LR
     classDef external fill:#f1948a,stroke:#b03a2e,color:#000
     classDef hotspot fill:#e74c3c,stroke:#922b21,color:#fff
 ```
+
+Source: the ddd-crew EventStorming notation only; the legend has no code behind
+it. The code files behind every sticky are named under each section's diagram.
 
 ## 1. Demand intake and answer
 

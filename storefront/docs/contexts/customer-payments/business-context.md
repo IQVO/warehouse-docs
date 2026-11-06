@@ -45,7 +45,7 @@ stores no PII, and it never sees a card number — only PSP tokens.
 
 | Actor | What they do here | Channel |
 | --- | --- | --- |
-| `checkout` | Authorizes the quote total with one allocation per shipment group; voids the authorization after a definitive rejection of the place-order step; reads an authorization | REST `POST /payment-authorizations`, `POST /payment-authorizations/{authorizationId}:void`, `GET /payment-authorizations/{authorizationId}` |
+| `checkout` | Authorizes the quote total with one allocation per shipment group; voids the authorization after a definitive rejection of the place-order step; reads an authorization | REST `POST /payment-authorizations`, `POST /payment-authorizations/{authorizationId}/voids`, `GET /payment-authorizations/{authorizationId}` |
 | `checkout` (again) | Announces that the purchase completed, which binds the order to the authorization | Kafka `retailnetwork.checkout.events`, `CheckoutCompleted` |
 | Storefront ops (human) | Requests a manual refund; lists authorizations by order or checkout session and refunds by order | REST `POST /refunds`, `GET /payment-authorizations?orderId=\|checkoutSessionId=`, `GET /refunds?orderId=` |
 | `order-sourcing` (network) | Reports that a group shipped (capture) or was cancelled (release) | Kafka `retailnetwork.order-sourcing.events`, `FulfillmentShipped`, `FulfillmentCancelled` |

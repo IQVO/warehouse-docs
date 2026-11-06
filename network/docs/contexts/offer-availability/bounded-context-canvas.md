@@ -146,7 +146,7 @@ sourcing) as events, so their hot paths make no synchronous call here.
 | --- | --- | --- | --- | --- |
 | `vendor-connectivity` | `ApplyInventoryFeed` | Command | REST `POST /inventory-feeds` (in-org; a `vendor-connectivity` `sync_calls` entry) | Customer/Supplier (`vendor-connectivity` is the Customer) |
 | Network merchandising (human) | `CreateCatalogItem` | Command | REST `POST /catalog-items` | UI |
-| Network merchandising (human) | `DiscontinueItem` | Command | REST `POST /catalog-items/{catalogItemId}:discontinue` | UI |
+| Network merchandising (human) | `DiscontinueItem` | Command | REST `POST /catalog-items/{catalogItemId}/discontinuations` | UI |
 | Network merchandising (human) | `CreateListing` | Command | REST `POST /listings` | UI |
 | Shopper / storefront | `BrowseCatalog` | Query | REST `GET /catalog`, `GET /catalog/{catalogItemId}` | Open Host Service |
 | `node-topology` | `NodeRegistered` | Event | Kafka `retailnetwork.node-topology.events`, `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | Conformist |

@@ -25,7 +25,7 @@ HTTP adapter loads the journey through the repository and returns it.
 | Use case | Actor / trigger | Inbound adapter (proposed) |
 | --- | --- | --- |
 | `IssueLabel` | `vendor-connectivity` | REST `POST /labels` |
-| `VoidLabel` | Not named in the model | REST `POST /labels/{labelRef}:void` |
+| `VoidLabel` | Not named in the model | REST `POST /labels/{labelRef}/voids` |
 | `StartJourney` | Inside `IssueLabel` (no trigger named in the model) | none |
 | `RecordScan` | Five consumed event types; an unnamed REST caller | Kafka consumers; REST `POST /journeys/{trackingNumber}/scans` |
 | `RaiseException` | `ExceptionOnSilence` sweep | internal scheduler |
@@ -87,7 +87,7 @@ not found 404, stale 409. Problems are `application/problem+json`
 ## VoidLabel
 
 - **Actor / trigger:** not named in the model.
-- **Inbound adapter:** REST `POST /labels/{labelRef}:void`, body `reason`,
+- **Inbound adapter:** REST `POST /labels/{labelRef}/voids`, body `reason`,
   `Idempotency-Key` required.
 - **Preconditions:** the label exists.
 - **Main flow:**

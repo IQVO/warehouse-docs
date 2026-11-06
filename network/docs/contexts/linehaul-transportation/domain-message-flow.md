@@ -97,8 +97,8 @@ sequenceDiagram
     Note over LH: ExpectedVolumeView
     OP->>LH: cmd: OpenLoad<br/>POST /loads departureId
     OP->>LH: cmd: AddPackage<br/>POST /loads/loadId/packages
-    OP->>LH: cmd: CloseLoad<br/>POST /loads/loadId:close
-    OP->>LH: cmd: DispatchLoad<br/>POST /loads/loadId:dispatch
+    OP->>LH: cmd: CloseLoad<br/>POST /loads/loadId/closures
+    OP->>LH: cmd: DispatchLoad<br/>POST /loads/loadId/dispatches
     LH->>ST: evt: load.LoadDeparted<br/>trackingNumbers, originNodeId
     Note over ST: HandoverOnFirstScan
 ```

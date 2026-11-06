@@ -170,9 +170,9 @@ holding network-originated orders until their caller commits.
 | --- | --- | --- | --- | --- |
 | Customer channel, order-mgmt-mfe | ReceiveOrder | Command | REST `POST /orders` (Idempotency-Key with Postgres) | Open Host Service |
 | network-fulfillment | ReceiveOrder held, with `requiredShipBy` | Command | REST `POST /orders` | Customer/Supplier (OM supplier) |
-| network-fulfillment | ReleaseHeldOrder | Command | REST `POST /orders/{id}/release` | Customer/Supplier |
+| network-fulfillment | ReleaseHeldOrder | Command | REST `POST /orders/{id}/releases` | Customer/Supplier |
 | network-fulfillment, order-mgmt-mfe | CancelOrder | Command | REST `DELETE /orders/{id}` | Open Host Service |
-| Operator | RetryAllocation | Command | REST `POST /orders/{id}/retry-allocation` | Open Host Service |
+| Operator | RetryAllocation | Command | REST `POST /orders/{id}/allocation-retries` | Open Host Service |
 | warehouse-ops-agent console-bff, order-mgmt-mfe | GetOrder | Query | REST `GET /orders/{id}` | Open Host Service, Conformist downstream |
 | AI agents (MCP hosts) | get_order | Query | MCP tool `get_order` (`cmd/mcp`) | Open Host Service |
 | AI agents (MCP hosts) | get_promise_health | Query | MCP tool `get_promise_health` (`cmd/mcp`, reads the analytics DB) | Open Host Service |
@@ -212,7 +212,7 @@ Top terms:
 | Release | Marking allocated lines `Released` and announcing them on Kafka |
 | Release confirmation | Knowing that wes-work-planning admitted a released line: `PENDING` -> `CONFIRMED` by its `WorkUnitCreated`, or `UNCONFIRMED` after `RELEASE_CONFIRMATION_TIMEOUT` (ADR 0043; off by default) |
 | Ship-complete | Release nothing until every line is allocated (BR3) |
-| Held order | Allocated but waiting for `POST /orders/{id}/release` (ADR 0020) |
+| Held order | Allocated but waiting for `POST /orders/{id}/releases` (ADR 0020) |
 | Promise / promise group | The CPT window a shipment group is promised to leave by |
 | Promise basis | `Capability`, `LeadTime` or `Network` |
 | Process path | The building workflow a line is routed to (`PathSelectionPolicy`) |
@@ -249,9 +249,11 @@ Top terms:
   this context keeps a version-guarded local copy of its
   `ProductClassified` events and never calls it. The copy is eventually
   consistent, so a SKU it has not seen yet fails open (ADR 0036).
-- One site per deployment: the promise uses `DEFAULT_SITE_ID`, and the
-  planned-capacity annotation uses `PLANNED_CAPACITY_SITE_ID` (defaulting to
-  the same value).
+- One deployment serves many sites by the order's own `fulfillmentSiteId`
+  (ADR 0047): the promise reads that site's CPT schedule and the
+  planned-capacity annotation matches it. An order without one uses
+  `DEFAULT_SITE_ID` (promise) and `PLANNED_CAPACITY_SITE_ID` (annotation,
+  defaulting to the same value). Path capacity and cycle time stay per path.
 - wes-work-planning accepts every released line. There is no dedicated reply
   event; by default nothing confirms it, and with
   `RELEASE_CONFIRMATION_MODE=kafka` (ADR 0043, off by default) its

@@ -137,12 +137,12 @@ sequenceDiagram
     participant OA
     participant DP
     participant OS
-    OPS->>NT: cmd: POST /nodes/nodeId:suspend<br/>SuspendNode
+    OPS->>NT: cmd: POST /nodes/nodeId/suspensions<br/>SuspendNode
     NT->>OA: evt: node.NodeSuspended
     Note over OA: NodeStatusView SUSPENDED<br/>SuppressListing on every<br/>LIVE listing of the node
     OA->>DP: evt: listing.<br/>ListingSuppressed
     OA->>OS: evt: listing.<br/>ListingSuppressed
-    OPS->>NT: cmd: POST /nodes/nodeId:activate<br/>ActivateNode
+    OPS->>NT: cmd: POST /nodes/nodeId/activations<br/>ActivateNode
     NT->>OA: evt: node.NodeActivated
     Note over OA: NodeStatusView ACTIVE<br/>RestoreListing on those<br/>suppressed for that reason
     OA->>DP: evt: listing.<br/>ListingRestored

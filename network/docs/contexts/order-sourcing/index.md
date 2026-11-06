@@ -30,7 +30,7 @@ assignment for good. When no node can still meet the promise's
   purchase-order outcomes, delivery, topology, availability, departures,
   waves, scorecards) and a small REST surface for the network-ops planner
   (`GET /assignments`, `GET /assignments/{assignmentId}`,
-  `POST /assignments/{assignmentId}:reoptimise`).
+  `POST /assignments/{assignmentId}/reoptimisations`).
 - **Outbound:** eight CloudEvents types
   (`com.retailnetwork.commerce.order-sourcing.assignment.*`) on
   `retailnetwork.order-sourcing.events`. No synchronous call to any other

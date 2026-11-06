@@ -7,7 +7,7 @@ sidebar_label: Entity-relationship diagrams
 # Entity-relationship diagrams
 
 :::info[Synced from network-fulfillment]
-This page is a copy of [`docs/ddd/entity-relationship.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/ddd/entity-relationship.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+This page is a copy of [`docs/docs/ddd/entity-relationship.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/docs/ddd/entity-relationship.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
 

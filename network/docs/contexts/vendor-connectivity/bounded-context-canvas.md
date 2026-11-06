@@ -157,7 +157,7 @@ asynchronous transaction a vendor reconciles.
 | network-fulfillment | SubmitAcknowledgement | Command | Vendor API `POST /vendor/acknowledgements` | OHS + PL (downstream is Conformist + ACL) |
 | network-fulfillment | RequestLabel | Command | Vendor API `POST /vendor/shipping-labels` | OHS + PL (downstream is Conformist + ACL) |
 | network-fulfillment | SubmitShipmentConfirmation | Command | Vendor API `POST /vendor/shipment-confirmations` | OHS + PL (downstream is Conformist + ACL) |
-| network-fulfillment | PollPurchaseOrders | Query | Vendor API `GET /vendor/purchase-orders?createdAfter=&nodeId=&nextToken=` | OHS + PL |
+| network-fulfillment | PollPurchaseOrders | Query | Vendor API `GET /vendor/purchase-orders?createdAfter=&nodeId=&nextCursor=` | OHS + PL |
 | network-fulfillment | GetPurchaseOrder | Query | Vendor API `GET /vendor/purchase-orders/{poNumber}` | OHS + PL |
 | network-fulfillment | GetTransaction | Query | Vendor API `GET /vendor/transactions/{transactionId}` | OHS + PL |
 | network-fulfillment | GetNode | Query | Vendor API `GET /vendor/nodes/{nodeId}` | OHS + PL |

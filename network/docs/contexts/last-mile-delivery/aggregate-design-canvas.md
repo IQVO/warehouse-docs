@@ -83,8 +83,8 @@ Omitted: nothing in the model. The creation edge (`ScheduleWave`) and the
 | --- | --- | --- |
 | `ScheduleWave` | creates `OPEN` | Station planner, REST `POST /waves` |
 | `InductPackage` | `OPEN` (assigned stops +) | policies `InductOnArrival` and `RetryNextWave` |
-| `CloseInduction` | `OPEN` → `INDUCTION_CLOSED` | Station planner, REST `POST /waves/{waveId}:close-induction` |
-| `DispatchWave` | `INDUCTION_CLOSED` → `DISPATCHED` | Station planner, REST `POST /waves/{waveId}:dispatch` |
+| `CloseInduction` | `OPEN` → `INDUCTION_CLOSED` | Station planner, REST `POST /waves/{waveId}/induction-closures` |
+| `DispatchWave` | `INDUCTION_CLOSED` → `DISPATCHED` | Station planner, REST `POST /waves/{waveId}/dispatches` |
 | `CompleteWave` | `DISPATCHED` → `COMPLETED` | no trigger in the model |
 | `CancelWave` | `OPEN` → `CANCELLED` | no trigger in the model |
 
@@ -173,7 +173,7 @@ planned routes.
 | Command | Transition | Issued by |
 | --- | --- | --- |
 | `PlanRoute` | creates `PLANNED` | Station planner, REST `POST /routes` |
-| `StartRoute` | `PLANNED` → `OUT_FOR_DELIVERY` | DSP driver app, REST `POST /routes/{routeId}:start` |
+| `StartRoute` | `PLANNED` → `OUT_FOR_DELIVERY` | DSP driver app, REST `POST /routes/{routeId}/starts` |
 | `RecordAttempt` | `OUT_FOR_DELIVERY` (stop outcome set) | DSP driver app, REST `POST /routes/{routeId}/attempts` |
 | `CompleteRoute` | `OUT_FOR_DELIVERY` → `COMPLETED` | no trigger in the model |
 

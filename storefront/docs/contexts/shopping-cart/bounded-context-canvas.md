@@ -80,7 +80,7 @@ flowchart LR
         out0["delivery-promise<br/>(network)"]:::net
         out1(["analytics consumers"]):::actor
     end
-    BC -.->|"qry - REST<br/>POST /delivery-offers:quote<br/>QuoteDeliveryOffers"| out0
+    BC -.->|"qry - REST<br/>POST /delivery-quotes<br/>QuoteDeliveryOffers"| out0
     BC ==>|"evt - Kafka<br/>retailnetwork.shopping-cart.analytics<br/>CartLineAdded, CartDeliveryQuoted,<br/>CartAbandoned, CartCheckedOut"| out1
     linkStyle 0 stroke:#2f9e44,stroke-width:1.5px
     linkStyle 1 stroke:#e8590c,stroke-width:2.5px
@@ -139,12 +139,12 @@ To hold a shopper's intent. The context:
 | --- | --- | --- | --- | --- |
 | Shopper via `storefront-bff` | `CreateCart` | Command | REST `POST /carts` | UI |
 | Shopper via `storefront-bff` | `AddLine` | Command | REST `POST /carts/{cartId}/lines` | UI |
-| Shopper via `storefront-bff` | `SetLineQuantity` | Command | REST `POST /carts/{cartId}/lines/{catalogItemId}:set-quantity` | UI |
-| Shopper via `storefront-bff` | `RemoveLine` | Command | REST `POST /carts/{cartId}/lines/{catalogItemId}:remove` | UI |
-| Shopper via `storefront-bff` | `SetDestination` | Command | REST `POST /carts/{cartId}:set-destination` | UI |
-| Shopper via `storefront-bff` | `QuoteDelivery` | Command | REST `POST /carts/{cartId}:quote-delivery` | UI |
-| Shopper via `storefront-bff` | `SelectDelivery` | Command | REST `POST /carts/{cartId}:select-delivery` | UI |
-| Shopper via `storefront-bff` | `MergeInto` | Command | REST `POST /carts/{cartId}:merge-into` | UI |
+| Shopper via `storefront-bff` | `SetLineQuantity` | Command | REST `PUT /carts/{cartId}/lines/{catalogItemId}` | UI |
+| Shopper via `storefront-bff` | `RemoveLine` | Command | REST `DELETE /carts/{cartId}/lines/{catalogItemId}` | UI |
+| Shopper via `storefront-bff` | `SetDestination` | Command | REST `PUT /carts/{cartId}/destination` | UI |
+| Shopper via `storefront-bff` | `QuoteDelivery` | Command | REST `POST /carts/{cartId}/delivery-quotes` | UI |
+| Shopper via `storefront-bff` | `SelectDelivery` | Command | REST `PUT /carts/{cartId}/delivery-selection` | UI |
+| Shopper via `storefront-bff` | `MergeInto` | Command | REST `POST /carts/{cartId}/merges` | UI |
 | Shopper via `storefront-bff` | `GetCart` | Query | REST `GET /carts/{cartId}` | UI |
 | Shopper via `storefront-bff` | `ListCarts` | Query | REST `GET /carts?shopperId=&state=` | UI |
 | `checkout` | `GetCart` | Query | REST `GET /carts/{cartId}` | Customer/Supplier (we are the Supplier) |
@@ -164,7 +164,7 @@ command and no command without a route.
 
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
-| `delivery-promise` (network) | `QuoteDeliveryOffers` | Query | REST `POST /delivery-offers:quote` | Open Host Service (the network publishes it for the `shopper / storefront` caller); we are the Customer |
+| `delivery-promise` (network) | `QuoteDeliveryOffers` | Query | REST `POST /delivery-quotes` | Open Host Service (the network publishes it for the `shopper / storefront` caller); we are the Customer |
 | analytics only | `CartLineAdded` | Event | Kafka `retailnetwork.shopping-cart.analytics`, `com.retailnetwork.storefront.shopping-cart.cart.CartLineAdded` | analytics stream |
 | analytics only | `CartDeliveryQuoted` | Event | Kafka `retailnetwork.shopping-cart.analytics`, `com.retailnetwork.storefront.shopping-cart.cart.CartDeliveryQuoted` | analytics stream |
 | analytics only | `CartAbandoned` | Event | Kafka `retailnetwork.shopping-cart.analytics`, `com.retailnetwork.storefront.shopping-cart.cart.CartAbandoned` | analytics stream |

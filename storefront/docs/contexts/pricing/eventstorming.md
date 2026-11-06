@@ -225,7 +225,7 @@ order per item.
 
 | # | Hotspot | Where it comes from in the model |
 | --- | --- | --- |
-| H1 | **Resolved in the model-fix:** `WithdrawPrice` gets the route `POST /item-prices/{catalogItemId}:withdraw` (merchandising UI, cmd channel), in `rest` and in the merchandiser inbound row. | `contexts[pricing].rest`, `.inbound` |
+| H1 | **Resolved in the model-fix:** `WithdrawPrice` gets the route `POST /item-prices/{catalogItemId}/withdrawals` (merchandising UI, cmd channel), in `rest` and in the merchandiser inbound row. | `contexts[pricing].rest`, `.inbound` |
 | H2 | **Resolved in the model-fix:** `CancelSale` publishes no event of its own. A cancelled sale changes the effective price, which the window-boundary policy already emits as `ItemPriceChanged` (idempotent per item and boundary); a separate event would duplicate the fact. The aggregate documents that `CancelSale` raises `ItemPriceChanged`. | `aggregates[ItemPrice].notes` |
 | H3 | **Resolved in the model-fix:** no `PriceQuoteExpired` event. Quotes are checkout-internal TTL state and expiry is checkout's clock (`ExpireOnQuoteExpiry`), not a business fact anyone consumes. The `ISSUED → EXPIRED` transition stays. | `aggregates[PriceQuote].notes` |
 | H4 | **Resolved in the model-fix:** the `IssuePriceQuote` inbound row now lists its fields: `cartId`, `lines[catalogItemId, quantity]`, `groups[groupNo, offerId, tier, lineNos]`, `destinationPostalPrefix`. The caller is checkout and the quote prices exactly what the checkout session froze. | `contexts[pricing].inbound` (checkout cmd row) |

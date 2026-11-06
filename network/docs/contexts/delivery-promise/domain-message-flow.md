@@ -33,7 +33,7 @@ sequenceDiagram
     participant CO as customer-ordering
     participant DP as delivery-promise
     participant OS as order-sourcing
-    SH->>DP: qry: POST /delivery-offers:quote<br/>QuoteDeliveryOffers
+    SH->>DP: qry: POST /delivery-quotes<br/>QuoteDeliveryOffers
     DP-->>SH: qry: reply offers per tier
     SH->>CO: cmd: POST /checkout<br/>PlaceOrder
     CO->>DP: cmd: POST /promises<br/>MakePromise per group
@@ -183,7 +183,7 @@ sequenceDiagram
         Note over OS: AssignmentCost adds<br/>book pressure
     else book already full
         DP-->>CO: cmd: reply 409<br/>promise-capacity-exhausted
-        CO->>DP: qry: POST /delivery-offers:quote<br/>QuoteDeliveryOffers
+        CO->>DP: qry: POST /delivery-quotes<br/>QuoteDeliveryOffers
         DP-->>CO: qry: reply new offers
     end
     Note over CO: shopper abandons checkout

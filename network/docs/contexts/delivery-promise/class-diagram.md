@@ -432,7 +432,7 @@ Omitted: Go field types (on [the domain events page](/network/contexts/delivery-
 %%{init: {"flowchart": {"nodeSpacing": 14, "rankSpacing": 36}}}%%
 flowchart TB
     subgraph IN["internal/adapters/inbound"]
-        HTTP["http<br/>POST /delivery-offers:quote<br/>GET /delivery-offers/offerId<br/>POST /promises, GET /promises<br/>GET /promise-books"]
+        HTTP["http<br/>POST /delivery-quotes<br/>GET /delivery-offers/offerId<br/>POST /promises, GET /promises<br/>GET /promise-books"]
         KC["kafka<br/>promise-lifecycle consumer<br/>7 read-model projectors"]
         SCH["scheduler<br/>ExpireOffers, ReleaseExpiredHolds,<br/>CloseBook"]
     end

@@ -64,7 +64,7 @@ drawn as terminal.
 | Command | Issued by | Inbound adapter |
 | --- | --- | --- |
 | `CreateCatalogItem` | Network merchandising | REST `POST /catalog-items` |
-| `DiscontinueItem` | Network merchandising | REST `POST /catalog-items/{catalogItemId}:discontinue` |
+| `DiscontinueItem` | Network merchandising | REST `POST /catalog-items/{catalogItemId}/discontinuations` |
 
 ### 7. Created Events
 

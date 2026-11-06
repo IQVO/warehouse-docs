@@ -41,7 +41,7 @@ Derived from: `model.yaml → contexts[customer-ordering].aggregates[*]` (`value
 | **Destination postal prefix** | The part of the ship-to postal code that `delivery-promise` quotes against and that `CustomerOrderPlaced` carries. | `destinationPostalPrefix` | **Service Area** (`node-topology`): the mapping from a postal prefix to a delivery station. This context never resolves it. |
 | **Order Tracking View** | The event-fed read model behind `GET /orders/{orderId}/tracking`. | `OrderTrackingView` | **Package Journey** (`shipping-and-tracking`): the authoritative timeline of one package. The view combines journeys, assignments and promises per order. |
 | **Checkout Promising** | Policy: for each shipment group call `MakePromise` with the offer the shopper saw; if the offer expired, re-quote and show the new window before placing. | `CheckoutPromising` | **Re-promise** (`delivery-promise`): revising a confirmed promise later. Checkout never revises. |
-| **Cancel On Unfulfillable** | Policy: when a group is unsourceable and no revised promise is feasible, cancel the group, and the order if nothing remains. | `CancelOnUnfulfillable` | **Customer cancellation** (`CancelOrder` from `POST /orders/{orderId}:cancel`), which the shopper asks for. |
+| **Cancel On Unfulfillable** | Policy: when a group is unsourceable and no revised promise is feasible, cancel the group, and the order if nothing remains. | `CancelOnUnfulfillable` | **Customer cancellation** (`CancelOrder` from `POST /orders/{orderId}/cancellations`), which the shopper asks for. |
 
 ## Neighbour terms this context uses
 

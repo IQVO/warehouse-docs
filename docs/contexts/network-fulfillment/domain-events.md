@@ -7,7 +7,7 @@ sidebar_label: Domain events
 # Domain events
 
 :::info[Synced from network-fulfillment]
-This page is a copy of [`docs/ddd/domain-events.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/ddd/domain-events.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+This page is a copy of [`docs/docs/ddd/domain-events.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/docs/ddd/domain-events.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
 
@@ -105,7 +105,7 @@ Consumer behaviour:
 
 ## Discrepancies found (spec vs code)
 
-Fixed on 2026-10-06 (docs-audit PR, [ADR 0015](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0015-docs-audit-contract-corrections.md)):
+Fixed on 2026-10-06 (docs-audit PR, [ADR 0015](https://iqvo.github.io/network-fulfillment/docs/adr/0015-docs-audit-contract-corrections)):
 
 1. ~~`apis/asyncapi.yaml`'s analytics channel lists only four messages~~:
    `AcknowledgementDeadlineAtRisk` is now on the analytics channel

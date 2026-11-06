@@ -72,7 +72,7 @@ sequenceDiagram
     participant SN as NetworkSnapshot + BookRepository
     participant A as DeliveryOffer
     participant DB as Postgres tx
-    C->>H: POST /delivery-offers:quote
+    C->>H: POST /delivery-quotes
     H->>UC: Execute(prefix, lines, tiers, key)
     alt Idempotency-Key seen, offers still QUOTED
         UC->>DB: offers by idempotency_key
@@ -95,7 +95,7 @@ sequenceDiagram
     H-->>C: 200 offers, constraints
 ```
 
-Derived from: `model.yaml → contexts[delivery-promise].rest[POST /delivery-offers:quote]`,
+Derived from: `model.yaml → contexts[delivery-promise].rest[POST /delivery-quotes]`,
 `.aggregates[DeliveryOffer]`, `.policies`, `.read_models`.
 
 Omitted: the search steps (listed on the use cases page and worked through in

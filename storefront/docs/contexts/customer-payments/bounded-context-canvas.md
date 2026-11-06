@@ -143,7 +143,7 @@ To move money with the shipment facts. The context:
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
 | `checkout` | `AuthorizePayment` | Command | REST `POST /payment-authorizations` | Customer/Supplier (we are the Supplier) |
-| `checkout` | `VoidAuthorization` | Command | REST `POST /payment-authorizations/{authorizationId}:void` | Customer/Supplier (we are the Supplier) |
+| `checkout` | `VoidAuthorization` | Command | REST `POST /payment-authorizations/{authorizationId}/voids` | Customer/Supplier (we are the Supplier) |
 | `checkout` | `GetAuthorization` | Query | REST `GET /payment-authorizations/{authorizationId}` | Customer/Supplier (we are the Supplier) |
 | Storefront ops (human) | `RequestRefund` | Command | REST `POST /refunds` | UI |
 | Storefront ops (human) | `ListAuthorizations` | Query | REST `GET /payment-authorizations?orderId=\|checkoutSessionId=` | UI |

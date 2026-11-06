@@ -68,7 +68,7 @@ flowchart TB
     E1["PurchaseOrderIssued"]:::event
     H1["Hotspot H1: ackBy needs<br/>handlingTime, no source"]:::hotspot
     V["Vendor system<br/>network-fulfillment"]:::external
-    R2["Purchase orders<br/>poll with nextToken"]:::readmodel
+    R2["Purchase orders<br/>poll with nextCursor"]:::readmodel
     C2["SubmitAcknowledgement<br/>whole order"]:::command
     C3["ReceiveSubmission<br/>ACKNOWLEDGEMENT"]:::command
     G2["Submission<br/>PROCESSING"]:::aggregate

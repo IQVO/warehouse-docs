@@ -102,8 +102,8 @@ Derived from: model.yaml → `contexts[last-mile-delivery].inbound`, `.rest`,
 `.publishes`; `contexts[shipping-and-tracking].publishes[PackageDelivered]`;
 `contexts[delivery-promise].policies[JudgeOnDelivery]`.
 
-Omitted: the routes behind each command (`POST /waves/waveId:close-induction`,
-`POST /routes`, `POST /waves/waveId:dispatch`, `POST /routes/routeId:start`,
+Omitted: the routes behind each command (`POST /waves/waveId/induction-closures`,
+`POST /routes`, `POST /waves/waveId/dispatches`, `POST /routes/routeId/starts`,
 `POST /routes/routeId/attempts`); `PackageOutForDelivery` is sent once per
 package; `ErrRouteOverCapacity` on `PlanRoute`; `CompleteRoute` and
 `CompleteWave` (no trigger in the model); the other consumers of

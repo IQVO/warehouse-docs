@@ -76,7 +76,7 @@ commands but not as a transition.
 
 | Command | Issued by | Effect |
 | --- | --- | --- |
-| `QuoteDeliveryOffers` | REST `POST /delivery-offers:quote` (storefront, `customer-ordering`) | Runs `PromisePolicy` per tier; creates one `QUOTED` offer per feasible tier |
+| `QuoteDeliveryOffers` | REST `POST /delivery-quotes` (storefront, `customer-ordering`) | Runs `PromisePolicy` per tier; creates one `QUOTED` offer per feasible tier |
 | `MakePromise` | REST `POST /promises` (`customer-ordering`) | `QUOTED` → `CONSUMED` (the offer backs exactly one promise) |
 | `ExpireOffers` | internal sweep | `QUOTED` → `EXPIRED` |
 

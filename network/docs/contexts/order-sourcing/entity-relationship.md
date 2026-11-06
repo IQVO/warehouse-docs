@@ -262,7 +262,7 @@ idempotent consumers on the CloudEvents id), `conventions.cloudevents`.
 written in the same transaction as the aggregate and drained by the relay.
 `processed_events` is the inbox: one row per consumed CloudEvents `id`,
 written in the same transaction as its effect. `idempotency_keys` stores the
-answer to `POST /assignments/{assignmentId}:reoptimise` per
+answer to `POST /assignments/{assignmentId}/reoptimisations` per
 `Idempotency-Key`. `schema_migrations` is the migration tool's bookkeeping.
 
 ## No foreign key across aggregates or contexts

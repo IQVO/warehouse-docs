@@ -93,10 +93,10 @@ later version behind the same port. It does not exist today.
 | --- | --- | --- |
 | Declare, read, list and remove a min/max policy | `PUT/GET/DELETE /policies/{siteId}/{sku}`, `GET /policies` | see [Use Cases](/contexts/pick-face-replenishment/use-cases) |
 | See every pick face with its status (`BELOW_MIN`, `OK`, `NO_SOURCE`, `NO_POLICY`) | `GET /pick-faces` | `ListPickFaces` |
-| Raise requests by sweep | `POST /sites/{siteId}/evaluate` | `EvaluateSite` |
+| Raise requests by sweep | `POST /sites/{siteId}/evaluations` | `EvaluateSite` |
 | Raise a request by hand | `POST /replenishments` | `RaiseManualRequest` |
 | Read requests | `GET /replenishments`, `GET /replenishments/{requestId}` | `GetRequest`, `ListRequests` |
-| Cancel a request | `POST /replenishments/{requestId}/cancel` | `CancelRequest` |
+| Cancel a request | `POST /replenishments/{requestId}/cancellations` | `CancelRequest` |
 | Raise requests as bin levels or the forward map change | Kafka consumers (always on; `INVENTORY_MODE`, `SLOTTING_MODE` and `LAYOUT_MODE` default to `kafka`) | `ApplyBinLevel`, `ApplyRelocation`, `ApplyForwardAssignmentMap`, `ApplyZone`, `ApplyLocationRegistered`, `ApplyLocationDecommissioned` |
 | Publish requests and their outcome | transactional outbox + relay (always on; both are mandatory) | every write use case |
 

@@ -87,7 +87,7 @@ second event from `delivery-promise`, and `PromiseMade` and
 | Topic | `retailnetwork.customer-ordering.events` |
 | Subject / key | `orderId` |
 | Dataschema | `urn:retailnetwork:customer-ordering:events:CustomerOrderCancelled:v1` |
-| Producing command / use case | `CancelOrder`: from the shopper (REST `POST /orders/{orderId}:cancel`) or from the `CancelOnUnfulfillable` policy |
+| Producing command / use case | `CancelOrder`: from the shopper (REST `POST /orders/{orderId}/cancellations`) or from the `CancelOnUnfulfillable` policy |
 | Consumers | `order-sourcing` (`CancelAssignment` for each listed group), `delivery-promise` (`CancelPromise` for each listed group) |
 
 | Field | Type | Meaning |

@@ -28,12 +28,12 @@ wave table directly.
 | --- | --- | --- | --- |
 | `ScheduleWave` | `DeliveryWave` | Station planner | REST `POST /waves` |
 | `InductPackage` | `DeliveryWave` | policies `InductOnArrival`, `RetryNextWave` | Kafka consumer of `LoadArrived`; internal handler of own `DeliveryAttempted` |
-| `CloseInduction` | `DeliveryWave` | Station planner | REST `POST /waves/{waveId}:close-induction` |
-| `DispatchWave` | `DeliveryWave` | Station planner | REST `POST /waves/{waveId}:dispatch` |
+| `CloseInduction` | `DeliveryWave` | Station planner | REST `POST /waves/{waveId}/induction-closures` |
+| `DispatchWave` | `DeliveryWave` | Station planner | REST `POST /waves/{waveId}/dispatches` |
 | `CompleteWave` | `DeliveryWave` | not modelled | none |
 | `CancelWave` | `DeliveryWave` | not modelled | none |
 | `PlanRoute` | `Route` | Station planner | REST `POST /routes` |
-| `StartRoute` | `Route` | DSP driver app | REST `POST /routes/{routeId}:start` |
+| `StartRoute` | `Route` | DSP driver app | REST `POST /routes/{routeId}/starts` |
 | `RecordAttempt` | `Route` | DSP driver app | REST `POST /routes/{routeId}/attempts` |
 | `CompleteRoute` | `Route` | not modelled | none |
 | `ContractPartner` | `DeliveryServicePartner` | caller not named in the model | REST `POST /partners` |
@@ -111,7 +111,7 @@ the adapters and the repository.
 ## CloseInduction
 
 - **Actor / trigger**: Station planner.
-- **Inbound adapter**: REST `POST /waves/{waveId}:close-induction` with
+- **Inbound adapter**: REST `POST /waves/{waveId}/induction-closures` with
   `Idempotency-Key`.
 - **Preconditions**: the wave exists and is `OPEN`.
 - **Main flow**:
@@ -127,7 +127,7 @@ the adapters and the repository.
 ## DispatchWave
 
 - **Actor / trigger**: Station planner.
-- **Inbound adapter**: REST `POST /waves/{waveId}:dispatch` with
+- **Inbound adapter**: REST `POST /waves/{waveId}/dispatches` with
   `Idempotency-Key`.
 - **Preconditions**: the wave is `INDUCTION_CLOSED`.
 - **Main flow**:
@@ -182,7 +182,7 @@ the adapters and the repository.
 ## StartRoute
 
 - **Actor / trigger**: DSP driver app.
-- **Inbound adapter**: REST `POST /routes/{routeId}:start` with
+- **Inbound adapter**: REST `POST /routes/{routeId}/starts` with
   `Idempotency-Key`.
 - **Preconditions**: the route is `PLANNED`.
 - **Main flow**:

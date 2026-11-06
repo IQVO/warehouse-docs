@@ -73,7 +73,7 @@ sequenceDiagram
     DP-->>CO: cmd: reply promiseId,<br/>PROVISIONAL
     CO->>DP: cmd: MakePromise<br/>group 2 offerId
     DP-->>CO: cmd: reply 409<br/>ErrOfferNotQuotable
-    CO->>DP: qry: QuoteDeliveryOffers<br/>POST /delivery-offers:quote
+    CO->>DP: qry: QuoteDeliveryOffers<br/>POST /delivery-quotes
     DP-->>CO: qry: reply new offers<br/>with their windows
     CO-->>SH: cmd: reply 409<br/>offer-not-quotable, new offers
     Note over CO: no order saved,<br/>nothing published
@@ -185,7 +185,7 @@ sequenceDiagram
     end
 ```
 
-Derived from: `model.yaml → contexts[customer-ordering].inbound` (`POST /orders/{orderId}:cancel`), `.aggregates[CustomerOrder].invariants`
+Derived from: `model.yaml → contexts[customer-ordering].inbound` (`POST /orders/{orderId}/cancellations`), `.aggregates[CustomerOrder].invariants`
 (`ErrCancelAfterLock`), `.policies[CancelOnUnfulfillable]`,
 `.publishes[CustomerOrderCancelled]`; `contexts[delivery-promise].policies[RepromiseOnRisk]`;
 `contexts[order-sourcing].consumes`.

@@ -93,7 +93,7 @@ model, so they are drawn as terminal.
 | `CloseDeparture` | not named in the model |
 | `RecordDeparture` | not named in the model |
 | `RecordArrival` | not named in the model |
-| `CancelDeparture` | Network-ops planner, REST `POST /departures/{departureId}:cancel`; `PickupFromCutoffs` on `NodeSuspended` / `NodeRetired` |
+| `CancelDeparture` | Network-ops planner, REST `POST /departures/{departureId}/cancellations`; `PickupFromCutoffs` on `NodeSuspended` / `NodeRetired` |
 
 ### 7. Created Events
 
@@ -173,7 +173,7 @@ its slots is not stated.
 | Command | Issued by |
 | --- | --- |
 | `DefineLaneSchedule` | Network-ops planner, REST `POST /lane-schedules` |
-| `RetireLaneSchedule` | REST `POST /lane-schedules/{laneId}:retire` (no `inbound` row names the actor) |
+| `RetireLaneSchedule` | REST `POST /lane-schedules/{laneId}/retirements` (no `inbound` row names the actor) |
 | `GenerateDepartures` | Scheduler, policy `HorizonRoll` |
 
 ### 7. Created Events
@@ -247,9 +247,9 @@ capacity snapshot copied from `Departure` into the load at `OpenLoad`.
 | --- | --- |
 | `OpenLoad` | Operators, REST `POST /loads` |
 | `AddPackage` | Operators, REST `POST /loads/{loadId}/packages` |
-| `CloseLoad` | Operators, REST `POST /loads/{loadId}:close` |
-| `DispatchLoad` | Operators, REST `POST /loads/{loadId}:dispatch` |
-| `ReceiveLoad` | Operators, REST `POST /loads/{loadId}:receive` |
+| `CloseLoad` | Operators, REST `POST /loads/{loadId}/closures` |
+| `DispatchLoad` | Operators, REST `POST /loads/{loadId}/dispatches` |
+| `ReceiveLoad` | Operators, REST `POST /loads/{loadId}/receipts` |
 
 ### 7. Created Events
 

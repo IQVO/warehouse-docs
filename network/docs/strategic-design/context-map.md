@@ -193,7 +193,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `customer-ordering` | `delivery-promise` | C/S | `CustomerOrderPlaced`, `CustomerOrderCancelled` | - |
 | `customer-ordering` | `order-sourcing` | C/S | `CustomerOrderPlaced`, `CustomerOrderCancelled` | - |
 | `customer-ordering` | `shipping-and-tracking` | C/S | - | qry GetShipTo (`REST GET /orders/{orderId}/ship-to`) |
-| `delivery-promise` | `customer-ordering` | ? + C/S | `PromiseAtRisk`, `PromiseRevised`, `PromiseKept`, `PromiseBroken`, `PromiseUnkeepable` | qry QuoteDeliveryOffers (`REST POST /delivery-offers:quote`); cmd MakePromise, ConfirmPromise, CancelPromise (`REST POST /promises, POST /promises/{promiseId}:confirm, POST /promises/{promiseId}:cancel`) |
+| `delivery-promise` | `customer-ordering` | ? + C/S | `PromiseAtRisk`, `PromiseRevised`, `PromiseKept`, `PromiseBroken`, `PromiseUnkeepable` | qry QuoteDeliveryOffers (`REST POST /delivery-quotes`); cmd MakePromise, ConfirmPromise, CancelPromise (`REST POST /promises, POST /promises/{promiseId}/confirmations, POST /promises/{promiseId}/cancellations`) |
 | `delivery-promise` | `node-performance` | CF | `PromiseKept`, `PromiseBroken` | - |
 | `delivery-promise` | `order-sourcing` | C/S | `PromiseRevised`, `PromiseBookExhausted` | - |
 | `last-mile-delivery` | `delivery-promise` | ? + CF | `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged`, `DeliveryWaveCancelled`, `PackageInductionDeferred` | - |

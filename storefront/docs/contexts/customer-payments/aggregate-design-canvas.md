@@ -116,7 +116,7 @@ the state does not allow, `concurrent-update` (409) and `validation-failed`
 | `AuthorizePayment` | `checkout`, REST `POST /payment-authorizations` (provider `Authorize`) | `[*] → AUTHORIZED`, or `[*] → DECLINED` |
 | `CaptureAllocation` | `CaptureOnShipment` policy on Kafka `FulfillmentShipped` (provider `Capture`) | `AUTHORIZED → PARTIALLY_CAPTURED`, `AUTHORIZED → CAPTURED`, `PARTIALLY_CAPTURED → PARTIALLY_CAPTURED`, `PARTIALLY_CAPTURED → CAPTURED`; sets the allocation's `trackingNumber` |
 | `ReleaseAllocation` | `ReleaseOnCancellation` policy on Kafka `FulfillmentCancelled`; `ReleaseOnUnsourceable` policy on Kafka `FulfillmentUnsourceable` (provider `ReduceAuthorization(amount)` for a partial release) | the allocation becomes `RELEASED`; `AUTHORIZED → AUTHORIZED`, `AUTHORIZED → RELEASED`, `PARTIALLY_CAPTURED → PARTIALLY_CAPTURED`, `PARTIALLY_CAPTURED → CAPTURED`, `PARTIALLY_CAPTURED → RELEASED` |
-| `VoidAuthorization` | `checkout`, REST `POST /payment-authorizations/{authorizationId}:void`; `VoidUnboundAuthorizations` policy (provider `Void`) | `AUTHORIZED → VOIDED` |
+| `VoidAuthorization` | `checkout`, REST `POST /payment-authorizations/{authorizationId}/voids`; `VoidUnboundAuthorizations` policy (provider `Void`) | `AUTHORIZED → VOIDED` |
 | `ExpireAuthorization` | a provider decline on re-authorization (`ReauthorizeBeforeExpiry`) | `AUTHORIZED → EXPIRED`, `PARTIALLY_CAPTURED → EXPIRED` |
 | `ReauthorizePayment` | `ReauthorizeBeforeExpiry` policy (provider `Reauthorize`) | `AUTHORIZED → AUTHORIZED` (new `expiresAt`, new provider reference) |
 | `BindOrder` | `BindOrderOnCheckoutCompleted` policy on Kafka `CheckoutCompleted` | none (sets `orderId`) |

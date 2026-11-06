@@ -41,8 +41,8 @@ flowchart LR
     C1["AddLine<br/>POST /carts/cartId/lines"]:::command
     C2["SetLineQuantity<br/>POST ...:set-quantity"]:::command
     C3["RemoveLine<br/>POST ...:remove"]:::command
-    C4["MergeInto<br/>POST /carts/cartId:merge-into"]:::command
-    C4b["AcceptRequotedOffers<br/>POST /carts/cartId/delivery/requoted<br/>OPEN to OPEN, no delivery-promise call"]:::command
+    C4["MergeInto<br/>POST /carts/cartId/merges"]:::command
+    C4b["AcceptRequotedOffers<br/>POST /carts/cartId/delivery-requote-acceptances<br/>OPEN to OPEN, no delivery-promise call"]:::command
     RM0["PurchasabilityView"]:::readmodel
     G1["Cart"]:::aggregate
     E1["CartLineAdded"]:::event
@@ -108,7 +108,7 @@ flowchart LR
     S --> C5
     S --> C6
     S --> C7
-    C6 -->|qry QuoteDeliveryOffers<br/>POST /delivery-offers:quote| DP
+    C6 -->|qry QuoteDeliveryOffers<br/>POST /delivery-quotes| DP
     DP -->|groups with offers,<br/>windows, expiries| Q
     C6 -->|ErrNoDestination<br/>without a prefix| G1
     Q --> G1

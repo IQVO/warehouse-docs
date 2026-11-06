@@ -48,7 +48,7 @@ sequenceDiagram
     OS->>LH: evt: FulfillmentReleasedToNode 1
     Note over VC: IssueOnRelease,<br/>PO ISSUED
     V->>VC: qry: GET /vendor/<br/>purchase-orders
-    VC-->>V: qry: reply POs,<br/>nextToken
+    VC-->>V: qry: reply POs,<br/>nextCursor
     V->>VC: cmd: POST /vendor/<br/>acknowledgements<br/>ACCEPT
     VC-->>V: cmd: reply 202<br/>transactionId
     Note over VC: PO ACCEPTED

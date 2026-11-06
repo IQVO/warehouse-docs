@@ -39,9 +39,9 @@ sequenceDiagram
     OM-)WWP: OrderAllocated
     Note over WWP: work unit enters the path pool<br/>released earliest CPT first, within the WIP limit
     WWP-)FE: WorkReleased
-    S->>FE: POST /stations/{stationId}/claim-next
+    S->>FE: POST /stations/{stationId}/task-claims
     FE-->>S: best-fit PICK task, under lease
-    S->>FE: POST /tasks/{id}/complete
+    S->>FE: POST /tasks/{id}/completions
     FE-)INV: TaskCompleted, confirms the pick
     FE-)WWP: TaskCompleted, completes the work unit
     Note over FE,S: REBIN, PACK and SLAM tasks follow on their own paths
@@ -73,15 +73,15 @@ sequenceDiagram
     PM-)INV: ProductClassified
     V->>INB: POST /asns
     V->>INB: POST /appointments
-    O->>INB: POST /appointments/{appointmentId}/check-in
+    O->>INB: POST /appointments/{appointmentId}/check-ins
     O->>INB: POST /receipts
     O->>INB: POST /receipts/{receiptId}/lines
     INB-)INV: ReceiptLineReceived for the good units
     Note over INV: StockReceived
-    O->>INV: POST /stock/stow
+    O->>INV: POST /stowages
     Note over INV: zone and handling checks<br/>hazmat placement, DOT segregation
     INV-->>O: stow recorded
-    O->>INB: POST /receipts/{receiptId}/close
+    O->>INB: POST /receipts/{receiptId}/closures
 ```
 
 Inbound is entirely WMS. The first two messages are the local copies that
@@ -106,7 +106,7 @@ sequenceDiagram
     participant FE as fulfillment-execution
     end
 
-    P->>NIP: POST /v1/transfers:approve
+    P->>NIP: POST /v1/transfer-approvals
     NIP-)INV: TransferAllocationRequested
     INV-)NIP: TransferStockAllocated
     NIP-)WWP: WorkDemandReleased

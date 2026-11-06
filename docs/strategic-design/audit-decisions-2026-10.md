@@ -64,7 +64,7 @@ the fleet-level index.
 
 ## Confirm-pick: built, switched off by default
 
-Nothing called `POST /reservations/{id}/confirm-pick`, so reserved stock was
+Nothing called `POST /reservations/{id}/pick-confirmations`, so reserved stock was
 never confirmed as picked. The decision was event-driven, with no synchronous
 cross-context call, and building it corrected the first design:
 

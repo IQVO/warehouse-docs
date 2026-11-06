@@ -46,9 +46,9 @@ sequenceDiagram
     alt k1 already present
         MW->>DB: SELECT request_hash, status_code, response
         alt hash differs
-            MW-->>C: 422 idempotency-key-reused
+            MW-->>C: 409 idempotency-key-reused
         else same request
-            MW-->>C: replay stored status, headers and body
+            MW-->>C: replay stored status, headers and body (Idempotency-Replayed: true)
         end
     else fresh key
         MW->>H: request with the transaction in context
@@ -126,7 +126,7 @@ sequenceDiagram
     participant R as TaskRepo
     participant T as task.Task
     participant P as EventPublisher
-    S->>H: POST /stations/station-03/claim-next with taskType
+    S->>H: POST /stations/station-03/task-claims with taskType
     H->>UC: Execute stationId, taskType
     UC->>SR: FindById station-03
     alt station not found
@@ -183,7 +183,7 @@ sequenceDiagram
     end
     RS->>SR: Save new station
     H-->>S: 201 station, occupied false
-    S->>H: POST /stations/station-03/check-in with occupantId
+    S->>H: POST /stations/station-03/check-ins with occupantId
     H->>CI: Execute
     CI->>SR: FindById
     CI->>ST: CheckIn occupant
@@ -192,7 +192,7 @@ sequenceDiagram
     end
     CI->>SR: Save
     H-->>S: 200 station
-    S->>H: POST /tasks/task-1/renew-lease with stationId
+    S->>H: POST /tasks/task-1/lease-renewals with stationId
     H->>RL: Execute taskId, stationId
     RL->>R: FindById
     RL->>T: RenewLease stationId, now, 5 min
@@ -223,7 +223,7 @@ sequenceDiagram
     participant OB as outbox_events
     participant RLY as OutboxRelay in cmd/execution
     participant K as Kafka
-    S->>IN: POST /tasks/task-1/complete with stationId
+    S->>IN: POST /tasks/task-1/completions with stationId
     IN->>UC: Execute taskId, stationId
     UC->>R: FindById
     alt not found
@@ -299,7 +299,7 @@ sequenceDiagram
     participant CL as ProductClassificationLookup
     participant PK as pack.Package
     participant P as EventPublisher
-    S->>H: POST /tasks/task-9/seal-package with stationId, contents
+    S->>H: POST /tasks/task-9/package-seals with stationId, contents
     H->>UC: Execute taskId, stationId, contents
     UC->>PR: FindByTaskId
     alt package already exists
@@ -354,7 +354,7 @@ sequenceDiagram
     participant PR as PackageRepo
     participant PK as pack.Package
     participant P as EventPublisher
-    S->>H: POST /packages/pkg-7/slam with actualWeight, expectedWeight
+    S->>H: POST /packages/pkg-7/slam-runs with actualWeight, expectedWeight
     H->>UC: Execute packageId, actual, expected
     UC->>PR: FindById
     alt not found
@@ -431,7 +431,7 @@ sequenceDiagram
     participant R as TaskRepo
     participant T as task.Task
     participant P as EventPublisher
-    SCH->>H: POST /tasks/expire-leases
+    SCH->>H: POST /task-lease-expirations
     H->>EL: Execute
     EL->>R: FindAllClaimed
     loop each claimed task
@@ -442,7 +442,7 @@ sequenceDiagram
         end
     end
     H-->>SCH: 200 freed count
-    SCH->>H: POST /tasks/sweep-cpt-misses
+    SCH->>H: POST /cpt-miss-sweeps
     H->>SW: Execute
     SW->>R: FindOpenPastCPT now
     loop each overdue task

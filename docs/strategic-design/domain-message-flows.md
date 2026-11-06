@@ -127,7 +127,7 @@ sequenceDiagram
     NF->>RN: cmd: SubmitAcknowledgement accepted true
     NF->>RN: qry: SubmissionStatus networkRef
     Note over NF,RN: SUCCESS settles the order as ACKNOWLEDGED, no event
-    NF->>OM: cmd: POST /orders/{id}/release
+    NF->>OM: cmd: POST /orders/{id}/releases
     OM->>INV: cmd: POST /reservations again to reconfirm
     OM-)WP: evt: OrderAllocated with released lines
 ```
@@ -171,7 +171,7 @@ sequenceDiagram
     OM-)WP: evt: OrderAllocated on warehouse.order-management.events
     Note over WP: ApplyOrderAllocated enqueues one WorkUnit per released line
     WP-)WP: evt: WorkUnitCreated on warehouse.work-planning.events
-    Sup->>WP: cmd: POST /paths/{pathId}/release or MCP release_next_work
+    Sup->>WP: cmd: POST /paths/{pathId}/work-releases or MCP release_next_work
     Note over WP: hazmat and fragile hints read from its local classification copy
     WP-)FE: evt: WorkReleased on warehouse.work-planning.events
     Note over FE: CreateTask builds its own Task, orderRef is the work unit id
@@ -211,19 +211,19 @@ sequenceDiagram
     participant LP as labor-performance
     participant OM as order-management
     WP-)FE: evt: WorkReleased on warehouse.work-planning.events
-    Picker->>FE: cmd: POST /stations/{stationId}/check-in
-    Picker->>FE: cmd: POST /stations/{stationId}/claim-next taskType PICK
+    Picker->>FE: cmd: POST /stations/{stationId}/check-ins
+    Picker->>FE: cmd: POST /stations/{stationId}/task-claims taskType PICK
     Note over FE: earliest-CPT PICK task leased for 5 minutes
-    Picker->>FE: cmd: POST /tasks/{id}/complete
+    Picker->>FE: cmd: POST /tasks/{id}/completions
     FE-)WP: evt: TaskCompleted on warehouse.fulfillment.events
     Note over WP: ApplyTaskCompleted frees the WIP slot, WorkUnitCompleted
     FE-)LP: evt: TaskCompleted with associate_id and task_type
     Packer->>FE: cmd: POST /rebin/arrivals per picked line
     Note over FE: last line creates the PACK task once
-    Packer->>FE: cmd: POST /stations/{stationId}/claim-next taskType PACK
-    Packer->>FE: cmd: POST /tasks/{id}/seal-package
+    Packer->>FE: cmd: POST /stations/{stationId}/task-claims taskType PACK
+    Packer->>FE: cmd: POST /tasks/{id}/package-seals
     Note over FE: DOT segregation checked against its local classification copy
-    Slam->>FE: cmd: POST /packages/{id}/slam actualWeight and expectedWeight
+    Slam->>FE: cmd: POST /packages/{id}/slam-runs actualWeight and expectedWeight
     FE-)OM: evt: PackageManifested on warehouse.fulfillment.events
     Note over OM: re-promise the line, see scenario 5
 ```
@@ -231,7 +231,7 @@ sequenceDiagram
 Outside the 5 % weight tolerance, the package is `DIVERTED`. That raises
 `WeightDiscrepancyDetected` and `PackageDiverted` on the analytics topic
 only, and nothing reaches `order-management`. No sibling calls
-`inventory-storage`'s `POST /reservations/{id}/confirm-pick`. The physical
+`inventory-storage`'s `POST /reservations/{id}/pick-confirmations`. The physical
 pick therefore never consumes the reservation in the live flow. Only the
 `e2e-tests` simulator calls it.
 
@@ -295,7 +295,7 @@ sequenceDiagram
     PPM-)NF: evt: CPTScheduleChanged
     WP-)OM: evt: PathCapacityChanged on warehouse.work-planning.events
     Note over OM: catalogue, CPT schedule and path-capacity caches feed PromisePolicy
-    SCH->>FE: cmd: POST /tasks/sweep-cpt-misses
+    SCH->>FE: cmd: POST /cpt-miss-sweeps
     Note over FE: open tasks at or past CPT, no state change
     FE-)OM: evt: TaskCPTMissed order_ref orderId-line-n on warehouse.fulfillment.events
     OM->>OM: cmd: RepromiseOrder for that line's shipment group
@@ -344,7 +344,7 @@ sequenceDiagram
     Planner->>WPL: qry: GET /demand
     Planner->>WPL: cmd: POST /capacity-plans
     WPL-)OM: evt: CapacityPlanCreated on warehouse.warehouse-planning.events
-    Planner->>WPL: cmd: POST /capacity-plans/{id}/publish
+    Planner->>WPL: cmd: POST /capacity-plans/{id}/publications
     WPL-)OM: evt: CapacityPlanPublished
     WPL-)OM: evt: CapacityShortageDetected, only when shortage is above 0
     WPL-)OM: evt: BottleneckDetected, ignored by order-management
@@ -393,7 +393,7 @@ sequenceDiagram
     Note over LP: score against the standard active at completion, derive idle gap
     LP-)WFM: evt: TaskPerformanceRecorded on warehouse.labor-performance.events
     Note over WFM: laborperformancecache keeps measured mean and idle share
-    Lead->>WFM: cmd: POST /paths/{pathId}/plan/propose
+    Lead->>WFM: cmd: POST /paths/{pathId}/plan-proposals
     Lead->>WFM: cmd: POST /shift-plans
     WFM->>FE: qry: GET /capacity/{capability} per required capability
     WFM-)WP: evt: ShiftPlanCommitted on warehouse.workforce.events, one per PathPlan line
@@ -437,11 +437,11 @@ sequenceDiagram
     participant WP as wes-work-planning
     Op->>FL: cmd: POST /sites/{siteCode}/zones
     FL-)INV: evt: ZoneRegistered on warehouse.facility.events
-    Op->>FL: cmd: POST /locations/import
+    Op->>FL: cmd: POST /location-imports
     FL-)INV: evt: LocationSlotRegistered per accepted row
     FL-)WPL: evt: LocationSlotRegistered, added to the tally
     FL-)FL: evt: FacilityLayoutImported once per call
-    Op->>FL: cmd: POST /locations/{locationCode}/decommission
+    Op->>FL: cmd: POST /locations/{locationCode}/decommissionings
     FL-)INV: evt: LocationSlotDecommissioned, slot dropped from the cache
     FL-)WPL: evt: LocationSlotDecommissioned, tally decremented
     FE->>FL: qry: GET /locations/{locationCode}, opt-in role check
@@ -562,7 +562,7 @@ sequenceDiagram
     OM-)NIP: evt: SiteSkuDemandChanged on warehouse.order-management.events
     WPL-)NIP: evt: CapacityPlanPublished on warehouse.warehouse-planning.events
     Op->>NIP: qry: GET /v1/transfer-simulations
-    Op->>NIP: cmd: POST /v1/transfers:approve with Idempotency-Key
+    Op->>NIP: cmd: POST /v1/transfer-approvals with Idempotency-Key
     NIP-)INV: cmd: TransferAllocationRequested on warehouse.network-inventory-planning.events
     INV-)NIP: evt: TransferStockAllocated on warehouse.inventory.events
     NIP-)WP: cmd: WorkDemandReleased pick leg

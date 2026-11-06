@@ -32,8 +32,8 @@ sequenceDiagram
     participant NP as node-<br/>performance
     OS->>VC: evt:<br/>FulfillmentReleasedToNode
     VC->>NP: evt: PurchaseOrderIssued
-    NF->>VC: qry: GET<br/>/vendor/purchase-orders<br/>with nextToken
-    VC-->>NF: qry: reply purchaseOrders,<br/>nextToken
+    NF->>VC: qry: GET<br/>/vendor/purchase-orders<br/>with nextCursor
+    VC-->>NF: qry: reply purchaseOrders,<br/>nextCursor
     NF->>VC: cmd: POST<br/>/vendor/acknowledgements<br/>ACCEPT, every line
     VC-->>NF: cmd: reply 202<br/>transactionId
     Note over VC: after notBefore,<br/>ProcessSubmission SUCCESS,<br/>PO ACCEPTED

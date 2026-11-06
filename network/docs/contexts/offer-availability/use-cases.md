@@ -28,7 +28,7 @@ are not use cases: they read the repositories directly.
 | Use case | Aggregate | Actor / trigger | Inbound adapter |
 | --- | --- | --- | --- |
 | `CreateCatalogItem` | `CatalogItem` | Network merchandising | REST `POST /catalog-items` |
-| `DiscontinueItem` | `CatalogItem` | Network merchandising | REST `POST /catalog-items/{catalogItemId}:discontinue` |
+| `DiscontinueItem` | `CatalogItem` | Network merchandising | REST `POST /catalog-items/{catalogItemId}/discontinuations` |
 | `CreateListing` | `Listing` | Network merchandising | REST `POST /listings` |
 | `ApplyInventoryFeed` | `InventoryFeed` (+ `Listing`) | `vendor-connectivity` | REST `POST /inventory-feeds` (in-org) |
 | `ApplyAvailability` | `Listing` | `ApplyInventoryFeed` | none of its own |
@@ -62,7 +62,7 @@ are not use cases: they read the repositories directly.
 ## DiscontinueItem
 
 - **Actor / trigger**: network merchandising.
-- **Inbound adapter**: REST `POST /catalog-items/{catalogItemId}:discontinue`,
+- **Inbound adapter**: REST `POST /catalog-items/{catalogItemId}/discontinuations`,
   header `Idempotency-Key`.
 - **Preconditions**: the item exists and is `ACTIVE`.
 - **Main flow**:

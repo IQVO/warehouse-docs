@@ -46,14 +46,14 @@ starts from a fact another context published (ADR 0001).
    payload on the case. A repeated fact — `TaskCPTMissed` re-fires on every
    sweep tick by design — **touches** the open case (occurrence + 1,
    `lastSeenAt`) instead of opening another.
-2. **Triage / assign (operator, REST).** `POST /exceptions/{caseId}/triage`
-   sets severity and queue; `POST /exceptions/{caseId}/assign` sets an owner.
+2. **Triage / assign (operator, REST).** `POST /exceptions/{caseId}/triage-decisions`
+   sets severity and queue; `POST /exceptions/{caseId}/assignments` sets an owner.
    Every transition records its actor.
 3. **Escalate (sweeper).** A bounded ticker (`SLA_SWEEP_INTERVAL`) compares
    `now` with `openedAt + policy.slaMinutes`; a breach sets the `ESCALATED`
    flag — a flag, not a state: work continues — and raises
    `ExceptionEscalated`.
-4. **Resolve (operator, terminal).** `POST /exceptions/{caseId}/resolve`
+4. **Resolve (operator, terminal).** `POST /exceptions/{caseId}/resolutions`
    needs a resolution code and a root cause; `RESOLVED` is terminal. A source
    fact arriving after resolution touches the case (occurrence, `lastSeenAt`)
    and never reopens it.

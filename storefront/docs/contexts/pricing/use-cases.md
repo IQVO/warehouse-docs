@@ -29,10 +29,10 @@ Reads are not use cases here: `GET /item-prices/{catalogItemId}`
 
 | Use case | Trigger | Inbound adapter | Emits |
 | --- | --- | --- | --- |
-| `SetListPrice` | Merchandiser | REST `POST /item-prices`, `POST /item-prices/{catalogItemId}:set-list-price` | `ItemPriceChanged` |
+| `SetListPrice` | Merchandiser | REST `POST /item-prices`, `PUT /item-prices/{catalogItemId}/list-price` | `ItemPriceChanged` |
 | `ScheduleSale` | Merchandiser | REST `POST /item-prices/{catalogItemId}/sales` | `ItemPriceChanged` |
-| `CancelSale` | Merchandiser | REST `POST /item-prices/{catalogItemId}/sales/{saleId}:cancel` | `ItemPriceChanged` |
-| `WithdrawPrice` | Merchandiser | REST `POST /item-prices/{catalogItemId}:withdraw` | `ItemPriceWithdrawn` |
+| `CancelSale` | Merchandiser | REST `POST /item-prices/{catalogItemId}/sales/{saleId}/cancellations` | `ItemPriceChanged` |
+| `WithdrawPrice` | Merchandiser | REST `POST /item-prices/{catalogItemId}/withdrawals` | `ItemPriceWithdrawn` |
 | `WithdrawPrice` (policy) | `WithdrawOnDiscontinue` | Kafka consumer, `CatalogItemDiscontinued` | `ItemPriceWithdrawn` |
 | `PublishChargeSchedule` | Merchandiser | REST `POST /delivery-charge-schedules` | `DeliveryChargeScheduleChanged` |
 | `PublishTaxTable` | Merchandiser | REST `POST /tax-tables` | `TaxTableChanged` |
@@ -59,7 +59,7 @@ illegal-transition 409, concurrent-update 409, validation-failed 422.
 
 - **Actor / trigger:** the storefront merchandiser.
 - **Inbound adapter:** REST `POST /item-prices` (create) or
-  `POST /item-prices/{catalogItemId}:set-list-price` (update), header
+  `PUT /item-prices/{catalogItemId}/list-price` (update), header
   `Idempotency-Key` required.
 - **Input:** `catalogItemId`, `listPrice` (`amountMinor`, `currency`).
 - **Preconditions:** the item exists in `CatalogItemView` and is not
@@ -120,7 +120,7 @@ illegal-transition 409, concurrent-update 409, validation-failed 422.
 
 - **Actor / trigger:** the merchandiser.
 - **Inbound adapter:** REST
-  `POST /item-prices/{catalogItemId}/sales/{saleId}:cancel`, header
+  `POST /item-prices/{catalogItemId}/sales/{saleId}/cancellations`, header
   `Idempotency-Key` required.
 - **Main flow:** load `ItemPrice` (404), remove the window
   (`saleId` unknown → 404 `not-found`), save, outbox `ItemPriceChanged`
@@ -137,7 +137,7 @@ illegal-transition 409, concurrent-update 409, validation-failed 422.
 ## WithdrawPrice (merchandiser)
 
 - **Actor / trigger:** the merchandiser.
-- **Inbound adapter:** REST `POST /item-prices/{catalogItemId}:withdraw` (merchandising UI, cmd channel).
+- **Inbound adapter:** REST `POST /item-prices/{catalogItemId}/withdrawals` (merchandising UI, cmd channel).
 - **Main flow:** load `ItemPrice`, `WithdrawPrice(...)`: `ACTIVE →
   WITHDRAWN`; already `WITHDRAWN` → 200 unchanged, no event. Save, outbox
   `ItemPriceWithdrawn`, one transaction.

@@ -139,7 +139,7 @@ classDiagram
         +FindByNumber(ctx, poNumber) PurchaseOrder
         +FindOpenByAssignment(ctx, assignmentId) PurchaseOrder
         +ListIssuedPastAckBy(ctx, now) PurchaseOrder[]
-        +Poll(ctx, filter, nextToken) Page
+        +Poll(ctx, filter, nextCursor) Page
     }
     PurchaseOrder "1" *-- "1..*" PoLine : lines
     PurchaseOrder "1" *-- "0..1" AckDecision : ack

@@ -91,7 +91,7 @@ Omitted: the optimistic-concurrency branch (a new row has none). A unique
 key on `checkout_session_id` also catches two concurrent first calls under
 different keys, answered `409 duplicate-authorization`.
 
-## 2. VoidAuthorization (REST POST /payment-authorizations/authorizationId:void)
+## 2. VoidAuthorization (REST POST /payment-authorizations/authorizationId/voids)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%

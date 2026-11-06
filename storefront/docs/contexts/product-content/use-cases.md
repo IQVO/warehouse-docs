@@ -30,13 +30,13 @@ triggers the `RetireOnDiscontinue` policy, which is a use case below.)
 | Use case | Trigger | Inbound adapter | Emits |
 | --- | --- | --- | --- |
 | `CreateProductContent` | Content manager | REST `POST /product-contents` | none |
-| `ReviseContent` | Content manager | REST `POST /product-contents/{catalogItemId}:revise` | none (re-publication is a model gap) |
-| `PublishContent` | Content manager | REST `POST /product-contents/{catalogItemId}:publish` | `ProductContentPublished` |
-| `RetireContent` | Content manager | REST `POST /product-contents/{catalogItemId}:retire` | `ProductContentRetired` |
+| `ReviseContent` | Content manager | REST `POST /product-contents/{catalogItemId}/revisions` | none (re-publication is a model gap) |
+| `PublishContent` | Content manager | REST `POST /product-contents/{catalogItemId}/publications` | `ProductContentPublished` |
+| `RetireContent` | Content manager | REST `POST /product-contents/{catalogItemId}/retirements` | `ProductContentRetired` |
 | `RetireContent` (policy) | `RetireOnDiscontinue` | Kafka consumer, `CatalogItemDiscontinued` | `ProductContentRetired` |
 | `CreateCategory` | Content manager | REST `POST /categories` | none |
-| `MoveCategory` | Content manager | REST `POST /categories/{categoryId}:move` | none |
-| `RenameCategory` | Content manager | REST `POST /categories/{categoryId}:rename` | none |
+| `MoveCategory` | Content manager | REST `PUT /categories/{categoryId}/parent` | none |
+| `RenameCategory` | Content manager | REST `PUT /categories/{categoryId}/name` | none |
 | `PublishCategoryTree` | not named in the model | none (no `inbound` row, no route) | `CategoryTreePublished` |
 
 ## How save and publish commit
@@ -98,7 +98,7 @@ key returns the stored response of the first call.
 ## ReviseContent
 
 - **Actor / trigger:** the storefront content manager.
-- **Inbound adapter:** REST `POST /product-contents/{catalogItemId}:revise`,
+- **Inbound adapter:** REST `POST /product-contents/{catalogItemId}/revisions`,
   header `Idempotency-Key` required; same body as create.
 - **Preconditions:** the content exists and is PUBLISHED (the only source
   state of the modelled transition); the named category exists.
@@ -130,7 +130,7 @@ key returns the stored response of the first call.
 ## PublishContent
 
 - **Actor / trigger:** the storefront content manager.
-- **Inbound adapter:** REST `POST /product-contents/{catalogItemId}:publish`,
+- **Inbound adapter:** REST `POST /product-contents/{catalogItemId}/publications`,
   header `Idempotency-Key` required.
 - **Preconditions:** the content exists and is DRAFT; the publish gate
   passes.
@@ -163,7 +163,7 @@ key returns the stored response of the first call.
 ## RetireContent (content manager)
 
 - **Actor / trigger:** the storefront content manager.
-- **Inbound adapter:** REST `POST /product-contents/{catalogItemId}:retire`,
+- **Inbound adapter:** REST `POST /product-contents/{catalogItemId}/retirements`,
   header `Idempotency-Key` required.
 - **Preconditions:** the content exists and is PUBLISHED.
 - **Main flow:**
@@ -236,7 +236,7 @@ key returns the stored response of the first call.
 ## MoveCategory
 
 - **Actor / trigger:** the storefront content manager.
-- **Inbound adapter:** REST `POST /categories/{categoryId}:move`, header
+- **Inbound adapter:** REST `PUT /categories/{categoryId}/parent`, header
   `Idempotency-Key` required; body `parentId` (nullable: move to the root).
 - **Preconditions:** the category and the new parent exist; the structural
   invariants hold after the move.
@@ -265,7 +265,7 @@ key returns the stored response of the first call.
 ## RenameCategory
 
 - **Actor / trigger:** the storefront content manager.
-- **Inbound adapter:** REST `POST /categories/{categoryId}:rename`, header
+- **Inbound adapter:** REST `PUT /categories/{categoryId}/name`, header
   `Idempotency-Key` required; body `name`.
 - **Preconditions:** the category exists; no sibling has the new name.
 - **Main flow:**

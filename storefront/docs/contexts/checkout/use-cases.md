@@ -34,7 +34,7 @@ after an in-doubt placement it is the endpoint the BFF polls.
 | Use case | Trigger | Inbound adapter | Emits |
 | --- | --- | --- | --- |
 | `OpenSession` | Shopper via `storefront-bff` | REST `POST /checkout-sessions` | `CheckoutOpened` |
-| `ConfirmSession` | Shopper via `storefront-bff` | REST `POST /checkout-sessions/{sessionId}:confirm` | the outcome's event (see below) |
+| `ConfirmSession` | Shopper via `storefront-bff` | REST `POST /checkout-sessions/{sessionId}/confirmations` | the outcome's event (see below) |
 | `RecordAuthorization` | The answer to `AuthorizePayment` | inside `ConfirmSession` | none |
 | `RecordDecline` | The answer to `AuthorizePayment` | inside `ConfirmSession` | `CheckoutDeclined` |
 | `RecordPlacementInDoubt` | `PlaceOrder` timed out or answered `503` | inside `ConfirmSession` or `ResolveInDoubtPlacements` | `CheckoutPlacementInDoubt` |
@@ -109,7 +109,7 @@ one kebab-case slug per `Err` in the model. Every write route takes an
 ## ConfirmSession
 
 - **Actor / trigger:** the shopper, through `storefront-bff`.
-- **Inbound adapter:** REST `POST /checkout-sessions/{sessionId}:confirm`,
+- **Inbound adapter:** REST `POST /checkout-sessions/{sessionId}/confirmations`,
   header `Idempotency-Key` required.
 - **Input:** `paymentMethodToken`, the PSP token from the hosted fields,
   never a card number.

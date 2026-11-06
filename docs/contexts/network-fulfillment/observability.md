@@ -7,7 +7,7 @@ sidebar_label: Observability
 # Observability
 
 :::info[Synced from network-fulfillment]
-This page is a copy of [`docs/operations/observability.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/operations/observability.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+This page is a copy of [`docs/docs/operations/observability.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/docs/operations/observability.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
 
@@ -66,7 +66,7 @@ clients use a plain `http.Client`, so outbound calls are not traced and no
 trace context is sent to order-management. The poller, the tickers, the
 outbox relay and the Kafka publishers open no spans.
 
-**Trace context across the outbox** ([ADR 0022](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0022-trace-context-crosses-the-outbox.md)).
+**Trace context across the outbox** ([ADR 0022](https://iqvo.github.io/network-fulfillment/docs/adr/0022-trace-context-crosses-the-outbox)).
 In outbox mode `OutboxPublisher.Publish` injects the active span's W3C
 `traceparent` (and `tracestate` / `baggage` when present) into each
 `outbox_events.headers` row, after the CloudEvents `content-type`; the relay
@@ -219,7 +219,7 @@ Messages worth knowing, with their fields (all from the code):
 | `capability offer: usable inventory lookup failed` | ERROR | `sku`, `err` | netfulfil | inventory-storage call failed for one SKU |
 | `outbox relay pass failed` | ERROR | `error` | netfulfil | a database failure of a relay pass (begin, claim, mark published); rows stay unpublished and are retried. Send failures are logged by the two lines below instead |
 | `outbox relay: send failed, stopping this pass at the failed row` | WARN | `outbox_id`, `topic`, `event_type`, `attempts`, `error` | netfulfil | the broker rejected a row below the attempt cap; the next pass retries it |
-| `outbox relay: row reached the attempt cap and is excluded from future claims; re-arm it with attempts = 0 after fixing the cause` | ERROR | `outbox_id`, `topic`, `event_type`, `key`, `attempts`, `max_attempts`, `error` | netfulfil | once per row, when it reaches `OUTBOX_MAX_ATTEMPTS` ([ADR 0021](https://github.com/IQVO/network-fulfillment/blob/develop/docs/adr/0021-outbox-relay-attempt-cap.md)); consumers never got that event ([runbook](/contexts/network-fulfillment/runbook#an-outbox-row-hit-the-attempt-cap)) |
+| `outbox relay: row reached the attempt cap and is excluded from future claims; re-arm it with attempts = 0 after fixing the cause` | ERROR | `outbox_id`, `topic`, `event_type`, `key`, `attempts`, `max_attempts`, `error` | netfulfil | once per row, when it reaches `OUTBOX_MAX_ATTEMPTS` ([ADR 0021](https://iqvo.github.io/network-fulfillment/docs/adr/0021-outbox-relay-attempt-cap)); consumers never got that event ([runbook](/contexts/network-fulfillment/runbook#an-outbox-row-hit-the-attempt-cap)) |
 | `outbox relay running` | INFO | `topic`, `analytics_topic`, `max_attempts` | netfulfil | outbox mode is on, with the attempt cap in force |
 | `stub network acknowledgement` | INFO | `networkRef`, `accepted` | netfulfil | what the stub gateway was told |
 | `analytics: message is not a valid CloudEvent, sending to dead-letter topic` | WARN | `topic`, `partition`, `offset`, `error` | projector | |

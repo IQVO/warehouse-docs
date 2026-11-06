@@ -66,7 +66,7 @@ command that changes nothing raises no event.
 | `ProductMeasured` | `PUT /products/{sku}/dimensions/measured` | the same full physical profile |
 | `ProductPackLevelDeclared` | `PUT /products/{sku}/pack-levels/{level}` (ADR 0011) | the declared pack level with its GTIN; see the [generated reference](/api-reference/async/product-master) |
 | `ProductPackLevelMeasured` | `PUT /products/{sku}/pack-levels/{level}/measured` | the measured pack level; see the generated reference |
-| `ProductPackLevelRetired` | `POST /products/{sku}/pack-levels/{level}:retire` | the retired pack level; see the generated reference |
+| `ProductPackLevelRetired` | `POST /products/{sku}/pack-levels/{level}/retirements` | the retired pack level; see the generated reference |
 
 `GET /gtins/{gtin}` resolves a GTIN to its SKU and pack level without an event. `?` marks a field omitted when unset. `handling_tags` is in the stable order
 Hazmat, Fragile, TemperatureSensitive, Oversized, HighValue. There is no

@@ -50,7 +50,7 @@ The model lists no analytics-only event for this context, so the
 | Topic | `retailnetwork.product-content.events` |
 | Subject / key | `catalogItemId` |
 | Dataschema | `urn:retailnetwork:product-content:events:ProductContentPublished:v1` |
-| Producing command / use case | `PublishContent` (REST `POST /product-contents/{catalogItemId}:publish`) |
+| Producing command / use case | `PublishContent` (REST `POST /product-contents/{catalogItemId}/publications`) |
 | Consumers | `product-discovery` (folds the content into `ProductView`, guarded by `revision`) |
 
 | Field | Type | Meaning |
@@ -76,7 +76,7 @@ consumer drop an out-of-order redelivery.
 | Topic | `retailnetwork.product-content.events` |
 | Subject / key | `catalogItemId` |
 | Dataschema | `urn:retailnetwork:product-content:events:ProductContentRetired:v1` |
-| Producing command / use case | `RetireContent`: from the content manager (REST `POST /product-contents/{catalogItemId}:retire`) or from the `RetireOnDiscontinue` policy |
+| Producing command / use case | `RetireContent`: from the content manager (REST `POST /product-contents/{catalogItemId}/retirements`) or from the `RetireOnDiscontinue` policy |
 | Consumers | `product-discovery` (the item's content is no longer PUBLISHED, so the item stops being purchasable) |
 
 | Field | Type | Meaning |

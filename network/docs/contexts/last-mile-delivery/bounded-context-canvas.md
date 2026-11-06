@@ -154,12 +154,12 @@ It never sees an address ([ADR 0006](/network/adr/0006-pii-confinement)).
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
 | Station planner (person) | `ScheduleWave` | Command | REST `POST /waves` | UI on Open Host |
-| Station planner | `CloseInduction` | Command | REST `POST /waves/{waveId}:close-induction` | UI on Open Host |
-| Station planner | `DispatchWave` | Command | REST `POST /waves/{waveId}:dispatch` | UI on Open Host |
+| Station planner | `CloseInduction` | Command | REST `POST /waves/{waveId}/induction-closures` | UI on Open Host |
+| Station planner | `DispatchWave` | Command | REST `POST /waves/{waveId}/dispatches` | UI on Open Host |
 | Station planner | `PlanRoute` | Command | REST `POST /routes` | UI on Open Host |
 | Station planner | List waves | Query | REST `GET /waves?stationNodeId=&serviceDate=` | UI on Open Host |
 | Station planner | `ContractPartner` | Command | REST `POST /partners` | UI on Open Host |
-| DSP driver app (external organisation) | `StartRoute` | Command | REST `POST /routes/{routeId}:start` | UI on Open Host |
+| DSP driver app (external organisation) | `StartRoute` | Command | REST `POST /routes/{routeId}/starts` | UI on Open Host |
 | DSP driver app | `RecordAttempt` | Command | REST `POST /routes/{routeId}/attempts` | UI on Open Host |
 | `linehaul-transportation` | `LoadArrived` | Event | Kafka `retailnetwork.linehaul-transportation.events`, type `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived` | Customer/Supplier (we are the Customer) |
 | `node-topology` | `NodeRegistered` | Event | Kafka `retailnetwork.node-topology.events`, type `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | Conformist |

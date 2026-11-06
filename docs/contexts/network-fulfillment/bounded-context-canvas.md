@@ -7,7 +7,7 @@ sidebar_label: Bounded Context Canvas
 # Bounded Context Canvas
 
 :::info[Synced from network-fulfillment]
-This page is a copy of [`docs/ddd/bounded-context-canvas.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/ddd/bounded-context-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
+This page is a copy of [`docs/docs/ddd/bounded-context-canvas.md`](https://github.com/IQVO/network-fulfillment/blob/develop/docs/docs/ddd/bounded-context-canvas.md) on `develop`, derived from that repository's code. Edit it there, then re-sync.
 :::
 
 
@@ -74,6 +74,10 @@ flowchart LR
     linkStyle 6 stroke:#e8590c,stroke-width:2.5px
     class BC bc
 ```
+
+Source: `internal/adapters/inbound/http/server.go`, `internal/adapters/inbound/mcp/`,
+`internal/adapters/inbound/kafka/` and `internal/adapters/inbound/poller/poller.go`
+(the Inbound Communication table below maps each arrow to its route, tool or topic).
 
 ### Outbound
 
@@ -180,7 +184,7 @@ ship-to PII enters this context at all.
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
 | `order-management` | Raise held order + feasibility verdict | Command | REST `POST /orders` (`releaseOnAllocation: false`, `allowPartialShipment: false`, `requiredShipBy`) | Customer/Supplier (we are the Customer; OM ADR 0020) |
-| `order-management` | Release held order | Command | REST `POST /orders/{id}/release` | Customer/Supplier |
+| `order-management` | Release held order | Command | REST `POST /orders/{id}/releases` | Customer/Supplier |
 | `order-management` | Cancel held order | Command | REST `DELETE /orders/{id}` (also the orphaned-hold sweep, which reads 404 and 409/422 as answers) | Customer/Supplier |
 | `inventory-storage` | Usable quantity per SKU | Query | REST `GET /inventory/{sku}/usable` (always on) | Conformist to its Open Host |
 | External network | Acknowledge / reject in full | Command | `ports.NetworkGateway.SubmitAcknowledgement(ref, accepted)` (stub) | Conformist |
@@ -301,6 +305,9 @@ Full glossary: [ubiquitous-language.md](/contexts/network-fulfillment/ubiquitous
 - **Decided 2026-10-06: cycle time gates eligibility (ADR 0017).** A path is
   eligible for a cutoff only if `CycleTimeP95 <= cutoff - now`; a missing or
   zero cycle time stays eligible (fail-open); capacity is not scaled.
+- **Decided 2026-10-30: the next feasible cutoff (ADR 0031).** When no path
+  can make the next cutoff, the offer is computed against the first one a
+  path can make, up to 7 days ahead; only none in that bound is a zero.
 - **Contract drift (fixed 2026-10-06, ADR 0015).** CORS now allows
   `GET/POST/OPTIONS`, `ErrConfirmBeforeAcknowledge` maps to a 409,
   `apis/openapi.yaml` documents `GET /capability-offers` and the

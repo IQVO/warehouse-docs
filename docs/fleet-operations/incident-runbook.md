@@ -28,7 +28,7 @@ flowchart LR
     B --> C["Release in the same call<br/>OrderAllocated to outbox"]
     C --> D["Relay publishes on<br/>warehouse.order-management.events"]
     D --> E["wes-work-planning consumer<br/>one WorkUnit per line"]
-    E --> F["POST /paths/pathId/release<br/>WorkReleased to outbox"]
+    E --> F["POST /paths/pathId/work-releases<br/>WorkReleased to outbox"]
     F --> G["Relay publishes on<br/>warehouse.work-planning.events"]
     G --> H["fulfillment-execution consumer<br/>one Task per work unit"]
     H --> I["Station claims and completes<br/>TaskCompleted to outbox"]
@@ -76,8 +76,8 @@ curl -s http://localhost:8000/api/order-management/orders/<orderId>
 | Order / line status | Meaning | Next |
 | --- | --- | --- |
 | `Received`, lines `Pending` | allocation never happened (permissive inventory client, or a hard failure at intake) | [order-management troubleshooting](/contexts/order-management/troubleshooting#circuit-breaker-and-allocation): cancel and resubmit with a new `Idempotency-Key` |
-| `Backordered` lines | inventory-storage answered `409` (no usable stock): a business fact | `POST /orders/<orderId>/retry-allocation` once stock exists |
-| `Allocated` / `PartiallyAllocated`, not released | held at intake (ship-complete rule or network hold) | `POST /orders/<orderId>/release` when the hold reason is gone |
+| `Backordered` lines | inventory-storage answered `409` (no usable stock): a business fact | `POST /orders/<orderId>/allocation-retries` once stock exists |
+| `Allocated` / `PartiallyAllocated`, not released | held at intake (ship-complete rule or network hold) | `POST /orders/<orderId>/releases` when the hold reason is gone |
 | `Released` / `PartiallyReleased` | order-management is done; the order is in wes-work-planning's hands | step 3 |
 | `Cancelled` | nothing downstream should happen | none |
 
@@ -149,7 +149,7 @@ order:
 Each work unit has a `state`: `Pending` → `Released` → `Completed`.
 
 - **`Pending`**: nothing releases it on its own. Work is released by a
-  call to `POST /paths/<pathId>/release` (REST, the MCP tool
+  call to `POST /paths/<pathId>/work-releases` (REST, the MCP tool
   `release_next_work`, or the console), earliest CPT first. The call
   answers `409 wip-limit-reached` when the path is at its WIP limit:
   that happens when completions from fulfillment-execution stop arriving
@@ -188,8 +188,8 @@ Check the group the same way as in step 4 with
 
 | Task state | Meaning | Next |
 | --- | --- | --- |
-| `PENDING` | no station has pulled it | stations must call `POST /stations/<stationId>/claim-next`; `GET /queues/<taskType>/depth` shows the backlog. Too few stations with the required capability, or none checked in |
-| `CLAIMED` | a station holds the lease | an expired lease goes back to `PENDING` on the next lease-expiry sweep (`POST /tasks/expire-leases`, called every minute by the `<release>-expire-leases` CronJob) |
+| `PENDING` | no station has pulled it | stations must call `POST /stations/<stationId>/task-claims`; `GET /queues/<taskType>/depth` shows the backlog. Too few stations with the required capability, or none checked in |
+| `CLAIMED` | a station holds the lease | an expired lease goes back to `PENDING` on the next lease-expiry sweep (`POST /task-lease-expirations`, called every minute by the `<release>-expire-leases` CronJob) |
 | `COMPLETED` | `TaskCompleted` went into the outbox | check fulfillment-execution's `outbox_events` as in step 3; this context has no outbox-lag gauge, so the SQL query and the log line `outbox relay pass failed` are the only signals |
 
 When `TaskCompleted` is published, wes-work-planning applies it and marks
@@ -198,7 +198,7 @@ uses `PackageManifested` and `TaskCPTMissed` from the same topic to
 re-promise. A work unit stuck in `Released` while its task is `COMPLETED`
 means wes-work-planning is not consuming `warehouse.fulfillment.events`:
 check its consumer group (step 4) or complete the unit by hand with
-`POST /work-units/<id>/complete`.
+`POST /work-units/<id>/completions`.
 
 ## 8. After the incident
 

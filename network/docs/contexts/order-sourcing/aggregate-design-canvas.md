@@ -125,7 +125,7 @@ Neighbours' reactions that close the loops:
 | Command | Transition | Issued by |
 | --- | --- | --- |
 | `QueueAssignment` | `[*] → QUEUED` | Kafka consumer of `CustomerOrderPlaced`, one per group |
-| `ReoptimiseAssignment` | `QUEUED → QUEUED` | re-optimisation sweep over `QUEUED` rows (scheduler); planner `POST /assignments/{assignmentId}:reoptimise` |
+| `ReoptimiseAssignment` | `QUEUED → QUEUED` | re-optimisation sweep over `QUEUED` rows (scheduler); planner `POST /assignments/{assignmentId}/reoptimisations` |
 | `ReleaseToNode` | `QUEUED → RELEASED` or `QUEUED → UNSOURCEABLE` | release timer at `releaseAt`; at once for `SAME_DAY`, right after `QueueAssignment` |
 | `HandleNodeRefusal` | `RELEASED → QUEUED` or `RELEASED → UNSOURCEABLE` | Kafka consumer of `PurchaseOrderRejected`, `PurchaseOrderExpired` |
 | `LockAssignment` | `RELEASED → LOCKED` | Kafka consumer of `PurchaseOrderAccepted` |

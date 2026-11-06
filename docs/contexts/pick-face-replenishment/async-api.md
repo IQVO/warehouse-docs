@@ -88,9 +88,9 @@ Example from the spec (`ReplenishmentRequested`):
 
 | Type (after `com.warehouse.wms.pick-face-replenishment.`) | Raised by | Payload |
 | --- | --- | --- |
-| `replenishment.ReplenishmentRequested` | `Request.Plan`, through the detector on a bin level or forward map change, `POST /sites/{siteId}/evaluate` or `POST /replenishments` | `request_id`, `site_id`, `sku`, `forward_bin`, `source_bin`, `quantity`, `priority` (`NORMAL` or `URGENT`), `policy_min`, `policy_max`, `requested_at` |
+| `replenishment.ReplenishmentRequested` | `Request.Plan`, through the detector on a bin level or forward map change, `POST /sites/{siteId}/evaluations` or `POST /replenishments` | `request_id`, `site_id`, `sku`, `forward_bin`, `source_bin`, `quantity`, `priority` (`NORMAL` or `URGENT`), `policy_min`, `policy_max`, `requested_at` |
 | `replenishment.ReplenishmentCompleted` | `Request.Complete`, through a `StockRelocated` with reason `REPLENISHMENT` | the same ids and bins, `quantity` = what the relocation moved (possibly less than requested), `completed_at` |
-| `replenishment.ReplenishmentCancelled` | `Request.Cancel`, through `POST /replenishments/{requestId}/cancel`, a policy removal or a `SlotPlanApproved` that drops the assignment | `request_id`, `site_id`, `sku`, `reason` (`OPERATOR`, `ASSIGNMENT_CHANGED`, `POLICY_REMOVED`), `cancelled_at` |
+| `replenishment.ReplenishmentCancelled` | `Request.Cancel`, through `POST /replenishments/{requestId}/cancellations`, a policy removal or a `SlotPlanApproved` that drops the assignment | `request_id`, `site_id`, `sku`, `reason` (`OPERATOR`, `ASSIGNMENT_CHANGED`, `POLICY_REMOVED`), `cancelled_at` |
 | `policy.ReplenishmentPolicyDeclared` (analytics topic only) | `DeclarePolicy` through `PUT /policies/{siteId}/{sku}` | `site_id`, `sku`, `min_qty`, `max_qty`, `multiple`, `version`, `declared_at` |
 
 Removing a policy raises no event of its own: its open requests are cancelled

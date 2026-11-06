@@ -33,8 +33,8 @@ infrastructure.
 | # | Use case | Trigger | Raises |
 | --- | --- | --- | --- |
 | 1 | `ReceiveOrder` | `POST /orders` | `OrderReceived`, then (best-effort) the allocation-pass events |
-| 2 | `RetryAllocation` | `POST /orders/{id}/retry-allocation` | `OrderLineAllocated`, `OrderLineBackordered`, `OrderAllocated`/`OrderPartiallyAllocated`, `OrderAllocationPartiallyFailed` |
-| 3 | `ReleaseHeldOrder` | `POST /orders/{id}/release` | `OrderLineBackordered` (lost reservation), `OrderAllocated`/`OrderPartiallyAllocated` for the released lines |
+| 2 | `RetryAllocation` | `POST /orders/{id}/allocation-retries` | `OrderLineAllocated`, `OrderLineBackordered`, `OrderAllocated`/`OrderPartiallyAllocated`, `OrderAllocationPartiallyFailed` |
+| 3 | `ReleaseHeldOrder` | `POST /orders/{id}/releases` | `OrderLineBackordered` (lost reservation), `OrderAllocated`/`OrderPartiallyAllocated` for the released lines |
 | 4 | `CancelOrder` | `DELETE /orders/{id}` | `OrderCancelled` |
 | 5 | `GetOrder` | `GET /orders/{id}`, MCP `get_order` | — (query) |
 | 6 | `RepromiseOrder` | Kafka `TaskCPTMissed`/`PackageManifested` on `warehouse.fulfillment.events` | `OrderRepromised` |
@@ -65,7 +65,7 @@ anything is persisted. It then mints an `OrderId`, persists the order in
 With Postgres, the call sits behind the `Idempotency-Key` middleware
 (ADR 0023): the header is required (`400` `idempotency-key-required`), a
 replay returns the stored response, and the same key with a different body
-is `422` `idempotency-key-reused`.
+is `409` `idempotency-key-reused` (REST guideline 2.3; it was 422 before ADR 0048).
 
 **Request:**
 
@@ -234,8 +234,9 @@ PUBLISHED plan). No order changes and no event is raised.
 windows for one site that end after `from` (default now).
 `OrderCapacityConstraints` is called while building every order response:
 an order with a promise gets a `capacityConstraint` annotation listing the
-published shortage windows its promise overlaps, for the single configured
-site (`PLANNED_CAPACITY_SITE_ID`, defaulting to `DEFAULT_SITE_ID`). Neither
+published shortage windows its promise overlaps, at the order's own
+`fulfillmentSiteId` or, for an order without one, the configured site
+(`PLANNED_CAPACITY_SITE_ID`, defaulting to `DEFAULT_SITE_ID`; ADR 0047). Neither
 changes a promise.
 
 ## 10. ApplyProductClassification (Kafka-driven, opt-in)
@@ -305,8 +306,8 @@ touched. With the default 1h `HOUSEKEEPING_INTERVAL` a line is flagged up to
 | --- | --- | --- |
 | `POST` | `/orders` | ReceiveOrder (allocates + releases automatically) |
 | `GET` | `/orders/{id}` | GetOrder |
-| `POST` | `/orders/{id}/retry-allocation` | RetryAllocation |
-| `POST` | `/orders/{id}/release` | ReleaseHeldOrder (held orders only, ADR 0020) |
+| `POST` | `/orders/{id}/allocation-retries` | RetryAllocation |
+| `POST` | `/orders/{id}/releases` | ReleaseHeldOrder (held orders only, ADR 0020) |
 | `DELETE` | `/orders/{id}` | CancelOrder |
 | `GET` | `/planned-capacity` | GetPlannedCapacity (ADR 0031) |
 | `GET` | `/healthz` | Liveness probe |

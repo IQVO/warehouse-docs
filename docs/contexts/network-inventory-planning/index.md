@@ -40,8 +40,8 @@ Per the code on this context's `develop` branch:
 `order-management`, `warehouse-planning`); the fail-closed snapshot and the
 per-site advisory simulation (`GET /v1/transfer-simulations`); the diagnostic
 planner endpoint with explicit positions, policies and lanes
-(`POST /v1/transfer-proposals:generate`); the idempotent approval endpoint
-(`POST /v1/transfers:approve`); the eleven-state saga with an immutable audit
+(`POST /v1/transfer-proposal-runs`); the idempotent approval endpoint
+(`POST /v1/transfer-approvals`); the eleven-state saga with an immutable audit
 trail; the transactional outbox and relay; the inventory-storage reply and fact
 consumers and the fulfillment-execution fact consumer; `WorkDemandReleased` for
 the pick and dispatch legs; read-only transfer REST and a read-only MCP server;

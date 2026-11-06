@@ -108,9 +108,9 @@ analytics-only events, which have no integration consumer.
 | `checkout` | `customer-payments` | C/S | `CheckoutCompleted` | - |
 | `checkout` | `shopping-cart` | C/S | `CheckoutCompleted` | - |
 | `customer-ordering` | `checkout` | ACL + OHS | - | cmd PlaceOrder (`REST POST /checkout`) |
-| `customer-payments` | `checkout` | C/S | - | cmd AuthorizePayment (`REST POST /payment-authorizations`); cmd VoidAuthorization (`REST POST /payment-authorizations/{authorizationId}:void`) |
+| `customer-payments` | `checkout` | C/S | - | cmd AuthorizePayment (`REST POST /payment-authorizations`); cmd VoidAuthorization (`REST POST /payment-authorizations/{authorizationId}/voids`) |
 | `delivery-promise` | `checkout` | OHS | - | qry GetDeliveryOffer (`REST GET /delivery-offers/{offerId}`) |
-| `delivery-promise` | `shopping-cart` | OHS | - | qry QuoteDeliveryOffers (`REST POST /delivery-offers:quote`) |
+| `delivery-promise` | `shopping-cart` | OHS | - | qry QuoteDeliveryOffers (`REST POST /delivery-quotes`) |
 | `offer-availability` | `pricing` | CF | `CatalogItemCreated`, `CatalogItemDiscontinued` | - |
 | `offer-availability` | `product-content` | CF | `CatalogItemCreated`, `CatalogItemDiscontinued` | - |
 | `offer-availability` | `product-discovery` | C/S + CF + OHS + ops-only | `CatalogItemCreated`, `CatalogItemDiscontinued`, `ListingCreated`, `ListingAvailabilityChanged`, `ListingSuppressed`, `ListingRestored` | qry ListCatalog (`REST GET /catalog`); qry ListListings (`REST GET /listings?nodeId=&catalogItemId=`) |
