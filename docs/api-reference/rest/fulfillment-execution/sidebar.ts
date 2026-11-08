@@ -50,6 +50,24 @@ const sidebar: SidebarsConfig = {
         },
         {
           type: "doc",
+          id: "api-reference/rest/fulfillment-execution/form-work-batch",
+          label: "Form this station's pick walk (ADR 0063)",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/fulfillment-execution/get-work-batch",
+          label: "Read one work batch (the station's walk)",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/fulfillment-execution/renew-work-batch-lease",
+          label: "Renew every open member's task lease (LeaseTogether)",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
           id: "api-reference/rest/fulfillment-execution/renew-lease",
           label: "Extend the active lease held by the claiming station",
           className: "api-method post",
@@ -116,6 +134,24 @@ const sidebar: SidebarsConfig = {
           type: "doc",
           id: "api-reference/rest/fulfillment-execution/claim-next-task",
           label: "PULL-dispatch the best-fit pending task to this station",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/fulfillment-execution/form-work-batch",
+          label: "Form this station's pick walk (ADR 0063)",
+          className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/fulfillment-execution/get-work-batch",
+          label: "Read one work batch (the station's walk)",
+          className: "api-method get",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/fulfillment-execution/renew-work-batch-lease",
+          label: "Renew every open member's task lease (LeaseTogether)",
           className: "api-method post",
         },
         {

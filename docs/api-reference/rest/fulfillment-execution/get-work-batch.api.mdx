@@ -1,0 +1,71 @@
+---
+id: get-work-batch
+title: "Read one work batch (the station's walk)"
+description: "The WorkBatch read side (ADR 0063): the batch, its status (`OPEN`, `COMPLETED`, `ABANDONED`) and its stops in visit order with their cart compartments and member states. A `DETACHED` member left the walk early (its lease expired and the task returned to the pool)."
+sidebar_label: "Read one work batch (the station's walk)"
+hide_title: true
+hide_table_of_contents: true
+api: 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
+sidebar_class_name: "get api-method"
+info_path: api-reference/rest/fulfillment-execution/fulfillment-execution-api
+custom_edit_url: null
+hide_send_button: true
+---
+
+import MethodEndpoint from "@theme/ApiExplorer/MethodEndpoint";
+import ParamsDetails from "@theme/ParamsDetails";
+import RequestSchema from "@theme/RequestSchema";
+import StatusCodes from "@theme/StatusCodes";
+import OperationTabs from "@theme/OperationTabs";
+import TabItem from "@theme/TabItem";
+import Heading from "@theme/Heading";
+import Translate from "@docusaurus/Translate";
+
+<Heading
+  as={"h1"}
+  className={"openapi__heading"}
+  children={"Read one work batch (the station's walk)"}
+>
+</Heading>
+
+<MethodEndpoint
+  method={"get"}
+  path={"/work-batches/{batchId}"}
+  context={"endpoint"}
+>
+  
+</MethodEndpoint>
+
+
+
+The WorkBatch read side (ADR 0063): the batch, its status (`OPEN`, `COMPLETED`, `ABANDONED`) and its stops in visit order with their cart compartments and member states. A `DETACHED` member left the walk early (its lease expired and the task returned to the pool).
+
+
+<Heading
+  id={"request"}
+  as={"h2"}
+  className={"openapi-tabs__heading"}
+>
+  <Translate id="theme.openapi.request.title">Request</Translate>
+</Heading>
+
+<ParamsDetails
+  parameters={[{"name":"batchId","in":"path","required":true,"description":"The batch id, as returned by `POST /stations/{stationId}/work-batches`.","schema":{"type":"string","example":"wb-20260101T120000.000000000"}}]}
+>
+  
+</ParamsDetails>
+
+<RequestSchema
+  title={"Body"}
+>
+  
+</RequestSchema>
+
+<StatusCodes
+  responses={{"200":{"description":"The batch.","content":{"application/json":{"schema":{"type":"object","required":["batch_id","station_id","status","cpt","formed_at","members"],"properties":{"batch_id":{"type":"string","description":"Server-generated work batch id.","example":"wb-20260101T120000.000000000"},"station_id":{"type":"string","description":"The station holding the walk.","example":"station-1"},"status":{"type":"string","enum":["OPEN","COMPLETED","ABANDONED"],"description":"OPEN while any member is still open; COMPLETED when the last open member completed; ABANDONED when every member left without completing.\n","example":"OPEN"},"cpt":{"type":"string","format":"date-time","description":"The batch's priority band — every member shares this CPT instant.","example":"2026-01-01T18:00:00Z"},"formed_at":{"type":"string","format":"date-time","description":"The formation instant; the walk's `walk_seconds` on WorkBatchCompleted is measured from it.","example":"2026-01-01T12:00:00Z"},"members":{"type":"array","minItems":1,"items":{"type":"object","required":["task_id","stop_seq","compartment","state"],"properties":{"task_id":{"type":"string","description":"The member PICK task's id.","example":"20260101T120000.000000000"},"stop_seq":{"type":"integer","minimum":1,"description":"The 1-based visit order of this stop (hint rank order, ADR 0063 D6).","example":1},"compartment":{"type":"integer","minimum":1,"description":"The cart position holding this task's items; v1 assigns it by stop order.","example":1},"state":{"type":"string","enum":["OPEN","COMPLETED","DETACHED"],"description":"The member's state inside the walk. DETACHED means the task's lease expired and it returned to the pool through the existing sweep.\n","example":"OPEN"}},"title":"WorkBatchMember"}}},"title":"WorkBatchResponse"},"example":{"batch_id":"wb-20260101T120000.000000000","station_id":"station-1","status":"OPEN","cpt":"2026-01-01T18:00:00Z","formed_at":"2026-01-01T12:00:00Z","members":[{"task_id":"20260101T120000.000000000","stop_seq":1,"compartment":1,"state":"OPEN"}]}}}},"404":{"description":"No batch exists with this `batchId`.","content":{"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 (Problem Details for HTTP APIs) error response, used for every error this API returns. See https://www.rfc-editor.org/rfc/rfc7807.\n","required":["type","title","status","detail"],"properties":{"type":{"type":"string","format":"uri","description":"A URI identifying the error category. Does not need to resolve to a real page — it is an identifier, unique per distinct error category in this service.\n","example":"https://errors.fulfillment-execution.warehouse-systems.dev/task-not-found"},"title":{"type":"string","description":"Fixed, category-level human-readable summary.","example":"Task not found"},"status":{"type":"integer","format":"int32","description":"Duplicates the HTTP status code, per RFC 7807.","example":404},"detail":{"type":"string","description":"The specific error message for this occurrence.","example":"usecases: task not found"},"instance":{"type":"string","description":"The request path that produced the error. Omitted for a validation error on a bare collection-create endpoint (`POST /tasks`, `POST /stations`, `POST /rebin/arrivals`) whose path has no segment identifying a specific resource.\n","example":"/tasks/20260101T120000.000000000/lease-renewals"}},"title":"Problem"},"example":{"type":"https://errors.fulfillment-execution.warehouse-systems.dev/batch-not-found","title":"Work batch not found","status":404,"detail":"usecases: work batch not found","instance":"/work-batches/wb-1"}}}},"500":{"description":"An unexpected server-side failure (e.g. a repository or event-publisher error).","content":{"application/problem+json":{"schema":{"type":"object","description":"RFC 7807 (Problem Details for HTTP APIs) error response, used for every error this API returns. See https://www.rfc-editor.org/rfc/rfc7807.\n","required":["type","title","status","detail"],"properties":{"type":{"type":"string","format":"uri","description":"A URI identifying the error category. Does not need to resolve to a real page — it is an identifier, unique per distinct error category in this service.\n","example":"https://errors.fulfillment-execution.warehouse-systems.dev/task-not-found"},"title":{"type":"string","description":"Fixed, category-level human-readable summary.","example":"Task not found"},"status":{"type":"integer","format":"int32","description":"Duplicates the HTTP status code, per RFC 7807.","example":404},"detail":{"type":"string","description":"The specific error message for this occurrence.","example":"usecases: task not found"},"instance":{"type":"string","description":"The request path that produced the error. Omitted for a validation error on a bare collection-create endpoint (`POST /tasks`, `POST /stations`, `POST /rebin/arrivals`) whose path has no segment identifying a specific resource.\n","example":"/tasks/20260101T120000.000000000/lease-renewals"}},"title":"Problem"},"example":{"type":"https://errors.fulfillment-execution.warehouse-systems.dev/internal-error","title":"Internal server error","status":500,"detail":"pgx: connection refused"}}}}}}
+>
+  
+</StatusCodes>
+
+
+      
