@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **exception-management** bounded context (WES\nsubdomain): the Problem Solve lifecycle (ADR 0001, ADR 0002). Every case\nis opened by a fact another context published; this service owns the\ntriage, assignment, SLA and resolution of that case, never the producer's\nown state.\n\n**Published.** The `ExceptionCase` aggregate raises six events and the\n`ExceptionPolicy` aggregate one, all published to\n`warehouse.exception-management.events` through a **transactional\noutbox**: the aggregate row and its already-encoded events are written in\nONE database transaction and a relay drains them to Kafka (at-least-once;\nthe CloudEvents `id` is stored with the outbox row, so a retry republishes\nthe same `id`). Kafka key = case id (source type for the policy event), so\none case's history stays ordered on one partition.\n\n**Consumed (ADR 0003, 0006).** Exception facts from seven sibling contexts:\nfulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,\n`WeightDiscrepancyDetected`), wes-work-planning\n(`BacklogThresholdBreached`), network-fulfillment\n(`AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled`),\norder-management (`OrderRepromised`, correlation for auto-resolve only),\nreturns-processing (`UnexpectedReturnReceived`), inbound-receiving\n(`CartonDiscrepancyRaised`, routed by `kind`, ADR 0006) and inventory-storage\n(`DiscrepancyDetected`, `ItemUnlocated`). Each consumed message opens or\ntouches exactly one open case per dedup key (source type, source subject,\nsite); the source payload is frozen on the case, never re-fetched. The\nconsumed messages below are the producers' own contracts, restated here\nand never imported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\n`specversion`, `id`, `source` (`/warehouse/exception-management`), `type`,\n`subject` (the case id; the source type for the policy event), `time`,\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:exception-management:events:<EventName>:v1`) are all\nrequired. Kafka key = the subject. Type =\n`com.warehouse.wes.exception-management.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
+    "description": "Event catalog for the **exception-management** bounded context (WES\nsubdomain): the Problem Solve lifecycle (ADR 0001, ADR 0002). Every case\nis opened by a fact another context published; this service owns the\ntriage, assignment, SLA and resolution of that case, never the producer's\nown state.\n\n**Published.** The `ExceptionCase` aggregate raises six events and the\n`ExceptionPolicy` aggregate one, all published to\n`warehouse.exception-management.events` through a **transactional\noutbox**: the aggregate row and its already-encoded events are written in\nONE database transaction and a relay drains them to Kafka (at-least-once;\nthe CloudEvents `id` is stored with the outbox row, so a retry republishes\nthe same `id`). Kafka key = case id (source type for the policy event), so\none case's history stays ordered on one partition.\n\n**Consumed (ADR 0003, 0006, 0010).** Exception facts from ten sibling\ncontexts: fulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,\n`WeightDiscrepancyDetected`), wes-work-planning\n(`BacklogThresholdBreached`), network-fulfillment\n(`AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled`),\norder-management (`OrderRepromised`, correlation for auto-resolve only),\nreturns-processing (`UnexpectedReturnReceived`), inbound-receiving\n(`CartonDiscrepancyRaised`, routed by `kind`, ADR 0006),\ninventory-storage (`DiscrepancyDetected`, `ItemUnlocated`),\nyard-management (`VisitRejected`, `SealExceptionRaised`,\n`TrailerDwellExceeded`, `YardCheckClosed` — one case per\ndiscrepancy, ADR 0010), dock-scheduling\n(`DockAppointmentNoShow`, ADR 0010) and outbound-shipping\n(`PackageMissedLoad`, ADR 0010). Each consumed message opens or\ntouches exactly one open case per dedup key (source type, source subject,\nsite); the source payload is frozen on the case, never re-fetched. The\nconsumed messages below are the producers' own contracts, restated here\nand never imported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\n`specversion`, `id`, `source` (`/warehouse/exception-management`), `type`,\n`subject` (the case id; the source type for the policy event), `time`,\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:exception-management:events:<EventName>:v1`) are all\nrequired. Kafka key = the subject. Type =\n`com.warehouse.wes.exception-management.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
   },
   "servers": {
     "production": {
@@ -1849,6 +1849,529 @@
         }
       }
     },
+    "warehouse.yard-management.events": {
+      "description": "yard-management's integration topic (ADR 0010). This service consumes\nONLY `VisitRejected`, `SealExceptionRaised`, `TrailerDwellExceeded` and\n`YardCheckClosed` under a stable consumer group read from env\n`YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP`. Every other type (the\nproducer's analytics-heavy surface) is ignored. The contracts below are\npinned consumer-first from the producer's published contract.\n",
+      "publish": {
+        "operationId": "consumeYardManagementEvents",
+        "summary": "Consume yard exceptions as routed cases.",
+        "description": "One case per visit (VisitRejected), per trailer raise (SealExceptionRaised,\nTrailerDwellExceeded) and per discrepancy (YardCheckClosed). Each\nsource type is its own policy (default queue `yard-supervisor`,\nmigration 0004). The CloudEvents `id` claim and the effect commit in\none transaction; a yard check claims its id once for all of its cases.\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "VisitRejected",
+              "title": "VisitRejected (consumed, yard-management)",
+              "summary": "A yard visit was refused at the gate.",
+              "description": "`type` = `com.warehouse.wms.yard-management.yardvisit.VisitRejected`,\nsource `/warehouse/yard-management`, subject and Kafka key = the visit\nid. Dedup subject = `visit_id`; the site is `site_id`. ADR 0010.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "visit_id",
+                          "site_id",
+                          "reason",
+                          "rejected_at"
+                        ],
+                        "properties": {
+                          "visit_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-119>"
+                          },
+                          "site_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-120>"
+                          },
+                          "carrier_scac": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-121>"
+                          },
+                          "appointment_id": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-122>"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "description": "APPOINTMENT_REQUIRED, UNKNOWN_APPOINTMENT, SEAL_MISMATCH, TRAILER_ALREADY_ON_SITE or SITE_REQUEST; kept in the frozen payload, not routed on.",
+                            "x-parser-schema-id": "<anonymous-schema-123>"
+                          },
+                          "rejected_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-124>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-118>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-117>"
+                  }
+                ],
+                "x-parser-schema-id": "VisitRejectedEvent"
+              },
+              "examples": [
+                {
+                  "name": "sealMismatch",
+                  "summary": "A seal mismatch refused the visit.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "0a1f6c52-3d7e-4c1b-9a10-7e2b5d6c8f01",
+                    "source": "/warehouse/yard-management",
+                    "type": "com.warehouse.wms.yard-management.yardvisit.VisitRejected",
+                    "subject": "visit-3f9a",
+                    "time": "2026-11-05T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:yard-management:events:VisitRejected:v1",
+                    "data": {
+                      "visit_id": "visit-3f9a",
+                      "site_id": "SITE-1",
+                      "carrier_scac": "ABCD",
+                      "appointment_id": "appt-77c1",
+                      "reason": "SEAL_MISMATCH",
+                      "rejected_at": "2026-11-05T08:00:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "SealExceptionRaised",
+              "title": "SealExceptionRaised (consumed, yard-management)",
+              "summary": "A trailer seal differs from the one the carrier declared.",
+              "description": "`type` = `com.warehouse.wms.yard-management.trailer.SealExceptionRaised`,\nsource `/warehouse/yard-management`, subject and Kafka key = the trailer\nid. Dedup subject = `<trailer_id>/<raised_at>` (a later visit of the\nsame trailer is its own case; the same raise re-published touches).\nADR 0010.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "trailer_id",
+                          "site_id",
+                          "raised_at"
+                        ],
+                        "properties": {
+                          "trailer_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-127>"
+                          },
+                          "site_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-128>"
+                          },
+                          "appointment_id": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-129>"
+                          },
+                          "expected_seal_number": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-130>"
+                          },
+                          "found_seal_number": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-131>"
+                          },
+                          "raised_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-132>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-126>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-125>"
+                  }
+                ],
+                "x-parser-schema-id": "SealExceptionRaisedEvent"
+              },
+              "examples": [
+                {
+                  "name": "sealMismatch",
+                  "summary": "Expected seal S-1001, found S-2002.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "1b2e7d63-4e8f-4d2c-8b21-8f3c6e7d9a02",
+                    "source": "/warehouse/yard-management",
+                    "type": "com.warehouse.wms.yard-management.trailer.SealExceptionRaised",
+                    "subject": "trl-5d20",
+                    "time": "2026-11-05T08:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:yard-management:events:SealExceptionRaised:v1",
+                    "data": {
+                      "trailer_id": "trl-5d20",
+                      "site_id": "SITE-1",
+                      "appointment_id": "appt-77c1",
+                      "expected_seal_number": "S-1001",
+                      "found_seal_number": "S-2002",
+                      "raised_at": "2026-11-05T08:30:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "TrailerDwellExceeded",
+              "title": "TrailerDwellExceeded (consumed, yard-management)",
+              "summary": "A trailer stayed on site past its dwell threshold.",
+              "description": "`type` = `com.warehouse.wms.yard-management.trailer.TrailerDwellExceeded`,\nsource `/warehouse/yard-management`, subject and Kafka key = the trailer\nid. The payload carries no instant: the dedup subject is\n`<trailer_id>/<CloudEvents time>` (the producer raises once per\ntrailer and threshold crossing). ADR 0010.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "trailer_id",
+                          "site_id",
+                          "dwell_minutes",
+                          "threshold_minutes"
+                        ],
+                        "properties": {
+                          "trailer_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-135>"
+                          },
+                          "site_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-136>"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "description": "The trailer kind whose threshold was crossed (DRY_VAN, REEFER, FLATBED, CONTAINER).",
+                            "x-parser-schema-id": "<anonymous-schema-137>"
+                          },
+                          "dwell_minutes": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "x-parser-schema-id": "<anonymous-schema-138>"
+                          },
+                          "threshold_minutes": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "x-parser-schema-id": "<anonymous-schema-139>"
+                          },
+                          "location_code": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-140>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-134>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-133>"
+                  }
+                ],
+                "x-parser-schema-id": "TrailerDwellExceededEvent"
+              },
+              "examples": [
+                {
+                  "name": "dryVan",
+                  "summary": "A dry van 120 minutes past its threshold.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "2c3f8e74-5f90-4e3d-9c32-9a4d7f8eab03",
+                    "source": "/warehouse/yard-management",
+                    "type": "com.warehouse.wms.yard-management.trailer.TrailerDwellExceeded",
+                    "subject": "trl-5d20",
+                    "time": "2026-11-05T09:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:yard-management:events:TrailerDwellExceeded:v1",
+                    "data": {
+                      "trailer_id": "trl-5d20",
+                      "site_id": "SITE-1",
+                      "kind": "DRY_VAN",
+                      "dwell_minutes": 3000,
+                      "threshold_minutes": 2880,
+                      "location_code": "SPOT-04"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "YardCheckClosed",
+              "title": "YardCheckClosed (consumed, yard-management)",
+              "summary": "A yard audit closed; each discrepancy becomes its own case.",
+              "description": "`type` = `com.warehouse.wms.yard-management.yardcheck.YardCheckClosed`,\nsource `/warehouse/yard-management`, subject and Kafka key = the yard\ncheck id. ONE case per entry of `discrepancies`, keyed\n`<yard_check_id>/<kind>/<location_code>/<trailer_id, else unit_number,\nelse ->`; the CloudEvents `id` is claimed once for the whole check. A\ncheck without discrepancies opens nothing. ADR 0010.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "yard_check_id",
+                          "site_id",
+                          "closed_at",
+                          "discrepancies"
+                        ],
+                        "properties": {
+                          "yard_check_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-143>"
+                          },
+                          "site_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-144>"
+                          },
+                          "closed_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-145>"
+                          },
+                          "discrepancies": {
+                            "type": "array",
+                            "description": "One case per entry. May be empty (a clean check).",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "kind",
+                                "location_code"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "description": "MISSING, UNEXPECTED or WRONG_LOCATION today; any non-blank string is accepted.",
+                                  "x-parser-schema-id": "<anonymous-schema-148>"
+                                },
+                                "location_code": {
+                                  "type": "string",
+                                  "x-parser-schema-id": "<anonymous-schema-149>"
+                                },
+                                "trailer_id": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "x-parser-schema-id": "<anonymous-schema-150>"
+                                },
+                                "unit_number": {
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ],
+                                  "x-parser-schema-id": "<anonymous-schema-151>"
+                                }
+                              },
+                              "x-parser-schema-id": "<anonymous-schema-147>"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-146>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-142>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-141>"
+                  }
+                ],
+                "x-parser-schema-id": "YardCheckClosedEvent"
+              },
+              "examples": [
+                {
+                  "name": "twoFindings",
+                  "summary": "One trailer missing, one unexpected.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3d409f85-6aa1-4f4e-8d43-ab5e809fbc04",
+                    "source": "/warehouse/yard-management",
+                    "type": "com.warehouse.wms.yard-management.yardcheck.YardCheckClosed",
+                    "subject": "yck-9e41",
+                    "time": "2026-11-05T11:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:yard-management:events:YardCheckClosed:v1",
+                    "data": {
+                      "yard_check_id": "yck-9e41",
+                      "site_id": "SITE-1",
+                      "closed_at": "2026-11-05T11:00:00Z",
+                      "discrepancies": [
+                        {
+                          "kind": "MISSING",
+                          "location_code": "SPOT-01",
+                          "trailer_id": "trl-5d20",
+                          "unit_number": "TR100"
+                        },
+                        {
+                          "kind": "UNEXPECTED",
+                          "location_code": "SPOT-02",
+                          "trailer_id": null,
+                          "unit_number": "TR200"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.dock-scheduling.events": {
+      "description": "dock-scheduling's integration topic (ADR 0010). This service consumes\nONLY `DockAppointmentNoShow` under a stable consumer group read from env\n`DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP`. Every other type on the\ntopic (bookings, reschedules, cancellations, door closures) is ignored.\n",
+      "publish": {
+        "operationId": "consumeDockSchedulingEvents",
+        "summary": "Consume appointment no-shows as dock-planner cases.",
+        "description": "One case per appointment id; the policy is the source type's own\n(default queue `dock-planner`, migration 0004). The CloudEvents `id`\nclaim and the effect commit in one transaction.\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "name": "DockAppointmentNoShow",
+          "title": "DockAppointmentNoShow (consumed, dock-scheduling)",
+          "summary": "A carrier missed its dock appointment window.",
+          "description": "`type` =\n`com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow`,\nsource `/warehouse/dock-scheduling`, subject and Kafka key = the\nappointment id. Dedup subject = `appointment_id`; NO_SHOW is terminal in\ndock-scheduling, so one case per appointment. ADR 0010.\n",
+          "contentType": "application/cloudevents+json",
+          "tags": [
+            {
+              "name": "consumed"
+            }
+          ],
+          "payload": {
+            "allOf": [
+              "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
+              {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "required": [
+                      "appointment_id",
+                      "site_id"
+                    ],
+                    "properties": {
+                      "appointment_id": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-154>"
+                      },
+                      "site_id": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-155>"
+                      },
+                      "door_code": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-156>"
+                      },
+                      "direction": {
+                        "type": "string",
+                        "enum": [
+                          "INBOUND",
+                          "OUTBOUND"
+                        ],
+                        "x-parser-schema-id": "<anonymous-schema-157>"
+                      },
+                      "carrier_scac": {
+                        "type": [
+                          "string",
+                          "null"
+                        ],
+                        "x-parser-schema-id": "<anonymous-schema-158>"
+                      },
+                      "window_end": {
+                        "type": "string",
+                        "format": "date-time",
+                        "x-parser-schema-id": "<anonymous-schema-159>"
+                      },
+                      "version": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "x-parser-schema-id": "<anonymous-schema-160>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-153>"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-152>"
+              }
+            ],
+            "x-parser-schema-id": "DockAppointmentNoShowEvent"
+          },
+          "examples": [
+            {
+              "name": "inbound",
+              "summary": "An inbound appointment whose grace period lapsed.",
+              "payload": {
+                "specversion": "1.0",
+                "id": "4e51a096-7bb2-405f-9e54-bc6f91a0cd05",
+                "source": "/warehouse/dock-scheduling",
+                "type": "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow",
+                "subject": "appt-77c1",
+                "time": "2026-11-05T11:00:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:dock-scheduling:events:DockAppointmentNoShow:v1",
+                "data": {
+                  "appointment_id": "appt-77c1",
+                  "site_id": "SITE-1",
+                  "door_code": "DOOR-03",
+                  "direction": "INBOUND",
+                  "carrier_scac": "ABCD",
+                  "window_end": "2026-11-05T10:00:00Z",
+                  "version": 3
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
     "warehouse.inventory.events": {
       "description": "inventory-storage's integration topic. This service consumes\n`DiscrepancyDetected` and `ItemUnlocated` under a stable consumer group\nread from env `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`. Both types arrive\nhere only after the producer's promotion PR (they are analytics-only\ntoday); the contracts below are pinned consumer-first. Every other type\nis ignored.\n",
       "publish": {
@@ -1890,25 +2413,25 @@
                           "bin_id": {
                             "type": "string",
                             "description": "The bin whose count did not match system records.",
-                            "x-parser-schema-id": "<anonymous-schema-119>"
+                            "x-parser-schema-id": "<anonymous-schema-163>"
                           },
                           "counted": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Quantity physically counted in the bin.",
-                            "x-parser-schema-id": "<anonymous-schema-120>"
+                            "x-parser-schema-id": "<anonymous-schema-164>"
                           },
                           "system": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Quantity the system believed was in the bin.",
-                            "x-parser-schema-id": "<anonymous-schema-121>"
+                            "x-parser-schema-id": "<anonymous-schema-165>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-118>"
+                        "x-parser-schema-id": "<anonymous-schema-162>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-117>"
+                    "x-parser-schema-id": "<anonymous-schema-161>"
                   }
                 ],
                 "x-parser-schema-id": "DiscrepancyDetectedEvent"
@@ -1964,28 +2487,28 @@
                           "stock_unit_id": {
                             "type": "string",
                             "description": "The StockUnit flagged Unlocated.",
-                            "x-parser-schema-id": "<anonymous-schema-124>"
+                            "x-parser-schema-id": "<anonymous-schema-168>"
                           },
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-125>"
+                            "x-parser-schema-id": "<anonymous-schema-169>"
                           },
                           "bin_id": {
                             "type": "string",
                             "description": "The bin the stock was believed to be in.",
-                            "x-parser-schema-id": "<anonymous-schema-126>"
+                            "x-parser-schema-id": "<anonymous-schema-170>"
                           },
                           "quantity": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "Quantity that could not be accounted for.",
-                            "x-parser-schema-id": "<anonymous-schema-127>"
+                            "x-parser-schema-id": "<anonymous-schema-171>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-123>"
+                        "x-parser-schema-id": "<anonymous-schema-167>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-122>"
+                    "x-parser-schema-id": "<anonymous-schema-166>"
                   }
                 ],
                 "x-parser-schema-id": "ItemUnlocatedEvent"
@@ -2016,6 +2539,118 @@
           ]
         }
       }
+    },
+    "warehouse.outbound-shipping.events": {
+      "description": "outbound-shipping's integration topic. This service consumes ONLY\n`PackageMissedLoad` under a stable consumer group read from env\n`OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` (ADR 0010). Every other\ntype is ignored.\n",
+      "publish": {
+        "operationId": "consumeOutboundShippingEvents",
+        "summary": "Consume packages that missed their load.",
+        "description": "One problem-solve case per missed package: the dedup subject is the\n`package_id` (the producer raises the fact at most once per package\nand load), the site part of the key is the payload `site_id`. The\npackage, load, order, cutoff and detection instant the operator\nneeds are frozen on the case exactly as the producer shipped them.\nThe CloudEvents `id` claim and the effect commit in one transaction.\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "name": "PackageMissedLoad",
+          "title": "PackageMissedLoad (consumed, outbound-shipping)",
+          "summary": "A package was not loaded by its cutoff or by departure.",
+          "description": "`type` =\n`com.warehouse.wms.outbound-shipping.shippingpackage.PackageMissedLoad`,\nsource `/warehouse/outbound-shipping`, dataschema\n`urn:warehouse:outbound-shipping:events:PackageMissedLoad:v1`.\nSubject and Kafka key = the package id. The producer raises it at\nmost once per package and load; `source_order_id` is omitted when\nthe manifest carried none. One problem-solve case per missed\npackage (ADR 0010).\n",
+          "contentType": "application/cloudevents+json",
+          "tags": [
+            {
+              "name": "consumed"
+            }
+          ],
+          "payload": {
+            "allOf": [
+              "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
+              {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "required": [
+                      "package_id",
+                      "load_id",
+                      "site_id",
+                      "cutoff",
+                      "detected_at",
+                      "version"
+                    ],
+                    "properties": {
+                      "package_id": {
+                        "type": "string",
+                        "description": "The missed package; the dedup subject.",
+                        "x-parser-schema-id": "<anonymous-schema-174>"
+                      },
+                      "load_id": {
+                        "type": "string",
+                        "description": "The load the package missed.",
+                        "x-parser-schema-id": "<anonymous-schema-175>"
+                      },
+                      "site_id": {
+                        "type": "string",
+                        "description": "The site part of the dedup key.",
+                        "x-parser-schema-id": "<anonymous-schema-176>"
+                      },
+                      "source_order_id": {
+                        "type": "string",
+                        "description": "Omitted when the manifest carried none.",
+                        "x-parser-schema-id": "<anonymous-schema-177>"
+                      },
+                      "cutoff": {
+                        "type": "string",
+                        "format": "date-time",
+                        "x-parser-schema-id": "<anonymous-schema-178>"
+                      },
+                      "detected_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "x-parser-schema-id": "<anonymous-schema-179>"
+                      },
+                      "version": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "description": "The aggregate version after the change; not part of the dedup key.",
+                        "x-parser-schema-id": "<anonymous-schema-180>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-173>"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-172>"
+              }
+            ],
+            "x-parser-schema-id": "PackageMissedLoadEvent"
+          },
+          "examples": [
+            {
+              "name": "missed",
+              "summary": "The 16:00 cutoff passes with pkg-2055 still staged.",
+              "payload": {
+                "specversion": "1.0",
+                "id": "3f1d2c3b-4a5e-4b7c-8d9e-0a1b2c3d4e0b",
+                "source": "/warehouse/outbound-shipping",
+                "type": "com.warehouse.wms.outbound-shipping.shippingpackage.PackageMissedLoad",
+                "subject": "pkg-2055",
+                "time": "2026-11-06T16:00:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:outbound-shipping:events:PackageMissedLoad:v1",
+                "data": {
+                  "package_id": "pkg-2055",
+                  "load_id": "load-7f3a",
+                  "site_id": "SITE-1",
+                  "source_order_id": "order-88423",
+                  "cutoff": "2026-11-06T16:00:00Z",
+                  "detected_at": "2026-11-06T16:00:00Z",
+                  "version": 2
+                }
+              }
+            }
+          ]
+        }
+      }
     }
   },
   "components": {
@@ -2036,6 +2671,12 @@
       "OrderRepromised": "$ref:$.channels.warehouse.order-management.events.publish.message",
       "UnexpectedReturnReceived": "$ref:$.channels.warehouse.returns-processing.events.publish.message",
       "CartonDiscrepancyRaised": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message",
+      "VisitRejected": "$ref:$.channels.warehouse.yard-management.events.publish.message.oneOf[0]",
+      "SealExceptionRaised": "$ref:$.channels.warehouse.yard-management.events.publish.message.oneOf[1]",
+      "TrailerDwellExceeded": "$ref:$.channels.warehouse.yard-management.events.publish.message.oneOf[2]",
+      "YardCheckClosed": "$ref:$.channels.warehouse.yard-management.events.publish.message.oneOf[3]",
+      "DockAppointmentNoShow": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message",
+      "PackageMissedLoad": "$ref:$.channels.warehouse.outbound-shipping.events.publish.message",
       "DiscrepancyDetected": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0]",
       "ItemUnlocated": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1]",
       "ExceptionOpenedAnalytics": "$ref:$.channels.warehouse.exception-management.analytics.subscribe.message.oneOf[0]",
@@ -2065,6 +2706,12 @@
       "OrderRepromisedEvent": "$ref:$.channels.warehouse.order-management.events.publish.message.payload",
       "UnexpectedReturnReceivedEvent": "$ref:$.channels.warehouse.returns-processing.events.publish.message.payload",
       "CartonDiscrepancyRaisedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.payload",
+      "VisitRejectedEvent": "$ref:$.channels.warehouse.yard-management.events.publish.message.oneOf[0].payload",
+      "SealExceptionRaisedEvent": "$ref:$.channels.warehouse.yard-management.events.publish.message.oneOf[1].payload",
+      "TrailerDwellExceededEvent": "$ref:$.channels.warehouse.yard-management.events.publish.message.oneOf[2].payload",
+      "YardCheckClosedEvent": "$ref:$.channels.warehouse.yard-management.events.publish.message.oneOf[3].payload",
+      "DockAppointmentNoShowEvent": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.payload",
+      "PackageMissedLoadEvent": "$ref:$.channels.warehouse.outbound-shipping.events.publish.message.payload",
       "DiscrepancyDetectedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0].payload",
       "ItemUnlocatedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1].payload"
     }

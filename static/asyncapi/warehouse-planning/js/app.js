@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **warehouse-planning** bounded context (WES\nsubdomain): *can this warehouse process the demand assigned to it?*\n\n**Published (Phase 4).** The `CapacityPlan` aggregate raises four events,\npublished to `warehouse.warehouse-planning.events` through a\n**transactional outbox**: the plan and its already-encoded events are\nwritten in ONE database transaction, and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is persisted with the outbox row, so\na retry republishes the same `id` -- consumers dedupe on it). Per plan:\n`CapacityPlanCreated` on creation; on publication\n`CapacityPlanPublished`, plus `CapacityShortageDetected` and\n`BottleneckDetected` only when the plan has a shortage.\nThe `ProcessCapacity` aggregate publishes on the same topic and the same\noutbox: `ProcessCapacityRegistered` when its first (native) constraint\nbrings it into being, `ProcessCapacityChanged` when a registration\nmoves the effective rate (the minimum rate value, the binding\nconstraint, or both); a registration the effective rate does not notice\nraises nothing. ProcessCapacity events are integration-stream only: the\nanalytics fanout carries plan facts only (ADR 0005).\n\n**Consumed (Phase 3).** `ShiftPlanCommitted` (workforce-management) and\n`LocationSlotRegistered`/`LocationSlotDecommissioned` (facility-layout) keep\nlocal ProcessCapacity read models current; this context never makes a\nlive cross-context call.\n\n**Consumed (ADR 0004).** `OrderAllocated` and\n`OrderPartiallyAllocated` (order-management, topic\n`warehouse.order-management.events`) keep a local expected-demand read\nmodel current under the REQUIRED consumer group `DEMAND_CONSUMER_GROUP`.\nEach order is counted once, at its latest promise cutoff, and attributed to\nthe ONE configured site (`DEMAND_SITE_ID`): order-management's events carry\nno fulfillment site. `OrderRepromised` and every other type are ignored.\n\n**Consumed (ADR 0017).** `DockAppointmentBooked` and\n`DockAppointmentCancelled` (inbound-receiving, topic\n`warehouse.inbound-receiving.events`, group `INBOUND_DEMAND_CONSUMER_GROUP`)\nkeep a local inbound-demand read model current: a capacity plan carries the\ndock appointments of its window and the labour the operator-declared inbound\nstandard attributes to them (a Cancelled that arrives before its Booked\nwins). `TaskCompleted` (fulfillment-execution, topic\n`warehouse.fulfillment.events`, group `OBSERVED_CAPACITY_CONSUMER_GROUP`)\nkeeps a local observed-capacity read model current that feeds an ADVISORY\nplanned-versus-observed variance; it never changes a planned capacity. Both\nattribute to the same configured site and dead-letter unusable payloads to\n`<topic>.dlq`.\n\n**Analytics stream (ADR 0005).** The same four events are ALSO written to\n`warehouse.warehouse-planning.analytics` in the SAME outbox transaction\n(two outbox rows per event, one per topic), as CloudEvents 1.0 with the\nSAME `type` and the SAME `id` per occurrence but\n`dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`.\nThe integration messages are byte-identical to what they were before the\nstream existed. The analytics payloads are the integration payloads plus\nadditive, analytics-only fields: today `binding_constraint` on\n`CapacityPlanPublished` (the constraint type -- LABOR, STATION, ... --\nbinding the bottleneck step; `\"\"` for a plan created before it was\nrecorded). Only this service's own `planning-projector` consumes it (fixed\nconsumer group, at-least-once, offsets committed after the projection\ncommitted), into a SEPARATE analytical database that\n`planning-reports` serves read-only. Poison messages go to\n`warehouse.warehouse-planning.analytics.dlq`.\n\n**Envelope (mandatory).** Every message is a CloudEvents 1.0 event in\n*structured content mode* (Kafka value = JSON event format) with the Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0014); consumers may extract them, and must not require\nthem. All of\n`specversion` (`1.0`), `id`, `source` (`/warehouse/warehouse-planning`),\n`type`, `subject`, `time`, `datacontenttype` (`application/json`) and\n`dataschema` are required; the payload sits under `data`. No flat\nenvelope, no toggle.\n\n**Type naming.** `com.warehouse.wes.warehouse-planning.<entity>.<EventName>`\nwhere `<entity>` is the aggregate that raised the event, lowercase, no\nseparators -- `capacityplan` or `processcapacity`. **dataschema** =\n`urn:warehouse:warehouse-planning:events:<EventName>:v1`. **subject** and\nthe Kafka message key = the aggregate's id: the capacity plan id, or\n`<processType>/<location>/<windowStart>/<windowEnd>` for a\nProcessCapacity (one aggregate's events stay ordered on one partition).\nA breaking payload change gets a new `.v2` type and dataschema, never a\nmutation.\n"
+    "description": "Event catalog for the **warehouse-planning** bounded context (WES\nsubdomain): *can this warehouse process the demand assigned to it?*\n\n**Published (Phase 4).** The `CapacityPlan` aggregate raises four events,\npublished to `warehouse.warehouse-planning.events` through a\n**transactional outbox**: the plan and its already-encoded events are\nwritten in ONE database transaction, and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is persisted with the outbox row, so\na retry republishes the same `id` -- consumers dedupe on it). Per plan:\n`CapacityPlanCreated` on creation; on publication\n`CapacityPlanPublished`, plus `CapacityShortageDetected` and\n`BottleneckDetected` only when the plan has a shortage.\nThe `ProcessCapacity` aggregate publishes on the same topic and the same\noutbox: `ProcessCapacityRegistered` when its first (native) constraint\nbrings it into being, `ProcessCapacityChanged` when a registration\nmoves the effective rate (the minimum rate value, the binding\nconstraint, or both); a registration the effective rate does not notice\nraises nothing. ProcessCapacity events are integration-stream only: the\nanalytics fanout carries plan facts only (ADR 0005).\n\n**Consumed (Phase 3).** `ShiftPlanCommitted` (workforce-management) and\n`LocationSlotRegistered`/`LocationSlotDecommissioned` (facility-layout) keep\nlocal ProcessCapacity read models current; this context never makes a\nlive cross-context call.\n\n**Consumed (ADR 0004).** `OrderAllocated` and\n`OrderPartiallyAllocated` (order-management, topic\n`warehouse.order-management.events`) keep a local expected-demand read\nmodel current under the REQUIRED consumer group `DEMAND_CONSUMER_GROUP`.\nEach order is counted once, at its latest promise cutoff, and attributed to\nthe ONE configured site (`DEMAND_SITE_ID`): order-management's events carry\nno fulfillment site. `OrderRepromised` and every other type are ignored.\n\n**Consumed (ADR 0017, source switched by ADR 0020).** dock-scheduling's\n`DockAppointmentBooked`, `DockAppointmentRescheduled`,\n`DockAppointmentCancelled` and `DockAppointmentNoShow` (topic\n`warehouse.dock-scheduling.events`, group `DOCK_APPOINTMENT_CONSUMER_GROUP`)\nkeep a local inbound-demand read model current: a capacity plan carries the\nINBOUND dock appointments of its window and the labour the operator-declared\ninbound standard attributes to them. Each appointment is attributed to the\n`site_id` of its events; the producer's aggregate `version` orders them (a\nCancelled that arrives before its Booked wins). inbound-receiving's\nappointment events are NO LONGER consumed, and a deployment that still sets\n`INBOUND_DEMAND_CONSUMER_GROUP` is refused at boot. `TaskCompleted`\n(fulfillment-execution, topic `warehouse.fulfillment.events`, group\n`OBSERVED_CAPACITY_CONSUMER_GROUP`) keeps a local observed-capacity read\nmodel current that feeds an ADVISORY planned-versus-observed variance; it\nnever changes a planned capacity and is attributed to the configured site\n(`DEMAND_SITE_ID`). Both consumers dead-letter unusable payloads to\n`<topic>.dlq`.\n\n**Analytics stream (ADR 0005).** The same four events are ALSO written to\n`warehouse.warehouse-planning.analytics` in the SAME outbox transaction\n(two outbox rows per event, one per topic), as CloudEvents 1.0 with the\nSAME `type` and the SAME `id` per occurrence but\n`dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`.\nThe integration messages are byte-identical to what they were before the\nstream existed. The analytics payloads are the integration payloads plus\nadditive, analytics-only fields: today `binding_constraint` on\n`CapacityPlanPublished` (the constraint type -- LABOR, STATION, ... --\nbinding the bottleneck step; `\"\"` for a plan created before it was\nrecorded). Only this service's own `planning-projector` consumes it (fixed\nconsumer group, at-least-once, offsets committed after the projection\ncommitted), into a SEPARATE analytical database that\n`planning-reports` serves read-only. Poison messages go to\n`warehouse.warehouse-planning.analytics.dlq`.\n\n**Envelope (mandatory).** Every message is a CloudEvents 1.0 event in\n*structured content mode* (Kafka value = JSON event format) with the Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0014); consumers may extract them, and must not require\nthem. All of\n`specversion` (`1.0`), `id`, `source` (`/warehouse/warehouse-planning`),\n`type`, `subject`, `time`, `datacontenttype` (`application/json`) and\n`dataschema` are required; the payload sits under `data`. No flat\nenvelope, no toggle.\n\n**Type naming.** `com.warehouse.wes.warehouse-planning.<entity>.<EventName>`\nwhere `<entity>` is the aggregate that raised the event, lowercase, no\nseparators -- `capacityplan` or `processcapacity`. **dataschema** =\n`urn:warehouse:warehouse-planning:events:<EventName>:v1`. **subject** and\nthe Kafka message key = the aggregate's id: the capacity plan id, or\n`<processType>/<location>/<windowStart>/<windowEnd>` for a\nProcessCapacity (one aggregate's events stay ordered on one partition).\nA breaking payload change gets a new `.v2` type and dataschema, never a\nmutation.\n"
   },
   "servers": {
     "production": {
@@ -1820,12 +1820,12 @@
         }
       }
     },
-    "warehouse.inbound-receiving.events": {
-      "description": "inbound-receiving's integration topic (`InboundTopic`, key = appointment id for\nappointment events). This service consumes it with a STABLE consumer group read from\nenv `INBOUND_DEMAND_CONSUMER_GROUP` (REQUIRED, no default; ADR 0016/0017). Only\n`DockAppointmentBooked` and `DockAppointmentCancelled` are acted on; every other\n`type` on the topic (ASN, check-in, completion, receipt events) is ignored. A message\nthat is not CloudEvents 1.0, or a known type with an unusable payload, is published to\n`warehouse.inbound-receiving.events.dlq` (raw bytes plus `x-dlq-*` headers).\n",
+    "warehouse.dock-scheduling.events": {
+      "description": "dock-scheduling's integration topic (`DockSchedulingTopic`, key = appointment id for\nappointment events). This service consumes it with a STABLE consumer group read from\nenv `DOCK_APPOINTMENT_CONSUMER_GROUP` (REQUIRED, no default; ADR 0016/0020). Only\n`DockAppointmentBooked`, `DockAppointmentRescheduled`, `DockAppointmentCancelled` and\n`DockAppointmentNoShow` are acted on, dispatched on the FULL `type` string; every other\n`type` on the topic (door calendar events, and the retired\n`com.warehouse.wms.inbound-receiving.dockappointment.*` types) is ignored. The\nanalytics-only appointment events (checked-in, door reassigned, completed, at risk) are\npublished to the producer's analytics topic and never reach this one. A message that is\nnot CloudEvents 1.0, or a known type with an unusable payload, is published to\n`warehouse.dock-scheduling.events.dlq` (raw bytes plus `x-dlq-*` headers).\n\nThe previous source, inbound-receiving's `warehouse.inbound-receiving.events` and the\nenv `INBOUND_DEMAND_CONSUMER_GROUP`, is retired by ADR 0020: setting that variable is a\nboot error naming `DOCK_APPOINTMENT_CONSUMER_GROUP`.\n",
       "publish": {
         "operationId": "consumeDockAppointmentEvents",
-        "summary": "Consume inbound-receiving's dock appointment events.",
-        "description": "Consumed by this service into a LOCAL inbound-demand read model\n(`inbound_appointments`, one row per appointment id; `GET /inbound-demand`,\n`get_inbound_demand`, the inbound figures on a capacity plan). An appointment is\ndemand in a window [start, end) when its door window STARTS at or after start and\nstrictly before end. Last writer wins per appointment on the CloudEvents `time`; a\nCancelled wins a tie and is stored as a tombstone if it arrives before its Booked.\nThe idempotency claim on the CloudEvents `id` and the upsert commit in ONE database\ntransaction; the offset is committed only afterwards. The labour minutes are NOT in\nthe event: they come from the operator-declared inbound labour standard. See\ndocs/adr/0017-inbound-labour-demand-and-observed-capacity-feedback.md.\n",
+        "summary": "Consume dock-scheduling's dock appointment events.",
+        "description": "Consumed by this service into a LOCAL inbound-demand read model\n(`inbound_appointments`, one row per appointment id; `GET /inbound-demand`,\n`get_inbound_demand`, the inbound figures on a capacity plan). Only INBOUND\nappointments (`data.direction`) are demand; OUTBOUND ones are stored and never\ncounted. An appointment is demand in a window [start, end) when it is BOOKED and its\ndoor window STARTS at or after start and strictly before end. A Rescheduled moves the\nwindow; a Cancelled and a NoShow remove the demand (both are terminal on the\nproducer). Each appointment is attributed to the `data.site_id` of its events (a\nfacility-layout siteCode): there is no configured site on this path.\n\nOrdering: every event carries the aggregate `data.version` (starts at 1, +1 per\naccepted change). The state (status, window, version) changes only when the event's\nversion is GREATER than the stored one, so a redelivery, a duplicate or an older event\nchanges nothing. The booking facts only a Booked carries (direction, ASN count) are\nfilled in whenever they arrive, so a Cancelled or Rescheduled that arrives before its\nBooked is stored as a partial row (a tombstone) that the Booked then completes\nwithout resurrecting it or moving the window back. Rows written by the retired\ninbound-receiving source are INBOUND at version 0, so any dock-scheduling event for\nthe same appointment id supersedes them.\n\nThe idempotency claim on the CloudEvents `id` and the upsert commit in ONE database\ntransaction; the offset is committed only afterwards. This consumer raises no event\nof its own. The labour minutes are NOT in the event: they come from the\noperator-declared inbound labour standard. See\ndocs/adr/0017-inbound-labour-demand-and-observed-capacity-feedback.md and\ndocs/adr/0020-inbound-demand-from-dock-scheduling.md.\n",
         "tags": [
           {
             "name": "consumed"
@@ -1836,8 +1836,8 @@
             {
               "name": "DockAppointmentBooked",
               "title": "Dock appointment booked (consumed)",
-              "summary": "inbound-receiving booked a door window for a carrier.",
-              "description": "CONSUMED from `warehouse.inbound-receiving.events` (producer: inbound-receiving, its own\n`apis/asyncapi.yaml`). Stores the appointment in the local inbound-demand read model\n(`inbound_appointments`, one row per `data.appointment_id`): door window start/end and\nASN count = `len(data.asn_numbers)`, site = the configured `DEMAND_SITE_ID` (the event\ncarries none). `subject` must equal `data.appointment_id`. Ordering guard: last writer\nwins per appointment on the CloudEvents `time`, and a Cancelled wins a tie, so a Booked\nthat arrives after the Cancelled that supersedes it changes nothing. Deduped on the\nCloudEvents `id`. `type` =\n`com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked`.\n",
+              "summary": "dock-scheduling booked a door window for a carrier.",
+              "description": "CONSUMED from `warehouse.dock-scheduling.events` (producer: dock-scheduling; the data\nis the superset contract of the yard-management plan). Stores the appointment in the\nlocal inbound-demand read model (`inbound_appointments`, one row per\n`data.appointment_id`): site = `data.site_id`, direction, door window start/end and ASN\ncount = `len(data.asn_numbers)`. `subject` must equal `data.appointment_id`.\nVersion-guarded: the window and status are written only when `data.version` is greater\nthan the stored version; the direction and ASN count are filled in when the row lacks\nthem. Deduped on the CloudEvents `id`. `type` =\n`com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentBooked`.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -1848,28 +1848,31 @@
                 }
               ],
               "payload": {
-                "description": "CloudEvents 1.0 envelope of inbound-receiving's DockAppointmentBooked (consumed).",
+                "description": "CloudEvents 1.0 envelope of dock-scheduling's DockAppointmentBooked (consumed).",
                 "allOf": [
                   "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
                   {
                     "type": "object",
                     "properties": {
                       "type": {
-                        "const": "com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked",
+                        "const": "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentBooked",
                         "x-parser-schema-id": "<anonymous-schema-140>"
                       },
                       "dataschema": {
-                        "const": "urn:warehouse:inbound-receiving:events:DockAppointmentBooked:v1",
+                        "const": "urn:warehouse:dock-scheduling:events:DockAppointmentBooked:v1",
                         "x-parser-schema-id": "<anonymous-schema-141>"
                       },
                       "data": {
                         "type": "object",
-                        "description": "Fields this service reads from inbound-receiving's DockAppointmentBooked `data` (hand-mirrored, never imported). door_code and carrier are ignored.",
+                        "description": "Fields this service reads from dock-scheduling's DockAppointmentBooked `data` (hand-mirrored, never imported). door_code, carrier, carrier_scac, cpt_id, shipment_refs, expected_seal_number and provenance are ignored.",
                         "required": [
                           "appointment_id",
+                          "site_id",
+                          "direction",
                           "window_start",
                           "window_end",
-                          "asn_numbers"
+                          "asn_numbers",
+                          "version"
                         ],
                         "properties": {
                           "appointment_id": {
@@ -1877,27 +1880,46 @@
                             "description": "Must equal the CloudEvents `subject`.",
                             "x-parser-schema-id": "<anonymous-schema-142>"
                           },
+                          "site_id": {
+                            "type": "string",
+                            "description": "The facility-layout siteCode the demand is attributed to.",
+                            "x-parser-schema-id": "<anonymous-schema-143>"
+                          },
+                          "direction": {
+                            "type": "string",
+                            "enum": [
+                              "INBOUND",
+                              "OUTBOUND"
+                            ],
+                            "description": "Only INBOUND appointments are demand.",
+                            "x-parser-schema-id": "<anonymous-schema-144>"
+                          },
                           "window_start": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Door window start; the window predicate (ADR 0003) is applied to it.",
-                            "x-parser-schema-id": "<anonymous-schema-143>"
+                            "x-parser-schema-id": "<anonymous-schema-145>"
                           },
                           "window_end": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Must be after window_start.",
-                            "x-parser-schema-id": "<anonymous-schema-144>"
+                            "x-parser-schema-id": "<anonymous-schema-146>"
                           },
                           "asn_numbers": {
                             "type": "array",
-                            "minItems": 1,
-                            "description": "Only its length is read (the ASN count that `minutes_per_asn` multiplies).",
+                            "description": "Only its length is read (the ASN count that `minutes_per_asn` multiplies); at least one for an INBOUND booking, empty for an OUTBOUND one.",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-146>"
+                              "x-parser-schema-id": "<anonymous-schema-148>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-145>"
+                            "x-parser-schema-id": "<anonymous-schema-147>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "The aggregate version; the ordering key.",
+                            "x-parser-schema-id": "<anonymous-schema-149>"
                           }
                         },
                         "x-parser-schema-id": "DockAppointmentBookedData"
@@ -1915,31 +1937,39 @@
                   "payload": {
                     "specversion": "1.0",
                     "id": "4a8c2e91-5b3d-4c7f-a012-9e6d1b8f3c25",
-                    "source": "/warehouse/inbound-receiving",
-                    "type": "com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked",
+                    "source": "/warehouse/dock-scheduling",
+                    "type": "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentBooked",
                     "subject": "appt-123e4567-e89b-12d3-a456-426614174000",
                     "time": "2026-10-08T12:05:00Z",
                     "datacontenttype": "application/json",
-                    "dataschema": "urn:warehouse:inbound-receiving:events:DockAppointmentBooked:v1",
+                    "dataschema": "urn:warehouse:dock-scheduling:events:DockAppointmentBooked:v1",
                     "data": {
                       "appointment_id": "appt-123e4567-e89b-12d3-a456-426614174000",
+                      "site_id": "WH1",
+                      "direction": "INBOUND",
                       "door_code": "WH1-DOCK-IN-01",
-                      "carrier": "ACME Freight",
+                      "carrier": "Example Freight",
+                      "carrier_scac": "EXFT",
                       "window_start": "2026-10-09T08:00:00Z",
                       "window_end": "2026-10-09T10:00:00Z",
                       "asn_numbers": [
                         "ASN-1001"
-                      ]
+                      ],
+                      "cpt_id": null,
+                      "shipment_refs": [],
+                      "expected_seal_number": null,
+                      "provenance": "native",
+                      "version": 1
                     }
                   }
                 }
               ]
             },
             {
-              "name": "DockAppointmentCancelled",
-              "title": "Dock appointment cancelled (consumed)",
-              "summary": "inbound-receiving cancelled a Booked appointment.",
-              "description": "CONSUMED from `warehouse.inbound-receiving.events`. Removes the appointment's demand:\nthe row flips to CANCELLED and stops counting. A Cancelled that arrives BEFORE its\nBooked is stored as a tombstone (no window) and wins over any Booked with an older or\nequal `time`. Idempotent: a redelivered `id` is a no-op. `type` =\n`com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled`.\n",
+              "name": "DockAppointmentRescheduled",
+              "title": "Dock appointment rescheduled (consumed)",
+              "summary": "dock-scheduling moved a booked appointment to another door window.",
+              "description": "CONSUMED from `warehouse.dock-scheduling.events`. Moves the appointment's demand to\n`data.window_start` / `data.window_end` (the previous window and the door are\nignored) when `data.version` is greater than the stored version. Carries no direction\nand no ASNs: arriving before its Booked it is stored as a partial row that is not\ndemand until the Booked supplies the direction. `type` =\n`com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentRescheduled`.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -1950,37 +1980,150 @@
                 }
               ],
               "payload": {
-                "description": "CloudEvents 1.0 envelope of inbound-receiving's DockAppointmentCancelled (consumed).",
+                "description": "CloudEvents 1.0 envelope of dock-scheduling's DockAppointmentRescheduled (consumed).",
                 "allOf": [
                   "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
                   {
                     "type": "object",
                     "properties": {
                       "type": {
-                        "const": "com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled",
-                        "x-parser-schema-id": "<anonymous-schema-148>"
+                        "const": "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentRescheduled",
+                        "x-parser-schema-id": "<anonymous-schema-151>"
                       },
                       "dataschema": {
-                        "const": "urn:warehouse:inbound-receiving:events:DockAppointmentCancelled:v1",
-                        "x-parser-schema-id": "<anonymous-schema-149>"
+                        "const": "urn:warehouse:dock-scheduling:events:DockAppointmentRescheduled:v1",
+                        "x-parser-schema-id": "<anonymous-schema-152>"
                       },
                       "data": {
                         "type": "object",
-                        "description": "Fields this service reads from inbound-receiving's DockAppointmentCancelled `data`. door_code and reason are ignored.",
+                        "description": "Fields this service reads from dock-scheduling's DockAppointmentRescheduled `data`. door_code, previous_window_start and previous_window_end are ignored.",
                         "required": [
-                          "appointment_id"
+                          "appointment_id",
+                          "site_id",
+                          "window_start",
+                          "window_end",
+                          "version"
                         ],
                         "properties": {
                           "appointment_id": {
                             "type": "string",
                             "description": "Must equal the CloudEvents `subject`.",
-                            "x-parser-schema-id": "<anonymous-schema-150>"
+                            "x-parser-schema-id": "<anonymous-schema-153>"
+                          },
+                          "site_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-154>"
+                          },
+                          "window_start": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "The new door window start.",
+                            "x-parser-schema-id": "<anonymous-schema-155>"
+                          },
+                          "window_end": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Must be after window_start.",
+                            "x-parser-schema-id": "<anonymous-schema-156>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-157>"
+                          }
+                        },
+                        "x-parser-schema-id": "DockAppointmentRescheduledData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-150>"
+                  }
+                ],
+                "x-parser-schema-id": "DockAppointmentRescheduledEvent"
+              },
+              "examples": [
+                {
+                  "name": "rescheduled",
+                  "summary": "Moved to the afternoon window of the same day.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "c3d5e7f9-2a4b-4c6d-8e0f-1a2b3c4d5e6f",
+                    "source": "/warehouse/dock-scheduling",
+                    "type": "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentRescheduled",
+                    "subject": "appt-123e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-08T15:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:dock-scheduling:events:DockAppointmentRescheduled:v1",
+                    "data": {
+                      "appointment_id": "appt-123e4567-e89b-12d3-a456-426614174000",
+                      "site_id": "WH1",
+                      "door_code": "WH1-DOCK-IN-02",
+                      "window_start": "2026-10-09T13:00:00Z",
+                      "window_end": "2026-10-09T15:00:00Z",
+                      "previous_window_start": "2026-10-09T08:00:00Z",
+                      "previous_window_end": "2026-10-09T10:00:00Z",
+                      "version": 2
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DockAppointmentCancelled",
+              "title": "Dock appointment cancelled (consumed)",
+              "summary": "dock-scheduling cancelled a booked appointment.",
+              "description": "CONSUMED from `warehouse.dock-scheduling.events`. Removes the appointment's demand:\nthe row flips to CANCELLED and stops counting (terminal on the producer). A Cancelled\nthat arrives BEFORE its Booked is stored as a tombstone (no window) that no Booked of\nan older version can resurrect. Idempotent: a redelivered `id` or a version that is not\ngreater than the stored one is a no-op. `type` =\n`com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentCancelled`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                },
+                {
+                  "name": "warehouse-planning"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of dock-scheduling's DockAppointmentCancelled (consumed).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentCancelled",
+                        "x-parser-schema-id": "<anonymous-schema-159>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:dock-scheduling:events:DockAppointmentCancelled:v1",
+                        "x-parser-schema-id": "<anonymous-schema-160>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Fields this service reads from dock-scheduling's DockAppointmentCancelled `data`. door_code and reason are ignored.",
+                        "required": [
+                          "appointment_id",
+                          "site_id",
+                          "version"
+                        ],
+                        "properties": {
+                          "appointment_id": {
+                            "type": "string",
+                            "description": "Must equal the CloudEvents `subject`.",
+                            "x-parser-schema-id": "<anonymous-schema-161>"
+                          },
+                          "site_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-162>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-163>"
                           }
                         },
                         "x-parser-schema-id": "DockAppointmentCancelledData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-147>"
+                    "x-parser-schema-id": "<anonymous-schema-158>"
                   }
                 ],
                 "x-parser-schema-id": "DockAppointmentCancelledEvent"
@@ -1988,20 +2131,118 @@
               "examples": [
                 {
                   "name": "cancelled",
-                  "summary": "Cancelled because the carrier was delayed.",
+                  "summary": "Cancelled at the carrier's request.",
                   "payload": {
                     "specversion": "1.0",
                     "id": "b2c4d6e8-1f3a-4b5c-9d7e-8f0a1b2c3d4e",
-                    "source": "/warehouse/inbound-receiving",
-                    "type": "com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled",
+                    "source": "/warehouse/dock-scheduling",
+                    "type": "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentCancelled",
                     "subject": "appt-123e4567-e89b-12d3-a456-426614174000",
                     "time": "2026-10-08T18:00:00Z",
                     "datacontenttype": "application/json",
-                    "dataschema": "urn:warehouse:inbound-receiving:events:DockAppointmentCancelled:v1",
+                    "dataschema": "urn:warehouse:dock-scheduling:events:DockAppointmentCancelled:v1",
                     "data": {
                       "appointment_id": "appt-123e4567-e89b-12d3-a456-426614174000",
+                      "site_id": "WH1",
                       "door_code": "WH1-DOCK-IN-01",
-                      "reason": "Carrier delayed"
+                      "reason": "CARRIER_REQUEST",
+                      "version": 2
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "DockAppointmentNoShow",
+              "title": "Dock appointment no-show (consumed)",
+              "summary": "dock-scheduling marked a booked appointment as not shown.",
+              "description": "CONSUMED from `warehouse.dock-scheduling.events`. Removes the appointment's demand\nexactly like a Cancelled (the row flips to NO_SHOW; terminal on the producer: a late\ncarrier needs a new booking). Carries the direction, so even a NoShow that arrives\nbefore its Booked is stored with a known direction. `type` =\n`com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                },
+                {
+                  "name": "warehouse-planning"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of dock-scheduling's DockAppointmentNoShow (consumed).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow",
+                        "x-parser-schema-id": "<anonymous-schema-165>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:dock-scheduling:events:DockAppointmentNoShow:v1",
+                        "x-parser-schema-id": "<anonymous-schema-166>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Fields this service reads from dock-scheduling's DockAppointmentNoShow `data`. door_code, carrier_scac and window_end are ignored.",
+                        "required": [
+                          "appointment_id",
+                          "site_id",
+                          "direction",
+                          "version"
+                        ],
+                        "properties": {
+                          "appointment_id": {
+                            "type": "string",
+                            "description": "Must equal the CloudEvents `subject`.",
+                            "x-parser-schema-id": "<anonymous-schema-167>"
+                          },
+                          "site_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-168>"
+                          },
+                          "direction": {
+                            "type": "string",
+                            "enum": [
+                              "INBOUND",
+                              "OUTBOUND"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-169>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-170>"
+                          }
+                        },
+                        "x-parser-schema-id": "DockAppointmentNoShowData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-164>"
+                  }
+                ],
+                "x-parser-schema-id": "DockAppointmentNoShowEvent"
+              },
+              "examples": [
+                {
+                  "name": "no-show",
+                  "summary": "The carrier did not arrive within the no-show grace.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "d4e6f8a0-3b5c-4d7e-9f1a-2b3c4d5e6f70",
+                    "source": "/warehouse/dock-scheduling",
+                    "type": "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow",
+                    "subject": "appt-123e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-09T11:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:dock-scheduling:events:DockAppointmentNoShow:v1",
+                    "data": {
+                      "appointment_id": "appt-123e4567-e89b-12d3-a456-426614174000",
+                      "site_id": "WH1",
+                      "door_code": "WH1-DOCK-IN-01",
+                      "direction": "INBOUND",
+                      "carrier_scac": "EXFT",
+                      "window_end": "2026-10-09T10:00:00Z",
+                      "version": 2
                     }
                   }
                 }
@@ -2045,11 +2286,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
-                    "x-parser-schema-id": "<anonymous-schema-152>"
+                    "x-parser-schema-id": "<anonymous-schema-172>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
-                    "x-parser-schema-id": "<anonymous-schema-153>"
+                    "x-parser-schema-id": "<anonymous-schema-173>"
                   },
                   "data": {
                     "type": "object",
@@ -2062,26 +2303,26 @@
                       "task_id": {
                         "type": "string",
                         "description": "Must equal the CloudEvents `subject`; a mismatch or a blank value is dead-lettered.",
-                        "x-parser-schema-id": "<anonymous-schema-154>"
+                        "x-parser-schema-id": "<anonymous-schema-174>"
                       },
                       "task_type": {
                         "type": "string",
                         "description": "The process step (PICK, PACK, ...); upper-cased to form the read model's process_type.",
                         "example": "PICK",
-                        "x-parser-schema-id": "<anonymous-schema-155>"
+                        "x-parser-schema-id": "<anonymous-schema-175>"
                       },
                       "duration_seconds": {
                         "type": "integer",
                         "format": "int64",
                         "minimum": 0,
                         "description": "Optional; completions without it count as tasks but do not contribute to the mean duration.",
-                        "x-parser-schema-id": "<anonymous-schema-156>"
+                        "x-parser-schema-id": "<anonymous-schema-176>"
                       }
                     },
                     "x-parser-schema-id": "TaskCompletedData"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-151>"
+                "x-parser-schema-id": "<anonymous-schema-171>"
               }
             ],
             "x-parser-schema-id": "TaskCompletedEvent"
@@ -2128,8 +2369,10 @@
       "OrderPartiallyAllocated": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[1]",
       "LocationSlotRegistered": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[0]",
       "LocationSlotDecommissioned": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1]",
-      "DockAppointmentBooked": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.oneOf[0]",
-      "DockAppointmentCancelled": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.oneOf[1]",
+      "DockAppointmentBooked": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[0]",
+      "DockAppointmentRescheduled": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[1]",
+      "DockAppointmentCancelled": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[2]",
+      "DockAppointmentNoShow": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[3]",
       "TaskCompleted": "$ref:$.channels.warehouse.fulfillment.events.publish.message"
     },
     "schemas": {
@@ -2160,10 +2403,14 @@
       "OrderAllocationData": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data",
       "OrderAllocatedEvent": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[0].payload",
       "OrderPartiallyAllocatedEvent": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[1].payload",
-      "DockAppointmentBookedData": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.oneOf[0].payload.allOf[1].properties.data",
-      "DockAppointmentBookedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.oneOf[0].payload",
-      "DockAppointmentCancelledData": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.oneOf[1].payload.allOf[1].properties.data",
-      "DockAppointmentCancelledEvent": "$ref:$.channels.warehouse.inbound-receiving.events.publish.message.oneOf[1].payload",
+      "DockAppointmentBookedData": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[0].payload.allOf[1].properties.data",
+      "DockAppointmentBookedEvent": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[0].payload",
+      "DockAppointmentRescheduledData": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[1].payload.allOf[1].properties.data",
+      "DockAppointmentRescheduledEvent": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[1].payload",
+      "DockAppointmentCancelledData": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[2].payload.allOf[1].properties.data",
+      "DockAppointmentCancelledEvent": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[2].payload",
+      "DockAppointmentNoShowData": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[3].payload.allOf[1].properties.data",
+      "DockAppointmentNoShowEvent": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[3].payload",
       "TaskCompletedData": "$ref:$.channels.warehouse.fulfillment.events.publish.message.payload.allOf[1].properties.data",
       "TaskCompletedEvent": "$ref:$.channels.warehouse.fulfillment.events.publish.message.payload"
     }
