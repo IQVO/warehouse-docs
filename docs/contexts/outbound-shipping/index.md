@@ -95,10 +95,10 @@ troubleshooting, testing). The REST reference is generated from its
   yard-management contract is pinned). It also has its own documentation site
   with the same pack plus architecture, quickstart, integration and MCP pages.
 - **Fleet-level**: [Context Map](/strategic-design/context-map) (its edges
-  K62 to K74, all built, not deployed), the
+  K67 to K75, all built, not deployed), the
   [Event Standard](/strategic-design/event-standard-cloudevents) (subdomain
   table and type catalogue),
   [Subdomain Classification](/strategic-design/subdomain-classification) and
   the [WMS and WES tiers](/wms-wes).
 - **Yard section**: its two yard neighbours, `dock-scheduling` and
-  `yard-management`, are documented in the [yard section](/yard/overview).
+  `yard-management`, are documented in the [yard section](/yard/).
