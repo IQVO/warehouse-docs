@@ -2,7 +2,7 @@
 id: class-diagram
 title: Class Diagram
 sidebar_label: Class Diagram
-description: "Proposed UML class diagrams of the Dock Scheduling domain (DockAppointment, DockCalendar, events, policies, read models) and its hexagonal ports and adapters."
+description: "UML class diagrams of the Dock Scheduling domain (DockAppointment, DockCalendar, events, policies, read models) and its hexagonal ports and adapters."
 ---
 
 # Class Diagram
@@ -11,11 +11,19 @@ description: "Proposed UML class diagrams of the Dock Scheduling domain (DockApp
 Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
-UML class diagrams of the **proposed** `internal/domain/**` packages
+UML class diagrams of the `internal/domain/**` packages
 (`dockappointment`, `dockcalendar`, `shared`), then the hexagonal ports and
 adapters in the Go layout the fleet uses. Type and field names come from
 `model.yaml`; method names are the model's commands. Fields are shown `-`
 (unexported), methods `+`.
+
+As built: the package names are the model's. The Go methods of the root are shorter than
+the command names drawn here (`Reschedule`, `Cancel`, `ReportEta`, `MarkAtRisk`,
+`RecordArrival`, `ReassignDoor`, `RecordDoorRelease`, `MarkNoShow`), booking and legacy import are
+constructors, the state type is `State`, the per-site `Rules` value (max window, granularity,
+arrival tolerance, no-show grace) is passed to the methods that need it, and the repository is
+`AppointmentRepo` (diagram 1c). The ports and adapters are as built in diagram 5; the drawn
+fields and methods are not a copy of the code.
 
 ## 1. DockAppointment aggregate
 
@@ -131,15 +139,17 @@ classDiagram
         <<DomainService>>
         +CheckNoOverlap(doorCode, window, active) error
     }
-    class DockAppointmentRepository {
+    class AppointmentRepo {
         <<Repository>>
-        +Get(appointmentId) DockAppointment
-        +Save(appointment, events) error
-        +ActiveOnDoor(doorCode) DockAppointment[]
-        +BookedPastGrace(now) DockAppointment[]
+        +Get(id) DockAppointment
+        +GetForUpdate(id) DockAppointment
+        +Save(appointment, expectedVersion) error
+        +LockDoor(doorCode) error
+        +ListActiveOnDoor(doorCode) DockAppointment[]
+        +ListBookedEndedBy(t, limit) string[]
     }
     DoorSchedule ..> DockAppointment : reads active
-    DockAppointmentRepository ..> DockAppointment : persists
+    AppointmentRepo ..> DockAppointment : persists
 ```
 
 Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockAppointment]`
@@ -156,9 +166,10 @@ booking inputs (door, direction, window, carrier, references, expected
 seal). The advisory that `ReportEta` may raise (`DockAppointmentAtRisk`) is
 an event, not a return value. The commands that policies drive
 (`RecordArrival`, `ReassignDoor`, `RecordDoorRelease`,
-`ImportLegacyAppointment`) have no REST route. `ActiveOnDoor` and
-`BookedPastGrace` are repository queries the rules need (the overlap check and
-the no-show sweep). `DoorSchedule` is the domain service named by
+`ImportLegacyAppointment`) have no REST route. `ListActiveOnDoor` and
+`ListBookedEndedBy` are repository queries the rules need (the overlap check and
+the no-show sweep); `LockDoor` takes the per-door advisory lock for the rest of the unit of work, and
+`Save` is guarded by the version the caller loaded. `DoorSchedule` is the domain service named by
 `ErrDoorDoubleBooked`; the checks that need `DoorView`, `AsnView`,
 `CutoffView` and `DockCalendar` are in diagram 4.
 
@@ -339,7 +350,7 @@ Omitted: the CloudEvents envelope (see
 `RescheduleAppointment` and `CancelAppointment` by a carrier raise
 `DockAppointmentBooked`, `Rescheduled` and `Cancelled` directly, not through
 a policy; `DockAppointmentRescheduled` has no policy at all. `LegacyImport`
-raising `DockAppointmentBooked` is this pack's reading (gap `DS-G08`).
+raising `DockAppointmentBooked` is as built (service ADR 0002, assumption A12).
 
 ## 4. Read models and the checks that use them
 
@@ -453,10 +464,10 @@ flowchart LR
         UC["every use case<br/>and projector"]
     end
     subgraph PORTS["internal/application/ports"]
-        P1["DockAppointment and<br/>DockCalendar repositories"]
-        P2["ReadModelStore"]
+        P1["AppointmentRepo and<br/>CalendarRepo"]
+        P2["DoorView, AsnView,<br/>CutoffView"]
         P3["EventPublisher outbox"]
-        P4["Inbox, UnitOfWork,<br/>Clock, DoorLock"]
+        P4["ProcessedEvents, UnitOfWork,<br/>IdempotencyStore, Clock, IDGen"]
     end
     subgraph OUT["internal/adapters/outbound"]
         PG["postgres"]
@@ -480,8 +491,10 @@ idempotent consumers).
 
 All paths are under `internal/`. The dashed arrows mean every use case calls
 ports only: the repository of its aggregate, the event publisher (outbox),
-the inbox, the unit of work, the clock and a per-door lock (the model names
-the per-door advisory lock; the `DoorLock` port is this pack's naming). The
+the inbox (`ProcessedEvents`), the unit of work, the clock and the id generator; the per-door advisory
+lock is `AppointmentRepo.LockDoor`, and the read-model ports (`DoorView`, `AsnView`,
+`CutoffView`) are separate interfaces. Report readers (`AdherenceReader`,
+`FreshnessReader`) belong to the `reports` binary. The
 `http` adapter drives the carrier and planner commands and the sweep, which
 a Kubernetes CronJob calls over REST, so there is no `scheduler` adapter.
 The `kafka` adapter drives the policies (`ArrivalFromGate`, `ActualDoorWins`,
@@ -490,6 +503,5 @@ projectors; the `AdherenceReport` projector reads this context's own
 analytics topic.
 
 Omitted: the HTTP read path (`GET` routes read the repositories and
-`DoorAvailabilityView` directly); the MCP read adapter that `fleet_changes`
-expects for `warehouse-ops-agent` (the model lists no tool for this context,
-gap `DS-G11`). There are no outbound HTTP clients: `sync_calls` is empty.
+`DoorAvailabilityView` directly); the MCP adapter (`internal/adapters/inbound/mcp`, nine tools: five
+L1 reads and four L3 writes, service ADR 0007), the analytics projector and the report binary. There are no outbound HTTP clients: `sync_calls` is empty.

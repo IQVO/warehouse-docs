@@ -13,9 +13,10 @@ Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.co
 
 Process-level EventStorming in the ddd-crew
 [EventStorming glossary & cheat sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet)
-notation. Every sticky comes from `model.yaml`. Hotspots are genuine open
-questions or risks in the model; the source of each is in the
-[hotspot table](#hotspots).
+notation. Every sticky comes from `model.yaml`. Hotspots were the genuine open
+questions or risks in the model when this pack was written; the source of each is in the
+[hotspot table](#hotspots), whose last column says how the built service settled it. The boards
+keep the hotspot stickies as they were drawn.
 
 ## Legend
 
@@ -103,8 +104,9 @@ flowchart TB
 Derived from: `model.yaml → contexts[dock-scheduling].policies[ArrivalFromGate, ActualDoorWins]`,
 `.aggregates[DockAppointment]`, `.publishes`.
 
-Omitted: `DockAppointmentCheckedIn`, `DoorReassigned` and `AtRisk` are all
-`analytics only`; no context reacts to them. `E5` is raised for the
+Omitted: `DockAppointmentCheckedIn` and `AtRisk` are `analytics only`; no context reacts to them.
+`DoorReassigned` is also on the integration topic since service ADR 0010 (`inbound-receiving`
+reads it). `E5` is raised for the
 **overlapped** appointment, with cause `DOOR_REASSIGNED_OVERLAP`.
 
 ## 3. Door release and out-of-order yard facts
@@ -288,22 +290,22 @@ Derived from: `model.yaml → contexts[dock-scheduling].policies[LegacyImport, P
 
 Omitted: the dotted arrow from `PickupFromCutoffs` is the policy keeping one
 `OUTBOUND` appointment per cutoff and operating day; the model names no
-command for it. `DockAppointmentBooked` after an import is this pack's
-reading (gap `DS-G08`).
+command for it, and as built it does not exist: the schedule is stored and no appointment is
+created from it. `DockAppointmentBooked` is raised after an import.
 
 ## Hotspots
 
-| # | Hotspot | Where it comes from in the model | Gap |
-| --- | --- | --- | --- |
-| H1 | `CancellationReason` has `SITE_REQUEST`, but the only inbound row for cancel is the carrier scheduler. | `aggregates[DockAppointment]`, `reasons[CancellationReason]`, `inbound[0]` | `DS-G10` |
-| H2 | `DockAppointmentRescheduled` carries `door_code` but no previous door; the model does not say a reschedule may change the door. | `publishes[DockAppointmentRescheduled].data` | `DS-G06` |
-| H3 | An appointment is one carrier visit, but `VisitCheckedIn` carries `trailers`, and the first `TrailerUndocked` completes the appointment. | `policies[CompleteOnDoorRelease]`, `contexts[yard-management].publishes[VisitCheckedIn]` | `DS-G03` |
-| H4 | The arrival tolerance is a `DockCalendar` setting; `yard-management`'s `DirectOnCheckIn` needs it and no event carries it. | `aggregates[DockCalendar].value_objects`, `contexts[yard-management].policies[DirectOnCheckIn]` | `DS-G01` |
-| H5 | The out-of-order rules cover four cases; a second `VisitCheckedIn`, a `TrailerDocked` after completion and an implicit arrival in the adherence report are not covered. | `policies[OutOfOrderYardFacts, ArrivalFromGate]` | `DS-G19` |
-| H6 | `DockAppointmentAtRisk` is `analytics only` and no read model or route exposes it, yet the console and the ops agent are meant to show at-risk appointments. | `publishes[DockAppointmentAtRisk]`, `fleet_changes` | `DS-G11` |
-| H7 | `NO_SHOW` has no outgoing transition; a carrier that arrives after the sweep is ignored by this context. | `aggregates[DockAppointment].transitions`, `policies[OutOfOrderYardFacts]` | `DS-G16` |
-| H8 | `TURNED_AWAY` has no producer, and `VisitRejected` is not consumed here. | `reasons[CancellationReason]`, `consumes`, `contexts[yard-management].publishes[VisitRejected]` | `DS-G02` |
-| H9 | A closure is refused if it covers an active appointment; a change of operating hours and a decommissioned door are not. | `aggregates[DockCalendar].invariants`, `consumes[facility-layout]` | `DS-G12`, `DS-G13` |
-| H10 | `DeclareCalendarSettings` raises no event, and no default is given for the arrival tolerance or the no-show grace. | `aggregates[DockCalendar]`, `publishes` | `DS-G07`, `DS-G01` |
-| H11 | `ImportLegacyAppointment` lists no invariants, and the effect of the legacy check-in, cancel and complete events is not stated. | `policies[LegacyImport]`, `consumes[inbound-receiving]` | `DS-G08` |
-| H12 | `PickupFromCutoffs` names `PickupDoorRule` and `pickup_lead`, defined nowhere, and creates an appointment with no carrier. | `policies[PickupFromCutoffs]`, `aggregates[DockAppointment].invariants` | `DS-G04` |
+| # | Hotspot | Where it comes from in the model | Gap | As built (2026-11-09) |
+| --- | --- | --- | --- | --- |
+| H1 | `CancellationReason` has `SITE_REQUEST`, but the only inbound row for cancel is the carrier scheduler. | `aggregates[DockAppointment]`, `reasons[CancellationReason]`, `inbound[0]` | `DS-G10` | Settled (D-5): the dock planner cancels with `CARRIER_REQUEST` or `SITE_REQUEST` through the same route. |
+| H2 | `DockAppointmentRescheduled` carries `door_code` but no previous door; the model does not say a reschedule may change the door. | `publishes[DockAppointmentRescheduled].data` | `DS-G06` | Settled (D-4, X1): a reschedule may change the door; the event carries `previous_door_code`. |
+| H3 | An appointment is one carrier visit, but `VisitCheckedIn` carries `trailers`, and the first `TrailerUndocked` completes the appointment. | `policies[CompleteOnDoorRelease]`, `contexts[yard-management].publishes[VisitCheckedIn]` | `DS-G03` | Settled (X3): one appointment covers exactly one trailer. |
+| H4 | The arrival tolerance is a `DockCalendar` setting; `yard-management`'s `DirectOnCheckIn` needs it and no event carries it. | `aggregates[DockCalendar].value_objects`, `contexts[yard-management].policies[DirectOnCheckIn]` | `DS-G01` | Settled (X1): `Booked` and `Rescheduled` carry `arrival_tolerance_minutes`. |
+| H5 | The out-of-order rules cover four cases; a second `VisitCheckedIn`, a `TrailerDocked` after completion and an implicit arrival in the adherence report are not covered. | `policies[OutOfOrderYardFacts, ArrivalFromGate]` | `DS-G19` | Settled: the state machine decides; an already applied or terminal fact is ignored and counted, an implicit arrival is counted as `ON_TIME` (X6). |
+| H6 | `DockAppointmentAtRisk` is `analytics only` and no read model or route exposes it, yet the console and the ops agent are meant to show at-risk appointments. | `publishes[DockAppointmentAtRisk]`, `fleet_changes` | `DS-G11` | Settled (D-6): the REST appointment exposes `atRisk` and `atRiskCause`, `GET /appointments` filters on `atRisk` and the MCP tool `list_at_risk_appointments` lists them. |
+| H7 | `NO_SHOW` has no outgoing transition; a carrier that arrives after the sweep is ignored by this context. | `aggregates[DockAppointment].transitions`, `policies[OutOfOrderYardFacts]` | `DS-G16` | Settled (D-9): terminal, a late carrier books anew. |
+| H8 | `TURNED_AWAY` has no producer, and `VisitRejected` is not consumed here. | `reasons[CancellationReason]`, `consumes`, `contexts[yard-management].publishes[VisitRejected]` | `DS-G02` | Settled (X2): `VisitRejected` is consumed (policy `CancelOnVisitRejected`), `TURNED_AWAY` is its cancellation reason. |
+| H9 | A closure is refused if it covers an active appointment; a change of operating hours and a decommissioned door are not. | `aggregates[DockCalendar].invariants`, `consumes[facility-layout]` | `DS-G12`, `DS-G13` | Settled: new hours that strand an appointment are refused (D-8); a decommissioned door blocks new bookings only (D-7). |
+| H10 | `DeclareCalendarSettings` raises no event, and no default is given for the arrival tolerance or the no-show grace. | `aggregates[DockCalendar]`, `publishes` | `DS-G07`, `DS-G01` | Settled (D-1): defaults 240, 15, 15 and 60 minutes, created lazily; the tolerance travels on the booking events. |
+| H11 | `ImportLegacyAppointment` lists no invariants, and the effect of the legacy check-in, cancel and complete events is not stated. | `policies[LegacyImport]`, `consumes[inbound-receiving]` | `DS-G08` | Settled (D-2): no invariant is enforced; later legacy events move only `legacy-import` appointments. |
+| H12 | `PickupFromCutoffs` names `PickupDoorRule` and `pickup_lead`, defined nowhere, and creates an appointment with no carrier. | `policies[PickupFromCutoffs]`, `aggregates[DockAppointment].invariants` | `DS-G04` | Open by decision (D-3): phase 2. The schedule is consumed and stored; no appointment is created. |

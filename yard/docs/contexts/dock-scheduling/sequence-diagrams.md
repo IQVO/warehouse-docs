@@ -2,7 +2,7 @@
 id: sequence-diagrams
 title: Sequence Diagrams
 sidebar_label: Sequence Diagrams
-description: "One proposed UML sequence diagram per Dock Scheduling command use case, from the inbound adapter through the aggregate, repository and outbox to Kafka."
+description: "One UML sequence diagram per Dock Scheduling command use case, from the inbound adapter through the aggregate, repository and outbox to Kafka."
 ---
 
 # Sequence Diagrams
@@ -12,19 +12,19 @@ Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.co
 :::
 
 One UML sequence diagram per command use case of
-[Use Cases](/yard/contexts/dock-scheduling/use-cases), in the proposed
-hexagonal layout: inbound adapter → use case → aggregate → repositories and
+[Use Cases](/yard/contexts/dock-scheduling/use-cases), in the
+hexagonal layout of the built service: inbound adapter → use case → aggregate → repositories and
 views → outbox (same transaction) → relay → Kafka. The outbox, the relay and Kafka
 share one lifeline ("outbox and relay to Kafka") to keep each diagram at five
 participants.
 `alt` blocks show error branches, optimistic-concurrency `version` checks and
 idempotency (REST `Idempotency-Key`, Kafka inbox on the CloudEvents `id`).
 Errors named `ErrNotFound`, `ErrIllegalTransition`, `ErrConcurrentUpdate` and
-`ErrValidation` carry the model's status and problem slug; the status of every
-other `Err...` is proposed (gap `DS-G17`). Route parameters are written
+`ErrValidation` carry the model's status and problem slug; every
+other `Err...` has the status of decision D-10 (409 conflicts, 422 value rules). Route parameters are written
 without braces. The relay publishes to `warehouse.dock-scheduling.events` for
-integration events and to `warehouse.dock-scheduling.analytics` for events
-marked `analytics only`, keyed by the aggregate root id.
+integration events and, as a twin, to `warehouse.dock-scheduling.analytics`; events
+marked `analytics only` go to the analytics topic alone. Both are keyed by the aggregate root id.
 
 ## 1. BookAppointment
 
@@ -83,7 +83,7 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockAppointment]` (`commands`, `invariants`), `.publishes[DockAppointmentBooked]`, `conventions.integration_rules`.
 
-Omitted: the per-door lock is released at commit (not drawn). The order of the checks and the HTTP statuses are proposed (gap `DS-G17`). `slot_granularity_minutes` is checked nowhere in the model (gap `DS-G21`).
+Omitted: the per-door lock is released at commit (not drawn). The order of the checks is this pack's reading; the HTTP statuses are decision D-10. `slot_granularity_minutes` forces the window start and end onto a grid of whole minutes since the Unix epoch (`ErrInvalidWindow`, decision D-11), and an ASN already on another active appointment is refused (`ErrAsnAlreadyScheduled`).
 
 ## 2. RescheduleAppointment
 
@@ -141,7 +141,7 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockAppointment].transitions` (`BOOKED` to `BOOKED`), `.invariants`, `.publishes[DockAppointmentRescheduled]`.
 
-Omitted: the idempotency replay branch (drawn in diagram 1); whether the door can change (gap `DS-G06`).
+Omitted: the idempotency replay branch (drawn in diagram 1); a reschedule may also change the door (decision D-4); the event then carries `previous_door_code`.
 
 ## 3. CancelAppointment
 
@@ -232,7 +232,7 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[dock-scheduling].policies[EtaRisk]`, `.aggregates[DockAppointment].value_objects[Eta]`, `.publishes[DockAppointmentAtRisk]`.
 
-Omitted: the relay step publishes only when an `AtRisk` row exists; nothing is rescheduled. That `BOOKED` is the only state that accepts an ETA is this pack's reading.
+Omitted: the relay step publishes only when an `AtRisk` row exists; nothing is rescheduled. `BOOKED` is the only state that accepts an ETA (assumption A6); a later on-time ETA or a reschedule clears the at-risk flag.
 
 ## 5. RecordArrival
 
@@ -278,7 +278,7 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[dock-scheduling].policies[ArrivalFromGate, OutOfOrderYardFacts]`, `contexts[yard-management].publishes[VisitCheckedIn]`.
 
-Omitted: an appointment already `CHECKED_IN` is not covered by the model (gap `DS-G19`), so only `BOOKED` reaches the aggregate. The `arrival_status` formula is this pack's reading (gap `DS-G09`).
+Omitted: an appointment already `CHECKED_IN` is left unchanged and counted, so only `BOOKED` reaches the aggregate. The `arrival_status` formula is decision X6: EARLY before `window_start` minus the tolerance, LATE after `window_start` plus the tolerance, else ON_TIME.
 
 ## 6. ReassignDoor
 
@@ -322,13 +322,13 @@ sequenceDiagram
             end
         end
     end
-    Note over O: after commit the relay<br/>publishes to warehouse.<br/>dock-scheduling.analytics
+    Note over O: after commit the relay<br/>publishes DoorReassigned to the events<br/>and analytics topics, AtRisk to analytics
 
 ```
 
 Derived from: `model.yaml → contexts[dock-scheduling].policies[ActualDoorWins]`, `.publishes[DockAppointmentDoorReassigned, DockAppointmentAtRisk]`.
 
-Omitted: `ErrDoorDoubleBooked` is deliberately not raised: the physical fact wins. Which states accept the command and what a same-door event does are this pack's reading (gap `DS-G19`).
+Omitted: `ErrDoorDoubleBooked` is deliberately not raised: the physical fact wins. `BOOKED` and `CHECKED_IN` accept the command, and a same-door event changes nothing. The reassignment is also written to the integration topic (service ADR 0010), so the closing note's analytics topic is not the only target.
 
 ## 7. RecordDoorRelease
 
@@ -376,7 +376,7 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockAppointment].transitions`, `.policies[CompleteOnDoorRelease, OutOfOrderYardFacts]`.
 
-Omitted: no `DockAppointmentCheckedIn` is written for an implicit arrival (gap `DS-G19`); a visit with several trailers completes on the first release (gap `DS-G03`).
+Omitted: no `DockAppointmentCheckedIn` is written for an implicit arrival (the adherence report counts it as `ON_TIME`); one appointment covers exactly one trailer (decision X3).
 
 ## 8. MarkNoShow
 
@@ -391,7 +391,7 @@ sequenceDiagram
     participant A as Dock<br/>Appointment
     participant R as repositories<br/>and views
     participant O as outbox and<br/>relay to Kafka
-    H->>U: MarkNoShow POST /no-show-<br/>sweeps
+    H->>U: MarkNoShow<br/>POST /no-show-sweeps
     U->>R: BOOKED appointments past<br/>window_end<br/>plus no-show grace
     loop each qualifying appointment
         U->>A: MarkNoShow now, grace
@@ -453,7 +453,7 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[dock-scheduling].policies[LegacyImport]`, `.consumes` (legacy-import entry), `fleet_changes`.
 
-Omitted: which invariants an import enforces, how the legacy check-in, cancel and complete events are applied and whether the import raises `DockAppointmentBooked` are open (gap `DS-G08`); the diagram shows this pack's reading.
+Omitted: which invariants an import enforces, how the legacy check-in, cancel and complete events are applied and whether the import raises `DockAppointmentBooked` are settled by decision D-2: the import enforces no invariant, later legacy events move only `legacy-import` appointments, and `DockAppointmentBooked` is raised; the diagram shows that.
 
 ## 10. DeclareOperatingHours
 
@@ -492,7 +492,7 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockCalendar]` (`invariants`, `commands`, `events`).
 
-Omitted: the idempotency replay (diagram 1). How a calendar is created at first use is not in the model (gap `DS-G07`); appointments already outside the new hours are not refused (gap `DS-G13`).
+Omitted: the idempotency replay (diagram 1). The calendar is created lazily with the defaults at first use (decision D-1); new hours that leave an active appointment outside them are refused with `ErrHoursConflictWithAppointments` (decision D-8), a branch this diagram does not draw.
 
 ## 11. DeclareCalendarSettings
 
@@ -527,7 +527,7 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockCalendar]` (`value_objects[Settings]`, `commands`, `events`).
 
-Omitted: no outbox row and no relay: the model lists no event for this command (gap `DS-G01`, gap `DS-G21`). The idempotency replay is as in diagram 1.
+Omitted: no outbox row and no relay: the service raises no event for this command (decision D-11 fixes the bounds). The idempotency replay is as in diagram 1.
 
 ## 12. ScheduleDoorClosure
 
@@ -572,7 +572,7 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockCalendar].invariants`, `.publishes[DoorClosureScheduled]`.
 
-Omitted: the idempotency replay (diagram 1). The appointments are read from another aggregate; a booking that commits between the read and the save is not prevented in the model (this pack's reading).
+Omitted: the idempotency replay (diagram 1). The appointments are read from another aggregate; a booking that commits between the read and the save is not prevented (this pack's reading; the service does not state it).
 
 ## 13. LiftDoorClosure
 
