@@ -328,7 +328,8 @@ owner, not decided here.
 9. **Handicap edge cases.** `ScorecardHandicap` in the model does not map
    grade `PROVISIONAL` (the [promise model](/network/network-model/promise-model) page
    reads it as no handicap), and does not say which scorecard window (7-day or
-   30-day) applies.
+   30-day) applies. As built, grades and handicaps read the 30-day window and the
+   7-day window gates the fast tiers through `NodeTierEligibilityChanged`.
 10. **A late `CustomerOrderPlaced`.** Confirmation is asynchronous. If the hold
     expires first, the order exists with a `RELEASED` promise; no recovery is
     named.

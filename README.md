@@ -27,6 +27,7 @@ GitHub Pages: **https://iqvo.github.io/warehouse-docs/**. Page map:
 | Architecture (C4, fleet data model, runtime flows) | `docs/architecture/` |
 | Per-context pages (business context, ddd-crew pack, operations) | `docs/contexts/<context>/` |
 | Retail-network domain (second docs section) | `network/` |
+| Yard section (dock-scheduling, yard-management) | `yard/` |
 | Generated REST references (OpenAPI) | `docs/api-reference/` (regenerated, not hand-edited) |
 | Generated AsyncAPI references | `static/asyncapi/` (regenerated, not hand-edited) |
 | Fleet health (docs coverage, README standard, gaps) | `docs/fleet-health/` |
@@ -85,6 +86,13 @@ GitHub Pages: **https://iqvo.github.io/warehouse-docs/**. Page map:
   The network REST reference is generated at build time (gitignored), unlike
   the committed fleet reference. Gates: `npm run check:model:network` and
   `npm run check:pages:network`.
+- **Yard Management** (`yard/`, served at `/yard/`): two WMS-tier bounded
+  contexts, `dock-scheduling` (the door calendar) and `yard-management` (the
+  physical yard), both built on `develop` and not deployed (no warehouse-infra
+  `terraform/apps.yaml` entry). The source of truth is `yard/model/model.yaml`;
+  the `yard/docs/strategic-design/` pages it feeds are regenerated via
+  `yard/scripts/gen_pages.py`, and the context packs are written here from the
+  model. Gates: `npm run check:model:yard` and `npm run check:pages:yard`.
 - **Digital Storefront** (`storefront/`, served at `/storefront/`): the
   e-commerce storefront on top of the retail network. Six bounded contexts
   (`pricing`, `product-content`, `product-discovery`, `shopping-cart`,

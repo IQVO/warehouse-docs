@@ -2,7 +2,7 @@
 id: domain-events
 title: Domain Events
 sidebar_label: Domain Events
-description: The two events Node Performance publishes and the fifteen it consumes, with full CloudEvents types, payloads and idempotency rules.
+description: The events Node Performance publishes and the fifteen it consumes, with full CloudEvents types, payloads and idempotency rules.
 ---
 
 # Domain Events
@@ -23,7 +23,7 @@ and consumes (`.consumes`), with the envelope rules of
 | `specversion` | `1.0` |
 | `id` | a UUID minted once when the event is written to the outbox; a redelivery carries the same `id` |
 | `source` | `/retailnetwork/node-performance` |
-| `type` | `com.retailnetwork.partner.node-performance.scorecard.<EventName>` (tier `partner`, entity `scorecard` for both events) |
+| `type` | `com.retailnetwork.partner.node-performance.scorecard.<EventName>` (tier `partner`, entity `scorecard` for every event) |
 | `subject` | the aggregate root id, `scorecardId = nodeId + ':' + window` (for example `N-0042:30d`) |
 | `time` | the instant the recompute ran (`computedAt` for `NodeScorecardUpdated`) |
 | `datacontenttype` | `application/json` |
@@ -80,6 +80,32 @@ The model does not say whether an "analytics only" event goes to the
 (`conventions.cloudevents.analytics_topic`). These pages put both
 published events on `.events`, because both are in `publishes`; this is
 listed as an open question.
+
+### NodeTierEligibilityChanged
+
+| | |
+| --- | --- |
+| **Type** | `com.retailnetwork.partner.node-performance.scorecard.NodeTierEligibilityChanged` |
+| **Topic** | `retailnetwork.node-performance.events` (an integration event, not analytics-only) |
+| **Subject / key** | the `7d` `scorecardId` (`nodeId:7d`) |
+| **Produced by** | `Recompute` of the `7d` scorecard, policy `FastTierEligibility`, only when the node's eligibility flag flips: one event per tier, with the same `changedAt`, in the same transaction as the scorecard save |
+| **Consumers** | `delivery-promise` (`NodeTierEligibility`, policy `FastTierCandidateFilter`) |
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `nodeId` | string | The node. |
+| `tier` | enum | `SAME_DAY` or `NEXT_DAY`, the tiers this context governs. |
+| `eligible` | boolean | `false` on suspension, `true` on reinstatement. |
+| `metric` | string | `onTimeHandoverRate`. |
+| `value` | number | The rate that caused the change. |
+| `threshold` | number | `0.90` on suspension, `0.95` on reinstatement. |
+| `window` | string | `7d`. |
+| `changedAt` | timestamp | The instant of the flip, RFC 3339 UTC. |
+
+Every node starts eligible and the initial state publishes nothing, so a
+consumer that has never seen an event treats the node as eligible. Delivery is
+at least once: the state a consumer holds is the `eligible` of the latest event
+per `nodeId` and `tier`.
 
 ### Example envelope
 

@@ -464,6 +464,10 @@ contexts:
       - A promise is per shipment group; a multi-node order gets one promise per group.
       - A poorly performing node is handicapped (later shipBy) by its scorecard grade, never silently excluded.
       - Kept means delivered on or before deliverByLatest.
+      - A node that node-performance has suspended from a fast tier is not a candidate for that tier in future quotes and estimates (SAME_DAY and NEXT_DAY only; a missing eligibility row means eligible); promises already made are never touched by it (delivery-promise ADR 0022).
+      - An offer reports how full the book behind its window is as a coarse capacityBand; the network publishes the pressure it measures and never computes a fee (delivery-promise ADR 0023).
+      - The quote adds a one-sided buffer learned from this service's own kept and broken judgements, and says how sure it is with an optional confidence; with too few judgements it adds nothing and says nothing (delivery-promise ADR 0020).
+      - A confirmed promise whose witness-path departure is past its expected arrival with no arrival seen is flagged AT_RISK with reason PREDICTED_LATE while the customer can still be told (delivery-promise ADR 0021).
     aggregates:
       - name: DeliveryOffer
         root_id: offerId
@@ -477,6 +481,8 @@ contexts:
           - "WitnessPath{nodeId, pickupDepartureId, legs[departureId], deliveryWaveId}"
           - "OfferConstraint(DESTINATION_NOT_SERVED|ITEM_QUANTITY_NOT_AVAILABLE|DELIVERY_SLA_UNAVAILABLE|NODE_CAPACITY_EXHAUSTED)"
           - "OfferLine{catalogItemId, quantity, ownerRef ('' = operator-owned)}: the owner OwnerChoice picked at quote time (delivery-promise ADR 0017)"
+          - "CapacityBand(AMPLE|TIGHT|SCARCE): utilisation (provisional + confirmed) / share of the book the offer's window would charge, under 60% AMPLE, 60% to under 85% TIGHT, 85% and over SCARCE. A read-only snapshot at quote time: not stored, no column, omitted when the book has no finite capacity and on a stored offer read back; it never changes which offers are produced, their windows or their order (delivery-promise ADR 0023)"
+          - "Confidence: optional number in [0,1] rounded to 3 decimals, the segment's observed share of judged promises whose lateness was within the buffer the quote carries; present only when the segment has at least minCalibrationObservations in-window judgements, absent means unknown, never zero (delivery-promise ADR 0020)"
         invariants:
           - {rule: "expiresAt <= min(quotedAt + offerTtl, the latest instant the witness pickup cutoff can still be met)", error: ErrOfferExpiryTooLate}
           - {rule: "an expired or consumed offer cannot back a promise", error: ErrOfferNotQuotable}
@@ -503,7 +509,7 @@ contexts:
           - [AT_RISK, CANCELLED, CancelPromise]
         value_objects:
           - "ShipmentGroup{lines[{catalogItemId, quantity, ownerRef ('' = operator-owned; the owner the line was netted against, delivery-promise ADR 0017)}]}"
-          - "PromiseTerms{tier, shipBy, deliverByEarliest, deliverByLatest, basis(SCHEDULED|MEASURED|NOMINAL), policyVersion}"
+          - "PromiseTerms{tier, shipBy, deliverByEarliest, deliverByLatest, basis(SCHEDULED|MEASURED|NOMINAL), policyVersion, confidence (optional, from the offer's candidate; a revision takes the confidence of the candidate it moves to)}"
           - "WitnessPath{nodeId, pickupDepartureId, legs[departureId], deliveryWaveId}"
           - "Revision{revisionNo, previousTerms, reason, revisedAt}"
         invariants:
@@ -544,6 +550,9 @@ contexts:
       - {name: TransitActualsView, source: "linehaul-transportation LoadDeparted, LoadArrived (paired by loadId; ADR 0014)"}
       - {name: DeliveryWaveView, source: "last-mile-delivery DeliveryWaveScheduled, DeliveryWaveCapacityChanged"}
       - {name: ScorecardView, source: "node-performance NodeScorecardUpdated"}
+      - {name: NodeTierEligibility, source: "node-performance NodeTierEligibilityChanged: rm_node_tier_eligibility(node_id, tier, eligible, changed_at), primary key (node_id, tier), a missing row means ELIGIBLE; an event is applied only when its changedAt is not older than the stored one; an unknown tier or a missing nodeId, tier, eligible or changedAt is ignored and counted, never dead-lettered (delivery-promise ADR 0022)"}
+      - {name: DepartureArrival, source: "linehaul-transportation LoadArrived, only when it carries the OPTIONAL departureId (the consumed copy of LoadDeparted and LoadArrived reads departureId when present): rm_departure_arrival(departure_id PK, arrived_at), a first arrival is kept, rows older than the maximum transit window are pruned; an event without departureId writes no row and is counted (delivery-promise ADR 0021)"}
+      - {name: PromiseCalibrationView, source: "LOCAL, fed only by this service's own judgements (PromiseKept records 0, PromiseBroken with cause LATE records lateByMinutes; LOST and RETURNED are not recorded), no sibling event and no call: rm_promise_calibration(tier, basis, node_grade, observations), a ring of the last 500 observations per segment key (tier, basis, nodeGrade with the empty grade spelled PROVISIONAL), written in the judgement's unit of work and read pruned to calibrationWindowDays (delivery-promise ADR 0020)"}
       - {name: PromiseAnalytics, source: "analytical read side (delivery-promise ADR 0018): cmd/dp-projector, the only writer of a SEPARATE analytical database, projects this context's OWN topics only (retailnetwork.delivery-promise.events and .analytics) in one consumer group, deduped in the projection transaction; cmd/dp-reports serves the read-only /reports routes on :8092"}
     policies:
       - {name: PromisePolicy, rule: "earliest feasible witness path; see network-model/promise-model"}
@@ -551,14 +560,18 @@ contexts:
       - {name: TierOrderDeadline, rule: "per tier and region a policy-versioned local order deadline (peak control of new workable demand)"}
       - {name: OwnerChoice, rule: "a quoted line must be covered by ONE owner: Available(node, item, owner) >= qty after netting; summing across owners is forbidden. The owner is: operator-owned ('') first if it covers; otherwise the covering seller owner with the highest available after netting; ties go to the lowest ownerRef in byte order; no covering owner means the node is not a candidate for that line (ITEM_QUANTITY_NOT_AVAILABLE). Applied verbatim by order-sourcing too (delivery-promise ADR 0017, gap G47)"}
       - {name: OwnerAwareNetting, rule: "provisional and confirmed holds record the ownerRef they took and net only the figure of their own (node, item, ownerRef) key (ADR 0015 semantics per key); MakePromise re-validates with OwnerChoice and takes another covering owner without a re-quote; on a lock at another node the charge is re-netted with OwnerChoice there, and kept where it was (logged) when no single owner covers"}
-      - {name: BatchDeliveryEstimates, rule: "POST /delivery-estimates is SAFE: up to 50 unique items for one destinationPostalPrefix (tiers optional, default all), each searched as a single-line group with exactly the quote search (read models, OwnerChoice, netting, scorecard handicap, basis) over one load of the shared inputs per request; answers per item the options (tier, window start/end/timeZone, basis, orderByAt) and constraints in the OfferConstraint vocabulary. Persists nothing (no offer row, hold, outbox row or event); an Idempotency-Key is ignored; an unknown item yields ITEM_QUANTITY_NOT_AVAILABLE. The read-only MCP tool estimate_delivery (authority L1) is bound to the same use case (delivery-promise ADR 0019, gap G60)"}
+      - {name: BatchDeliveryEstimates, rule: "POST /delivery-estimates is SAFE: up to 50 unique items for one destinationPostalPrefix (tiers optional, default all), each searched as a single-line group with exactly the quote search (read models, OwnerChoice, netting, scorecard handicap, basis) over one load of the shared inputs per request; answers per item the options (tier, window start/end/timeZone, basis, orderByAt, capacityBand and confidence when known) and constraints in the OfferConstraint vocabulary. Persists nothing (no offer row, hold, outbox row or event); an Idempotency-Key is ignored; an unknown item yields ITEM_QUANTITY_NOT_AVAILABLE. The read-only MCP tool estimate_delivery (authority L1) is bound to the same use case and so carries capacityBand and confidence on each option; there is no MCP quote tool and get_delivery_offer always omits the band (delivery-promise ADR 0019, ADR 0023, gap G60)"}
+      - {name: FastTierCandidateFilter, rule: "SAME_DAY and NEXT_DAY candidates are searched only among nodes that NodeTierEligibility does not mark ineligible for that tier; TWO_DAY and STANDARD are never filtered, so the same node stays a candidate for STANDARD including the nominal fallback. The use case loads the ineligible pairs once per search and hands the pure domain a TierIneligible(nodeId, tier) closure (nil never filters). When no candidate remains the tier yields no offer exactly like any infeasible tier (DELIVERY_SLA_UNAVAILABLE; no new constraint code). Applies to quotes and estimates only: re-promising an existing promise (ReviseAtRisk) does not use it and no event moves or flags a promise. The network owns no threshold here: node-performance decides eligibility with hysteresis (delivery-promise ADR 0022, node-performance ADR 0013)"}
+      - {name: CapacityBand, rule: "capacityBand = AMPLE | TIGHT | SCARCE from shared.CapacityBandFor(used, share) over the book the offer's chosen window would charge (used = provisional + confirmed): SCARCE when used x 100 >= share x 85, TIGHT when used x 100 >= share x 60, otherwise AMPLE; share of zero or less means no band; a book not yet opened is AMPLE. The thresholds are domain constants, not PromisePolicy fields. Computed at quote time for SCHEDULED, MEASURED and NOMINAL candidates, carried on the offer, on each POST /delivery-estimates option, on the estimate_delivery MCP output and on DeliveryOfferQuoted, not stored, not an input to ranking. The network never computes a fee; the storefront reads the band from the response it already receives (delivery-promise ADR 0023)"}
+      - {name: PromiseCalibration, rule: "ADR 0020: for each candidate the search adds the segment's buffer to the final-arrival time BEFORE the delivery window is snapped, so the window width never changes and the offer lands in a later fixed window when needed (a candidate that no longer fits the horizon is dropped like any infeasible one). Buffer = Calibrate(observations, policy): with n at least minCalibrationObservations the smallest b such that at least targetOnTimeProbabilityPercent of the observations have lateBy <= b (nearest rank, kept promises count 0), capped at maxCalibrationBufferMinutes; ONE-SIDED, never earlier; below the minimum the buffer is 0 and the search behaves as before. Applied to every tier including STANDARD. The segment is (tier, basis, nodeGrade of the candidate's node read from ScorecardView); the destination region is not in the key because it is not stored on the promise. One global target value, not one per tier. A store error is logged and means no calibration, never a failed quote. confidence is reported only when n reaches the minimum. Metrics: histogram promising.calibration.buffer (tier) and counter promising.calibration.segments_below_minimum"}
+      - {name: FlagPredictedLate, rule: "ADR 0021: the clock-driven sweeper pass FlagPredictedLate(ctx, limit) examines each CONFIRMED promise's witness-path departures (the pickup departure and the legs; a NOMINAL witness has none): expectedArrival = arrivesAt plus the same one-sided measured-transit adjustment the search uses (0 below minTransitObservations); when now is later than expectedArrival plus lateRiskGrace (15 minutes, a constant, not a policy field) and DepartureArrival has no row for the departure, the promise is flagged AT_RISK with reason PREDICTED_LATE through the existing flagAtRisk path, one INFO log and the counter deliverypromise_predicted_late_flagged_total per flag. RepriceAtRisk does NOT re-promise a PREDICTED_LATE promise while its window is still reachable (the latest remaining expected arrival shifted by the late leg's observed lateness, plus the downstream sort dwell and the wave's last-mile allowance, no later than the window end; a missing, cancelled or unscheduled wave means not reachable); otherwise the normal re-promise runs and never moves the window earlier. DELIBERATE LIMIT: the flag is not cleared when the load arrives later (AT_RISK stays Active until the judgement closes the promise); an event without departureId is ignored by the arrival model and counted"}
       - {name: ShipmentGrouping, rule: "prefer one node for the whole cart; split only when no single node covers every line, minimising the number of groups"}
-      - {name: RepromiseOnRisk, rule: "on FulfillmentUnsourceable, PackageExceptionRaised or a cancelled departure on the witness path, recompute and RevisePromise; if nothing is feasible even at STANDARD, report PromiseBroken at judgement time"}
+      - {name: RepromiseOnRisk, rule: "on FulfillmentUnsourceable, PackageExceptionRaised, a cancelled departure on the witness path or the FlagPredictedLate sweep (only when the window is no longer reachable, see FlagPredictedLate), recompute and RevisePromise; if nothing is feasible even at STANDARD, report PromiseBroken at judgement time"}
       - {name: JudgeOnDelivery, rule: "on PackageDelivered judge every promise of the package's group"}
       - {name: LazyBookOpening, rule: "a PromiseBook is opened (OpenBook) by the first HoldCapacity for a (node, pickup departure); MakePromise opens the book, holds it, consumes the offer and creates the promise in one local transaction. The book takes cutoffAt from the pickup departure, holdDeadline = cutoffAt minus handling time (business minutes) and a share computed once by BookShare"}
       - {name: BookShare, rule: "share = ceil(min(CutoffSlot.maxOrders, throughputCap x window) x capacitySharePercent / 100), at least 1. maxOrders applies only when the cutoff slot sets it. window is the node's operating time between its previous cutoff and this one: a HOUR cap gives value x minutes / 60 and a DAY cap value x minutes / operating minutes of the cutoff's day. capacitySharePercent is a PromisePolicy field (default 100). Every hold that makes provisional + confirmed equal to share raises PromiseBookExhausted"}
       - {name: CloseBooksAtCutoff, rule: "a clock job closes every OPEN book at its cutoffAt (CloseBook). Holds are already refused from holdDeadline, before the job runs, and confirm and release stay legal on a CLOSED book"}
-      - {name: PromisePolicyParameters, rule: "the versioned PromisePolicy record (POST /promise-policies, event PromisePolicyPublished) carries policyVersion ('v' + version), version, offerTtlMinutes, holdTtlMinutes, packagesPerOrder, capacitySharePercent, transitWindowDays (default 28), transitServiceLevelPercent (default 90), minTransitObservations (default 20), orderDeadlines[{tier, regionId?, localTime}] and publishedAt. The current policy is the highest version. Without a published policy version 0 applies: offerTtl 10, holdTtl 15, packagesPerOrder 1, capacitySharePercent 100, transitWindowDays 28, transitServiceLevelPercent 90, minTransitObservations 20, no deadlines. holdExpiresAt = now + holdTtlMinutes; each order needs packagesPerOrder packages of room on the pickup and on every linehaul departure of the witness path"}
+      - {name: PromisePolicyParameters, rule: "the versioned PromisePolicy record (POST /promise-policies, event PromisePolicyPublished) carries policyVersion ('v' + version), version, offerTtlMinutes, holdTtlMinutes, packagesPerOrder, capacitySharePercent, transitWindowDays (default 28), transitServiceLevelPercent (default 90), minTransitObservations (default 20), the calibration fields of ADR 0020 targetOnTimeProbabilityPercent (default 95, 50..99, ONE value for every tier), minCalibrationObservations (default 50, 10..10000), calibrationWindowDays (default 28, 1..365) and maxCalibrationBufferMinutes (default 720, 0..2880; 0 switches the buffer off and keeps the confidence), orderDeadlines[{tier, regionId?, localTime}] and publishedAt. The current policy is the highest version. Without a published policy version 0 applies: offerTtl 10, holdTtl 15, packagesPerOrder 1, capacitySharePercent 100, transitWindowDays 28, transitServiceLevelPercent 90, minTransitObservations 20, targetOnTimeProbabilityPercent 95, minCalibrationObservations 50, calibrationWindowDays 28, maxCalibrationBufferMinutes 720, no deadlines. holdExpiresAt = now + holdTtlMinutes; each order needs packagesPerOrder packages of room on the pickup and on every linehaul departure of the witness path"}
       - {name: MeasuredTransit, rule: "ADR 0014: TransitActualsView pairs LoadDeparted/LoadArrived by loadId into observed transits per (origin, destination) (ring of 200, read-side pruned to transitWindowDays). When a pair has at least minTransitObservations in-window observations and its transitServiceLevelPercent nearest-rank transit exceeds a departure leg's scheduled transit (arrivesAt - departsAt), the leg's arrival becomes arrivesAt + (measured - scheduled): one-sided, measured transit never promises earlier than the timetable. A candidate whose witness path used at least one measured adjustment is quoted basis MEASURED; the pickup leg counts as a departure leg; below minTransitObservations the timetable stands"}
     inbound:
       - {from: customer-ordering, type: qry, channel: "REST POST /delivery-quotes (in-org)", routes: ["POST /delivery-quotes"], message: "QuoteDeliveryOffers", relationship: Customer/Supplier}
@@ -576,11 +589,11 @@ contexts:
       - {from: customer-ordering, type: evt, channel: "Kafka retailnetwork.customer-ordering.events", message: "CustomerOrderPlaced, CustomerOrderCancelled", relationship: Customer/Supplier}
       - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentUnsourceable, FulfillmentLocked", relationship: Customer/Supplier}
       - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "PackageDelivered, PackageExceptionRaised", relationship: Conformist}
-      - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "DepartureScheduled, DepartureCapacityChanged, DepartureCancelled", relationship: Conformist}
+      - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events (the consumed LoadDeparted and LoadArrived read the optional departureId, delivery-promise ADR 0021)", message: "DepartureScheduled, DepartureCapacityChanged, DepartureCancelled, LoadDeparted, LoadArrived", relationship: Conformist}
       - {from: last-mile-delivery, type: evt, channel: "Kafka retailnetwork.last-mile-delivery.events", message: "DeliveryWaveScheduled, DeliveryWaveCapacityChanged", relationship: Conformist}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired, LaneOpened, LaneClosed, ServiceAreaAssigned, RegionDefined", relationship: Conformist}
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated, CatalogItemDiscontinued, ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored", relationship: Conformist}
-      - {from: node-performance, type: evt, channel: "Kafka retailnetwork.node-performance.events", message: "NodeScorecardUpdated", relationship: Conformist}
+      - {from: node-performance, type: evt, channel: "Kafka retailnetwork.node-performance.events", message: "NodeScorecardUpdated, NodeTierEligibilityChanged", relationship: Conformist}
     rest:
       - "POST /delivery-quotes"
       - "POST /delivery-estimates"
@@ -598,7 +611,7 @@ contexts:
       - "GET /reports/quote-conversion?from=&to="
       - "GET /reports/freshness"
     publishes:
-      - {event: PromiseMade, entity: promise, data: [promiseId, offerId, tier, nodeId, pickupDepartureId, shipBy, deliverByEarliest, deliverByLatest, basis, policyVersion, holdExpiresAt, "lines(catalogItemId, quantity, ownerRef (optional, omitted when operator-owned))"], consumers: [analytics only]}
+      - {event: PromiseMade, entity: promise, data: [promiseId, offerId, tier, nodeId, pickupDepartureId, shipBy, deliverByEarliest, deliverByLatest, basis, confidence (optional), policyVersion, holdExpiresAt, "lines(catalogItemId, quantity, ownerRef (optional, omitted when operator-owned))"], consumers: [analytics only]}
       - {event: PromiseConfirmed, entity: promise, data: [promiseId, orderId, groupNo], consumers: [analytics only]}
       - {event: PromiseAtRisk, entity: promise, data: [promiseId, orderId, reason, detectedAt], consumers: [customer-ordering]}
       - {event: PromiseRevised, entity: promise, data: [promiseId, orderId, revisionNo, previousDeliverByLatest, deliverByEarliest, deliverByLatest, shipBy, nodeId, reason], consumers: [customer-ordering, order-sourcing]}
@@ -608,8 +621,8 @@ contexts:
       - {event: PromiseCancelled, entity: promise, data: [promiseId, orderId, reason], consumers: [analytics only]}
       - {event: PromiseBookExhausted, entity: promisebook, data: [bookId, nodeId, pickupDepartureId, share], consumers: [order-sourcing]}
       - {event: PromiseUnkeepable, entity: promise, data: [promiseId, orderId, groupNo, reason], consumers: [customer-ordering]}
-      - {event: DeliveryOfferQuoted, entity: deliveryoffer, data: [offerId, tier, destinationPostalPrefix, nodeId, deliverByEarliest, deliverByLatest, basis, policyVersion, expiresAt], consumers: [analytics only]}
-      - {event: PromisePolicyPublished, entity: promisepolicy, data: [policyVersion, version, offerTtlMinutes, holdTtlMinutes, packagesPerOrder, capacitySharePercent, orderDeadlines, publishedAt], consumers: [analytics only]}
+      - {event: DeliveryOfferQuoted, entity: deliveryoffer, data: [offerId, tier, destinationPostalPrefix, nodeId, deliverByEarliest, deliverByLatest, basis, confidence (optional), policyVersion, expiresAt, capacityBand (optional)], consumers: [analytics only]}
+      - {event: PromisePolicyPublished, entity: promisepolicy, data: [policyVersion, version, offerTtlMinutes, holdTtlMinutes, packagesPerOrder, capacitySharePercent, transitWindowDays, transitServiceLevelPercent, minTransitObservations, targetOnTimeProbabilityPercent, minCalibrationObservations, calibrationWindowDays, maxCalibrationBufferMinutes, orderDeadlines, publishedAt], consumers: [analytics only]}
     reasons:
       - name: PromiseBrokenCause
         fields: [PromiseBroken.cause, "rest:Judgement.cause"]
@@ -631,6 +644,7 @@ contexts:
           - {value: WAVE_CANCELLED, meaning: "The delivery wave on the promise's witness path was cancelled (DeliveryWaveCancelled)."}
           - {value: BOOKING_FAILED, meaning: "linehaul-transportation could not book the group's package on any departure (BookingFailed)."}
           - {value: BOOKING_MOVED, meaning: "The group's package was rebooked on another departure (BookingMoved)."}
+          - {value: PREDICTED_LATE, meaning: "The FlagPredictedLate sweep found a departure of the witness path past its expected arrival with no arrival seen (delivery-promise ADR 0021). The promise stays AT_RISK until it is judged, even if the load arrives later; it is re-promised only when its window is no longer reachable."}
       - name: PromiseReleaseReason
         fields: [PromiseReleased.reason, "rest:Promise.releaseReason"]
         about: "Why a PROVISIONAL promise was RELEASED."
@@ -675,6 +689,7 @@ contexts:
       - {event: ListingSuppressed, from: offer-availability}
       - {event: ListingRestored, from: offer-availability}
       - {event: NodeScorecardUpdated, from: node-performance}
+      - {event: NodeTierEligibilityChanged, from: node-performance}
       - {event: DeliveryWaveCancelled, from: last-mile-delivery}
       - {event: PackageInductionDeferred, from: last-mile-delivery}
       - {event: BookingFailed, from: linehaul-transportation}
@@ -699,6 +714,11 @@ contexts:
       - {term: Re-promise, definition: "Revising a confirmed promise to a later window when its path is no longer feasible.", code: "promise.Promise.Revise"}
       - {term: Promise Kept / Broken, definition: "The judgement at delivery against deliverByLatest.", code: "promise.Judgement"}
       - {term: Shipment Group, definition: "The lines of an order promised and shipped together from one node.", code: "promise.ShipmentGroup"}
+      - {term: Capacity Band, definition: "AMPLE, TIGHT or SCARCE: how full the promise book behind an offer's window is at quote time (under 60%, 60% to under 85%, 85% and over of its share). A signal, never a price.", code: "shared.CapacityBand"}
+      - {term: Calibration Buffer, definition: "The minutes a quote adds to its arrival, learned from the lateness of this service's own judged promises in the same segment; one-sided and capped.", code: "search.Calibration.BufferMinutes"}
+      - {term: Confidence, definition: "The observed share of a segment's judged promises that were within the quote's buffer; present only with enough judgements, absence means unknown.", code: "search.Calibration.Confidence"}
+      - {term: Predicted Late, definition: "The at-risk reason of a confirmed promise whose witness-path departure is past its expected arrival with no arrival seen.", code: "promise.ReasonPredictedLate"}
+      - {term: Fast-Tier Eligibility, definition: "Whether a node may be offered SAME_DAY and NEXT_DAY, as decided by node-performance and held locally; a missing row means eligible.", code: "NodeTierEligibility"}
 
   # =========================================================================
   - id: customer-ordering
@@ -1603,6 +1623,7 @@ contexts:
       - A scorecard is computed only from observed facts, never from the vendor's declaration.
       - A node with fewer than the minimum observations in the window is graded PROVISIONAL, not A.
       - Grades drive the promise handicap (owned by delivery-promise); this context never suspends a node.
+      - The 7-day scorecard also decides fast-tier eligibility (policy FastTierEligibility): below 0.90 graded on-time handover a node is suspended from SAME_DAY and NEXT_DAY, reinstated after three successive recompute days at 0.95 or more. The decision is published as NodeTierEligibilityChanged and acted on by delivery-promise; it never changes the node's status in node-topology (node-performance ADR 0013).
     aggregates:
       - name: NodeScorecard
         root_id: "scorecardId = nodeId + ':' + window"
@@ -1612,17 +1633,19 @@ contexts:
         value_objects:
           - "Metrics{onTimeHandoverRate, lateAckRate, rejectRate, expiryRate, promiseKeptRate, feedFreshnessP95Minutes, inboundTimelinessP95Minutes, inboundAccuracyRate, observations}; the two inbound metrics are informational: they are not an input to Grading and are not on NodeScorecardUpdated"
           - "Grade(A|B|C|D)"
+          - "FastTierState{eligible, reinstatementStreakDays, streakLastUtcDay}: held on the 7d scorecard only (migration 0004), every node starts eligible; the 30d scorecard never evaluates it and keeps the defaults (node-performance ADR 0013)"
         invariants:
           - {rule: "rates are in [0,1]", error: ErrRateOutOfRange}
           - {rule: "grade requires observations >= minObservations", error: ErrInsufficientObservations}
           - {rule: "an observation is counted once (idempotent on source event id)", error: ErrDuplicateObservation}
         commands: [RecordObservation, Recompute]
-        events: [NodeScorecardUpdated, NodeThresholdBreached]
+        events: [NodeScorecardUpdated, NodeThresholdBreached, NodeTierEligibilityChanged]
         throughput_estimate: "medium; recompute batched per minute"
         size_estimate: "nodes x 2 windows + observations (30 days)"
     read_models: []
     policies:
       - {name: Grading, rule: "A: onTimeHandover>=0.98 and promiseKept>=0.97 and lateAck<=0.01; B: >=0.95/0.94/0.03; C: >=0.90/0.90/0.05; else D"}
+      - {name: FastTierEligibility, rule: "evaluated by Recompute on the 7d scorecard only, for SAME_DAY and NEXT_DAY together (one eligibility flag per node, one event per tier). Every node starts ELIGIBLE and a PROVISIONAL scorecard never changes eligibility. Suspension: a GRADED 7d onTimeHandoverRate below 0.90 makes the node ineligible. Reinstatement: an ineligible node whose GRADED 7d onTimeHandoverRate is 0.95 or more on three consecutive distinct UTC calendar days of recompute becomes eligible; a GRADED recompute below 0.95 resets the streak, a PROVISIONAL one neither advances nor resets it, a second recompute on the same UTC day counts once, and a quiet calendar day on which no recompute ran is not a miss. The 0.90 and 0.95 gap is the hysteresis; the numbers are domain constants in the style of the grading bars. The flag, the streak and its last UTC day persist on the 7d aggregate (node-performance ADR 0013)"}
       - {name: ThresholdAlert, rule: "publish NodeThresholdBreached when a metric crosses its threshold downward"}
       - {name: InboundObservations, rule: "light, informational. The shipped time of each shipment is kept from InboundShipmentShipped.shippedAt; each InboundReceiptSubmitted is then one observation: timeliness is the receipt's receivedAt minus the shipment's shippedAt, accuracy is the share of reported cartons with status RECEIVED; both are shown on the scorecard and never graded"}
     inbound:
@@ -1641,7 +1664,16 @@ contexts:
     publishes:
       - {event: NodeScorecardUpdated, entity: scorecard, data: [nodeId, window, grade, onTimeHandoverRate, lateAckRate, rejectRate, expiryRate, promiseKeptRate, feedFreshnessP95Minutes, observations, computedAt], consumers: [delivery-promise, order-sourcing]}
       - {event: NodeThresholdBreached, entity: scorecard, data: [nodeId, metric, value, threshold, window], consumers: [analytics only]}
+      - {event: NodeTierEligibilityChanged, entity: scorecard, data: [nodeId, tier, eligible, metric, value, threshold, window, changedAt], consumers: [delivery-promise]}
     reasons:
+      - name: FastTierGoverned
+        fields: [NodeTierEligibilityChanged.tier]
+        about: "The tiers whose eligibility node-performance judges; raised only when the node's flag flips, one event per tier with the same changedAt, in the same transaction as the scorecard save (outbox). No event for the initial ELIGIBLE state: a consumer that never saw one treats the node as eligible."
+        values:
+          - {value: SAME_DAY, meaning: "Governed by the same eligibility flag as NEXT_DAY."}
+          - {value: NEXT_DAY, meaning: "Governed by the same eligibility flag as SAME_DAY."}
+        consumers:
+          - {context: delivery-promise, uses: [SAME_DAY, NEXT_DAY], rule: "Filters the node out of the tier's candidates while ineligible; any other tier value is ignored and counted (delivery-promise ADR 0022)."}
       - name: ObservationKind
         fields: ["stored:NodeScorecard"]
         about: "The measured outcomes a scorecard counts, stored per node and keyed by the CloudEvents id of the source event (ADR 0002 A2)."
@@ -1675,6 +1707,8 @@ contexts:
       - {term: On-Time Handover Rate, definition: "Share of packages handed over before requiredShipBy.", code: "scorecard.Metrics.OnTimeHandoverRate"}
       - {term: Late Ack Rate, definition: "Share of purchase orders acknowledged in the last 10% of the window or expired.", code: "scorecard.Metrics.LateAckRate"}
       - {term: Grade, definition: "A, B, C or D; PROVISIONAL below the observation minimum.", code: "scorecard.Grade"}
+      - {term: Fast-Tier Eligibility, definition: "Whether a node may be offered SAME_DAY and NEXT_DAY: suspended when the graded 7-day on-time handover rate falls below 0.90, reinstated after three successive recompute days at 0.95 or more.", code: "scorecard.FastTierEligibility"}
+      - {term: Hysteresis, definition: "The gap between the suspension bar (0.90) and the reinstatement bar (0.95), with the three-day streak, that stops a node at the boundary from flapping.", code: "scorecard.FastTierEligibility"}
       - {term: Declared vs Measured, definition: "What a vendor says (profile) against what the network observes (scorecard).", code: "(principle)"}
 
   # =========================================================================

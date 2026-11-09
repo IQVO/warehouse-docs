@@ -23,8 +23,13 @@ acknowledgement rate, a reject rate, an expiry rate, a promise-kept rate and
 the p95 feed freshness, and grades the node `A` to `D`. Below the
 observation minimum the scorecard stays `PROVISIONAL`. The grade feeds
 `delivery-promise`'s handicap and `order-sourcing`'s assignment cost through
-the `NodeScorecardUpdated` event. This context never suspends a node and
-never reads the vendor's declaration into a metric: the declaration is what
+the `NodeScorecardUpdated` event. The 7-day scorecard also decides fast-tier
+eligibility (policy `FastTierEligibility`, [ADR 0013](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0013-fast-tier-eligibility-from-the-7-day-window.md)):
+a node is suspended from `SAME_DAY` and `NEXT_DAY` when its graded on-time
+handover rate falls below 0.90 and reinstated after three successive recompute
+days at 0.95 or more, published as `NodeTierEligibilityChanged` and acted on by
+`delivery-promise`. This context never suspends a node (its status stays a
+`node-topology` decision) and never reads the vendor's declaration into a metric: the declaration is what
 the vendor says, the scorecard is what the network observes
 ([ADR 0003](/network/adr/0003-declared-and-measured-capability)). Vendors see their
 own scorecard only through `vendor-connectivity`

@@ -8,7 +8,7 @@ description: The Core context that quotes a delivery date only from a feasible, 
 # Delivery Promise
 
 :::info[As built]
-Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. It also has an analytics read side (delivery-promise ADR 0018): `cmd/dp-projector` projects this context's own topics into a separate analytical database, and `cmd/dp-reports` serves the read-only `/reports/...` routes on `:8092`.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. It also has an analytics read side (delivery-promise ADR 0018): `cmd/dp-projector` projects this context's own topics into a separate analytical database, and `cmd/dp-reports` serves the read-only `/reports/...` routes on `:8092`. Wave 1 added four promise-quality capabilities ([ADR 0020](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0020-promise-calibration-from-the-services-own-judgement.md) to [ADR 0023](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0023-offers-carry-a-capacity-band.md)): a calibrated quote buffer with an optional `confidence`, a sweep that flags a promise `AT_RISK` with reason `PREDICTED_LATE`, a fast-tier candidate filter fed by `NodeTierEligibilityChanged`, and an optional `capacityBand` on offers. The pages below predate them; the model and the contract copies are authoritative.
 :::
 
 <span className="badge-core">Core</span>
@@ -23,7 +23,7 @@ capacity on the node's pickup cutoff (the **PromiseBook**) until the order is
 placed or the hold expires. When the path breaks, the context re-promises to a
 later window, never an earlier one. At delivery it judges every promise
 **kept** or **broken**. It owns three aggregates (`DeliveryOffer`, `Promise`,
-`PromiseBook`), seven event-fed read models and six policies. It makes **no
+`PromiseBook`), its event-fed read models (plus one local read model fed by its own judgements) and its policies. It makes **no
 synchronous call** to any other context: every input of the promise hot path is
 a local read model fed by events.
 
@@ -36,8 +36,8 @@ a local read model fed by events.
 | [Core Domain Chart](/network/contexts/delivery-promise/core-domain-chart) | Why this is the Core domain | [Core Domain Charts](https://github.com/ddd-crew/core-domain-charts) |
 | [Bounded Context Canvas](/network/contexts/delivery-promise/bounded-context-canvas) | Purpose, classification, roles, inbound and outbound messages, decisions, metrics, open questions | [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas) |
 | [Context Map](/network/contexts/delivery-promise/context-map) | Every upstream and downstream neighbour, with pattern and channel | [Context Mapping](https://github.com/ddd-crew/context-mapping) |
-| [Aggregate Design Canvas](/network/contexts/delivery-promise/aggregate-design-canvas) | `DeliveryOffer`, `Promise`, `PromiseBook` and the seven read models | [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas) |
-| [Domain Events](/network/contexts/delivery-promise/domain-events) | The nine published and twenty-seven consumed events, with a full CloudEvents envelope | — (CloudEvents catalogue) |
+| [Aggregate Design Canvas](/network/contexts/delivery-promise/aggregate-design-canvas) | `DeliveryOffer`, `Promise`, `PromiseBook` and the read models | [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas) |
+| [Domain Events](/network/contexts/delivery-promise/domain-events) | The published and consumed events, with a full CloudEvents envelope | — (CloudEvents catalogue) |
 | [Domain Message Flow](/network/contexts/delivery-promise/domain-message-flow) | Quote, checkout, re-promise and judgement scenarios | [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
 | [EventStorming](/network/contexts/delivery-promise/eventstorming) | Process-level boards with hotspots | [EventStorming glossary & cheat sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
 | [Use Cases](/network/contexts/delivery-promise/use-cases) | One section per command use case, with errors and idempotency | — (application layer) |

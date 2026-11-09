@@ -33,7 +33,7 @@ accepts it.
 ## Service ADRs (one sequence per context repository)
 
 Each of the eleven context repositories records its own decisions on top of
-the domain-level ones above: 146 ADRs on `develop` as of 2026-11-09. They are
+the domain-level ones above: 151 ADRs on `develop` as of 2026-11-09. They are
 linked, never copied; the *Status* column is the word from each ADR's own
 status line. Since the fleet observability standard (accepted 2026-10-26),
 every repository added an A2A inbound adapter and adopted the fleet REST API
@@ -43,7 +43,11 @@ agent authority levels and the complete MCP surface (2026-11-02). The
 network evolution wave 0 (2026-11-08/09) added the owner-aware sourcing and
 promise ADRs (gap G47), seller status and received stock as integration facts
 (G48, G51), fulfillment centres receiving inbound (G64), batch delivery
-estimates (G60) and the analytics read sides of four contexts.
+estimates (G60) and the analytics read sides of four contexts. Wave 1
+(2026-11-09) added the fast-tier eligibility decision of `node-performance`
+and the four promise-quality ADRs of `delivery-promise`: calibrated quotes
+with a confidence, a sweep that flags promises whose load is running late, a
+fast-tier candidate filter on node eligibility, and a capacity band on offers.
 
 
 ### node-topology
@@ -108,6 +112,10 @@ estimates (G60) and the analytics read sides of four contexts.
 | [0017](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0017-owner-aware-availability-and-promise-netting.md) | Owner-aware availability and promise netting | Accepted |
 | [0018](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0018-analytics-read-side.md) | Analytics read side | Accepted |
 | [0019](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0019-batch-delivery-estimates-for-listing-pages.md) | Batch delivery estimates for listing pages | Accepted |
+| [0020](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0020-promise-calibration-from-the-services-own-judgement.md) | Promise calibration from the service's own judgement | Accepted |
+| [0021](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0021-a-sweep-flags-promises-whose-locked-path-is-running-late.md) | A sweep flags promises whose locked path is running late | Accepted |
+| [0022](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0022-fast-tier-candidates-are-filtered-on-node-eligibility.md) | Fast-tier candidates are filtered on node eligibility | Accepted |
+| [0023](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0023-offers-carry-a-capacity-band.md) | Offers carry a capacity band | Accepted |
 
 ### customer-ordering
 
@@ -227,6 +235,7 @@ estimates (G60) and the analytics read sides of four contexts.
 | [0010](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0010-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
 | [0011](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0011-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
 | [0012](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0012-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
+| [0013](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0013-fast-tier-eligibility-from-the-7-day-window.md) | Fast-tier eligibility from the 7-day window | Accepted |
 
 ### seller-inbound
 
