@@ -7,8 +7,8 @@ description: Qualification cards for the five contexts the fleet publishes under
 
 # The WMS tier — five contexts, qualified
 
-Six contexts publish events with the `wms` segment
-(`com.warehouse.wms.<context>.…`). This page has a card for each of the five
+Eight contexts publish events with the `wms` segment
+(`com.warehouse.wms.<context>.…`) in this section. This page has a card for each of the five
 that are qualified. All five pass the industry WMS tests on the
 [industry reference](/wms-wes/industry-reference#the-tests-this-site-applies).
 Four are WMS core and one is WMS extended. The sixth,
@@ -18,7 +18,9 @@ card here yet; see the [qualification](/wms-wes/qualification). Neither has
 the seventh, `returns-processing` (built on `develop` 2026-10-20/21 and wired in
 `warehouse-infra` `develop` since 2026-10-22 — the reverse flow of goods: RMA, return receipt, grading and
 disposition, handing restockable units to `inventory-storage` as staged
-lines).
+lines). Nor has the eighth, `outbound-shipping` (built on `develop`, not
+deployed: trailer load planning, staging, loading, the bill of lading and the
+ship-confirm on the trailer's physical departure).
 
 ## Coverage of the WMS functions
 

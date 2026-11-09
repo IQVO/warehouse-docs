@@ -2,8 +2,8 @@
 
 Fleet-wide documentation for the **warehouse-systems** ecosystem. It holds
 the strategic and tactical Domain-Driven Design artifacts, the generated REST
-and AsyncAPI references, and the business context for nineteen backend
-contexts: eighteen domain bounded contexts plus `warehouse-ops-agent`. Built with [Docusaurus](https://docusaurus.io/) and
+and AsyncAPI references, and the business context for twenty backend
+contexts: nineteen domain bounded contexts plus `warehouse-ops-agent`. Built with [Docusaurus](https://docusaurus.io/) and
 published to **GitHub Pages** through GitHub Actions. It also hosts the
 **retail-network** domain documentation — the large-scale retail and logistics
 network, eleven bounded contexts — as a second docs section served at `/network/`
@@ -124,7 +124,8 @@ for repo in order-management inventory-storage wes-work-planning \
             process-path-management labor-performance network-fulfillment \
             warehouse-planning product-master inbound-receiving \
             slotting-optimization network-inventory-planning \
-            pick-face-replenishment task-interleaving; do
+            pick-face-replenishment task-interleaving returns-processing \
+            exception-management outbound-shipping; do
   git -C "$repo" show origin/develop:apis/openapi.yaml \
     > "warehouse-docs/apis/$repo/openapi.yaml" 2>/dev/null
   git -C "$repo" show origin/develop:apis/asyncapi.yaml \
@@ -147,10 +148,10 @@ all three specs plus the synced context pages in one run.
 `warehouse-ops-agent` has no `apis/` copy here: its `develop` now ships an
 `apis/openapi.yaml`, but this site documents it in prose
 (`docs/api-reference/warehouse-ops-agent.md`) and the gate below only reads that
-spec to resolve routes cited on its pages. Eighteen contexts ship both an
+spec to resolve routes cited on its pages. Nineteen contexts ship both an
 `openapi.yaml` and an `asyncapi.yaml` (`inbound-receiving`,
 `slotting-optimization`, `pick-face-replenishment`, `task-interleaving`,
-`returns-processing` and `exception-management` were added to the sync
+`returns-processing`, `exception-management` and `outbound-shipping` were added to the sync
 loop above, `docusaurus.config.ts`, `sidebars.ts` and
 `scripts/gen-async-docs.mjs` when their contracts merged).
 
@@ -235,18 +236,16 @@ Pages must be set to **Source: GitHub Actions** for this repository
 
 ## Scope
 
-This site documents nineteen backend contexts: the eighteen domain bounded
+This site documents twenty backend contexts: the nineteen domain bounded
 contexts `order-management`, `inventory-storage`, `wes-work-planning`,
 `fulfillment-execution`, `workforce-management`, `facility-layout`,
 `process-path-management`, `labor-performance`, `network-fulfillment`,
 `warehouse-planning`, `product-master`, `network-inventory-planning`,
 `inbound-receiving`, `slotting-optimization`, `pick-face-replenishment`,
-`task-interleaving`, `returns-processing` and `exception-management`,
-plus `warehouse-ops-agent`.
-Every context ships its specs and its artifact pack, except that
-`returns-processing` ships only part of the pack (no core domain chart, context map, EventStorming,
-message-flow, class, ER or sequence pages yet), so its sidebar lists only the
-pages that exist (`CONTEXT_PAGE_OVERRIDES` in `sidebars.ts`).
+`task-interleaving`, `returns-processing`, `exception-management` and
+`outbound-shipping`, plus `warehouse-ops-agent`.
+Every context ships its specs and its artifact pack, so
+`CONTEXT_PAGE_OVERRIDES` in `sidebars.ts` stays empty.
 The frontend repositories (`warehouse-console`, `warehouse-ui-kit`) and the
 deployment repository (`warehouse-infra`) are referenced where relevant.
 They are not bounded contexts in the Evans/Vernon sense, so they have no DDD

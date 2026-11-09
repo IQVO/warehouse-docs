@@ -40,10 +40,13 @@ are deliberately not one-to-one. The domain layer has no knowledge of SQL.
 
 ## Databases
 
-Eighteen contexts on this site persist, and every one of them has an
-**OLTP** database and a separate **analytical** database. All eighteen are
+Nineteen contexts on this site persist. Eighteen of them have an
+**OLTP** database and a separate **analytical** database, and all eighteen are
 registered with `database: true` and an `analytics:` read side in
-`warehouse-infra` `develop`'s `terraform/apps.yaml`. The OLTP binary (and
+`warehouse-infra` `develop`'s `terraform/apps.yaml`. The nineteenth,
+`outbound-shipping` (built, not deployed, no `terraform/apps.yaml` entry), has
+one Postgres database only: its `load_board` read model is a table in it, fed
+by its own analytics topic, and it has no projector or reports binary. The OLTP binary (and
 its MCP sibling) owns the first.
 The analytical one is written only by that context's projector binary and
 read only by its reports binary (see [Containers](/architecture/containers)).
@@ -72,6 +75,7 @@ explains why).
 | `task-interleaving` | 10 | 2 | three: `hints` to `station_trips`, `station_trips.current_hint_id` to `hints`, and `candidates` to `hints` | [ER](/contexts/task-interleaving/entity-relationship) |
 | `returns-processing` | 11 | 3 | `return_receipt_lines` to `return_receipts` | none synced yet (its pack has no ER page) |
 | `exception-management` | 5 | 3 | none | [ER](/contexts/exception-management/entity-relationship) |
+| `outbound-shipping` | 12 | 0 (no analytics database; the `load_board` table is one of the 12) | none: the schema declares no foreign keys | [ER](/contexts/outbound-shipping/entity-relationship) |
 | `warehouse-ops-agent` | 0 | 0 | no database | [ER](/contexts/warehouse-ops-agent/entity-relationship) |
 | **Total** | **196** | **58** | | |
 
@@ -115,8 +119,8 @@ separate aggregates or records of their own:
   of each other; the FKs bind a trip to its hints inside the `StationTrip`
   aggregate.
 
-fulfillment-execution, labor-performance, pick-face-replenishment and
-exception-management have no FKs at all. Their
+fulfillment-execution, labor-performance, pick-face-replenishment,
+exception-management and outbound-shipping have no FKs at all. Their
 aggregates reference each other only by identity.
 
 ## Tables by role
@@ -141,6 +145,7 @@ aggregates reference each other only by identity.
 | `task-interleaving` | `interleaving_policies` (`InterleavingPolicy`), `station_trips`, `hints` and `candidates` (`StationTrip` and its hints) | `task_pool` (fulfillment-execution's `TaskAvailable`, `TaskClaimed`, `TaskCompleted`), `zones` and `locations` with geometry (facility-layout) | `outbox_events`, `idempotency_keys`, `processed_events` |
 | `returns-processing` | `return_authorizations` (`ReturnAuthorization`), `return_receipts` and `return_receipt_lines` (`ReturnReceipt`), `dispositions` (`Disposition`), `disposition_policies` (the versioned `DispositionPolicy`) | `allocated_lines` (order-management's allocations), `manifested_units` (fulfillment-execution's `PackageManifested`), `product_classes` (product-master's `ProductClassified`) | `outbox`, `idempotency_keys`, `processed_events` |
 | `exception-management` | `exception_cases` (`ExceptionCase`), `exception_policies` (one row per `ExceptionPolicy` version) | none: a case keeps a frozen copy of its source payload | `outbox`, `idempotency_keys`, `processed_events` |
+| `outbound-shipping` | `outbound_loads` (`OutboundLoad`), `shipping_packages` (`ShippingPackage`), `bills_of_lading` (`BillOfLading`) | `cpt_schedules` (process-path-management's `CPTScheduleChanged`), `zones` and `locations` (facility-layout), `dock_appointments` (dock-scheduling's `DockAppointmentBooked`), `door_work_completions` (yard-management's `DoorWorkCompleted`), and `load_board` (its own analytics stream, folded by the `analytics` consumer) | `outbox_events`, `idempotency_keys`, `processed_events` |
 
 Patterns that the table makes visible:
 
@@ -154,7 +159,7 @@ Patterns that the table makes visible:
   `processed_events` (or a per-consumer ledger, as in order-management) is
   keyed on the inbound CloudEvents `id`. labor-performance goes one step
   further and uses that `id` as the primary key of `task_performances`.
-- **HTTP idempotency.** Fourteen of the eighteen persisting contexts store
+- **HTTP idempotency.** Fifteen of the nineteen persisting contexts store
   `Idempotency-Key` replays in an `idempotency_keys` table: every context in
   the table above except network-fulfillment, warehouse-planning,
   product-master and network-inventory-planning.
@@ -221,6 +226,9 @@ correlation state, plus projector bookkeeping.
 | `task-interleaving` | `hint_facts` | none | `analytics_processed_events` only |
 | `returns-processing` | `return_line_facts`, `disposition_facts` | none | `analytics_processed_events` only |
 | `exception-management` | `exception_case_facts`, `exception_policy_facts` | none | `analytics_processed_events` only |
+
+`outbound-shipping` has no analytical database and no row here: its one read
+model, `load_board`, lives in its OLTP database.
 
 | Table kind | Purpose |
 | --- | --- |

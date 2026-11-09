@@ -8,7 +8,7 @@ description: UML class diagrams of the aggregates, entities and value objects in
 # Domain Model
 
 The fleet-level view of what lives under `internal/domain/**` in each of the
-nineteen contexts documented on this site: which aggregate roots each one owns, the invariant
+twenty contexts documented on this site: which aggregate roots each one owns, the invariant
 that makes each one a consistency boundary, and how aggregates in different
 contexts refer to each other.
 
@@ -34,9 +34,10 @@ in the outbound Postgres adapter.
 
 ## The fleet at a glance
 
-50 aggregate roots across eighteen contexts. The nineteenth, `warehouse-ops-agent`,
-owns none, and that is a design decision. The two newest contexts are built and
-counted: `returns-processing` (decided 2026-10-20) has three aggregates
+53 aggregate roots across nineteen contexts. The twentieth, `warehouse-ops-agent`,
+owns none, and that is a design decision. The three newest contexts are built and
+counted: `outbound-shipping` (decided 2026-11-05, built on `develop`, not deployed) has three aggregates
+(`OutboundLoad`, `ShippingPackage`, `BillOfLading`), `returns-processing` (decided 2026-10-20) has three aggregates
 (`ReturnAuthorization`, `ReturnReceipt`, `Disposition`; its versioned
 `DispositionPolicy` is data without behaviour, not an aggregate) and
 `exception-management` (2026-10-20) has two (`ExceptionCase`,
@@ -71,6 +72,7 @@ declare an aggregate root (`Container`, ADR 0045, and `Relocation`, ADR
 | `task-interleaving` | `StationTrip` (the station's position and its hint, in the states `Active`, `Consumed`, `Expired`, `Superseded`), `InterleavingPolicy` (the versioned per-site settings). The recommender in `internal/domain/recommend` and the `rectilinear-v1` travel model are pure functions behind a port, not aggregates | 2 | [class diagram](/contexts/task-interleaving/class-diagram), [canvas](/contexts/task-interleaving/aggregate-design-canvas) |
 | `returns-processing` | `ReturnAuthorization` (the RMA), `ReturnReceipt` (lines matched to an RMA or `UNEXPECTED`), `Disposition` (immutable; an override is a new instance). `DispositionPolicy` is versioned data, not an aggregate | 3 | class diagram not synced yet, [canvas](/contexts/returns-processing/aggregate-design-canvas) |
 | `exception-management` | `ExceptionCase` (one owned anomaly, with its SLA clock and audit trail), `ExceptionPolicy` (the append-only handling policy of one source type) | 2 | [class diagram](/contexts/exception-management/class-diagram), [canvas](/contexts/exception-management/aggregate-design-canvas) |
+| `outbound-shipping` | `OutboundLoad` (the packages planned to leave together for one cutoff key), `ShippingPackage` (one manifested package on its way to the truck), `BillOfLading` (the shipping document of one confirmed load) | 3 | [class diagram](/contexts/outbound-shipping/class-diagram), [canvas](/contexts/outbound-shipping/aggregate-design-canvas) |
 | `warehouse-ops-agent` | none: per-request decision objects in `internal/domain/policy` | 0 | [class diagram](/contexts/warehouse-ops-agent/class-diagram), [canvas](/contexts/warehouse-ops-agent/aggregate-design-canvas) |
 
 ## Aggregates across context boundaries
@@ -423,6 +425,27 @@ request, not aggregates. [Canvas](/contexts/facility-layout/aggregate-design-can
 
 [Canvas](/contexts/exception-management/aggregate-design-canvas).
 
+### outbound-shipping
+
+- `OutboundLoad`: at most one open load per cutoff key (site, cpt, operating
+  date, ship method), enforced by `Plan` and the partial unique index
+  `uq_open_load_per_cutoff` as race backstop (`ErrDuplicateOpenLoad`).
+  Loading starts only with a door and a docked trailer at that door. A load
+  closes only when every package is loaded or short-shipped with a reason
+  (`ErrPackagesOutstanding`), and ship-confirm needs a `CLOSED` load
+  (`ErrLoadNotClosed`). A `SHIP_CONFIRMED` load never changes
+  (`ErrLoadConfirmed`); only a `PLANNED` load can be cancelled.
+- `ShippingPackage`: stages only at a Staging location of its own site
+  (`ErrNotStagingLocation`), loads only onto its own load through that load's
+  door (`ErrWrongLoad`), belongs to one load at a time, and unloads only before
+  ship-confirm (`ErrAlreadyShipped`). A missed-load flag needs a load and is
+  raised at most once per package (the `missed_flagged` guard).
+- `BillOfLading`: issued only for a ship-confirmed load, exactly once per load
+  (`ErrBolAlreadyIssued`, backed by `UNIQUE (load_id)`), and only with the seal
+  the yard recorded (`ErrSealMissing`); a void needs a reason and happens once.
+
+[Canvas](/contexts/outbound-shipping/aggregate-design-canvas).
+
 ### warehouse-ops-agent
 
 No aggregate root and no persisted state. `internal/domain/policy` is
@@ -452,5 +475,5 @@ place of invariants. [Canvas](/contexts/warehouse-ops-agent/aggregate-design-can
    order-management, `SaveClaim` in fulfillment-execution, and the
    `WorkPool` version check in wes-work-planning).
 6. **The domain layer imports nothing framework-shaped.** Every one of the
-   nineteen repositories has `internal/architecture/*_test.go` fitness tests
+   twenty repositories has `internal/architecture/*_test.go` fitness tests
    that fail the build if it does. See [Components](/architecture/components).

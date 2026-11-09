@@ -2,7 +2,7 @@
 id: index
 title: Bounded Contexts
 sidebar_label: Bounded Contexts
-description: The eighteen domain bounded contexts and the operator agent, each with its ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
+description: The nineteen domain bounded contexts and the operator agent, each with its ddd-crew artifact set — business context, ubiquitous language, core domain chart, canvases, context map, domain events, message flows, EventStorming and code-level diagrams.
 slug: /contexts
 ---
 
@@ -54,7 +54,7 @@ applies, is given in brackets:
     `labor-performance`, `network-fulfillment`, `warehouse-planning`,
     `product-master`, `inbound-receiving`, `slotting-optimization`,
     `network-inventory-planning`, `pick-face-replenishment`,
-    `task-interleaving`, `returns-processing` and `exception-management`.
+    `task-interleaving`, `returns-processing`, `exception-management` and `outbound-shipping`.
     (Hand-written for this site.)
 
 :::info[Synced pages]
@@ -96,6 +96,7 @@ pyramid, `make` targets and CI jobs).
 | [task-interleaving](/contexts/task-interleaving) | Supporting | `wes` | WES — after each completed task, an advisory, expiring hint of nearby open tasks. Built and deployed in the reference cluster since 2026-10-20/21 (API, MCP, analytics and web remote); `fulfillment-execution` consumes the hint as a tie-break (its ADR 0051) |
 | [returns-processing](/contexts/returns-processing) | Supporting | `wms` | WMS — the reverse flow of goods: RMA authorization against a shipped line, return receipt and grading, the disposition decision, and the staged handover of restockable units to `inventory-storage`. Built on `develop` (API, outbox, three consumers, read-only MCP, analytics read side, web remote) and registered in `warehouse-infra` `develop`; both output edges are built and wired (`inventory-storage` ADR 0044, `exception-management`). Its repository ships part of the synced page set (see below) |
 | [exception-management](/contexts/exception-management) | Supporting | `wes` | WES — the Problem Solve lifecycle: every case opened by a fact another context published (six producer contexts plus the `OrderRepromised` correlation feed), with dedup, triage, assignment, an SLA clock and declarative auto-resolve. Built on `develop` and registered in `warehouse-infra` `develop` (API, MCP, analytics read side, web remote); the workforce-management and network-inventory-planning fact sources are planned, not built |
+| [outbound-shipping](/contexts/outbound-shipping) | Supporting | `wms` | WMS — what leaves on which trailer: load planning from the first manifested package, staging, loading, the bill of lading and ship-confirm on the trailer's physical departure; hands `order-management` `ShipmentConfirmed` and `PackageMissedLoad`. Built on `develop`, not deployed (no Helm chart, no `warehouse-infra` entry) |
 
 `exception-management` now ships the full synced set like every other
 context. `returns-processing` ships only part of it: its directory holds the
@@ -106,7 +107,7 @@ site. Its repository has no core domain chart, context map, domain message
 flow, EventStorming, class, entity-relationship, sequence-diagram or use-case
 page on `develop` yet.
 
-See [Strategic Design](/strategic-design) for how these nineteen contexts relate to
+See [Strategic Design](/strategic-design) for how these twenty contexts relate to
 each other at the fleet level, and the
 [DDD Starter Modelling Process](/strategic-design/ddd-starter-modelling-process)
 for which modelling step each page belongs to.

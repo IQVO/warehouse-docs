@@ -12,15 +12,19 @@ A **container** here is C4's meaning of the word: a separately deployable or
 runnable unit, whether that is a Go process, a Postgres database or the
 broker. It is unrelated to Docker specifically.
 
-This site covers nineteen backend contexts: eighteen domain contexts and
-`warehouse-ops-agent`. All eighteen domain contexts ship **four Go binaries
+This site covers twenty backend contexts: nineteen domain contexts and
+`warehouse-ops-agent`. Eighteen of the nineteen domain contexts ship **four Go binaries
 and two databases** each, plus a Module Federation frontend remote, because
 the analytical read side is a separate process family from the operational
 one. `fulfillment-execution` also ships `cmd/sweep`, the entrypoint of its two
 sweep CronJobs (expire-leases, sweep-cpt-misses), which POSTs the sweep
 endpoints of its own Service. `warehouse-ops-agent` is one binary with no
-database. Every one of the nineteen has an entry in `warehouse-infra`
-`develop`'s application registry (`terraform/apps.yaml`), and each domain
+database. The nineteenth, `outbound-shipping` (built on `develop`, not
+deployed), ships two binaries (`cmd/api` with its consumers and outbox relay,
+and a read-only `cmd/mcp`), one Postgres database, no analytics read side and no
+frontend remote, and has no Helm chart. Nineteen of the twenty have an entry in
+`warehouse-infra` `develop`'s application registry (`terraform/apps.yaml`; not
+`outbound-shipping`), and each registered domain
 context's entry declares `database: true`, an `analytics:` read side and a
 `frontend_remote:`. The five most recent read sides
 (`slotting-optimization`, `pick-face-replenishment`, `task-interleaving`,
@@ -91,7 +95,8 @@ Three consequences follow, and all three are load-bearing:
    calls stay on direct ClusterIP and Kafka and never hairpin through either
    gateway.
 
-The console registers eighteen WMS and WES remotes, one per domain context:
+The console registers eighteen WMS and WES remotes, one per domain context
+except `outbound-shipping`, which has none:
 `order_mgmt_mfe`, `inventory_mfe`,
 `planning_mfe`, `fulfillment_mfe`, `workforce_mfe`, `facility_mfe`,
 `process_path_mfe`, `labor_mfe`, `netfulfil_mfe` (keyed
@@ -409,9 +414,16 @@ flowchart LR
 | `warehouse.task-interleaving.events` | task-interleaving | 1 | fulfillment-execution (`InterleavingHintIssued`, an advisory tie-break inside one `claimNext` priority band, its ADR 0051; `TASK_INTERLEAVING_MODE=kafka`) |
 | `warehouse.returns-processing.events` | returns-processing | 7 | inventory-storage (`ReturnLineStaged`, once per `RESTOCK` disposition, into its staged-receipt use case, its ADR 0044); exception-management (`UnexpectedReturnReceived`, one case per receipt line); the other five types have no consumer |
 | `warehouse.exception-management.events` | exception-management | 7 | none: no context consumes any of its seven types |
+| `warehouse.outbound-shipping.events` | outbound-shipping (built, not deployed) | 13 | order-management (`ShipmentConfirmed`, `PackageMissedLoad`, its ADR 0051; dark unless `OUTBOUND_SHIPPING_CONSUMER_MODE=kafka`); exception-management (`PackageMissedLoad`, its ADR 0011); `LoadingStarted`, `LoadClosed`, `LoadReopened` and `ShipmentConfirmed` toward yard-management and network-fulfillment have no handler; the other eight types are analytics-only by design |
 
 The type counts are the messages each producer's `asyncapi.yaml` declares on
-its integration channel (counted on `origin/develop`, 2026-10-27). The
+its integration channel (counted on `origin/develop`, 2026-10-27; the
+`outbound-shipping` row on 2026-11-09). `outbound-shipping` is not deployed, so it
+has no pod, no topic in the cluster and none of the diagrams above; it also
+*consumes* five sibling topics (`warehouse.fulfillment.events`,
+`warehouse.process-path-management.events`, `warehouse.facility.events`,
+`warehouse.dock-scheduling.events`, `warehouse.yard-management.events`),
+which are not in the consumer columns above (context map K67 to K71). The
 consumers come from each consumer's own `asyncapi.yaml` plus its Kafka
 adapters on `develop`: several consumers' specs omit a type their code
 consumes (the pack-level consumers of wes-work-planning, fulfillment-execution,

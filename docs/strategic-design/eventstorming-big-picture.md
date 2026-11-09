@@ -20,7 +20,10 @@ Every orange sticky is a real domain event: it appears in a synced
 `apis/<context>/asyncapi.yaml` or on that context's Domain Events page.
 Every hotspot is a gap that is already documented somewhere, and the
 [hotspot table](#hotspots-and-their-sources) cites the source for each one.
-Nothing on this page is a guess. The four newest contexts,
+Nothing on this page is a guess. `outbound-shipping` (built on `develop`, not
+deployed) is drawn in the [timeline overview](#timeline-overview) and in
+[Phase 4](#phase-4-ship-close-and-the-exception-loop), from its synced
+`asyncapi.yaml`. Four other recent contexts,
 `inbound-receiving` (before the first stow), `slotting-optimization`
 (beside the order-to-ship line), `pick-face-replenishment` (keeping the
 forward faces stocked) and `task-interleaving` (hinting the next nearby task
@@ -157,6 +160,12 @@ flowchart LR
         direction LR
         LP1["Task Performance Recorded"]:::event
     end
+    subgraph S_OS["outbound-shipping"]
+        direction LR
+        OS1["Load Planned"]:::event
+        OS2["Load Closed"]:::event
+        OS3["Shipment Confirmed"]:::pivotal
+    end
 
     FL1 --> FL2 --> IN1
     IR1 --> IN0 --> IN1
@@ -180,6 +189,8 @@ flowchart LR
     FE4 --> OM3
     FE5 --> OM3
     FE4 -. "operator confirms" .-> NF3
+    FE4 -. "plans the load" .-> OS1
+    OS1 --> OS2 --> OS3
 
     classDef event fill:#f6a04d,stroke:#9a5b1c,color:#1f1300
     classDef pivotal fill:#f6a04d,stroke:#000000,stroke-width:5px,color:#1f1300,font-weight:bold
@@ -196,7 +207,12 @@ handover that `inventory-storage` books as `Stock Received` before the stow
 (see [Phase 0b](#phase-0b-inbound-receiving-and-forward-pick-slotting), which
 also draws `slotting-optimization`). The `FE4` to `NF3` arrow is dotted on
 purpose. No event or call links a manifested package to the network order,
-and an operator closes the loop by hand (hotspot H26).
+and an operator closes the loop by hand (hotspot H26). `outbound-shipping`
+is the context that would close it: it plans a load from `PackageManifested`
+(dotted, because the producer omits `site_id` today and a manifest without it
+plans nothing, H45) and raises `ShipmentConfirmed` on the trailer's physical
+departure, but it is built, not deployed (H43), and
+`network-fulfillment` has no handler for the event (H44).
 
 Sources: event names from every `apis/*/asyncapi.yaml`. Causal order from
 the per-context [Domain Message Flow](/contexts/order-management/domain-message-flow)
@@ -806,7 +822,10 @@ Sources: [fulfillment-execution scenarios 1 and 2](/contexts/fulfillment-executi
 
 A manifested package, or a missed CPT, re-promises the order line. The
 network order is closed by an explicit shipment confirmation. Overdue
-acknowledgements are reported and then refused.
+acknowledgements are reported and then refused. `outbound-shipping`, built on
+`develop` and not deployed, owns what is loaded on which trailer: it raises
+`ShipmentConfirmed` only on the physical departure the yard reports, and flags
+every package a departing trailer left behind as `PackageMissedLoad`.
 
 ```mermaid
 flowchart LR
@@ -837,6 +856,27 @@ flowchart LR
         E7["Network Order Rejected, deadline missed"]:::event
         R1["Capability offers"]:::readmodel
     end
+    subgraph S_YM["yard-management"]
+        direction LR
+        Y1["Trailer Docked"]:::event
+        Y2["Trailer Departed"]:::event
+    end
+    subgraph S_OS["outbound-shipping"]
+        direction LR
+        E8["Load Planned"]:::event
+        E14["Loading Started"]:::event
+        C7["Stage Package"]:::command
+        E9["Package Staged"]:::event
+        C8["Load Package"]:::command
+        E10["Package Loaded"]:::event
+        C9["Close Load"]:::command
+        E11["Load Closed"]:::event
+        P2["Whenever a trailer departs a closed load, confirm the shipment"]:::policy
+        E12["Shipment Confirmed"]:::pivotal
+        P3["Whenever a trailer departs a load still loading, flag the packages not loaded"]:::policy
+        E13["Package Missed Load"]:::event
+        R2["Load board"]:::readmodel
+    end
 
     SCH --> C1 --> E2
     SCH --> C2 --> E3
@@ -855,6 +895,24 @@ flowchart LR
     H26 -.- C4
     E6 -.- H28
 
+    E1 -.-> E8
+    OP --> C7 --> E9
+    OP --> C8 --> E10
+    OP --> C9 --> E11
+    E8 --> E14
+    Y1 --> E14
+    E11 --> P2
+    Y2 --> P2 --> E12
+    Y2 --> P3 --> E13
+    E8 --> R2
+
+    H43["H43 built, not deployed: no Helm chart, no infra entry"]:::hotspot
+    H44["H44 network-fulfillment and yard-management have no handler for its events"]:::hotspot
+    H45["H45 a manifest without site_id plans no load"]:::hotspot
+    E12 -.- H43
+    E12 -.- H44
+    E1 -.- H45
+
     classDef actor fill:#fff176,stroke:#b59f00,color:#1f1300
     classDef command fill:#4aa3df,stroke:#1f6f9f,color:#0b1e2d
     classDef event fill:#f6a04d,stroke:#9a5b1c,color:#1f1300
@@ -870,7 +928,9 @@ capability offer is computed from Phase 2's `Path Capacity Changed`, the
 CPT schedule and usable stock, and in live mode each pass is fed to the
 network as one inventory feed per site (H30, resolved).
 
-Sources: [order-management flow 3](/contexts/order-management/domain-message-flow),
+Sources: [outbound-shipping Domain Events](/contexts/outbound-shipping/domain-events) and
+[Async API](/contexts/outbound-shipping/async-api),
+[order-management flow 3](/contexts/order-management/domain-message-flow),
 [fulfillment-execution scenario 3](/contexts/fulfillment-execution/domain-message-flow),
 [network-fulfillment flows 1, 3 and 4](/contexts/network-fulfillment/domain-message-flow),
 [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming).
@@ -910,7 +970,7 @@ this site, and the corroborating context page is linked instead.
 | ~~H23~~ | fulfillment-execution | ~~No in-process scheduler for `expire-leases` or `sweep-cpt-misses`~~ **Resolved 2026-10-06.** The chart CronJobs now run both sweeps by default (ADR 0037). | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | H24 | fulfillment-execution | `TaskCPTMissed` re-fires on every sweep pass | [fulfillment-execution EventStorming](/contexts/fulfillment-execution/eventstorming) |
 | ~~H25~~ | order-management | ~~No known consumer of `OrderRepromised`~~ **Resolved 2026-10-22**: `exception-management` consumes it to auto-resolve `TaskCPTMissed` cases (context map K58, group `exception-management-order-correlation`), wired in `warehouse-infra` `develop`. | [order-management EventStorming](/contexts/order-management/eventstorming) H5. [order-management context map](/contexts/order-management/context-map). **Decided 2026-10-12: kept unconsumed** (it carries no new cutoff instant; warehouse-planning ADR 0004, [ecosystem gaps tracker](/fleet-health/ecosystem-gaps) E4). |
-| H26 | network-fulfillment | No persisted WorkUnitId-to-NetworkRef mapping, so shipment confirmation is an explicit call (ADR 0014) | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), section 3 |
+| H26 | network-fulfillment | No persisted WorkUnitId-to-NetworkRef mapping, so shipment confirmation is an explicit call (ADR 0014). `outbound-shipping`'s `ShipmentConfirmed` is meant to replace the call (its ADR 0004), but network-fulfillment has no consumer of it yet (H44) | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), section 3 |
 | ~~H27~~ | network-fulfillment | ~~Confirming a shipment before acknowledgement surfaces as HTTP 500~~ **Resolved 2026-10-06.** Now 409 `confirm-before-acknowledge` (ADR 0015). | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming) |
 | H28 | network-fulfillment | `AcknowledgementDeadlineAtRisk` fires only after the deadline, while ADR 0001 says "approaching" | [network-fulfillment EventStorming](/contexts/network-fulfillment/eventstorming), sticky inventory |
 | ~~H29~~ | network-fulfillment | ~~`warehouse.network-fulfillment.events` is wired but unused: no consumer in the fleet~~ **Resolved for the alarm types**: `exception-management` consumes `AcknowledgementDeadlineAtRisk` and `OrphanedHoldCancelled` (context map K57). The five `NetworkOrder*` types keep no consumer by decision (K19). | [network-fulfillment context map](/contexts/network-fulfillment/context-map) |
@@ -927,6 +987,9 @@ this site, and the corroborating context page is linked instead.
 | ~~H41~~ | task-interleaving | ~~Not deployed: `warehouse-infra` `develop` has no database, Kong route, ArgoCD application, values file or dashboard for it.~~ **Resolved 2026-10-20/21.** The ArgoCD application is Synced and Healthy with five pods (API, MCP, analytics projector and reports, frontend); its inputs K41, K45 and K46 are consumed by a running instance. Still open: its `cmd/api` emits no metrics or traces. | [task-interleaving Business Context](/contexts/task-interleaving/business-context), [Runbook](/contexts/task-interleaving/runbook) (deployment status) |
 | ~~H42~~ | task-interleaving | ~~The hint has no reader: `fulfillment-execution` has no consumer of `InterleavingHintIssued`, no hint table and no `claimNext` tie-break (K47)~~ **Resolved 2026-10-18 on `develop`, deployed 2026-10-20/21.** `fulfillment-execution` ADR 0051 (`fulfillment-execution#224`) stores one active hint per station and uses it as a tie-break inside one `claimNext` priority band. | [task-interleaving context map](/contexts/task-interleaving/context-map), [Async API](/contexts/task-interleaving/async-api) |
 | ~~H35~~ | product-master | ~~Stage E (remove the legacy importer, the inventory-storage backfill and the deprecated classification endpoint) has no date~~ **Resolved 2026-10-17**: stage E removed the legacy importer, the `inventory-storage` backfill and the legacy `ProductClassified` type (product-master ADR 0003 index: "importer removed at stage E (2026-10-17)"). | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0003, stage E) |
+| H43 | outbound-shipping | Built on `develop`, not deployed: no Helm chart in its repository and no `terraform/apps.yaml` entry or `helm-values` file in `warehouse-infra` `develop`, so no load is planned or confirmed in the reference cluster | [outbound-shipping Async API](/contexts/outbound-shipping/async-api), [Context Map](/strategic-design/context-map) K67 to K75 |
+| H44 | outbound-shipping | The two consumers its ADRs name for `ShipmentConfirmed` (network-fulfillment, ADR 0004) and for `LoadingStarted`, `LoadClosed`, `LoadReopened` (yard-management, ADR 0005) have no handler on their `develop`; the asyncapi marks the three yard-bound types `pending` | [outbound-shipping Async API](/contexts/outbound-shipping/async-api), [Context Map](/strategic-design/context-map) K74 and K75 |
+| H45 | fulfillment-execution | `PackageManifested` omits `site_id` today (no source in the order-work chain yet), and outbound-shipping ignores a manifest without it, so no load is planned from a manifest even when both ends run | [outbound-shipping Business Context](/contexts/outbound-shipping/business-context), outbound-shipping ADR 0003, [Context Map](/strategic-design/context-map) K67 |
 
 Other wired-but-unused edges are not drawn, because they sit outside
 the order-to-ship timeline. They are `warehouse-ops-agent`'s MCP clients
@@ -963,6 +1026,7 @@ sticky inventory and the code evidence:
 | `pick-face-replenishment` | [/contexts/pick-face-replenishment/eventstorming](/contexts/pick-face-replenishment/eventstorming) |
 | `task-interleaving` | [/contexts/task-interleaving/eventstorming](/contexts/task-interleaving/eventstorming) |
 | `network-inventory-planning` | [/contexts/network-inventory-planning/eventstorming](/contexts/network-inventory-planning/eventstorming) |
+| `outbound-shipping` | [/contexts/outbound-shipping/eventstorming](/contexts/outbound-shipping/eventstorming) |
 
 `network-inventory-planning`'s inter-warehouse transfer flow is not one of the five
 phases above, which follow a customer order from intake to shipment. It has its

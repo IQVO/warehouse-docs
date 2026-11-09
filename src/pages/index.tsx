@@ -33,6 +33,7 @@ const WMS_CONTEXTS: ContextCard[] = [
   {slug: 'task-interleaving', name: 'task-interleaving', tier: 'Supporting'},
   {slug: 'returns-processing', name: 'returns-processing', tier: 'Supporting'},
   {slug: 'exception-management', name: 'exception-management', tier: 'Supporting'},
+  {slug: 'outbound-shipping', name: 'outbound-shipping', tier: 'Supporting'},
 ];
 
 const NETWORK_CONTEXTS: ContextCard[] = [
@@ -75,7 +76,7 @@ const SECTIONS = [
     name: 'WMS / WES',
     tagline: 'The warehouse execution fleet',
     description:
-      'Nineteen backend contexts — receiving, storage, slotting, picking, packing, shipping and the planning around them — one shared ubiquitous language and a single documented context map. Generated from each context\u2019s own OpenAPI and AsyncAPI specifications, ADRs and domain source.',
+      'Twenty backend contexts — receiving, storage, slotting, picking, packing, shipping and the planning around them — one shared ubiquitous language and a single documented context map. Generated from each context\u2019s own OpenAPI and AsyncAPI specifications, ADRs and domain source.',
     links: [
       {label: 'Overview', to: '/overview'},
       {label: 'Strategic Design', to: '/strategic-design/domain-vision'},

@@ -25,6 +25,7 @@ import taskInterleavingSidebar from './docs/api-reference/rest/task-interleaving
 import networkInventoryPlanningSidebar from './docs/api-reference/rest/network-inventory-planning/sidebar';
 import returnsProcessingSidebar from './docs/api-reference/rest/returns-processing/sidebar';
 import exceptionManagementSidebar from './docs/api-reference/rest/exception-management/sidebar';
+import outboundShippingSidebar from './docs/api-reference/rest/outbound-shipping/sidebar';
 
 /**
  * Every bounded context's category lists the same page set, in the same
@@ -52,6 +53,7 @@ const CONTEXTS = [
   'task-interleaving',
   'returns-processing',
   'exception-management',
+  'outbound-shipping',
 ];
 
 const CONTEXT_PAGES = [
@@ -100,6 +102,7 @@ const ASYNC_NARRATIVE = new Set([
   'task-interleaving',
   'returns-processing',
   'exception-management',
+  'outbound-shipping',
 ]);
 
 // Pages a context has beyond the shared page set, appended after it.
@@ -347,6 +350,11 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'exception-management',
       items: [...exceptionManagementSidebar, 'api-reference/async/exception-management'],
+    },
+    {
+      type: 'category',
+      label: 'outbound-shipping',
+      items: [...outboundShippingSidebar, 'api-reference/async/outbound-shipping'],
     },
   ],
 };

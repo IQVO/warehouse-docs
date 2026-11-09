@@ -9,18 +9,20 @@ slug: /overview
 # warehouse-systems documentation
 
 This site is the fleet-wide reference for the **warehouse-systems**
-ecosystem. The ecosystem is nineteen independently deployable Go services
+ecosystem. The ecosystem is twenty Go services
 with hexagonal architecture that together implement a warehouse fulfillment
-platform: eighteen domain bounded contexts plus `warehouse-ops-agent`. Each
+platform: nineteen domain bounded contexts plus `warehouse-ops-agent`. Each
 domain context has its own REST surface and a read-only MCP server
-(`cmd/mcp`), owns a Postgres database plus a separate analytical database,
-and publishes Kafka events. `warehouse-ops-agent` is the exception: a thin
+(`cmd/mcp`), owns a Postgres database (all but the newest, `outbound-shipping`,
+plus a separate analytical database; it keeps its load board in its single
+database), and publishes Kafka events. `warehouse-ops-agent` is the exception: a thin
 read-side agent with no database and no Kafka, which serves its own MCP tools
-in-process. This site documents all eighteen domain contexts and the agent,
+in-process. This site documents all nineteen domain contexts and the agent,
 each with its synced artifact pack and, where it has specs, generated API
-references. All nineteen have an entry in the application registry of
-`warehouse-infra` `develop` (`terraform/apps.yaml`), the two newest,
-`returns-processing` and `exception-management`, since 2026-10-22. That is
+references. Nineteen of the twenty have an entry in the application registry of
+`warehouse-infra` `develop` (`terraform/apps.yaml`), `returns-processing` and
+`exception-management` since 2026-10-22. The twentieth, `outbound-shipping`
+(built on `develop` in November 2026, with no Helm chart), has none yet. That is
 the wiring in `warehouse-infra` `develop`; whether a given cluster has
 applied it is not something this site records.
 
@@ -34,7 +36,7 @@ artifacts, links them together, and adds the fleet-level strategic layer.
 All source repositories live in the [IQVO](https://github.com/IQVO) GitHub
 organization.
 
-## The nineteen contexts on this site
+## The twenty contexts on this site
 
 | Context | Classification | CloudEvents subdomain |
 | --- | --- | --- |
@@ -57,8 +59,13 @@ organization.
 | [`task-interleaving`](/contexts/task-interleaving) | Supporting | `wes` |
 | [`returns-processing`](/contexts/returns-processing) | Supporting | `wms` |
 | [`exception-management`](/contexts/exception-management) | Supporting | `wes` |
+| [`outbound-shipping`](/contexts/outbound-shipping) | Supporting | `wms` |
 
-The newest contexts on this site are `returns-processing` and
+The newest context on this site is `outbound-shipping` (`wms`, Supporting;
+built on `develop`, not deployed): trailer load planning, staging, loading, the
+bill of lading and the ship-confirm on the trailer's physical departure, which
+hands `order-management` the `ShipmentConfirmed` and `PackageMissedLoad` facts.
+Before it came `returns-processing` and
 `exception-management` (both decided 2026-10-20, built on `develop` since
 2026-10-21). `returns-processing` owns the reverse flow of goods: the RMA
 against a shipped order line, the return receipt and its inspection grade,
@@ -160,7 +167,7 @@ published site as an error box.
 
 ## Scope
 
-This section documents the **nineteen backend contexts** listed above (eighteen
+This section documents the **twenty backend contexts** listed above (nineteen
 domain bounded contexts and `warehouse-ops-agent`), which is every backend
 service of the WMS and WES fleet. The retail network and the storefront have
 their own sections, at [/network/](/network/) and [/storefront/](/storefront/).

@@ -38,6 +38,7 @@ const CONTEXTS = [
   'task-interleaving',
   'returns-processing',
   'exception-management',
+  'outbound-shipping',
 ];
 
 const asyncapiBin = path.join(root, 'tools', 'asyncapi-gen', 'node_modules', '.bin', 'asyncapi');
