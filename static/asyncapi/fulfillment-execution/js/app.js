@@ -1435,10 +1435,11 @@
               ]
             },
             {
+              "x-no-consumer-reason": "pending: published only with PICK_BATCH_MODE on (ADR 0063); the contract names labor-performance (batch_size reporting) as the intended consumer, but labor-performance has no handler for it on develop.",
               "name": "WorkBatchFormed",
               "title": "WorkBatchFormed",
               "summary": "A station's pick walk formed (ADR 0063).",
-              "description": "Raised when POST /stations/{stationId}/work-batches forms a walk, inside the same transaction that persists the batch. Published on `warehouse.fulfillment.events`, keyed (and `subject`-ed) by batch id. The anchor is exactly the task ClaimNext would have returned, so a consumer can treat the first member as today's dispatch and the rest as additions. Published only with PICK_BATCH_MODE on; with the fleet default off nothing is published. Consumed by labor-performance (batch_size reporting) and available to the warehouse console.",
+              "description": "Raised when POST /stations/{stationId}/work-batches forms a walk, inside the same transaction that persists the batch. Published on `warehouse.fulfillment.events`, keyed (and `subject`-ed) by batch id. The anchor is exactly the task ClaimNext would have returned, so a consumer can treat the first member as today's dispatch and the rest as additions. Published only with PICK_BATCH_MODE on; with the fleet default off nothing is published. The intended consumer is labor-performance (batch_size reporting; no handler for it on its develop yet); also available to the warehouse console.",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -1595,6 +1596,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "pending: published only with PICK_BATCH_MODE on (ADR 0063); the contract names labor-performance (batch_size reporting) as the intended consumer, but labor-performance has no handler for it on develop.",
               "name": "WorkBatchCompleted",
               "title": "WorkBatchCompleted",
               "summary": "The walk's last open stop completed (ADR 0063).",
@@ -1717,6 +1719,7 @@
               ]
             },
             {
+              "x-no-consumer-reason": "pending: published only with PICK_BATCH_MODE on (ADR 0063); the contract names labor-performance (batch_size reporting) as the intended consumer, but labor-performance has no handler for it on develop.",
               "name": "WorkBatchAbandoned",
               "title": "WorkBatchAbandoned",
               "summary": "Every member left the walk without completing (ADR 0063).",
