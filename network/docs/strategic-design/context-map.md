@@ -181,7 +181,7 @@ flowchart TB
     LH ==>|"C/S 1e"| LM
     LM ==>|"? + CF 4e"| DP
     LM ==>|"? + CF 4e"| OS
-    NP ==>|"CF 1e"| DP
+    NP ==>|"CF 2e"| DP
     NP ==>|"CF 1e"| OS
 ```
 
@@ -204,7 +204,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `linehaul-transportation` | `last-mile-delivery` | C/S | `LoadArrived` | - |
 | `linehaul-transportation` | `order-sourcing` | ? + CF | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`, `BookingMoved`, `BookingFailed` | - |
 | `linehaul-transportation` | `shipping-and-tracking` | CF | `LoadDeparted`, `LoadArrived` | - |
-| `node-performance` | `delivery-promise` | CF | `NodeScorecardUpdated` | - |
+| `node-performance` | `delivery-promise` | CF | `NodeScorecardUpdated`, `NodeTierEligibilityChanged` | - |
 | `node-performance` | `order-sourcing` | CF | `NodeScorecardUpdated` | - |
 | `node-performance` | `vendor-connectivity` | C/S | - | qry GetScorecard (`REST GET /scorecards/{nodeId}`) |
 | `node-topology` | `delivery-promise` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneClosed`, `ServiceAreaAssigned`, `RegionDefined` | - |

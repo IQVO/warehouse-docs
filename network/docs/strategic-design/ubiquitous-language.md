@@ -25,11 +25,14 @@ are the proposed Go package and type names. Each context's own
 | **Available Quantity** | `offer-availability` | What a node claims it can ship now for one listing. | `listing.Availability.AvailableQty` |
 | **Book Share** | `delivery-promise` | The number of orders a promise book may hold for one pickup cutoff: the node's declared limit for the window, scaled by the policy's capacitySharePercent, at least 1. | `book.Capacity.Share` |
 | **Break Case** | `seller-inbound` | Opening a sealed case at a vendor node to release its eaches. A vendor-node operation, not a network event; quantities stay in eaches. | `(vendor node operation, not modelled)` |
+| **Calibration Buffer** | `delivery-promise` | The minutes a quote adds to its arrival, learned from the lateness of this service's own judged promises in the same segment; one-sided and capped. | `search.Calibration.BufferMinutes` |
+| **Capacity Band** | `delivery-promise` | AMPLE, TIGHT or SCARCE: how full the promise book behind an offer's window is at quote time (under 60%, 60% to under 85%, 85% and over of its share). A signal, never a price. | `shared.CapacityBand` |
 | **Capacity Hold** | `delivery-promise` | A provisional reservation on a promise book released if the order is not placed in time. | `book.Capacity.Provisional` |
 | **Carton** | `seller-inbound` | One physical outer carton of a shipment, identified by an SSCC and holding the contents it declares. | `inboundshipment.Carton` |
 | **Case Pack** | `seller-inbound` | The quantity of eaches in one case of an item (unitsPerPack). Fixed by the case's GTIN; a different quantity needs a different GTIN. | `catalog.PackLevelDef.UnitsPerPack` |
 | **Catalog Item** | `offer-availability` | The network's own entry for a product, independent of who ships it. | `catalog.Item` |
 | **Checkout** | `customer-ordering` | The act of turning a cart into a customer order, promising every group. | `order.PlaceOrder` |
+| **Confidence** | `delivery-promise` | The observed share of a segment's judged promises that were within the quote's buffer; present only with enough judgements, absence means unknown. | `search.Calibration.Confidence` |
 | **Customer Order** | `customer-ordering` | What the shopper bought, with a promise per shipment group. | `order.CustomerOrder` |
 | **Cutoff** | `node-topology` | A local time by which a node declares packages are ready to be handed over; the network schedules one pickup departure per cutoff. | `node.CutoffSlot` |
 | **Declared vs Measured** | `node-performance` | What a vendor says (profile) against what the network observes (scorecard). | `(principle)` |
@@ -42,6 +45,8 @@ are the proposed Go package and type names. Each context's own
 | **Departure** | `linehaul-transportation` | One scheduled trip on a lane with a cutoff and a capacity. | `departure.Departure` |
 | **Each** | `seller-inbound` | The lowest packaging level, intended for individual resale and the unit of every quantity in the network's ledgers. | `catalog.PackLevel.EACH` |
 | **EAN** | `seller-inbound` | A 13-digit GTIN as printed on a consumer unit. Treated as a GTIN input like any other length. | `gs1.GTIN` |
+| **Fast-Tier Eligibility** | `delivery-promise` | Whether a node may be offered SAME_DAY and NEXT_DAY, as decided by node-performance and held locally; a missing row means eligible. | `NodeTierEligibility` |
+| **Fast-Tier Eligibility** | `node-performance` | Whether a node may be offered SAME_DAY and NEXT_DAY: suspended when the graded 7-day on-time handover rate falls below 0.90, reinstated after three successive recompute days at 0.95 or more. | `scorecard.FastTierEligibility` |
 | **Fulfillment Assignment** | `order-sourcing` | The decision of which node and path fulfil one shipment group. | `assignment.FulfillmentAssignment` |
 | **Full Feed** | `offer-availability` | A feed that is the complete truth for its node; omitted listings become zero. | `feed.InventoryFeed.FullUpdate` |
 | **Grade** | `node-performance` | A, B, C or D; PROVISIONAL below the observation minimum. | `scorecard.Grade` |
@@ -50,6 +55,7 @@ are the proposed Go package and type names. Each context's own
 | **Handling Time** | `node-topology` | Declared time from order release to a package ready for handover. | `node.OperationalProfile.HandlingTime` |
 | **Handover** | `shipping-and-tracking` | The instant a vendor node's package enters the network. | `journey.HandedOver` |
 | **Hold Deadline** | `delivery-promise` | The instant from which a promise book accepts no new hold: the pickup cutoff minus the node's handling time. | `book.BookTimes.HoldDeadline` |
+| **Hysteresis** | `node-performance` | The gap between the suspension bar (0.90) and the reinstatement bar (0.95), with the three-day streak, that stops a node at the boundary from flapping. | `scorecard.FastTierEligibility` |
 | **Inbound Limits** | `node-topology` | A receiving node's declared carton weight and size limits, whether it accepts pallets and whether it requires an SSCC on every carton. | `node.OperationalProfile.Inbound` |
 | **Inbound Plan** | `seller-inbound` | A seller's declaration, in eaches, of what it will send to one node and with which packing option. | `inboundplan.Plan` |
 | **Inbound Receipt** | `vendor-connectivity` | A vendor's carton-level report of what arrived for one inbound shipment: per SSCC a status, the eaches received per GTIN and any compliance codes. | `inbound.Receipt` |
@@ -82,6 +88,7 @@ are the proposed Go package and type names. Each context's own
 | **Packing Option** | `seller-inbound` | INDIVIDUAL (eaches packed freely) or CASE_PACKED (cartons are case packs of a declared CASE level). | `inboundplan.PackingOption` |
 | **Path Lock** | `order-sourcing` | The point after which an assignment never changes node: the vendor's acceptance. | `assignment.Lock` |
 | **Pickup Departure** | `linehaul-transportation` | The departure that collects packages at a vendor node at one of its declared cutoffs. | `departure.KindPickup` |
+| **Predicted Late** | `delivery-promise` | The at-risk reason of a confirmed promise whose witness-path departure is past its expected arrival with no arrival seen. | `promise.ReasonPredictedLate` |
 | **Promise** | `delivery-promise` | The network's commitment of a delivery window for one shipment group. | `promise.Promise` |
 | **Promise Basis** | `delivery-promise` | SCHEDULED (from real departures and waves), MEASURED (a leg stretched by its measured P-serviceLevel transit, ADR 0014) or NOMINAL (STANDARD tier from nominal lane times). | `promise.Basis` |
 | **Promise Book** | `delivery-promise` | Capacity ledger of one node pickup cutoff on the promise side. | `book.PromiseBook` |
