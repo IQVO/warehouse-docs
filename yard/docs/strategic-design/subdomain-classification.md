@@ -22,11 +22,11 @@ Subdomains are classified by how much competitive advantage they give, not by si
 
 Both are Supporting: every site with trucks needs them and the rules (window length, seal policy, dwell thresholds) differ per operator, but the platform does not win on them. See [Benchmarks](/yard/research/benchmarks).
 
-## Deferred contexts
+## Deferred contexts and contexts outside this section
 
 | Context | Classification | Note |
 | --- | --- | --- |
-| `outbound-shipping` | Supporting | Trailer load planning, loading, bill of lading and ship-confirm (Gartner lists truck loading and manifesting as WMS capabilities). Until it exists, outbound door work is completed by the dock operator in yard-management. |
+| `outbound-shipping` | Supporting | Trailer load planning, loading, bill of lading and ship-confirm (Gartner lists truck loading and manifesting as WMS capabilities). BUILT on develop as IQVO/outbound-shipping (not deployed) and consuming the yard facts; it is outside the yard section. Outbound door work is still completed by the dock operator in yard-management. |
 | `transport-visibility` | Generic | ACL to a real-time transportation visibility platform for ETAs; stub mode first (network-fulfillment *_MODE=stub precedent). Feeds dock-scheduling ReportEta. |
 | `yard-billing` | Generic | Detention and yard service charges; out of scope. |
 
@@ -50,6 +50,8 @@ Both are Supporting: every site with trucks needs them and the rules (window len
 - Arrival and door release are physical facts owned by yard-management; this context applies them from events and never records them from its own API.
 - A BOOKED appointment with no arrival by window_end plus the site's no-show grace becomes NO_SHOW (sweep).
 - An ETA later than window_start plus the arrival tolerance raises an advisory DockAppointmentAtRisk; nothing reschedules automatically.
+- An ASN sits on only one active native appointment (decision D-12); one appointment covers exactly one trailer (X3).
+- COMPLETED, CANCELLED and NO_SHOW are terminal, so a late carrier books anew (D-9). The dock planner may reschedule and cancel (CARRIER_REQUEST, SITE_REQUEST) like the carrier portal (D-5).
 
 ### `yard-management`
 

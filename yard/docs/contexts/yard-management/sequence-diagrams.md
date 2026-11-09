@@ -2,28 +2,28 @@
 id: sequence-diagrams
 title: Sequence Diagrams
 sidebar_label: Sequence Diagrams
-description: "Proposed UML sequence diagrams for Yard Management: the live unload, the drop and later door call, gate rejection and the hostler move with lease expiry, then one diagram per significant command use case."
+description: "UML sequence diagrams for Yard Management: the live unload, the drop and later door call, gate rejection and the hostler move with lease expiry, then one diagram per significant command use case."
 ---
 
 # Sequence Diagrams
 
-:::info[Proposed design]
-Derived from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml). This context's service is not built yet; identifiers (`Err...` names, REST paths, CloudEvents types) are the names the service will use.
+:::info[Built on develop, not deployed]
+Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 Two parts. **Part A** has the four scenarios the pack must show, each as one story
 across several use cases: inbound adapter → use cases → aggregates → outbox → relay →
 Kafka → neighbour. **Part B** has one diagram per significant command use case of
-[Use Cases](/yard/contexts/yard-management/use-cases), in the proposed hexagonal layout:
+[Use Cases](/yard/contexts/yard-management/use-cases), in the hexagonal layout of the built service:
 inbound adapter → use case → aggregate → repository → outbox (same transaction) → relay →
 Kafka. The relay and Kafka share one lifeline ("relay to Kafka") to keep each diagram at
 six participants or fewer. `alt` blocks show error branches, optimistic-concurrency
 `version` checks and idempotency (REST `Idempotency-Key`, Kafka inbox on the CloudEvents
-`id`). Error names are the model's; HTTP statuses of domain errors are proposed (see
+`id`). Error names are the model's; HTTP statuses of domain errors follow decision D-10: 409 conflicts, 422 value rules (see
 [Use Cases](/yard/contexts/yard-management/use-cases#conventions-for-every-use-case)).
 Route parameters are written without braces. The relay publishes integration events to
-`warehouse.yard-management.events` and analytics-only events to
-`warehouse.yard-management.analytics`, keyed by the aggregate root id.
+`warehouse.yard-management.events` and, as a twin, to `warehouse.yard-management.analytics`; analytics-only events
+go to the analytics topic alone. Both are keyed by the aggregate root id.
 
 ## Part A: the four scenarios
 
@@ -66,11 +66,10 @@ VisitingDriverMove, AutoCompleteUnload]`, `.aggregates[YardVisit, Trailer, YardM
 `.publishes`; `contexts[dock-scheduling].policies`.
 
 Omitted: the failure branches (Part B), the analytics events (`VisitCheckedOut`,
-`TrailerDeparted`, `DoorWorkStarted`, `DoorWorkCompleted`, `YardMove*`), and
-`inbound-receiving`'s own receipt flow. The model names no command that departs a
-trailer or raises `TrailerUndocked`; `Depart` from the door under `CheckOutVisit` is this
-pack's reading (gaps YM-G8, YM-G28). The completion of the first move by the dock operator
-follows the policy text, not an inbound row (gap YM-G3).
+`DoorWorkStarted`, `YardMove*`; `DoorWorkCompleted` and `TrailerDeparted` also go to the integration topic since
+2026-11-09), and `inbound-receiving`'s own receipt flow. `Depart` from the door under `CheckOutVisit` raises
+`TrailerUndocked` and `TrailerDeparted` (decisions Y-2, Y-6). The dock operator or gate clerk completes the
+first move through the completion route (decision Y-3).
 
 ### A2. Drop, then a later door call
 
@@ -122,10 +121,9 @@ TrailerDocked]`; `contexts[dock-scheduling].policies[CompleteOnDoorRelease]`.
 Omitted: the door work commands (A1), `YardMoveRequested`, `YardMoveClaimed`,
 `YardMoveCompleted` and `TrailerParked` (analytics only), the idempotency and inbox rows.
 `CallToDoor` reacts to the own `TrailerUndocked`; this pack reads that as a consumer of
-the own topic, as `dock-scheduling` consumes it. Which command raises `TrailerUndocked`
-for a trailer leaving by a `FROM_DOOR` move is not stated (gap YM-G8); the trailer is
-linked to its appointment by a reference the model does not give `Trailer` (gap YM-G9);
-the reason of the first move to a plain spot has no value in `Reason` (gap YM-G4).
+the own topic, as `dock-scheduling` consumes it. `StartMoving` from `DOCKED` (the claim of a `FROM_DOOR` move)
+raises `TrailerUndocked` (decision Y-6); the trailer carries its appointment through `appointment_id` (decision X3);
+the first move to a plain spot has the reason `TO_SPOT` (decision Y-4).
 
 ### A3. Gate rejection
 
@@ -171,11 +169,10 @@ Derived from: `model.yaml → contexts[yard-management].aggregates[YardVisit]`
 `fleet_changes[exception-management]`.
 
 Omitted: `ErrTrailerAlreadyOnSite` (reason `TRAILER_ALREADY_ON_SITE`), `UNKNOWN_APPOINTMENT`
-and `SITE_REQUEST` rejections; `dock-scheduling`, which receives neither event (gap
-YM-G17). The model has both an error on `CheckInVisit` and a command that records a
-rejection; the two-step flow is this pack's reading (gap YM-G7). Where the seal is
-recorded at the gate and which trailer a rejected visit's exception names are not stated
-(gap YM-G23).
+and `SITE_REQUEST` rejections; the detail that `dock-scheduling` now receives `VisitRejected` and cancels the
+appointment with `TURNED_AWAY` (decision X2). A refused `CheckInVisit` creates nothing and `RejectAtGate` records the
+rejection (decision Y-5). The seal number arrives with the trailer at check-in, and a rejected visit's
+`SealExceptionRaised` has a null `trailer_id` (decisions Y-5, Y-13).
 
 ### A4. A hostler claims a move, the lease expires, another hostler completes it
 
@@ -218,10 +215,10 @@ Derived from: `model.yaml → contexts[yard-management].aggregates[YardMove, Tra
 
 Omitted: the `Idempotency-Key` rows; `ErrHostlerBusy` when a hostler already holds a
 `CLAIMED` move; the late completion after expiry when nobody has re-claimed the move,
-which is `ErrIllegalTransition` (the move is `REQUESTED`). The model returns the move to
-`REQUESTED` on expiry, has no transition that brings the trailer back from `IN_MOVE` (gap
-YM-G1), raises no event for the expiry (gap YM-G14) and has no lease renewal. A refusal at
-`ArriveAt` happens when the hostler is already at the location (gap YM-G11).
+which is `ErrIllegalTransition` (the move is `REQUESTED`). The expiry returns the move to
+`REQUESTED` and `ReturnToOrigin` brings the trailer back (decision Y-1), raises `YardMoveLeaseExpired` (decision
+Y-10) and has no lease renewal. A refusal at `ArriveAt` still happens when the hostler is already at the
+location; the destination was also validated when the move was requested (decision Y-8).
 
 ## Part B: one diagram per significant command
 
@@ -286,9 +283,9 @@ Derived from: `model.yaml → contexts[yard-management].aggregates[YardVisit, Tr
 SealCheckAtGate]`, `conventions.integration_rules`.
 
 Omitted: the `REJECT` seal outcome (A3); the choice of door, holding spot or parking spot
-(A2); each domain error is answered `409` or `422` as proposed. The first move's events
-(`YardMoveRequested`, `YardMoveClaimed`) go to the analytics topic; which of them a move
-born `CLAIMED` raises is not stated (gap YM-G2).
+(A2); each domain error is answered `409` or `422` (decision D-10). The first move's events
+(`YardMoveRequested`, `YardMoveClaimed`) go to the analytics topic; the move is created `CLAIMED`, so the
+service raises both (decision Y-1).
 
 ### B2. CheckOutVisit
 
@@ -340,9 +337,9 @@ Derived from: `model.yaml → contexts[yard-management].aggregates[YardVisit, Tr
 (`invariants`, `transitions`), `.publishes[VisitCheckedOut, TrailerDeparted,
 TrailerUndocked]`.
 
-Omitted: the idempotency-key check (as in B1). `Depart` is not named as a use case by the
-model; calling it from here is this pack's reading (gap YM-G8). For a live visit the
-trailer leaves from the door while `ErrTrailerNotReleased` says "not docked" (gap YM-G28).
+Omitted: the idempotency-key check (as in B1). `Depart` is called from here for each trailer taken out
+(decision Y-6). For a live visit the trailer leaves from the door: released means no open move and either
+`PARKED` or `DOCKED` with door work `DONE` (decision Y-2).
 
 ### B3. RequestMove
 
@@ -384,9 +381,9 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[yard-management].aggregates[YardMove]`
 (`invariants`, `commands`), `.policies[CallToDoor, ClearDoorAfterWork]`.
 
-Omitted: the idempotency-key check; the Kafka inbox row when a policy is the caller. Only
-`ErrDestinationReserved` and `ErrTrailerHasOpenMove` are named for the request; closure,
-flow and hold are checked at arrival in the model (gap YM-G11).
+Omitted: the idempotency-key check; the Kafka inbox row when a policy is the caller. The
+destination is validated at the request (known slot, closure, flow, hold, `ErrDestinationReserved`,
+`ErrTrailerHasOpenMove`) and again at arrival (decision Y-8).
 
 ### B4. ClaimNextMove
 
@@ -407,7 +404,7 @@ sequenceDiagram
     else free
         U->>R: next REQUESTED HOSTLER move<br/>band, due_by, skip locked
         alt none available
-            U-->>H: 204 no move
+            U-->>H: 404 no-claimable-move
         else found
             U->>A: Move.ClaimNextMove lease_seconds
             U->>A: Trailer.StartMoving
@@ -430,8 +427,9 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[yard-management].aggregates[YardMove, Trailer]`
 (`invariants`, `transitions`, `notes`), `.business_decisions`.
 
-Omitted: the idempotency-key check. The claim order (band, then `due_by`), the `204`
-answer and `TrailerUndocked` on a claim from a door are proposed (gaps YM-G19, YM-G8).
+Omitted: the idempotency-key check. The claim order is the lowest band, then `due_by`, then request time
+(decision Y-11); with nothing to claim the answer is `404 no-claimable-move`; a claim from a door raises
+`TrailerUndocked` (decision Y-6).
 
 ### B5. CompleteMove
 
@@ -491,8 +489,8 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[yard-management].aggregates[YardMove, Trailer]`
 (`invariants`, `notes`), `.read_models[LocationView, DoorClosureView]`.
 
-Omitted: the idempotency-key check. For a `VISITING_DRIVER` move there is no lease; who
-may complete it is not an inbound row (gap YM-G3). The partial unique index on active
+Omitted: the idempotency-key check. For a `VISITING_DRIVER` move there is no lease; the dock
+operator or gate clerk completes it through the same route (decision Y-3). The partial unique index on active
 occupancy is the race-safe backstop for `ErrLocationOccupied`.
 
 ### B6. ExpireLease
@@ -530,8 +528,8 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[yard-management].policies[LeaseExpirySweep]`,
 `.aggregates[YardMove].transitions`.
 
-Omitted: no outbox, relay or Kafka: the model lists no event for `ExpireLease` (gap
-YM-G14). The trailer is not touched; the model has no transition for it (gap YM-G1). Each
+Omitted: the outbox row for `YardMoveLeaseExpired` (analytics only, decision Y-10) and the
+`ReturnToOrigin` step on the trailer (decision Y-1), both in the same unit of work as the move. Each
 move is its own transaction, so one conflict does not stop the sweep.
 
 ### B7. CancelMove
@@ -578,9 +576,9 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[yard-management].aggregates[YardMove].transitions`,
 `.policies[NoShowFreesHolding]`.
 
-Omitted: the idempotency check and the inbox row. A cancelled `CLAIMED` move leaves the
-trailer `IN_MOVE` in the model (gap YM-G1); how the policy finds the move of an
-appointment is not stated (gaps YM-G9, YM-G27).
+Omitted: the idempotency check and the inbox row. A cancelled `CLAIMED` hostler move runs `ReturnToOrigin` in the same
+unit of work, so the trailer goes back where it was (decision Y-1); the policy finds the move through the
+`appointment_id` that the move carries (decisions X3, Y-14).
 
 ### B8. StartDoorWork and CompleteDoorWork
 
@@ -627,9 +625,9 @@ Derived from: `model.yaml → contexts[yard-management].aggregates[Trailer]`
 ClearDoorAfterWork]`, `.publishes[DoorWorkStarted, DoorWorkCompleted]`.
 
 Omitted: the `AutoCompleteUnload` caller (a `ReceiptClosed` consumer: inbox row instead of
-the idempotency key, joining `ReceiptAtDoorView` to the trailer, gap YM-G10) and the
-follow-up `RequestMove` of `ClearDoorAfterWork` for a `DROP` trailer (B3). The
-door-work transitions themselves are this pack's reading (gap YM-G10).
+the idempotency key, joining `ReceiptAtDoorView` to the trailer through `receipt_id`, decision Y-7) and the
+follow-up `RequestMove` of `ClearDoorAfterWork` for a `DROP` trailer (B3). `AutoCompleteUnload` completes from
+`WAITING` or `IN_PROGRESS`; an operator's completion needs `IN_PROGRESS` (assumption A11).
 
 ### B9. PlaceHold
 
@@ -674,8 +672,8 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[yard-management].aggregates[Trailer]`
 (`invariants[ErrTrailerOnHold]`, `commands`), `.reasons[HoldReason]`.
 
-Omitted: the idempotency-key check. A hold on an already `DOCKED` trailer is not addressed
-by the model (gap YM-G23); a held trailer is refused docking at `ArriveAt` (B5).
+Omitted: the idempotency-key check. A hold on an already `DOCKED` trailer is allowed and door work waits for
+the release (decision Y-13); a held trailer is refused docking at `ArriveAt` (B5).
 
 ### B10. DwellSweep
 
@@ -712,8 +710,8 @@ Derived from: `model.yaml → contexts[yard-management].policies[DwellSweep]`,
 `.aggregates[YardPolicy]` (`dwell_threshold_minutes`), `.publishes[TrailerDwellExceeded]`.
 
 Omitted: a kind with no threshold (skipped). The marker that makes the sweep "once per
-trailer and threshold crossing" is not in the model's value objects (gap YM-G21), and the
-model attaches `DwellSweep` to no aggregate command (gap YM-G8).
+trailer and threshold crossing" is `dwell_alerted_at` on the trailer (decision Y-13); the sweep has no aggregate
+command of its own.
 
 ### B11. CloseYardCheck
 
@@ -759,5 +757,6 @@ Derived from: `model.yaml → contexts[yard-management].aggregates[YardCheck]`,
 
 Omitted: the idempotency-key check. `OpenYardCheck` and `RecordObservation` are the same
 shape without the outbox row (`ErrYardCheckOpen` and `ErrLocationAlreadyObserved` as the
-guards). The discrepancy rules and the fact that nothing applies a discrepancy to a trailer
-are not stated (gap YM-G18); `exception-management` opens one case per discrepancy.
+guards). The discrepancy rules are decision Y-11 (a location not observed is `MISSING` when the model records a trailer
+there) and nothing applies a discrepancy to a trailer: closing only reports; `exception-management` opens one case
+per discrepancy.

@@ -2,20 +2,23 @@
 id: entity-relationship
 title: Entity Relationship
 sidebar_label: Entity Relationship
-description: "The proposed Postgres schema of Yard Management, with one table per aggregate root, child tables, read-model tables, the occupancy indexes and the outbox, inbox and migration infrastructure."
+description: "The Postgres schema of Yard Management as built, with one table per aggregate root, read-model tables, the occupancy indexes, the outbox, inbox and idempotency tables and the analytics schema."
 ---
 
 # Entity Relationship
 
-:::info[Proposed design]
-Derived from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml). This context's service is not built yet; identifiers (`Err...` names, REST paths, CloudEvents types) are the names the service will use.
+:::info[Built on develop, not deployed]
+Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
-The **proposed** Postgres schema. This context owns its database; no table is shared
-with another context (`conventions.integration_rules`). A relationship line is drawn
-only where a foreign key would exist, and only inside one aggregate. Postgres and Kafka
-are the only runtime: there is no in-memory mode. Everything not named in the model
-(column names, types, the indexes other than the occupancy one) is **proposed**.
+The Postgres schema **as built**, from the service's migrations `migrations/0001_yard-management` and
+`0002_idempotency_keys` (OLTP) and `analytics/migrations/0001_yard_analytics` and `0002_kpi_standard` (the `analytics`
+schema). This context owns its database; no table is shared with another context
+(`conventions.integration_rules`). Postgres and Kafka are the only runtime. Columns are drawn with the types
+of the migration, simplified (`COLLATE "C"` and defaults are left out). The earlier version of this page proposed a
+different shape: child tables for the visit's trailers, the check's observations and the policy's lists, and a
+`schema_migrations` table; as built those lists are array and `JSONB` columns of the root row, and the
+outbox is a smaller table.
 
 ## Aggregate tables
 
@@ -24,27 +27,23 @@ are the only runtime: there is no in-memory mode. Everything not named in the mo
 ```mermaid
 erDiagram
     direction LR
-    visits ||--o{ visit_trailers : "FK visit_id"
-    visits {
+    yard_visits {
         TEXT visit_id PK
-        TEXT site_id "siteCode"
-        TEXT state "3 states"
-        TEXT carrier_name
-        TEXT carrier_scac "nullable"
+        TEXT site_id
+        TEXT state "CHECKED_IN, CHECKED_OUT, REJECTED"
+        TEXT carrier
+        TEXT carrier_scac "empty string when none"
         TEXT tractor_plate
         TEXT driver_ref "opaque, no PII"
-        TEXT purpose "Purpose enum"
-        TEXT appointment_id "nullable, value"
-        TEXT rejection_reason "nullable"
-        TIMESTAMPTZ arrived_at "nullable"
+        TEXT purpose "empty or a Purpose"
+        TEXT appointment_id "empty string when none"
+        TEXT rejection_reason "empty string when none"
+        TEXT_ARRAY trailers_in "trailer ids, values"
+        TEXT_ARRAY trailers_out "trailer ids, values"
+        TIMESTAMPTZ arrived_at
         TIMESTAMPTZ departed_at "nullable"
-        TIMESTAMPTZ rejected_at "nullable"
-        BIGINT version "optimistic lock"
-    }
-    visit_trailers {
-        TEXT visit_id PK,FK
-        TEXT direction PK "IN or OUT"
-        TEXT trailer_id PK "value, no FK"
+        BIGINT version "optimistic lock, 1 or more"
+        TIMESTAMPTZ updated_at
     }
 ```
 
@@ -56,24 +55,30 @@ erDiagram
     trailers {
         TEXT trailer_id PK
         TEXT site_id
-        TEXT carrier_scac "natural key part"
+        TEXT scac "natural key part"
         TEXT unit_number "natural key part"
         TEXT kind "DRY_VAN, REEFER, FLATBED, CONTAINER"
         TEXT state "PARKED, IN_MOVE, DOCKED, DEPARTED"
         TEXT load_state "EMPTY, LOADED, PARTIAL"
-        JSONB asn_numbers "Contents, inbound"
-        TEXT outbound_ref "nullable"
-        TEXT seal_number "nullable"
-        TEXT seal_state "INTACT, BROKEN, NONE"
-        TEXT hold_reason "nullable"
-        TEXT location_kind "SPOT or DOOR, null while IN_MOVE"
-        TEXT location_code "nullable"
-        TEXT door_work "WAITING, IN_PROGRESS, DONE, only DOCKED"
-        TEXT appointment_id "nullable, proposed"
+        TEXT_ARRAY asn_numbers "Contents, inbound"
+        TEXT outbound_ref "empty string when none"
+        TEXT purpose "DROP, LIVE_UNLOAD, LIVE_LOAD, PICKUP, BOBTAIL"
+        TEXT seal_number "empty string when none"
+        TEXT seal_state "NONE, INTACT, BROKEN"
+        TEXT hold "empty or a HoldReason"
+        TEXT location_kind "SPOT or DOOR, empty while IN_MOVE"
+        TEXT location_code "empty while IN_MOVE"
+        TEXT door_work "WAITING, IN_PROGRESS, DONE, empty off a door"
+        TEXT origin_kind "where StartMoving found it"
+        TEXT origin_code "where StartMoving found it"
+        TEXT origin_work "door work at the origin"
+        TEXT visit_id "value, no FK"
+        TEXT appointment_id "empty string when none"
         TIMESTAMPTZ arrived_at "dwell clock start"
         TIMESTAMPTZ departed_at "nullable"
-        TIMESTAMPTZ dwell_alerted_at "nullable, proposed marker"
+        TIMESTAMPTZ dwell_alerted_at "nullable, the sweep marker"
         BIGINT version "optimistic lock"
+        TIMESTAMPTZ updated_at
     }
 ```
 
@@ -86,23 +91,25 @@ erDiagram
         TEXT move_id PK
         TEXT site_id
         TEXT trailer_id "value, no FK"
+        TEXT appointment_id "empty string when none"
         TEXT performer "HOSTLER or VISITING_DRIVER"
-        TEXT reason "TO_DOOR, FROM_DOOR, RELOCATE, TO_HOLDING"
-        TEXT from_kind "nullable"
-        TEXT from_code "nullable"
-        TEXT to_kind
+        TEXT from_kind "empty at the gate"
+        TEXT from_code "empty at the gate"
+        TEXT to_kind "SPOT or DOOR"
         TEXT to_code
-        SMALLINT priority_band "1 to 9"
+        TEXT actual_kind "set at completion"
+        TEXT actual_code "set at completion"
+        TEXT reason "TO_DOOR, FROM_DOOR, TO_SPOT, RELOCATE, TO_HOLDING"
+        INTEGER priority_band "1 to 9"
         TIMESTAMPTZ due_by "nullable"
         TEXT state "REQUESTED, CLAIMED, COMPLETED, CANCELLED"
-        TEXT lease_hostler_ref "nullable"
+        TEXT hostler_ref "empty string when none"
         TIMESTAMPTZ lease_expires_at "nullable"
-        TEXT actual_kind "nullable"
-        TEXT actual_code "nullable"
+        TIMESTAMPTZ requested_at
         TIMESTAMPTZ claimed_at "nullable"
         TIMESTAMPTZ completed_at "nullable"
-        TEXT cancel_reason "nullable"
         BIGINT version "optimistic lock"
+        TIMESTAMPTZ updated_at
     }
 ```
 
@@ -111,28 +118,16 @@ erDiagram
 ```mermaid
 erDiagram
     direction LR
-    yard_checks ||--o{ yard_check_observations : "FK"
-    yard_checks ||--o{ yard_check_discrepancies : "FK"
     yard_checks {
         TEXT yard_check_id PK
         TEXT site_id
         TEXT state "OPEN, CLOSED"
+        JSONB observations "the observed locations"
+        JSONB discrepancies "written at close"
         TIMESTAMPTZ opened_at
         TIMESTAMPTZ closed_at "nullable"
         BIGINT version
-    }
-    yard_check_observations {
-        TEXT yard_check_id PK,FK
-        TEXT location_code PK
-        TEXT unit_number "nullable"
-    }
-    yard_check_discrepancies {
-        TEXT yard_check_id PK,FK
-        INTEGER seq PK
-        TEXT kind "Discrepancy kind"
-        TEXT location_code
-        TEXT trailer_id "nullable"
-        TEXT unit_number "nullable"
+        TIMESTAMPTZ updated_at
     }
 ```
 
@@ -141,104 +136,96 @@ erDiagram
 ```mermaid
 erDiagram
     direction LR
-    yard_policies ||--o{ yard_policy_holding_spots : "FK"
-    yard_policies ||--o{ yard_policy_parking_zones : "FK"
-    yard_policies ||--o{ yard_policy_dwell_thresholds : "FK"
     yard_policies {
         TEXT site_id PK
         BOOLEAN require_appointment
-        INTEGER lease_seconds "CHECK gt 0"
+        TEXT_ARRAY holding_spot_codes
+        TEXT_ARRAY parking_zone_ids
+        JSONB dwell_threshold_minutes "by trailer kind"
+        INTEGER lease_seconds "1 or more"
         TEXT seal_mismatch_action "FLAG, REJECT"
-        INTEGER free_time_minutes "nullable"
-        BIGINT version
-    }
-    yard_policy_holding_spots {
-        TEXT site_id PK,FK
-        TEXT spot_code PK
-    }
-    yard_policy_parking_zones {
-        TEXT site_id PK,FK
-        TEXT zone_id PK
-    }
-    yard_policy_dwell_thresholds {
-        TEXT site_id PK,FK
-        TEXT trailer_kind PK
-        INTEGER threshold_minutes "CHECK gt 0"
+        INTEGER free_time_minutes "0 means none"
+        BOOLEAN declared "false for the defaults"
+        BIGINT version "2 or more"
+        TIMESTAMPTZ updated_at
     }
 ```
 
 Derived from: `model.yaml → contexts[yard-management].aggregates` (`YardVisit`,
 `Trailer`, `YardMove`, `YardCheck`, `YardPolicy`: root ids, states, value objects,
-invariants) and `.publishes[*].data`.
+invariants), `.publishes[*].data` and `.as_built.tables`.
 
-Omitted: the indexes. Proposed, enforcing the invariants where a database can:
+Omitted: the rest of the indexes (`idx_*` lookups by site, arrival, appointment and expiry). The invariants a
+database can hold are held by these:
 
-| Invariant | Error | Proposed index or lock |
+| Invariant | Error | Index or lock as built |
 | --- | --- | --- |
-| A spot or door holds at most one trailer | `ErrLocationOccupied` | Per-location advisory lock inside `Occupancy.CheckFree` (the model) plus a **partial unique index** on `trailers (site_id, location_kind, location_code)` where the state is `PARKED` or `DOCKED` (the model names the index, not its columns) |
-| The natural key is unique among trailers on site | `ErrTrailerAlreadyOnSite` | Unique `trailers (site_id, carrier_scac, unit_number)` where state is not `DEPARTED` |
-| A trailer has at most one open move | `ErrTrailerHasOpenMove` | Unique `yard_moves (trailer_id)` where state is `REQUESTED` or `CLAIMED` |
-| No two open moves share a destination | `ErrDestinationReserved` | Unique `yard_moves (site_id, to_kind, to_code)` where state is `REQUESTED` or `CLAIMED` |
-| A hostler holds at most one `CLAIMED` move | `ErrHostlerBusy` | Unique `yard_moves (lease_hostler_ref)` where state is `CLAIMED` |
-| At most one `CHECKED_IN` visit per plate per site | `ErrVisitAlreadyOpen` | Unique `visits (site_id, tractor_plate)` where state is `CHECKED_IN` |
-| At most one `OPEN` yard check per site | `ErrYardCheckOpen` | Unique `yard_checks (site_id)` where state is `OPEN` |
-| A location is observed once per check | `ErrLocationAlreadyObserved` | The primary key of `yard_check_observations` |
-| `ClaimNextMove` finds the next move | — | `yard_moves (site_id, priority_band, due_by)` where state is `REQUESTED` and performer is `HOSTLER`; read with `FOR UPDATE SKIP LOCKED` |
-| Lease sweep | — | `yard_moves (lease_expires_at)` where state is `CLAIMED` |
+| A spot or door holds at most one trailer | `ErrLocationOccupied` | Per-location advisory lock inside `Occupancy.CheckFree` plus the partial unique index `uq_trailers_one_per_location` on `trailers (location_kind, location_code)` where the state is `PARKED` or `DOCKED` |
+| The natural key is unique among trailers on site | `ErrTrailerAlreadyOnSite` | `uq_trailers_unit_on_site` on `trailers (site_id, scac, unit_number)` where state is not `DEPARTED` |
+| A trailer has at most one open move | `ErrTrailerHasOpenMove` | `uq_yard_moves_one_open_per_trailer` on `yard_moves (trailer_id)` where state is `REQUESTED` or `CLAIMED` |
+| No two open moves share a destination | `ErrDestinationReserved` | `uq_yard_moves_open_destination` on `yard_moves (to_kind, to_code)` where state is `REQUESTED` or `CLAIMED` |
+| A hostler holds at most one `CLAIMED` move | `ErrHostlerBusy` | `uq_yard_moves_one_claim_per_hostler` on `yard_moves (site_id, hostler_ref)` where state is `CLAIMED` |
+| At most one `CHECKED_IN` visit per plate per site | `ErrVisitAlreadyOpen` | `uq_yard_visits_one_open_per_plate` on `yard_visits (site_id, tractor_plate)` where state is `CHECKED_IN` |
+| At most one `OPEN` yard check per site | `ErrYardCheckOpen` | `uq_yard_checks_one_open_per_site` on `yard_checks (site_id)` where state is `OPEN` |
+| A location is observed once per check | `ErrLocationAlreadyObserved` | The use case, over the `observations` column (no table) |
+| A parked or docked trailer has a place | none | `CHECK` on `trailers`: state `PARKED` or `DOCKED` if and only if `location_code` is not empty |
+| `ClaimNextMove` finds the next move | none | `idx_yard_moves_claimable` on `yard_moves (site_id, priority_band, due_by NULLS LAST, requested_at, move_id)` where state is `REQUESTED` and performer is `HOSTLER` |
+| Lease sweep | none | `idx_yard_moves_expiry` on `yard_moves (lease_expires_at)` where state is `CLAIMED` and performer is `HOSTLER` |
 
-`trailers.location_kind` and `location_code` are null while the trailer is `IN_MOVE`, so
-a moving trailer holds no place (this pack's reading of "one place", gap YM-G11).
-`trailers.appointment_id` and `dwell_alerted_at` are columns the model has no value object
-for (gaps YM-G9, YM-G21). Comparison operators are written `gt` inside the diagrams.
+The location columns are empty while the trailer is `IN_MOVE`, so a moving trailer holds no place; the origin is
+kept in `origin_*` for `ReturnToOrigin` (decision Y-1). `appointment_id` and `dwell_alerted_at` are columns of
+`trailers` (decisions X3 and Y-13). The migration gives `yard_policies.version` a floor of 2 and the table a
+`declared` flag: a site that never declared a policy is answered by the defaults, as version 1.
 
 ## Read-model tables
 
 ```mermaid
 erDiagram
     direction LR
-    rm_locations {
-        TEXT location_code PK
-        TEXT zone_id
-        TEXT role "Yard or Dock"
-        TEXT dock_flow "Inbound, Outbound, Both, nullable"
-        BOOLEAN active "false after decommission"
-    }
-    rm_zones {
+    zones {
         TEXT zone_id PK
         TEXT site_code
     }
-    rm_appointments {
+    locations {
+        TEXT location_code PK
+        TEXT zone_id
+        TEXT site_code "nullable"
+        TEXT kind "SPOT or DOOR"
+        TEXT dock_flow "empty, or the flow"
+        BOOLEAN active "false after decommission"
+    }
+    appointments {
         TEXT appointment_id PK
         TEXT site_id
         TEXT direction
         TEXT door_code
-        TIMESTAMPTZ window_start
-        TIMESTAMPTZ window_end
-        TEXT carrier_scac "nullable"
-        JSONB asn_numbers
-        TEXT expected_seal_number "nullable"
-        TEXT status "booked, cancelled, no-show, see gap"
+        TEXT carrier_scac
+        TIMESTAMPTZ window_start "nullable"
+        TIMESTAMPTZ window_end "nullable"
+        TEXT_ARRAY asn_numbers
+        TEXT_ARRAY shipment_refs
+        TEXT expected_seal_number
+        INTEGER arrival_tolerance_minutes
+        TEXT status "BOOKED, CHECKED_IN, USED, CANCELLED, NO_SHOW"
         BIGINT version "apply only if greater"
     }
-    rm_door_closures {
+    door_closures {
         TEXT closure_id PK
         TEXT site_id
         TEXT door_code
-        TIMESTAMPTZ from_at
-        TIMESTAMPTZ to_at
-        TEXT reason "nullable"
-        BIGINT version
+        TIMESTAMPTZ closed_from "nullable"
+        TIMESTAMPTZ closed_to "nullable"
+        BOOLEAN lifted
     }
-    rm_asn_contents {
+    asns {
         TEXT asn_number PK
-        TEXT status "REGISTERED or CANCELLED"
-        JSONB lines "consumed, used by no rule"
+        BOOLEAN cancelled
     }
-    rm_receipts_at_door {
+    receipts {
         TEXT receipt_id PK
         TEXT asn_number
-        TEXT appointment_id "nullable, from ReceiptOpened"
-        TEXT door_code "nullable, from ReceiptOpened"
+        TEXT appointment_id "from ReceiptOpened"
+        TEXT door_code "from ReceiptOpened"
         TIMESTAMPTZ closed_at "nullable, from ReceiptClosed"
     }
 ```
@@ -247,91 +234,167 @@ Derived from: `model.yaml → contexts[yard-management].read_models`, and the `d
 the consumed events in `.consumes` (`LocationSlotRegistered`, `ZoneRegistered`, the
 `dock-scheduling` events, `ASNRegistered`, `ReceiptOpened`, `ReceiptClosed`).
 
-Omitted: the event fields not used by a decision here. The site of a door or spot is
-derived by joining `rm_locations.zone_id` to `rm_zones.zone_id` (`site_code` is
-`facility-layout`'s `siteCode`, the `site_id` on every yard event); it is never parsed
-from a location code. `rm_appointments.status` cannot hold `CHECKED_IN` or `COMPLETED`
-from the consumed events alone (gap YM-G6). `YardBoardView` has no table: it is a query
-over `trailers` and `yard_moves`. `YardKpiReport` is built from the analytics topic, not
-from this database.
+Omitted: the event fields not used by a decision here, and the lookup indexes. The site of a door or spot is
+derived by joining `locations.zone_id` to `zones.zone_id` (`site_code` is
+`facility-layout`'s `siteCode`, the `site_id` on every yard event; the migration also keeps a `site_code` on the
+location); it is never parsed from a location code. The appointment copy marks itself `CHECKED_IN` from the yard's
+own `VisitCheckedIn` and `USED` from its own `TrailerUndocked` (decision X4). The `asns` copy keeps only the number
+and a cancelled flag; the ASN lines are not stored. `YardBoardView` has no table: it is a query
+over `trailers` and `yard_moves`. The KPI reports are built from the analytics topic into the `analytics` schema
+below, not from these tables.
 
 ## Infrastructure tables
 
 ```mermaid
 erDiagram
     direction LR
-    outbox_events {
+    outbox {
         BIGSERIAL id PK
-        UUID event_id UK "CloudEvents id"
-        TEXT topic "events or analytics topic"
-        TEXT event_type "full CloudEvents type"
-        TEXT event_key "aggregate root id"
-        JSONB payload "structured CloudEvent"
+        TEXT event_id UK "CloudEvents id"
+        TEXT aggreg_type
+        TEXT aggreg_id "aggregate root id"
+        JSON payload "the CloudEvent"
+        TIMESTAMPTZ occurred_at
+        INTEGER attempts "0 or more"
+        TIMESTAMPTZ next_attempt_at
+        TEXT last_error
         TIMESTAMPTZ created_at
-        TIMESTAMPTZ published_at "nullable"
-        INTEGER attempts "attempt cap, then DLQ"
     }
     processed_events {
-        UUID event_id PK "CloudEvents id, inbox"
-        TEXT event_type
+        TEXT event_id PK "CloudEvents id, inbox"
         TIMESTAMPTZ processed_at
     }
     idempotency_keys {
-        TEXT idempotency_key PK
-        TEXT route
-        INTEGER status_code
-        JSONB response_body
+        TEXT key PK
+        TEXT fingerprint "of the request"
+        INTEGER status "200 to 499"
+        TEXT content_type
+        BYTEA body "the first response"
         TIMESTAMPTZ created_at
-    }
-    schema_migrations {
-        BIGINT version PK
-        BOOLEAN dirty
     }
 ```
 
-Derived from: `model.yaml → conventions.integration_rules` (transactional outbox with
-attempt cap and DLQ, idempotent consumers on the CloudEvents id, `Idempotency-Key`),
-`conventions.cloudevents` (topics `warehouse.yard-management.events` and
+Derived from: `model.yaml → conventions.integration_rules` (transactional outbox, idempotent consumers on the
+CloudEvents id, `Idempotency-Key`), `conventions.cloudevents` (topics `warehouse.yard-management.events` and
 `warehouse.yard-management.analytics`, key = aggregate root id).
 
-**All four are infrastructure, not domain.** `outbox_events` is written in the same
-transaction as the aggregate and drained by the relay to Kafka; the `topic` column
-separates the 7 integration events from the 11 analytics-only ones. `processed_events` is
-the inbox: one row per consumed CloudEvents `id`, written in the same transaction as the
-effect. `idempotency_keys` stores the first response to a REST `Idempotency-Key`.
-`schema_migrations` is the migration tool's bookkeeping.
+**All three are infrastructure, not domain.** `outbox` is written in the same transaction as the aggregate and
+drained by the `relay` binary to Kafka; `attempts`, `next_attempt_at` and `last_error` track the retries. The table
+has no topic column; which topic an event goes to is decided by the relay, not by the schema (19 types on the
+analytics topic, 9 of them also on the events topic). `processed_events` is the inbox: one row per consumed
+CloudEvents `id`, written in the same transaction as the effect. `idempotency_keys` stores the first response to a
+REST `Idempotency-Key`, with a request fingerprint. The migration tool's own bookkeeping table is not part of the SQL.
+
+## Analytics schema
+
+The KPI reports (service ADR 0011) read a separate `analytics` schema, written only by the `yard-projector` binary from
+the analytics topic and read by `yard-reports` (that split is from the service's binary layout, not checked in the
+code). The migrations grant read access to a `yard_analytics_reader` role when it exists.
+
+```mermaid
+erDiagram
+    direction LR
+    analytics_processed_events {
+        TEXT event_id PK
+        TEXT event_type
+        TIMESTAMPTZ occurred_at
+        TIMESTAMPTZ applied_at
+    }
+    trailer_facts {
+        TEXT trailer_id PK
+        TEXT site_id
+        TEXT kind
+        TEXT unit_number
+        TEXT visit_id
+        TIMESTAMPTZ arrived_at
+        TIMESTAMPTZ first_door_work_started_at
+        TIMESTAMPTZ departed_at
+        BIGINT dwell_minutes
+    }
+    visit_facts {
+        TEXT visit_id PK
+        TEXT site_id
+        TEXT purpose
+        TIMESTAMPTZ arrived_at
+        TIMESTAMPTZ departed_at
+        BIGINT on_site_minutes
+    }
+    door_dockings {
+        TEXT trailer_id PK
+        TIMESTAMPTZ docked_at PK
+        TEXT site_id
+        TEXT door_code
+        TIMESTAMPTZ undocked_at
+    }
+    door_work {
+        TEXT trailer_id PK
+        TIMESTAMPTZ started_at PK
+        TEXT site_id
+        TEXT door_code
+        TIMESTAMPTZ completed_at
+    }
+    hostler_moves {
+        TEXT move_id PK
+        TEXT site_id
+        TEXT trailer_id
+        TEXT hostler_ref
+        TIMESTAMPTZ completed_at
+        BIGINT duration_seconds
+    }
+    gate_exceptions {
+        TEXT kind PK "VISIT_REJECTED, SEAL_EXCEPTION"
+        TEXT subject_id PK
+        TIMESTAMPTZ occurred_at PK
+        TEXT site_id
+        TEXT reason
+    }
+    trailer_holds {
+        TEXT trailer_id PK
+        BIGINT version PK
+        TEXT site_id
+        TEXT reason
+        TIMESTAMPTZ held_at
+    }
+    yard_check_results {
+        TEXT yard_check_id PK
+        TEXT site_id
+        TIMESTAMPTZ closed_at
+        INTEGER discrepancies
+    }
+```
+
+Derived from: `model.yaml → contexts[yard-management].as_built.analytics_tables`.
+
+Omitted: the indexes. No table here has a foreign key. Each is a projection of the analytics topic.
 
 ## Why no foreign key crosses an aggregate or a context
 
-- **Across aggregates.** `visit_trailers.trailer_id`, `yard_moves.trailer_id`,
-  `trailers.appointment_id` and `visits.appointment_id` are values, not foreign keys.
-  `YardVisit`, `Trailer` and `YardMove` are separate consistency boundaries; the
+- **Across aggregates.** `yard_visits.trailers_in`, `yard_moves.trailer_id`, `trailers.visit_id`,
+  `trailers.appointment_id` and `yard_visits.appointment_id` are values, not foreign keys, and the migration has no
+  `REFERENCES` clause at all. `YardVisit`, `Trailer` and `YardMove` are separate consistency boundaries; the
   occupancy rule that spans them is held by a domain service, a lock and a partial
   unique index, not by a foreign key. A foreign key would couple lifecycles (a departed
   trailer could not be archived without its visit and moves).
 - **To other contexts.** `site_id`, `appointment_id`, `door_code`, `asn_number`,
   `receipt_id` and the location codes name things owned by `facility-layout`,
   `dock-scheduling` and `inbound-receiving`. Those live in other databases; this context
-  only holds event-fed copies (`rm_...`).
+  only holds event-fed copies (the read-model tables above).
 
 ## Table ≠ aggregate
 
 | Table | Aggregate / role | Notes |
 | --- | --- | --- |
-| `visits` | **YardVisit** (root) | One row per visit, including a rejected one. |
-| `visit_trailers` | **YardVisit** (its in and out lists) | Values only. |
+| `yard_visits` | **YardVisit** (root) | One row per visit, including a rejected one; the trailers in and out are array columns. |
 | `trailers` | **Trailer** (root) | One row per trailer; the occupancy and natural-key indexes live here. |
 | `yard_moves` | **YardMove** (root) | One row per move; the open-move, destination and hostler indexes live here. |
-| `yard_checks` | **YardCheck** (root) | One row per check. |
-| `yard_check_observations`, `yard_check_discrepancies` | **YardCheck** (its children) | Written at record and at close. |
-| `yard_policies` | **YardPolicy** (root) | One row per site. |
-| `yard_policy_holding_spots`, `yard_policy_parking_zones`, `yard_policy_dwell_thresholds` | **YardPolicy** (its lists) | Replaced as a set by `DeclareYardPolicy`. |
-| `rm_locations`, `rm_zones` | read model `LocationView` | From `facility-layout`. |
-| `rm_appointments` | read model `AppointmentView` | From `dock-scheduling`. |
-| `rm_door_closures` | read model `DoorClosureView` | From `dock-scheduling`. |
-| `rm_asn_contents` | read model `AsnContentView` | From `inbound-receiving`. |
-| `rm_receipts_at_door` | read model `ReceiptAtDoorView` | From `inbound-receiving`. |
-| `outbox_events` | none (infrastructure) | Transactional outbox. |
+| `yard_checks` | **YardCheck** (root) | One row per check; observations and discrepancies are `JSONB` columns. |
+| `yard_policies` | **YardPolicy** (root) | One row per site that declared a policy; the lists are array and `JSONB` columns replaced as a set by `DeclareYardPolicy`. |
+| `locations`, `zones` | read model `LocationView` | From `facility-layout`. |
+| `appointments` | read model `AppointmentView` | From `dock-scheduling`. |
+| `door_closures` | read model `DoorClosureView` | From `dock-scheduling`. |
+| `asns` | read model `AsnContentView` | From `inbound-receiving`. |
+| `receipts` | read model `ReceiptAtDoorView` | From `inbound-receiving`. |
+| `outbox` | none (infrastructure) | Transactional outbox. |
 | `processed_events` | none (infrastructure) | Inbox. |
 | `idempotency_keys` | none (infrastructure) | REST replay store. |
-| `schema_migrations` | none (infrastructure) | Migrations. |
+| `analytics.*` (9 tables) | read model `YardKpiReport` | Projected from the analytics topic. |

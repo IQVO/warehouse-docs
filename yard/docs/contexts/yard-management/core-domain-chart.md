@@ -7,8 +7,8 @@ description: "Where Yard Management sits on the ddd-crew Core Domain Chart and w
 
 # Core Domain Chart
 
-:::info[Proposed design]
-Derived from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml). This context's service is not built yet; identifiers (`Err...` names, REST paths, CloudEvents types) are the names the service will use.
+:::info[Built on develop, not deployed]
+Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 Following the ddd-crew [Core Domain Charts](https://github.com/ddd-crew/core-domain-charts):
@@ -43,7 +43,7 @@ reading** of the model, not values from `model.yaml`.
 `Supporting` with differentiation exactly 0.50 and complexity 0.60, which the
 quadrant renderer draws on the middle of the y axis and right of the middle of
 the x axis. The quadrant labels are a rendering convention; the classification
-comes from the model (gap YM-G25).
+comes from the model (gap YM-G25, accepted: the chart sits on the line by design).
 
 ## Classification: Supporting
 
@@ -62,7 +62,7 @@ else has (dwell, door occupancy, yard-truck productivity) and drives the
 **Model complexity is high-moderate (x = 0.60).** Five aggregates, the most
 stateful of the two yard contexts: `Trailer` (four states plus door work),
 `YardMove` (four states, a lease), `YardVisit` (three states), `YardCheck` and
-`YardPolicy`. Twenty-three commands, nine policies, and an invariant that
+`YardPolicy`. Twenty-four commands, nine policies and twenty-five invariants, one of which
 spans two aggregates (a spot or door holds at most one trailer, under a
 per-location advisory lock and a partial unique index). The hard parts are
 concurrent and cross-aggregate: occupancy races, lease expiry, and events that
