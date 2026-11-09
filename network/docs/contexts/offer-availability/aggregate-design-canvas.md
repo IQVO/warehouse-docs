@@ -265,4 +265,10 @@ line, kept 30 days; one event per applied feed.
 becomes "one listing per (`catalogItemId`, `nodeId`, `ownerRef`)"; an absent
 `ownerRef` is its own owner. The policy `SegregatedByOwner` states that
 availability is per listing and never summed, merged or moved between owners.
-This context does not check that an `ownerRef` is an active seller (gap G48).
+A listing whose owner is a suspended seller is `SUPPRESSED` with reason
+`OWNER_SUSPENDED`, read from the local `SellerStatusView` fed by
+`SellerSuspended` and `SellerReinstated`; a listing shows its highest active
+cause, `DISCONTINUED` > `NODE_NOT_SELLABLE` > `OWNER_SUSPENDED` (service
+ADR 0013, gap G48, closed). Received seller stock (`InboundShipmentReceived`
+`received` lines) creates the owner's listing at availability 0 / `UNKNOWN`
+(service ADR 0014, gap G51, closed).

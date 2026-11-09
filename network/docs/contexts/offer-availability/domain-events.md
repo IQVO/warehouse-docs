@@ -164,6 +164,17 @@ All four come from `node-topology` on `retailnetwork.node-topology.events`
 `NodeRegistered` also carries `subtype`, `vendorNodeCode`, `regionId`,
 `timezone`, `postalCode` and `countryCode`; this context does not use them.
 
+Three more come from `seller-inbound` on `retailnetwork.seller-inbound.events`
+(tier `partner`), on the consumer group `SELLER_INBOUND_CONSUMER_GROUP`
+(service ADRs 0013 and 0014). Every other type on that topic is acknowledged
+and counted, never dead-lettered.
+
+| Event | Full `type` | Fields used | What this context does |
+| --- | --- | --- | --- |
+| `SellerSuspended` | `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | `sellerId`, `suspendedAt` | Sets the seller `SUSPENDED` in `SellerStatusView`; every `LIVE` listing of the owner is suppressed with `OWNER_SUSPENDED` (gap G48). |
+| `SellerReinstated` | `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | `sellerId`, `reinstatedAt` | Sets the seller `ACTIVE`; every `OWNER_SUSPENDED` listing of the owner is reconciled: `LIVE` when no other cause holds, otherwise suppressed with the remaining highest cause. |
+| `InboundShipmentReceived` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | `sellerId`, `nodeId`, `received` | Creates the missing owner listing per received item at availability 0 / `UNKNOWN`, suppressed when a cause holds; an existing listing is left as it is (gap G51). |
+
 ### Idempotency and ordering
 
 - **Inbox.** Each consumed CloudEvents `id` is recorded in

@@ -8,7 +8,7 @@ description: The Core context that quotes a delivery date only from a feasible, 
 # Delivery Promise
 
 :::info[As built]
-Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. It also has an analytics read side (delivery-promise ADR 0018): `cmd/dp-projector` projects this context's own topics into a separate analytical database, and `cmd/dp-reports` serves the read-only `/reports/...` routes on `:8092`.
 :::
 
 <span className="badge-core">Core</span>

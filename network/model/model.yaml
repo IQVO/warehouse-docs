@@ -194,8 +194,9 @@ contexts:
           - {rule: "the node's regionId names a defined Region", error: ErrUnknownRegion}
           - {rule: "subtype, when given, is one of the node type's subtypes in node_types", error: ErrSubtypeNotAllowed}
           - {rule: "sortDwellMinutes is declared only by SORTATION_CENTER and AIR_HUB nodes", error: ErrSortDwellNotAllowed}
-          # as built (node-topology ADR 0007): the limits are value-checked only and accepted on any node type; the INBOUND-capability restriction is not enforced and FULFILLMENT_CENTER has no INBOUND capability in the service (gap G64)
-          - {rule: "inbound limits, when declared, declare at least one field; every number set is a positive integer (at most 2147483647); the three maxCartonDimsMm edges are all-or-none. Not enforced as built: the restriction to nodes with the INBOUND capability (gap G64)", error: ErrValidation}
+          # as built (node-topology ADR 0015, gap G64 closed): FULFILLMENT_CENTER carries INBOUND (node_types); a NEW declaration of inbound limits on a type without INBOUND is refused before the ADR 0007 value checks; stored revisions that carry such limits stay restorable (no migration)
+          - {rule: "inbound limits are declared only on a node whose type has the INBOUND capability (FULFILLMENT_CENTER, INBOUND_CROSS_DOCK); HTTP 422 inbound-limits-not-allowed. Checked on DeclareOperationalProfile only, before the value checks; an explicit inbound null reads as absent; Restore never refuses a stored revision (node-topology ADR 0015)", error: ErrInboundLimitsNotAllowed}
+          - {rule: "inbound limits, when declared, declare at least one field; every number set is a positive integer (at most 2147483647); the three maxCartonDimsMm edges are all-or-none (node-topology ADR 0007)", error: ErrValidation}
           - {rule: "RETIRED is terminal", error: ErrNodeRetired}
         commands: [RegisterNode, DeclareOperationalProfile, ActivateNode, SuspendNode, RetireNode]
         events: [NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired]
@@ -313,7 +314,8 @@ contexts:
       that number (physical stock or throughput-constrained).
     roles: [Specification, Analysis (availability)]
     business_decisions:
-      - A listing is sellable only while its node is ACTIVE.
+      - A listing is sellable only while its node is ACTIVE and its owner is not a suspended seller (offer-availability ADR 0013).
+      - Received seller stock becomes the seller's listing on the receiving node at availability 0 / UNKNOWN; only the vendor's inventory feed sets availability (offer-availability ADR 0014).
       - A feed older than the last applied feed for that node is ignored.
       - A full feed zeroes every listing of that node it omits.
       - The basis the vendor declares (PHYSICAL or THROUGHPUT_CONSTRAINED) is kept with the number, never re-derived.
@@ -352,7 +354,7 @@ contexts:
           - {rule: "an update with asOf <= current asOf is ignored (monotonic per listing)", error: ErrStaleAvailability}
           - {rule: "a listing on a non-ACTIVE node is SUPPRESSED", error: ErrNodeNotSellable}
           - {rule: "one listing per (catalogItemId, nodeId, ownerRef); no ownerRef is its own owner", error: ErrDuplicateListing}
-        commands: [CreateListing, ApplyAvailability, SuppressListing, RestoreListing]
+        commands: [CreateListing, ApplyAvailability, SuppressListing, RestoreListing, ApplyReceivedStock]
         events: [ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored]
         throughput_estimate: "high: one update per feed line; bursty"
         size_estimate: "items x nodes, sparse"
@@ -372,9 +374,14 @@ contexts:
         size_estimate: "retained 30 days"
     read_models:
       - {name: NodeStatusView, source: "node-topology NodeRegistered/NodeActivated/NodeSuspended/NodeRetired"}
+      - {name: SellerStatusView, source: "seller-inbound SellerSuspended (SUSPENDED, asOf = suspendedAt), SellerReinstated (ACTIVE, asOf = reinstatedAt); one row per sellerId, an observation older than asOf is ignored, an unknown seller is ACTIVE (offer-availability ADR 0013)"}
     policies:
-      - {name: SuppressOnNodeUnavailable, rule: "on NodeSuspended or NodeRetired suppress every listing of the node; on NodeActivated restore those suppressed for that reason"}
+      - {name: SuppressOnNodeUnavailable, rule: "on NodeSuspended or NodeRetired suppress every listing of the node; on NodeActivated reconcile every listing of the node: it becomes LIVE only when no other cause holds, and a listing whose owner is SUSPENDED switches to OWNER_SUSPENDED instead (offer-availability ADR 0013)"}
+      - {name: SuppressOnOwnerSuspended, rule: "on SellerSuspended suppress every LIVE listing with ownerRef = sellerId with reason OWNER_SUSPENDED (one ListingSuppressed each, in the transaction of the view update); a listing already suppressed for a higher cause keeps its reason, and the owner's view row stops a later restore of that cause; on SellerReinstated reconcile every OWNER_SUSPENDED listing of the owner: ListingRestored when no cause remains, otherwise one ListingSuppressed with the remaining highest cause (offer-availability ADR 0013, gap G48)"}
+      - {name: ListingReconcile, rule: "Listing.Reconcile reads the listing's three causes (node ACTIVE in NodeStatusView, item discontinued, owner SUSPENDED in SellerStatusView) and moves the listing to the highest active cause: LIVE when none holds (ListingRestored), otherwise SUPPRESSED with that reason (one ListingSuppressed when the reason changes); DISCONTINUED stays final"}
+      - {name: ListingsFromReceivedStock, rule: "on InboundShipmentReceived, for each received line with qtyEaches > 0 resolve the item (the line's catalogItemId, else the own GTIN/packaging index, retired levels included) and, when no listing of (catalogItemId, nodeId, ownerRef = sellerId) exists, create one as the system actor: ListingCreated with ownerRef, availability 0 basis UNKNOWN, then ListingSuppressed for the highest cause when the node is not sellable, the item is discontinued or the owner is SUSPENDED. An existing listing is a no-op; availability still comes only from the vendor feed; an unresolvable GTIN, an unknown item or an event without received is skipped and counted, never an error; one transaction per event, inbox-idempotent (offer-availability ADR 0014, gap G51)"}
       - {name: FullFeedZeroing, rule: "a full feed sets availableQty=0 on every listing of the node it omits"}
+      - {name: OwnerSuspendedOnCreate, rule: "CreateListing (REST or ListingsFromReceivedStock) for an owner SUSPENDED in SellerStatusView raises ListingCreated then ListingSuppressed(OWNER_SUSPENDED) at version 1, unless a higher cause applies, which wins"}
       - {name: SegregatedByOwner, rule: "availability is per listing and a listing has one owner: quantities of different owners are never summed, merged or moved between listings; commingling stock by GTIN is not designed"}
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /inventory-feeds (in-org)", routes: ["POST /inventory-feeds"], message: "ApplyInventoryFeed", relationship: Customer/Supplier}
@@ -383,6 +390,7 @@ contexts:
       - {from: "network merchandising (human)", type: qry, channel: "REST GET /listings, GET /inventory-feeds/{feedId}", routes: ["GET /listings", "GET /inventory-feeds/{feedId}"], message: "ListListings, GetInventoryFeed", relationship: UI}
       - {from: shopper / storefront, type: qry, channel: "REST GET /catalog, GET /catalog/{catalogItemId}", routes: ["GET /catalog", "GET /catalog/{catalogItemId}"], message: "BrowseCatalog", relationship: OHS}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeActivated, NodeSuspended, NodeRetired", relationship: Conformist}
+      - {from: seller-inbound, type: evt, channel: "Kafka retailnetwork.seller-inbound.events", message: "SellerSuspended, SellerReinstated, InboundShipmentReceived", relationship: Conformist}
     rest:
       - "POST /catalog-items"
       - "POST /catalog-items/{catalogItemId}:discontinue"
@@ -400,7 +408,7 @@ contexts:
       - {event: CatalogItemPackagingDeclared, entity: catalogitem, data: [catalogItemId, level, gtin, childGtin (optional), unitsPerPack, declaredAt], consumers: [seller-inbound, vendor-connectivity]}
       - {event: CatalogItemPackLevelRetired, entity: catalogitem, data: [catalogItemId, level, gtin, retiredAt], consumers: [seller-inbound, vendor-connectivity]}
       - {event: ListingCreated, entity: listing, data: [listingId, catalogItemId, nodeId, ownerRef (optional)], consumers: [delivery-promise, order-sourcing, vendor-connectivity]}
-      - {event: ListingAvailabilityChanged, entity: listing, data: [listingId, catalogItemId, nodeId, availableQty, basis, asOf, feedId, ownerRef (optional)], consumers: [delivery-promise, order-sourcing]}
+      - {event: ListingAvailabilityChanged, entity: listing, data: [listingId, catalogItemId, nodeId, availableQty, basis, asOf, feedId, ownerRef (optional)], consumers: [delivery-promise, order-sourcing, seller-inbound]}
       - {event: ListingSuppressed, entity: listing, data: [listingId, nodeId, reason], consumers: [delivery-promise, order-sourcing]}
       - {event: ListingRestored, entity: listing, data: [listingId, nodeId], consumers: [delivery-promise, order-sourcing]}
       - {event: InventoryFeedApplied, entity: inventoryfeed, data: [feedId, nodeId, fullUpdate, lineCount, appliedAt], consumers: [node-performance]}
@@ -411,11 +419,15 @@ contexts:
         values:
           - {value: NODE_NOT_SELLABLE, meaning: "The listing's node is not ACTIVE; the listing is restored when the node activates."}
           - {value: DISCONTINUED, meaning: "The catalogue item is discontinued; final, the listing is never restored."}
+          - {value: OWNER_SUSPENDED, meaning: "The listing's owner (ownerRef) is a suspended seller; the listing is reconciled when the seller is reinstated. Lowest precedence: DISCONTINUED, then NODE_NOT_SELLABLE, then OWNER_SUSPENDED."}
     consumes:
       - {event: NodeRegistered, from: node-topology}
       - {event: NodeActivated, from: node-topology}
       - {event: NodeSuspended, from: node-topology}
       - {event: NodeRetired, from: node-topology}
+      - {event: SellerSuspended, from: seller-inbound}
+      - {event: SellerReinstated, from: seller-inbound}
+      - {event: InboundShipmentReceived, from: seller-inbound}
     sync_calls: []
     ul:
       - {term: Catalog Item, definition: "The network's own entry for a product, independent of who ships it.", code: "catalog.Item"}
@@ -427,6 +439,7 @@ contexts:
       - {term: Packaging Hierarchy, definition: "The pack levels of one catalogue item (each, inner pack, case, pallet), each with its own GTIN and a fixed content quantity. Quantities stay in eaches.", code: "catalog.PackagingHierarchy"}
       - {term: Pack Level, definition: "One of EACH, INNER, CASE or PALLET. A level other than EACH knows its child level's GTIN and how many of it it holds.", code: "catalog.PackLevel"}
       - {term: Owner Reference, definition: "The opaque ownerRef on a listing: the seller of record of the stock. Empty means the vendor's own stock.", code: "listing.OwnerRef"}
+      - {term: Owner Suspended, definition: "The suppression cause of a listing whose seller is suspended; the lowest of the three causes.", code: "listing.ReasonOwnerSuspended"}
 
   # =========================================================================
   - id: delivery-promise
@@ -463,10 +476,11 @@ contexts:
           - "DeliveryWindow{earliest, latest}"
           - "WitnessPath{nodeId, pickupDepartureId, legs[departureId], deliveryWaveId}"
           - "OfferConstraint(DESTINATION_NOT_SERVED|ITEM_QUANTITY_NOT_AVAILABLE|DELIVERY_SLA_UNAVAILABLE|NODE_CAPACITY_EXHAUSTED)"
+          - "OfferLine{catalogItemId, quantity, ownerRef ('' = operator-owned)}: the owner OwnerChoice picked at quote time (delivery-promise ADR 0017)"
         invariants:
           - {rule: "expiresAt <= min(quotedAt + offerTtl, the latest instant the witness pickup cutoff can still be met)", error: ErrOfferExpiryTooLate}
           - {rule: "an expired or consumed offer cannot back a promise", error: ErrOfferNotQuotable}
-        commands: [QuoteDeliveryOffers, ExpireOffers]
+        commands: [QuoteDeliveryOffers, ExpireOffers, EstimateDeliveries]
         events: []
         notes: "Quotes are high-volume query results; they are persisted with a TTL so checkout can honour them, but publish no integration event (analytics only: DeliveryOfferQuoted on the analytics topic)."
         throughput_estimate: "very high: every product page and cart view"
@@ -488,7 +502,7 @@ contexts:
           - [CONFIRMED, CANCELLED, CancelPromise]
           - [AT_RISK, CANCELLED, CancelPromise]
         value_objects:
-          - "ShipmentGroup{lines[{catalogItemId, quantity}]}"
+          - "ShipmentGroup{lines[{catalogItemId, quantity, ownerRef ('' = operator-owned; the owner the line was netted against, delivery-promise ADR 0017)}]}"
           - "PromiseTerms{tier, shipBy, deliverByEarliest, deliverByLatest, basis(SCHEDULED|MEASURED|NOMINAL), policyVersion}"
           - "WitnessPath{nodeId, pickupDepartureId, legs[departureId], deliveryWaveId}"
           - "Revision{revisionNo, previousTerms, reason, revisedAt}"
@@ -525,15 +539,19 @@ contexts:
       - {name: NodeProfileView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
       - {name: RegionAndServiceAreaView, source: "node-topology ServiceAreaAssigned, RegionDefined"}
       - {name: LaneView, source: "node-topology LaneOpened, LaneClosed"}
-      - {name: AvailabilityView, source: "offer-availability ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored, CatalogItemCreated, CatalogItemDiscontinued"}
+      - {name: AvailabilityView, source: "offer-availability ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored, CatalogItemCreated, CatalogItemDiscontinued; keyed by (catalogItemId, nodeId, ownerRef), operator-owned stored as '' (absent ownerRef), the asOf monotonic rule per key (delivery-promise ADR 0017)"}
       - {name: DepartureView, source: "linehaul-transportation DepartureScheduled, DepartureCapacityChanged, DepartureCancelled"}
       - {name: TransitActualsView, source: "linehaul-transportation LoadDeparted, LoadArrived (paired by loadId; ADR 0014)"}
       - {name: DeliveryWaveView, source: "last-mile-delivery DeliveryWaveScheduled, DeliveryWaveCapacityChanged"}
       - {name: ScorecardView, source: "node-performance NodeScorecardUpdated"}
+      - {name: PromiseAnalytics, source: "analytical read side (delivery-promise ADR 0018): cmd/dp-projector, the only writer of a SEPARATE analytical database, projects this context's OWN topics only (retailnetwork.delivery-promise.events and .analytics) in one consumer group, deduped in the projection transaction; cmd/dp-reports serves the read-only /reports routes on :8092"}
     policies:
       - {name: PromisePolicy, rule: "earliest feasible witness path; see network-model/promise-model"}
       - {name: ScorecardHandicap, rule: "grade A: +0; B: +handling x 0.25; C: next cutoff; D: two cutoffs later; no scorecard yet: +0"}
       - {name: TierOrderDeadline, rule: "per tier and region a policy-versioned local order deadline (peak control of new workable demand)"}
+      - {name: OwnerChoice, rule: "a quoted line must be covered by ONE owner: Available(node, item, owner) >= qty after netting; summing across owners is forbidden. The owner is: operator-owned ('') first if it covers; otherwise the covering seller owner with the highest available after netting; ties go to the lowest ownerRef in byte order; no covering owner means the node is not a candidate for that line (ITEM_QUANTITY_NOT_AVAILABLE). Applied verbatim by order-sourcing too (delivery-promise ADR 0017, gap G47)"}
+      - {name: OwnerAwareNetting, rule: "provisional and confirmed holds record the ownerRef they took and net only the figure of their own (node, item, ownerRef) key (ADR 0015 semantics per key); MakePromise re-validates with OwnerChoice and takes another covering owner without a re-quote; on a lock at another node the charge is re-netted with OwnerChoice there, and kept where it was (logged) when no single owner covers"}
+      - {name: BatchDeliveryEstimates, rule: "POST /delivery-estimates is SAFE: up to 50 unique items for one destinationPostalPrefix (tiers optional, default all), each searched as a single-line group with exactly the quote search (read models, OwnerChoice, netting, scorecard handicap, basis) over one load of the shared inputs per request; answers per item the options (tier, window start/end/timeZone, basis, orderByAt) and constraints in the OfferConstraint vocabulary. Persists nothing (no offer row, hold, outbox row or event); an Idempotency-Key is ignored; an unknown item yields ITEM_QUANTITY_NOT_AVAILABLE. The read-only MCP tool estimate_delivery (authority L1) is bound to the same use case (delivery-promise ADR 0019, gap G60)"}
       - {name: ShipmentGrouping, rule: "prefer one node for the whole cart; split only when no single node covers every line, minimising the number of groups"}
       - {name: RepromiseOnRisk, rule: "on FulfillmentUnsourceable, PackageExceptionRaised or a cancelled departure on the witness path, recompute and RevisePromise; if nothing is feasible even at STANDARD, report PromiseBroken at judgement time"}
       - {name: JudgeOnDelivery, rule: "on PackageDelivered judge every promise of the package's group"}
@@ -546,6 +564,9 @@ contexts:
       - {from: customer-ordering, type: qry, channel: "REST POST /delivery-quotes (in-org)", routes: ["POST /delivery-quotes"], message: "QuoteDeliveryOffers", relationship: Customer/Supplier}
       - {from: customer-ordering, type: cmd, channel: "REST POST /promises, POST /promises/{promiseId}/confirmations, POST /promises/{promiseId}/cancellations (in-org)", routes: ["POST /promises", "POST /promises/{promiseId}/confirmations", "POST /promises/{promiseId}/cancellations"], message: "MakePromise, ConfirmPromise, CancelPromise", relationship: Customer/Supplier}
       - {from: shopper / storefront, type: qry, channel: "REST POST /delivery-quotes", routes: ["POST /delivery-quotes"], message: "QuoteDeliveryOffers", relationship: OHS}
+      - {from: shopper / storefront, type: qry, channel: "REST POST /delivery-estimates (listing pages; safe, non-persisted)", routes: ["POST /delivery-estimates"], message: "EstimateDeliveries", relationship: OHS}
+      # caller inferred: ADR 0018 names the report questions, not a client; the routes are served by cmd/dp-reports on :8092, not cmd/api
+      - {from: network analysts (human), type: qry, channel: "REST GET /reports/promise-reliability, GET /reports/promise-precision, GET /reports/quote-conversion, GET /reports/freshness (cmd/dp-reports, :8092)", routes: ["GET /reports/promise-reliability", "GET /reports/promise-precision", "GET /reports/quote-conversion", "GET /reports/freshness"], message: "GetPromiseReliabilityReport, GetPromisePrecisionReport, GetQuoteConversionReport, GetReportFreshness", relationship: UI}
       # caller inferred: the spec names no caller for these three reads; attributed to the actor of the sibling quote route
       - {from: shopper / storefront, type: qry, channel: "REST GET /delivery-offers/{offerId}, GET /promises/{promiseId}, GET /promises?orderId=", routes: ["GET /delivery-offers/{offerId}", "GET /promises/{promiseId}", "GET /promises"], message: "GetDeliveryOffer, GetPromise, ListPromisesByOrder", relationship: OHS}
       # caller inferred: the spec and ADR 0002 A21 name no caller; a policy is published by network operations, not by a service or the storefront
@@ -562,6 +583,7 @@ contexts:
       - {from: node-performance, type: evt, channel: "Kafka retailnetwork.node-performance.events", message: "NodeScorecardUpdated", relationship: Conformist}
     rest:
       - "POST /delivery-quotes"
+      - "POST /delivery-estimates"
       - "GET /delivery-offers/{offerId}"
       - "POST /promises"
       - "GET /promises/{promiseId}"
@@ -571,8 +593,12 @@ contexts:
       - "POST /promise-policies"
       - "GET /promise-policies/current"
       - "POST /promises/{promiseId}/cancellations"
+      - "GET /reports/promise-reliability?from=&to="
+      - "GET /reports/promise-precision?from=&to="
+      - "GET /reports/quote-conversion?from=&to="
+      - "GET /reports/freshness"
     publishes:
-      - {event: PromiseMade, entity: promise, data: [promiseId, offerId, tier, nodeId, pickupDepartureId, shipBy, deliverByEarliest, deliverByLatest, basis, policyVersion, holdExpiresAt, lines], consumers: [analytics only]}
+      - {event: PromiseMade, entity: promise, data: [promiseId, offerId, tier, nodeId, pickupDepartureId, shipBy, deliverByEarliest, deliverByLatest, basis, policyVersion, holdExpiresAt, "lines(catalogItemId, quantity, ownerRef (optional, omitted when operator-owned))"], consumers: [analytics only]}
       - {event: PromiseConfirmed, entity: promise, data: [promiseId, orderId, groupNo], consumers: [analytics only]}
       - {event: PromiseAtRisk, entity: promise, data: [promiseId, orderId, reason, detectedAt], consumers: [customer-ordering]}
       - {event: PromiseRevised, entity: promise, data: [promiseId, orderId, revisionNo, previousDeliverByLatest, deliverByEarliest, deliverByLatest, shipBy, nodeId, reason], consumers: [customer-ordering, order-sourcing]}
@@ -838,6 +864,7 @@ contexts:
           - "Candidate{nodeId, pickupDepartureId, legs[], deliveryWaveId, eta, cost}"
           - "Release{releaseNo, nodeId, releasedAt, requiredShipBy, outcome(ACCEPTED|REJECTED|EXPIRED|PENDING), reasonCode}"
           - "ExcludedNode{nodeId, reason}"
+          - "AssignmentLine{catalogItemId, listingId, quantity, ownerRef ('' = operator-owned)}: the owner chosen by OwnerChoice at the node actually released (order-sourcing ADR 0012)"
         invariants:
           - {rule: "a released candidate's eta <= deliverByLatest", error: ErrCandidateBreaksPromise}
           - {rule: "no change of node after LOCKED", error: ErrAssignmentLocked}
@@ -846,19 +873,22 @@ contexts:
           - {rule: "assignmentVersion strictly increases", error: ErrStaleAssignmentVersion}
           - {rule: "cancel only before LOCKED: a cancel request on a LOCKED, SHIPPED or DELIVERED assignment is refused, the assignment keeps its state and raises FulfillmentCancelRefused (reason CANCEL_AFTER_LOCK) instead of FulfillmentCancelled", error: ErrCancelAfterLock}
         commands: [QueueAssignment, ReoptimiseAssignment, ReleaseToNode, HandleNodeRefusal, LockAssignment, MarkShipped, MarkDelivered, CancelAssignment, RefuseCancel, ApplyRevisedPromise]
-        events: [FulfillmentQueued, FulfillmentReleasedToNode, FulfillmentReassigned, FulfillmentLocked, FulfillmentShipped, FulfillmentDelivered, FulfillmentUnsourceable, FulfillmentCancelled, FulfillmentCancelRefused]
+        events: [FulfillmentQueued, FulfillmentReleasedToNode, FulfillmentReassigned, FulfillmentLocked, FulfillmentShipped, FulfillmentDelivered, FulfillmentUnsourceable, FulfillmentCancelled, FulfillmentCancelRefused, FulfillmentSourcingDecided]
         notes: "Known residual (G12): an acceptance that reaches order-sourcing after it cancelled a RELEASED assignment is only recorded and logged (policy AcceptanceAfterCancelOnlyLogged); the vendor may still ship a cancelled group."
         throughput_estimate: "medium-high; re-optimisation sweeps touch QUEUED rows only"
         size_estimate: "one row per shipment group + releases"
     read_models:
       - {name: NodeProfileView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
       - {name: NetworkGraphView, source: "node-topology LaneOpened, LaneClosed, ServiceAreaAssigned, RegionDefined; linehaul-transportation DepartureScheduled, DepartureCapacityChanged, DepartureCancelled; last-mile-delivery DeliveryWaveScheduled, DeliveryWaveCapacityChanged"}
-      - {name: AvailabilityView, source: "offer-availability ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored, CatalogItemDiscontinued"}
+      - {name: AvailabilityView, source: "offer-availability ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored, CatalogItemDiscontinued; keyed by (catalogItemId, nodeId, ownerRef), operator-owned stored as '' (absent ownerRef), a suppressed key covers nothing (order-sourcing ADR 0012)"}
       - {name: ScorecardView, source: "node-performance NodeScorecardUpdated"}
       - {name: PromiseBookPressureView, source: "delivery-promise PromiseBookExhausted"}
+      - {name: SourcingAnalytics, source: "analytical read side (order-sourcing ADR 0013): cmd/os-projector, the only writer of a SEPARATE analytical database, projects this context's OWN topics only (retailnetwork.order-sourcing.events and .analytics: FulfillmentReleasedToNode, FulfillmentQueued, FulfillmentSourcingDecided, ...) in one consumer group, deduped in the projection transaction; cmd/os-reports serves the read-only /reports routes on :8092"}
     policies:
       - {name: VirtualQueue, rule: "releaseAt = pickup cutoff of the best candidate - node handling time - vendor ack budget; release immediately for SAME_DAY"}
       - {name: AssignmentCost, rule: "estimatedCostCents = lane costPerUnitCents over the path legs + the final wave costPerStopCents (planner-declared, consumed from LaneCostDeclared and WaveCostDeclared; a cost arriving before its lane or wave is known is kept); an undeclared component contributes 0 and marks the estimate incomplete; the comparator leads with estimatedCostCents (lower wins) and the ordinal penalties (legs, crossRegionPenalty, scorecardPenalty, bookPressurePenalty) are tie-breakers, then the witness node; FulfillmentReleasedToNode carries estimatedCostCents only when the estimate is complete (ADR 0011, F7)"}
+      - {name: OwnerChoice, rule: "a line is feasible at a node only when ONE owner covers its quantity (availableQty of that key; summing across owners is forbidden, a line never spans owners). The owner is: operator-owned ('') first if it covers the line; otherwise the covering seller owner with the highest availableQty; ties go to the lowest ownerRef in byte order; no covering owner means the node is not a candidate (NO_CANDIDATE path). Recomputed on every search; the owner at the released node is persisted on the line and published on FulfillmentReleasedToNode lines[].ownerRef. The same rule, verbatim, is applied by delivery-promise (order-sourcing ADR 0012, gap G47)"}
+      - {name: SourcingDecisionFact, rule: "every release also appends the analytics-only FulfillmentSourcingDecided (one per assignment and releaseNo: node and destination regions, inRegion, legs, estimated cost and its completeness, units, candidate count), read only by this context's own analytics projector (order-sourcing ADR 0013)"}
       - {name: ReassignOnRefusal, rule: "on PurchaseOrderRejected or PurchaseOrderExpired, exclude the node and re-queue; if no candidate meets deliverByLatest, UNSOURCEABLE"}
       - {name: LockOnCommit, rule: "on PurchaseOrderAccepted the assignment is LOCKED (the vendor-node equivalent of the item being picked)"}
       - {name: CancelDecision, rule: "CustomerOrderCancelled is a request, and order-sourcing decides per group. From QUEUED, RELEASED or UNSOURCEABLE it cancels (CancelAssignment) and publishes FulfillmentCancelled. From LOCKED, SHIPPED or DELIVERED it publishes FulfillmentCancelRefused with reason CANCEL_AFTER_LOCK and changes no state; the lock is the vendor's acceptance of the purchase order, so after a refusal the vendor ships and the shopper's refusal becomes a return. A repeated request on a CANCELLED assignment is a no-op. customer-ordering consumes both events and vendor-connectivity consumes FulfillmentCancelled"}
@@ -874,22 +904,29 @@ contexts:
       - {from: last-mile-delivery, type: evt, channel: "Kafka retailnetwork.last-mile-delivery.events", message: "DeliveryWaveScheduled, DeliveryWaveCapacityChanged", relationship: Conformist}
       - {from: node-performance, type: evt, channel: "Kafka retailnetwork.node-performance.events", message: "NodeScorecardUpdated", relationship: Conformist}
       - {from: network-ops planner, type: qry, channel: "REST GET /assignments, GET /assignments/{assignmentId}", routes: ["GET /assignments", "GET /assignments/{assignmentId}"], message: "ListAssignments, GetAssignment", relationship: UI}
+      # caller inferred: ADR 0013 names the report questions, not a client; the routes are served by cmd/os-reports on :8092, not cmd/api
+      - {from: network analysts (human), type: qry, channel: "REST GET /reports/sourcing-mix, GET /reports/order-splits, GET /reports/cost-to-serve, GET /reports/freshness (cmd/os-reports, :8092)", routes: ["GET /reports/sourcing-mix", "GET /reports/order-splits", "GET /reports/cost-to-serve", "GET /reports/freshness"], message: "GetSourcingMixReport, GetOrderSplitsReport, GetCostToServeReport, GetReportFreshness", relationship: UI}
       - {from: network-ops planner, type: cmd, channel: "REST POST /assignments/{assignmentId}:reoptimise", routes: ["POST /assignments/{assignmentId}:reoptimise"], message: "ReoptimiseAssignment", relationship: UI}
     rest:
       - "GET /assignments?state=&nodeId=&orderId="
       - "GET /assignments/{assignmentId}"
       - "POST /assignments/{assignmentId}:reoptimise"
+      - "GET /reports/sourcing-mix?from=&to="
+      - "GET /reports/order-splits?from=&to="
+      - "GET /reports/cost-to-serve?from=&to="
+      - "GET /reports/freshness"
     publishes:
       - {event: FulfillmentQueued, entity: assignment, data: [assignmentId, orderId, groupNo, promiseId, deliverByLatest, lines], consumers: [analytics only]}
-      - {event: FulfillmentReleasedToNode, entity: assignment, data: [assignmentId, releaseNo, orderId, groupNo, nodeId, pickupDepartureId, requiredShipBy, promisedDeliverByLatest, tier, lines(catalogItemId, listingId, quantity), estimatedCostCents (optional, omitted when the estimate is incomplete)], consumers: [vendor-connectivity, linehaul-transportation]}
+      - {event: FulfillmentReleasedToNode, entity: assignment, data: [assignmentId, releaseNo, orderId, groupNo, nodeId, pickupDepartureId, requiredShipBy, promisedDeliverByLatest, tier, lines(catalogItemId, listingId, quantity, ownerRef (optional, omitted when operator-owned)), estimatedCostCents (optional, omitted when the estimate is incomplete)], consumers: [vendor-connectivity, linehaul-transportation, seller-inbound]}
       - {event: FulfillmentReassigned, entity: assignment, data: [assignmentId, fromNodeId, toNodeId, reason, assignmentVersion], consumers: [linehaul-transportation]}
       - {event: FulfillmentLocked, entity: assignment, data: [assignmentId, orderId, groupNo, nodeId, pickupDepartureId, lockedAt, lockReason, promiseId], consumers: [delivery-promise, customer-ordering, linehaul-transportation]}
       - {event: FulfillmentShipped, entity: assignment, data: [assignmentId, orderId, groupNo, nodeId, trackingNumbers, shippedAt], consumers: [customer-ordering, delivery-promise]}
       - {event: FulfillmentDelivered, entity: assignment, data: [assignmentId, orderId, groupNo, deliveredAt], consumers: [analytics only]}
       - {event: FulfillmentUnsourceable, entity: assignment, data: [assignmentId, orderId, groupNo, promiseId, excludedNodes, reason], consumers: [delivery-promise, customer-ordering]}
-      - {event: FulfillmentCancelled, entity: assignment, data: [assignmentId, orderId, groupNo, reason], consumers: [vendor-connectivity, linehaul-transportation, customer-ordering]}
+      - {event: FulfillmentCancelled, entity: assignment, data: [assignmentId, orderId, groupNo, reason], consumers: [vendor-connectivity, linehaul-transportation, customer-ordering, seller-inbound]}
       - {event: FulfillmentCancelRefused, entity: assignment, data: [assignmentId, orderId, groupNo, reason], consumers: [customer-ordering]}
       - {event: FulfillmentConstraintRevised, entity: assignment, data: [assignmentId, revisionNo, deliverByLatest], consumers: [analytics only]}
+      - {event: FulfillmentSourcingDecided, entity: assignment, data: [assignmentId, orderId, groupNo (optional), releaseNo, nodeId, nodeRegionId (optional), destinationRegionId (optional), inRegion (optional), legs, estimatedCostCents (optional), costComplete, units, candidateCount, decidedAt], consumers: [analytics only]}
     reasons:
       - name: FulfillmentReassignedReason
         fields: [FulfillmentReassigned.reason]
@@ -1027,7 +1064,7 @@ contexts:
           - [SHIPMENT_PROCESSING, ACCEPTED, ProcessSubmission]
           - [ISSUED, CANCELLED, CancelPurchaseOrder]
         value_objects:
-          - "PoLine{lineNo, listingId, quantity}"
+          - "PoLine{lineNo, listingId, quantity, ownerRef ('' = operator-owned; copied from FulfillmentReleasedToNode lines[].ownerRef, omitted on the Vendor API and PurchaseOrderIssued when empty; vendor-connectivity ADR 0012)}"
           - "AckDecision(ACCEPT|REJECT){reasonCode}"
           - "Label{labelRef, trackingNumber, carrier}"
           - "RejectReason(OUT_OF_STOCK|UNKNOWN_LISTING|CANNOT_MEET_SHIP_BY|DISCONTINUED)"
@@ -1063,6 +1100,7 @@ contexts:
       - {name: CatalogPackagingView, source: "offer-availability CatalogItemPackagingDeclared, CatalogItemPackLevelRetired"}
     policies:
       - {name: IssueOnRelease, rule: "on FulfillmentReleasedToNode for a VENDOR node, issue a purchase order (poNumber is idempotent on assignmentId + releaseNo)"}
+      - {name: PoLineNamesTheOwner, rule: "each purchase-order line carries the ownerRef of its released line (absent or empty = operator-owned), persisted on the line and exposed, optional and additive, on GET /vendor/purchase-orders, GET /vendor/purchase-orders/{poNumber} and PurchaseOrderIssued. Acknowledgement, cancellation, labels and shipment confirmation ignore it. KNOWN RESIDUAL: the fleet's network-fulfillment does not read it yet, so seller-owned lines are still picked without owner segregation (vendor-connectivity ADR 0012, gap G47)"}
       - {name: CancelOnSourcingCancel, rule: "on FulfillmentCancelled cancel the purchase order of the assignment's highest releaseNo (CancelPurchaseOrder; no order is a no-op). If the vendor has already acknowledged it, CancelPurchaseOrder fails with ErrCancelAfterAcknowledgement, which is logged at INFO: nothing is published and the event is not retried, because order-sourcing decides the cancel and learns the order's fate from PurchaseOrderAccepted. Known residual: an acceptance that arrives after order-sourcing cancelled a RELEASED assignment is only logged there (order-sourcing policy AcceptanceAfterCancelOnlyLogged)"}
       - {name: ExpireUnacknowledged, rule: "sweep: ISSUED past ackBy -> EXPIRED"}
       - {name: ReceiptRelay, rule: "when an INBOUND_RECEIPT submission is accepted, append InboundReceiptSubmitted (subject and key shipmentId) to the outbox in the same unit of work, so a 202 always has its event (vendor-connectivity ADR 0005); SubmissionProcessed still reports the processing. The receipt is not applied to the shipment here, seller-inbound owns that"}
@@ -1099,7 +1137,7 @@ contexts:
       - "POST /vendors/{vendorId}:reinstate"
     publishes:
       - {event: VendorOnboarded, entity: vendoraccount, data: [vendorId, name, ackWindowMinutes], consumers: [node-performance]}
-      - {event: PurchaseOrderIssued, entity: purchaseorder, data: [poNumber, vendorId, nodeId, assignmentId, releaseNo, requiredShipBy, ackBy, lines], consumers: [node-performance]}
+      - {event: PurchaseOrderIssued, entity: purchaseorder, data: [poNumber, vendorId, nodeId, assignmentId, releaseNo, requiredShipBy, ackBy, "lines(lineNo, listingId, quantity, ownerRef (optional, omitted when operator-owned))"], consumers: [node-performance]}
       - {event: PurchaseOrderAccepted, entity: purchaseorder, data: [poNumber, assignmentId, releaseNo, nodeId, acceptedAt, transactionId], consumers: [order-sourcing, node-performance]}
       - {event: PurchaseOrderRejected, entity: purchaseorder, data: [poNumber, assignmentId, releaseNo, nodeId, reasonCode, rejectedAt], consumers: [order-sourcing, node-performance]}
       - {event: PurchaseOrderExpired, entity: purchaseorder, data: [poNumber, assignmentId, releaseNo, nodeId, ackBy], consumers: [order-sourcing, node-performance]}
@@ -1354,6 +1392,7 @@ contexts:
       - {name: StationView, source: "node-topology NodeRegistered, ServiceAreaAssigned"}
       - {name: InboundPackagesView, source: "linehaul-transportation LoadArrived"}
       - {name: PackageStopView, source: "shipping-and-tracking LabelIssued (trackingNumber, stopKey, destinationPostalPrefix, assignmentId)"}
+      - {name: LastMileAnalytics, source: "analytical read side (last-mile-delivery ADR 0012): cmd/lm-projector, the only writer of a SEPARATE analytical database, projects this context's OWN topics only (retailnetwork.last-mile-delivery.events and .analytics, RoutePlanned included) in one consumer group, deduped in the projection transaction; cmd/lm-reports serves the read-only /reports routes on :8092"}
     policies:
       - {name: InductOnArrival, rule: "on LoadArrived at a delivery station induct every package into the earliest eligible wave"}
       - {name: RetryNextWave, rule: "a FAILED attempt re-inducts the package into the next wave; three failures return it to sender"}
@@ -1369,6 +1408,8 @@ contexts:
       - {from: delivery service partner driver app, type: qry, channel: "REST GET /routes/{routeId}", routes: ["GET /routes/{routeId}"], message: "GetRoute", relationship: UI}
       - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "LoadArrived", relationship: Customer/Supplier}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, ServiceAreaAssigned", relationship: Conformist}
+      # caller inferred: ADR 0012 names the report questions, not a client; the routes are served by cmd/lm-reports on :8092, not cmd/api
+      - {from: network analysts (human), type: qry, channel: "REST GET /reports/route-efficiency, GET /reports/attempt-outcomes, GET /reports/wave-utilisation, GET /reports/freshness (cmd/lm-reports, :8092)", routes: ["GET /reports/route-efficiency", "GET /reports/attempt-outcomes", "GET /reports/wave-utilisation", "GET /reports/freshness"], message: "GetRouteEfficiencyReport, GetAttemptOutcomesReport, GetWaveUtilisationReport, GetReportFreshness", relationship: UI}
     rest:
       - "POST /waves"
       - "GET /waves?stationNodeId=&serviceDate="
@@ -1382,6 +1423,10 @@ contexts:
       - "POST /waves/{waveId}:cancel"
       - "GET /routes/{routeId}"
       - "POST /partners/{dspId}:deactivate"
+      - "GET /reports/route-efficiency?from=&to="
+      - "GET /reports/attempt-outcomes?from=&to="
+      - "GET /reports/wave-utilisation?from=&to="
+      - "GET /reports/freshness"
     publishes:
       - {event: DeliveryWaveScheduled, entity: wave, data: [waveId, stationNodeId, serviceDate, inductCutoffAt, windowStart, windowEnd, stopCapacity], consumers: [delivery-promise, order-sourcing]}
       - {event: WaveCostDeclared, entity: wave, data: [waveId, costPerStopCents, declaredAt], consumers: [order-sourcing]}
@@ -1479,6 +1524,7 @@ contexts:
         size_estimate: "one per package + scans"
     read_models:
       - {name: CatalogDimensionsView, source: "offer-availability CatalogItemCreated"}
+      - {name: DeliveryAnalytics, source: "analytical read side (shipping-and-tracking ADR 0012, the pilot): cmd/st-projector, the only writer of a SEPARATE analytical database, projects this context's OWN integration topic only (retailnetwork.shipping-and-tracking.events; the analytics topic is not subscribed while nothing is published on it), deduped in the projection transaction; cmd/st-reports serves the read-only /reports routes on :8092"}
     policies:
       - {name: HandoverOnFirstScan, rule: "the first PICKUP_DEPARTURE scan, made from a LoadDeparted whose departureKind is PICKUP, moves LABELLED to HANDED_OVER; its origin node and departedAt are the handover node and instant used by node-performance. A LoadDeparted with no departureKind counts as a pickup only while the journey is still LABELLED"}
       - {name: ScanTypeFromLoadFacts, rule: "LoadDeparted of kind PICKUP is a PICKUP_DEPARTURE scan (LABELLED to HANDED_OVER) and of any other kind a DEPARTURE scan (HANDED_OVER or IN_TRANSIT to IN_TRANSIT). LoadArrived whose nodeType is DELIVERY_STATION is a STATION_ARRIVAL scan (HANDED_OVER or IN_TRANSIT to AT_STATION) and any other or absent nodeType a TRANSIT_ARRIVAL scan (HANDED_OVER or IN_TRANSIT to IN_TRANSIT). HANDED_OVER to AT_STATION is direct injection: a package that goes from a fulfillment centre straight to a delivery station, the SAME_DAY path, has no IN_TRANSIT step. A scan with no edge from the current state is stored with applied=false and answers ErrIllegalTransition"}
@@ -1495,11 +1541,16 @@ contexts:
       - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "LoadDeparted, LoadArrived", relationship: Conformist}
       - {from: last-mile-delivery, type: evt, channel: "Kafka retailnetwork.last-mile-delivery.events", message: "PackageOutForDelivery, DeliveryAttempted", relationship: Conformist}
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated", relationship: Conformist}
+      # caller inferred: ADR 0012 names the report questions, not a client; the routes are served by cmd/st-reports on :8092, not cmd/api
+      - {from: network analysts (human), type: qry, channel: "REST GET /reports/package-touches, GET /reports/delivery-outcomes, GET /reports/freshness (cmd/st-reports, :8092)", routes: ["GET /reports/package-touches", "GET /reports/delivery-outcomes", "GET /reports/freshness"], message: "GetPackageTouchesReport, GetDeliveryOutcomesReport, GetReportFreshness", relationship: UI}
     rest:
       - "POST /labels"
       - "POST /labels/{labelRef}:void"
       - "GET /journeys/{trackingNumber}"
       - "POST /journeys/{trackingNumber}/scans"
+      - "GET /reports/package-touches?from=&to="
+      - "GET /reports/delivery-outcomes?from=&to="
+      - "GET /reports/freshness"
     publishes:
       - {event: LabelIssued, entity: label, data: [labelRef, trackingNumber, poNumber, assignmentId, packageNo, tier, carrier, orderId, stopKey, destinationPostalPrefix], consumers: [linehaul-transportation, customer-ordering, last-mile-delivery]}
       - {event: LabelVoided, entity: label, data: [labelRef, trackingNumber, reason], consumers: [customer-ordering, linehaul-transportation]}
@@ -1645,8 +1696,8 @@ contexts:
       and closes the shipment from the vendor's carton-level receipt,
       recording every discrepancy and compliance violation instead of
       correcting it. It absorbs the idea reserved earlier as the
-      inventory-placement context; automated placement advice is not
-      modelled (see the gap register).
+      inventory-placement context; placement advice is advisory only
+      (PlacementPlan, seller-inbound ADR 0012).
     roles: [Execution (inbound plans and shipments), Gateway for sellers (Open Host Service), Enforcer (carton and label compliance)]
     business_decisions:
       - "Eaches are the ledger unit: every quantity on a plan, a carton and a receipt is in eaches; pack fields are additive and named cases, unitsPerPack, qtyOfChild."
@@ -1727,7 +1778,7 @@ contexts:
         throughput_estimate: "medium: cartons dominate (tens to thousands per shipment)"
         size_estimate: "one row per shipment + one per carton + contents; retained for audit"
     read_models:
-      - {name: DemandHeatView, source: "order-sourcing FulfillmentLocked (per item+region, the node region from node-topology profiles), offer-availability listing availability (per item+node); ADR 0012"}
+      - {name: DemandHeatView, source: "order-sourcing FulfillmentReleasedToNode and FulfillmentCancelled (the released lines per item+region over a 28-day window, the node region from node-topology events), offer-availability ListingAvailabilityChanged (declared availability per item+node); seller-inbound ADR 0012"}
       - {name: NodeInboundView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
       - {name: CatalogPackagingView, source: "offer-availability CatalogItemPackagingDeclared, CatalogItemPackLevelRetired"}
       - {name: SellerScorecard, source: "own facts only (no consumer, no event): one row per closed shipment and one per InboundDiscrepancyRecorded or SellerComplianceViolationRecorded, written in the receipt's unit of work (seller-inbound ADR 0005)"}
@@ -1736,6 +1787,8 @@ contexts:
       - {name: NodeMustBeAbleToReceive, rule: "the destination node, its INBOUND capability, acceptsPallets and carton limits are read from NodeInboundView; a node that is not ACTIVE receives nothing; a node whose profile declares no inbound limits is treated as accepting cartons with limits unchecked"}
       - {name: OwnerSegregation, rule: "every carton of a plan is owned by the plan's seller (ownerRef = sellerId); ownership travels on InboundShipmentShipped and the Vendor API and is never merged with another owner's"}
       - {name: ReceiveOnVendorReceipt, rule: "on InboundReceiptSubmitted run RecordInboundReceipt for the shipment: the shipment closes when every carton has a final status, CLOSED if nothing differs from the manifest and CLOSED_WITH_DISCREPANCY otherwise"}
+      - {name: SellerStatusIsIntegration, rule: "SellerSuspended and SellerReinstated are integration events on retailnetwork.seller-inbound.events (subject and key sellerId), consumed by offer-availability to suppress and restore the seller's listings; SellerOnboarded stays analytics-only (seller-inbound ADR 0013, gap G48)"}
+      - {name: ReceivedStockPerItem, rule: "when a shipment closes, InboundShipmentReceived carries received[{catalogItemId?, gtin, qtyEaches}]: only manifest cartons answered RECEIVED count (discrepant or not; MISSING, DAMAGED and UNEXPECTED do not); a counted carton uses the vendor's counted quantities, otherwise its manifest contents, both already in eaches; the gtin is the EACH-level GTIN when CatalogPackagingView resolves the childGtin chain, else the carton GTIN; catalogItemId is omitted when unresolved; summed per published gtin, zero lines omitted, sorted by gtin, always present (an empty array is legal). Events closed before the change carry no received (seller-inbound ADR 0014, gap G51)"}
       - {name: RecordDiscrepancies, rule: "a MISSING, UNEXPECTED or DAMAGED carton, or a received quantity different from the manifest, raises InboundDiscrepancyRecorded; each complianceCode on the receipt raises SellerComplianceViolationRecorded; the manifest is never edited"}
     inbound:
       - {from: seller / seller portal, type: cmd, channel: "REST POST /sellers", routes: ["POST /sellers"], message: OnboardSeller, relationship: OHS}
@@ -1747,7 +1800,8 @@ contexts:
       - {from: seller / network partner manager, type: cmd, channel: "REST POST /placement-plans (compute), GET /placement-plans, GET /placement-plans/{planId}, POST /placement-plans/{planId}/acceptances", routes: ["POST /placement-plans", "GET /placement-plans", "GET /placement-plans/{planId}", "POST /placement-plans/{planId}/acceptances"], message: "ComputePlacementPlan, ListPlacementPlans, GetPlacementPlan, AcceptPlacementPlan", relationship: OHS}
       - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: InboundReceiptSubmitted, relationship: Customer/Supplier}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired", relationship: Conformist}
-      - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemPackagingDeclared, CatalogItemPackLevelRetired", relationship: Conformist}
+      - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemPackagingDeclared, CatalogItemPackLevelRetired, ListingAvailabilityChanged", relationship: Conformist}
+      - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentReleasedToNode, FulfillmentCancelled", relationship: Conformist}
     rest:
       - "POST /sellers"
       - "POST /sellers/{sellerId}:suspend"
@@ -1770,12 +1824,12 @@ contexts:
     publishes:
       - {event: SellerOnboarded, entity: seller, data: [sellerId, name, onboardedAt], consumers: [analytics only]}
       - {event: PlacementPlanSuggested, entity: placementplan, data: [planId, sellerId, catalogItemId, basis, suggestions(nodeId, regionId, suggestedUnits, regionDemandUnits, nodeAvailabilityUnits), createdAt], consumers: [analytics only in v1 (ADR 0012)]}
-      - {event: SellerSuspended, entity: seller, data: [sellerId, suspendedAt, reason], consumers: [analytics only]}
-      - {event: SellerReinstated, entity: seller, data: [sellerId, reinstatedAt], consumers: [analytics only]}
+      - {event: SellerSuspended, entity: seller, data: [sellerId, suspendedAt, reason (optional)], consumers: [offer-availability]}
+      - {event: SellerReinstated, entity: seller, data: [sellerId, reinstatedAt], consumers: [offer-availability]}
       - {event: InboundPlanConfirmed, entity: inboundplan, data: [planId, sellerId, destinationNodeId, packingOption, lines(catalogItemId, gtin, qtyEaches), confirmedAt], consumers: [analytics only]}
       - {event: InboundShipmentLabelled, entity: inboundshipment, data: [shipmentId, planId, sellerId, nodeId, cartons(sscc, parentSscc, kind, contents(catalogItemId, gtin, qtyEaches, lot, expiry), grossWeightG, dimsMm), labelledAt], consumers: [vendor-connectivity]}
       - {event: InboundShipmentShipped, entity: inboundshipment, data: [shipmentId, planId, sellerId, nodeId, shippedAt], consumers: [vendor-connectivity, node-performance]}
-      - {event: InboundShipmentReceived, entity: inboundshipment, data: [shipmentId, sellerId, nodeId, status, "cartons(sscc, status)", receivedAt], consumers: [vendor-connectivity]}
+      - {event: InboundShipmentReceived, entity: inboundshipment, data: [shipmentId, sellerId, nodeId, status, "cartons(sscc, status)", receivedAt, "received(catalogItemId (optional), gtin, qtyEaches)"], consumers: [vendor-connectivity, offer-availability]}
       - {event: InboundDiscrepancyRecorded, entity: inboundshipment, data: [shipmentId, sellerId, nodeId, sscc (optional), kind, expected (optional), actual (optional), recordedAt], consumers: [analytics only]}
       - {event: SellerComplianceViolationRecorded, entity: seller, data: [sellerId, shipmentId (optional), code, recordedAt], consumers: [analytics only]}
     reasons:
@@ -1812,6 +1866,9 @@ contexts:
       - {event: NodeRetired, from: node-topology}
       - {event: CatalogItemPackagingDeclared, from: offer-availability}
       - {event: CatalogItemPackLevelRetired, from: offer-availability}
+      - {event: ListingAvailabilityChanged, from: offer-availability}
+      - {event: FulfillmentReleasedToNode, from: order-sourcing}
+      - {event: FulfillmentCancelled, from: order-sourcing}
     sync_calls: []
     ul:
       - {term: Seller, definition: "An organisation that sends its own stock to the network. Distinct from a Vendor, which operates fulfillment nodes.", code: "seller.Account"}

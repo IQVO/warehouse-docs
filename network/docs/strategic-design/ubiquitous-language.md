@@ -75,6 +75,7 @@ are the proposed Go package and type names. Each context's own
 | **Operational Profile** | `node-topology` | The node's declared operating hours, cutoffs, handling time, throughput cap and time zone, versioned by profileRevision. | `node.OperationalProfile` |
 | **Owner / Seller of Record** | `seller-inbound` | Whose stock it is. On the network ownerRef equals the sellerId; stock, listings and reservations are segregated by it. | `seller.ID (shared.ValidOwnerRef)` |
 | **Owner Reference** | `offer-availability` | The opaque ownerRef on a listing: the seller of record of the stock. Empty means the vendor's own stock. | `listing.OwnerRef` |
+| **Owner Suspended** | `offer-availability` | The suppression cause of a listing whose seller is suspended; the lowest of the three causes. | `listing.ReasonOwnerSuspended` |
 | **Pack Level** | `offer-availability` | One of EACH, INNER, CASE or PALLET. A level other than EACH knows its child level's GTIN and how many of it it holds. | `catalog.PackLevel` |
 | **Package Journey** | `shipping-and-tracking` | The customer-visible timeline of one package. | `journey.PackageJourney` |
 | **Packaging Hierarchy** | `offer-availability` | The pack levels of one catalogue item (each, inner pack, case, pallet), each with its own GTIN and a fixed content quantity. Quantities stay in eaches. | `catalog.PackagingHierarchy` |

@@ -43,13 +43,14 @@ domain consumer".
 | Event | Full `type` | Producing command | Consumers |
 | --- | --- | --- | --- |
 | `FulfillmentQueued` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentQueued` | `QueueAssignment` | analytics only |
-| `FulfillmentReleasedToNode` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | `ReleaseToNode` | `vendor-connectivity`, `linehaul-transportation` |
+| `FulfillmentReleasedToNode` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | `ReleaseToNode` | `vendor-connectivity`, `linehaul-transportation`, `seller-inbound` |
 | `FulfillmentReassigned` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReassigned` | `ReoptimiseAssignment`, `HandleNodeRefusal` (node changed) | `linehaul-transportation` |
 | `FulfillmentLocked` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | `LockAssignment` | `delivery-promise`, `customer-ordering`, `linehaul-transportation` |
 | `FulfillmentShipped` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | `MarkShipped` | `customer-ordering` |
 | `FulfillmentDelivered` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentDelivered` | `MarkDelivered` | analytics only |
 | `FulfillmentUnsourceable` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentUnsourceable` | `ReleaseToNode`, `HandleNodeRefusal` (no candidate left) | `delivery-promise`, `customer-ordering` |
-| `FulfillmentCancelled` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | `CancelAssignment` | `vendor-connectivity`, `linehaul-transportation` |
+| `FulfillmentCancelled` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | `CancelAssignment` | `vendor-connectivity`, `linehaul-transportation`, `customer-ordering`, `seller-inbound` |
+| `FulfillmentSourcingDecided` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentSourcingDecided` | `ReleaseToNode` | analytics only (read by this context's own projector, service ADR 0013) |
 
 The field lists below are the model's `publishes[*].data`, in order. Types
 are the proposed JSON types; the model gives names only.
@@ -78,7 +79,7 @@ are the proposed JSON types; the model gives names only.
 | `requiredShipBy` | date-time | That departure's cutoff at this node |
 | `promisedDeliverByLatest` | date-time | The promise's `deliverByLatest` |
 | `tier` | string | `SAME_DAY`, `NEXT_DAY`, `TWO_DAY` or `STANDARD` |
-| `lines` | array of `{catalogItemId, listingId, quantity}` | The whole group (fill-or-kill); `listingId` is this node's listing |
+| `lines` | array of `{catalogItemId, listingId, quantity, ownerRef?}` | The whole group (fill-or-kill); `listingId` is this node's listing; `ownerRef` is the owner OwnerChoice picked, omitted when operator-owned (service ADR 0012) |
 
 No ship-to data: the release carries no PII
 ([ADR 0006](/network/adr/0006-pii-confinement)).
