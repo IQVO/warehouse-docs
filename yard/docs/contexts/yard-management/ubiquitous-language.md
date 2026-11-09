@@ -2,7 +2,7 @@
 id: ubiquitous-language
 title: Ubiquitous Language
 sidebar_label: Ubiquitous Language
-description: "The terms Yard Management speaks (yard, yard visit, trailer, spot, dock door, hostler, yard move, door work, dwell, seal) and the neighbour terms it uses, each with its proposed code identifier."
+description: "The terms Yard Management speaks (yard, yard visit, trailer, spot, dock door, hostler, yard move, door work, dwell, seal) and the neighbour terms it uses, each with its Go identifier in the built service."
 ---
 
 # Ubiquitous Language

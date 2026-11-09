@@ -20,7 +20,7 @@ were taken before the services were built and are also recorded in the build con
 (`contracts-delta`), which the service owners follow; where a decision changes a
 published event it is stated in the row.
 
-The two packs were written before these decisions: where a pack page says "proposed" and carries a gap id, the decision in this table is the current rule, and the as-built refresh of the packs folds it in.
+The two packs were written before these decisions. The as-built refresh (2026-11-09) folded them into the pages: a page that still says "proposed" next to a gap id is a historical note, and the decision in this table is the rule the service follows.
 
 | Gap | Severity | What is unclear | Decision |
 | --- | --- | --- | --- |

@@ -43,7 +43,7 @@ reading** of the model, not values from `model.yaml`.
 `Supporting` with differentiation exactly 0.50 and complexity 0.60, which the
 quadrant renderer draws on the middle of the y axis and right of the middle of
 the x axis. The quadrant labels are a rendering convention; the classification
-comes from the model (gap YM-G25).
+comes from the model (gap YM-G25, accepted: the chart sits on the line by design).
 
 ## Classification: Supporting
 
