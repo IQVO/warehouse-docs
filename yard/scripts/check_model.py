@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Consistency gate for the PROPOSED yard model (model.yaml).
+"""Consistency gate for the yard model (model.yaml), BUILT on develop 2026-11-08.
 
 Same intent as warehouse-docs network/scripts/check_model.py, smaller:
 
@@ -13,11 +13,15 @@ Same intent as warehouse-docs network/scripts/check_model.py, smaller:
    apis/<repo>/asyncapi.yaml copy; --fleet reads origin/develop live), with the fields the model relies on (read via git show,
    never from a design document).
 
+8. (as built) each yard context's published events, their stream (integration vs analytics only), their `data` fields and its REST routes
+   equal what its own contract says: yard/apis/<context>/{asyncapi,openapi,openapi-reports}.yaml (--fleet reads origin/develop).
+
 Usage: python3 yard/scripts/check_model.py [--model yard/model/model.yaml] [--fleet ~/warehouse-systems]
 Exit 0 = clean; 1 = findings (printed).
 """
 import argparse
 import os
+import re
 import subprocess
 import sys
 
@@ -83,6 +87,100 @@ def producer_messages(fleet, repo):
     return result
 
 
+RX_TYPE = re.compile(r"com\.warehouse\.[a-z]+\.([a-z-]+)\.([a-z]+)\.([A-Za-z]+)")
+INFRA = {"/healthz", "/readyz", "/livez", "/metrics"}
+
+
+def own_spec(fleet, repo, name):
+    """The context's own contract file: this repo's copy under yard/apis, or sibling origin/develop (--fleet)."""
+    if fleet is None:
+        path = os.path.join(REPO_ROOT, "yard", "apis", repo, name)
+        return yaml.safe_load(open(path)) if os.path.exists(path) else None
+    out = subprocess.run(["git", "-C", os.path.join(fleet, repo), "show", f"origin/develop:apis/{name}"],
+                         capture_output=True, text=True, check=False)
+    return yaml.safe_load(out.stdout) if out.returncode == 0 else None
+
+
+def resolve(doc, node, depth=0):
+    if depth > 8 or not isinstance(node, dict):
+        return node
+    if "$ref" in node:
+        cur = doc
+        for part in node["$ref"].lstrip("#/").split("/"):
+            cur = cur[part]
+        return resolve(doc, cur, depth + 1)
+    out = dict(node)
+    if "allOf" in node:
+        props = {}
+        for part in node["allOf"]:
+            props.update(resolve(doc, part, depth + 1).get("properties", {}) or {})
+        out["properties"] = {**props, **(out.get("properties") or {})}
+    return out
+
+
+def own_events(doc, cid):
+    """{event: {"entity", "fields", "streams"}} for the types this context publishes on its own two topics."""
+    pubs = {}
+    for key, ch in (doc.get("channels") or {}).items():
+        topic = ch.get("address") or key
+        if topic not in (f"warehouse.{cid}.events", f"warehouse.{cid}.analytics"):
+            continue
+        stream = "analytics" if topic.endswith(".analytics") else "events"
+        msgs = []
+        for m in (ch.get("messages") or {}).values():  # AsyncAPI 3.0
+            msgs.append(resolve(doc, m))
+        for op in ("publish", "subscribe"):  # AsyncAPI 2.6
+            if op in ch:
+                node = ch[op].get("message", {})
+                msgs += [resolve(doc, m) for m in (node.get("oneOf") or [node])]
+        for m in msgs:
+            t = RX_TYPE.search(yaml.safe_dump(m))
+            if not t or t.group(1) != cid:
+                continue
+            data = resolve(doc, (resolve(doc, m.get("payload", {})).get("properties") or {}).get("data", {}))
+            rec = pubs.setdefault(t.group(3), {"entity": t.group(2), "fields": sorted((data.get("properties") or {}).keys()), "streams": set()})
+            rec["streams"].add(stream)
+    return pubs
+
+
+def check_own_contract(fleet, cid, ctx, findings):
+    doc = own_spec(fleet, cid, "asyncapi.yaml")
+    if doc is None:
+        findings.append(f"{cid}: no asyncapi.yaml (yard/apis/{cid} or origin/develop)")
+    else:
+        built = own_events(doc, cid)
+        model = {p["event"]: p for p in ctx.get("publishes", [])}
+        for ev in sorted(set(built) - set(model)):
+            findings.append(f"{cid}: contract publishes {ev}, the model does not")
+        for ev in sorted(set(model) - set(built)):
+            findings.append(f"{cid}: model publishes {ev}, the contract does not")
+        for ev in sorted(set(model) & set(built)):
+            b, m = built[ev], model[ev]
+            if b["entity"] != m["entity"]:
+                findings.append(f"{cid}.{ev}: entity {m['entity']} in the model, {b['entity']} in the contract")
+            if sorted(m["data"]) != b["fields"]:
+                findings.append(f"{cid}.{ev}: data fields differ: model-only {sorted(set(m['data']) - set(b['fields']))}, contract-only {sorted(set(b['fields']) - set(m['data']))}")
+            if "analytics" not in b["streams"]:
+                findings.append(f"{cid}.{ev}: not on the analytics topic")
+            integration = "events" in b["streams"]
+            if integration == (m["consumers"] == ["analytics only"]):
+                findings.append(f"{cid}.{ev}: stream differs: the contract has it {'on' if integration else 'off'} the integration topic, the model consumers are {m['consumers']}")
+    routes = set()
+    for name in ("openapi.yaml", "openapi-reports.yaml"):
+        spec = own_spec(fleet, cid, name)
+        for path, ops in ((spec or {}).get("paths") or {}).items():
+            for meth in ops:
+                if meth in ("get", "post", "put", "patch", "delete") and path not in INFRA:
+                    routes.add(f"{meth.upper()} {path}")
+    if not routes:
+        findings.append(f"{cid}: no openapi.yaml routes (yard/apis/{cid} or origin/develop)")
+    else:
+        for r in sorted(routes - set(ctx.get("rest", []))):
+            findings.append(f"{cid}: contract route {r} is missing from the model")
+        for r in sorted(set(ctx.get("rest", [])) - routes):
+            findings.append(f"{cid}: model route {r} is not in the contract")
+
+
 def main():
     ap = argparse.ArgumentParser()
     here = os.path.dirname(os.path.abspath(__file__))
@@ -95,6 +193,7 @@ def main():
     changed = {row["context"] for row in model.get("fleet_changes", [])}
 
     for cid, ctx in contexts.items():
+        check_own_contract(args.fleet, cid, ctx, findings)
         published = {p["event"]: p for p in ctx.get("publishes", [])}
         aggregate_events = {}
         errors = []

@@ -11,6 +11,10 @@ description: "Strategic design of the yard domain, generated from the model: sub
 This page is generated from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml) by `scripts/gen_pages.py`. Edit the model, then regenerate; CI fails when the page and the model disagree.
 :::
 
+:::info[Built on develop, not deployed]
+Both contexts are merged on `develop` (2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling) and [IQVO/yard-management](https://github.com/IQVO/yard-management); neither is registered in warehouse-infra. The model records the as-built contracts: `scripts/check_model.py` compares it with the contract copies under `yard/apis/`.
+:::
+
 The yard is the enclosed area outside a site's four walls. It is modelled as two bounded contexts:
 
 | Context | Code | Classification | Purpose |
@@ -24,7 +28,7 @@ Pages: [Subdomain Classification](/yard/strategic-design/subdomain-classificatio
 
 | Fact | Value |
 | --- | --- |
-| `dock-scheduling` aggregates / invariants | 2 / 13 |
-| `dock-scheduling` published events / REST routes | 11 / 14 |
-| `yard-management` aggregates / invariants | 5 / 22 |
-| `yard-management` published events / REST routes | 18 / 28 |
+| `dock-scheduling` aggregates / invariants | 2 / 16 |
+| `dock-scheduling` published events / REST routes | 11 / 15 |
+| `yard-management` aggregates / invariants | 5 / 25 |
+| `yard-management` published events / REST routes | 19 / 32 |
