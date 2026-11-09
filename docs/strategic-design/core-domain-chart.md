@@ -2,7 +2,7 @@
 id: core-domain-chart
 title: Core Domain Chart
 sidebar_label: Core Domain Chart
-description: The nineteen contexts documented on this site on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart (returns-processing and exception-management are documented but not yet plotted, their repositories ship no chart).
+description: The twenty contexts documented on this site on one ddd-crew Core Domain Chart — business differentiation against model complexity — with each point taken from that context's own chart (returns-processing and exception-management are documented but not yet plotted, their repositories ship no chart).
 ---
 
 # Core Domain Chart
@@ -21,7 +21,7 @@ context's own chart in this fleet uses the same layout:
 
 ```mermaid
 quadrantChart
-    title warehouse-systems - seventeen contexts
+    title warehouse-systems - eighteen contexts
     x-axis Low model complexity --> High model complexity
     y-axis Low business differentiation --> High business differentiation
     quadrant-1 Core
@@ -45,6 +45,7 @@ quadrantChart
     slotting-optimization: [0.46, 0.42]
     pick-face-replenishment: [0.34, 0.36]
     task-interleaving: [0.34, 0.38]
+    outbound-shipping: [0.40, 0.35]
 ```
 
 Every coordinate is copied from the context's **own** chart. The contexts
@@ -52,8 +53,8 @@ mark these positions as judgements grounded in code evidence, not
 measurements. The five Core contexts sit close together, so some of their
 labels overlap; so do `product-master` and `network-fulfillment` in the
 Supporting quadrant.
-`inbound-receiving`, `slotting-optimization`, `pick-face-replenishment` and
-`task-interleaving` ship their own charts, so all four are plotted from them;
+`inbound-receiving`, `slotting-optimization`, `pick-face-replenishment`,
+`task-interleaving` and `outbound-shipping` ship their own charts, so all five are plotted from them;
 `inbound-receiving` also sits close to
 `product-master` and `workforce-management`, and `pick-face-replenishment`
 and `task-interleaving` close to `network-fulfillment` and `labor-performance`
@@ -81,6 +82,7 @@ from context charts and invents none.
 | `slotting-optimization` | 0.46, 0.42 | Supporting | Supporting | point `slotting-optimization`, the whole context. Its chart adds `abc-velocity-v1 planner` at 0.49, 0.48 and `approval workflow` at 0.25, 0.25, both Supporting. [chart](/contexts/slotting-optimization/core-domain-chart) |
 | `pick-face-replenishment` | 0.34, 0.36 | Supporting | Supporting | point `pick-face-replenishment`, the whole context. Its chart adds `min-max policy` at 0.15, 0.30, `detector and source bin choice` at 0.40, 0.40 and `request lifecycle` at 0.35, 0.28, all Supporting. [chart](/contexts/pick-face-replenishment/core-domain-chart) |
 | `task-interleaving` | 0.34, 0.38 | Supporting | Supporting | point `task-interleaving`, the whole context. Its chart adds `rectilinear-v1 recommender` at 0.40, 0.44 and `policy declaration` at 0.15, 0.18, all Supporting. [chart](/contexts/task-interleaving/core-domain-chart) |
+| `outbound-shipping` | 0.40, 0.35 | Supporting | Supporting | point `outbound-shipping`, the whole context. Its chart adds five slices: ship-confirm on departure at 0.55, 0.48, load planning from the manifest at 0.45, 0.38, missed-load detection at 0.35, 0.34, load board and adherence at 0.25, 0.20 and bill of lading at 0.22, 0.14, all Supporting or on its edge. [chart](/contexts/outbound-shipping/core-domain-chart) |
 
 Every context's own chart puts its own point in the quadrant that matches the
 fleet classification in [Subdomain Classification](/strategic-design/subdomain-classification).
@@ -127,7 +129,7 @@ This page keeps each context's own placement and the fleet classification.
 - **Supporting: `workforce-management`, `labor-performance`,
   `network-fulfillment`, `warehouse-ops-agent`, `product-master`,
   `inbound-receiving`, `slotting-optimization`, `pick-face-replenishment`, `task-interleaving`,
-  `returns-processing`, `exception-management`, and `order-management` on the
+  `returns-processing`, `exception-management`, `outbound-shipping`, and `order-management` on the
   border.** Each one is necessary, but the differentiating knowledge it uses
   belongs to another context:
   - `workforce-management` records human rebalancing decisions.
@@ -162,6 +164,10 @@ This page keeps each context's own placement and the fleet classification.
     policies and agent recommendations run against it. Not yet plotted: its
     repository ships no chart of its own, so it has no point in the diagram
     above.
+  - `outbound-shipping` records what was loaded on which trailer and issues
+    the ship-confirm on the physical departure; the fleet does not win
+    customers by how it records a load, and the bill of lading is a commodity
+    document (its ADR 0001 and its own chart).
   - `order-management`'s promise rules lift it above a commodity order
     front end, but they are not the platform's differentiator.
 - **Generic: `facility-layout`, `process-path-management`.** Both are well
