@@ -55,8 +55,11 @@ SECTIONS = {
     "wms": ("apis", "docs/contexts", SPEC_NAMES),
     "network": ("network/apis", "network/docs/contexts", ("openapi.yaml",)),
     "storefront": ("storefront/apis", "storefront/docs/contexts", ("openapi.yaml",)),
+    # yard carries every contract file develop has (like the WMS section): dock-scheduling serves its
+    # reports from apis/openapi-reports.yaml, both services publish apis/asyncapi.yaml.
+    "yard": ("yard/apis", "yard/docs/contexts", SPEC_NAMES),
 }
-PAGE_ROOTS = ("docs", "network/docs", "storefront/docs")
+PAGE_ROOTS = ("docs", "network/docs", "storefront/docs", "yard/docs")
 PAGE_FILES = ("README.md",)
 EXCLUDE_DIR_PARTS = ("api-reference", "adr", "node_modules")
 # Operational endpoints every service serves but no spec lists.
@@ -401,7 +404,7 @@ def owner_of(rel: str, contexts: list[dict]) -> str | None:
     for c in contexts:
         if rel.startswith(c["page_dir"] + "/"):
             return c["repo"]
-    m = re.match(r"(?:network/|storefront/)?docs/contexts/([^/]+)/", rel)
+    m = re.match(r"(?:network/|storefront/|yard/)?docs/contexts/([^/]+)/", rel)
     return f"~{m.group(1)}" if m else None  # a context folder without an OpenAPI (warehouse-ops-agent)
 
 
