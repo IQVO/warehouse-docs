@@ -10,10 +10,10 @@ slug: /adr
 
 The storefront section holds no ADRs of its own: each decision lives in the repo
 that made it. This index lists every ADR on `develop` of the nine storefront repos
-(39 ADRs), with the **Status** copied from the ADR body (first sentence) and
+(64 ADRs), with the **Status** copied from the ADR body (first sentence) and
 a link to the file. ADR bodies are immutable; read them in their repo.
 
-Per repo: `pricing` 5, `product-content` 5, `product-discovery` 5, `shopping-cart` 5, `checkout` 6, `customer-payments` 4, `storefront-bff` 2, `storefront-web` 5, `payment-provider-simulator` 2.
+Per repo: `pricing` 8, `product-content` 7, `product-discovery` 8, `shopping-cart` 8, `checkout` 9, `customer-payments` 7, `storefront-bff` 6, `storefront-web` 7, `payment-provider-simulator` 4.
 
 ## pricing
 
@@ -24,6 +24,9 @@ Per repo: `pricing` 5, `product-content` 5, `product-discovery` 5, `shopping-car
 | [0003](https://github.com/IQVO/pricing/blob/develop/docs/adr/0003-consumed-contracts-and-local-read-model.md) | Consumed contracts and the local CatalogItemView | Accepted (2026-10-25). |
 | [0004](https://github.com/IQVO/pricing/blob/develop/docs/adr/0004-cloudevents-envelope-and-type-catalogue.md) | CloudEvents envelope and type catalogue | Accepted (2026-10-25). |
 | [0005](https://github.com/IQVO/pricing/blob/develop/docs/adr/0005-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted (2026-10-26). |
+| [0006](https://github.com/IQVO/pricing/blob/develop/docs/adr/0006-dataschema-stream-segment-names-the-actual-stream.md) | The dataschema stream segment names the actual stream | Accepted (2026-10-27). |
+| [0007](https://github.com/IQVO/pricing/blob/develop/docs/adr/0007-a2a-inbound-adapter.md) | A2A inbound adapter | Accepted (2026-10-30). |
+| [0008](https://github.com/IQVO/pricing/blob/develop/docs/adr/0008-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted (2026-11-01). |
 
 ## product-content
 
@@ -34,6 +37,8 @@ Per repo: `pricing` 5, `product-content` 5, `product-discovery` 5, `shopping-car
 | [0003](https://github.com/IQVO/product-content/blob/develop/docs/adr/0003-consumed-contracts-and-local-read-model.md) | Consumed contracts and the local CatalogItemView | Accepted (2026-10-25). |
 | [0004](https://github.com/IQVO/product-content/blob/develop/docs/adr/0004-cloudevents-envelope-and-type-catalogue.md) | CloudEvents envelope and type catalogue | Accepted (2026-10-25). |
 | [0005](https://github.com/IQVO/product-content/blob/develop/docs/adr/0005-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted (2026-10-26). |
+| [0006](https://github.com/IQVO/product-content/blob/develop/docs/adr/0006-a2a-inbound-adapter.md) | A2A inbound adapter | Accepted (2026-10-30). |
+| [0007](https://github.com/IQVO/product-content/blob/develop/docs/adr/0007-adopt-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted (2026-11-01). |
 
 ## product-discovery
 
@@ -44,6 +49,9 @@ Per repo: `pricing` 5, `product-content` 5, `product-discovery` 5, `shopping-car
 | [0003](https://github.com/IQVO/product-discovery/blob/develop/docs/adr/0003-consumed-contracts-and-rebuild.md) | Consumed contracts, per-key guards and the snapshot rebuild | Accepted (2026-10-25). |
 | [0004](https://github.com/IQVO/product-discovery/blob/develop/docs/adr/0004-cloudevents-envelope-and-type-catalogue.md) | CloudEvents envelope and type catalogue | Accepted (2026-10-25). |
 | [0005](https://github.com/IQVO/product-discovery/blob/develop/docs/adr/0005-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted (2026-10-26). |
+| [0006](https://github.com/IQVO/product-discovery/blob/develop/docs/adr/0006-rebuild-as-default-off-helm-job.md) | The rebuild binary ships as an optional, default-off Helm Job | Accepted (2026-10-27). |
+| [0007](https://github.com/IQVO/product-discovery/blob/develop/docs/adr/0007-a2a-inbound-adapter.md) | A2A inbound adapter | Accepted (2026-10-30). |
+| [0008](https://github.com/IQVO/product-discovery/blob/develop/docs/adr/0008-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted (2026-11-01). |
 
 ## shopping-cart
 
@@ -54,6 +62,9 @@ Per repo: `pricing` 5, `product-content` 5, `product-discovery` 5, `shopping-car
 | [0003](https://github.com/IQVO/shopping-cart/blob/develop/docs/adr/0003-consumed-contracts-and-local-read-model.md) | Consumed contracts and the local read models | Accepted (2026-10-25). |
 | [0004](https://github.com/IQVO/shopping-cart/blob/develop/docs/adr/0004-cloudevents-envelope-and-type-catalogue.md) | CloudEvents envelope and type catalogue | Accepted (2026-10-25). |
 | [0005](https://github.com/IQVO/shopping-cart/blob/develop/docs/adr/0005-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted (2026-10-26). |
+| [0006](https://github.com/IQVO/shopping-cart/blob/develop/docs/adr/0006-a2a-inbound-adapter.md) | A2A inbound adapter (read-only agent) | Accepted (2026-10-30). |
+| [0007](https://github.com/IQVO/shopping-cart/blob/develop/docs/adr/0007-delivery-dates-in-the-destinations-local-calendar.md) | Delivery dates are days of the destination's local calendar | Accepted (2026-10-30). |
+| [0008](https://github.com/IQVO/shopping-cart/blob/develop/docs/adr/0008-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted (2026-11-01). |
 
 ## checkout
 
@@ -65,6 +76,9 @@ Per repo: `pricing` 5, `product-content` 5, `product-discovery` 5, `shopping-car
 | [0004](https://github.com/IQVO/checkout/blob/develop/docs/adr/0004-cloudevents-envelope-and-type-catalogue.md) | CloudEvents envelope and type catalogue | Accepted (2026-10-25). |
 | [0005](https://github.com/IQVO/checkout/blob/develop/docs/adr/0005-mcp-server.md) | A read-only MCP server | Accepted (2026-10-25). |
 | [0006](https://github.com/IQVO/checkout/blob/develop/docs/adr/0006-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted (2026-10-26). |
+| [0007](https://github.com/IQVO/checkout/blob/develop/docs/adr/0007-a2a-inbound-adapter.md) | A2A inbound adapter | Accepted (2026-10-30). |
+| [0008](https://github.com/IQVO/checkout/blob/develop/docs/adr/0008-requoted-dates-in-the-destination-time-zone.md) | Requoted delivery dates in the destination's time zone | Accepted (2026-10-30). |
+| [0009](https://github.com/IQVO/checkout/blob/develop/docs/adr/0009-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted (2026-11-01). |
 
 ## customer-payments
 
@@ -74,6 +88,9 @@ Per repo: `pricing` 5, `product-content` 5, `product-discovery` 5, `shopping-car
 | [0002](https://github.com/IQVO/customer-payments/blob/develop/docs/adr/0002-customer-payments-assumptions.md) | customer-payments assumptions | Accepted (2026-10-25). |
 | [0003](https://github.com/IQVO/customer-payments/blob/develop/docs/adr/0003-cloudevents-envelope-and-type-catalogue.md) | CloudEvents envelope and type catalogue | Accepted (2026-10-25). |
 | [0004](https://github.com/IQVO/customer-payments/blob/develop/docs/adr/0004-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted (2026-10-26). |
+| [0005](https://github.com/IQVO/customer-payments/blob/develop/docs/adr/0005-a2a-inbound-adapter.md) | A2A inbound adapter | Accepted (2026-10-30). |
+| [0006](https://github.com/IQVO/customer-payments/blob/develop/docs/adr/0006-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted (2026-11-01). |
+| [0007](https://github.com/IQVO/customer-payments/blob/develop/docs/adr/0007-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and complete MCP surface | Accepted (2026-11-02). |
 
 ## storefront-bff
 
@@ -81,6 +98,10 @@ Per repo: `pricing` 5, `product-content` 5, `product-discovery` 5, `shopping-car
 | --- | --- | --- |
 | [0001](https://github.com/IQVO/storefront-bff/blob/develop/docs/adr/0001-storefront-bff-bounded-context.md) | Storefront BFF is a bounded context of the storefront domain | Accepted (bootstrap). |
 | [0002](https://github.com/IQVO/storefront-bff/blob/develop/docs/adr/0002-storefront-bff-assumptions.md) | Storefront BFF design assumptions | Accepted. |
+| [0003](https://github.com/IQVO/storefront-bff/blob/develop/docs/adr/0003-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted (2026-10-29). |
+| [0004](https://github.com/IQVO/storefront-bff/blob/develop/docs/adr/0004-bff-relays-the-category-tree.md) | The BFF relays the category tree | Accepted (2026-10-29). |
+| [0005](https://github.com/IQVO/storefront-bff/blob/develop/docs/adr/0005-delivery-dates-carry-the-window-time-zone.md) | Delivery dates carry the window's time zone | Accepted (2026-10-30). |
+| [0006](https://github.com/IQVO/storefront-bff/blob/develop/docs/adr/0006-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted (2026-11-01). |
 
 ## storefront-web
 
@@ -91,6 +112,8 @@ Per repo: `pricing` 5, `product-content` 5, `product-discovery` 5, `shopping-car
 | [0003](https://github.com/IQVO/storefront-web/blob/develop/docs/adr/0003-strict-csp.md) | Strict Content-Security-Policy | Accepted. |
 | [0004](https://github.com/IQVO/storefront-web/blob/develop/docs/adr/0004-simulated-payment-fields.md) | Simulated hosted payment fields | Accepted. |
 | [0005](https://github.com/IQVO/storefront-web/blob/develop/docs/adr/0005-ci-sensors-and-stub-bff.md) | CI sensors and the stub BFF | Accepted. |
+| [0006](https://github.com/IQVO/storefront-web/blob/develop/docs/adr/0006-promise-windows-in-the-destination-time-zone.md) | Promise windows are shown in the destination's time zone | Accepted. |
+| [0007](https://github.com/IQVO/storefront-web/blob/develop/docs/adr/0007-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted. |
 
 ## payment-provider-simulator
 
@@ -98,6 +121,8 @@ Per repo: `pricing` 5, `product-content` 5, `product-discovery` 5, `shopping-car
 | --- | --- | --- |
 | [0001](https://github.com/IQVO/payment-provider-simulator/blob/develop/docs/adr/0001-payment-provider-simulator-bounded-context.md) | Payment Provider Simulator is a bounded context of the storefront domain | Accepted (bootstrap). |
 | [0002](https://github.com/IQVO/payment-provider-simulator/blob/develop/docs/adr/0002-payment-provider-simulator-assumptions.md) | Payment Provider Simulator assumptions | Accepted. |
+| [0003](https://github.com/IQVO/payment-provider-simulator/blob/develop/docs/adr/0003-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted (2026-10-29). |
+| [0004](https://github.com/IQVO/payment-provider-simulator/blob/develop/docs/adr/0004-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted (2026-11-01). |
 
 Two template artefacts worth knowing when you read them: `storefront-bff` ADR 0001 and
 `payment-provider-simulator` ADR 0001 carry the harness title "... is a bounded context of the
