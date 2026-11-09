@@ -33,8 +33,12 @@ Streamable HTTP on `:8090`, no auth, its own reads only) exposed by the
 gateway as `/api/mcp/` + the context id — for example
 `/api/mcp/delivery-promise` — and a console Module Federation remote
 mounted as `/mfes/` + the context id (for example `/mfes/delivery-promise/`):
-read-only screens over the existing REST reads. There is still no analytics
-read side and no report screens. The model is derived from public fulfillment-network research and the fleet's repositories. The canonical model is
+read-only screens over the existing REST reads. Four contexts now have an
+analytics read side: `shipping-and-tracking`, `last-mile-delivery`,
+`delivery-promise` and `order-sourcing` each run a projector over their OWN
+topics into a separate analytical database and a read-only reports binary
+(`/reports/...` on `:8092`). The other seven have none, and there are no
+report screens yet. The model is derived from public fulfillment-network research and the fleet's repositories. The canonical model is
 [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml);
 every page is derived from it, and a CI gate fails the build when a page names
 a message the model does not have. Where a service had to decide something the model left open, the decision is an assumption in that service's ADRs and appears in the [gap register](/network/strategic-design/model-gap-register).

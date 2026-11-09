@@ -18,7 +18,10 @@ against each repository's `develop` on 2026-10-26. Each service has a
 traces over OTLP, one Tier-2 business counter; an ADR in each repository). Each service also ships a read-only MCP server
 (`cmd/mcp`, Streamable HTTP on `:8090`, exposed by the gateway at
 `/api/mcp/<context>`) and a console Module Federation remote at
-`/mfes/<context>/`. The model is derived from public fulfillment-network
+`/mfes/<context>/`. `shipping-and-tracking`, `last-mile-delivery`,
+`delivery-promise` and `order-sourcing` also ship an analytics read side: a
+projector over the context's own topics into a separate analytical database,
+and a read-only reports binary serving `/reports/...` on `:8092`. The model is derived from public fulfillment-network
 benchmarks.
 
 ## Layout

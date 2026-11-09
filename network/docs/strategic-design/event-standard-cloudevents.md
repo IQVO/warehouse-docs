@@ -104,7 +104,7 @@ Topic `retailnetwork.offer-availability.events`.
 | `CatalogItemPackagingDeclared` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackagingDeclared` | `seller-inbound`, `vendor-connectivity` |
 | `CatalogItemPackLevelRetired` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemPackLevelRetired` | `seller-inbound`, `vendor-connectivity` |
 | `ListingCreated` | `com.retailnetwork.commerce.offer-availability.listing.ListingCreated` | `delivery-promise`, `order-sourcing`, `vendor-connectivity` |
-| `ListingAvailabilityChanged` | `com.retailnetwork.commerce.offer-availability.listing.ListingAvailabilityChanged` | `delivery-promise`, `order-sourcing` |
+| `ListingAvailabilityChanged` | `com.retailnetwork.commerce.offer-availability.listing.ListingAvailabilityChanged` | `delivery-promise`, `order-sourcing`, `seller-inbound` |
 | `ListingSuppressed` | `com.retailnetwork.commerce.offer-availability.listing.ListingSuppressed` | `delivery-promise`, `order-sourcing` |
 | `ListingRestored` | `com.retailnetwork.commerce.offer-availability.listing.ListingRestored` | `delivery-promise`, `order-sourcing` |
 | `InventoryFeedApplied` | `com.retailnetwork.commerce.offer-availability.inventoryfeed.InventoryFeedApplied` | `node-performance` |
@@ -144,15 +144,16 @@ Topic `retailnetwork.order-sourcing.events`.
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
 | `FulfillmentQueued` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentQueued` | analytics only |
-| `FulfillmentReleasedToNode` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | `vendor-connectivity`, `linehaul-transportation` |
+| `FulfillmentReleasedToNode` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | `vendor-connectivity`, `linehaul-transportation`, `seller-inbound` |
 | `FulfillmentReassigned` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReassigned` | `linehaul-transportation` |
 | `FulfillmentLocked` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | `delivery-promise`, `customer-ordering`, `linehaul-transportation` |
 | `FulfillmentShipped` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | `customer-ordering`, `delivery-promise` |
 | `FulfillmentDelivered` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentDelivered` | analytics only |
 | `FulfillmentUnsourceable` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentUnsourceable` | `delivery-promise`, `customer-ordering` |
-| `FulfillmentCancelled` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | `vendor-connectivity`, `linehaul-transportation`, `customer-ordering` |
+| `FulfillmentCancelled` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | `vendor-connectivity`, `linehaul-transportation`, `customer-ordering`, `seller-inbound` |
 | `FulfillmentCancelRefused` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelRefused` | `customer-ordering` |
 | `FulfillmentConstraintRevised` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentConstraintRevised` | analytics only |
+| `FulfillmentSourcingDecided` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentSourcingDecided` | analytics only |
 
 ### `vendor-connectivity`
 
@@ -228,6 +229,7 @@ Topic `retailnetwork.node-performance.events`.
 | --- | --- | --- |
 | `NodeScorecardUpdated` | `com.retailnetwork.partner.node-performance.scorecard.NodeScorecardUpdated` | `delivery-promise`, `order-sourcing` |
 | `NodeThresholdBreached` | `com.retailnetwork.partner.node-performance.scorecard.NodeThresholdBreached` | analytics only |
+| `NodeTierEligibilityChanged` | `com.retailnetwork.partner.node-performance.scorecard.NodeTierEligibilityChanged` | `delivery-promise` |
 
 ### `seller-inbound`
 
@@ -237,12 +239,12 @@ Topic `retailnetwork.seller-inbound.events`.
 | --- | --- | --- |
 | `SellerOnboarded` | `com.retailnetwork.partner.seller-inbound.seller.SellerOnboarded` | analytics only |
 | `PlacementPlanSuggested` | `com.retailnetwork.partner.seller-inbound.placementplan.PlacementPlanSuggested` | analytics only in v1 (ADR 0012) |
-| `SellerSuspended` | `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | analytics only |
-| `SellerReinstated` | `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | analytics only |
+| `SellerSuspended` | `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | `offer-availability` |
+| `SellerReinstated` | `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | `offer-availability` |
 | `InboundPlanConfirmed` | `com.retailnetwork.partner.seller-inbound.inboundplan.InboundPlanConfirmed` | analytics only |
 | `InboundShipmentLabelled` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentLabelled` | `vendor-connectivity` |
 | `InboundShipmentShipped` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentShipped` | `vendor-connectivity`, `node-performance` |
-| `InboundShipmentReceived` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | `vendor-connectivity` |
+| `InboundShipmentReceived` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | `vendor-connectivity`, `offer-availability` |
 | `InboundDiscrepancyRecorded` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundDiscrepancyRecorded` | analytics only |
 | `SellerComplianceViolationRecorded` | `com.retailnetwork.partner.seller-inbound.seller.SellerComplianceViolationRecorded` | analytics only |
 
@@ -260,6 +262,7 @@ Appears in: `ListingSuppressed.reason`, REST `SuppressionReason`, REST `Listing.
 | --- | --- |
 | `NODE_NOT_SELLABLE` | The listing's node is not ACTIVE; the listing is restored when the node activates. |
 | `DISCONTINUED` | The catalogue item is discontinued; final, the listing is never restored. |
+| `OWNER_SUSPENDED` | The listing's owner (ownerRef) is a suspended seller; the listing is reconciled when the seller is reinstated. Lowest precedence: DISCONTINUED, then NODE_NOT_SELLABLE, then OWNER_SUSPENDED. |
 
 ### Reasons of `delivery-promise`
 
@@ -288,6 +291,7 @@ Appears in: `PromiseAtRisk.reason`, `PromiseRevised.reason`, `PromiseUnkeepable.
 | `WAVE_CANCELLED` | The delivery wave on the promise's witness path was cancelled (DeliveryWaveCancelled). |
 | `BOOKING_FAILED` | linehaul-transportation could not book the group's package on any departure (BookingFailed). |
 | `BOOKING_MOVED` | The group's package was rebooked on another departure (BookingMoved). |
+| `PREDICTED_LATE` | The FlagPredictedLate sweep found a departure of the witness path past its expected arrival with no arrival seen (delivery-promise ADR 0021). The promise stays AT_RISK until it is judged, even if the load arrives later; it is re-promised only when its window is no longer reachable. |
 
 **`PromiseReleaseReason`**: Why a PROVISIONAL promise was RELEASED.
 
@@ -418,6 +422,17 @@ Appears in: `PackageExceptionRaised.reason`.
 | `NO_SCAN` | No applied scan inside the silence window of the journey's leg (ExceptionOnSilence); raised once per silence. |
 
 ### Reasons of `node-performance`
+
+**`FastTierGoverned`**: The tiers whose eligibility node-performance judges; raised only when the node's flag flips, one event per tier with the same changedAt, in the same transaction as the scorecard save (outbox). No event for the initial ELIGIBLE state: a consumer that never saw one treats the node as eligible.
+
+Appears in: `NodeTierEligibilityChanged.tier`.
+
+| Value | Meaning |
+| --- | --- |
+| `SAME_DAY` | Governed by the same eligibility flag as NEXT_DAY. |
+| `NEXT_DAY` | Governed by the same eligibility flag as SAME_DAY. |
+
+Branched on by `delivery-promise` (`SAME_DAY`, `NEXT_DAY`): Filters the node out of the tier's candidates while ineligible; any other tier value is ignored and counted (delivery-promise ADR 0022).
 
 **`ObservationKind`**: The measured outcomes a scorecard counts, stored per node and keyed by the CloudEvents id of the source event (ADR 0002 A2).
 

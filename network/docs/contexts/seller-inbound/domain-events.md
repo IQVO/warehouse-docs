@@ -38,12 +38,12 @@ Quantities are eaches. `sellerId` here is `ownerRef` on the Vendor API.
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
 | `SellerOnboarded` | `com.retailnetwork.partner.seller-inbound.seller.SellerOnboarded` | analytics only |
-| `SellerSuspended` | `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | analytics only |
-| `SellerReinstated` | `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | analytics only |
+| `SellerSuspended` | `com.retailnetwork.partner.seller-inbound.seller.SellerSuspended` | `offer-availability` |
+| `SellerReinstated` | `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | `offer-availability` |
 | `InboundPlanConfirmed` | `com.retailnetwork.partner.seller-inbound.inboundplan.InboundPlanConfirmed` | analytics only |
 | `InboundShipmentLabelled` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentLabelled` | `vendor-connectivity` |
 | `InboundShipmentShipped` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentShipped` | `vendor-connectivity`, `node-performance` |
-| `InboundShipmentReceived` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | `vendor-connectivity` |
+| `InboundShipmentReceived` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | `vendor-connectivity`, `offer-availability` |
 | `InboundDiscrepancyRecorded` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundDiscrepancyRecorded` | analytics only |
 | `SellerComplianceViolationRecorded` | `com.retailnetwork.partner.seller-inbound.seller.SellerComplianceViolationRecorded` | analytics only |
 
@@ -52,12 +52,12 @@ Quantities are eaches. `sellerId` here is `ownerRef` on the Vendor API.
 | Event | Fields (from the model) |
 | --- | --- |
 | `SellerOnboarded` | `sellerId`, `name`, `onboardedAt` |
-| `SellerSuspended` | `sellerId`, `suspendedAt`, `reason` |
+| `SellerSuspended` | `sellerId`, `suspendedAt`, `reason` (optional) |
 | `SellerReinstated` | `sellerId`, `reinstatedAt` |
 | `InboundPlanConfirmed` | `planId`, `sellerId`, `destinationNodeId`, `packingOption`, `lines` (`catalogItemId`, `gtin`, `qtyEaches`), `confirmedAt` |
 | `InboundShipmentLabelled` | `shipmentId`, `planId`, `sellerId`, `nodeId`, `cartons` (`sscc`, `parentSscc`, `kind`, `contents` (`catalogItemId`, `gtin`, `qtyEaches`, `lot`, `expiry`), `grossWeightG`, `dimsMm`), `labelledAt` |
 | `InboundShipmentShipped` | `shipmentId`, `planId`, `sellerId`, `nodeId`, `shippedAt` |
-| `InboundShipmentReceived` | `shipmentId`, `sellerId`, `nodeId`, `status`, `cartons` (`sscc`, `status`), `receivedAt` |
+| `InboundShipmentReceived` | `shipmentId`, `sellerId`, `nodeId`, `status`, `cartons` (`sscc`, `status`), `receivedAt`, `received` (`catalogItemId` (optional), `gtin`, `qtyEaches`) |
 | `InboundDiscrepancyRecorded` | `shipmentId`, `sellerId`, `nodeId`, `sscc` (optional), `kind`, `expected` (optional), `actual` (optional), `recordedAt` |
 | `SellerComplianceViolationRecorded` | `sellerId`, `shipmentId` (optional), `code`, `recordedAt` |
 

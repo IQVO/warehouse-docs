@@ -134,11 +134,12 @@ flowchart TB
     NT ==>|"CF 2e"| NP
     NT ==>|"? + C/S + CF 5e +REST"| VC
     NT ==>|"CF 5e"| SI
-    OA ==>|"CF 2e"| SI
+    OA ==>|"CF 3e"| SI
     OA ==>|"C/S + CF 3e +REST"| VC
     OA ==>|"CF 1e"| NP
     VC ==>|"CF 8e"| NP
     VC ==>|"C/S 1e"| SI
+    SI ==>|"CF 3e"| OA
     SI ==>|"C/S 3e"| VC
     SI ==>|"CF 1e"| NP
     NP -->|"C/S +REST"| VC
@@ -180,7 +181,7 @@ flowchart TB
     LH ==>|"C/S 1e"| LM
     LM ==>|"? + CF 4e"| DP
     LM ==>|"? + CF 4e"| OS
-    NP ==>|"CF 1e"| DP
+    NP ==>|"CF 2e"| DP
     NP ==>|"CF 1e"| OS
 ```
 
@@ -203,7 +204,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `linehaul-transportation` | `last-mile-delivery` | C/S | `LoadArrived` | - |
 | `linehaul-transportation` | `order-sourcing` | ? + CF | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`, `BookingMoved`, `BookingFailed` | - |
 | `linehaul-transportation` | `shipping-and-tracking` | CF | `LoadDeparted`, `LoadArrived` | - |
-| `node-performance` | `delivery-promise` | CF | `NodeScorecardUpdated` | - |
+| `node-performance` | `delivery-promise` | CF | `NodeScorecardUpdated`, `NodeTierEligibilityChanged` | - |
 | `node-performance` | `order-sourcing` | CF | `NodeScorecardUpdated` | - |
 | `node-performance` | `vendor-connectivity` | C/S | - | qry GetScorecard (`REST GET /scorecards/{nodeId}`) |
 | `node-topology` | `delivery-promise` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneClosed`, `ServiceAreaAssigned`, `RegionDefined` | - |
@@ -217,14 +218,16 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `offer-availability` | `delivery-promise` | CF | `CatalogItemCreated`, `CatalogItemDiscontinued`, `ListingCreated`, `ListingAvailabilityChanged`, `ListingSuppressed`, `ListingRestored` | - |
 | `offer-availability` | `node-performance` | CF | `InventoryFeedApplied` | - |
 | `offer-availability` | `order-sourcing` | CF | `CatalogItemDiscontinued`, `ListingCreated`, `ListingAvailabilityChanged`, `ListingSuppressed`, `ListingRestored` | - |
-| `offer-availability` | `seller-inbound` | CF | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | - |
+| `offer-availability` | `seller-inbound` | CF | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`, `ListingAvailabilityChanged` | - |
 | `offer-availability` | `shipping-and-tracking` | CF | `CatalogItemCreated` | - |
 | `offer-availability` | `vendor-connectivity` | C/S + CF | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`, `ListingCreated` | cmd ApplyInventoryFeed (`REST POST /inventory-feeds`) |
 | `order-sourcing` | `customer-ordering` | ? + CF | `FulfillmentLocked`, `FulfillmentShipped`, `FulfillmentUnsourceable`, `FulfillmentCancelled`, `FulfillmentCancelRefused` | - |
 | `order-sourcing` | `delivery-promise` | ? + C/S | `FulfillmentLocked`, `FulfillmentShipped`, `FulfillmentUnsourceable` | - |
 | `order-sourcing` | `linehaul-transportation` | C/S | `FulfillmentReleasedToNode`, `FulfillmentReassigned`, `FulfillmentLocked`, `FulfillmentCancelled` | - |
+| `order-sourcing` | `seller-inbound` | CF | `FulfillmentReleasedToNode`, `FulfillmentCancelled` | - |
 | `order-sourcing` | `vendor-connectivity` | C/S | `FulfillmentReleasedToNode`, `FulfillmentCancelled` | - |
 | `seller-inbound` | `node-performance` | CF | `InboundShipmentShipped` | - |
+| `seller-inbound` | `offer-availability` | CF | `SellerSuspended`, `SellerReinstated`, `InboundShipmentReceived` | - |
 | `seller-inbound` | `vendor-connectivity` | C/S | `InboundShipmentLabelled`, `InboundShipmentShipped`, `InboundShipmentReceived` | - |
 | `shipping-and-tracking` | `customer-ordering` | ? + CF | `LabelIssued`, `LabelVoided`, `PackageScanned`, `PackageDelivered`, `PackageExceptionRaised`, `PackageReturned`, `PackageLost` | - |
 | `shipping-and-tracking` | `delivery-promise` | ? + CF | `PackageDelivered`, `PackageExceptionRaised`, `PackageReturned`, `PackageLost` | - |

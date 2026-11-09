@@ -110,6 +110,6 @@ flowchart TB
 
 | Hotspot | Where it comes from |
 | --- | --- |
-| Who creates owner-scoped listings from received stock | Gap G51 |
+| Who creates owner-scoped listings from received stock | `offer-availability`, from the `received` lines of `InboundShipmentReceived` (gap G51, closed) |
 | A shipped shipment that is never received | Gap G50 |
 | Violations are recorded and nothing consumes them | Gap G42 |

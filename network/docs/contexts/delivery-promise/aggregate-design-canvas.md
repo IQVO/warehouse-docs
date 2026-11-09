@@ -2,7 +2,7 @@
 id: aggregate-design-canvas
 title: Aggregate Design Canvas
 sidebar_label: Aggregate Design Canvas
-description: The ddd-crew Aggregate Design Canvas for DeliveryOffer, Promise and PromiseBook, plus the seven event-fed read models of Delivery Promise.
+description: The ddd-crew Aggregate Design Canvas for DeliveryOffer, Promise and PromiseBook, plus the read models of Delivery Promise.
 ---
 
 # Aggregate Design Canvas
@@ -187,7 +187,7 @@ either becomes `CONFIRMED` or is `RELEASED` when its hold expires.
 | --- | --- | --- |
 | `MakePromise` | REST `POST /promises` (`customer-ordering` checkout) | `[*]` → `PROVISIONAL` |
 | `ConfirmPromise` | Kafka consumer of `CustomerOrderPlaced` | `PROVISIONAL` → `CONFIRMED` |
-| `FlagPromiseAtRisk` | `RepromiseOnRisk` (consumers of `FulfillmentUnsourceable`, `PackageExceptionRaised`, `DepartureCancelled`) | `CONFIRMED` → `AT_RISK` |
+| `FlagPromiseAtRisk` | `RepromiseOnRisk` (consumers of `FulfillmentUnsourceable`, `PackageExceptionRaised`, `DepartureCancelled`) and the clock-driven `FlagPredictedLate` sweep (reason `PREDICTED_LATE`) | `CONFIRMED` → `AT_RISK` |
 | `RevisePromise` | `RepromiseOnRisk`, after a successful recompute | `AT_RISK` → `CONFIRMED`, `CONFIRMED` → `CONFIRMED` |
 | `JudgePromise` | `JudgeOnDelivery` (consumer of `PackageDelivered`) | `CONFIRMED` / `AT_RISK` → `KEPT` / `BROKEN` |
 | `CancelPromise` | Kafka consumer of `CustomerOrderCancelled` | `CONFIRMED` / `AT_RISK` → `CANCELLED` |

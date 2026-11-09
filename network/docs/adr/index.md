@@ -33,13 +33,21 @@ accepts it.
 ## Service ADRs (one sequence per context repository)
 
 Each of the eleven context repositories records its own decisions on top of
-the domain-level ones above: 125 ADRs on `develop` as of 2026-11-04. They are
+the domain-level ones above: 151 ADRs on `develop` as of 2026-11-09. They are
 linked, never copied; the *Status* column is the word from each ADR's own
 status line. Since the fleet observability standard (accepted 2026-10-26),
 every repository added an A2A inbound adapter and adopted the fleet REST API
 guideline, and six (`node-topology`, `offer-availability`, `delivery-promise`,
 `customer-ordering`, `vendor-connectivity`, `seller-inbound`) also record
-agent authority levels and the complete MCP surface (2026-11-02).
+agent authority levels and the complete MCP surface (2026-11-02). The
+network evolution wave 0 (2026-11-08/09) added the owner-aware sourcing and
+promise ADRs (gap G47), seller status and received stock as integration facts
+(G48, G51), fulfillment centres receiving inbound (G64), batch delivery
+estimates (G60) and the analytics read sides of four contexts. Wave 1
+(2026-11-09) added the fast-tier eligibility decision of `node-performance`
+and the four promise-quality ADRs of `delivery-promise`: calibrated quotes
+with a confidence, a sweep that flags promises whose load is running late, a
+fast-tier candidate filter on node eligibility, and a capacity band on offers.
 
 
 ### node-topology
@@ -59,6 +67,8 @@ agent authority levels and the complete MCP surface (2026-11-02).
 | [0011](https://github.com/IQVO/node-topology/blob/develop/docs/adr/0011-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
 | [0012](https://github.com/IQVO/node-topology/blob/develop/docs/adr/0012-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 | [0013](https://github.com/IQVO/node-topology/blob/develop/docs/adr/0013-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
+| [0014](https://github.com/IQVO/node-topology/blob/develop/docs/adr/0014-lane-cost-declaration.md) | Lane cost declaration (cents, planner-declared) | Accepted |
+| [0015](https://github.com/IQVO/node-topology/blob/develop/docs/adr/0015-fulfillment-centres-receive-inbound.md) | Fulfillment centres receive inbound | Accepted |
 
 ### offer-availability
 
@@ -76,6 +86,8 @@ agent authority levels and the complete MCP surface (2026-11-02).
 | [0010](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0010-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
 | [0011](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0011-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 | [0012](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0012-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
+| [0013](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0013-seller-status-and-received-stock-drive-owner-listings.md) | Seller status and received stock drive owner listings | Accepted |
+| [0014](https://github.com/IQVO/offer-availability/blob/develop/docs/adr/0014-received-stock-creates-owner-listings.md) | Received stock creates owner listings | Accepted |
 
 ### delivery-promise
 
@@ -95,6 +107,15 @@ agent authority levels and the complete MCP surface (2026-11-02).
 | [0012](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0012-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 | [0013](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0013-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
 | [0014](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0014-measured-transit-basis.md) | Measured-transit promising (basis MEASURED) | Accepted |
+| [0015](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0015-confirmed-units-stay-decremented.md) | Confirmed units stay decremented until the feed that accounts for them lands | Accepted |
+| [0016](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0016-book-charge-follows-the-locked-node.md) | The PromiseBook charge follows the node order-sourcing locks | Accepted |
+| [0017](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0017-owner-aware-availability-and-promise-netting.md) | Owner-aware availability and promise netting | Accepted |
+| [0018](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0018-analytics-read-side.md) | Analytics read side | Accepted |
+| [0019](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0019-batch-delivery-estimates-for-listing-pages.md) | Batch delivery estimates for listing pages | Accepted |
+| [0020](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0020-promise-calibration-from-the-services-own-judgement.md) | Promise calibration from the service's own judgement | Accepted |
+| [0021](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0021-a-sweep-flags-promises-whose-locked-path-is-running-late.md) | A sweep flags promises whose locked path is running late | Accepted |
+| [0022](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0022-fast-tier-candidates-are-filtered-on-node-eligibility.md) | Fast-tier candidates are filtered on node eligibility | Accepted |
+| [0023](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0023-offers-carry-a-capacity-band.md) | Offers carry a capacity band | Accepted |
 
 ### customer-ordering
 
@@ -126,6 +147,9 @@ agent authority levels and the complete MCP surface (2026-11-02).
 | [0008](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0008-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
 | [0009](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0009-a2a-inbound-adapter.md) | An A2A inbound adapter (read-only) | Accepted |
 | [0010](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
+| [0011](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0011-money-denominated-assignment-cost.md) | The money-denominated AssignmentCost | Accepted |
+| [0012](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0012-owner-aware-availability-and-sourcing.md) | Owner-aware availability and sourcing | Accepted |
+| [0013](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0013-analytics-read-side-and-the-sourcing-decision-fact.md) | Analytics read side and the sourcing-decision fact | Accepted |
 
 ### vendor-connectivity
 
@@ -142,6 +166,7 @@ agent authority levels and the complete MCP surface (2026-11-02).
 | [0009](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0009-a2a-inbound-adapter.md) | An A2A inbound adapter (a read-only third driving adapter) | Accepted |
 | [0010](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 | [0011](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0011-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
+| [0012](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0012-purchase-order-lines-name-the-stock-owner.md) | Purchase-order lines name the stock owner | Accepted |
 
 ### linehaul-transportation
 
@@ -174,6 +199,8 @@ agent authority levels and the complete MCP surface (2026-11-02).
 | [0008](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0008-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
 | [0009](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0009-a2a-inbound-adapter.md) | An A2A inbound adapter (a read-only agent) | Accepted |
 | [0010](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
+| [0011](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0011-wave-stop-cost-declaration.md) | Wave stop-cost declaration (cents, planner-declared) | Accepted |
+| [0012](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0012-analytics-read-side.md) | Analytics read side | Accepted |
 
 ### shipping-and-tracking
 
@@ -189,6 +216,8 @@ agent authority levels and the complete MCP surface (2026-11-02).
 | [0008](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0008-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
 | [0009](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0009-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
 | [0010](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
+| [0011](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0011-label-time-address-deliverability-check.md) | Label-time address deliverability check | Accepted |
+| [0012](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0012-analytics-read-side.md) | Analytics read side | Accepted |
 
 ### node-performance
 
@@ -206,6 +235,7 @@ agent authority levels and the complete MCP surface (2026-11-02).
 | [0010](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0010-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
 | [0011](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0011-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
 | [0012](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0012-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
+| [0013](https://github.com/IQVO/node-performance/blob/develop/docs/adr/0013-fast-tier-eligibility-from-the-7-day-window.md) | Fast-tier eligibility from the 7-day window | Accepted |
 
 ### seller-inbound
 
@@ -222,3 +252,6 @@ agent authority levels and the complete MCP surface (2026-11-02).
 | [0009](https://github.com/IQVO/seller-inbound/blob/develop/docs/adr/0009-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
 | [0010](https://github.com/IQVO/seller-inbound/blob/develop/docs/adr/0010-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 | [0011](https://github.com/IQVO/seller-inbound/blob/develop/docs/adr/0011-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
+| [0012](https://github.com/IQVO/seller-inbound/blob/develop/docs/adr/0012-the-placement-advisory.md) | The placement advisory (PlacementPlan) | Accepted |
+| [0013](https://github.com/IQVO/seller-inbound/blob/develop/docs/adr/0013-seller-status-is-an-integration-fact.md) | Seller status is an integration fact | Accepted |
+| [0014](https://github.com/IQVO/seller-inbound/blob/develop/docs/adr/0014-received-stock-is-published-per-item.md) | Received stock is published per item | Accepted |

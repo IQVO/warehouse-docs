@@ -65,7 +65,8 @@ timestamps are RFC 3339 UTC strings.
 | `shipBy` | timestamp | pickup cutoff the package must be ready for |
 | `deliverByEarliest` | timestamp | window start |
 | `deliverByLatest` | timestamp | window end; the judgement line |
-| `basis` | enum | `SCHEDULED` or `NOMINAL` |
+| `basis` | enum | `SCHEDULED`, `MEASURED` or `NOMINAL` |
+| `confidence` | number, optional | in [0,1], three decimals: the calibration segment's observed share of judged promises within the quote's buffer; omitted when the segment has too few judgements (unknown, never zero) |
 | `policyVersion` | string | version of the promise policies used |
 | `holdExpiresAt` | timestamp | the provisional hold is released after this instant |
 | `lines` | array of `{catalogItemId, quantity}` | the shipment group |
@@ -74,8 +75,7 @@ timestamps are RFC 3339 UTC strings.
 `groupNo` (the group's number in that order).
 
 **`PromiseAtRisk`**: `promiseId`; `orderId`; `reason` (string, what put it at
-risk: unsourceable, package exception or cancelled departure; the model gives no
-vocabulary); `detectedAt` (timestamp).
+risk: `NODE_UNSOURCEABLE`, `PACKAGE_EXCEPTION`, `INDUCTION_DEFERRED`, `DEPARTURE_CANCELLED`, `WAVE_CANCELLED`, `BOOKING_FAILED`, `BOOKING_MOVED` or `PREDICTED_LATE`, the last raised by the clock-driven late-risk sweep); `detectedAt` (timestamp).
 
 **`PromiseRevised`**
 
@@ -109,11 +109,13 @@ expired).
 
 ### Analytics topic
 
-The model names one analytics-only message, `DeliveryOfferQuoted`, published on
-`retailnetwork.delivery-promise.analytics` for every quote. It is not in the
-model's `publishes` list and has no data fields, so this pack prints no type or
-schema for it (open question on
-[the canvas page](/network/contexts/delivery-promise/bounded-context-canvas)).
+`DeliveryOfferQuoted` is analytics-only, published on
+`retailnetwork.delivery-promise.analytics` for every quote. Its data fields in the
+model are `offerId`, `tier`, `destinationPostalPrefix`, `nodeId`,
+`deliverByEarliest`, `deliverByLatest`, `basis`, `confidence` (optional),
+`policyVersion`, `expiresAt` and `capacityBand` (optional: `AMPLE`, `TIGHT` or
+`SCARCE`, omitted when unknown, never an empty string). Consumers of the
+analytics topic decode tolerantly and ignore what they do not use.
 
 ### Example envelope: `PromiseRevised`
 
@@ -184,6 +186,8 @@ row backwards.
 | `offer-availability` | `com.retailnetwork.commerce.offer-availability.listing.ListingSuppressed` | `listingId`, `nodeId`, `reason` | the listing is not a candidate | newer `time` wins |
 | `offer-availability` | `com.retailnetwork.commerce.offer-availability.listing.ListingRestored` | `listingId`, `nodeId` | the listing is a candidate again | newer `time` wins |
 | `node-performance` | `com.retailnetwork.partner.node-performance.scorecard.NodeScorecardUpdated` | `nodeId`, `window`, `grade`, `observations`, `computedAt` | upsert `ScorecardView` per `(nodeId, window)` | applied only if `computedAt` is newer |
+| `node-performance` | `com.retailnetwork.partner.node-performance.scorecard.NodeTierEligibilityChanged` | `nodeId`, `tier`, `eligible`, `changedAt` | upsert `NodeTierEligibility` per `(nodeId, tier)`; an ineligible node leaves the tier's candidates in future quotes and estimates (policy `FastTierCandidateFilter`) | applied only if `changedAt` is not older than the stored one; an unknown `tier` or a missing field is ignored and counted, never dead-lettered; a missing row means eligible |
+| `linehaul-transportation` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived` | `loadId`, `arrivedAt`, and the OPTIONAL `departureId` | pairs with `LoadDeparted` for `TransitActualsView`; with a `departureId` also records the arrival in `DepartureArrival` for the late-risk sweep | a first arrival is kept; an event without `departureId` writes no arrival row and is counted |
 
 Consumer groups (proposed): one group per projector, named
 `delivery-promise-<read-model>` (for example `delivery-promise-departure-view`),
