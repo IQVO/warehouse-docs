@@ -36,13 +36,18 @@ different bounded context:
    (`linehaul-transportation`) and delivery waves with stops left
    (`last-mile-delivery`).
 3. **How much each node can be trusted.** A scorecard measured from what
-   happened, not from what was declared (`node-performance`).
+   happened, not from what was declared (`node-performance`), over a 30-day
+   window for grades and a 7-day window for the fast-tier eligibility decision.
 
 Two Core contexts turn those facts into decisions:
 
 - `delivery-promise` decides **what to promise**: it quotes only from a
-  feasible witness path, holds capacity on the node's pickup cutoff, and
-  handicaps a node by its grade.
+  feasible witness path, holds capacity on the node's pickup cutoff, handicaps a
+  node by its grade and keeps the fast tiers away from a node whose recent
+  on-time handover has collapsed. It learns from its own judgements: a quote
+  carries a one-sided buffer and an optional confidence, an offer reports a
+  coarse capacity band, and a promise whose load is running late is flagged at
+  risk before it is broken.
 - `order-sourcing` decides **who fulfils**: it keeps each shipment group in a
   virtual queue, re-optimizes against current cost and capacity, releases it
   to one node, and locks the path when that node commits.

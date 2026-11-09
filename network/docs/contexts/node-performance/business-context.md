@@ -71,6 +71,12 @@ observes. Both feed the promise, and neither overwrites the other
 5. **Grades drive the promise handicap, owned by `delivery-promise`.** This
    context never suspends a node; suspension is a `node-topology` command
    issued by people.
+6. **The 7-day scorecard gates the fast tiers.** A node whose graded 7-day
+   on-time handover rate falls below 0.90 is suspended from `SAME_DAY` and
+   `NEXT_DAY` and reinstated after three successive recompute days at 0.95 or
+   more (policy `FastTierEligibility`, with hysteresis). The decision is
+   published as `NodeTierEligibilityChanged` and acted on by `delivery-promise`;
+   it does not change the node's status in `node-topology`.
 
 ## How it relates to the real fulfillment networks
 

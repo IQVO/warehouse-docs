@@ -46,6 +46,9 @@ events.
 | `LaneView`, `DepartureView` | `node-topology` lanes; `linehaul-transportation` `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled` | which departures exist, when, with how much room |
 | `DeliveryWaveView` | `last-mile-delivery` `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged` | when packages must reach the station, the window, stops left |
 | `ScorecardView` | `node-performance` `NodeScorecardUpdated` | the node's grade |
+| `NodeTierEligibility` | `node-performance` `NodeTierEligibilityChanged` | whether the node may be offered `SAME_DAY` and `NEXT_DAY`; a missing row means eligible |
+| `PromiseCalibrationView` | the service's own judgements (`PromiseKept`, `PromiseBroken` with cause `LATE`); no sibling event | how late promises of a segment (tier, basis, node grade) actually ran |
+| `DepartureArrival` | `linehaul-transportation` `LoadArrived`, when it carries the optional `departureId` | which departures have been seen arriving |
 | `PromiseBook` (own aggregate) | own commands | how many orders are already promised onto each node cutoff |
 
 A cold or stale read model is not a reason to guess. Fast tiers require every
@@ -62,7 +65,7 @@ quote(item, qty, postalPrefix, tiers, now):
   nodes  = ACTIVE FULFILLMENT_CENTER nodes with OUTBOUND
            and availableQty(item, node) - provisionalHolds >= qty
                                                 else constraint ITEM_QUANTITY_NOT_AVAILABLE
-  for node in nodes:
+  for node in nodes:       # SAME_DAY and NEXT_DAY: drop nodes ineligible for the tier
      ready   = addBusinessTime(now, node.handlingTime, node.hours, node.holidays)
      ready   = handicap(ready, node, grade(node))           # ScorecardHandicap
      pickup  = first PICKUP departure from node with cutoffAt >= ready
@@ -72,6 +75,7 @@ quote(item, qty, postalPrefix, tiers, now):
                # time-expanded graph: at each parcel node add its sortDwell,
                # then take the first departure on an OPEN lane with
                # cutoffAt >= that instant and remaining > 0
+     arrival = arrival + calibrationBuffer(tier, basis, grade)   # one-sided, 0 when unknown
      wave    = first wave at ds with inductCutoffAt >= arrival and remainingStops > 0
      candidate(node, shipBy = pickup.cutoffAt,
                window = [wave.windowStart, wave.windowEnd],
@@ -101,6 +105,45 @@ The scorecard handicap (`ScorecardHandicap`):
 A handicapped node is still offered, later. The network never silently drops a
 node because of its grade; suspension is a separate, human decision in
 `node-topology`.
+
+One short-window rule does remove a node, and only from the two fastest tiers.
+`node-performance` judges fast-tier eligibility from its 7-day scorecard
+(policy `FastTierEligibility`): a node whose graded on-time handover rate falls
+below 0.90 is suspended from `SAME_DAY` and `NEXT_DAY`, and is reinstated after
+three successive recompute days at 0.95 or more. It publishes the decision as
+`NodeTierEligibilityChanged`, and this context keeps it in `NodeTierEligibility`
+(policy `FastTierCandidateFilter`). An ineligible node is not a candidate for
+those two tiers in future quotes and estimates, but it stays a candidate for
+`TWO_DAY` and `STANDARD`; promises already made are never touched, and
+re-promising does not apply the filter. If no candidate remains, the tier
+yields no offer like any other infeasible tier. A node with no event is eligible.
+
+## Quote-time signals: calibration, confidence and capacity band
+
+Three signals ride on the offer without changing what a quote means.
+
+- **Calibration buffer** (policy `PromiseCalibration`). The service judges every
+  promise kept or broken, so it knows how late promises of a segment (tier,
+  basis, node grade) actually ran. With at least `minCalibrationObservations`
+  judgements in `calibrationWindowDays`, the search adds to each candidate's
+  arrival the smallest buffer that would have kept `targetOnTimeProbabilityPercent`
+  of them, capped at `maxCalibrationBufferMinutes`, before the arrival is
+  snapped to a delivery window. The buffer is one-sided (a quote is never
+  earlier because of it) and the window width never changes: the offer lands in
+  a later fixed window when needed. Below the minimum the buffer is 0. The only
+  input is the service's own judgements; no sibling is called.
+- **Confidence.** Where the segment has enough judgements, the offer, each
+  estimate option, the promise terms and `PromiseMade` carry an optional
+  `confidence` in [0,1]: the observed share of the segment's promises that were
+  within the buffer. Absence means unknown, never zero.
+- **Capacity band.** The offer, each estimate option and `DeliveryOfferQuoted`
+  carry an optional `capacityBand`: `AMPLE` (under 60% of the book's share
+  used), `TIGHT` (60% to under 85%) or `SCARCE` (85% or more), read from the book
+  the offer's window would charge. It is a snapshot at quote time: not stored, so
+  a stored offer read back omits it, and not an input to ranking. The network
+  computes no fee; a consumer that prices reads the band from the response it
+  already gets, and `POST /promises` is still the only thing that reserves
+  capacity.
 
 ## From offer to promise: holding capacity
 
@@ -139,7 +182,13 @@ Derived from: `model.yaml` → `contexts[delivery-promise].aggregates[Promise].t
 4. **RevisePromise** moves a confirmed promise later, never earlier
    (`ErrRevisionMovesEarlier`), when its path stops being feasible:
    `FulfillmentUnsourceable`, `PackageExceptionRaised`, or a cancelled
-   departure on the witness path.
+   departure on the witness path. A clock-driven sweep (`FlagPredictedLate`)
+   also flags a confirmed promise `AT_RISK` with reason `PREDICTED_LATE` when a
+   departure of its witness path is more than 15 minutes past its expected
+   arrival (the timetable plus the measured-transit adjustment) and no arrival has
+   been seen; it re-promises only when the window is no longer reachable, and it
+   never clears the flag when the load arrives later (the judgement closes the
+   promise).
 5. **JudgePromise** on `PackageDelivered`: delivered on or before
    `deliverByLatest` is `KEPT`, else `BROKEN{lateBy}`. Both feed
    `node-performance`.
@@ -225,5 +274,7 @@ What happens next (which node really fulfils, and when it locks) is
 | The vendor rejects or lets the purchase order expire, and no other node meets `deliverByLatest` | `FulfillmentUnsourceable` | `RevisePromise` to the next feasible window; `PromiseRevised` to the customer order and to sourcing |
 | The 22:00 linehaul is cancelled | `DepartureCancelled` | if a locked group's path used it: recompute, `PromiseAtRisk`, then `PromiseRevised` |
 | A package stops scanning | `PackageExceptionRaised` | `PromiseAtRisk`, re-promise if the window is no longer reachable |
+| A load is past its expected arrival and not scanned in | no `LoadArrived` for the departure within the grace | `PromiseAtRisk` with reason `PREDICTED_LATE`; re-promise only if the window is no longer reachable |
+| A node's recent on-time handover collapses | `NodeTierEligibilityChanged` (`eligible` false) | the node leaves the `SAME_DAY` and `NEXT_DAY` candidates of future quotes; existing promises are untouched |
 | The vendor ships late (the fleet's `TaskCPTMissed` inside the building) | the package misses its pickup; no handover scan by `requiredShipBy` | judged `BROKEN` if delivery is late; `node-performance` lowers the on-time handover rate; the next promise from that node is handicapped |
 | Checkout after the offer expired | `ErrOfferNotQuotable` | re-quote, show the new window before placing |

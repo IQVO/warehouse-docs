@@ -32,8 +32,10 @@ observations counted in its window, the `Metrics` value object computed
 from them
 (`onTimeHandoverRate, lateAckRate, rejectRate, expiryRate, promiseKeptRate, feedFreshnessP95Minutes, observations`),
 its state (`PROVISIONAL` or `GRADED`) and, when graded, a `Grade` (`A`,
-`B`, `C` or `D`). It decides nothing about the node's eligibility; it
-states how the node has behaved.
+`B`, `C` or `D`). It decides nothing about the node's status in `node-topology`; it
+states how the node has behaved. The `7d` aggregate also holds the node's
+fast-tier eligibility flag, its reinstatement streak and the streak's last UTC
+day (policy `FastTierEligibility`); the `30d` aggregate never evaluates it.
 
 The model lists no entity for this aggregate. Its size estimate ("nodes x
 2 windows + observations (30 days)") and its third invariant (an
