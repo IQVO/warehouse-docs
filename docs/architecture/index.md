@@ -58,14 +58,16 @@ Reading them in that order is the fastest way to understand any one context.
 
 ## Three things worth knowing up front
 
-**The fleet is bigger than "nineteen services".** All eighteen domain
+**The fleet is bigger than "twenty services".** Eighteen of the nineteen domain
 contexts on this site ship four binaries (OLTP, MCP, projector, reports) and
 two databases each, because the analytical read side is a separate process
 family from the operational one; `fulfillment-execution` adds a fifth,
 `cmd/sweep`, the entrypoint of its two sweep CronJobs.
-`warehouse-ops-agent` is one binary with no database. All nineteen are
-registered in `warehouse-infra` `develop`, the newest two,
-`returns-processing` and `exception-management`, since 2026-10-22. That is
+`warehouse-ops-agent` is one binary with no database. The nineteenth domain
+context, `outbound-shipping`, is built on `develop` with two binaries and one
+database and is not deployed. Nineteen of the twenty are
+registered in `warehouse-infra` `develop`, `returns-processing` and
+`exception-management` since 2026-10-22; `outbound-shipping` is not. That is
 [Containers](/architecture/containers).
 
 **The domain layer depends on nothing, and CI proves it.** Every context has an
