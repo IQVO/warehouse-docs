@@ -236,9 +236,9 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wms.product-master.product.ProductMeasured` | slotting-optimization |
 | `com.warehouse.wms.inbound-receiving.asn.ASNRegistered` | (published contract; no consumer yet) |
 | `com.warehouse.wms.inbound-receiving.asn.ASNCancelled` | (published contract; no consumer yet) |
-| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked` | warehouse-planning (inbound labour demand, its ADR 0017; context map K28, live) |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked` | warehouse-planning (inbound labour demand, its ADR 0017; context map K28; its source switched to dock-scheduling by ADR 0020) |
 | `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCheckedIn` | (published contract; no consumer yet) |
-| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled` | warehouse-planning (withdraws the appointment's labour demand, its ADR 0017; context map K28) |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled` | warehouse-planning (withdraws the appointment's labour demand, its ADR 0017; context map K28; its source switched to dock-scheduling by ADR 0020) |
 | `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCompleted` | (published contract; no consumer yet) |
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptOpened` | (published contract; no consumer yet) |
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` | inventory-storage (its ADR 0037) |

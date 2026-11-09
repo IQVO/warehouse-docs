@@ -25,9 +25,10 @@ chain is built in the five contexts it touches (`slotting-optimization`,
 `SlotPlanApproved` to `wes-work-planning` (K29), the RELOCATE `TaskCompleted`
 from `fulfillment-execution` to `inventory-storage` (K37) and `StockRelocated`
 back to `slotting-optimization` (K38). Of the two edges that needed a
-consumer-side ADR first, K28 (`inbound-receiving` to `warehouse-planning`) is
-now **live**: `warehouse-planning` ADR 0017 (merged 2026-10-20, deployed
-2026-10-20/21) consumes the dock-appointment events, and the same ADR adds K49,
+consumer-side ADR first, K28 (`inbound-receiving` to `warehouse-planning`) was
+**live**: `warehouse-planning` ADR 0017 (merged 2026-10-20, deployed
+2026-10-20/21) consumed the dock-appointment events until ADR 0020 (2026-11-05)
+moved its source to `dock-scheduling` (now wired-but-unused), and the same ADR adds K49,
 the observed-capacity feedback from `fulfillment-execution`.
 
 `pick-face-replenishment` (`wms`, Supporting), decided and merged on 2026-10-17, is the sixth `wms`
@@ -146,6 +147,7 @@ flowchart LR
         PFR["pick-face-replenishment<br/>Supporting"]
         RP["returns-processing<br/>Supporting"]
     end
+    DS["dock-scheduling<br/>yard section"]
 
     subgraph WES["wes subdomain"]
         OM["order-management<br/>Generic/Supporting"]
@@ -231,8 +233,9 @@ flowchart LR
     %% consumer modes on (helm-values/slotting-optimization.yaml), so K25 to K27
     %% and the execution chain are thick: SLOT -> WP (SlotPlanApproved, K29),
     %% FE -> INV (TaskCompleted RELOCATE, K37) and INV -> SLOT (StockRelocated,
-    %% K38, the WP -> FE hop is the WorkReleased edge above). INB -> WPL is
-    %% thick too since warehouse-planning ADR 0017 (K28).
+    %% K38, the WP -> FE hop is the WorkReleased edge above). DS -> WPL (K28) is
+    %% dashed: warehouse-planning ADR 0020 moved the source to dock-scheduling,
+    %% which is not registered in warehouse-infra (wired-but-unused).
     PM ==>|"Kafka ProductRegistered,<br/>local copy"| INB
     FL ==>|"Kafka LocationSlot events,<br/>local copy"| INB
     INB ==>|"Kafka ReceiptLineReceived,<br/>handover"| INV
@@ -240,7 +243,7 @@ flowchart LR
     PM ==>|"Kafka ProductClassified, ProductDimensionsDeclared,<br/>ProductMeasured"| SLOT
     FL ==>|"Kafka ZoneRegistered,<br/>LocationSlot events"| SLOT
     OM ==>|"Kafka SiteSkuDemandChanged"| SLOT
-    INB ==>|"Kafka DockAppointmentBooked,<br/>DockAppointmentCancelled"| WPL
+    DS -.->|"Kafka DockAppointmentBooked, Rescheduled,<br/>Cancelled, NoShow (K28, ADR 0020)"| WPL
     FE ==>|"Kafka TaskCompleted,<br/>observed capacity"| WPL
     SLOT ==>|"Kafka SlotPlanApproved,<br/>one RELOCATE work unit per move"| WP
     FE ==>|"Kafka TaskCompleted,<br/>PICK confirm-pick and RELOCATE"| INV
@@ -303,7 +306,7 @@ flowchart LR
     class INV,WP,FE,WPL,NIP core;
     class OM,WFM,LP,NF,OA,PM,INB,SLOT,PFR,TI,RP,EM supp;
     class FL,PPM gen;
-    class RN,WCS,CON,NOSUB ext;
+    class RN,WCS,CON,NOSUB,DS ext;
 ```
 
 **How to read it.** Thick arrows are live Kafka edges (CloudEvents 1.0
@@ -320,8 +323,9 @@ K29, K37 and K38 (the `wes-work-planning` → `fulfillment-execution` hop is
 K11). The thick edges K39 to K47 belong to `pick-face-replenishment` and
 `task-interleaving` (merged on `develop` 2026-10-17, deployed 2026-10-20/21;
 K44 is the replenishment chain, built end to end, K47 is `fulfillment-execution`'s
-hint consumer). K28 and K49 are the two thick edges into `warehouse-planning`
-from `inbound-receiving` and `fulfillment-execution`.
+hint consumer). K49 is the thick edge into `warehouse-planning` from
+`fulfillment-execution`; K28 (inbound labour demand, source switched to
+`dock-scheduling` by `warehouse-planning` ADR 0020) is dashed.
 The dashed K48 is the
 opt-in `WorkUnitCreated` release confirmation into `order-management`
 (wired-but-unused). The twelve edges K50 to K61 belong to
@@ -381,7 +385,7 @@ Omitted from the diagram:
 | K25 | `product-master` → `slotting-optimization` | PL / local copy (classification and effective physical profile per SKU) | `warehouse.product-master.events`: `ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured` | **live**. `PRODUCT_MODE=kafka`, group `slotting-optimization-product` (`helm-values/slotting-optimization.yaml`), applied only when `version` is newer. This also makes the physical-profile types consumed (hotspot H34) | [slotting-optimization](/contexts/slotting-optimization/context-map) |
 | K26 | `facility-layout` → `slotting-optimization` | OHS + PL / ACL (local copy of zones and slots) | `warehouse.facility.events`: `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | **live**. `LAYOUT_MODE=kafka`, group `slotting-optimization-layout`. slotting-optimization's own map names this edge Conformist | [slotting-optimization](/contexts/slotting-optimization/context-map) |
 | K27 | `order-management` → `slotting-optimization` | PL / ACL (pick velocity from the demand feed) | `warehouse.order-management.events`: `siteskudemand.SiteSkuDemandChanged` | **live**. `DEMAND_MODE=kafka`, group `slotting-optimization-demand`, last writer wins per order line. slotting-optimization's own map names this edge Conformist | [slotting-optimization](/contexts/slotting-optimization/context-map) |
-| K28 | `inbound-receiving` → `warehouse-planning` | PL, inbound-labor demand | `warehouse.inbound-receiving.events`: `dockappointment.DockAppointmentBooked` | **live**, since `warehouse-planning` ADR 0017 (`warehouse-planning#79`, merged 2026-10-20; deployed 2026-10-20/21). `InboundDemandConsumer` reads `DockAppointmentBooked` and `DockAppointmentCancelled` into `inbound_appointments` (group `INBOUND_DEMAND_CONSUMER_GROUP`, running on the cluster as `warehouse-planning-inbound-demand`). The labour is a declared `InboundLabourStandard` (minutes per appointment plus minutes per ASN, attributed to the configured `DEMAND_SITE_ID`), read through `/inbound-labour-standards` and `/inbound-demand`. No standard is declared on the cluster yet, so no appointment adds labour there | [inbound-receiving](/contexts/inbound-receiving/context-map) |
+| K28 | `dock-scheduling` → `warehouse-planning` (was `inbound-receiving`) | PL, inbound-labor demand | `warehouse.dock-scheduling.events`: `dockappointment.DockAppointmentBooked`, `DockAppointmentRescheduled`, `DockAppointmentCancelled`, `DockAppointmentNoShow` | **wired-but-unused**. The source switched on 2026-11-05: `warehouse-planning` ADR 0020 supersedes the source of ADR 0017 (the `DockAppointment` aggregate moved to `dock-scheduling`, inbound-receiving ADR 0019), keeping the labour standard, window semantics and `/inbound-demand`. The consumer is built and configured (`dockAppointments.consumerGroup` in `helm-values/warehouse-planning.yaml`; the retired `INBOUND_DEMAND_CONSUMER_GROUP` is refused by the chart), but `dock-scheduling` has no `warehouse-infra` `develop` registration (no `terraform/apps.yaml` entry, no values file), so no appointment event reaches the topic. Before ADR 0020 the edge was live from `inbound-receiving` (ADR 0017, deployed 2026-10-20/21). Cluster state not verified. See the [yard section context map](/yard/strategic-design/context-map) | [dock-scheduling](/yard/contexts/dock-scheduling/context-map), [warehouse-planning](/contexts/warehouse-planning/context-map) |
 | K29 | `slotting-optimization` → `wes-work-planning` | PL / ACL (unexported structs in the consumer hold the foreign shape), RELOCATE work execution | `warehouse.slotting-optimization.events`: `slotplan.SlotPlanApproved` (carries the full forward-pick map and the moves, so a consumer needs no lookup) | **live**. wes-work-planning ADR 0040: its inbound consumer reads the topic whenever `KAFKA_BROKERS` is set (`kafka.enabled` in `helm-values/wes-work-planning.yaml`), under its existing group, and plans one `RELOCATE` work unit per move (sequenced, superseded by a newer plan, CPT = approval time + `RELOCATION_CPT_HORIZON`, default 24 h). slotting-optimization publishes with `EVENT_PUBLISHER=kafka`. The `RELOCATE` process path (process-path-management ADR 0033, intake `SLOT_RELOCATION`, ADR 0034) must be seeded first (`warehouse-infra` post-deploy step 1), or the plan is retried and dead-lettered to `warehouse.slotting-optimization.events.dlq`. Slotting ADR 0010 decides it and supersedes ADR 0007 | [slotting-optimization](/contexts/slotting-optimization/context-map), [WP](/contexts/wes-work-planning/context-map) |
 | K30 | `facility-layout` → `network-inventory-planning` | OHS + PL / ACL (a last-writer-wins `site_capability` row) | `warehouse.facility.events`: `SiteCapabilityChanged` | **live**. Opt-in (`SITE_CAPABILITY_CONSUMER_GROUP`, NIP ADR 0002), and the reference deployment sets it (`terraform/network-inventory-planning.tf`). `facility-layout`'s own code names no consumer | [NIP](/contexts/network-inventory-planning/context-map) |
 | K31 | `order-management` → `network-inventory-planning` | OHS + PL / ACL (a `site_sku_demand` row per order line, `REMOVED` tombstones it) | `warehouse.order-management.events`: `SiteSkuDemandChanged` | **live**. Opt-in (`SITE_SKU_DEMAND_CONSUMER_GROUP`), set in the reference deployment. `order-management`'s own code names no consumer | [NIP](/contexts/network-inventory-planning/context-map) |
@@ -451,7 +455,9 @@ Published types with no consumer, as stated by their owners:
   `ProductDescriptionChanged` has none;
 - every `warehouse.inbound-receiving.events` type except
   `ReceiptLineReceived` (K24, live) and `DockAppointmentBooked` and
-  `DockAppointmentCancelled` (K28, live since `warehouse-planning` ADR 0017):
+  `DockAppointmentCancelled` (K28 was live from this topic under `warehouse-planning`
+  ADR 0017; ADR 0020 moved its source to `dock-scheduling`, so the topic now carries
+  only legacy rows, inbound-receiving ADR 0019):
   `ASNRegistered`, `ASNCancelled`,
   `DockAppointmentCheckedIn`,
   `DockAppointmentCompleted`, `ReceiptOpened` and `ReceiptClosed`;
@@ -481,7 +487,7 @@ Published types with no consumer, as stated by their owners:
 
 No other context consumes `inbound-receiving` events (**not consumed yet**),
 apart from K24, and none other consumes `slotting-optimization` events, apart
-from K29. K28 is live. `inbound-receiving`'s analytics stream
+from K29. K28 reads `dock-scheduling` now and is wired-but-unused. `inbound-receiving`'s analytics stream
 (`warehouse.inbound-receiving.analytics`) is read only by its own projector.
 
 `product-master` also serves REST, a read-only MCP server (its ADR 0005)
