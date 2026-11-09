@@ -97,9 +97,9 @@ default to well-behaved:
   (`payments-and-invoicing`).
 - **Vendor authentication.** No auth, consistent with the fleet. The vendor
   names itself in each write.
-- **Inventory placement.** Vendors place their own stock; the network does
-  not advise where (gap G49). A seller names the destination node in
-  `seller-inbound`.
+- **Inventory placement.** Vendors place their own stock; `seller-inbound`
+  offers sellers an advisory placement plan (gap G49). A seller names the
+  destination node in `seller-inbound`.
 - **Returns authorisation.** The future `customer-returns` context routes
   returns to a `RETURNS_CENTER`; this context only lets a vendor register
   one.

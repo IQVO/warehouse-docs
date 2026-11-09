@@ -77,9 +77,11 @@ other context (`conventions.no_auth`).
 
 | Message | Type | Consumers |
 | --- | --- | --- |
-| `SellerOnboarded`, `SellerSuspended`, `SellerReinstated` | event | analytics only |
+| `SellerOnboarded` | event | analytics only |
+| `SellerSuspended`, `SellerReinstated` | event | `offer-availability` (service ADR 0013) |
 | `InboundPlanConfirmed` | event | analytics only |
-| `InboundShipmentLabelled`, `InboundShipmentReceived` | event | `vendor-connectivity` |
+| `InboundShipmentLabelled` | event | `vendor-connectivity` |
+| `InboundShipmentReceived` | event | `vendor-connectivity`, `offer-availability` (the `received` lines, service ADR 0014) |
 | `InboundShipmentShipped` | event | `vendor-connectivity`, `node-performance` |
 | `InboundDiscrepancyRecorded`, `SellerComplianceViolationRecorded` | event | analytics only |
 

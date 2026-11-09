@@ -8,7 +8,7 @@ description: "The proposed Last-Mile Delivery context: it runs the network's del
 # Last-Mile Delivery
 
 :::info[As built]
-Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. It also has an analytics read side (last-mile-delivery ADR 0012): `cmd/lm-projector` projects this context's own topics into a separate analytical database, and `cmd/lm-reports` serves the read-only `/reports/...` routes on `:8092`.
 :::
 
 <span className="badge-supporting">Supporting</span> &nbsp; tier `logistics` · code `LM`

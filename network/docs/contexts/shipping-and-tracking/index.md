@@ -8,7 +8,7 @@ description: "Shipping & Tracking (proposed): a Generic subdomain that issues sh
 # Shipping & Tracking
 
 :::info[As built]
-Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
+Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses. It also has an analytics read side (shipping-and-tracking ADR 0012): `cmd/st-projector` projects this context's own topics into a separate analytical database, and `cmd/st-reports` serves the read-only `/reports/...` routes on `:8092`.
 :::
 
 <span className="badge-generic">Generic Subdomain</span>
