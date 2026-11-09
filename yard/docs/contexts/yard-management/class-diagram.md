@@ -2,7 +2,7 @@
 id: class-diagram
 title: Class Diagram
 sidebar_label: Class Diagram
-description: "Proposed UML class diagrams of the Yard Management domain (YardVisit, Trailer, YardMove, YardCheck, YardPolicy, Occupancy, events, policies) and its hexagonal ports and adapters."
+description: "UML class diagrams of the Yard Management domain (YardVisit, Trailer, YardMove, YardCheck, YardPolicy, Occupancy, events, policies) and its hexagonal ports and adapters."
 ---
 
 # Class Diagram
@@ -11,10 +11,12 @@ description: "Proposed UML class diagrams of the Yard Management domain (YardVis
 Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
-UML class diagrams of the **proposed** `internal/domain/**` packages (`yardvisit`,
-`trailer`, `yardmove`, `yardcheck`, `yardpolicy`), then the hexagonal ports and
+UML class diagrams of the `internal/domain/**` packages of the built service (`yardvisit`,
+`trailer`, `yardmove`, `yardcheck`, `yardpolicy`, and `shared`), then the hexagonal ports and
 adapters in the Go layout the fleet uses. Type and field names come from
-`model.yaml`; method names are the model's commands. Fields are shown `-`
+`model.yaml`, whose Go identifiers were reconciled with the code (the aggregate roots are `yardvisit.Visit`,
+`trailer.Trailer`, `yardmove.Move`, `yardcheck.Check`, `yardpolicy.Policy`); method names are the model's commands.
+The drawings are not generated from the code, so a method or field may differ in detail. Fields are shown `-`
 (unexported), methods `+`.
 
 ## 1. Trailer aggregate and the Occupancy service
@@ -124,8 +126,8 @@ Omitted: the error variables (see
 `SealState` (`INTACT`, `BROKEN`, `NONE`) enumerations, read accessors. `ArriveAt`
 receives the facts it cannot know alone (closure, door flow, active slot) from the use
 case; `Occupancy.CheckFree` runs under a per-location advisory lock, with a partial
-unique index as backstop. `RecordArrival` is drawn as a constructor; the model names no
-initial state (gap YM-G2), so `state` is set by the use case.
+unique index as backstop. `RecordArrival` is drawn as a constructor; it creates the trailer `IN_MOVE`
+together with its first move (decision Y-1).
 
 ## 2. YardVisit and YardMove aggregates
 
@@ -226,10 +228,10 @@ Derived from: `model.yaml → contexts[yard-management].aggregates[YardVisit, Ya
 
 Omitted: `Carrier{name, scac?}`, `TractorPlate`, `DriverRef`, `AppointmentRef`,
 `RejectionReason` and `TrailerRef` (the shape of `TrailersIn[]` and `TrailersOut[]` is
-not given in the model, gap YM-G15); the error variables. `VisitingDriverMove` is
-drawn as a constructor named after the policy: the model gives that creation no command
-name (gaps YM-G2, YM-G3). `ClaimNextMove` is a method of the aggregate and its selection
-is the repository's `ClaimableFor` (order proposed, gap YM-G19). `released` is the fact
+given in the OpenAPI of the service: `checkInVisit` and `checkOutVisit`); the error variables.
+`VisitingDriverMove` is drawn as a constructor named after the policy; the move is created `CLAIMED` with no lease and
+the dock operator or gate clerk completes it (decisions Y-1, Y-3). `ClaimNextMove` is a method of the aggregate and its
+selection is the repository's claim query: lowest band, then earliest `due_by`, then request time (decision Y-11). `released` is the fact
 the use case computes from the trailers and moves.
 
 ## 3. YardCheck and YardPolicy aggregates
@@ -294,8 +296,9 @@ Derived from: `model.yaml → contexts[yard-management].aggregates[YardCheck, Ya
 
 Omitted: `ErrYardCheckOpen`, `ErrLocationAlreadyObserved`, `ErrUnknownLocation`,
 `ErrValidation`. `expected` in `CloseYardCheck` is the places the model holds for the
-observed locations, passed in by the use case (the discrepancy rules are not spelled
-out, gap YM-G18). The model states no defaults for `YardPolicy` (gap YM-G24).
+observed locations, passed in by the use case (the discrepancy rules are decision Y-11). A site with
+no declared `YardPolicy` answers the defaults (`require_appointment` false, `seal_mismatch_action` `FLAG`,
+`lease_seconds` 300).
 
 ### Repositories
 
@@ -337,7 +340,7 @@ classDiagram
 ```
 
 One repository per aggregate root (the ports of the next view). `ClaimableFor` backs
-`ClaimNextMove` (order proposed, gap YM-G19); `OpenForTrailer` and `FindOpenByPlate`
+`ClaimNextMove` (the order is decision Y-11); `OpenForTrailer` and `FindOpenByPlate`
 back `ErrTrailerHasOpenMove` and `ErrVisitAlreadyOpen`.
 
 ## 4. Events and policies
@@ -473,9 +476,9 @@ Derived from: `model.yaml → contexts[yard-management].publishes`, `.policies`.
 Omitted: the CloudEvents envelope (see
 [Domain Events](/yard/contexts/yard-management/domain-events)); the events not drawn
 (`VisitCheckedOut`, `TrailerParked`, `DoorWorkStarted`, `TrailerDeparted`, `TrailerHeld`,
-`TrailerHoldReleased`) are raised directly by their commands, not by a policy, and carry
+`TrailerHoldReleased`, `YardMoveLeaseExpired`) are raised directly by their commands, not by a policy, and carry
 the fields listed there; the policies `VisitingDriverMove` and `LeaseExpirySweep` (the
-sweep returns expired moves to `REQUESTED` and raises no event, gap YM-G14). The seven
+sweep returns expired moves to `REQUESTED` and raises `YardMoveLeaseExpired`, decision Y-10). The seven
 read models (`LocationView`, `AppointmentView`, `DoorClosureView`, `AsnContentView`,
 `ReceiptAtDoorView`, `YardBoardView`, `YardKpiReport`) are projections, shown in the
 ports view below.
@@ -520,10 +523,10 @@ Outbound side: the ports every use case calls and their adapters.
 flowchart LR
     APP["use cases<br/>and projectors"]
     subgraph PORTS["application/ports"]
-        P1["Visit, Trailer, Move,<br/>YardCheck, YardPolicy<br/>repositories"]
-        P2["ReadModelStore"]
+        P1["Visit, Trailer, Move,<br/>Check, Policy<br/>repositories"]
+        P2["Locations, Appointments,<br/>Closures, Asns, Receipts<br/>and their feeds"]
         P3["EventPublisher<br/>outbox"]
-        P4["Inbox, UnitOfWork,<br/>Clock, LocationLock"]
+        P4["ProcessedEvents, UnitOfWork,<br/>Clock, IDGen, LocationLock,<br/>IdempotencyStore"]
     end
     subgraph OUT["adapters/outbound"]
         PG["postgres"]
@@ -544,9 +547,14 @@ Derived from: `model.yaml → contexts[yard-management].inbound`, `.consumes`,
 `.read_models`, `.policies`, `conventions.integration_rules` (own database,
 transactional outbox, idempotent consumers, Postgres and Kafka only).
 
-All paths are under `internal/` (`internal/adapters/inbound/{http,kafka}`,
+All paths are under `internal/` (`internal/adapters/inbound/{http,kafka,mcp}`,
 `internal/application/usecases`, `internal/domain`, `internal/application/ports`,
-`internal/adapters/outbound/{postgres,kafka}`). The dashed arrows mean every use case
+`internal/adapters/outbound/{postgres,kafka,analyticsstore,memory,system}`). The service has five binaries under
+`cmd/` (`api`, `mcp`, `relay`, `yard-projector`, `yard-reports`); `http` is the `api` binary and `mcp` serves the
+14 tools of the service's MCP server (8 reads, 6 L3 writes). The ports are named as in `ports.go`: the five
+repositories, the read ports `Locations`, `Appointments`, `Closures`, `Asns` and `Receipts` with a feed each,
+`LocationLock`, `EventPublisher`, `ProcessedEvents`, `IDGen`, `Clock`, `IdempotencyStore` and `UnitOfWork`. The
+KPI reports read an analytics store (`analyticsstore`) fed from the analytics topic. The dashed arrows mean every use case
 calls ports only: the repository of its aggregate, the event publisher (outbox), the
 inbox, the unit of work and, for occupancy, the per-location lock. `http` drives the gate,
 hostler, dock operator and supervisor commands and the two sweeps (a CronJob calls
