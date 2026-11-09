@@ -145,6 +145,7 @@ Subdomain and bounded-context segments (authoritative):
 | network-inventory-planning | wes     | network-inventory-planning | /warehouse/network-inventory-planning |
 | task-interleaving        | wes       | task-interleaving        | /warehouse/task-interleaving |
 | exception-management     | wes       | exception-management     | /warehouse/exception-management |
+| outbound-shipping        | wms       | outbound-shipping        | /warehouse/outbound-shipping |
 
 `dock-scheduling` and `yard-management` (wms, PROPOSED 2026-11-05, nothing built):
 the type prefixes `com.warehouse.wms.dock-scheduling.` and
@@ -170,6 +171,11 @@ are in progress — their type prefixes
 `com.warehouse.wms.returns-processing.` and
 `com.warehouse.wes.exception-management.` are PINNED here so consumers and
 producers build against identical strings before the first event ships.
+
+`outbound-shipping` (wms): built on `develop` (2026-11-05 to 2026-11-09, ADR 0005 in its
+repository pins the catalogue) and not deployed: no Helm chart and no
+`warehouse-infra` entry. Topics: `warehouse.outbound-shipping.events` / `.analytics` (type prefix
+`com.warehouse.wms.outbound-shipping.`, thirteen types, each on both topics).
 
 ### What the subdomain segment means
 
@@ -203,6 +209,7 @@ Entity segments for repos that had no catalogue yet:
 - slotting-optimization: every `SlotPlan*` event → `slotplan` (slotting-optimization ADR 0004)
 - pick-face-replenishment (built and deployed): `ReplenishmentRequested` / `ReplenishmentCompleted` / `ReplenishmentCancelled` → `replenishment`; `ReplenishmentPolicyDeclared` (analytics only) → `policy`
 - task-interleaving (built and deployed): `InterleavingHintIssued` / `InterleavingHintConsumed` / `InterleavingHintExpired` → `stationtrip`; `InterleavingPolicyDeclared` (analytics only) → `policy`
+- outbound-shipping (built, not deployed): every `Load*` event and `ShipmentConfirmed` → `outboundload`; `Package*` → `shippingpackage`; `BillOfLading*` → `billoflading` (outbound-shipping ADR 0005)
 
 Repos that already have an AsyncAPI catalogue keep the entity segments
 already documented there. Events not yet in a catalogue get the entity of
@@ -215,9 +222,9 @@ a suffix match) and these must be byte-identical on both sides:
 
 | `type` | consumed by |
 | --- | --- |
-| `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | inventory-storage, warehouse-planning, inbound-receiving, slotting-optimization; pick-face-replenishment and task-interleaving (consumers deployed) |
+| `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered` | inventory-storage, warehouse-planning, inbound-receiving, slotting-optimization; pick-face-replenishment and task-interleaving (consumers deployed); outbound-shipping (consumer built, not deployed) |
 | `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned` | inventory-storage, warehouse-planning, inbound-receiving, slotting-optimization; pick-face-replenishment and task-interleaving (consumers deployed) |
-| `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | inventory-storage, slotting-optimization; pick-face-replenishment and task-interleaving (consumers deployed) |
+| `com.warehouse.wms.facility-layout.zone.ZoneRegistered` | inventory-storage, slotting-optimization; pick-face-replenishment and task-interleaving (consumers deployed); outbound-shipping (consumer built, not deployed) |
 | `com.warehouse.wms.facility-layout.locationslot.LocationGeometryUpdated` | task-interleaving (consumer deployed; no other consumer); published by facility-layout |
 | `com.warehouse.wms.facility-layout.site.SiteCapabilityChanged` | network-inventory-planning |
 | `com.warehouse.wms.inventory-storage.reservation.StockReserved` | wes-work-planning |
@@ -256,14 +263,15 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wes.process-path-management.processpath.ProcessPathCreated` | fulfillment-execution, wes-work-planning, workforce-management, order-management |
 | `com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated` | same four |
 | `com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated` | same four |
-| `com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged` | order-management |
+| `com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged` | order-management; outbound-shipping (cutoff schedule copy; consumer built, not deployed) |
 | `com.warehouse.wes.labor-performance.performance.TaskPerformanceRecorded` | workforce-management (and labor-performance itself) |
 | `com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted` | wes-work-planning, warehouse-planning |
 | `com.warehouse.wes.fulfillment-execution.task.TaskCompleted` | wes-work-planning, labor-performance, inventory-storage (picks, and RELOCATE moves via the additive RELOCATE fields, fulfillment-execution ADR 0047, and `REPLENISH` moves via the additive `request_ref`, fulfillment-execution ADR 0050 and inventory-storage ADR 0041); task-interleaving (consumer deployed); warehouse-planning (observed capacity, its ADR 0017) |
 | `com.warehouse.wes.fulfillment-execution.task.TaskAvailable` | published by fulfillment-execution since its ADR 0049, for `RELOCATE` and `REPLENISH` tasks only (the tasks that carry bins; ADR 0050): task-interleaving (consumer deployed) |
 | `com.warehouse.wes.fulfillment-execution.task.TaskClaimed` | published on the integration topic by fulfillment-execution since its ADR 0049 (the analytics-topic occurrence is separate): task-interleaving (consumer deployed) |
 | `com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed` | order-management |
-| `com.warehouse.wes.fulfillment-execution.package.PackageManifested` | order-management |
+| `com.warehouse.wes.fulfillment-execution.package.PackageManifested` | order-management; returns-processing; outbound-shipping (plans the load; consumer built, not deployed; ignores a manifest without `site_id`, which the producer omits today) |
+| `com.warehouse.wes.fulfillment-execution.package.PackageDiverted` | exception-management; outbound-shipping (short-ships the package with reason `DIVERTED`; consumer built, not deployed) |
 | `com.warehouse.wes.fulfillment-execution.transfer.TransferPicked` | network-inventory-planning |
 | `com.warehouse.wes.fulfillment-execution.transfer.TransferDispatched` | network-inventory-planning |
 | `com.warehouse.wes.fulfillment-execution.transfer.TransferArrived` | network-inventory-planning (reserved kind; scan-driven receiving can bypass it) |
@@ -279,6 +287,14 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wes.network-inventory-planning.workdemand.WorkDemandReleased` | wes-work-planning |
 | `com.warehouse.wes.task-interleaving.stationtrip.InterleavingHintIssued` | published by task-interleaving (deployed); consumed by fulfillment-execution (advisory tie-break inside one priority band; its ADR 0051, context map K47, live) |
 | `com.warehouse.wes.task-interleaving.stationtrip.InterleavingHintConsumed` and `...InterleavingHintExpired`, `com.warehouse.wes.task-interleaving.policy.InterleavingPolicyDeclared` | (analytics topic only; read by task-interleaving's own analytics projector; no other consumer) |
+| `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentBooked` | outbound-shipping (OUTBOUND appointments naming a `cpt_id` assign the load's door; consumer built, not deployed) |
+| `com.warehouse.wms.yard-management.trailer.TrailerDocked` | outbound-shipping (attaches the trailer and starts loading; consumer built, not deployed) |
+| `com.warehouse.wms.yard-management.trailer.DoorWorkCompleted` | outbound-shipping (stored as a local copy; consumer built, not deployed) |
+| `com.warehouse.wms.yard-management.trailer.TrailerDeparted` | outbound-shipping (confirms a `CLOSED` load; consumer built, not deployed; pinned and tested against the producer's contract, its ADR 0006) |
+| `com.warehouse.wms.outbound-shipping.outboundload.ShipmentConfirmed` | order-management (its ADR 0051; dark unless `OUTBOUND_SHIPPING_CONSUMER_MODE=kafka`); network-fulfillment is named by outbound-shipping ADR 0004 but has no handler |
+| `com.warehouse.wms.outbound-shipping.shippingpackage.PackageMissedLoad` | order-management (re-promise, its ADR 0051); exception-management (one case per package, its ADR 0011) |
+| `com.warehouse.wms.outbound-shipping.outboundload.LoadingStarted`, `...LoadClosed`, `...LoadReopened` | (published contract; yard-management is named by outbound-shipping ADR 0005 but has no handler) |
+| the other eight `com.warehouse.wms.outbound-shipping.` types (`LoadPlanned`, `LoadDoorAssigned`, `LoadCancelled`, `PackageStaged`, `PackageLoaded`, `PackageUnloaded`, `BillOfLadingIssued`, `BillOfLadingVoided`) | (analytics only by design; outbound-shipping's own projector reads them from its analytics topic) |
 
 ## 5. Consumer rules
 
