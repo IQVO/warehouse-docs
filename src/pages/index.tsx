@@ -58,6 +58,11 @@ const STOREFRONT_CONTEXTS: ContextCard[] = [
   {slug: 'customer-payments', name: 'customer-payments', tier: 'Generic'},
 ];
 
+const YARD_CONTEXTS: ContextCard[] = [
+  {slug: 'dock-scheduling', name: 'dock-scheduling', tier: 'Supporting'},
+  {slug: 'yard-management', name: 'yard-management', tier: 'Supporting'},
+];
+
 const TIER_CLASS: Record<ContextCard['tier'], string> = {
   Core: 'badge-core',
   Supporting: 'badge-supporting',
@@ -104,6 +109,19 @@ const SECTIONS = [
       {label: 'API Reference', to: '/storefront/api-reference'},
     ],
   },
+  {
+    key: 'yard',
+    name: 'Yard Management',
+    tagline: 'The gate, the yard and the dock doors',
+    description:
+      'Two WMS-tier bounded contexts: dock-scheduling (the door calendar of every site) and yard-management (the physical yard: visits, trailers, moves, door work). Built on develop, not deployed yet. Source of truth: the yard domain model.',
+    links: [
+      {label: 'Yard Overview', to: '/yard/'},
+      {label: 'Strategic Design', to: '/yard/strategic-design/'},
+      {label: 'Context Map', to: '/yard/strategic-design/context-map'},
+      {label: 'ADRs', to: '/yard/adr'},
+    ],
+  },
 ];
 
 function HomepageHeader() {
@@ -117,14 +135,17 @@ function HomepageHeader() {
         </Heading>
         <p className={styles.heroSubtitle}>{siteConfig.tagline}</p>
         <p className={styles.heroLead}>
-          Three domains, one site: the WMS/WES warehouse execution fleet, the
-          retail network it serves, and the digital storefront that sells on
-          that network. Every page is generated from each context&rsquo;s own
+          Four sections, one site: the WMS/WES warehouse execution fleet, the
+          yard that feeds its dock doors, the retail network it serves, and the
+          digital storefront that sells on that network. Every page is generated from each context&rsquo;s own
           specifications and ADRs — never hand-transcribed.
         </p>
         <div className={styles.buttons}>
           <Link className="button button--primary button--lg" to="/overview">
             WMS/WES docs
+          </Link>
+          <Link className="button button--primary button--lg" to="/yard/">
+            Yard docs
           </Link>
           <Link className="button button--primary button--lg" to="/network">
             Retail Network docs
@@ -197,7 +218,7 @@ export default function Home(): ReactNode {
   return (
     <Layout
       title={siteConfig.title}
-      description="IQVO ecosystem documentation: the WMS/WES warehouse execution fleet and the retail network domain — strategic and tactical DDD artifacts, REST and AsyncAPI references, and business context for every bounded context.">
+      description="IQVO ecosystem documentation: the WMS/WES warehouse execution fleet, the yard, the retail network and the digital storefront — strategic and tactical DDD artifacts, REST and AsyncAPI references, and business context for every bounded context.">
       <HomepageHeader />
       <main>
         <SectionHub />
@@ -205,6 +226,11 @@ export default function Home(): ReactNode {
           heading="WMS/WES bounded contexts"
           basePath="/contexts"
           contexts={WMS_CONTEXTS}
+        />
+        <ContextGrid
+          heading="Yard Management bounded contexts"
+          basePath="/yard/contexts"
+          contexts={YARD_CONTEXTS}
         />
         <ContextGrid
           heading="Retail Network bounded contexts"
