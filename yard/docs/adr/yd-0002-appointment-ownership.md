@@ -9,7 +9,7 @@ description: "One owner of door time for both directions; staged strangler migra
 
 ## Status
 
-Proposed (2026-11-05); decisions confirmed by the owner the same day.
+Accepted (2026-11-05): decisions confirmed by the owner the same day; built in both services on develop (merged 2026-11-08), not deployed.
 
 ## Context
 

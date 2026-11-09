@@ -7,27 +7,30 @@ description: "The ddd-crew Aggregate Design Canvas for YardVisit, Trailer, YardM
 
 # Aggregate Design Canvas
 
-:::info[Proposed design]
-Derived from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml). This context's service is not built yet; identifiers (`Err...` names, REST paths, CloudEvents types) are the names the service will use.
+:::info[Built on develop, not deployed]
+Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
 The model has five aggregate roots: **YardVisit**, **Trailer**, **YardMove**,
-**YardCheck** and **YardPolicy**. Proposed Go packages:
-`internal/domain/yardvisit`, `trailer`, `yardmove`, `yardcheck`, `yardpolicy`
-(from the `ul` code identifiers).
+**YardCheck** and **YardPolicy**. Go packages, as built:
+`internal/domain/yardvisit`, `trailer`, `yardmove`, `yardcheck`, `yardpolicy`, plus `shared` (ids,
+`Location`, `TrailerKind`, `LoadState`, `Purpose`, `SCAC`). Ids are `<prefix>-<uuid>`: `visit-`, `trl-`, `mv-`,
+`yck-`; the policy is keyed by the site code. The aggregates are pure Go: `Snapshot()` and `Restore()` are the
+persistence boundary and `Restore` re-validates.
 
 Common to all: every mutable aggregate carries an optimistic-concurrency
 `version` (starts at 1, +1 per accepted change; ETag / If-Match on REST), and
 errors are `ErrNotFound` (404), `ErrIllegalTransition` (409),
 `ErrConcurrentUpdate` (409) and `ErrValidation` (422) plus the domain errors
-named below.
+named below. As built the status of a domain error is 409 for a conflict with state, 422 for a value or
+reference rule and 400 for a malformed request; the problem slug is the kebab-case of the `Err` name.
 
 ## YardVisit
 
 ### 1. Name
 
-`YardVisit` (`yardvisit.YardVisit`), identified by `visitId`.
+`YardVisit` (`yardvisit.Visit`), identified by `visitId`.
 
 ### 2. Description
 
@@ -55,9 +58,9 @@ Derived from: `model.yaml → contexts[yard-management].aggregates[YardVisit].st
 `.transitions`, `.commands`.
 
 Omitted: the model's only transition is `CHECKED_IN → CHECKED_OUT`. The two
-creation arrows are this pack's reading of `CheckInVisit` and `RejectAtGate`
-(a command that creates the aggregate has no from-state). How a refused
-`CheckInVisit` becomes a `REJECTED` visit is not stated (gap YM-G7).
+creation arrows are `CheckInVisit` and `RejectAtGate` (a command that creates the aggregate has no
+from-state). A refused `CheckInVisit` creates nothing; `RejectAtGate` is the command that records a
+`REJECTED` visit (decision Y-5).
 
 ### 4. Enforced Invariants
 
@@ -71,7 +74,7 @@ creation arrows are this pack's reading of `CheckInVisit` and `RejectAtGate`
 
 The last two read `Trailer` and `YardMove` state, so they cross the aggregate
 boundary; the use case loads the trailers and checks them in one unit of work.
-Which purposes are `OUTBOUND` is not stated (gap YM-G13), and a live visit's trailer leaves from the door while `ErrTrailerNotReleased` says "not `DOCKED`" (gap YM-G28).
+The outbound purposes are `LIVE_LOAD` and `PICKUP` (decision Y-9), and a trailer is released when it has no open move and is either `PARKED` or `DOCKED` with door work `DONE`, so a live visit leaves from the door (decision Y-2).
 
 ### 5. Corrective Policies
 
@@ -154,15 +157,14 @@ stateDiagram-v2
 Derived from: `model.yaml → contexts[yard-management].aggregates[Trailer].states`,
 `.transitions`, `.invariants`, `.notes`.
 
-Omitted: the creation arrow. `RecordArrival` creates a trailer, but the model
-names no initial state and no transition from the start (gap YM-G2). The model
-has no transition out of `IN_MOVE` other than `ArriveAt`, so a move that is
-cancelled or whose lease expires after the claim leaves the trailer `IN_MOVE`
-(gap YM-G1). `ArriveAt` to a spot or a door is one command with two target
-states; the label says which. `RecordSeal`, `BreakSeal`, `PlaceHold`,
+Omitted: the creation arrow. `RecordArrival` creates the trailer `IN_MOVE` together with its first move,
+created `CLAIMED` (decision Y-1). A move that is cancelled or whose lease expires after the claim brings the
+trailer back through `ReturnToOrigin` (`IN_MOVE` to `PARKED` or `DOCKED`, where `StartMoving` found it) in the same
+unit of work; if that origin has since been taken the trailer stays `IN_MOVE` and the move `REQUESTED`.
+`ArriveAt` to a spot or a door is one command with two target states; the label says which. `RecordSeal`, `BreakSeal`, `PlaceHold`,
 `ReleaseHold` and `RecordLoadState` do not change the state.
 
-Door work (this pack's reading of the three values and the two commands):
+Door work (the three values and the commands, as built):
 
 ```mermaid
 stateDiagram-v2
@@ -173,8 +175,9 @@ stateDiagram-v2
     DONE --> [*]
 ```
 
-The model lists the three values and the two commands but no door-work
-transitions; the arrow `WAITING → DONE` is a question, not a fact (gap YM-G10).
+`WAITING → DONE` is real: `AutoCompleteUnload` may complete door work that was never started, once every ASN
+on the trailer has a closed receipt (decision Y-7); `CompleteDoorWork` by an operator requires `IN_PROGRESS`
+(assumption A11).
 
 ### 4. Enforced Invariants
 
@@ -215,27 +218,27 @@ those in. See [Occupancy across aggregates](#occupancy-across-aggregates).
 
 | Command | Issued by |
 | --- | --- |
-| `RecordArrival` | `CheckInVisit` (this pack's reading: one per trailer in `TrailersIn`); no route of its own |
+| `RecordArrival` | `CheckInVisit` (one per trailer in `TrailersIn`, and one appointment covers exactly one trailer); no route of its own |
 | `StartMoving` | `ClaimNextMove` use case, same unit of work as the claim |
 | `ArriveAt` | `CompleteMove` use case, same unit of work as the completion |
 | `StartDoorWork` | Dock operator, REST `POST /trailers/{trailerId}/door-work-starts` |
 | `CompleteDoorWork` | Dock operator, REST `POST /trailers/{trailerId}/door-work-completions`; `AutoCompleteUnload` |
 | `RecordSeal` | Yard supervisor, REST `POST /trailers/{trailerId}/seals` |
-| `BreakSeal` | not named in the model (no route, no policy) |
+| `BreakSeal` | `RecordSeal` with state `BROKEN`, which also places a `SEAL_BROKEN` hold (decision Y-6); no route of its own |
 | `PlaceHold` | Yard supervisor, REST `POST /trailers/{trailerId}/holds` |
 | `ReleaseHold` | Yard supervisor, REST `POST /trailers/{trailerId}/hold-releases` |
-| `RecordLoadState` | not named in the model; `AutoCompleteUnload` sets `EMPTY` |
-| `Depart` | not named in the model; this pack's reading: `CheckOutVisit` for each trailer taken out |
+| `RecordLoadState` | `AutoCompleteUnload` sets `EMPTY`; no route of its own |
+| `Depart` | `CheckOutVisit` for each trailer taken out (it raises `TrailerUndocked` first when the trailer is `DOCKED`) |
 
 ### 7. Created Events
 
-| Event | Raised when (this pack's reading where marked) | Full CloudEvents type |
+| Event | Raised when | Full CloudEvents type |
 | --- | --- | --- |
-| `TrailerParked` | `ArriveAt` a spot (reading) | `com.warehouse.wms.yard-management.trailer.TrailerParked` |
-| `TrailerDocked` | `ArriveAt` a door (reading) | `com.warehouse.wms.yard-management.trailer.TrailerDocked` |
+| `TrailerParked` | `ArriveAt` a spot (also `ReturnToOrigin` to a spot) | `com.warehouse.wms.yard-management.trailer.TrailerParked` |
+| `TrailerDocked` | `ArriveAt` a door (also `ReturnToOrigin` to a door) | `com.warehouse.wms.yard-management.trailer.TrailerDocked` |
 | `DoorWorkStarted` | `StartDoorWork` succeeds | `com.warehouse.wms.yard-management.trailer.DoorWorkStarted` |
 | `DoorWorkCompleted` | `CompleteDoorWork` succeeds | `com.warehouse.wms.yard-management.trailer.DoorWorkCompleted` |
-| `TrailerUndocked` | the trailer leaves a door: `StartMoving` or `Depart` from `DOCKED` (reading, gap YM-G8) | `com.warehouse.wms.yard-management.trailer.TrailerUndocked` |
+| `TrailerUndocked` | the trailer leaves a door: `StartMoving` or `Depart` from `DOCKED` (decision Y-6) | `com.warehouse.wms.yard-management.trailer.TrailerUndocked` |
 | `TrailerDeparted` | `Depart` succeeds | `com.warehouse.wms.yard-management.trailer.TrailerDeparted` |
 | `SealExceptionRaised` | `SealCheckAtGate` finds a mismatch | `com.warehouse.wms.yard-management.trailer.SealExceptionRaised` |
 | `TrailerHeld` | `PlaceHold` succeeds | `com.warehouse.wms.yard-management.trailer.TrailerHeld` |
@@ -249,8 +252,9 @@ their own in the model.
 
 *Estimate* (from the model): **high (every move and door step)**. Two trailer
 writes per move (claim, complete), plus door-work steps. The contended resource is
-a location: one door wanted by two moves. Proposed: per-location advisory lock,
-partial unique index as backstop, optimistic concurrency on `version`.
+a location: one door wanted by two moves. As built: per-location advisory lock,
+partial unique index as backstop (`uq_trailers_one_per_location`, `uq_trailers_unit_on_site`), optimistic
+concurrency on `version`.
 
 ### 9. Size
 
@@ -264,7 +268,7 @@ per extra move).
 
 ### 1. Name
 
-`YardMove` (`yardmove.YardMove`), identified by `moveId`.
+`YardMove` (`yardmove.Move`), identified by `moveId`.
 
 ### 2. Description
 
@@ -295,11 +299,10 @@ stateDiagram-v2
 Derived from: `model.yaml → contexts[yard-management].aggregates[YardMove].states`,
 `.transitions`, `.commands`, `.policies[VisitingDriverMove]`.
 
-Omitted: the creation arrow into `REQUESTED` is this pack's reading of
-`RequestMove`. The arrow into `CLAIMED` comes from the policy text ("created
-`CLAIMED` with performer `VISITING_DRIVER`") and is not in `transitions`. A
-`CLAIMED` move without a lease can never be expired, and who completes it is not
-in the inbound rows (gaps YM-G2, YM-G3).
+Omitted: the creation arrow into `REQUESTED` is `RequestMove`. The arrow into `CLAIMED` comes from the
+policy text ("created `CLAIMED` with performer `VISITING_DRIVER`") and is not in `transitions`. A `CLAIMED`
+visiting-driver move has no lease, so it can neither expire nor be cancelled; the dock operator or gate clerk
+completes it through the same completion route (decisions Y-1, Y-3).
 
 ### 4. Enforced Invariants
 
@@ -311,9 +314,10 @@ in the inbound rows (gaps YM-G2, YM-G3).
 | Only the lease holder completes a `CLAIMED` move | `ErrNotLeaseHolder` |
 | Completion records the actual location; a location other than the destination needs a reason | `ErrUnexplainedDestination` |
 
-The first, second and third span moves (and, for "free", trailers). Proposed
-enforcement: partial unique indexes on open moves per trailer, per destination
-and per hostler, and `Occupancy.CheckFree` for "the destination is free". See
+The first, second and third span moves (and, for "free", trailers). Enforcement as built:
+partial unique indexes on open moves per trailer, per destination and per hostler
+(`uq_yard_moves_one_open_per_trailer`, `uq_yard_moves_open_destination`, `uq_yard_moves_one_claim_per_hostler`),
+and `Occupancy.CheckFree` for "the destination is free". See
 [Occupancy across aggregates](#occupancy-across-aggregates).
 
 ### 5. Corrective Policies
@@ -324,7 +328,7 @@ and per hostler, and `Occupancy.CheckFree` for "the destination is free". See
   `CLAIMED` moves to `REQUESTED`.
 - **`NoShowFreesHolding`** (this context): on `DockAppointmentNoShow` or
   `DockAppointmentCancelled`, an open `TO_DOOR` move for that appointment is
-  cancelled. A move carries no appointment reference in the model (gap YM-G9).
+  cancelled. A move carries the `appointment_id` of its appointment (decision X3), which is how the policy finds it.
 - **`VisitingDriverMove`** (this context): the first move from the gate is created
   `CLAIMED`, performer `VISITING_DRIVER`, no lease; the dock operator or gate clerk
   completes it. Departures leave from a spot or, for a live visit, from the door;
@@ -336,7 +340,7 @@ and per hostler, and `Occupancy.CheckFree` for "the destination is free". See
 | --- | --- |
 | `RequestMove` | Yard supervisor, REST `POST /moves`; policies `DirectOnCheckIn`, `CallToDoor`, `ClearDoorAfterWork` |
 | `ClaimNextMove` | Hostler, REST `POST /moves/claims` |
-| `CompleteMove` | Hostler, REST `POST /moves/{moveId}/completions`; dock operator or gate clerk for a `VISITING_DRIVER` move (policy text; no inbound row, gap YM-G3) |
+| `CompleteMove` | Hostler, REST `POST /moves/{moveId}/completions`; dock operator or gate clerk for a `VISITING_DRIVER` move (same route, decision Y-3) |
 | `CancelMove` | Yard supervisor, REST `POST /moves/{moveId}/cancellations`; policy `NoShowFreesHolding` |
 | `ExpireLease` | Scheduler (cron), REST `POST /move-lease-sweeps` |
 
@@ -344,20 +348,22 @@ and per hostler, and `Occupancy.CheckFree` for "the destination is free". See
 
 | Event | Raised when | Full CloudEvents type |
 | --- | --- | --- |
-| `YardMoveRequested` | `RequestMove` succeeds | `com.warehouse.wms.yard-management.yardmove.YardMoveRequested` |
+| `YardMoveRequested` | `RequestMove` succeeds (also the first move at the gate) | `com.warehouse.wms.yard-management.yardmove.YardMoveRequested` |
 | `YardMoveClaimed` | `ClaimNextMove` succeeds | `com.warehouse.wms.yard-management.yardmove.YardMoveClaimed` |
+| `YardMoveLeaseExpired` | `ExpireLease` succeeds | `com.warehouse.wms.yard-management.yardmove.YardMoveLeaseExpired` |
 | `YardMoveCompleted` | `CompleteMove` succeeds | `com.warehouse.wms.yard-management.yardmove.YardMoveCompleted` |
 | `YardMoveCancelled` | `CancelMove` succeeds | `com.warehouse.wms.yard-management.yardmove.YardMoveCancelled` |
 
-All four are analytics only. `ExpireLease` raises no event (gap YM-G14).
+All five are analytics only. `YardMoveLeaseExpired` is new as built (decision Y-10); the type strings above
+replace the earlier `MoveRequested` style, which was never the contract.
 
 ### 8. Throughput
 
 *Estimate* (from the model): **high**. Hostlers poll `ClaimNextMove`; two hostlers
-may reach for the same move, and two requests may name one destination. Proposed:
-claim with `SELECT ... FOR UPDATE SKIP LOCKED` ordered by priority band then
-`due_by` (the order is not in the model, gap YM-G19), optimistic concurrency on
-`version`.
+may reach for the same move, and two requests may name one destination. As built, the
+claim is ordered by lowest priority band, then earliest `due_by` (none last), then request time (decision
+Y-11, assumption A14), with a unique index of one `CLAIMED` move per hostler as the backstop and optimistic
+concurrency on `version`.
 
 ### 9. Size
 
@@ -369,7 +375,7 @@ which raises none.
 
 ### 1. Name
 
-`YardCheck` (`yardcheck.YardCheck`), identified by `yardCheckId`.
+`YardCheck` (`yardcheck.Check`), identified by `yardCheckId`.
 
 ### 2. Description
 
@@ -404,7 +410,8 @@ Omitted: the creation arrow is `OpenYardCheck` (a command, not a model transitio
 ### 5. Corrective Policies
 
 None in the model. Closing computes the discrepancies and publishes them; no
-command applies a discrepancy to a `Trailer` (gap YM-G18). `exception-management`
+command applies a discrepancy to a `Trailer`: closing only reports (decision Y-11), and a location that was not
+observed is `MISSING` when the model records a trailer there. `exception-management`
 opens one case per discrepancy (`fleet_changes`).
 
 ### 6. Handled Commands
@@ -435,7 +442,7 @@ location; one event per instance.
 
 ### 1. Name
 
-`YardPolicy` (`yardpolicy.YardPolicy`), identified by `siteId`.
+`YardPolicy` (`yardpolicy.Policy`), identified by `siteId`.
 
 ### 2. Description
 
@@ -443,7 +450,8 @@ The per-site yard rules every gate and move decision reads. Value objects:
 `require_appointment` (bool), `holding_spot_codes[]`, `parking_zone_ids[]`;
 `dwell_threshold_minutes` per `TrailerKind`, `lease_seconds`,
 `seal_mismatch_action` (`FLAG` or `REJECT`); `free_time_minutes` (detention clock,
-optional, no default).
+optional, no default). Defaults as built: `require_appointment` false, `seal_mismatch_action` `FLAG`,
+`lease_seconds` 300, no free time and no dwell thresholds (a kind without a threshold is never alerted).
 
 ### 3. State Transitions
 
@@ -459,8 +467,8 @@ stateDiagram-v2
 Derived from: `model.yaml → contexts[yard-management].aggregates[YardPolicy].states`,
 `.transitions` (empty).
 
-Omitted: the self-arrow is this pack's reading of `PUT` replacing the settings.
-The model states no defaults for the policy (gap YM-G24).
+Omitted: the self-arrow is `PUT` replacing the settings (`If-Match` is honoured). A site that never declared a
+policy answers the defaults above, as version 1.
 
 ### 4. Enforced Invariants
 
@@ -506,11 +514,11 @@ index as backstop.
 | --- | --- | --- | --- |
 | `RequestMove` | The destination is free and no other open move names it | `ErrDestinationReserved` | `YardMove` invariant |
 | `RequestMove` | The trailer has no other open move | `ErrTrailerHasOpenMove` | `YardMove` invariant |
-| `ClaimNextMove` | The hostler holds no other `CLAIMED` move; the trailer goes `IN_MOVE` and its origin place is released (this pack's reading) | `ErrHostlerBusy` | `YardMove` invariant |
+| `ClaimNextMove` | The hostler holds no other `CLAIMED` move; the trailer goes `IN_MOVE` and its origin place is released (decision Y-8, assumption A3) | `ErrHostlerBusy` | `YardMove` invariant |
 | `CompleteMove` (`ArriveAt`) | `Occupancy.CheckFree` on the actual location, under the lock | `ErrLocationOccupied` | `Trailer` invariant |
 | `CompleteMove` (`ArriveAt`) | Known, active slot; door not closed; door flow allows the trailer; trailer not on hold | `ErrUnknownLocation`, `ErrDoorClosed`, `ErrDoorFlowMismatch`, `ErrTrailerOnHold` | `Trailer` invariants |
 | `CompleteMove` | A location other than the destination needs a reason | `ErrUnexplainedDestination` | `YardMove` invariant |
-| `CheckOutVisit` | Every trailer out is released (not `DOCKED`, no open move) | `ErrTrailerNotReleased` | `YardVisit` invariant |
+| `CheckOutVisit` | Every trailer out is released (no open move, and `PARKED` or `DOCKED` with door work `DONE`) | `ErrTrailerNotReleased` | `YardVisit` invariant |
 
 ```mermaid
 flowchart TB
@@ -531,19 +539,17 @@ flowchart TB
 Derived from: `model.yaml → contexts[yard-management].aggregates[Trailer].invariants`,
 `aggregates[YardMove].invariants`, `.business_decisions`.
 
-Omitted: how the origin place is released while the trailer is `IN_MOVE`, and what
-happens when `ArriveAt` is refused after the hostler is already at the location
-(the physical fact has happened; the model's [YD-0004](/yard/adr/yd-0004-physical-facts-win)
-speaks about the appointment side only). Both are gap YM-G11. The model uses two
-error names for "not free": `ErrDestinationReserved` when requesting and
-`ErrLocationOccupied` when arriving; this pack follows that split.
+Omitted: the origin place is released at `StartMoving`, the destination was reserved at `RequestMove` and is
+validated again at `ArriveAt`; an occupied location is refused and the move stays `CLAIMED` (decision Y-8,
+assumption A3). The model uses two error names for "not free": `ErrDestinationReserved` when requesting and
+`ErrLocationOccupied` when arriving, and the service follows that split.
 
 ## Read models
 
 | Read model | Source events | Used for | Why it is not an aggregate |
 | --- | --- | --- | --- |
 | `LocationView` | `facility-layout` `LocationSlotRegistered` (role `Yard` or `Dock`, `dockFlow`), `LocationSlotDecommissioned`, `ZoneRegistered` (`zoneId` → `siteCode`) | `ErrUnknownLocation`, `ErrDoorFlowMismatch`, the site of a door or spot, free-spot search by location code | A copy of `facility-layout`'s registry; this context enforces no rule on it. |
-| `AppointmentView` | `dock-scheduling` `DockAppointmentBooked`, `DockAppointmentRescheduled`, `DockAppointmentCancelled`, `DockAppointmentNoShow` | `ErrAppointmentRequired`, `DirectOnCheckIn`, `CallToDoor`, `SealCheckAtGate` (`expected_seal_number`), `NoShowFreesHolding` | A copy of `dock-scheduling`'s appointments; it never changes them. It cannot tell `CHECKED_IN` from `COMPLETED` (gap YM-G6). |
+| `AppointmentView` | `dock-scheduling` `DockAppointmentBooked`, `DockAppointmentRescheduled`, `DockAppointmentCancelled`, `DockAppointmentNoShow` | `ErrAppointmentRequired`, `DirectOnCheckIn`, `CallToDoor`, `SealCheckAtGate` (`expected_seal_number`), `NoShowFreesHolding` | A copy of `dock-scheduling`'s appointments; it never changes them. It marks itself `CHECKED_IN` from the yard's own `VisitCheckedIn` and `USED` from its own `TrailerUndocked` (decision X4). |
 | `DoorClosureView` | `dock-scheduling` `DoorClosureScheduled`, `DoorClosureLifted` | `ErrDoorClosed`, `DirectOnCheckIn` | A copy of `dock-scheduling`'s closures. |
 | `AsnContentView` | `inbound-receiving` `ASNRegistered`, `ASNCancelled` | What an inbound trailer holds (`Contents.asn_numbers`) | A projection of another context's ASNs. |
 | `ReceiptAtDoorView` | `inbound-receiving` `ReceiptOpened` (`receipt_id`, `appointment_id`, `door_code`), `ReceiptClosed` | `AutoCompleteUnload` | A projection of receipts at a door; it decides nothing alone. |

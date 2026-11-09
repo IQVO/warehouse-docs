@@ -7,13 +7,13 @@ description: "One section per Yard Management command use case, with its trigger
 
 # Use Cases
 
-:::info[Proposed design]
-Derived from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml). This context's service is not built yet; identifiers (`Err...` names, REST paths, CloudEvents types) are the names the service will use.
+:::info[Built on develop, not deployed]
+Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 One section per command in `contexts[yard-management].aggregates[*].commands`
-(23 commands) plus `DwellSweep`, an inbound message that is on no aggregate's command
-list (24 sections). Proposed package: `internal/application/usecases`. The runtime
+(24 commands, `ExpireLease` among them) plus `DwellSweep`, an inbound message that is on no aggregate's command
+list. Package (as built): `internal/application/usecases`. The runtime
 sequence of the significant ones is on
 [Sequence Diagrams](/yard/contexts/yard-management/sequence-diagrams). Reads
 (`ListVisits`, `GetVisit`, `ListTrailers`, `GetTrailer`, `ListMoves`, `GetYardBoard`,
@@ -38,21 +38,25 @@ read models directly.
   | `ErrValidation` | 422 | `validation-failed` |
 
 - **Domain errors** (`ErrLocationOccupied`, `ErrAppointmentRequired`, ...) have a name
-  in the model and no status. **Proposed** mapping used below: a conflict with current
+  in the model and, at first, no status. As built (decision D-10, service ADR 0002): a conflict with current
   state (occupancy, ownership, release, an open check) is **409**; a value-object or
   reference rule (`ErrInvalidCarrier`, `ErrUnknownLocation`,
-  `ErrUnexplainedDestination`) is **422**. The problem `type` slug is proposed as the
+  `ErrUnexplainedDestination`) is **422**; a malformed request is **400**. The problem `type` slug is the
   kebab case of the name without `Err` (`ErrLocationOccupied` becomes
-  `location-occupied`). This is gap YM-G16.
+  `location-occupied`). Errors added as built: `ErrNoFreeSpot` (409), `ErrTrailerNotOnHold` (409),
+  `ErrLeaseNotExpired`.
 - **Idempotency.** Every state-changing `POST` and `PUT` takes an `Idempotency-Key`
-  header; a replay with the same key returns the first response. Mutable aggregates
-  carry a `version` (ETag / If-Match); a stale write is `ErrConcurrentUpdate`. Every
+  header; a replay with the same key returns the first response (`idempotency_keys`); sweeps are
+  naturally idempotent. Mutable aggregates carry a `version`; a `GET` of one aggregate returns a weak ETag of
+  it, `PUT /sites/{siteId}/yard-policy` honours `If-Match`, and a stale write is `ErrConcurrentUpdate`. Every
   Kafka consumer is idempotent on the CloudEvents `id` (inbox).
 - **Kafka-driven errors** have no HTTP status. A policy refusal is logged and counted,
   the event is marked processed, and nothing is retried; an infrastructure failure
   rolls back and the message is redelivered.
-- **Where the model is silent** the flow says *proposed* or *this pack's reading* and
-  names the gap.
+- **Where the model was silent** the flow first said *proposed* or *this pack's reading* and
+  named the gap. The decisions that closed the gaps (Y-1 to Y-14, X1 to X7; see the
+  [Model Gap Register](/yard/strategic-design/model-gap-register)) are now stated in the flows; what remains
+  marked *this pack's reading* is a detail the service does not state.
 
 ## YardVisit
 
@@ -60,10 +64,10 @@ read models directly.
 
 - **Actor / trigger:** gate clerk or kiosk (a camera or ANPR adapter issues the same
   command).
-- **Inbound adapter:** REST `POST /visits`. Body (proposed): carrier, `carrier_scac?`,
-  tractor plate, `driver_ref`, `purpose`, `appointment_id?`, the trailers in.
-- **Preconditions:** the site has a `YardPolicy` (otherwise defaults are unknown, gap
-  YM-G24).
+- **Inbound adapter:** REST `POST /visits`. Body (OpenAPI `checkInVisit`): `siteId`, `carrier`,
+  `carrierScac?`, `tractorPlate`, `driverRef?`, `purpose`, `appointmentId?`, `trailers` (the trailers in).
+- **Preconditions:** none. A site with no declared `YardPolicy` answers the defaults (`require_appointment` false,
+  `seal_mismatch_action` `FLAG`, `lease_seconds` 300).
 - **Main flow:**
   1. Read the site's `YardPolicy` (`require_appointment`, `holding_spot_codes`,
      `parking_zone_ids`, `seal_mismatch_action`).
@@ -74,7 +78,8 @@ read models directly.
   5. For each trailer brought in, `RecordArrival` (below).
   6. `SealCheckAtGate`: compare a recorded seal with the appointment's
      `expected_seal_number`; a mismatch raises `SealExceptionRaised`, and under
-     `REJECT` the visit is rejected instead (gap YM-G7).
+     `REJECT` the visit is recorded `REJECTED` instead, with `VisitRejected(SEAL_MISMATCH)` and a
+     `SealExceptionRaised` that has no trailer (decision Y-5).
   7. `DirectOnCheckIn` and `VisitingDriverMove`: for each trailer in, create the first
      move, `CLAIMED`, performer `VISITING_DRIVER`, no lease. Destination: a door when the
      appointment's door is free, not closed and flow-compatible (reason `TO_DOOR`); the
@@ -82,7 +87,7 @@ read models directly.
      (`TO_HOLDING`); otherwise the first free spot of the parking zones by location code.
   8. Save and write `VisitCheckedIn` to the outbox, one transaction.
 
-| Error | HTTP (proposed except generic) | Problem `type` slug |
+| Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrInvalidCarrier` | 422 | `invalid-carrier` |
 | `ErrVisitAlreadyOpen` | 409 | `visit-already-open` |
@@ -94,52 +99,50 @@ read models directly.
 - **Events emitted:** `VisitCheckedIn`; `SealExceptionRaised` when the seal mismatches;
   `VisitRejected` under `REJECT`; analytics move events for the first move.
 - **Idempotency:** `Idempotency-Key`; `ErrVisitAlreadyOpen` is the natural second guard.
-- **Gaps:** the tolerance is unknown here (YM-G5); the reason of a move to a plain spot
-  (YM-G4); no free spot (YM-G22); the move's origin when it comes from the gate
-  (YM-G2).
+- **Settled gaps:** the arrival tolerance comes from the appointment copy (X1); a move to a plain spot has the
+  reason `TO_SPOT` (Y-4); with no free spot the check-in fails with `ErrNoFreeSpot` (Y-12); the first move has no
+  origin, it comes from the gate (Y-1). A walk-in or an arrival earlier than the tolerance goes to the first
+  free holding spot of the policy, or to the first free spot when none is declared (assumption A17).
 
 ### RejectAtGate
 
 - **Actor / trigger:** gate clerk or kiosk, when a visit must not enter.
-- **Inbound adapter:** REST `POST /visit-rejections`. Body (proposed): carrier,
-  `carrier_scac?`, `appointment_id?`, `reason` (a `RejectionReason`).
-- **Preconditions:** none (this pack's reading: the rejected visit never became
-  `CHECKED_IN`).
+- **Inbound adapter:** REST `POST /visit-rejections`. Body (OpenAPI `rejectAtGate`): `siteId`, `carrier`,
+  `carrierScac?`, `tractorPlate`, `appointmentId?`, `reason` (a `RejectionReason`).
+- **Preconditions:** none (the rejected visit never became `CHECKED_IN`).
 - **Main flow:**
   1. Validate the carrier and the reason.
   2. Create `YardVisit` in `REJECTED`; no trailer is recorded on site.
   3. Save and write `VisitRejected` to the outbox, one transaction.
 
-| Error | HTTP (proposed except generic) | Problem `type` slug |
+| Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrInvalidCarrier` | 422 | `invalid-carrier` |
 | `ErrValidation` (unknown reason) | 422 | `validation-failed` |
 
-- **Events emitted:** `VisitRejected` (consumed by `exception-management`).
+- **Events emitted:** `VisitRejected` (consumed by `dock-scheduling`, which cancels the appointment with
+  `TURNED_AWAY`, and by `exception-management`).
 - **Idempotency:** `Idempotency-Key`.
-- **Gap:** the relation to the errors raised by `CheckInVisit`, and to the `REJECT` seal
-  outcome (YM-G7).
+- **Settled gap:** a refused `CheckInVisit` creates nothing, `RejectAtGate` is the one command that records a
+  rejection, and the `REJECT` seal outcome uses it (decision Y-5).
 
 ### CheckOutVisit
 
 - **Actor / trigger:** gate clerk or kiosk.
-- **Inbound adapter:** REST `POST /visits/{visitId}/check-outs`. Body: the trailers
-  taken out (proposed; the model does not specify it, gap YM-G13).
+- **Inbound adapter:** REST `POST /visits/{visitId}/check-outs`. Body (OpenAPI `checkOutVisit`): `trailersOut`,
+  naming only the trailer ids (decision Y-9).
 - **Preconditions:** the visit is `CHECKED_IN`.
 - **Main flow:**
   1. Load the visit and the trailers it takes out.
-  2. Every trailer is on site and released: not `DOCKED`, no open move. The model also
-     lets a live visit leave from its door (`DOCKED → DEPARTED`, `Depart` needs door work
-     `DONE`), so the two rules contradict for a live visit. This pack's reading: for the
-     trailer leaving from the door, "released" means door work `DONE` and no open move
-     (gap YM-G28).
-  3. Every `LOADED` trailer taken out on an outbound purpose carries a seal.
-  4. `Depart` for each trailer taken out (this pack's reading, gap YM-G8).
+  2. Every trailer is on site and released: no open move, and either `PARKED` or `DOCKED` with door work
+     `DONE` (a live visit leaves from its door; decision Y-2).
+  3. Every `LOADED` trailer taken out of a `LIVE_LOAD` or `PICKUP` visit carries a seal (`ErrSealRequired`).
+  4. `Depart` for each trailer taken out (decision Y-6).
   5. Transition `CHECKED_IN → CHECKED_OUT`, compute `on_site_minutes`.
   6. Save and write `VisitCheckedOut` (analytics) and, per trailer, `TrailerDeparted`
-     (analytics) and `TrailerUndocked` (when it left a door; reading), one transaction.
+     (integration and analytics since ADR 0010) and `TrailerUndocked` (when it left a door), one transaction.
 
-| Error | HTTP (proposed except generic) | Problem `type` slug |
+| Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrTrailerNotReleased` | 409 | `trailer-not-released` |
 | `ErrSealRequired` | 409 | `seal-required` |
@@ -148,7 +151,8 @@ read models directly.
 | `ErrNotFound` | 404 | `not-found` |
 | `ErrConcurrentUpdate` | 409 | `concurrent-update` |
 
-- **Events emitted:** `VisitCheckedOut`, `TrailerDeparted`, `TrailerUndocked`.
+- **Events emitted:** `VisitCheckedOut` (analytics only), `TrailerDeparted` (integration, read by
+  `outbound-shipping`), `TrailerUndocked`.
 - **Idempotency:** `Idempotency-Key`; a visit already `CHECKED_OUT` is returned
   unchanged (this pack's reading).
 
@@ -156,18 +160,18 @@ read models directly.
 
 ### RecordArrival
 
-- **Actor / trigger:** `CheckInVisit`, once per trailer in (this pack's reading). No
-  route of its own.
+- **Actor / trigger:** `CheckInVisit`, once per trailer in. No route of its own.
 - **Inbound adapter:** internal (called by the visit use case).
 - **Preconditions:** the natural key `(scac, number)` is not already on site.
 - **Main flow:**
   1. Create `Trailer` with `UnitNumber`, `TrailerKind`, `LoadState`, `Contents`
      (`asn_numbers` from the appointment and `AsnContentView`, or `outbound_ref`),
      `Seal` and `ArrivedAt` (the dwell clock start).
-  2. The first state is not defined by the model (gap YM-G2).
+  2. The trailer is created `IN_MOVE` together with its first move, created `CLAIMED` (decision Y-1);
+     `appointment_id` is set from the visit.
   3. Save.
 
-| Error | HTTP (proposed except generic) | Problem `type` slug |
+| Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrTrailerAlreadyOnSite` | 409 | `trailer-already-on-site` |
 | `ErrValidation` | 422 | `validation-failed` |
@@ -181,9 +185,8 @@ read models directly.
   its creation), in the same unit of work. Not an inbound message.
 - **Preconditions:** the trailer is `PARKED` or `DOCKED`.
 - **Main flow:**
-  1. Transition to `IN_MOVE`; the place (spot or door) is released (this pack's reading,
-     gap YM-G11).
-  2. When it left a door: raise `TrailerUndocked` (this pack's reading, gap YM-G8).
+  1. Transition to `IN_MOVE`; the place (spot or door) is released (decision Y-8).
+  2. When it left a door: raise `TrailerUndocked` (decision Y-6).
 
 | Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
@@ -203,10 +206,10 @@ read models directly.
   3. `Occupancy.CheckFree` on the location under a per-location advisory lock (a partial
      unique index is the backstop).
   4. Transition to `PARKED` (spot) or `DOCKED` (door); at a door, `DoorWork` starts
-     `WAITING` (this pack's reading).
+     `WAITING`.
   5. Raise `TrailerParked` or `TrailerDocked`.
 
-| Error | HTTP (proposed except generic) | Problem `type` slug |
+| Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrUnknownLocation` | 422 | `unknown-location` |
 | `ErrDoorClosed` | 409 | `door-closed` |
@@ -217,8 +220,9 @@ read models directly.
 
 - **Events emitted:** `TrailerParked` (analytics) or `TrailerDocked` (integration).
 - **Idempotency:** the completion's.
-- **Gap:** these checks run when the hostler is already at the location (YM-G11); the
-  direction of an `EMPTY` trailer (YM-G12).
+- **Settled gaps:** the destination is also validated when the move is requested, and an occupied location
+  at arrival is refused with the move staying `CLAIMED` (decision Y-8); an `EMPTY` trailer is unconstrained
+  by door flow unless the visit purpose is `LIVE_LOAD` or `PICKUP` (decision Y-9).
 
 ### StartDoorWork
 
@@ -239,13 +243,13 @@ read models directly.
 
 - **Events emitted:** `DoorWorkStarted` (analytics only).
 - **Idempotency:** `Idempotency-Key`; door work already `IN_PROGRESS` is returned
-  unchanged (this pack's reading).
+  unchanged (this pack's reading). A held trailer's door work does not start (`ErrTrailerOnHold`).
 
 ### CompleteDoorWork
 
 - **Actor / trigger:** dock operator; policy `AutoCompleteUnload` on `ReceiptClosed`.
-- **Inbound adapter:** REST `POST /trailers/{trailerId}/door-work-completions` (body:
-  the resulting `load_state`, proposed); Kafka consumer of
+- **Inbound adapter:** REST `POST /trailers/{trailerId}/door-work-completions` (body: the
+  resulting `loadState`, optional); Kafka consumer of
   `warehouse.inbound-receiving.events` for the policy.
 - **Preconditions:** the trailer is `DOCKED`.
 - **Main flow:**
@@ -254,7 +258,7 @@ read models directly.
   3. Save and write `DoorWorkCompleted` to the outbox.
   4. `ClearDoorAfterWork`: a `DROP` trailer gets a `HOSTLER` move `FROM_DOOR` to a free
      spot (`RequestMove`); a `LIVE` trailer stays until its visit checks out. How the
-     trailer knows it is a drop is the visit's purpose (gap YM-G9).
+     trailer knows it is a drop is the visit's purpose.
 
 | Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
@@ -262,10 +266,11 @@ read models directly.
 | `ErrIllegalTransition` (not `DOCKED`) | 409 | `illegal-transition` |
 | `ErrConcurrentUpdate` | 409 | `concurrent-update` |
 
-- **Events emitted:** `DoorWorkCompleted` (analytics only).
+- **Events emitted:** `DoorWorkCompleted` (integration since 2026-11-09, read by `outbound-shipping`).
 - **Idempotency:** `Idempotency-Key`, inbox for the policy; completing `DONE` work is
   a no-op.
-- **Gap:** the receipt-to-trailer join and several ASNs on one trailer (YM-G10).
+- **Settled gap:** `AutoCompleteUnload` joins through `receipt_id` from `ReceiptOpened` and completes door work
+  (from `WAITING` or `IN_PROGRESS`) once every ASN on the trailer has a closed receipt (decision Y-7).
 
 ### RecordSeal
 
@@ -275,7 +280,7 @@ read models directly.
 - **Main flow:**
   1. Set `Seal{number, INTACT}`.
   2. If the trailer's appointment has an `expected_seal_number` that differs, raise
-     `SealExceptionRaised` (`SealCheckAtGate`; the moment of comparison is gap YM-G23).
+     `SealExceptionRaised` (`SealCheckAtGate`; the comparison happens when the seal arrives, decision Y-13).
   3. Save with the version check.
 
 | Error | HTTP | Problem `type` slug |
@@ -291,13 +296,12 @@ read models directly.
 
 ### BreakSeal
 
-- **Actor / trigger:** not named in the model (no route, no policy).
-- **Inbound adapter:** none in the model.
+- **Actor / trigger:** `RecordSeal` with state `BROKEN` (`POST /trailers/{trailerId}/seals`); no route of its own.
+- **Inbound adapter:** the seal route (body: `state`, `sealNumber?`).
 - **Preconditions:** the trailer is on site.
-- **Main flow:** set `Seal.state` to `BROKEN`; save. Whether it places a `SEAL_BROKEN`
-  hold is not stated (gap YM-G23).
+- **Main flow:** set `Seal.state` to `BROKEN`, place a `SEAL_BROKEN` hold and save (decision Y-6, assumption A10).
 - **Errors:** `ErrNotFound`, `ErrIllegalTransition`.
-- **Events emitted:** none in the model.
+- **Events emitted:** `TrailerHeld` (analytics only).
 - **Idempotency:** a seal already `BROKEN` is unchanged.
 
 ### PlaceHold
@@ -309,8 +313,8 @@ read models directly.
 - **Main flow:**
   1. Set `Hold{reason}`.
   2. Save and write `TrailerHeld` to the outbox. A held trailer cannot be docked
-     (`ErrTrailerOnHold`); a hold on an already `DOCKED` trailer is not addressed (gap
-     YM-G23).
+     (`ErrTrailerOnHold`); a hold on an already `DOCKED` trailer is allowed and door work then
+     waits for the release (decision Y-13).
 
 | Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
@@ -341,19 +345,16 @@ read models directly.
 
 ### RecordLoadState
 
-- **Actor / trigger:** not named in the model; `DoorWorkCompleted` carries a
-  `load_state`, and `AutoCompleteUnload` sets `EMPTY`.
-- **Inbound adapter:** none of its own in the model.
-- **Main flow:** set `LoadState` (`EMPTY`, `LOADED` or `PARTIAL`); save. This pack reads
-  it as a step of `CompleteDoorWork`.
+- **Actor / trigger:** `DoorWorkCompleted` carries a `load_state`, and `AutoCompleteUnload` sets `EMPTY`.
+- **Inbound adapter:** none of its own; the door-work completion body takes an optional `loadState`.
+- **Main flow:** set `LoadState` (`EMPTY`, `LOADED` or `PARTIAL`); save. It is a step of `CompleteDoorWork`.
 - **Errors:** `ErrNotFound`, `ErrValidation`.
 - **Events emitted:** none of its own.
 - **Idempotency:** setting the same value is a no-op.
 
 ### Depart
 
-- **Actor / trigger:** not named in the model. This pack's reading: `CheckOutVisit`
-  calls it for each trailer taken out.
+- **Actor / trigger:** `CheckOutVisit` calls it for each trailer taken out.
 - **Inbound adapter:** none of its own (no route).
 - **Preconditions:** the trailer is `PARKED` or `DOCKED`; if `DOCKED`, its door work is
   `DONE`.
@@ -361,7 +362,7 @@ read models directly.
   1. Transition to `DEPARTED`; compute `dwell_minutes` from `ArrivedAt`.
   2. Save; write `TrailerDeparted` and, when it left a door, `TrailerUndocked`.
 
-| Error | HTTP (proposed except generic) | Problem `type` slug |
+| Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrDoorWorkOpen` | 409 | `door-work-open` |
 | `ErrIllegalTransition` (`IN_MOVE` or already `DEPARTED`) | 409 | `illegal-transition` |
@@ -388,8 +389,8 @@ read models directly.
 
 - **Events emitted:** `TrailerDwellExceeded` (consumed by `exception-management`).
 - **Idempotency:** once per trailer and threshold crossing, so a rerun raises nothing new;
-  where the marker is kept is gap YM-G21. The model attaches the policy to no aggregate
-  command (gap YM-G8).
+  the marker is `dwell_alerted_at` on the trailer (decision Y-13). A kind without a threshold
+  is never alerted.
 
 ## YardMove
 
@@ -397,8 +398,8 @@ read models directly.
 
 - **Actor / trigger:** yard supervisor; policies `DirectOnCheckIn`, `CallToDoor`,
   `ClearDoorAfterWork`.
-- **Inbound adapter:** REST `POST /moves` (body, proposed: `trailer_id`, `to_location`,
-  `reason`, `priority`, `due_by`); the policies call the use case in-process.
+- **Inbound adapter:** REST `POST /moves` (body, OpenAPI `requestMove`: `trailerId`, `to`,
+  `reason?`, `priorityBand?`, `dueBy?`); the policies call the use case in-process.
 - **Preconditions:** the trailer is on site and not `IN_MOVE` with another move.
 - **Main flow:**
   1. Load the trailer; `from_location` is its current place.
@@ -408,7 +409,7 @@ read models directly.
   4. Create `YardMove` in `REQUESTED`, performer `HOSTLER`.
   5. Save and write `YardMoveRequested` to the outbox.
 
-| Error | HTTP (proposed except generic) | Problem `type` slug |
+| Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrTrailerHasOpenMove` | 409 | `trailer-has-open-move` |
 | `ErrDestinationReserved` | 409 | `destination-reserved` |
@@ -417,27 +418,29 @@ read models directly.
 
 - **Events emitted:** `YardMoveRequested` (analytics only).
 - **Idempotency:** `Idempotency-Key`; the open-move invariant is the guard.
-- **Gap:** closure, flow and hold are not checked at request in the model (YM-G11).
+- **Settled gap:** the destination (known slot, closure, flow, hold) is validated at request and again at arrival
+  (decision Y-8). A missing `reason` is derived: `TO_DOOR` for a door, `FROM_DOOR` for a spot when the trailer is
+  `DOCKED`, `RELOCATE` otherwise (assumption A6).
 
 ### ClaimNextMove
 
 - **Actor / trigger:** hostler (floor client).
-- **Inbound adapter:** REST `POST /moves/claims` (body, proposed: `hostler_ref`, site).
+- **Inbound adapter:** REST `POST /moves/claims` (body, OpenAPI `claimNextMove`: `siteId`, `hostlerRef`).
 - **Preconditions:** the hostler holds no `CLAIMED` move.
 - **Main flow:**
   1. Refuse if the hostler already holds a `CLAIMED` move.
-  2. Pick the next `REQUESTED` `HOSTLER` move of the site: priority band, then `due_by`
-     (order proposed, gap YM-G19), skipping rows locked by another claim.
+  2. Pick the next `REQUESTED` `HOSTLER` move of the site: lowest priority band, then earliest `due_by`
+     (none last), then request time (decision Y-11), skipping rows locked by another claim.
   3. Transition `REQUESTED → CLAIMED` with `Lease{hostler_ref, expires_at}`, where
      `expires_at` = now plus the site's `lease_seconds`.
   4. `Trailer.StartMoving` in the same unit of work.
   5. Save and write `YardMoveClaimed`.
 
-| Error | HTTP (proposed except generic) | Problem `type` slug |
+| Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrHostlerBusy` | 409 | `hostler-busy` |
 | `ErrConcurrentUpdate` (another hostler won) | 409 | `concurrent-update` |
-| no move available (no `Err...`) | 204, empty (proposed) | — |
+| no move available | 404 | `no-claimable-move` |
 | `ErrValidation` | 422 | `validation-failed` |
 
 - **Events emitted:** `YardMoveClaimed` (analytics only).
@@ -446,9 +449,9 @@ read models directly.
 ### CompleteMove
 
 - **Actor / trigger:** the lease-holding hostler; for a `VISITING_DRIVER` move the dock
-  operator or gate clerk (policy text; gap YM-G3).
-- **Inbound adapter:** REST `POST /moves/{moveId}/completions` (body, proposed:
-  `actual_location`, `reason?`).
+  operator or gate clerk (same route; decision Y-3).
+- **Inbound adapter:** REST `POST /moves/{moveId}/completions` (body, OpenAPI `completeMove`:
+  `hostlerRef?`, `actualLocation?`, `deviationNote?`).
 - **Preconditions:** the move is `CLAIMED`.
 - **Main flow:**
   1. Load the move with its `version`.
@@ -460,7 +463,7 @@ read models directly.
   6. Save and write `YardMoveCompleted` and the trailer's `TrailerParked` or
      `TrailerDocked`.
 
-| Error | HTTP (proposed except generic) | Problem `type` slug |
+| Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrNotLeaseHolder` | 409 | `not-lease-holder` |
 | `ErrUnexplainedDestination` | 422 | `unexplained-destination` |
@@ -494,8 +497,9 @@ read models directly.
 - **Events emitted:** `YardMoveCancelled` (analytics only).
 - **Idempotency:** `Idempotency-Key`, inbox for the policy; a `CANCELLED` move is
   returned unchanged.
-- **Gap:** a cancelled `CLAIMED` move leaves the trailer `IN_MOVE` (YM-G1); how the
-  policy finds the move of an appointment (YM-G9, YM-G27).
+- **Settled gaps:** cancelling a `CLAIMED` hostler move runs `ReturnToOrigin` in the same unit of work, so the
+  trailer goes back where it was (decision Y-1); the policy finds the move through the `appointment_id` the move
+  carries (decision X3).
 
 ### ExpireLease
 
@@ -512,9 +516,10 @@ read models directly.
 | --- | --- | --- |
 | a move that changed since selection (no `Err...`) | — | skipped, next sweep |
 
-- **Events emitted:** none in the model (gap YM-G14).
+- **Events emitted:** `YardMoveLeaseExpired` (analytics only, decision Y-10).
 - **Idempotency:** rerunning returns the same moves to `REQUESTED` only once.
-- **Gap:** the trailer's state after expiry (YM-G1).
+- **Settled gap:** the trailer goes back where `StartMoving` found it (`ReturnToOrigin`, decision Y-1); when that
+  origin has since been taken it stays `IN_MOVE` and the move `REQUESTED` (assumption A16).
 
 ## YardCheck
 
@@ -525,7 +530,7 @@ read models directly.
 - **Main flow:** refuse if the site has an `OPEN` check; create `YardCheck` in `OPEN`;
   save.
 
-| Error | HTTP (proposed except generic) | Problem `type` slug |
+| Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrYardCheckOpen` | 409 | `yard-check-open` |
 | `ErrValidation` | 422 | `validation-failed` |
@@ -542,7 +547,7 @@ read models directly.
 - **Main flow:** refuse a location already observed in this check; append the
   `Observation`; save.
 
-| Error | HTTP (proposed except generic) | Problem `type` slug |
+| Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrLocationAlreadyObserved` | 409 | `location-already-observed` |
 | `ErrIllegalTransition` (`CLOSED`) | 409 | `illegal-transition` |
@@ -561,7 +566,10 @@ read models directly.
 - **Main flow:**
   1. Compare the observations with the trailers the model places at those locations.
   2. Build the `Discrepancy` list: `MISSING`, `UNEXPECTED` or `WRONG_LOCATION`. The rules
-     are not spelled out (gap YM-G18).
+     are: every observed location is compared with the trailer the model records there; a location not observed is
+     `MISSING` when the model records a trailer there; an observed unit that differs makes the expected trailer
+     `MISSING` and the observed unit `WRONG_LOCATION` (known elsewhere on site) or `UNEXPECTED` (unknown). Closing only
+     reports (decision Y-11, assumption A13).
   3. Transition `OPEN → CLOSED`.
   4. Save and write `YardCheckClosed` with the discrepancies.
 
@@ -591,7 +599,7 @@ read models directly.
 
 | Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
-| `ErrUnknownLocation` (proposed 422) | 422 | `unknown-location` |
+| `ErrUnknownLocation` | 422 | `unknown-location` |
 | `ErrValidation` | 422 | `validation-failed` |
 | `ErrConcurrentUpdate` | 409 | `concurrent-update` |
 

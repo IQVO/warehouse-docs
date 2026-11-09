@@ -33,6 +33,12 @@ This page is generated from [`model/model.yaml`](https://github.com/IQVO/warehou
 """
 
 
+STATUS = """:::info[Built on develop, not deployed]
+Both contexts are merged on `develop` (2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling) and [IQVO/yard-management](https://github.com/IQVO/yard-management); neither is registered in warehouse-infra. The model records the as-built contracts: `scripts/check_model.py` compares it with the contract copies under `yard/apis/`.
+:::
+"""
+
+
 def esc(text):
     """Escape MDX-active characters outside code spans."""
     parts = str(text).split("`")
@@ -53,6 +59,7 @@ def ce_type(ctx, entity, ev):
 def page_index():
     out = front("index", "Strategic Design", "Overview",
                 "Strategic design of the yard domain, generated from the model: subdomains, context map, ubiquitous language and the event standard.")
+    out += STATUS + "\n"
     out += "The yard is the enclosed area outside a site's four walls. It is modelled as two bounded contexts:\n\n"
     out += "| Context | Code | Classification | Purpose |\n| --- | --- | --- | --- |\n"
     for c in M["contexts"]:
@@ -79,7 +86,7 @@ def page_subdomains():
         ch = c["chart"]
         out += f"| `{c['id']}` | {c['classification']} | {ch['differentiation']} | {ch['complexity']} | {ch['evolution']} | {esc(c['business_model'])} |\n"
     out += "\nBoth are Supporting: every site with trucks needs them and the rules (window length, seal policy, dwell thresholds) differ per operator, but the platform does not win on them. See [Benchmarks](/yard/research/benchmarks).\n"
-    out += "\n## Deferred contexts\n\n| Context | Classification | Note |\n| --- | --- | --- |\n"
+    out += "\n## Deferred contexts and contexts outside this section\n\n| Context | Classification | Note |\n| --- | --- | --- |\n"
     for f in M.get("future_contexts", []):
         out += f"| `{f['id']}` | {f['classification']} | {esc(f['note'])} |\n"
     out += "\n## Deliberately not contexts\n\n| Item | Reason |\n| --- | --- |\n"
@@ -172,9 +179,10 @@ def page_events():
     out += f"\nSite key: {esc(M['conventions']['site_key'])}\n\n{esc(cv['analytics_rule'] if 'analytics_rule' in cv else M['conventions']['analytics_rule'])}\n"
     out += "\n"
     for c in M["contexts"]:
-        out += f"## `{c['id']}` published events\n\n| Event | CloudEvents type | Data | Consumers |\n| --- | --- | --- | --- |\n"
+        out += f"## `{c['id']}` published events\n\n| Event | CloudEvents type | Stream | Data | Consumers |\n| --- | --- | --- | --- | --- |\n"
         for p in c["publishes"]:
-            out += f"| `{p['event']}` | `{ce_type(c['id'], p['entity'], p['event'])}` | {', '.join('`'+d+'`' for d in p['data'])} | {', '.join(p['consumers'])} |\n"
+            stream = "analytics only" if p["consumers"] == ["analytics only"] else "integration + analytics"
+            out += f"| `{p['event']}` | `{ce_type(c['id'], p['entity'], p['event'])}` | {stream} | {', '.join('`'+d+'`' for d in p['data'])} | {', '.join(p['consumers'])} |\n"
         out += "\n"
     return out
 

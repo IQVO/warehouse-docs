@@ -9,7 +9,7 @@ description: "One path for trailer location changes, including the visiting driv
 
 ## Status
 
-Proposed (2026-11-05); decisions confirmed by the owner the same day.
+Accepted (2026-11-05): decisions confirmed by the owner the same day; built in both services on develop (merged 2026-11-08), not deployed.
 
 ## Decision
 

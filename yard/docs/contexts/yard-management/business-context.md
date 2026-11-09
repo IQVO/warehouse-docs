@@ -7,8 +7,8 @@ description: "Why the warehouse needs a context for the physical yard: gate, tra
 
 # Business Context
 
-:::info[Proposed design]
-Derived from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml). This context's service is not built yet; identifiers (`Err...` names, REST paths, CloudEvents types) are the names the service will use.
+:::info[Built on develop, not deployed]
+Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 ## The problem in plain language
@@ -69,14 +69,15 @@ and door release from `yard-management` events
 | --- | --- | --- |
 | Gate clerk or kiosk | Person / device | Checks a visit in, rejects it, checks it out (`CheckInVisit`, `RejectAtGate`, `CheckOutVisit`). A camera, ANPR or kiosk is an inbound adapter issuing `CheckInVisit`, not a context. |
 | Hostler | Person (floor client) | Claims the next move and completes it (`ClaimNextMove`, `CompleteMove`). Also called jockey, spotter or shunter. |
-| Dock operator | Person (floor client) | Starts and completes door work (`StartDoorWork`, `CompleteDoorWork`). Until `outbound-shipping` exists, outbound door work is completed here. |
+| Dock operator | Person (floor client) | Starts and completes door work (`StartDoorWork`, `CompleteDoorWork`). Outbound door work is completed here; `outbound-shipping` (built on develop, outside this section) only reads the yard's facts. |
 | Yard supervisor | Person (console) | Requests and cancels moves, places and releases holds, records seals, declares the yard policy, runs yard checks. |
 | Dock planner | Person (console) | Not an actor here: declares door hours and closures in `dock-scheduling`. This context only reads the closures. |
 | Scheduler (cron) | Kubernetes CronJob | Calls `POST /dwell-sweeps` and `POST /move-lease-sweeps`. |
 | `dock-scheduling` | Sibling context (upstream and downstream) | Publishes appointments and door closures; consumes visit check-in and trailer docking and undocking. |
 | `facility-layout` | Fleet context (upstream) | Publishes the Yard and Dock slots and the zone-to-site mapping. |
-| `inbound-receiving` | Fleet context (upstream and downstream) | Publishes ASNs and receipts; may consume `TrailerDocked`. |
-| `exception-management` | Fleet context (downstream) | Opens problem cases from rejected visits, seal exceptions, dwell breaches and yard-check discrepancies. |
+| `inbound-receiving` | Fleet context (upstream and downstream) | Publishes ASNs and receipts. It does not consume `TrailerDocked` as built; the optional consumer was not built. |
+| `exception-management` | Fleet context (downstream) | Opens problem cases from rejected visits, seal exceptions, dwell breaches and yard-check discrepancies (merged on develop). |
+| `outbound-shipping` | Fleet context (downstream) | Confirms a shipment when the trailer leaves: reads `TrailerDocked`, `DoorWorkCompleted` and `TrailerDeparted` (merged on develop, not deployed). |
 
 ## Decisions this context makes
 
@@ -90,7 +91,7 @@ From `contexts[yard-management].business_decisions`:
 4. Moves are pulled by hostlers (claim-next with a lease), never pushed, as in
    `fulfillment-execution`.
 5. A visit checks out only when every trailer it takes is released (not docked,
-   no open move) and every loaded outbound trailer carries a seal.
+   no open move) and every loaded trailer of a live-load or pickup visit carries a seal.
 6. Walk-ins are allowed into a holding spot unless the site's policy requires an
    appointment.
 7. A seal mismatch at the gate raises `SealExceptionRaised`; whether it also
@@ -116,8 +117,8 @@ boundary stated in `meta`.
 
 - **Door calendar, bookings, opening hours, no-shows, ETA risk.** These belong
   to `dock-scheduling`.
-- **Trailer load planning, loading, bill of lading and ship-confirm.** A future
-  context, `outbound-shipping` (Supporting).
+- **Trailer load planning, loading, bill of lading and ship-confirm.** The context
+  `outbound-shipping` (Supporting), built on develop in its own repository and outside this section.
 - **Real-time ETA feeds.** A future context, `transport-visibility` (Generic);
   an ETA enters `dock-scheduling` first.
 - **Detention and yard service charges.** A future context, `yard-billing`

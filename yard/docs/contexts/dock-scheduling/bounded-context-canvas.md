@@ -7,8 +7,8 @@ description: "The ddd-crew Bounded Context Canvas v5 for Dock Scheduling, with e
 
 # Bounded Context Canvas
 
-:::info[Proposed design]
-Derived from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml). This context's service is not built yet; identifiers (`Err...` names, REST paths, CloudEvents types) are the names the service will use.
+:::info[Built on develop, not deployed]
+Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 Following the ddd-crew [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas).
@@ -55,10 +55,10 @@ flowchart LR
         purpose["<b>Purpose</b><br/>Own the door calendar: every booked<br/>window on every dock door, inbound<br/>and outbound, from booking to door<br/>release, ETA risk and no-shows.<br/><br/><b>Domain roles</b><br/>- Specification: door calendar<br/>- Gateway for carriers: OHS<br/>- Analysis: adherence<br/><br/><b>Decisions it enforces</b><br/>- One owner of door time<br/>- No overlap of active appointments<br/>- Direction fits the door dockFlow<br/>- Inside hours, outside closures<br/>- Arrival and release come from<br/>the yard, never from its own API<br/>- No-show after window end + grace<br/>- Late ETA is advisory only"]:::card
     end
     in0 -->|"cmd - REST<br/>BookAppointment,<br/>RescheduleAppointment,<br/>CancelAppointment,<br/>ReportEta"| BC
-    in1 -->|"cmd - REST<br/>DeclareOperatingHours,<br/>DeclareCalendarSettings,<br/>ScheduleDoorClosure,<br/>LiftDoorClosure"| BC
+    in1 -->|"cmd - REST<br/>RescheduleAppointment,<br/>CancelAppointment,<br/>DeclareOperatingHours,<br/>DeclareCalendarSettings,<br/>ScheduleDoorClosure,<br/>LiftDoorClosure"| BC
     in2 -.->|"qry - REST<br/>ListAppointments,<br/>GetAppointment,<br/>GetDoorAvailability,<br/>GetDockCalendar"| BC
     in3 -->|"cmd - REST<br/>MarkNoShow"| BC
-    in4 ==>|"evt - Kafka<br/>VisitCheckedIn,<br/>TrailerDocked,<br/>TrailerUndocked"| BC
+    in4 ==>|"evt - Kafka<br/>VisitCheckedIn,<br/>VisitRejected,<br/>TrailerDocked,<br/>TrailerUndocked"| BC
     in5 ==>|"evt - Kafka<br/>LocationSlotRegistered,<br/>LocationSlotDecommissioned,<br/>ZoneRegistered"| BC
     in6 ==>|"evt - Kafka<br/>ASNRegistered,<br/>ASNCancelled,<br/>legacy DockAppointment<br/>events, stage A to D"| BC
     in7 ==>|"evt - Kafka<br/>CPTScheduleChanged"| BC
@@ -92,18 +92,21 @@ flowchart LR
         out1["warehouse-planning"]:::ctx
         out2["inbound-receiving"]:::ctx
         out3["exception-management"]:::ctx
-        out4["analytics only<br/>no named consumer"]:::none
+        out4["outbound-shipping"]:::ctx
+        out5["analytics only<br/>no named consumer"]:::none
     end
     BC ==>|"evt - Kafka<br/>DockAppointmentBooked,<br/>DockAppointmentRescheduled,<br/>DockAppointmentCancelled,<br/>DockAppointmentNoShow,<br/>DoorClosureScheduled,<br/>DoorClosureLifted"| out0
     BC ==>|"evt - Kafka<br/>DockAppointmentBooked,<br/>DockAppointmentRescheduled,<br/>DockAppointmentCancelled,<br/>DockAppointmentNoShow"| out1
-    BC ==>|"evt - Kafka<br/>DockAppointmentBooked,<br/>DockAppointmentCancelled"| out2
+    BC ==>|"evt - Kafka<br/>DockAppointmentBooked,<br/>DockAppointmentRescheduled,<br/>DockAppointmentCancelled,<br/>DockAppointmentDoorReassigned"| out2
     BC ==>|"evt - Kafka<br/>DockAppointmentNoShow"| out3
-    BC ==>|"evt - Kafka analytics<br/>DockAppointmentCheckedIn,<br/>DockAppointmentDoorReassigned,<br/>DockAppointmentCompleted,<br/>DockAppointmentAtRisk,<br/>DoorOperatingHoursDeclared"| out4
+    BC ==>|"evt - Kafka<br/>DockAppointmentBooked"| out4
+    BC ==>|"evt - Kafka analytics<br/>DockAppointmentCheckedIn,<br/>DockAppointmentCompleted,<br/>DockAppointmentAtRisk,<br/>DoorOperatingHoursDeclared"| out5
     linkStyle 0 stroke:#e8590c,stroke-width:2.5px
     linkStyle 1 stroke:#e8590c,stroke-width:2.5px
     linkStyle 2 stroke:#e8590c,stroke-width:2.5px
     linkStyle 3 stroke:#e8590c,stroke-width:2.5px
     linkStyle 4 stroke:#e8590c,stroke-width:2.5px
+    linkStyle 5 stroke:#e8590c,stroke-width:2.5px
 ```
 
 Derived from: `model.yaml → contexts[dock-scheduling].inbound`,
@@ -147,11 +150,9 @@ from the other, and neither records the other's facts.
 
 ## Inbound Communication
 
-Kafka types of `yard-management` follow the model's convention
-(`com.warehouse.wms.yard-management.<entity>.<Event>`). The model does not
-print the full `type` of the events from the other producers; their
-consumer dispatches on the full type string read from the producer's
-AsyncAPI (gap `DS-G18`).
+The Kafka types are read from each producer's AsyncAPI and the service dispatches on the
+full type string (`process-path-management` is in the `wes` tier:
+`com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged`).
 
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
@@ -159,6 +160,8 @@ AsyncAPI (gap `DS-G18`).
 | Carrier scheduler (carrier portal) | `RescheduleAppointment` | Command | REST `POST /appointments/{appointmentId}/reschedules` | OHS |
 | Carrier scheduler (carrier portal) | `CancelAppointment` | Command | REST `POST /appointments/{appointmentId}/cancellations` | OHS |
 | Carrier scheduler (carrier portal) | `ReportEta` | Command | REST `POST /appointments/{appointmentId}/eta-reports` | OHS |
+| Dock planner | `RescheduleAppointment` | Command | REST `POST /appointments/{appointmentId}/reschedules` | UI |
+| Dock planner | `CancelAppointment` | Command | REST `POST /appointments/{appointmentId}/cancellations` | UI |
 | Dock planner | `DeclareOperatingHours` | Command | REST `PUT /sites/{siteId}/dock-calendar/operating-hours` | UI |
 | Dock planner | `DeclareCalendarSettings` | Command | REST `PUT /sites/{siteId}/dock-calendar/settings` | UI |
 | Dock planner | `ScheduleDoorClosure` | Command | REST `POST /sites/{siteId}/dock-calendar/closures` | UI |
@@ -169,6 +172,7 @@ AsyncAPI (gap `DS-G18`).
 | Any context | `GetDockCalendar` | Query | REST `GET /sites/{siteId}/dock-calendar` | OHS |
 | Scheduler (cron) | `MarkNoShow` | Command | REST `POST /no-show-sweeps` | UI |
 | `yard-management` | `VisitCheckedIn` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.yardvisit.VisitCheckedIn` | Customer/Supplier |
+| `yard-management` | `VisitRejected` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.yardvisit.VisitRejected` | Customer/Supplier |
 | `yard-management` | `TrailerDocked` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.trailer.TrailerDocked` | Customer/Supplier |
 | `yard-management` | `TrailerUndocked` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.trailer.TrailerUndocked` | Customer/Supplier |
 | `facility-layout` | `LocationSlotRegistered` | Event | Kafka `warehouse.facility.events` | Conformist |
@@ -177,28 +181,29 @@ AsyncAPI (gap `DS-G18`).
 | `inbound-receiving` | `ASNRegistered` | Event | Kafka `warehouse.inbound-receiving.events` | Conformist |
 | `inbound-receiving` | `ASNCancelled` | Event | Kafka `warehouse.inbound-receiving.events` | Conformist |
 | `process-path-management` | `CPTScheduleChanged` | Event | Kafka `warehouse.process-path-management.events` | Conformist |
-| `inbound-receiving` (strangler stage A to D) | `DockAppointmentBooked`, `DockAppointmentCheckedIn`, `DockAppointmentCancelled`, `DockAppointmentCompleted` | Event | Kafka `warehouse.inbound-receiving.events` (policy `LegacyImport`; removed at stage E) | not named in the model; this pack's reading: Conformist, transitional |
+| `inbound-receiving` (strangler stage A to D) | `DockAppointmentBooked`, `DockAppointmentCheckedIn`, `DockAppointmentCancelled`, `DockAppointmentCompleted` | Event | Kafka `warehouse.inbound-receiving.events` (policy `LegacyImport`; removed at stage E) | Conformist, transitional (this pack's reading; off unless `DOCK_LEGACY_IMPORT_CONSUMER_GROUP` is set) |
 
-Routes with no `inbound` row: `GET /reports/schedule-adherence` is in `rest`
-but not in any `inbound` row (see Open Questions).
+Reports: `GET /reports/schedule-adherence` and `GET /reports/freshness` are served by
+the separate `reports` binary from `apis/openapi-reports.yaml` (read-only, on the analytics
+database) and have an `inbound` row of their own (dock planner, query).
 
 ## Outbound Communication
 
-Topics are `warehouse.dock-scheduling.events` for integration events and
-`warehouse.dock-scheduling.analytics` for the events the model marks
-`analytics only`. The relationship column is the model's for
-`yard-management` and this pack's reading for the others (gap `DS-G22`).
+Topics are `warehouse.dock-scheduling.events` for integration events (each also goes, as a
+twin, to the analytics topic) and `warehouse.dock-scheduling.analytics` for the events the
+model marks `analytics only`. The relationship column is the model's for `yard-management`
+and this pack's reading for the others.
 
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
-| `yard-management`, `warehouse-planning`, `inbound-receiving` | `DockAppointmentBooked` | Event | Kafka `warehouse.dock-scheduling.events`, `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentBooked` | `yard-management`: Customer/Supplier; the others: OHS + PL (reading) |
-| `yard-management`, `warehouse-planning` | `DockAppointmentRescheduled` | Event | Kafka `warehouse.dock-scheduling.events`, `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentRescheduled` | same |
+| `yard-management`, `warehouse-planning`, `inbound-receiving`, `outbound-shipping` | `DockAppointmentBooked` | Event | Kafka `warehouse.dock-scheduling.events`, `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentBooked` | `yard-management`: Customer/Supplier; the others: OHS + PL (reading) |
+| `yard-management`, `warehouse-planning`, `inbound-receiving` | `DockAppointmentRescheduled` | Event | Kafka `warehouse.dock-scheduling.events`, `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentRescheduled` | same |
 | `yard-management`, `warehouse-planning`, `inbound-receiving` | `DockAppointmentCancelled` | Event | Kafka `warehouse.dock-scheduling.events`, `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentCancelled` | same |
 | `yard-management`, `warehouse-planning`, `exception-management` | `DockAppointmentNoShow` | Event | Kafka `warehouse.dock-scheduling.events`, `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow` | same |
+| `inbound-receiving` | `DockAppointmentDoorReassigned` | Event | Kafka `warehouse.dock-scheduling.events`, `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentDoorReassigned` | OHS + PL (reading); integration since 2026-11-09 (service ADR 0010) |
 | `yard-management` | `DoorClosureScheduled` | Event | Kafka `warehouse.dock-scheduling.events`, `com.warehouse.wms.dock-scheduling.dockcalendar.DoorClosureScheduled` | Customer/Supplier |
 | `yard-management` | `DoorClosureLifted` | Event | Kafka `warehouse.dock-scheduling.events`, `com.warehouse.wms.dock-scheduling.dockcalendar.DoorClosureLifted` | Customer/Supplier |
 | analytics only | `DockAppointmentCheckedIn` | Event | Kafka `warehouse.dock-scheduling.analytics`, `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentCheckedIn` | PL, no in-org consumer |
-| analytics only | `DockAppointmentDoorReassigned` | Event | Kafka `warehouse.dock-scheduling.analytics`, `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentDoorReassigned` | PL, no in-org consumer |
 | analytics only | `DockAppointmentCompleted` | Event | Kafka `warehouse.dock-scheduling.analytics`, `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentCompleted` | PL, no in-org consumer |
 | analytics only | `DockAppointmentAtRisk` | Event | Kafka `warehouse.dock-scheduling.analytics`, `com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentAtRisk` | PL, no in-org consumer |
 | analytics only | `DoorOperatingHoursDeclared` | Event | Kafka `warehouse.dock-scheduling.analytics`, `com.warehouse.wms.dock-scheduling.dockcalendar.DoorOperatingHoursDeclared` | PL, no in-org consumer |
@@ -233,8 +238,8 @@ Top terms: **Dock Appointment**, **Door Window**, **Door Calendar**,
 
 ## Assumptions
 
-Each is an assumption of the model or of this pack's reading, not a verified
-fact.
+Each is an assumption of the model or of this pack's reading; the service's ADR 0002 and
+ADR 0003 state the ones it relies on.
 
 - `facility-layout` publishes every dock slot with its `dockFlow` and its
   `zoneId`, and every zone with its `siteCode`; a door reaches its site only
@@ -253,7 +258,7 @@ fact.
 
 ## Verification Metrics
 
-Proposed; the model names the report but sets no targets.
+Targets are this page's proposal; neither the model nor the service sets any. The service exports the counters named below (for example `dock_scheduling_ignored_facts_total` and `dock_scheduling_implicit_arrivals_total`).
 
 | Metric | Target (proposed) | Source |
 | --- | --- | --- |
@@ -266,30 +271,17 @@ Proposed; the model names the report but sets no targets.
 | Appointments completed with an implicit arrival (`BOOKED` to `COMPLETED`) | trend to 0 | `dock_appointments` table |
 | Lag from a `yard-management` event to the matching `dock-scheduling` event | set before build | event timestamps |
 
-## Open Questions
+## Closed questions
 
-Each of these is a gap in `model.yaml`, returned to the orchestrator and not
-patched here. The ids are the gap ids of this pack.
-
-- **`DS-G01`: arrival tolerance never leaves this context.** `yard-management`
-  needs it for `DirectOnCheckIn`; no event carries it.
-- **`DS-G02`: `VisitRejected` is not consumed.** An appointment whose visit
-  was rejected stays `BOOKED`; `TURNED_AWAY` has no producer.
-- **`DS-G03`: one appointment, several trailers.**
-- **`DS-G04`: phase-2 `PickupFromCutoffs`** names `PickupDoorRule` and
-  `pickup_lead`, which exist nowhere, and creates appointments with no
-  carrier.
-- **`DS-G05`: the shape of `cutoffs`** and where `cpt_id` comes from.
-- **`DS-G06`: can a reschedule change the door?**
-- **`DS-G07`: a site with no calendar declared.**
-- **`DS-G08`: what `ImportLegacyAppointment` enforces.**
-- **`DS-G09`: the `ArrivalStatus` formula.**
-- **`DS-G10`: no site-side actor** for cancel and reschedule.
-- **`DS-G11`: no read side for at-risk appointments.**
-- **`DS-G12` and `DS-G13`:** a decommissioned door and a change of operating
-  hours have no effect on existing appointments.
-- **`DS-G14`: which events `inbound-receiving` needs** for its local copy.
-- **`DS-G15`: are door codes unique across sites?**
-- **`DS-G16`: `NO_SHOW` is terminal.**
-- **`DS-G17` to `DS-G22`:** conventions, consumed types, out-of-order matrix,
-  value-object lists, calendar settings, the unlisted report route.
+The gaps this page used to list (`DS-G01` to `DS-G22`) were decided before the build and are
+folded into the service; the decision per gap is in the
+[Model Gap Register](/yard/strategic-design/model-gap-register). In short: the arrival
+tolerance travels on `Booked` and `Rescheduled` (`DS-G01`); `VisitRejected` cancels with
+`TURNED_AWAY` (`DS-G02`); one appointment covers one trailer (`DS-G03`); `PickupFromCutoffs`
+is phase 2 and only the schedule is stored (`DS-G04`, `DS-G05`); a reschedule may change the
+door (`DS-G06`); the calendar is created lazily and open 24x7 until hours are declared
+(`DS-G07`); the legacy import enforces nothing (`DS-G08`); the planner may cancel and
+reschedule (`DS-G10`); the aggregate exposes `atRisk` (`DS-G11`); a decommissioned door blocks
+new bookings only and new hours that strand an appointment are refused (`DS-G12`, `DS-G13`);
+door codes are globally unique (`DS-G15`); `NO_SHOW` is terminal, a late carrier books anew
+(`DS-G16`); `409` for conflicts and `422` for value rules (`DS-G17`).

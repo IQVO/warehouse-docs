@@ -21,16 +21,18 @@ flowchart TD
   yard_management[["yard-management"]]
   warehouse_planning["warehouse-planning"]
   inbound_receiving["inbound-receiving"]
+  outbound_shipping["outbound-shipping"]
   exception_management["exception-management"]
   facility_layout["facility-layout"]
   process_path_management["process-path-management"]
   dock_scheduling -->|Customer/Supplier, 6| yard_management
   dock_scheduling -->|Customer/Supplier, 4| warehouse_planning
-  dock_scheduling -->|Customer/Supplier, 2| inbound_receiving
+  dock_scheduling -->|Customer/Supplier, 4| inbound_receiving
+  dock_scheduling -->|Customer/Supplier, 1| outbound_shipping
   dock_scheduling -->|Customer/Supplier, 1| exception_management
   yard_management -->|Customer/Supplier, 4| dock_scheduling
   yard_management -->|Customer/Supplier, 4| exception_management
-  yard_management -->|Customer/Supplier, 1| inbound_receiving
+  yard_management -->|Customer/Supplier, 3| outbound_shipping
   facility_layout -->|Conformist, 3| dock_scheduling
   inbound_receiving -->|Conformist, 2| dock_scheduling
   process_path_management -->|Conformist, 1| dock_scheduling
@@ -44,11 +46,12 @@ flowchart TD
 | --- | --- | --- | --- |
 | `dock-scheduling` | `yard-management` | Customer/Supplier | `DockAppointmentBooked`, `DockAppointmentRescheduled`, `DockAppointmentCancelled`, `DockAppointmentNoShow`, `DoorClosureScheduled`, `DoorClosureLifted` |
 | `dock-scheduling` | `warehouse-planning` | Customer/Supplier | `DockAppointmentBooked`, `DockAppointmentRescheduled`, `DockAppointmentCancelled`, `DockAppointmentNoShow` |
-| `dock-scheduling` | `inbound-receiving` | Customer/Supplier | `DockAppointmentBooked`, `DockAppointmentCancelled` |
+| `dock-scheduling` | `inbound-receiving` | Customer/Supplier | `DockAppointmentBooked`, `DockAppointmentRescheduled`, `DockAppointmentCancelled`, `DockAppointmentDoorReassigned` |
+| `dock-scheduling` | `outbound-shipping` | Customer/Supplier | `DockAppointmentBooked` |
 | `dock-scheduling` | `exception-management` | Customer/Supplier | `DockAppointmentNoShow` |
 | `yard-management` | `dock-scheduling` | Customer/Supplier | `VisitCheckedIn`, `VisitRejected`, `TrailerDocked`, `TrailerUndocked` |
 | `yard-management` | `exception-management` | Customer/Supplier | `VisitRejected`, `SealExceptionRaised`, `TrailerDwellExceeded`, `YardCheckClosed` |
-| `yard-management` | `inbound-receiving` | Customer/Supplier | `TrailerDocked` |
+| `yard-management` | `outbound-shipping` | Customer/Supplier | `TrailerDocked`, `DoorWorkCompleted`, `TrailerDeparted` |
 | `facility-layout` | `dock-scheduling` | Conformist | `LocationSlotRegistered`, `LocationSlotDecommissioned`, `ZoneRegistered` |
 | `inbound-receiving` | `dock-scheduling` | Conformist | `ASNRegistered`, `ASNCancelled` |
 | `process-path-management` | `dock-scheduling` | Conformist | `CPTScheduleChanged` |
@@ -59,11 +62,12 @@ flowchart TD
 
 | Context | Kind | Summary |
 | --- | --- | --- |
-| `inbound-receiving` | ownership-transfer | DockAppointment moves to dock-scheduling (strangler A-E). Stage C: appointment write routes answer 410 appointment-moved; a local copy fed by dock-scheduling events validates Receipt.Open(appointment_id); closing a receipt no longer completes the appointment (yard door release does). Optional: consume TrailerDocked to confirm the door on an open receipt. |
-| `warehouse-planning` | consumer-source-switch | ADR 0017 inbound demand switches from inbound-receiving DockAppointmentBooked/Cancelled to dock-scheduling DockAppointmentBooked/Rescheduled/Cancelled/NoShow; it gains site_id and direction, closing ADR 0017's no-site limitation. |
-| `exception-management` | new-consumer | Open problem cases from VisitRejected, SealExceptionRaised, TrailerDwellExceeded, YardCheckClosed (one per discrepancy) and DockAppointmentNoShow; routing per source type. |
+| `inbound-receiving` | ownership-transfer | DockAppointment moves to dock-scheduling (strangler A-E). BUILT on develop (its ADR 0019): the appointment write routes are retired, an appointments local copy fed by dock-scheduling DockAppointmentBooked, Cancelled, Rescheduled and DoorReassigned validates Receipt.Open(appointment_id) and stamps the door; closing a receipt no longer completes the appointment (yard door release does). The optional TrailerDocked consumer was not built. |
+| `warehouse-planning` | consumer-source-switch | BUILT on develop (its ADR 0020), the helm values read dock-scheduling. ADR 0017 inbound demand switches from inbound-receiving DockAppointmentBooked/Cancelled to dock-scheduling DockAppointmentBooked/Rescheduled/Cancelled/NoShow; it gains site_id and direction, closing ADR 0017's no-site limitation. |
+| `exception-management` | new-consumer | BUILT on develop (its yard and dock-scheduling consumers). Open problem cases from VisitRejected, SealExceptionRaised, TrailerDwellExceeded, YardCheckClosed (one per discrepancy) and DockAppointmentNoShow; routing per source type. |
 | `facility-layout` | additive-ask | Yard slot attribute spotKind (PARKING, HOLDING, REEFER_PLUG, STAGING_LANE) on LocationSlotRegistered; until then holding spots live in yard-management's YardPolicy. |
-| `warehouse-ops-agent` | read-only-client | MCP read tools of both contexts (yard board, appointments at risk, dwell); no write tools. |
+| `warehouse-ops-agent` | read-only-client | MCP tools of both contexts. AS BUILT each service ships its own MCP server (cmd/mcp): dock-scheduling 5 L1 read tools and 4 L3 write tools (book, reschedule, cancel, report_eta), yard-management 8 L1 read tools and 6 L3 write tools (request_move, cancel_move, place_hold, release_hold, record_seal, open_yard_check); every L3 call needs a human approval and initiated_by. Arrival and door release (physical facts) and the calendar changes and sweeps are not exposed. |
+| `outbound-shipping` | new-consumer | BUILT on develop (IQVO/outbound-shipping), not deployed. Ship-confirm follows the physical departure: consumes yard-management TrailerDocked, DoorWorkCompleted and TrailerDeparted (the last two reached the integration topic with yard-management ADR 0010) and dock-scheduling DockAppointmentBooked. |
 | `warehouse-console` | new-remote | Yard Board MFE (spot and door map, arrivals, at-risk appointments) and Dock Calendar MFE. |
 | `warehouse-floor-client` | new-screens | Gate clerk check-in/out, hostler claim/complete move, dock operator door work. |
 

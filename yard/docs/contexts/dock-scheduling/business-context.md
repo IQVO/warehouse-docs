@@ -7,8 +7,8 @@ description: "Why the warehouse fleet needs one owner of door time: a calendar t
 
 # Business Context
 
-:::info[Proposed design]
-Derived from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml). This context's service is not built yet; identifiers (`Err...` names, REST paths, CloudEvents types) are the names the service will use.
+:::info[Built on develop, not deployed]
+Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 ## The problem in plain language
@@ -35,9 +35,11 @@ Inbound and outbound appointments share **one calendar per door**. A door
 whose `dockFlow` is `Both` takes either direction, which is why the
 no-double-booking rule cannot be split across two owners. Inbound
 appointments name the ASNs they cover; outbound appointments name a CPT or
-shipment references. Today the appointment lives in `inbound-receiving` and
-covers inbound only; the model moves it here (YD-0002) through the strangler
-stages A to E, so that a `Both` door never has two owners of its time.
+shipment references. The appointment used to live in `inbound-receiving` and
+cover inbound only; it moved here (YD-0002) through the strangler stages A to E, so that
+a `Both` door never has two owners of its time. As built, `inbound-receiving` retired its
+appointment write routes and keeps a copy fed by this context's events (its ADR 0019); the
+legacy import (stage A) is off unless `DOCK_LEGACY_IMPORT_CONSUMER_GROUP` is set.
 
 ## The yard decides what physically happened
 
@@ -51,7 +53,10 @@ trailer docking and a door release are physical facts recorded in
 - `TrailerDocked` at a door other than the booked one: the door of the
   appointment changes to the real one. The physical fact wins (YD-0004), even
   if that creates an overlap, in which case the later appointment is flagged
-  `DockAppointmentAtRisk`.
+  `DockAppointmentAtRisk`. The change is announced as `DockAppointmentDoorReassigned`
+  on the integration topic, so that `inbound-receiving` stamps the right door on a receipt.
+- `VisitRejected` naming a `BOOKED` appointment: the appointment is cancelled with
+  reason `TURNED_AWAY`.
 - `TrailerUndocked` naming an appointment: the appointment is `COMPLETED`.
 
 Yard events are keyed by visit or trailer, not by appointment, so they can
@@ -80,14 +85,15 @@ Two things go wrong between a booking and a door.
 | Actor | Kind | What they do here |
 | --- | --- | --- |
 | Carrier scheduler (carrier portal) | Person or carrier system | Books, reschedules and cancels appointments and reports ETAs over REST |
-| Dock planner | Person (console) | Declares door operating hours and booking settings, schedules and lifts closures |
+| Dock planner | Person (console) | Declares door operating hours and booking settings, schedules and lifts closures; may also reschedule and cancel an appointment for a carrier (reasons `CARRIER_REQUEST`, `SITE_REQUEST`) |
 | Scheduler (cron) | Kubernetes CronJob | Calls `POST /no-show-sweeps` |
 | Any context | Client | Reads appointments, door availability and the dock calendar over REST |
-| `yard-management` | Sibling context (upstream and downstream) | Sends the physical facts (`VisitCheckedIn`, `TrailerDocked`, `TrailerUndocked`); consumes appointments and door closures |
+| `yard-management` | Sibling context (upstream and downstream) | Sends the physical facts (`VisitCheckedIn`, `VisitRejected`, `TrailerDocked`, `TrailerUndocked`); consumes appointments and door closures |
 | `facility-layout` | Sibling context (upstream) | Publishes dock slots (with `dockFlow`) and zones, which map a door to its site |
-| `inbound-receiving` | Sibling context (upstream and downstream) | Publishes ASNs; consumes appointment events; hands the appointment over (strangler) |
+| `inbound-receiving` | Sibling context (upstream and downstream) | Publishes ASNs; consumes appointment events (`Booked`, `Rescheduled`, `Cancelled`, `DoorReassigned`); handed the appointment over (strangler) |
 | `process-path-management` | Sibling context (upstream) | Publishes the CPT schedule used by outbound appointments |
-| `warehouse-planning` | Sibling context (downstream) | Reads appointments as inbound labour demand |
+| `warehouse-planning` | Sibling context (downstream) | Reads appointments as inbound labour demand (its ADR 0020) |
+| `outbound-shipping` | Sibling context (downstream) | Reads `DockAppointmentBooked`; confirms shipment from the yard's departure facts |
 | `exception-management` | Sibling context (downstream) | Opens a problem case on `DockAppointmentNoShow` |
 
 ## Decisions this context makes
@@ -108,10 +114,12 @@ From `contexts[dock-scheduling].business_decisions`:
    owned by `yard-management`; this context never records them from its own
    API.
 6. **No-show.** A `BOOKED` appointment with no arrival by `window_end` plus
-   the site's no-show grace becomes `NO_SHOW` (sweep).
+   the site's no-show grace becomes `NO_SHOW` (sweep, `ErrNoShowTooEarly` before that time).
 7. **Late ETA is advisory.** An ETA later than `window_start` plus the
    arrival tolerance raises `DockAppointmentAtRisk`; nothing reschedules
    automatically.
+8. **One ASN, one active appointment** (`ErrAsnAlreadyScheduled`), and one trailer per
+   appointment.
 
 It does **not** decide who may enter the gate, where a trailer parks, which
 hostler moves it, or when door work starts and ends. Those are
@@ -132,10 +140,11 @@ and makes no claim about any vendor's internal design. The names here
 - **ASNs and receipts.** `inbound-receiving` owns them; this context keeps an
   event-fed copy of the ASNs (`AsnView`) to check that an inbound booking
   covers known, non-cancelled ASNs.
-- **Outbound shipment planning.** The future context `outbound-shipping`
-  (trailer load planning, loading, bill of lading, ship-confirm) does not
-  exist yet. An outbound appointment only carries a `cpt_id` or shipment
-  references.
+- **Outbound shipment planning.** The context `outbound-shipping`
+  (trailer load planning, loading, bill of lading, ship-confirm) is built on develop in
+  its own repository and is outside this section. An outbound appointment only carries a
+  `cpt_id` or shipment references. The outbound pickup appointments planned from the CPT
+  schedule (`PickupFromCutoffs`) are phase 2 and not built: an outbound appointment is booked by a caller.
 - **ETA feeds.** The future context `transport-visibility` (an
   anti-corruption layer to a real-time transportation visibility platform,
   stub mode first) would feed `ReportEta`. Until then ETAs enter through the
