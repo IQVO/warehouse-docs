@@ -229,6 +229,7 @@ Topic `retailnetwork.node-performance.events`.
 | --- | --- | --- |
 | `NodeScorecardUpdated` | `com.retailnetwork.partner.node-performance.scorecard.NodeScorecardUpdated` | `delivery-promise`, `order-sourcing` |
 | `NodeThresholdBreached` | `com.retailnetwork.partner.node-performance.scorecard.NodeThresholdBreached` | analytics only |
+| `NodeTierEligibilityChanged` | `com.retailnetwork.partner.node-performance.scorecard.NodeTierEligibilityChanged` | `delivery-promise` |
 
 ### `seller-inbound`
 
@@ -290,6 +291,7 @@ Appears in: `PromiseAtRisk.reason`, `PromiseRevised.reason`, `PromiseUnkeepable.
 | `WAVE_CANCELLED` | The delivery wave on the promise's witness path was cancelled (DeliveryWaveCancelled). |
 | `BOOKING_FAILED` | linehaul-transportation could not book the group's package on any departure (BookingFailed). |
 | `BOOKING_MOVED` | The group's package was rebooked on another departure (BookingMoved). |
+| `PREDICTED_LATE` | The FlagPredictedLate sweep found a departure of the witness path past its expected arrival with no arrival seen (delivery-promise ADR 0021). The promise stays AT_RISK until it is judged, even if the load arrives later; it is re-promised only when its window is no longer reachable. |
 
 **`PromiseReleaseReason`**: Why a PROVISIONAL promise was RELEASED.
 
@@ -420,6 +422,17 @@ Appears in: `PackageExceptionRaised.reason`.
 | `NO_SCAN` | No applied scan inside the silence window of the journey's leg (ExceptionOnSilence); raised once per silence. |
 
 ### Reasons of `node-performance`
+
+**`FastTierGoverned`**: The tiers whose eligibility node-performance judges; raised only when the node's flag flips, one event per tier with the same changedAt, in the same transaction as the scorecard save (outbox). No event for the initial ELIGIBLE state: a consumer that never saw one treats the node as eligible.
+
+Appears in: `NodeTierEligibilityChanged.tier`.
+
+| Value | Meaning |
+| --- | --- |
+| `SAME_DAY` | Governed by the same eligibility flag as NEXT_DAY. |
+| `NEXT_DAY` | Governed by the same eligibility flag as SAME_DAY. |
+
+Branched on by `delivery-promise` (`SAME_DAY`, `NEXT_DAY`): Filters the node out of the tier's candidates while ineligible; any other tier value is ignored and counted (delivery-promise ADR 0022).
 
 **`ObservationKind`**: The measured outcomes a scorecard counts, stored per node and keyed by the CloudEvents id of the source event (ADR 0002 A2).
 
