@@ -212,6 +212,12 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          outboundShipping: {
+            specPath: 'apis/outbound-shipping/openapi.yaml',
+            outputDir: 'docs/api-reference/rest/outbound-shipping',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],
