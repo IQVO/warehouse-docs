@@ -71,7 +71,7 @@ context's own projector and are never read by a sibling.
 | | | `ProductRegistered` | inbound-receiving (local copy of known SKUs) |
 | | | `ProductDimensionsDeclared`, `ProductMeasured` | slotting-optimization |
 | `warehouse.inbound-receiving.events` | inbound-receiving | `ReceiptLineReceived` | inventory-storage (its ADR 0037) |
-| | | `DockAppointmentBooked`, `DockAppointmentCancelled` | warehouse-planning (inbound labour demand per site, declared labour standards, its ADR 0017, K28) |
+| | | `DockAppointmentBooked`, `DockAppointmentCancelled` | warehouse-planning (inbound labour demand per site, declared labour standards, its ADR 0017, K28; source switched to dock-scheduling by ADR 0020) |
 | `warehouse.slotting-optimization.events` | slotting-optimization | `SlotPlanApproved` | wes-work-planning (one `RELOCATE` work unit per move, its ADR-0040); pick-face-replenishment (forward map) |
 | `warehouse.pick-face-replenishment.events` | pick-face-replenishment | `ReplenishmentRequested` | wes-work-planning (one `REPLENISH` work unit per request, its ADR 0042; opt-in, and `REPLENISHMENT_MODE=kafka` is set in the reference deployment, K44) |
 | | | `ReplenishmentCancelled` | wes-work-planning (cancels the unit only while it is still Pending, same opt-in) |

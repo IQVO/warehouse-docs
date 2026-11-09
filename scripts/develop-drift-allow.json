@@ -1,17 +1,5 @@
 [
  {
-  "file": "docs/contexts/inventory-storage/eventstorming.md",
-  "class": "route-missing",
-  "text": "POST /stock/",
-  "reason": "UPSTREAM STALE: IQVO/inventory-storage docs/docs/ddd/eventstorming.md:214 cites the glob POST /stock/*; develop only has POST /stock-receipts. Fix there, re-sync, delete this entry."
- },
- {
-  "file": "docs/contexts/network-fulfillment/domain-message-flow.md",
-  "class": "route-missing",
-  "text": "POST /orders/id/release",
-  "reason": "UPSTREAM STALE: IQVO/network-fulfillment docs/docs/ddd/domain-message-flow.md:35 (also ddd/context-map.md:22, ecosystem/integration.md:34): order-management serves POST /orders/{id}/releases. Fix there, re-sync, delete this entry."
- },
- {
   "file": "docs/contexts/network-fulfillment/troubleshooting.md",
   "class": "route-missing",
   "text": "POST /network-orders//shipment-confirmation",

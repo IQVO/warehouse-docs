@@ -11,6 +11,10 @@ This page is a copy of [`docs/docs/ddd/use-cases.md`](https://github.com/IQVO/in
 :::
 
 
+:::caution[DockAppointment moved (ADR 0019)]
+The dock appointment is owned by dock-scheduling since [ADR 0019](https://iqvo.github.io/inbound-receiving/docs/adr/0019-dockappointment-moves-to-dock-scheduling). This context keeps a read-only local copy fed by dock-scheduling's `DockAppointmentBooked` / `DockAppointmentCancelled`, no longer books, checks in, cancels or completes appointments, and no longer raises the four `DockAppointment*` events (only the one-shot `api republish-appointments` backfill does). Where this page describes those commands, rules or events, read it as the pre-transfer design; the page is not yet rewritten.
+:::
+
 Application services in `internal/application/usecases`. The eight write use
 cases embed `Writer` (`writer.go`), which runs load, command, version-guarded
 save and outbox insert in one `ports.UnitOfWork`. The three consumer use cases
