@@ -31,6 +31,7 @@ sequenceDiagram
     participant YM as yard-<br/>management
     actor DO as Dock<br/>operator
     participant IR as inbound-<br/>receiving
+    participant OS as outbound-<br/>shipping
     DS->>YM: evt: dockappointment.<br/>DockAppointmentBooked<br/>door, window, expected seal
     Note over YM: AppointmentView
     GC->>YM: cmd: CheckInVisit<br/>POST /visits<br/>purpose LIVE_UNLOAD
@@ -40,14 +41,16 @@ sequenceDiagram
     DO->>YM: cmd: CompleteMove<br/>POST /moves/moveId/<br/>completions
     Note over YM: Trailer ArriveAt door<br/>Occupancy.CheckFree
     YM->>DS: evt: trailer.TrailerDocked
-    YM->>IR: evt: trailer.TrailerDocked
+    YM->>OS: evt: trailer.TrailerDocked
     Note over DS: ActualDoorWins<br/>reassign only if the door differs
     DO->>YM: cmd: StartDoorWork<br/>POST /trailers/trailerId/<br/>door-work-starts
     IR->>YM: evt: receipt.ReceiptOpened<br/>appointment_id, door_code
     IR->>YM: evt: receipt.ReceiptClosed
     Note over YM: AutoCompleteUnload<br/>CompleteDoorWork<br/>load_state EMPTY
+    YM->>OS: evt: trailer.DoorWorkCompleted
     GC->>YM: cmd: CheckOutVisit<br/>POST /visits/visitId/<br/>check-outs
     YM->>DS: evt: trailer.TrailerUndocked<br/>appointment_id
+    YM->>OS: evt: trailer.TrailerDeparted
     Note over DS: CompleteOnDoorRelease<br/>COMPLETED
 ```
 
@@ -56,15 +59,14 @@ VisitingDriverMove, AutoCompleteUnload]`, `.publishes[VisitCheckedIn, TrailerDoc
 TrailerUndocked]`, `.consumes`; `contexts[dock-scheduling].policies[ArrivalFromGate,
 ActualDoorWins, CompleteOnDoorRelease]`.
 
-Omitted: analytics events (`VisitCheckedOut`, `DoorWorkStarted`, `DoorWorkCompleted`,
-`TrailerDeparted`, `YardMove*`); the `receipt` work itself (`inbound-receiving`'s). The
-model fires `TrailerDocked` and `TrailerUndocked` without naming the command that
-raises them, and names no command that departs a trailer: this pack reads `ArriveAt`
-as raising `TrailerDocked`, and `CheckOutVisit` as calling `Depart` for the trailer,
-which raises `TrailerUndocked` from the door (gaps YM-G8, YM-G28: the check-out rule says a taken-out trailer is not docked). Who completes the
-visiting driver's move is the policy text (dock operator or gate clerk), not an
-inbound row (gap YM-G3). The order of `StartDoorWork` and `ReceiptOpened` is not
-stated; `AutoCompleteUnload` may complete door work that was never started (gap YM-G10).
+Omitted: analytics events (`VisitCheckedOut`, `DoorWorkStarted`, `YardMove*`); the `receipt` work itself
+(`inbound-receiving`'s). `TrailerDocked`, `DoorWorkCompleted` and `TrailerDeparted` are read by `outbound-shipping`
+(merged on `develop`); `inbound-receiving` is not a consumer of `TrailerDocked` as built. `ArriveAt` raises
+`TrailerDocked`, and `CheckOutVisit` calls `Depart` for the trailer, which raises `TrailerUndocked` from the
+door and then `TrailerDeparted` (decisions Y-6 and Y-2: a released trailer is parked, or docked with door work
+`DONE`). The gate clerk or dock operator completes the visiting driver's move (decision Y-3). The order of
+`StartDoorWork` and `ReceiptOpened` is not fixed; `AutoCompleteUnload` completes door work from `WAITING` or
+`IN_PROGRESS` once every ASN on the trailer has a closed receipt (decision Y-7).
 
 ## 2. Drop, then the door call and the return to a spot
 
@@ -105,12 +107,10 @@ ClearDoorAfterWork, VisitingDriverMove]`, `.aggregates[Trailer, YardMove, YardVi
 
 Omitted: `YardMoveRequested`, `YardMoveClaimed` and `YardMoveCompleted` (analytics only);
 how `CallToDoor` chooses among several `PARKED` trailers (the next appointment of that
-door by `window_start`). The point at which the appointment completes is this pack's
-reading: `dock-scheduling` completes on `TrailerUndocked`, and the trailer leaves the
-door when the `FROM_DOOR` move is claimed (`StartMoving` from `DOCKED`). The model does
-not say that (gap YM-G8). The reason of the first move to a plain parking spot has no
-value in `Reason` (gap YM-G4). A drop's trailer is linked to its appointment only
-through event fields, not a value object of `Trailer` (gap YM-G9).
+door by `window_start`). The appointment completes when `dock-scheduling` reads `TrailerUndocked`, and the trailer leaves the
+door when the `FROM_DOOR` move is claimed (`StartMoving` from `DOCKED`; decision Y-6). A move to a plain
+parking spot has the reason `TO_SPOT` (decision Y-4). A drop's trailer carries its `appointment_id`, set at
+arrival (decision X3).
 
 ## 3. Gate rejection: an appointment is required
 
@@ -137,11 +137,10 @@ Derived from: `model.yaml → contexts[yard-management].aggregates[YardVisit]`
 `.business_decisions`; `fleet_changes[exception-management]`.
 
 Omitted: the other reasons (`UNKNOWN_APPOINTMENT`, `TRAILER_ALREADY_ON_SITE`,
-`SITE_REQUEST`). The model has both an error on `CheckInVisit` (`ErrAppointmentRequired`)
-and a command that records a rejection (`RejectAtGate`); the two-step flow shown is this
-pack's reading (gap YM-G7). `dock-scheduling` has the cancellation reason `TURNED_AWAY`
-but receives no `VisitRejected`, so a booked appointment turned away at the gate stays
-`BOOKED` until the no-show sweep (gap YM-G17).
+`SITE_REQUEST`). A refused `CheckInVisit` (`ErrAppointmentRequired`) creates nothing, and `RejectAtGate` records a
+`REJECTED` visit; the two-step flow shown is decision Y-5. `dock-scheduling` consumes `VisitRejected` and
+cancels a `BOOKED` appointment with the reason `TURNED_AWAY` (decision X2), so it no longer waits for the no-show
+sweep.
 
 ### 3b. Seal mismatch at the gate
 
@@ -168,10 +167,10 @@ Derived from: `model.yaml → contexts[yard-management].policies[SealCheckAtGate
 `.aggregates[YardPolicy]` (`seal_mismatch_action`), `.reasons[RejectionReason]`,
 `.publishes[SealExceptionRaised, VisitRejected]`.
 
-Omitted: the other `Trailer` and `YardVisit` events of a normal check-in. Where the
-seal is recorded at the gate (`RecordSeal` is a supervisor route; `CheckInVisit` lists
-no seal field) and what trailer the exception names when the visit is then rejected
-are not stated (gaps YM-G7, YM-G23).
+Omitted: the other `Trailer` and `YardVisit` events of a normal check-in. The
+seal number is recorded at the gate on the trailer entry of the check-in (a missing seal raises nothing) and
+`RecordSeal` is the supervisor route; when the visit is then rejected (`REJECT` policy) the
+`SealExceptionRaised` has a null `trailer_id` (decisions Y-5, Y-13; assumptions A9 and A10).
 
 ## 4. A hostler claims a move, the lease expires, another hostler completes it
 
@@ -200,12 +199,12 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[yard-management].aggregates[YardMove]`
 (`transitions`, `invariants`), `.policies[LeaseExpirySweep]`, `.inbound`, `.rest`.
 
-Omitted: the analytics events `YardMoveRequested`, `YardMoveClaimed` and
-`YardMoveCompleted`; the result when nobody re-claims the move (a late `CompleteMove`
+Omitted: the analytics events `YardMoveRequested`, `YardMoveClaimed`,
+`YardMoveLeaseExpired` and `YardMoveCompleted`; the result when nobody re-claims the move (a late `CompleteMove`
 from `REQUESTED` is `ErrIllegalTransition`); `ErrHostlerBusy` when a hostler already
-holds a `CLAIMED` move. The model returns the move to `REQUESTED` on expiry and has no
-transition that brings the trailer back from `IN_MOVE` (gap YM-G1); it raises no event
-for the expiry (gap YM-G14). There is no lease renewal in the model.
+holds a `CLAIMED` move. The expiry returns the move to `REQUESTED` and `ReturnToOrigin` puts the trailer back where
+`StartMoving` found it, in the same unit of work (decision Y-1); the expiry raises `YardMoveLeaseExpired`
+(decision Y-10). There is no lease renewal.
 
 ## 5. An appointment is cancelled while a door call is open
 
@@ -232,9 +231,9 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[yard-management].policies[NoShowFreesHolding]`,
 `.consumes[dock-scheduling]`, `.aggregates[YardMove].transitions`.
 
-Omitted: how the move is linked to the appointment (neither `YardMove` nor `Trailer`
-carries an appointment reference in the model, gap YM-G9); what the policy does for a
-`DockAppointmentRescheduled` to another door; what happens to a trailer on site when a
-`CHECKED_IN` appointment is cancelled (gap YM-G27). The `CLAIMED` branch ends with the
-trailer `IN_MOVE` and no open move: a state the model's "exactly one place" rule does
-not allow (gap YM-G1).
+Omitted: what the policy does for a `DockAppointmentRescheduled` to another door. The move is found
+through the `appointment_id` that `YardMove` carries (decision X3, `YardMoveRequested` has the field). Cancelling
+a `CLAIMED` hostler move runs `ReturnToOrigin` in the same unit of work, so the trailer goes back where it was
+(decision Y-1); when that origin has been taken meanwhile the trailer stays `IN_MOVE` and the move
+`REQUESTED` for the supervisor to re-plan (assumption A16). A `CHECKED_IN` appointment cancelled with the
+trailer on site is settled by decision Y-14.

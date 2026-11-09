@@ -13,7 +13,7 @@ Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.co
 
 The yard-wide glossary is on
 [Ubiquitous Language](/yard/strategic-design/ubiquitous-language). Code
-identifiers are the proposed Go names (`package.Type`); `-` marks a term that
+identifiers are the Go names found in `internal/domain` of the built service (`package.Type`); `-` marks a term that
 names no single type.
 
 ## This context's terms
@@ -32,17 +32,16 @@ From `contexts[yard-management].ul`.
 | **Drop** | The trailer is left in the yard and the tractor leaves without it. | `shared.Purpose` | **Live Unload** |
 | **Bobtail** | A tractor without a trailer. | `shared.Purpose` | **Drop** (a drop leaves a trailer behind; a bobtail brings none) |
 | **Hostler** | Yard driver (also jockey, spotter, shunter) who moves trailers with a yard truck. | `yardmove.Performer` | **Visiting Driver** (the carrier's driver; moves only the first move from the gate) |
-| **Yard Move** | An instruction to take one trailer to a spot, a door or the gate. | `yardmove.Move` | **Dock Appointment** (a booking, not an instruction to move) |
+| **Yard Move** | An instruction to take one trailer to a spot or a door. | `yardmove.Move` | **Dock Appointment** (a booking, not an instruction to move) |
 | **Door Work** | Unloading or loading while a trailer is docked; `WAITING`, `IN_PROGRESS`, `DONE`. | `trailer.DoorWork` | **Receipt** (`inbound-receiving`: the receiving of an ASN's goods) |
 | **Dwell** | Time on site from gate-in to gate-out (per trailer: arrival to departure). | `trailer.Trailer` | **Detention** |
 | **Seal** | The numbered seal on a trailer's doors; `INTACT`, `BROKEN` or `NONE`. | `trailer.SealState` | **Expected seal** (`expected_seal_number` on the appointment: what the carrier declared) |
 | **Yard Check** | A yard audit reconciling observed trailers with the model. | `yardcheck.Check` | — |
 | **Detention** | Carrier waiting time charged beyond the agreed free time; the free time is a site setting. | `yardpolicy.Policy` | **Dwell** (a duration; detention is the chargeable part beyond free time) |
 
-The yard-wide page lists "Yard Move" as a move "to a spot, a door or the gate".
-The model's `VisitingDriverMove` policy says "there is no move to the gate", and
-a `Location` is only a `SPOT` or a `DOOR`. This pack follows the policy and the
-`Location` value object (gap YM-G2).
+There is no move to the gate: `VisitingDriverMove` says so, and a `Location` is only a `SPOT` or a `DOOR`. A
+departing trailer leaves from a spot or, for a live visit, from the door. This pack's earlier wording (gap
+YM-G2) is settled by decision Y-1.
 
 ## Value objects and states used on these pages
 
@@ -51,22 +50,22 @@ From the `value_objects` and `states` of the aggregates.
 | Term | Definition | Code identifier |
 | --- | --- | --- |
 | **Visit Purpose** | `DROP`, `LIVE_UNLOAD`, `LIVE_LOAD`, `PICKUP` or `BOBTAIL`. | `shared.Purpose` |
-| **Tractor Plate** | The plate of the tractor; at most one `CHECKED_IN` visit per plate per site. | `yardvisit.TractorPlate` |
-| **Driver Ref** | An opaque reference to the driver; no personal data is stored. | `yardvisit.DriverRef` |
-| **Trailer Kind** | `DRY_VAN`, `REEFER`, `FLATBED` or `CONTAINER`. | `trailer.TrailerKind` |
-| **Unit Number** | `carrier_scac` plus `number`; the natural key of a trailer on site. | `trailer.UnitNumber` |
-| **Load State** | `EMPTY`, `LOADED` or `PARTIAL`. | `trailer.LoadState` |
-| **Contents** | The `asn_numbers` an inbound trailer holds, or the `outbound_ref` of an outbound one. | `trailer.Contents` |
-| **Hold** | A reason a trailer must not be docked: `DAMAGED`, `SEAL_BROKEN`, `NOT_FOUND`, `QUALITY` or `SECURITY`. | `trailer.Hold` |
+| **Tractor Plate** | The plate of the tractor; at most one `CHECKED_IN` visit per plate per site. | field of `yardvisit.Visit` |
+| **Driver Ref** | An opaque reference to the driver; no personal data is stored. | field of `yardvisit.Visit` |
+| **Trailer Kind** | `DRY_VAN`, `REEFER`, `FLATBED` or `CONTAINER`. | `shared.TrailerKind` |
+| **Unit Number** | `carrier_scac` plus `number`; the natural key of a trailer on site. | fields of `trailer.Trailer` |
+| **Load State** | `EMPTY`, `LOADED` or `PARTIAL`. | `shared.LoadState` |
+| **Contents** | The `asn_numbers` an inbound trailer holds, or the `outbound_ref` of an outbound one. | fields of `trailer.Trailer` |
+| **Hold** | A reason a trailer must not be docked: `DAMAGED`, `SEAL_BROKEN`, `NOT_FOUND`, `QUALITY` or `SECURITY`. | `trailer.HoldReason` |
 | **Arrived At** | The instant a trailer reached the site; the dwell clock start. | `trailer.Trailer` |
 | **Performer** | Who does a move: `HOSTLER` or `VISITING_DRIVER`. | `yardmove.Performer` |
-| **Move Reason** | `TO_DOOR`, `FROM_DOOR`, `RELOCATE` or `TO_HOLDING`. | `yardmove.Reason` |
+| **Move Reason** | `TO_DOOR`, `FROM_DOOR`, `TO_SPOT`, `RELOCATE` or `TO_HOLDING`. | `yardmove.Reason` |
 | **Priority** | A band 1..9 and a `due_by` time. | `yardmove.Priority` |
-| **Lease** | The `hostler_ref` and `expires_at` of a claimed move. | `yardmove.Lease` |
+| **Lease** | The `hostler_ref` and `expires_at` of a claimed move. | field of `yardmove.Move` |
 | **Observation** | A `location_code` and optional `unit_number` recorded in a yard check. | `yardcheck.Observation` |
 | **Discrepancy** | `MISSING`, `UNEXPECTED` or `WRONG_LOCATION`, with the location and the trailer. | `yardcheck.Discrepancy` |
 | **Rejection Reason** | `APPOINTMENT_REQUIRED`, `UNKNOWN_APPOINTMENT`, `SEAL_MISMATCH`, `TRAILER_ALREADY_ON_SITE` or `SITE_REQUEST`. | `yardvisit.RejectionReason` |
-| **Seal Mismatch Action** | `FLAG` or `REJECT`: site policy for a seal that differs from the expected one. | `yardpolicy.Policy` |
+| **Seal Mismatch Action** | `FLAG` or `REJECT`: site policy for a seal that differs from the expected one. | `yardpolicy.SealAction` |
 | **Free Time** | The detention clock in minutes; optional, with no default. | `yardpolicy.Policy` |
 
 ## Neighbour terms used here

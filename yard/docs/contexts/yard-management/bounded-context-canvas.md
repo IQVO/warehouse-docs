@@ -57,7 +57,7 @@ flowchart LR
     in1 -->|"cmd - REST<br/>ClaimNextMove,<br/>CompleteMove"| BC
     in2 -->|"cmd - REST<br/>StartDoorWork,<br/>CompleteDoorWork"| BC
     in3 -->|"cmd - REST<br/>RequestMove, CancelMove,<br/>PlaceHold, ReleaseHold,<br/>RecordSeal, DeclareYardPolicy,<br/>yard check commands"| BC
-    in4 -.->|"qry - REST<br/>ListVisits, GetVisit,<br/>ListTrailers, GetTrailer,<br/>ListMoves, GetYardBoard,<br/>GetYardPolicy"| BC
+    in4 -.->|"qry - REST<br/>ListVisits, GetVisit,<br/>ListTrailers, GetTrailer,<br/>ListMoves, GetYardBoard,<br/>GetYardPolicy, 7 reports"| BC
     in5 -->|"cmd - REST<br/>DwellSweep, ExpireLease"| BC
     in6 ==>|"evt - Kafka<br/>DockAppointment x4,<br/>DoorClosure x2"| BC
     in7 ==>|"evt - Kafka<br/>LocationSlotRegistered,<br/>LocationSlotDecommissioned,<br/>ZoneRegistered"| BC
@@ -86,14 +86,14 @@ flowchart LR
     subgraph OUT["Outbound - whom it notifies"]
         direction TB
         out0["dock-scheduling"]:::ctx
-        out1["inbound-receiving"]:::ctx
+        out1["outbound-shipping"]:::ctx
         out2["exception-management"]:::ctx
         out3["analytics topic only<br/>no named consumer"]:::none
     end
-    BC ==>|"evt - Kafka<br/>VisitCheckedIn, TrailerDocked,<br/>TrailerUndocked"| out0
-    BC ==>|"evt - Kafka<br/>TrailerDocked"| out1
+    BC ==>|"evt - Kafka<br/>VisitCheckedIn, VisitRejected,<br/>TrailerDocked, TrailerUndocked"| out0
+    BC ==>|"evt - Kafka<br/>TrailerDocked, DoorWorkCompleted,<br/>TrailerDeparted"| out1
     BC ==>|"evt - Kafka<br/>VisitRejected,<br/>SealExceptionRaised,<br/>TrailerDwellExceeded,<br/>YardCheckClosed"| out2
-    BC ==>|"evt - Kafka analytics<br/>VisitCheckedOut,<br/>TrailerParked, DoorWork x2,<br/>TrailerDeparted, TrailerHeld,<br/>TrailerHoldReleased,<br/>YardMove x4"| out3
+    BC ==>|"evt - Kafka analytics<br/>VisitCheckedOut,<br/>TrailerParked, DoorWorkStarted,<br/>TrailerHeld, TrailerHoldReleased,<br/>YardMove x5"| out3
     linkStyle 0 stroke:#e8590c,stroke-width:2.5px
     linkStyle 1 stroke:#e8590c,stroke-width:2.5px
     linkStyle 2 stroke:#e8590c,stroke-width:2.5px
@@ -181,32 +181,32 @@ present of the yard.
 | `inbound-receiving` | `ReceiptOpened` | Event | Kafka `warehouse.inbound-receiving.events`, `com.warehouse.wms.inbound-receiving.receipt.ReceiptOpened` | Conformist |
 | `inbound-receiving` | `ReceiptClosed` | Event | Kafka `warehouse.inbound-receiving.events`, `com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed` | Conformist |
 
-The CloudEvents `type` strings of the consumed events are not recorded in the
-model; they are the ones in each producer's AsyncAPI under `apis/` (the
-`dock-scheduling` ones follow the convention, and its AsyncAPI is not yet
-merged). See gap YM-G26.
+The CloudEvents `type` strings of the consumed events are the ones in each producer's
+AsyncAPI: `apis/` for `facility-layout` and `inbound-receiving`, `yard/apis/dock-scheduling/` for
+`dock-scheduling` (merged on develop).
 
 ## Outbound Communication
 
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
 | `dock-scheduling` | `VisitCheckedIn` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.yardvisit.VisitCheckedIn` | Customer/Supplier (`dock-scheduling` is the Customer) |
-| `dock-scheduling`, `inbound-receiving` | `TrailerDocked` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.trailer.TrailerDocked` | Customer/Supplier |
+| `dock-scheduling`, `outbound-shipping` | `TrailerDocked` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.trailer.TrailerDocked` | Customer/Supplier |
 | `dock-scheduling` | `TrailerUndocked` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.trailer.TrailerUndocked` | Customer/Supplier |
-| `exception-management` | `VisitRejected` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.yardvisit.VisitRejected` | Customer/Supplier |
+| `dock-scheduling`, `exception-management` | `VisitRejected` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.yardvisit.VisitRejected` | Customer/Supplier |
 | `exception-management` | `SealExceptionRaised` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.trailer.SealExceptionRaised` | Customer/Supplier |
 | `exception-management` | `TrailerDwellExceeded` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.trailer.TrailerDwellExceeded` | Customer/Supplier |
 | `exception-management` | `YardCheckClosed` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.yardcheck.YardCheckClosed` | Customer/Supplier |
 | analytics only | `VisitCheckedOut` | Event | Kafka `warehouse.yard-management.analytics`, `com.warehouse.wms.yard-management.yardvisit.VisitCheckedOut` | PL, no named consumer |
-| analytics only | `TrailerParked`, `DoorWorkStarted`, `DoorWorkCompleted`, `TrailerDeparted`, `TrailerHeld`, `TrailerHoldReleased` | Event | Kafka `warehouse.yard-management.analytics`, `com.warehouse.wms.yard-management.trailer.<Event>` | PL, no named consumer |
-| analytics only | `YardMoveRequested`, `YardMoveClaimed`, `YardMoveCompleted`, `YardMoveCancelled` | Event | Kafka `warehouse.yard-management.analytics`, `com.warehouse.wms.yard-management.yardmove.<Event>` | PL, no named consumer |
+| `outbound-shipping` | `DoorWorkCompleted`, `TrailerDeparted` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.trailer.<Event>` | Customer/Supplier (integration since 2026-11-09) |
+| analytics only | `TrailerParked`, `DoorWorkStarted`, `TrailerHeld`, `TrailerHoldReleased` | Event | Kafka `warehouse.yard-management.analytics`, `com.warehouse.wms.yard-management.trailer.<Event>` | PL, no named consumer |
+| analytics only | `YardMoveRequested`, `YardMoveClaimed`, `YardMoveLeaseExpired`, `YardMoveCompleted`, `YardMoveCancelled` | Event | Kafka `warehouse.yard-management.analytics`, `com.warehouse.wms.yard-management.yardmove.<Event>` | PL, no named consumer |
 | — | (no synchronous calls) | — | `sync_calls: []` | — |
 
-The relationship for `inbound-receiving` and `exception-management` is this
+The relationship for `exception-management` and `outbound-shipping` is this
 pack's reading: the model lists them as consumers of the events and as
-`fleet_changes` (a new consumer in `exception-management`, an optional consumer
-in `inbound-receiving`), and the strategic context map marks both edges
-Customer/Supplier. Neither context's own `inbound` rows are in this model.
+`fleet_changes`, and the strategic context map marks both edges Customer/Supplier. Both
+consumers are merged on `develop`. `inbound-receiving` is not a consumer of `TrailerDocked`: the optional
+consumer in the model was not built. Neither context's own `inbound` rows are in this model.
 
 Full message details: [Domain Events](/yard/contexts/yard-management/domain-events).
 Relationship evidence: [Context Map](/yard/contexts/yard-management/context-map).
@@ -256,7 +256,7 @@ Move**, **Door Work**, **Dwell**, **Seal**.
 
 ## Verification Metrics
 
-The model states no targets; the targets below are **proposed**. The measures
+Neither the model nor the service states targets; the targets below are this page's proposal. The measures
 are the ones `YardKpiReport` names or the invariants imply.
 
 | Metric | Target | Source |
@@ -272,23 +272,14 @@ are the ones `YardKpiReport` names or the invariants imply.
 | Late or unknown appointment facts ignored by `dock-scheduling` | trend to 0 | `dock-scheduling` ignored-and-counted metric |
 | Lag from `TrailerUndocked` to the next `YardMoveRequested` for that door | p95 under one minute | event timestamps |
 
-## Open Questions
+## Closed questions
 
-Each of these is a gap in `model.yaml` reported to the orchestrator, not patched
-here. The full list, with severity, is in the hotspot table on
-[EventStorming](/yard/contexts/yard-management/eventstorming#hotspots).
-
-- **Trailer state on lease expiry and on cancelling a claimed move** (YM-G1): the
-  trailer is moved to `IN_MOVE` at claim, and no transition leads back.
-- **The visiting driver's first move from the gate** (YM-G2, YM-G3): no gate
-  location, no initial trailer state, no stated completer in the inbound rows.
-- **Arrival tolerance and appointment status** (YM-G5, YM-G6): the copy of the
-  appointment cannot say `CHECKED_IN` or `COMPLETED`, and the tolerance is a
-  `dock-scheduling` setting that no event carries.
-- **Rejection mechanics** (YM-G7): `RejectAtGate` versus the `Err` of
-  `CheckInVisit`.
-- **Which command raises `TrailerParked`, `TrailerDocked`, `TrailerUndocked`**
-  (YM-G8).
-- **Check-out of a live visit** (YM-G28): the trailer leaves from the door, while the
-  rule says a taken-out trailer is not docked.
-- **`GET /reports/*`** have routes but no `inbound` row (YM-G26).
+The gaps this page used to list were decided before the build (decisions Y-1 to Y-14, X1 to X7; the
+register is [Model Gap Register](/yard/strategic-design/model-gap-register)) and are in the service; how each was
+settled is in the hotspot table on [EventStorming](/yard/contexts/yard-management/eventstorming#hotspots). In
+short: a lease expiry or a cancelled claimed move returns the trailer where it was (`ReturnToOrigin`, `YM-G1`);
+the gate creates the trailer `IN_MOVE` with a visiting-driver move that the gate clerk or dock operator completes
+(`YM-G2`, `YM-G3`); the arrival tolerance travels on the dock-scheduling booking events and the appointment copy
+marks itself `CHECKED_IN` and `USED` (`YM-G5`, `YM-G6`); a refused check-in creates nothing while `RejectAtGate`
+records a rejected visit (`YM-G7`); `ArriveAt` and the departure commands raise the location events (`YM-G8`); a
+live visit leaves from the door (`YM-G28`); the report routes have an `inbound` row of their own (`YM-G26`).

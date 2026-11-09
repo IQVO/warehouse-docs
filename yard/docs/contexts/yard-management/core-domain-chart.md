@@ -62,7 +62,7 @@ else has (dwell, door occupancy, yard-truck productivity) and drives the
 **Model complexity is high-moderate (x = 0.60).** Five aggregates, the most
 stateful of the two yard contexts: `Trailer` (four states plus door work),
 `YardMove` (four states, a lease), `YardVisit` (three states), `YardCheck` and
-`YardPolicy`. Twenty-three commands, nine policies, and an invariant that
+`YardPolicy`. Twenty-four commands, nine policies and twenty-five invariants, one of which
 spans two aggregates (a spot or door holds at most one trailer, under a
 per-location advisory lock and a partial unique index). The hard parts are
 concurrent and cross-aggregate: occupancy races, lease expiry, and events that
