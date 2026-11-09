@@ -11,8 +11,8 @@ description: "Strategic design of the yard domain, generated from the model: sub
 This page is generated from [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml) by `scripts/gen_pages.py`. Edit the model, then regenerate; CI fails when the page and the model disagree.
 :::
 
-:::info[Built on develop, not deployed]
-Both contexts are merged on `develop` (2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling) and [IQVO/yard-management](https://github.com/IQVO/yard-management); neither is registered in warehouse-infra. The model records the as-built contracts: `scripts/check_model.py` compares it with the contract copies under `yard/apis/`.
+:::info[Built on develop, registered in infra, not applied]
+Both contexts are merged on `develop` (2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling) and [IQVO/yard-management](https://github.com/IQVO/yard-management); both are registered in warehouse-infra develop (apps.yaml entry, helm values, dashboards and alert rules, images pinned at v0.1.1) and not applied to the k3s cluster (no pods), so every edge is wired in infra, not live. The model records the as-built contracts: `scripts/check_model.py` compares it with the contract copies under `yard/apis/`.
 :::
 
 The yard is the enclosed area outside a site's four walls. It is modelled as two bounded contexts:

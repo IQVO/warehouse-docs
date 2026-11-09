@@ -2,7 +2,7 @@
 id: overview
 title: Yard Management
 sidebar_label: Overview
-description: "A yard management domain for the warehouse-systems fleet, modelled with Domain-Driven Design as two bounded contexts, built on develop and not deployed: dock-scheduling (door time) and yard-management (the physical yard)."
+description: "A yard management domain for the warehouse-systems fleet, modelled with Domain-Driven Design as two bounded contexts, built on develop, registered in infra and not applied to k3s: dock-scheduling (door time) and yard-management (the physical yard)."
 slug: /
 ---
 
@@ -15,9 +15,11 @@ inventory and equipment ([Benchmarks](/yard/research/benchmarks)). This instance
 models a yard management system (YMS) for the warehouse-systems fleet as
 **two bounded contexts** in the `wms` tier.
 
-:::info[Built on develop, not deployed]
+:::info[Built on develop, registered in infra, not applied]
 Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling) and
-[IQVO/yard-management](https://github.com/IQVO/yard-management), not deployed: registered nowhere in warehouse-infra.
+[IQVO/yard-management](https://github.com/IQVO/yard-management), registered in warehouse-infra develop (apps.yaml entry, helm
+values, dashboards and alert rules, images pinned at v0.1.1), not applied to the k3s cluster (no pods). An edge is live only when
+both ends run, so with no pod of either service every edge is wired in infra, not applied.
 The canonical model is
 [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml);
 every page still derives from it, and the as-built refresh of 2026-11-09 folded the differences back in.
@@ -38,7 +40,10 @@ facts that only `yard-management` records; `dock-scheduling` applies them from e
 
 ## What changes in the fleet
 
-These changes are merged on `develop` in the neighbouring contexts and, like the two yard services, not deployed:
+These changes are merged on `develop` in the neighbouring contexts. In warehouse-infra develop, `inbound-receiving` and
+`warehouse-planning` have a consumer group for the `dock-scheduling` topic, `helm-values/exception-management.yaml` sets no
+group for the yard or `dock-scheduling` topics, and `outbound-shipping` is not registered (no apps.yaml entry, no chart). No yard
+service runs, so none of these edges is live:
 
 - `DockAppointment` moved from `inbound-receiving` to `dock-scheduling` (a door that
   serves both directions cannot have two owners of its time). `inbound-receiving` retired its

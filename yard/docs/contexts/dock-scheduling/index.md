@@ -2,13 +2,13 @@
 id: index
 title: Dock Scheduling
 sidebar_label: Dock Scheduling
-description: "The door calendar of every site, a Supporting context, built on develop and not deployed, that owns booked time on every dock door, inbound and outbound, from booking to door release."
+description: "The door calendar of every site, a Supporting context, built on develop, registered in infra and not applied to k3s, that owns booked time on every dock door, inbound and outbound, from booking to door release."
 ---
 
 # Dock Scheduling
 
-:::info[Built on develop, not deployed]
-Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
+:::info[Built on develop, registered in infra, not applied]
+Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling), registered in warehouse-infra develop (apps.yaml entry, helm values, dashboards and alert rules, image pinned at v0.1.1), not applied to the k3s cluster (no pods). The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 <span className="badge-supporting">Supporting</span>
@@ -66,8 +66,15 @@ stages A to E listed in `fleet_changes`.
 ## Status
 
 Built on `develop` (merged 2026-11-08, `DockAppointmentDoorReassigned` on the integration topic since 2026-11-09)
-in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling); not deployed, because
-the service is registered nowhere in warehouse-infra. The model's status line records the same. The contracts
+in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling); registered in warehouse-infra develop
+(`terraform/apps.yaml` entry with a database and analytics, `helm-values/dock-scheduling.yaml`, a dashboard, alert rules and
+the image pinned at its v0.1.1 main commit `7f20813`) but not applied to the k3s cluster: no pod of the service runs. The
+helm values give the api four consumer groups (`dock-scheduling-yard`, `dock-scheduling-facility`, `dock-scheduling-asn`,
+`dock-scheduling-cpt`), the projector `dock-scheduling-analytics`, Kong routes `/api/dock-scheduling`,
+`/api/dock-scheduling/reports` and `/api/mcp/dock-scheduling`, a dedicated relay and the no-show sweep every five minutes;
+there is no A2A component, and the strangler stage A group is empty (off). The yard-domain Kafka topics must be pre-created before the
+first sync (`docs/kafka-topics-yard-dock.md` in warehouse-infra). An edge is live only when both ends run, so every edge of
+this context is wired in infra, not applied. The model's status line records the same. The contracts
 are copied under `yard/apis/dock-scheduling/` and `scripts/check_model.py` compares the model with them.
 The service ships six binaries (`api`, `mcp`, `projector`, `relay`, `reports`, `sweep`) and ten ADRs, indexed on the
 [ADR page](/yard/adr/).

@@ -7,8 +7,8 @@ description: "Dock Scheduling's neighbourhood on the yard context map, with the 
 
 # Context Map
 
-:::info[Built on develop, not deployed]
-Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
+:::info[Built on develop, registered in infra, not applied]
+Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling), registered in warehouse-infra develop (apps.yaml entry, helm values, dashboards and alert rules, image pinned at v0.1.1), not applied to the k3s cluster (no pods). The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).
@@ -85,7 +85,7 @@ retail-network service.
 | Scheduler (cron) | Upstream (CronJob) | UI on this context's REST | REST `POST /no-show-sweeps` | `MarkNoShow` | An idempotent sweep called on a timer. |
 | `warehouse-planning` | Downstream | OHS + PL (this pack's reading) | Kafka `warehouse.dock-scheduling.events` | `DockAppointmentBooked`, `DockAppointmentRescheduled`, `DockAppointmentCancelled`, `DockAppointmentNoShow` | Inbound labour demand. `warehouse-planning` reads these events instead of `inbound-receiving`'s (its ADR 0020, merged on develop); they gain `site_id` and `direction`. |
 | `exception-management` | Downstream | OHS + PL (this pack's reading) | Kafka `warehouse.dock-scheduling.events` | `DockAppointmentNoShow` | Opens a problem case per no-show (merged on develop). |
-| `outbound-shipping` | Downstream | OHS + PL (this pack's reading) | Kafka `warehouse.dock-scheduling.events` | `DockAppointmentBooked` | Ship-confirm context; it also reads the yard's departure facts (merged on develop, not deployed). |
+| `outbound-shipping` | Downstream | OHS + PL (this pack's reading) | Kafka `warehouse.dock-scheduling.events` | `DockAppointmentBooked` | Ship-confirm context; it also reads the yard's departure facts (`outbound-shipping` is merged on develop but not registered in warehouse-infra: no apps.yaml entry, no chart). |
 | MCP clients (the model plans `warehouse-ops-agent`; whether it is wired was not checked) | Downstream | OHS | MCP `cmd/mcp` of this service | 5 L1 read tools, 4 L3 write tools (`book_appointment`, `reschedule_appointment`, `cancel_appointment`, `report_eta`, each with `initiated_by`) | Arrival, door release, calendar changes and the sweep are not exposed over MCP. |
 | Any context | Downstream | **OHS** | REST `GET /appointments`, `GET /appointments/{appointmentId}`, `GET /doors/{doorCode}/availability`, `GET /sites/{siteId}/dock-calendar` | `ListAppointments`, `GetAppointment`, `GetDoorAvailability`, `GetDockCalendar` | Read access for tools and diagnostics; no decision path of a sibling depends on it (decisions use events). |
 

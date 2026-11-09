@@ -7,8 +7,8 @@ description: "Why the warehouse needs a context for the physical yard: gate, tra
 
 # Business Context
 
-:::info[Built on develop, not deployed]
-Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
+:::info[Built on develop, registered in infra, not applied]
+Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), registered in warehouse-infra develop (apps.yaml entry, helm values, dashboards and alert rules, image pinned at v0.1.1), not applied to the k3s cluster (no pods). The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 ## The problem in plain language
@@ -77,7 +77,7 @@ and door release from `yard-management` events
 | `facility-layout` | Fleet context (upstream) | Publishes the Yard and Dock slots and the zone-to-site mapping. |
 | `inbound-receiving` | Fleet context (upstream and downstream) | Publishes ASNs and receipts. It does not consume `TrailerDocked` as built; the optional consumer was not built. |
 | `exception-management` | Fleet context (downstream) | Opens problem cases from rejected visits, seal exceptions, dwell breaches and yard-check discrepancies (merged on develop). |
-| `outbound-shipping` | Fleet context (downstream) | Confirms a shipment when the trailer leaves: reads `TrailerDocked`, `DoorWorkCompleted` and `TrailerDeparted` (merged on develop, not deployed). |
+| `outbound-shipping` | Fleet context (downstream) | Confirms a shipment when the trailer leaves: reads `TrailerDocked`, `DoorWorkCompleted` and `TrailerDeparted` (`outbound-shipping` is merged on develop but not registered in warehouse-infra: no apps.yaml entry, no chart). |
 
 ## Decisions this context makes
 
