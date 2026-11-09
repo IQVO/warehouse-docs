@@ -7,8 +7,8 @@ description: "Where Dock Scheduling sits on the ddd-crew Core Domain Chart and w
 
 # Core Domain Chart
 
-:::info[Proposed design]
-Derived from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml). This context's service is not built yet; identifiers (`Err...` names, REST paths, CloudEvents types) are the names the service will use.
+:::info[Built on develop, not deployed]
+Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 Following the ddd-crew [Core Domain Charts](https://github.com/ddd-crew/core-domain-charts):
@@ -55,8 +55,8 @@ one rule that two organisations (carriers and the site) both feel when it
 fails.
 
 **Model complexity is moderate (x = 0.45).** Two aggregates (`DockAppointment`
-with five states and seven transitions, `DockCalendar` with a single state),
-thirteen invariants and nine policies. The hard parts are cross-cutting more
+with five states and ten transitions, `DockCalendar` with a single state),
+sixteen invariants and ten policies. The hard parts are cross-cutting more
 than structural: one rule over a door's whole calendar under a per-door
 advisory lock, four checks against event-fed copies (doors, ASNs, cutoffs and
 the calendar itself), and physical facts that arrive out of order from

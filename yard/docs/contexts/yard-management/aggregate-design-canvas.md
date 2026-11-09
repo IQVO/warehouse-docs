@@ -7,8 +7,8 @@ description: "The ddd-crew Aggregate Design Canvas for YardVisit, Trailer, YardM
 
 # Aggregate Design Canvas
 
-:::info[Proposed design]
-Derived from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml). This context's service is not built yet; identifiers (`Err...` names, REST paths, CloudEvents types) are the names the service will use.
+:::info[Built on develop, not deployed]
+Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
@@ -27,7 +27,7 @@ named below.
 
 ### 1. Name
 
-`YardVisit` (`yardvisit.YardVisit`), identified by `visitId`.
+`YardVisit` (`yardvisit.Visit`), identified by `visitId`.
 
 ### 2. Description
 
@@ -264,7 +264,7 @@ per extra move).
 
 ### 1. Name
 
-`YardMove` (`yardmove.YardMove`), identified by `moveId`.
+`YardMove` (`yardmove.Move`), identified by `moveId`.
 
 ### 2. Description
 
@@ -344,10 +344,10 @@ and per hostler, and `Occupancy.CheckFree` for "the destination is free". See
 
 | Event | Raised when | Full CloudEvents type |
 | --- | --- | --- |
-| `YardMoveRequested` | `RequestMove` succeeds | `com.warehouse.wms.yard-management.yardmove.YardMoveRequested` |
-| `YardMoveClaimed` | `ClaimNextMove` succeeds | `com.warehouse.wms.yard-management.yardmove.YardMoveClaimed` |
-| `YardMoveCompleted` | `CompleteMove` succeeds | `com.warehouse.wms.yard-management.yardmove.YardMoveCompleted` |
-| `YardMoveCancelled` | `CancelMove` succeeds | `com.warehouse.wms.yard-management.yardmove.YardMoveCancelled` |
+| `YardMoveRequested` | `RequestMove` succeeds | `com.warehouse.wms.yard-management.yardmove.MoveRequested` |
+| `YardMoveClaimed` | `ClaimNextMove` succeeds | `com.warehouse.wms.yard-management.yardmove.MoveClaimed` |
+| `YardMoveCompleted` | `CompleteMove` succeeds | `com.warehouse.wms.yard-management.yardmove.MoveCompleted` |
+| `YardMoveCancelled` | `CancelMove` succeeds | `com.warehouse.wms.yard-management.yardmove.MoveCancelled` |
 
 All four are analytics only. `ExpireLease` raises no event (gap YM-G14).
 
@@ -369,7 +369,7 @@ which raises none.
 
 ### 1. Name
 
-`YardCheck` (`yardcheck.YardCheck`), identified by `yardCheckId`.
+`YardCheck` (`yardcheck.Check`), identified by `yardCheckId`.
 
 ### 2. Description
 
@@ -435,7 +435,7 @@ location; one event per instance.
 
 ### 1. Name
 
-`YardPolicy` (`yardpolicy.YardPolicy`), identified by `siteId`.
+`YardPolicy` (`yardpolicy.Policy`), identified by `siteId`.
 
 ### 2. Description
 

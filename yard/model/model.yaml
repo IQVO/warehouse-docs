@@ -282,7 +282,7 @@ contexts:
       - {term: Closure, definition: "A period a door cannot be booked (maintenance, damage).", code: dockcalendar.Closure}
       - {term: Arrival Status, definition: "EARLY, ON_TIME or LATE, from the gate arrival against the window and the tolerance.", code: dockappointment.ArrivalStatus}
       - {term: No-Show, definition: "A booked appointment whose carrier did not arrive by window end plus grace.", code: dockappointment.NoShow}
-      - {term: SCAC, definition: "Standard Carrier Alpha Code identifying the carrier.", code: shared.SCAC}
+      - {term: SCAC, definition: "Standard Carrier Alpha Code identifying the carrier.", code: shared.Carrier}
       - {term: CPT, definition: "Critical pull time: the fleet's outbound cutoff, which the network uses as its pickup cutoff.", code: "consumed from process-path-management"}
 
   # -------------------------------------------------------------------------
@@ -601,21 +601,21 @@ contexts:
       adrs: "0001-0011"
     ul:
       - {term: Yard, definition: "The enclosed area outside a site's four walls: gate, parking spots and dock doors.", code: "-"}
-      - {term: Yard Visit, definition: "One tractor and driver passing the gate, from check-in to check-out.", code: yardvisit.YardVisit}
+      - {term: Yard Visit, definition: "One tractor and driver passing the gate, from check-in to check-out.", code: yardvisit.Visit}
       - {term: Trailer, definition: "Any towable unit on site, including a container on a chassis (SAP calls it a transportation unit).", code: trailer.Trailer}
-      - {term: Spot, definition: "A Yard location (facility-layout role Yard) a trailer parks on.", code: trailer.Location}
-      - {term: Holding Spot, definition: "A spot for walk-ins and early arrivals, named in the yard policy.", code: yardpolicy.YardPolicy}
-      - {term: Dock Door, definition: "A Dock location (facility-layout role Dock) with a dockFlow of Inbound, Outbound or Both.", code: trailer.Location}
-      - {term: Live Load / Live Unload, definition: "The tractor waits at the door while the trailer is worked.", code: yardvisit.Purpose}
-      - {term: Drop, definition: "The trailer is left in the yard and the tractor leaves without it.", code: yardvisit.Purpose}
-      - {term: Bobtail, definition: "A tractor without a trailer.", code: yardvisit.Purpose}
+      - {term: Spot, definition: "A Yard location (facility-layout role Yard) a trailer parks on.", code: shared.Location}
+      - {term: Holding Spot, definition: "A spot for walk-ins and early arrivals, named in the yard policy.", code: yardpolicy.Policy}
+      - {term: Dock Door, definition: "A Dock location (facility-layout role Dock) with a dockFlow of Inbound, Outbound or Both.", code: shared.Location}
+      - {term: Live Load / Live Unload, definition: "The tractor waits at the door while the trailer is worked.", code: shared.Purpose}
+      - {term: Drop, definition: "The trailer is left in the yard and the tractor leaves without it.", code: shared.Purpose}
+      - {term: Bobtail, definition: "A tractor without a trailer.", code: shared.Purpose}
       - {term: Hostler, definition: "Yard driver (also jockey, spotter, shunter) who moves trailers with a yard truck.", code: yardmove.Performer}
-      - {term: Yard Move, definition: "An instruction to take one trailer to a spot or a door.", code: yardmove.YardMove}
+      - {term: Yard Move, definition: "An instruction to take one trailer to a spot or a door.", code: yardmove.Move}
       - {term: Door Work, definition: "Unloading or loading while a trailer is docked; WAITING, IN_PROGRESS, DONE.", code: trailer.DoorWork}
-      - {term: Dwell, definition: "Time on site from gate-in to gate-out (per trailer: arrival to departure).", code: trailer.ArrivedAt}
-      - {term: Seal, definition: "The numbered seal on a trailer's doors; INTACT, BROKEN or NONE.", code: trailer.Seal}
-      - {term: Yard Check, definition: "A yard audit reconciling observed trailers with the model.", code: yardcheck.YardCheck}
-      - {term: Detention, definition: "Carrier waiting time charged beyond the agreed free time; the free time is a site setting.", code: yardpolicy.free_time_minutes}
+      - {term: Dwell, definition: "Time on site from gate-in to gate-out (per trailer: arrival to departure).", code: trailer.Trailer}
+      - {term: Seal, definition: "The numbered seal on a trailer's doors; INTACT, BROKEN or NONE.", code: trailer.SealState}
+      - {term: Yard Check, definition: "A yard audit reconciling observed trailers with the model.", code: yardcheck.Check}
+      - {term: Detention, definition: "Carrier waiting time charged beyond the agreed free time; the free time is a site setting.", code: yardpolicy.Policy}
 
 # Changes the yard contexts need in EXISTING contexts (each its own PR and ADR).
 fleet_changes:

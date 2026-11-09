@@ -7,8 +7,8 @@ description: "Four Dock Scheduling scenarios as ddd-crew domain message flows: b
 
 # Domain Message Flow
 
-:::info[Proposed design]
-Derived from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml). This context's service is not built yet; identifiers (`Err...` names, REST paths, CloudEvents types) are the names the service will use.
+:::info[Built on develop, not deployed]
+Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling), not deployed: registered nowhere in warehouse-infra. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 Following ddd-crew [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling).
@@ -32,6 +32,7 @@ sequenceDiagram
     participant YM as yard-<br/>management
     participant WP as warehouse-<br/>planning
     participant IR as inbound-<br/>receiving
+    participant OS as outbound-<br/>shipping
     CS->>DS: cmd: BookAppointment<br/>POST /appointments
     Note over DS: DoorView, DockCalendar,<br/>AsnView or CutoffView,<br/>DoorSchedule.CheckNoOverlap
     alt a rule refuses the booking
@@ -40,10 +41,12 @@ sequenceDiagram
         DS->>YM: evt: dockappointment.<br/>DockAppointmentBooked
         DS->>WP: evt: dockappointment.<br/>DockAppointmentBooked
         DS->>IR: evt: dockappointment.<br/>DockAppointmentBooked
+        DS->>OS: evt: dockappointment.<br/>DockAppointmentBooked
     end
     CS->>DS: cmd: RescheduleAppointment<br/>POST /appointments/<br/>appointmentId/reschedules
     DS->>YM: evt: dockappointment.<br/>DockAppointmentRescheduled
     DS->>WP: evt: dockappointment.<br/>DockAppointmentRescheduled
+    DS->>IR: evt: dockappointment.<br/>DockAppointmentRescheduled
     CS->>DS: cmd: CancelAppointment<br/>POST /appointments/<br/>appointmentId/cancellations
     DS->>YM: evt: dockappointment.<br/>DockAppointmentCancelled
     DS->>WP: evt: dockappointment.<br/>DockAppointmentCancelled
@@ -56,9 +59,10 @@ Derived from: `model.yaml → contexts[dock-scheduling].inbound`,
 Omitted: the three branches are shown in sequence for width; a real carrier
 reschedules or cancels one appointment, not all three in a row. A reschedule
 is allowed only from `BOOKED`, a cancel from `BOOKED` or `CHECKED_IN`
-(otherwise `ErrIllegalTransition`, 409). `inbound-receiving` is not a
-consumer of `DockAppointmentRescheduled` in the model (gap `DS-G14`). The
-`Err...` to HTTP status mapping is proposed (gap `DS-G17`).
+(otherwise `ErrIllegalTransition`, 409). `inbound-receiving` also consumes
+`DockAppointmentRescheduled` as built (its appointments copy, ADR 0019); `outbound-shipping`
+reads `DockAppointmentBooked`. A dock planner may also reschedule and cancel. The `Err...` to
+HTTP status mapping is decision D-10: 409 for conflicts, 422 for value rules.
 
 ## 2. From the gate to the released door
 
@@ -68,13 +72,14 @@ sequenceDiagram
     autonumber
     participant YM as yard-<br/>management
     participant DS as dock-<br/>scheduling
+    participant IR as inbound-<br/>receiving
     YM->>DS: evt: yardvisit.VisitCheckedIn<br/>appointment_id, arrived_at
     Note over DS: ArrivalFromGate<br/>RecordArrival with<br/>arrival_status<br/>BOOKED to CHECKED_IN
     Note over DS: DockAppointmentCheckedIn<br/>to the analytics topic
     YM->>DS: evt: trailer.TrailerDocked<br/>door_code, appointment_id
     alt door differs from the booked door
         Note over DS: ActualDoorWins<br/>ReassignDoor without the<br/>overlap refusal
-        Note over DS: DockAppointmentDoorReassigned<br/>to the analytics topic
+        DS->>IR: evt: dockappointment.<br/>DockAppointmentDoorReassigned<br/>integration and analytics topics
         opt a later appointment now overlaps on the new door
             Note over DS: DockAppointmentAtRisk<br/>cause DOOR_REASSIGNED_OVERLAP
         end
@@ -93,10 +98,10 @@ Derived from: `model.yaml → contexts[dock-scheduling].policies[ArrivalFromGate
 Omitted: the yard's own steps between the three events (moves, door work),
 which belong to `yard-management`. A yard fact for an unknown, terminal,
 `CANCELLED` or `NO_SHOW` appointment is ignored and counted; a late
-`VisitCheckedIn` for a `COMPLETED` appointment is ignored. The model does not
-say what a second trailer of the same visit does (gap `DS-G03`) or how a
-release applied to a `BOOKED` appointment is reported to analytics (gap
-`DS-G19`).
+`VisitCheckedIn` for a `COMPLETED` appointment is ignored. One appointment covers exactly one trailer
+(decision X3). A release applied to a `BOOKED` appointment completes it without a
+`DockAppointmentCheckedIn`; the adherence report counts it as `ON_TIME` and the metric
+`dock_scheduling_implicit_arrivals_total` counts it (decision X6).
 
 ## 3. A late ETA and a no-show
 
@@ -130,8 +135,7 @@ Derived from: `model.yaml → contexts[dock-scheduling].policies[EtaRisk, NoShow
 Omitted: the sweep is idempotent, so a second run marks nothing new. The
 routing of the case inside `exception-management` is that context's and is
 not in the model beyond "open problem cases ... and `DockAppointmentNoShow`".
-The model names no way for a carrier to recover from `NO_SHOW` (gap
-`DS-G16`).
+A carrier that missed its window books a new appointment: `NO_SHOW` is terminal (decision D-9).
 
 ## 4. A door closure and a cancelled ASN
 
@@ -163,9 +167,9 @@ Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockCalendar]
 `.policies[CancelWhenAllAsnsCancelled]`, `.publishes`, `.consumes`.
 
 Omitted: `DoorOperatingHoursDeclared` (analytics only) and
-`DeclareOperatingHours`, which raises no refusal for existing appointments
-(gap `DS-G13`); the strangler import and the phase-2 pickup appointments
+`DeclareOperatingHours`, which is refused with `ErrHoursConflictWithAppointments` when it would
+leave an active appointment outside the hours (decision D-8); the strangler import and the phase-2 pickup appointments
 (`LegacyImport`, `PickupFromCutoffs`), which are described on
 [Domain Events](/yard/contexts/dock-scheduling/domain-events). The refusal that
 lists the appointment ids is the model's only help for a planner closing a
-door; the filters of `ListAppointments` are not in the model (gap `DS-G17`).
+door; `ListAppointments` takes filters (for example `atRisk`), which are in the OpenAPI contract.
