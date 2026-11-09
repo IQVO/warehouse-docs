@@ -88,8 +88,8 @@ GitHub Pages: **https://iqvo.github.io/warehouse-docs/**. Page map:
   `npm run check:pages:network`.
 - **Yard Management** (`yard/`, served at `/yard/`): two WMS-tier bounded
   contexts, `dock-scheduling` (the door calendar) and `yard-management` (the
-  physical yard), both built on `develop` and not deployed (no warehouse-infra
-  `terraform/apps.yaml` entry). The source of truth is `yard/model/model.yaml`;
+  physical yard), both built on `develop` and registered in warehouse-infra
+  `develop` (apps.yaml entry, helm values, alert rules), not applied to the cluster. The source of truth is `yard/model/model.yaml`;
   the `yard/docs/strategic-design/` pages it feeds are regenerated via
   `yard/scripts/gen_pages.py`, and the context packs are written here from the
   model. Gates: `npm run check:model:yard` and `npm run check:pages:yard`.

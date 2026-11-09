@@ -102,7 +102,7 @@ const SECTIONS = [
     name: 'Digital Storefront',
     tagline: 'The e-commerce storefront on the retail network',
     description:
-      'Six bounded contexts (pricing, product content, product discovery, shopping cart, checkout, customer payments) plus the storefront-bff edge, the React SSR web app and a payment-provider simulator. Built on develop, not deployed yet. Source of truth: the storefront domain model.',
+      'Six bounded contexts (pricing, product content, product discovery, shopping cart, checkout, customer payments) plus the storefront-bff edge, the React SSR web app and a payment-provider simulator. Built on develop, registered in warehouse-infra, not applied to the cluster. Source of truth: the storefront domain model.',
     links: [
       {label: 'Storefront Overview', to: '/storefront'},
       {label: 'Strategic Design', to: '/storefront/strategic-design'},
@@ -115,7 +115,7 @@ const SECTIONS = [
     name: 'Yard Management',
     tagline: 'The gate, the yard and the dock doors',
     description:
-      'Two WMS-tier bounded contexts: dock-scheduling (the door calendar of every site) and yard-management (the physical yard: visits, trailers, moves, door work). Built on develop, not deployed yet. Source of truth: the yard domain model.',
+      'Two WMS-tier bounded contexts: dock-scheduling (the door calendar of every site) and yard-management (the physical yard: visits, trailers, moves, door work). Built on develop, registered in warehouse-infra, not applied to the cluster. Source of truth: the yard domain model.',
     links: [
       {label: 'Yard Overview', to: '/yard/'},
       {label: 'Strategic Design', to: '/yard/strategic-design/'},
