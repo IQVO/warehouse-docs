@@ -4,7 +4,9 @@
 
 # Copies of each context repo's develop specs (fix the owning repo, then re-sync)
 apis/*
+network/apis/*
 storefront/apis/*
+yard/apis/*
 
 # Generated references
 docs/api-reference/rest/*

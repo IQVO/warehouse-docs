@@ -20,8 +20,8 @@ every push to `main` builds and publishes the site to GitHub Pages: https://iqvo
 
 1. **GitFlow on `main` only.** No develop/main split here: a feature branch, then a PR into `main`
    (required check `build-check`). Never push `main` directly, never `--no-verify`.
-2. **Copies are never edited here.** `apis/<context>/*.yaml`, `storefront/apis/<repo>/openapi.yaml` and
-   the synced ddd-crew pages under `docs/contexts/<context>/` come from each context repo's `develop`:
+2. **Copies are never edited here.** `apis/<context>/*.yaml`, the `network/apis/`, `storefront/apis/` and
+   `yard/apis/` copies and the synced ddd-crew pages under `docs/contexts/<context>/` come from each context repo's `develop`:
    fix the source repo, then re-sync (`.claude/rules/spec-sync.md`,
    `.claude/rules/context-pages-and-sidebar.md`). The develop-drift gate fails a copy that is not
    byte-equal to develop (`.claude/rules/develop-drift-gate.md`).
