@@ -1,0 +1,33 @@
+# Generated or copied files the agent hooks block from hand edits (scripts/harness/hook.py reads this list).
+# Each is rewritten by a script from its source of truth, or is a byte copy of another repo's file that
+# the develop-drift gate compares. Regenerate / re-sync with the shell commands in CLAUDE.md instead.
+
+# Copies of each context repo's develop specs (fix the owning repo, then re-sync)
+apis/*
+storefront/apis/*
+
+# Generated references
+docs/api-reference/rest/*
+static/asyncapi/*
+
+# Pages generated from a model or registry (edit the model, then run the generator)
+docs/business-capability-architecture/capability-map.md
+docs/business-capability-architecture/capability-catalogue.md
+docs/business-capability-architecture/heat-maps.md
+docs/business-capability-architecture/cross-mapping.md
+docs/fleet-operations/alert-catalogue.md
+docs/architecture/a2a-agents.md
+docs/architecture/agent-catalogue.md
+network/docs/strategic-design/context-map.md
+network/docs/strategic-design/ubiquitous-language.md
+network/docs/strategic-design/event-standard-cloudevents.md
+storefront/docs/strategic-design/index.md
+storefront/docs/strategic-design/context-map.md
+storefront/docs/strategic-design/ubiquitous-language.md
+storefront/docs/strategic-design/event-standard-cloudevents.md
+storefront/docs/strategic-design/subdomain-classification.md
+yard/docs/strategic-design/index.md
+yard/docs/strategic-design/subdomain-classification.md
+yard/docs/strategic-design/context-map.md
+yard/docs/strategic-design/ubiquitous-language.md
+yard/docs/strategic-design/event-standard-cloudevents.md

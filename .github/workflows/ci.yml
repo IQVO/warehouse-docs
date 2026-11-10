@@ -1,0 +1,31 @@
+name: CI
+
+# Agent-harness sensors for this repo (harness-template v4, platform profile). The site build and its
+# content gates stay in docs.yml (`build-check`); this workflow only carries the harness jobs.
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Agent-guide sensor (harness-template v4): skills load, references resolve, context budget,
+  # plus repo_lint (config sensors) and the hook unit tests. BLOCKING: the guides are clean.
+  guide-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: python3 scripts/harness/guide_lint.py
+      - run: python3 scripts/harness/repo_lint.py
+      - run: python3 scripts/harness/test_hook.py
+      - run: python3 scripts/harness/test_red_issue.py
+      - run: python3 scripts/harness/test_repo_lint.py
