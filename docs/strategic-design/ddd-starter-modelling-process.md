@@ -15,7 +15,7 @@ jump between them, repeat them, and revisit earlier steps as they learn.
 
 This page uses the eight steps to index the site. For each step it gives
 a short description and names the artifact on this site that is the
-step's output for the seventeen `warehouse-systems` contexts documented
+step's output for the twenty `warehouse-systems` contexts documented
 here.
 
 ```mermaid
@@ -51,7 +51,7 @@ Story Mapping.
 - [Domain Vision](/strategic-design/domain-vision): what the platform
   does, the end-to-end fulfillment flow it serves, and where it wins.
 - One **Business Context** page per bounded context, which describes the
-  problem the context solves in business language. All seventeen are listed
+  problem the context solves in business language. All twenty are listed
   in the [per-context table](#per-context-artifacts-by-step) below.
 
 ## 2. Discover
@@ -80,7 +80,7 @@ coupled parts that can be reasoned about and changed independently.
 - [Subdomain Classification](/strategic-design/subdomain-classification):
   each bounded context, the part of the domain it owns, and why the line
   is drawn there.
-- [Bounded Contexts](/contexts): the seventeen resulting contexts, with their
+- [Bounded Contexts](/contexts): the twenty resulting contexts, with their
   tier and CloudEvents subdomain (`wms` or `wes`).
 
 ## 4. Strategize
@@ -197,6 +197,10 @@ them. ddd-crew's tool for the aggregate is the
 | `slotting-optimization` | [Business Context](/contexts/slotting-optimization/business-context) | [EventStorming](/contexts/slotting-optimization/eventstorming) | [Core Domain Chart](/contexts/slotting-optimization/core-domain-chart) | [Message Flow](/contexts/slotting-optimization/domain-message-flow), [Context Map](/contexts/slotting-optimization/context-map) | [Canvas](/contexts/slotting-optimization/bounded-context-canvas) | [Aggregate Canvas](/contexts/slotting-optimization/aggregate-design-canvas) |
 | `pick-face-replenishment` | [Business Context](/contexts/pick-face-replenishment/business-context) | [EventStorming](/contexts/pick-face-replenishment/eventstorming) | [Core Domain Chart](/contexts/pick-face-replenishment/core-domain-chart) | [Message Flow](/contexts/pick-face-replenishment/domain-message-flow), [Context Map](/contexts/pick-face-replenishment/context-map) | [Canvas](/contexts/pick-face-replenishment/bounded-context-canvas) | [Aggregate Canvas](/contexts/pick-face-replenishment/aggregate-design-canvas) |
 | `task-interleaving` | [Business Context](/contexts/task-interleaving/business-context) | [EventStorming](/contexts/task-interleaving/eventstorming) | [Core Domain Chart](/contexts/task-interleaving/core-domain-chart) | [Message Flow](/contexts/task-interleaving/domain-message-flow), [Context Map](/contexts/task-interleaving/context-map) | [Canvas](/contexts/task-interleaving/bounded-context-canvas) | [Aggregate Canvas](/contexts/task-interleaving/aggregate-design-canvas) |
+| `network-inventory-planning` | [Business Context](/contexts/network-inventory-planning/business-context) | [EventStorming](/contexts/network-inventory-planning/eventstorming) | [Core Domain Chart](/contexts/network-inventory-planning/core-domain-chart) | [Message Flow](/contexts/network-inventory-planning/domain-message-flow), [Context Map](/contexts/network-inventory-planning/context-map) | [Canvas](/contexts/network-inventory-planning/bounded-context-canvas) | [Aggregate Canvas](/contexts/network-inventory-planning/aggregate-design-canvas) |
+| `returns-processing` | [Business Context](/contexts/returns-processing/business-context) | [EventStorming](/contexts/returns-processing/eventstorming) | [Core Domain Chart](/contexts/returns-processing/core-domain-chart) | [Message Flow](/contexts/returns-processing/domain-message-flow), [Context Map](/contexts/returns-processing/context-map) | [Canvas](/contexts/returns-processing/bounded-context-canvas) | [Aggregate Canvas](/contexts/returns-processing/aggregate-design-canvas) |
+| `exception-management` | [Business Context](/contexts/exception-management/business-context) | [EventStorming](/contexts/exception-management/eventstorming) | [Core Domain Chart](/contexts/exception-management/core-domain-chart) | [Message Flow](/contexts/exception-management/domain-message-flow), [Context Map](/contexts/exception-management/context-map) | [Canvas](/contexts/exception-management/bounded-context-canvas) | [Aggregate Canvas](/contexts/exception-management/aggregate-design-canvas) |
+| `outbound-shipping` | [Business Context](/contexts/outbound-shipping/business-context) | [EventStorming](/contexts/outbound-shipping/eventstorming) | [Core Domain Chart](/contexts/outbound-shipping/core-domain-chart) | [Message Flow](/contexts/outbound-shipping/domain-message-flow), [Context Map](/contexts/outbound-shipping/context-map) | [Canvas](/contexts/outbound-shipping/bounded-context-canvas) | [Aggregate Canvas](/contexts/outbound-shipping/aggregate-design-canvas) |
 
 The Decompose step's output is fleet-level only, in
 [Subdomain Classification](/strategic-design/subdomain-classification).

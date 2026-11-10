@@ -9,7 +9,7 @@ slug: /glossary
 # Glossary
 
 This is an alphabetical index of the key terms from the ubiquitous languages
-of the seventeen contexts documented on this site. Each term belongs to one context, which holds
+of the twenty contexts documented on this site. Each term belongs to one context, which holds
 its authoritative definition. The short definitions below are condensed from
 each context's **Ubiquitous Language** page. That page is synced from the
 context's own repository, maps every term to its code identifier, and wins if
@@ -26,6 +26,7 @@ Ubiquitous Language pages like every other context.
 | Aisle | [`facility-layout`](/contexts/facility-layout/ubiquitous-language) | A physical corridor scoped to a Zone, with a walk-order `SequenceHint` and a `OneWay`/`TwoWay` direction. |
 | ASN | [`inbound-receiving`](/contexts/inbound-receiving/ubiquitous-language) | Advance ship notice: a supplier's declaration of what is arriving, keyed by `asn_number`, with lines of SKU and expected quantity. |
 | AssociateShift | [`workforce-management`](/contexts/workforce-management/ubiquitous-language) | Who is on shift: their certifications, breaks and logged hours. |
+| Bill of lading (BOL) | [`outbound-shipping`](/contexts/outbound-shipping/ubiquitous-language) | The shipping document of one confirmed load, issued exactly once and voidable. Voiding it does not undo the shipment. |
 | Bin | [`inventory-storage`](/contexts/inventory-storage/ubiquitous-language) | A coded slot with a capacity. Under chaotic storage any SKU may occupy any free bin; it knows nothing of aisles or zones (that is facility-layout's). |
 | Blast radius | [`warehouse-ops-agent`](/contexts/warehouse-ops-agent/ubiquitous-language) | The mandatory "what would this write touch" readout (SKU, bin, reservation, quantity freed) that must accompany a `revoke_reservation` recommendation. |
 | Bottleneck | [`warehouse-planning`](/contexts/warehouse-planning/ubiquitous-language) | The process-path step limiting end-to-end flow, and the constraint type binding it. |
@@ -41,12 +42,17 @@ Ubiquitous Language pages like every other context.
 | claimNext | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | Pull-based dispatch: returns the earliest-CPT pending task a station is certified and equipped for. There is no `assign(task, station)`. |
 | Classification source | [`product-master`](/contexts/product-master/ubiquitous-language) | `native` when a classification was authored in product-master, `legacy-import` when its legacy importer took it from inventory-storage during the migration (ADR 0003). A legacy import never overwrites a native one. |
 | CPT (Critical Pull Time) | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | The last moment a parcel can be manifested and still make its truck. Priority derives from it. |
+| Cutoff key | [`outbound-shipping`](/contexts/outbound-shipping/ubiquitous-language) | `(site, cpt, operating date, ship method)`: at most one open load exists per key. |
 | DailyBrief | [`warehouse-ops-agent`](/contexts/warehouse-ops-agent/ubiquitous-language) | The synthesized cross-path, cross-site operational summary: each monitored path's facts plus the open exceptions derived from them. |
+| Dedup key | [`exception-management`](/contexts/exception-management/ubiquitous-language) | `(source type, source subject, site)`. At most one open case exists per key; a repeated fact touches the open case instead of opening another. |
 | Detour (interleaving) | [`task-interleaving`](/contexts/task-interleaving/ubiquitous-language) | Distance in metres from the station's origin to a candidate task's first location (`FromLocation`), rounded to 0.1 m. `ToLocation` never enters the ranking. |
 | Direct | [`process-path-management`](/contexts/process-path-management/ubiquitous-language) | A structural, immutable fact about a path's routing shape. It is set at definition and cannot be revised. |
 | Discrepancy | [`product-master`](/contexts/product-master/ubiquitous-language) | True when a product's measured unit volume or weight differs from the declared value by more than 10 %. Information for stewards; it never rejects a measurement. |
 | Discrepancy (receipt) | [`inbound-receiving`](/contexts/inbound-receiving/ubiquitous-language) | A line of a closed receipt whose count differs from the ASN: `Short`, `Over` or `Damaged`. A different concept from product-master's Discrepancy. |
+| Disposition | [`returns-processing`](/contexts/returns-processing/ubiquitous-language) | The immutable decision for one inspected return line. An override is a new disposition with `supersedes` and a mandatory reason. |
 | Dock appointment | [`inbound-receiving`](/contexts/inbound-receiving/ubiquitous-language) | A booked dock door and time window for a carrier, covering one or more ASNs. Booked, checked in, completed or cancelled. |
+| ExceptionCase | [`exception-management`](/contexts/exception-management/ubiquitous-language) | One owned anomaly with a lifecycle: the frozen source fact, the dedup key, triage, an owner, an SLA clock, occurrences and the resolution. |
+| ExceptionPolicy | [`exception-management`](/contexts/exception-management/ubiquitous-language) | The per-source-type handling policy: default severity, queue, SLA minutes and an optional auto-resolve rule. Versioned and append-only. |
 | Flow balancing | [`wes-work-planning`](/contexts/wes-work-planning/ubiquitous-language) | A bounded, two-lever correction on one path when backlog deviates from plan: throttle upstream release, or flag labour reassignment. |
 | FlowBalanceException | [`warehouse-ops-agent`](/contexts/warehouse-ops-agent/ubiquitous-language) | The E1 correlation of a wes rebalance recommendation, a staffing gap and a stuck-task diagnostic for one path into one ranked recommendation. |
 | Forward bin | [`pick-face-replenishment`](/contexts/pick-face-replenishment/ubiquitous-language) | The location code of a pick face: the bin a replenishment request fills. |
@@ -55,6 +61,7 @@ Ubiquitous Language pages like every other context.
 | Fragile | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | A Task-level packing hint stamped at release time from wes-work-planning's local copy of product-master's classification. It does not gate claiming. |
 | Fulfillment class | [`order-management`](/contexts/order-management/ubiquitous-language) | A demand-shape classifier (`SINGLE`, `SAME_SKU_MULTI`, `MULTI_LINE_MULTI`), derived from line count and quantity and never stored. |
 | Gift wrap | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | A Task-level packing hint from a caller-stated request, independent of product classification. |
+| Grade | [`returns-processing`](/contexts/returns-processing/ubiquitous-language) | The inspection outcome of a return line (`A`, `B`, `C` or `SCRAP`) with reason codes, recorded exactly once. |
 | Handling tag | [`product-master`](/contexts/product-master/ubiquitous-language) | One of the closed set `Hazmat`, `Fragile`, `TemperatureSensitive`, `Oversized`, `HighValue` on a SKU's classification, always in that order on the wire. Moved from inventory-storage. |
 | Held order | [`order-management`](/contexts/order-management/ubiquitous-language) | An order received with `releaseOnAllocation=false`. It allocates, then waits for an explicit release or a cancel. Must be ship-complete. `network-fulfillment` raises these. |
 | Hint | [`task-interleaving`](/contexts/task-interleaving/ubiquitous-language) | The short ranked list of candidate tasks issued to a station after a completion. Advisory, expiring, never an assignment. States `Active`, `Consumed`, `Expired`, `Superseded`. |
@@ -69,6 +76,7 @@ Ubiquitous Language pages like every other context.
 | LocationSlot | [`facility-layout`](/contexts/facility-layout/ubiquitous-language) | The leaf aggregate: one coded physical slot, whose identity is its LocationCode. |
 | LocationType | [`facility-layout`](/contexts/facility-layout/ubiquitous-language) | A reusable classification of slot shape or kind (`PalletRack`, `Shelf`, `ToteWall`, ...), with a default capacity envelope and a LocationRole. |
 | MatchPrefix | [`process-path-management`](/contexts/process-path-management/ubiquitous-language) | The lower-case prefix consumers match a caller-supplied id against: an exact match, or the prefix followed by `-`. |
+| Missed load | [`outbound-shipping`](/contexts/outbound-shipping/ubiquitous-language) | A package that was not loaded by its cutoff (found by the sweep) or by the trailer's departure. Raised once per package. |
 | NetworkOrder | [`network-fulfillment`](/contexts/network-fulfillment/ubiquitous-language) | Demand from the external network with a deadline the fleet did not choose. It is answered exactly once, in full or not at all. |
 | NetworkRef | [`network-fulfillment`](/contexts/network-fulfillment/ubiquitous-language) | The network's opaque identity for one unit of demand. It is never parsed. It is the aggregate key, the CloudEvents `subject` and the Kafka key. |
 | Open request | [`pick-face-replenishment`](/contexts/pick-face-replenishment/ubiquitous-language) | The one `Requested` replenishment request of a pick face; its quantity counts as inbound stock when the projected level is computed. |
@@ -76,6 +84,7 @@ Ubiquitous Language pages like every other context.
 | OpenException | [`warehouse-ops-agent`](/contexts/warehouse-ops-agent/ubiquitous-language) | One path's flagged, human-gated exception: which correlation rule fired, its severity, and its evidence. Raised only when two or more independent signals fire. |
 | Order | [`order-management`](/contexts/order-management/ubiquitous-language) | The aggregate root: one customer's demand, its lines, its delivery promise and its hold/deadline intent. Its status is derived from line statuses, never stored. |
 | OrderLine | [`order-management`](/contexts/order-management/ubiquitous-language) | One requested SKU and quantity within an Order, with its resolved process path, gift-wrap flag, line status and reservation id. |
+| Outbound load | [`outbound-shipping`](/contexts/outbound-shipping/ubiquitous-language) | The packages planned to leave together on one trailer for one cutoff, planned automatically from the first manifested package. |
 | Package | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | Pack output: an order's contents becoming a sealed carton, then weigh-checked at SLAM (labelled or diverted). |
 | PathId | [`process-path-management`](/contexts/process-path-management/ubiquitous-language) | The canonical identity of a process path (`PICK`, `PACK`, ...). fulfillment-execution, wes-work-planning and workforce-management reference the same identity. |
 | PathPlan | [`workforce-management`](/contexts/workforce-management/ubiquitous-language) | One line of a ShiftPlan: `pathId`, `plannedHeads`, `plannedRate`, `plannedHours`. |
@@ -85,6 +94,7 @@ Ubiquitous Language pages like every other context.
 | Pick face | [`pick-face-replenishment`](/contexts/pick-face-replenishment/ubiquitous-language) | A forward bin assigned to one SKU by the site's latest approved slot plan, from which pickers pick. |
 | Pick velocity | [`slotting-optimization`](/contexts/slotting-optimization/ubiquitous-language) | Per SKU over the plan's window, from the order-management demand feed: picks = the number of ACTIVE demand lines, units = their summed units. Ranks SKUs for forward slots (picks desc, then units desc, then SKU ascending). |
 | PlacementRule | [`facility-layout`](/contexts/facility-layout/ubiquitous-language) | Declares which LocationTypes are legal in which Zones. It is enforced once, at registration time. |
+| Problem Solve | [`exception-management`](/contexts/exception-management/ubiquitous-language) | The operational work this context owns: taking an anomaly someone detected and driving it to a root cause. |
 | ProcessCapacity | [`warehouse-planning`](/contexts/warehouse-planning/ubiquitous-language) | The usable throughput of one process at one site for one window: the minimum across its registered constraints. |
 | ProcessPath | [`process-path-management`](/contexts/process-path-management/ubiquitous-language) | The aggregate root: the operator-configurable definition of one process path. (`warehouse-planning` keeps its own, differently modelled ProcessPath: an ordered sequence of process steps.) |
 | Proposal | [`network-inventory-planning`](/contexts/network-inventory-planning/ubiquitous-language) | An advisory transfer recommendation with a policy version, reason codes and a score breakdown. It reserves and moves nothing. |
@@ -101,9 +111,13 @@ Ubiquitous Language pages like every other context.
 | Replenishment request | [`pick-face-replenishment`](/contexts/pick-face-replenishment/ubiquitous-language) | One decision to move `quantity` units of one SKU from one reserve bin to one forward bin, and how it ended: `Requested`, then `Completed` or `Cancelled`. |
 | Reservation | [`inventory-storage`](/contexts/inventory-storage/ubiquitous-language) | A revocable binding of a quantity to demand, with a timeout. A revoke returns exactly the allocated quantity. |
 | Reserve bin | [`pick-face-replenishment`](/contexts/pick-face-replenishment/ubiquitous-language) | A known, not decommissioned Storage location of the same site in a reserve zone (default code `RSV`): where replenishment stock comes from. Its usable stock is `on_hand - reserved`. |
+| Return window | [`returns-processing`](/contexts/returns-processing/ubiquitous-language) | `authorized_at + policy.return_window_days`: the returned goods must arrive inside it. |
+| ReturnAuthorization (RMA) | [`returns-processing`](/contexts/returns-processing/ubiquitous-language) | Permission to send one shipped order line back, with the authorized quantity, the reason and the policy window. One open RMA per order line. |
 | Shortage | [`warehouse-planning`](/contexts/warehouse-planning/ubiquitous-language) | `max(0, assigned demand − capacity over window)`, in orders. Equal is not a shortage. |
 | ShiftPlan | [`workforce-management`](/contexts/workforce-management/ubiquitous-language) | The committed split of headcount across paths for one building and shift. The software proposes it and a human commits it. |
+| Ship-confirm | [`outbound-shipping`](/contexts/outbound-shipping/ubiquitous-language) | The fact that a load physically left, taken from the trailer's departure and never from a click. |
 | Site | [`facility-layout`](/contexts/facility-layout/ubiquitous-language) | A physical facility or building; the root of the location hierarchy. |
+| SLA clock | [`exception-management`](/contexts/exception-management/ubiquitous-language) | `slaDueAt = openedAt + policy.slaMinutes`, computed once at open. A breach sets the escalated flag, which never blocks the case. |
 | Slot plan | [`slotting-optimization`](/contexts/slotting-optimization/ubiquitous-language) | The aggregate: a proposed SKU-to-forward-slot assignment for a site and demand window, generated as a Draft and then approved or rejected by a human; approving supersedes the site's previous Approved plan. |
 | SortLane | [`fulfillment-execution`](/contexts/fulfillment-execution/ubiquitous-language) | The derived sortation decision for a package: `HAZMAT_LANE` beats `FRAGILE_NO_TILT` beats `STANDARD`. |
 | Source bin policy | [`pick-face-replenishment`](/contexts/pick-face-replenishment/ubiquitous-language) | The versioned rule that picks the reserve bin of a request; v1 is `fullest-reserve-bin-v1`. |

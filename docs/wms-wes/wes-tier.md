@@ -455,28 +455,33 @@ flowchart LR
 | | |
 | --- | --- |
 | Fleet tier | `wes` (it publishes no events) |
-| Industry category | **Cross-tier decision support**: a read-only correlation layer over WMS and WES |
+| Industry category | **Cross-tier decision support**: a correlation layer over WMS and WES, read-only apart from two human-confirmed act slices |
 | ISA-95 level | spans level 3 |
 | Decision horizon | minutes to hours |
 | DDD class | Supporting |
 
 **Why cross-tier.** It owns no aggregate, no database and no Kafka. It
-correlates what twelve contexts expose through their MCP tools, REST and
+correlates what the contexts expose through their MCP tools, REST and
 reports (one MCP client per context under
-`internal/adapters/outbound/mcpclient/`) into a daily brief and exception lists (`get_daily_brief`,
+`internal/adapters/outbound/mcpclient/`: seventeen of the nineteen other
+backend contexts on this site have one on `develop`, plus eleven retail-network contexts, and
+some are wired with no use case behind them) into a daily brief and exception lists (`get_daily_brief`,
 `list_open_exceptions`, `get_flow_balance_exception`,
 `detect_stranded_reservation`, `find_master_data_gaps`, `get_inbound_outlook`,
-`explain_network_imbalance`, `triage_stuck_transfers`). It has zero write
-tools: it recommends, people decide.
+`explain_network_imbalance`, `triage_stuck_transfers`). Its MCP surface has zero write
+tools: it recommends, people decide. Two human-confirmed act slices (ADR 0027,
+`release_next_work`, and ADR 0029, `assign_labor`) delegate one approved write
+each to the owning context over A2A, through a propose then approve flow.
 
-**Why neither WMS nor WES.** It executes no transaction and releases no work.
+**Why neither WMS nor WES.** It executes no transaction and decides no release on its own: an act slice only forwards a
+human-approved request to the owning context.
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 40, "padding": 6}}}%%
 flowchart LR
     IN1["WMS tier<br/>inventory-storage, facility-layout,<br/>product-master, inbound-receiving"] -->|"MCP, REST, reports"| OA
     IN2["wes tier<br/>wes-work-planning, fulfillment-execution,<br/>process-path-management, workforce-management,<br/>labor-performance, warehouse-planning,<br/>order-management, network-inventory-planning"] -->|"MCP, REST, reports"| OA
-    OA["<b>warehouse-ops-agent</b><br/>cross-tier, read-only"]
+    OA["<b>warehouse-ops-agent</b><br/>cross-tier, advisory"]
     OA -->|"daily brief,<br/>exceptions"| OUT1["Operators and<br/>the console"]
 
     classDef other fill:#f1f5f9,stroke:#475569,color:#0f172a

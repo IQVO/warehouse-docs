@@ -1,7 +1,7 @@
 ---
 id: qualification
 title: Qualifying each bounded context as WMS or WES
-sidebar_label: Qualification of the 17 contexts
+sidebar_label: Qualification of 17 of 20 contexts
 description: The five tests from the industry reference applied to every bounded context of the fleet, with the verdict, the ISA-95 level, the decision horizon, the Interact Analysis WES criteria and where the industry category differs from the fleet's CloudEvents tier.
 ---
 
@@ -9,7 +9,7 @@ description: The five tests from the industry reference applied to every bounded
 
 This page applies the five tests from the
 [industry reference](/wms-wes/industry-reference#the-tests-this-site-applies)
-to the seventeen contexts on this site. Every verdict is backed by code on
+to seventeen of the twenty contexts on this site. Every verdict is backed by code on
 `develop` (routes, events, domain packages), except for
 `pick-face-replenishment` and `task-interleaving`, whose rows are marked
 **not yet qualified**: no verdict has been derived for them yet. The
@@ -93,7 +93,7 @@ decides "the timing and location of order processing".[5][6]
 | [`order-management`](/wms-wes/wes-tier#order-management) | `wes` | **Above the WMS**: order management; plus the WMS order-allocation step | 4, allocation at 3 | seconds to hours | Generic/Supporting | no |
 | [`network-inventory-planning`](/wms-wes/wes-tier#network-inventory-planning) | `wes` | **Above the WMS**: network inventory deployment and transfers | 4 | days | Core | no |
 | [`network-fulfillment`](/wms-wes/wes-tier#network-fulfillment) | `wes` | **Above the WMS**: sales-channel integration (anti-corruption layer) | 4 | hours | Supporting | no |
-| [`warehouse-ops-agent`](/wms-wes/wes-tier#warehouse-ops-agent) | `wes` (publishes no events) | **Cross-tier decision support**: read-only, spans WMS and WES | spans 3 | minutes to hours | Supporting | no |
+| [`warehouse-ops-agent`](/wms-wes/wes-tier#warehouse-ops-agent) | `wes` (publishes no events) | **Cross-tier decision support**: advisory (read-only apart from two human-confirmed act slices), spans WMS and WES | spans 3 | minutes to hours | Supporting | no |
 | WCS | none | **WCS** | 2 | seconds | none | not built |
 
 The ISA-95 levels follow KNAPP's mapping of the categories onto ISA-95.[9] The
@@ -180,12 +180,12 @@ flowchart LR
 ```
 
 Thin arrows: the industry category matches the fleet tier. Thick arrows: it
-does not. The dotted arrow marks a context with no verdict yet. Five of the six `wms` contexts are WMS software by the industry tests;
-`pick-face-replenishment` is not yet qualified. Of
-the eleven `wes` contexts, three are WES software and `task-interleaving` is
-not yet qualified. The other seven are labor
+does not. The dotted arrow marks a context with no verdict yet. Of the six `wms` contexts that have a row, five are WMS software by the
+industry tests and `pick-face-replenishment` is not yet qualified. Of the
+eleven `wes` contexts that have a row (`exception-management` has none yet),
+three are WES software and `task-interleaving` is not yet qualified. The other seven are labor
 management (an extended WMS capability for Gartner[1][2]), software above the
-WMS, or the read-only agent.
+WMS, or the advisory agent.
 
 ## Placement by horizon and scope
 

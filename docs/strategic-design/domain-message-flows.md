@@ -2,7 +2,7 @@
 id: domain-message-flows
 title: Domain Message Flow Modelling
 sidebar_label: Domain Message Flows
-description: Commands, events and queries flowing between the seventeen contexts documented on this site for the platform's key business scenarios, in ddd-crew Domain Message Flow notation, with the Kafka topic of every event.
+description: Commands, events and queries flowing between seventeen of the twenty contexts documented on this site for the platform's key business scenarios, in ddd-crew Domain Message Flow notation, with the Kafka topic of every event.
 ---
 
 # Domain Message Flow Modelling
@@ -50,7 +50,7 @@ context's own projector and are never read by a sibling.
 | | | `BinStockLevelChanged` (absolute per-bin level, key `<bin>:<sku>`) | pick-face-replenishment (deployed) |
 | | | `TransferStockAllocated`, `TransferStockAllocationRejected`, `TransferReceiptStaged`, `TransferStockStowed` | network-inventory-planning |
 | | | legacy `ProductClassified` (emitted only by the one-shot backfill) | product-master's legacy importer (migration only, removed at stage E) |
-| `warehouse.work-planning.events` | wes-work-planning | `WorkReleased` (including `RELOCATE` work for slot-plan moves and, since wes-work-planning's ADR 0042, `REPLENISH` work with its additive `replenishment` object; the `REPLENISH` work exists only when the opt-in `REPLENISHMENT_MODE=kafka` consumer runs, which the reference deployment does not enable) | fulfillment-execution |
+| `warehouse.work-planning.events` | wes-work-planning | `WorkReleased` (including `RELOCATE` work for slot-plan moves and, since wes-work-planning's ADR 0042, `REPLENISH` work with its additive `replenishment` object; the `REPLENISH` work exists only when the opt-in `REPLENISHMENT_MODE=kafka` consumer runs, which `warehouse-infra` `develop` sets, `helm-values/wes-work-planning.yaml`, K44) | fulfillment-execution |
 | | | `PathCapacityChanged` | order-management, network-fulfillment |
 | `warehouse.fulfillment.events` | fulfillment-execution | `TaskCompleted` (RELOCATE tasks add `sku`, `from_bin`, `to_bin`, `quantity`, `relocation_ref`; REPLENISH tasks add the same plus `request_ref`) | wes-work-planning, labor-performance, inventory-storage (picks, RELOCATE and REPLENISH moves); task-interleaving; warehouse-planning (observed capacity, its ADR 0017, K49) |
 | | | `TaskAvailable` (RELOCATE and REPLENISH tasks only), `TaskClaimed` | task-interleaving (deployed) |
@@ -70,34 +70,47 @@ context's own projector and are never read by a sibling.
 | `warehouse.product-master.events` | product-master | `ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies); slotting-optimization |
 | | | `ProductRegistered` | inbound-receiving (local copy of known SKUs) |
 | | | `ProductDimensionsDeclared`, `ProductMeasured` | slotting-optimization |
+| | | `ProductPackLevelDeclared`, `ProductPackLevelRetired` | inbound-receiving, inventory-storage, pick-face-replenishment, slotting-optimization, wes-work-planning, fulfillment-execution, network-inventory-planning (local pack views, K62) |
+| | | `ProductPackLevelMeasured` | wes-work-planning, slotting-optimization (K62) |
 | `warehouse.inbound-receiving.events` | inbound-receiving | `ReceiptLineReceived` | inventory-storage (its ADR 0037) |
+| | | `CartonDiscrepancyRaised` | exception-management (its ADR 0006, K66) |
 | | | `DockAppointmentBooked`, `DockAppointmentCancelled` | warehouse-planning (inbound labour demand per site, declared labour standards, its ADR 0017, K28; source switched to dock-scheduling by ADR 0020) |
 | `warehouse.slotting-optimization.events` | slotting-optimization | `SlotPlanApproved` | wes-work-planning (one `RELOCATE` work unit per move, its ADR-0040); pick-face-replenishment (forward map) |
 | `warehouse.pick-face-replenishment.events` | pick-face-replenishment | `ReplenishmentRequested` | wes-work-planning (one `REPLENISH` work unit per request, its ADR 0042; opt-in, and `REPLENISHMENT_MODE=kafka` is set in the reference deployment, K44) |
 | | | `ReplenishmentCancelled` | wes-work-planning (cancels the unit only while it is still Pending, same opt-in) |
 | | | `ReplenishmentCompleted` | none (wes-work-planning reads the topic and ignores it) |
 | `warehouse.task-interleaving.events` | task-interleaving | `InterleavingHintIssued` | fulfillment-execution (advisory tie-break inside one `claimNext` priority band, its ADR 0051, K47) |
+| `warehouse.returns-processing.events` | returns-processing | `ReturnLineStaged` | inventory-storage (its ADR 0044, K53) |
+| | | `UnexpectedReturnReceived` | exception-management (K54) |
+| `warehouse.outbound-shipping.events` | outbound-shipping | `ShipmentConfirmed`, `PackageMissedLoad` | order-management (its ADR 0051, K72; wired-but-unused, `outbound-shipping` is not deployed) |
+| | | `PackageMissedLoad` | exception-management (its ADR 0011, K73; wired-but-unused) |
+| `warehouse.exception-management.events` | exception-management | all seven types | none |
 
 Several published types have no sibling consumer today. These are
-`OrderRepromised`, eight of the eleven `warehouse.work-planning.events`
+eight of the eleven `warehouse.work-planning.events`
 types (all but `WorkReleased`, `PathCapacityChanged` and `WorkUnitCreated`,
 which `order-management` reads only with `RELEASE_CONFIRMATION_MODE=kafka`; for
 example `PathPlanDriftDetected` and `WorkUnitCompleted`),
 `BottleneckDetected`, `TransferPlanApproved`, every `warehouse.network-fulfillment.events` type,
 `ProductDescriptionChanged`, every
 `warehouse.inbound-receiving.events` type except `ReceiptLineReceived`,
-`DockAppointmentBooked` and `DockAppointmentCancelled`,
+`CartonDiscrepancyRaised` (K66), `DockAppointmentBooked` and `DockAppointmentCancelled`
+(the yard section's own readers of the rest are on the
+[yard section context map](/yard/strategic-design/context-map)),
 `SlotPlanGenerated` and `SlotPlanRejected` on
 `warehouse.slotting-optimization.events`, and
 `ReplenishmentCompleted` on `warehouse.pick-face-replenishment.events`. No scenario below
 traverses the `inbound-receiving`, `slotting-optimization`,
-`pick-face-replenishment` or `task-interleaving` rows yet (the
+`pick-face-replenishment`, `task-interleaving`, `returns-processing`,
+`exception-management` or `outbound-shipping` rows yet (the
 slot-plan execution chain is the sequence on the
 [slotting-optimization sequence diagrams](/contexts/slotting-optimization/sequence-diagrams)).
 They are listed as hotspots on
 [Big Picture EventStorming](/strategic-design/eventstorming-big-picture).
-`warehouse-ops-agent` has no Kafka I/O at all. It only issues `qry:`
-messages over MCP and REST.
+`warehouse-ops-agent` has no Kafka I/O at all. It issues `qry:`
+messages over MCP and REST, and its two human-confirmed act slices send a
+`cmd:` to the owning context over A2A (see the
+[Context Map](/strategic-design/context-map)).
 
 ## 1. Network order intake and acceptance
 

@@ -107,7 +107,8 @@ troubleshooting, testing). The REST reference is generated from its
   type catalogue), 0005 (outbox relay attempt cap and DLQ) and 0006 (carton
   discrepancy consumer and routing).
 - **Fleet-level**: [Context Map](/strategic-design/context-map) (its producer edges K54 to K59 and K66, built on both ends and wired in
-  `warehouse-infra` `develop`, so live, plus the dashed planned
+  `warehouse-infra` `develop`, so live; the wired-but-unused yard, dock and
+  outbound-shipping feeds K63, K64 and K73; and the dashed planned
   workforce/NIP edges K60 and K61), the
   [Event Standard](/strategic-design/event-standard-cloudevents)
   (subdomain table and type catalogue),

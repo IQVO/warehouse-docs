@@ -2,7 +2,7 @@
 id: ubiquitous-language
 title: Ubiquitous Language (Fleet Overview)
 sidebar_label: Ubiquitous Language
-description: How the vocabulary is organised across the seventeen backend contexts, which terms are genuinely shared, and which words mean different things in different contexts.
+description: How the vocabulary is organised across the twenty backend contexts, which terms are genuinely shared, and which words mean different things in different contexts.
 ---
 
 # Ubiquitous Language: Fleet Overview
@@ -46,6 +46,9 @@ wins. For one alphabetical index across every context, see
 | `slotting-optimization` | Slot plan (Draft, Approved, Rejected, Superseded), Forward slot, Velocity, ABC class, Stickiness, Policy (`abc-velocity-v1`), Assignment, Move (Assign, Relocate, Vacate), Unassigned | [Ubiquitous Language](/contexts/slotting-optimization/ubiquitous-language) |
 | `pick-face-replenishment` | Pick face, Reserve bin, Min/max (policy), Replenishment request (Requested, Completed, Cancelled), Projected level, Priority (NORMAL, URGENT), Source bin policy | [Ubiquitous Language](/contexts/pick-face-replenishment/ubiquitous-language) |
 | `task-interleaving` | Station, Station trip, Position, Hint (Active, Consumed, Expired, Superseded), Candidate, Detour, Origin, Open-task pool, Priority band, Tie-break, Interleaving policy, Inert site, Travel model (`rectilinear-v1`), Unknown distance | [Ubiquitous Language](/contexts/task-interleaving/ubiquitous-language) |
+| `returns-processing` | ReturnAuthorization (RMA), Return window, ReturnReceipt, MATCHED / UNEXPECTED line, Grade, Disposition, Outcome, DispositionPolicy, Guardrails, Staged line | [Ubiquitous Language](/contexts/returns-processing/ubiquitous-language) |
+| `exception-management` | Problem Solve, ExceptionCase, Source fact, Dedup key, Occurrence, Touch, SLA clock, Escalation, Auto-resolve rule, ExceptionPolicy | [Ubiquitous Language](/contexts/exception-management/ubiquitous-language) |
+| `outbound-shipping` | Outbound load, Cutoff key, Shipping package, Staging, Loading, Door, Short-ship, Ship-confirm, Bill of lading, Missed load | [Ubiquitous Language](/contexts/outbound-shipping/ubiquitous-language) |
 
 ## Shared terms
 

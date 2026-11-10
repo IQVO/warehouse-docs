@@ -77,8 +77,16 @@ and `warehouse-infra` `develop` has no `terraform/apps.yaml` entry and no
 values file for it. Its nine edges are K67 to K75. Every one is
 **wired-but-unused** or **absent-planned**, never live; each row states the
 producer's code, the consumer's code and the infrastructure as three separate
-facts. K62 to K66 are cited by other pages but have no row in this table, so
-the numbering continues at K67 rather than reassign them.
+facts.
+
+K62 to K66 close a numbering gap: other pages cite K62 (the product-master
+pack-level edges) and K66 (the carton-discrepancy feed into
+`exception-management`), and until 2026-11-10 this table had no such rows.
+K62 and K66 are **live**, and K63 to K65 are the three yard-section edges into
+`exception-management` and `inbound-receiving` that were missing too: they
+are **wired-but-unused** because `dock-scheduling` and `yard-management` are
+registered in `warehouse-infra` `develop` (#193) but not applied to the cluster
+as far as the yard pages record.
 
 Each context's repository has its own context map, synced to this
 site and grounded in that repo's code. This page
@@ -224,6 +232,10 @@ flowchart LR
     LP -.->|"REST task-type performance"| WFM
     OM -.->|"MCP get_order, wired only"| OA
     PPM -.->|"MCP, wired only"| OA
+    PFR -.->|"MCP, wired only"| OA
+    TI -.->|"MCP, wired only"| OA
+    RP -.->|"MCP, wired only"| OA
+    EM -.->|"MCP, wired only"| OA
     NF -.->|"Kafka networkorder events"| NOSUB
     RN -->|"Vendor API, live mode"| NF
     FE -.-x|"deliberately absent"| WCS
@@ -238,6 +250,13 @@ flowchart LR
     PM ==>|"Kafka ProductClassified,<br/>local copy"| OM
     PM ==>|"Kafka ProductClassified,<br/>local copy"| WP
     PM ==>|"Kafka ProductClassified,<br/>local copy"| FE
+    PM ==>|"Kafka ProductPackLevel events,<br/>pack view (K62)"| INV
+    PM ==>|"Kafka ProductPackLevel events,<br/>pack view (K62)"| WP
+    PM ==>|"Kafka ProductPackLevel events,<br/>pack view (K62)"| FE
+    PM ==>|"Kafka ProductPackLevel events,<br/>pack view (K62)"| INB
+    PM ==>|"Kafka ProductPackLevel events,<br/>pack view (K62)"| SLOT
+    PM ==>|"Kafka ProductPackLevel events,<br/>pack view (K62)"| PFR
+    PM ==>|"Kafka ProductPackLevel events,<br/>pack view (K62)"| NIP
 
     %% inbound-receiving and slotting-optimization (decided 2026-10-08, both
     %% built). inbound-receiving runs in the reference deployment in kafka mode
@@ -313,6 +332,16 @@ flowchart LR
     WFM -.->|"PathUnderstaffed (planned,<br/>analytics-only today)"| EM
     NIP -.->|"TransferStuckDetected (planned,<br/>analytics-only today)"| EM
 
+    %% K62 to K66 (rows added 2026-11-10): the pack-level edges above, and the
+    %% feeds into exception-management and inbound-receiving. K66 is thick (both
+    %% ends registered and live); K63 to K65 are dotted because dock-scheduling
+    %% and yard-management are registered in warehouse-infra develop but not
+    %% applied.
+    INB ==>|"Kafka CartonDiscrepancyRaised<br/>(K66)"| EM
+    YM -.->|"Kafka VisitRejected, SealExceptionRaised,<br/>TrailerDwellExceeded, YardCheckClosed (K63)"| EM
+    DS -.->|"Kafka DockAppointmentNoShow<br/>(K64)"| EM
+    DS -.->|"Kafka DockAppointmentBooked, Rescheduled,<br/>Cancelled, DoorReassigned (K65)"| INB
+
     %% outbound-shipping (wms), built on develop and NOT deployed (no Helm chart,
     %% no warehouse-infra entry): K67 to K75. Every leg is dotted: the five inbound
     %% edges and the two built consumers (K72, K73) are wired-but-unused, and the
@@ -364,6 +393,12 @@ K59 are thick and live — the code on both ends is built, including
 and the dashed K60 and K61 (`PathUnderstaffed`,
 `TransferStuckDetected`) are absent-planned: their producers publish them on
 analytics topics only, so no consumer can exist yet.
+The seven thick pack-level edges from `product-master` are K62 (one row, seven
+consumers). K66 is the thick feed of `CartonDiscrepancyRaised` from
+`inbound-receiving` into `exception-management`; K63 to K65 are dotted
+(wired-but-unused) because they start at `yard-management` or
+`dock-scheduling`: yard and dock feeds into `exception-management` (K63, K64)
+and the appointment feed into `inbound-receiving` (K65).
 The nine dotted edges K67 to K75 belong to `outbound-shipping` (built on
 `develop`, not deployed): K67 to K71 are its five inbound feeds and K72 and K73
 its two built consumers, all wired-but-unused, and K74 and K75 are the two
@@ -418,7 +453,7 @@ Omitted from the diagram:
 | K25 | `product-master` → `slotting-optimization` | PL / local copy (classification and effective physical profile per SKU) | `warehouse.product-master.events`: `ProductClassified`, `ProductDimensionsDeclared`, `ProductMeasured` | **live**. `PRODUCT_MODE=kafka`, group `slotting-optimization-product` (`helm-values/slotting-optimization.yaml`), applied only when `version` is newer. This also makes the physical-profile types consumed (hotspot H34) | [slotting-optimization](/contexts/slotting-optimization/context-map) |
 | K26 | `facility-layout` → `slotting-optimization` | OHS + PL / ACL (local copy of zones and slots) | `warehouse.facility.events`: `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | **live**. `LAYOUT_MODE=kafka`, group `slotting-optimization-layout`. slotting-optimization's own map names this edge Conformist | [slotting-optimization](/contexts/slotting-optimization/context-map) |
 | K27 | `order-management` → `slotting-optimization` | PL / ACL (pick velocity from the demand feed) | `warehouse.order-management.events`: `siteskudemand.SiteSkuDemandChanged` | **live**. `DEMAND_MODE=kafka`, group `slotting-optimization-demand`, last writer wins per order line. slotting-optimization's own map names this edge Conformist | [slotting-optimization](/contexts/slotting-optimization/context-map) |
-| K28 | `dock-scheduling` → `warehouse-planning` (was `inbound-receiving`) | PL, inbound-labor demand | `warehouse.dock-scheduling.events`: `dockappointment.DockAppointmentBooked`, `DockAppointmentRescheduled`, `DockAppointmentCancelled`, `DockAppointmentNoShow` | **wired-but-unused**. The source switched on 2026-11-05: `warehouse-planning` ADR 0020 supersedes the source of ADR 0017 (the `DockAppointment` aggregate moved to `dock-scheduling`, inbound-receiving ADR 0019), keeping the labour standard, window semantics and `/inbound-demand`. The consumer is built and configured (`dockAppointments.consumerGroup` in `helm-values/warehouse-planning.yaml`; the retired `INBOUND_DEMAND_CONSUMER_GROUP` is refused by the chart), but `dock-scheduling` has no `warehouse-infra` `develop` registration (no `terraform/apps.yaml` entry, no values file), so no appointment event reaches the topic. Before ADR 0020 the edge was live from `inbound-receiving` (ADR 0017, deployed 2026-10-20/21). Cluster state not verified. See the [yard section context map](/yard/strategic-design/context-map) | [dock-scheduling](/yard/contexts/dock-scheduling/context-map), [warehouse-planning](/contexts/warehouse-planning/context-map) |
+| K28 | `dock-scheduling` → `warehouse-planning` (was `inbound-receiving`) | PL, inbound-labor demand | `warehouse.dock-scheduling.events`: `dockappointment.DockAppointmentBooked`, `DockAppointmentRescheduled`, `DockAppointmentCancelled`, `DockAppointmentNoShow` | **wired-but-unused**. The source switched on 2026-11-05: `warehouse-planning` ADR 0020 supersedes the source of ADR 0017 (the `DockAppointment` aggregate moved to `dock-scheduling`, inbound-receiving ADR 0019), keeping the labour standard, window semantics and `/inbound-demand`. The consumer is built and configured (`dockAppointments.consumerGroup` in `helm-values/warehouse-planning.yaml`; the retired `INBOUND_DEMAND_CONSUMER_GROUP` is refused by the chart), and `dock-scheduling` is registered in `warehouse-infra` `develop` (`terraform/apps.yaml`, `helm-values/dock-scheduling.yaml`, #193, 2026-11-09), but the yard pages record it as not applied to the cluster (no pods), so no appointment event is known to reach the topic. Before ADR 0020 the edge was live from `inbound-receiving` (ADR 0017, deployed 2026-10-20/21). Cluster state not verified. See the [yard section context map](/yard/strategic-design/context-map) | [dock-scheduling](/yard/contexts/dock-scheduling/context-map), [warehouse-planning](/contexts/warehouse-planning/context-map) |
 | K29 | `slotting-optimization` → `wes-work-planning` | PL / ACL (unexported structs in the consumer hold the foreign shape), RELOCATE work execution | `warehouse.slotting-optimization.events`: `slotplan.SlotPlanApproved` (carries the full forward-pick map and the moves, so a consumer needs no lookup) | **live**. wes-work-planning ADR 0040: its inbound consumer reads the topic whenever `KAFKA_BROKERS` is set (`kafka.enabled` in `helm-values/wes-work-planning.yaml`), under its existing group, and plans one `RELOCATE` work unit per move (sequenced, superseded by a newer plan, CPT = approval time + `RELOCATION_CPT_HORIZON`, default 24 h). slotting-optimization publishes with `EVENT_PUBLISHER=kafka`. The `RELOCATE` process path (process-path-management ADR 0033, intake `SLOT_RELOCATION`, ADR 0034) must be seeded first (`warehouse-infra` post-deploy step 1), or the plan is retried and dead-lettered to `warehouse.slotting-optimization.events.dlq`. Slotting ADR 0010 decides it and supersedes ADR 0007 | [slotting-optimization](/contexts/slotting-optimization/context-map), [WP](/contexts/wes-work-planning/context-map) |
 | K30 | `facility-layout` → `network-inventory-planning` | OHS + PL / ACL (a last-writer-wins `site_capability` row) | `warehouse.facility.events`: `SiteCapabilityChanged` | **live**. Opt-in (`SITE_CAPABILITY_CONSUMER_GROUP`, NIP ADR 0002), and the reference deployment sets it (`terraform/network-inventory-planning.tf`). `facility-layout`'s own code names no consumer | [NIP](/contexts/network-inventory-planning/context-map) |
 | K31 | `order-management` → `network-inventory-planning` | OHS + PL / ACL (a `site_sku_demand` row per order line, `REMOVED` tombstones it) | `warehouse.order-management.events`: `SiteSkuDemandChanged` | **live**. Opt-in (`SITE_SKU_DEMAND_CONSUMER_GROUP`), set in the reference deployment. `order-management`'s own code names no consumer | [NIP](/contexts/network-inventory-planning/context-map) |
@@ -452,13 +487,18 @@ Omitted from the diagram:
 | K59 | `inventory-storage` → `exception-management` | OHS + PL / CF (frozen copies; a short count and unlocated stock each open or touch their own case) | `warehouse.inventory.events`: `bin.DiscrepancyDetected`, `stock.ItemUnlocated` (both promoted onto the integration topic 2026-10-21, inventory-storage ADR 0043) | **live**. Consumer built (group `exception-management-inventory`, `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`); the producer publishes both types on its live topic since the promotion; `exception-management` is registered in `warehouse-infra` `develop` since 2026-10-22 (`terraform/apps.yaml`, consumer groups pinned in `helm-values/exception-management.yaml`) | [exception-management](/contexts/exception-management/domain-events) |
 | K60 | `workforce-management` → `exception-management` | PL, planned; CF on the consumer | `warehouse.workforce.analytics`: `shiftplan.PathUnderstaffed` (analytics-only on the producer today) | **absent-planned**. Named by exception-management's ADR 0001 and ADR 0003; the producer must promote the type onto its integration topic first (its own PR), and no consumer for it exists | [exception-management](/contexts/exception-management/bounded-context-canvas) |
 | K61 | `network-inventory-planning` → `exception-management` | PL, planned; CF on the consumer | `warehouse.network-inventory-planning.analytics`: `saga.TransferStuckDetected` (analytics-only on the producer today, its ADR 0007 health ticker) | **absent-planned**. Named by exception-management's ADR 0001 and ADR 0003; the producer must promote the type onto its integration topic first (its own PR), and no consumer for it exists | [exception-management](/contexts/exception-management/bounded-context-canvas) |
+| K62 | `product-master` → `inbound-receiving`, `inventory-storage`, `pick-face-replenishment`, `slotting-optimization`, `wes-work-planning`, `fulfillment-execution`, `network-inventory-planning` | PL / local pack view per consumer (the GS1 packaging hierarchy of product-master ADR 0011, applied only when the event `version` is newer) | `warehouse.product-master.events`: `product.ProductPackLevelDeclared` and `ProductPackLevelRetired` (all seven consumers), `ProductPackLevelMeasured` (`wes-work-planning` and `slotting-optimization` only) | **live**. Producer: `product-master` publishes all three types on its integration topic (`internal/adapters/outbound/kafka/encoder.go`, its ADR 0011). Consumers, each built on `develop` with its own group: `inbound-receiving` (`packaging_consumer.go`, ADR 0012, `PACKAGING_CONSUMER_GROUP`), `inventory-storage` (`apply_pack_level.go`, on the same consumer as K20), `pick-face-replenishment` (ADR 0009, `PACK_LEVEL_CONSUMER_GROUP`), `slotting-optimization` (ADR 0012, `PACK_LEVEL_MODE=kafka`), `wes-work-planning` (ADR 0045, `PACK_VIEW_CONSUMER_GROUP`), `fulfillment-execution` (ADR 0054, `PACK_VIEW_CONSUMER_GROUP`) and `network-inventory-planning` (ADR 0017, `PACK_LEVEL_CONSUMER_GROUP`). Infra: `warehouse-infra` `develop` sets `inbound-receiving-packaging`, `inventory-storage-product-master` (shared with K20), `pick-face-replenishment-pack-levels`, `slotting-optimization-pack-level` (`helm-values/*.yaml`), `fulfillment-execution-pack-view` (`PACK_VIEW_CONSUMER_GROUP` in its `extraEnv`) and `network-inventory-planning-pack-level`; `wes-work-planning` takes the chart default `wes-work-planning-pack-view`. Image tags and cluster state not checked | [product-master](/contexts/product-master/async-api), [inbound-receiving](/contexts/inbound-receiving/async-api), [slotting-optimization](/contexts/slotting-optimization/async-api) |
+| K63 | `yard-management` → `exception-management` | PL / CF (frozen copy of the source payload on the case); C/S per the yard pack | `warehouse.yard-management.events`: `yardvisit.VisitRejected`, `trailer.SealExceptionRaised`, `trailer.TrailerDwellExceeded`, `yardcheck.YardCheckClosed` (one case per discrepancy; every other type on the topic is ignored) | **wired-but-unused**. Producer: `yard-management` publishes all four on its integration topic (`internal/adapters/outbound/kafka/encoder.go`, its ADR 0010), and `warehouse-infra` `develop` registers it (`terraform/apps.yaml`, `helm-values/yard-management.yaml`, #193). Consumer: built in `exception-management` (ADR 0010, `internal/adapters/inbound/kafka/yard_exceptions_consumer.go`, group `YARD_MANAGEMENT_EXCEPTIONS_CONSUMER_GROUP`), pinned as `exception-management-yard-management` in `helm-values/exception-management.yaml`. Infra: both ends are wired; the yard pages record the producer as registered and not applied (no pods), and cluster state was not checked. See the [yard section context map](/yard/strategic-design/context-map) | [yard-management](/yard/contexts/yard-management/context-map), [exception-management](/contexts/exception-management/domain-events) |
+| K64 | `dock-scheduling` → `exception-management` | PL / CF (frozen copy of the source payload on the case); C/S per the yard pack | `warehouse.dock-scheduling.events`: `dockappointment.DockAppointmentNoShow` (one case per no-show; every other type on the topic is ignored) | **wired-but-unused**. Producer: `dock-scheduling` publishes the type on its integration topic (`internal/adapters/outbound/kafka/encoder.go`), and `warehouse-infra` `develop` registers it (`terraform/apps.yaml`, `helm-values/dock-scheduling.yaml`, #193). Consumer: built in `exception-management` (ADR 0010, `dock_scheduling_exceptions_consumer.go`, group `DOCK_SCHEDULING_EXCEPTIONS_CONSUMER_GROUP`), pinned as `exception-management-dock-scheduling`. Infra: both ends are wired; not applied per the yard pages, cluster state not checked. See the [yard section context map](/yard/strategic-design/context-map) | [dock-scheduling](/yard/contexts/dock-scheduling/context-map), [exception-management](/contexts/exception-management/domain-events) |
+| K65 | `dock-scheduling` → `inbound-receiving` | PL / local copy (the appointments copy behind `Receipt.Open(appointment_id)`); C/S, `inbound-receiving` ADR 0019 | `warehouse.dock-scheduling.events`: `dockappointment.DockAppointmentBooked`, `DockAppointmentRescheduled`, `DockAppointmentCancelled`, `DockAppointmentDoorReassigned` | **wired-but-unused**. Producer: `dock-scheduling` publishes all four on its integration topic (`internal/adapters/outbound/kafka/encoder.go`), registered in `warehouse-infra` `develop` (#193). Consumer: built in `inbound-receiving` (ADR 0019, `internal/adapters/inbound/kafka/dock_appointment_consumer.go`, `DOCK_APPOINTMENT_CONSUMER_GROUP` is required and always on), set to `inbound-receiving-dock-appointments` in `helm-values/inbound-receiving.yaml`. Infra: both ends are wired; not applied per the yard pages, cluster state not checked. This replaced `inbound-receiving`'s own appointment aggregate (K28 moved with it) | [dock-scheduling](/yard/contexts/dock-scheduling/context-map), [inbound-receiving](/contexts/inbound-receiving/async-api) |
+| K66 | `inbound-receiving` → `exception-management` | PL / CF (frozen copy of the source payload on the case) | `warehouse.inbound-receiving.events`: `receipt.CartonDiscrepancyRaised` (one case per `(receipt_id, sscc, kind)`; every other type on the topic is ignored) | **live**. Producer: `inbound-receiving` publishes the type on its integration topic (`internal/adapters/outbound/kafka/encoder.go`, `apis/asyncapi.yaml`), registered and live (K24). Consumer: built in `exception-management` (ADR 0006, `carton_discrepancy_consumer.go`, group `CARTON_DISCREPANCY_CONSUMER_GROUP`, no default), pinned as `exception-management-carton-discrepancy` in `helm-values/exception-management.yaml`, which is registered in `warehouse-infra` `develop` (K54 to K59). Image tags and cluster state not checked | [inbound-receiving](/contexts/inbound-receiving/async-api), [exception-management](/contexts/exception-management/domain-events) |
 | K67 | `fulfillment-execution` → `outbound-shipping` | OHS + PL / ACL (local copy of the manifested package); C/S per outbound-shipping ADR 0001 | `warehouse.fulfillment.events`: `package.PackageManifested` (`package_id`, `order_ref`, and the additive optional `site_id`, `source_order_id`, `cpt`, `weight_g`), `package.PackageDiverted` (`package_id`) | **wired-but-unused**. Producer: `fulfillment-execution` publishes both on its integration topic (`internal/adapters/outbound/kafka/publisher.go`; since its ADR 0061 `PackageManifested` carries `source_order_id` and `cpt`), registered in `warehouse-infra` `develop`; but its `site_id` is reserved with no source in the order-work chain yet, so it is omitted. Consumer: built in `outbound-shipping` (group from the mandatory `FULFILLMENT_CONSUMER_GROUP`; a manifest without `site_id` is ignored and plans no load, its ADR 0003), not deployed. Infra: `outbound-shipping` has no entry in `warehouse-infra` `develop`. Even deployed, no load is planned from a manifest until the producer carries `site_id` (H45) | [outbound-shipping](/contexts/outbound-shipping/async-api) |
 | K68 | `process-path-management` → `outbound-shipping` | OHS + PL / CF (hand-mirrored payload, last writer wins per site) | `warehouse.process-path-management.events`: `cptschedule.CPTScheduleChanged` (the site's cutoff schedule copy: cutoff id, local time, days of week, ship method) | **wired-but-unused**. Producer: `process-path-management` publishes the type (`internal/adapters/outbound/kafka/publisher.go`; K9 and K10 read it), registered and live. Consumer: built in `outbound-shipping` (group `CPT_CONSUMER_GROUP`), not deployed. Infra: no `outbound-shipping` entry in `warehouse-infra` `develop` | [outbound-shipping](/contexts/outbound-shipping/async-api) |
 | K69 | `facility-layout` → `outbound-shipping` | OHS + PL / CF (hand-mirrored; zone to site, location role) | `warehouse.facility.events`: `zone.ZoneRegistered`, `locationslot.LocationSlotRegistered` (the staging-location copy: a package stages only at a Staging location of its site) | **wired-but-unused**. Producer: `facility-layout` publishes both (`internal/adapters/outbound/kafka/publisher.go`; K4 and K26 read them), registered and live. Consumer: built in `outbound-shipping` (group `LAYOUT_CONSUMER_GROUP`), not deployed. Infra: no `outbound-shipping` entry in `warehouse-infra` `develop` | [outbound-shipping](/contexts/outbound-shipping/async-api) |
 | K70 | `dock-scheduling` → `outbound-shipping` | PL / ACL (local copy of the appointment; carrier and SCAC kept for the bill of lading); C/S | `warehouse.dock-scheduling.events`: `dockappointment.DockAppointmentBooked`. Only `OUTBOUND` appointments naming a `cpt_id` assign the load's door; `INBOUND` ones are ignored | **wired-but-unused**. Producer: `dock-scheduling` publishes the type on its integration topic (`internal/adapters/outbound/kafka/encoder.go`; the payload has a nullable `cpt_id`), and `warehouse-infra` `develop` registers it (`terraform/apps.yaml`, `helm-values/dock-scheduling.yaml`, images pinned, #193 and #194, 2026-11-09; cluster state not checked). Consumer: built in `outbound-shipping` (group `DOCK_CONSUMER_GROUP`), not deployed. The consumed contract is pinned **by hand** from the producer's feature branch (outbound-shipping ADR 0005): the producer's `develop` AsyncAPI now declares the type and the pin has not been refreshed, with no automated check. Infra: no `outbound-shipping` entry. See the [yard section context map](/yard/strategic-design/context-map) | [dock-scheduling](/yard/contexts/dock-scheduling/context-map), [outbound-shipping](/contexts/outbound-shipping/async-api) |
 | K71 | `yard-management` → `outbound-shipping` | PL / ACL (door-work and departure facts); C/S; the yard is the only recorder of physical facts (YD-0004) | `warehouse.yard-management.events`: `trailer.TrailerDocked` (attaches the trailer, starts loading), `trailer.DoorWorkCompleted`, `trailer.TrailerDeparted` (confirms a `CLOSED` load with the seal; without a seal nothing is confirmed, and a departure while the load is `LOADING` flags the missed packages instead, outbound-shipping ADR 0002) | **wired-but-unused**. Producer: `yard-management` publishes all three on its integration topic (`internal/adapters/outbound/kafka/encoder.go`), and `warehouse-infra` `develop` registers it (`terraform/apps.yaml`, `helm-values/yard-management.yaml`, #193 and #194, 2026-11-09; cluster state not checked). Consumer: built in `outbound-shipping` (group `YARD_CONSUMER_GROUP`), not deployed; the contract is **pinned and tested** (`contracts/yard-management.asyncapi.yaml`, CI job `pinned-contracts`, `TestConsumedYardTypesMatchTheProducersIntegrationContract`, its ADR 0006). Infra: no `outbound-shipping` entry. See the [yard section context map](/yard/strategic-design/context-map) | [yard-management](/yard/contexts/yard-management/context-map), [outbound-shipping](/contexts/outbound-shipping/async-api) |
 | K72 | `outbound-shipping` → `order-management` | PL / ACL on the OM side; C/S | `warehouse.outbound-shipping.events`: `outboundload.ShipmentConfirmed` (carries the distinct `orders`; the named orders' `Released` lines become `Shipped`), `shippingpackage.PackageMissedLoad` (an order-wide re-promise) | **wired-but-unused**. Producer: built in `outbound-shipping` (outbox relay, both types on the integration topic), not deployed. Consumer: built in `order-management` (ADR 0051, `internal/adapters/inbound/kafka/outbound_shipping_consumer.go`, `cmd/order/outbound_shipping.go`) and **dark**: `OUTBOUND_SHIPPING_CONSUMER_MODE` defaults to `off`, and `kafka` mode needs a mandatory `OUTBOUND_SHIPPING_CONSUMER_GROUP` (no default), brokers and a database. Infra: `warehouse-infra` `develop` sets none of the `OUTBOUND_SHIPPING_*` variables for it, and has no producer entry | [order-management](/contexts/order-management/domain-events), [outbound-shipping](/contexts/outbound-shipping/async-api) |
-| K73 | `outbound-shipping` → `exception-management` | PL / CF (frozen copy of the source payload on the case); C/S | `warehouse.outbound-shipping.events`: `shippingpackage.PackageMissedLoad` (one case per missed package; every other type on the topic is ignored) | **wired-but-unused**. Producer: built in `outbound-shipping`, not deployed. Consumer: built in `exception-management` (ADR 0011, `internal/adapters/inbound/kafka/outbound_shipping_consumer.go`, group `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP`, mandatory with the chart default `exception-management-outbound-shipping` in its `charts/exception-management/values.yaml`). Infra: `exception-management` is registered in `warehouse-infra` `develop` (K54 to K59), so its consumer starts with a chart that carries ADR 0011 (whether the image pinned there does was not checked) and waits on a topic nothing writes; the producer has no entry | [exception-management](/contexts/exception-management/async-api), [outbound-shipping](/contexts/outbound-shipping/async-api) |
+| K73 | `outbound-shipping` → `exception-management` | PL / CF (frozen copy of the source payload on the case); C/S | `warehouse.outbound-shipping.events`: `shippingpackage.PackageMissedLoad` (one case per missed package; every other type on the topic is ignored) | **wired-but-unused**. Producer: built in `outbound-shipping`, not deployed. Consumer: built in `exception-management` (ADR 0011, `internal/adapters/inbound/kafka/outbound_shipping_consumer.go`, group `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP`, mandatory with the chart default `exception-management-outbound-shipping` in its `charts/exception-management/values.yaml`). Infra: `exception-management` is registered in `warehouse-infra` `develop` (K54 to K59) and pins the group `exception-management-outbound-shipping` (`outboundShippingExceptionsConsumerGroup` in `helm-values/exception-management.yaml`, a703971, 2026-11-09), so its consumer starts with a chart that carries ADR 0011 (whether the image pinned there does was not checked) and waits on a topic nothing writes; the producer has no entry | [exception-management](/contexts/exception-management/async-api), [outbound-shipping](/contexts/outbound-shipping/async-api) |
 | K74 | `outbound-shipping` → `network-fulfillment` | C/S per outbound-shipping ADR 0004; planned | `warehouse.outbound-shipping.events`: `outboundload.ShipmentConfirmed`, meant to replace the manual `POST /network-orders/{networkRef}/shipment-confirmation` (joined on `NetworkOrder.localOrderId`) | **absent-planned**. Producer: built in `outbound-shipping`, not deployed. Consumer: **absent**. No code on `network-fulfillment`'s `develop` reads `warehouse.outbound-shipping.events` or the `ShipmentConfirmed` type; its `NetworkOrderShipmentConfirmed` is its own event, raised through its own REST confirmation (H26). Infra: neither end is wired | [outbound-shipping](/contexts/outbound-shipping/async-api) |
 | K75 | `outbound-shipping` → `yard-management` | C/S per outbound-shipping ADR 0005; planned | `warehouse.outbound-shipping.events`: `outboundload.LoadingStarted`, `LoadClosed`, `LoadReopened` | **absent-planned**. Producer: built in `outbound-shipping`, not deployed. Consumer: **absent**. ADR 0005 names `yard-management` as the consumer, but `yard-management` declares no such consumer and has no handler for these types on `develop`; outbound-shipping's AsyncAPI marks the three `pending`. Infra: neither end is wired for it (`yard-management` itself is registered, `outbound-shipping` is not) | [outbound-shipping](/contexts/outbound-shipping/async-api) |
 
@@ -475,15 +515,16 @@ is registered in `warehouse-infra` and the consumer is switched on.
 2026-10-17 and registered in `warehouse-infra` (`#116`, `#121`); both run on the
 kind cluster since 2026-10-20/21 with their consumer groups set, so K39 to K47
 are live wires. No flow through them has been traced end to end on the cluster.
-Both are Supporting, neither makes a synchronous call to a sibling, and no
-sibling calls them (the ops agent has no client for either).
+Both are Supporting and neither makes a synchronous call to a sibling. The
+ops agent has an MCP client for each (A16, A17), wired but with no use case
+behind it.
 
 `returns-processing` and `exception-management`: both merged on `develop`
 2026-10-20/21 and registered in `warehouse-infra` `develop` on 2026-10-22, so
-K50 to K59 are live and K60/K61 stay dashed planned. Both are Supporting,
-neither makes a synchronous call to a sibling, and no sibling calls them (the
-ops agent has no client for either; each ships a read-only MCP server with no
-caller).
+K50 to K59 are live and K60/K61 stay dashed planned. Both are Supporting and
+neither makes a synchronous call to a sibling. The ops agent has an MCP client
+for each (A18, A19), wired but with no use case behind it, and consults
+`exception-management` over A2A for an advisory read (A23).
 
 Published types with no consumer, as stated by their owners:
 
@@ -494,8 +535,8 @@ Published types with no consumer, as stated by their owners:
 - nine of the twelve types on `warehouse.facility.events`;
 - `OrderRepromised` on `warehouse.order-management.events` had no consumer
   until `exception-management` built its correlation consumer (K58,
-  wired-but-unused: it exists on `develop` but neither service is deployed,
-  so nothing reads the type today);
+  live: `exception-management` and `order-management` are both registered in
+  `warehouse-infra` `develop`);
 - `BottleneckDetected` on `warehouse.warehouse-planning.events`;
 - `TransferPlanApproved` on `warehouse.network-inventory-planning.events`;
 - `ProductRegistered`, `ProductDescriptionChanged`,
@@ -505,13 +546,19 @@ Published types with no consumer, as stated by their owners:
   consumed by `slotting-optimization` (K25, live), and
   `ProductDescriptionChanged` has none;
 - every `warehouse.inbound-receiving.events` type except
-  `ReceiptLineReceived` (K24, live) and `DockAppointmentBooked` and
-  `DockAppointmentCancelled` (K28 was live from this topic under `warehouse-planning`
-  ADR 0017; ADR 0020 moved its source to `dock-scheduling`, so the topic now carries
-  only legacy rows, inbound-receiving ADR 0019):
-  `ASNRegistered`, `ASNCancelled`,
-  `DockAppointmentCheckedIn`,
-  `DockAppointmentCompleted`, `ReceiptOpened` and `ReceiptClosed`;
+  `ReceiptLineReceived` (K24, live) and `CartonDiscrepancyRaised` (K66, live)
+  has no consumer among the contexts rows K1 to K75 draw. `DockAppointmentBooked`
+  and `DockAppointmentCancelled` fed K28 under `warehouse-planning` ADR 0017;
+  ADR 0020 moved that source to `dock-scheduling`, so the topic now carries
+  only legacy rows (inbound-receiving ADR 0019). The yard section reads some of
+  the rest and has no K row for it: `dock-scheduling` reads `ASNRegistered` and
+  `ASNCancelled` (`asn_consumer.go`) and the four legacy `DockAppointment*`
+  types (its one-shot `legacy_import_consumer.go`), and `yard-management`
+  reads `ASNRegistered`, `ASNCancelled`, `ReceiptOpened` and `ReceiptClosed`
+  (`inbound_receiving_consumer.go`); see the [yard section context
+  map](/yard/strategic-design/context-map). Read by nothing on `develop`:
+  `DockAppointmentCheckedIn` and `DockAppointmentCompleted` outside that one-shot
+  import;
 - two of the three `warehouse.slotting-optimization.events` types:
   `SlotPlanGenerated` and `SlotPlanRejected`. `SlotPlanApproved` is consumed
   by `wes-work-planning` (K29, live).
@@ -529,7 +576,8 @@ Published types with no consumer, as stated by their owners:
 - six of the seven types on `warehouse.returns-processing.events`: only
   `ReturnLineStaged` (inventory-storage ADR 0044, K53) and
   `UnexpectedReturnReceived` (`exception-management`, K54) have consumers, and
-  both are built-but-not-deployed, so nothing reads the topic today. The
+  both are live: `returns-processing`, `inventory-storage` and
+  `exception-management` are all registered in `warehouse-infra` `develop`. The
   analytics mirror is planned, not built;
 - eight of the thirteen types on `warehouse.outbound-shipping.events`
   (`LoadPlanned`, `LoadDoorAssigned`, `LoadCancelled`, `PackageStaged`,
@@ -574,9 +622,11 @@ operators, `warehouse-console` (its own `productmaster_mfe` remote) and
 
 ### warehouse-ops-agent (MCP Customer and console BFF)
 
-`warehouse-ops-agent` is downstream of every edge below. It is the Customer and
-the Conformist, and every edge is a read. Its zero-write rule is enforced in
-CI. It has no Kafka integration at all. The per-tool split between live and
+`warehouse-ops-agent` is downstream of every edge in this table. It is the
+Customer and the Conformist, and every MCP and REST edge is a read. Its
+zero-write rule is enforced in CI and is narrowed on `develop` to exactly two
+human-confirmed act slices, both delegated over A2A (see the A2A table below the
+MCP table). It has no Kafka integration at all. The per-tool split between live and
 wired comes from the agent's own map and was re-checked against which client
 methods its use cases call on `develop`.
 
@@ -590,17 +640,35 @@ methods its use cases call on `develop`.
 | A6 | `facility-layout` | `list_sites`, `estimate_travel_distance` | `get_site_layout`, `get_zone_grid` | catalog-growth report | **live** |
 | A7 | `warehouse-planning` | `get_process_path_capacity` | `get_capacity_plan`, `get_storage_capacity`, `list_station_standards` | — | **live** (`WAREHOUSE_PLANNING_MCP_ENDPOINT`, set in the reference deployment) |
 | A8 | `order-management` | — | `get_order` | `GET /orders/{id}`, funnel report | REST **live**. MCP: the daily brief's promise health calls the client (`GetPromiseHealth`, `promise_health.go:43`; `warehouse-ops-agent#151`, #153) - **live in code on `develop`**, not in the running image (the agent on the cluster is `local-75b7ee6`, older than #151) |
-| A9 | `process-path-management` | — | — | — | The client was **removed** (`warehouse-ops-agent#151`): the agent has no process-path-management client |
+| A9 | `process-path-management` | — | `get_process_path`, `list_process_paths`, `get_cpt_schedule` | — | **wired-but-unused**. The client was removed in `warehouse-ops-agent#151` (ADR 0024) and re-added by ADR 0026 against the context's current three-tool registry; it is `nil` when `PROCESS_PATH_MANAGEMENT_MCP_ENDPOINT` is unset, no use case calls it, and `helm-values/warehouse-ops-agent.yaml` sets `upstreams.processPathManagement.endpoint` |
 | A10 | `network-fulfillment` | — | — | — | **deliberately absent**. NF serves read-only MCP tools, but the agent has no client for them |
 | A11 | `warehouse-ops-agent` → `warehouse-console` | C/S: the agent is the BFF Supplier | — | `/console/orders/{id}/lifecycle`, `/console/reports/wms`, `/console/reports/wes`, `/daily-brief` | **live** |
 | A12 | `product-master` | `list_products` (the `find_master_data_gaps` tool and `GET /master-data-gaps`, OA ADR 0020) | `get_product`, `get_product_classification`, `get_physical_profile` | — | **live** (`PRODUCT_MASTER_MCP_ENDPOINT`, set in the reference deployment by `terraform/ops-agent.tf`) |
 | A13 | `inbound-receiving` | `list_asns`, `list_appointments`, `list_receipts` (the inbound-outlook use case, OA ADR 0021) | `get_asn`, `get_appointment`, `get_receipt`, `list_docks` | — | **live** (`INBOUND_RECEIVING_MCP_ENDPOINT`, set in the reference deployment by `terraform/ops-agent.tf` when MCP servers are deployed; the context's `cmd/mcp`, its ADR 0005) |
 | A14 | `slotting-optimization` | — | — | — | **live in code, not in the running image**. The agent has the client and a slot-plan watch in the daily brief (`cmd/agent/main.go:193`, ops-agent ADR 0024, `warehouse-ops-agent#151`). The server is on in kind (`mcp.enabled: true` and the Kong route in `helm-values/slotting-optimization.yaml`) and `SLOTTING_OPTIMIZATION_MCP_ENDPOINT` is set on the agent pod, but the running image predates #151 |
 | A15 | `network-inventory-planning` | `get_transfer`, `find_stuck_transfers`, `simulate_transfer_options` (the transfer-watch use case, OA ADR 0019; the client port also exposes `list_transfers`) | — | — | **live** (`NETWORK_INVENTORY_PLANNING_MCP_ENDPOINT`, set in the reference deployment by `terraform/ops-agent.tf` when MCP servers are deployed) |
+| A16 | `pick-face-replenishment` | — | `get_policy`, `list_policies`, `get_replenishment`, `list_replenishments`, `list_pick_faces` | — | **wired-but-unused**. The client is built against the context's published registry (`mcpclient/pick_face_replenishment.go`, ADR 0025) and no use case calls it. `helm-values/warehouse-ops-agent.yaml` sets `upstreams.pickFaceReplenishment.endpoint` |
+| A17 | `task-interleaving` | — | `get_hint`, `get_site_policy`, `get_station`, `list_hints` | — | **wired-but-unused**. Built (`mcpclient/task_interleaving.go`, ADR 0025), no use case calls it, `upstreams.taskInterleaving.endpoint` is set in `helm-values/warehouse-ops-agent.yaml` |
+| A18 | `returns-processing` | — | `get_return`, `list_returns_by_order`, `get_disposition_policy` | — | **wired-but-unused**. Built (`mcpclient/returns_processing.go`), no use case calls it, `upstreams.returnsProcessing.endpoint` is set in `helm-values/warehouse-ops-agent.yaml` |
+| A19 | `exception-management` | — | `list_open_exceptions`, `get_exception`, `get_exception_policies`, `get_sla_report` | — | MCP **wired-but-unused**: built (`mcpclient/exception_management.go`), no use case calls it, `upstreams.exceptionManagement.endpoint` is set in `helm-values/warehouse-ops-agent.yaml`. The advisory read over A2A is separate (A23, the A2A table below) |
+| A20 | `dock-scheduling` | — | — | — | **absent-planned**. The yard pack plans the agent as a client, and the service ships its own MCP server (`cmd/mcp`: 5 L1 read tools and 4 L3 write tools). On `warehouse-ops-agent` `develop` there is no client (no `mcpclient` file, no `DOCK_SCHEDULING_MCP_ENDPOINT`, no mention in `internal` or `cmd`), and `helm-values/warehouse-ops-agent.yaml` in `warehouse-infra` `develop` has no `upstreams` entry for it. Checked 2026-11-10 |
+| A21 | `yard-management` | — | — | — | **absent-planned**, same facts as A20 (the service ships 8 L1 read tools and 6 L3 write tools in its own `cmd/mcp`; the agent has no client and no infra upstream). Checked 2026-11-10 |
 
 The Order Lifecycle screen fans out to four contexts' OLTP APIs: OM, INV, WP
 and FE. The `/console/reports/*` endpoints read seven contexts' `*-reports`
 binaries.
+
+**A2A (the agent as caller).** The agent also holds three A2A clients on
+`develop` (`internal/adapters/outbound/a2a/`), each switched on by an
+environment variable that `helm-values/warehouse-ops-agent.yaml` sets in
+`warehouse-infra` `develop`. Whether the running agent image carries them was
+not checked.
+
+| # | Peer | Skill and purpose | Write? | Status |
+| --- | --- | --- | --- | --- |
+| A22 | `wes-work-planning` | `release_next_work`: the act slice of ADR 0027, a human-confirmed propose then approve flow over REST (never MCP, never reachable by the LLM) that delegates one release (`WES_WORK_PLANNING_A2A_URL`) | yes, human-gated | **live in code**, opt-in |
+| A23 | `exception-management` | `find_exceptions`, `sla_status`: an advisory, read-only `exceptionContext` on release proposals (ADR 0028, `EXCEPTION_MANAGEMENT_A2A_URL`); it never gates a proposal | no | **live in code**, opt-in |
+| A24 | `workforce-management` | `assign_labor`: act slice #2 of ADR 0029, one human-approved move (`a2aEndpoint`, rendered as `WORKFORCE_MANAGEMENT_A2A_URL`) | yes, human-gated | **live in code**, opt-in |
 
 ### Deliberately absent edges with a named seam
 
@@ -670,8 +738,8 @@ The context maps declare these pairs as having no relationship, by decision:
   `pick-face-replenishment` never creates floor work (that is
   `wes-work-planning` and `fulfillment-execution`) and never writes the stock
   ledger (that is `inventory-storage`). `task-interleaving` never assigns work:
-  `claimNext` stays the only claim path. `warehouse-ops-agent` has no client
-  for either.
+  `claimNext` stays the only claim path. `warehouse-ops-agent` has an MCP client
+  for each (A16, A17) and no use case calls either.
 
 - **`returns-processing` and `exception-management` ↔ every context not
   named in K50 to K61.** Neither makes a synchronous call to a sibling, in
@@ -682,7 +750,8 @@ The context maps declare these pairs as having no relationship, by decision:
   `inventory-storage`, K53) and `exception-management` never writes to any
   producer: a resolution is a fact other contexts may read. Both consume
   `warehouse.fulfillment.events` but disjoint type sets (K52 vs K55).
-  `warehouse-ops-agent` has no client for either.
+  `warehouse-ops-agent` has an MCP client for each (A18, A19) with no use case
+  behind it, plus the advisory A2A read of `exception-management` (A23).
 
 ## Where the per-context maps disagree
 
@@ -705,7 +774,7 @@ places where two synced pages describe the same edge differently.
 | R8 `facility-layout` → `fulfillment-execution` | FE's and FL's synced pages: opt-in, `LOCATION_ROLE_MODE` off by default | `warehouse-infra` `develop` (#92): `LOCATION_ROLE_MODE=http` in `sync_edge_env` | **live** (apply pending). The synced pages describe the binary default |
 | A3–A6 per-tool status | FE, WFM, FL, LP each list all their tools as consumed by the agent | OA: some tools are wired only | OA is correct. On `develop`, its use cases call only the tools listed as live in A1–A9 |
 | K2 `order-management` → `warehouse-planning` | WPL: wired, opt-in | OM's map does not list WPL as a consumer of its topic | WPL's consumer exists and the reference deployment enables it, so **live** |
-| K25 to K27, K38 and the deployment of `slotting-optimization` | slotting-optimization's synced runbook and EventStorming pages: edge route "planned, not wired", "no consumer, no Kong route, no chart" | `warehouse-infra` `develop`: a `local.services` entry (Kong route, ArgoCD application, database), `helm-values/slotting-optimization.yaml` with `DEMAND_MODE`, `PRODUCT_MODE`, `LAYOUT_MODE` and `RELOCATION_MODE` all `kafka`, and `terraform/mcp.tf` | `warehouse-infra` is correct for edge status, so the rows are **live**. The repository's pages describe the service repo, not the cluster. One more gap: `helm-values/slotting-optimization.yaml` and the `locals.tf` comment say the MCP server stays off, while `mcp.tf` lists the context in `mcp_services` (`mcp.enabled = var.deploy_mcp_servers`); nothing in `warehouse-ops-agent` calls it, so A14 stays **absent-planned** |
+| K25 to K27, K38 and the deployment of `slotting-optimization` | slotting-optimization's synced runbook and EventStorming pages: edge route "planned, not wired", "no consumer, no Kong route, no chart" | `warehouse-infra` `develop`: a `local.services` entry (Kong route, ArgoCD application, database), `helm-values/slotting-optimization.yaml` with `DEMAND_MODE`, `PRODUCT_MODE`, `LAYOUT_MODE` and `RELOCATION_MODE` all `kafka`, and `terraform/mcp.tf` | `warehouse-infra` is correct for edge status, so the rows are **live**. The repository's pages describe the service repo, not the cluster. One more gap: `helm-values/slotting-optimization.yaml` and the `locals.tf` comment say the MCP server stays off, while `mcp.tf` lists the context in `mcp_services` (`mcp.enabled = var.deploy_mcp_servers`); `warehouse-ops-agent` has the client and its daily brief calls it (the slot-plan watch, `SlotPlanWatch`), so A14 is **live in code** |
 | K30 to K32 `facility-layout`, `order-management`, `warehouse-planning` → `network-inventory-planning` | `warehouse-planning`'s own synced context map lists `network-inventory-planning` as "No relationship ... Absent"; the other two producers' maps do not mention it | NIP's code and AsyncAPI consume all three topics | NIP is correct. `network-inventory-planning` reads `CapacityPlanPublished` and relies on `warehouse-planning`'s additive `site_id` (which `warehouse-planning` publishes on `develop`). The producers are unaware of the consumer, which is normal for a Published Language edge; the upstream map rows are an upstream follow-up |
 | K48 `wes-work-planning` → `order-management` | WP's synced domain-events page: `WorkUnitCreated` consumed by "—" (no consumer) | OM: the release-confirmation consumer reads it (ADR 0043, opt-in) | OM is correct about the code, and the consumer is off in the reference deployment, so **wired-but-unused**. WP's page predates the consumer; fix upstream in `wes-work-planning` |
 | K45 `fulfillment-execution` → `task-interleaving`, `TaskAvailable` | TI's pages before its PR #11: announced for "RELOCATE tasks only" | FE `develop`: ADR 0050 announces `REPLENISH` tasks too (`apis/asyncapi.yaml`, "today only RELOCATE and REPLENISH tasks carry bins") | FE is correct. **Fixed at source** by `task-interleaving` PR #11 (merged 2026-10-17); the re-synced copies here say RELOCATE and REPLENISH |
@@ -726,9 +795,25 @@ different pattern for the downstream side. The edge table shows both:
 
 **Corrections to this page's previous version:**
 
+- K62 to K66 were cited by `product-master`, `pick-face-replenishment` and
+  `exception-management` pages with no row here. Each cite was grounded on both
+  repositories' `develop` and in `warehouse-infra` `develop`: K62 is the
+  `product-master` pack-level feed to seven consumers, K66 the
+  `CartonDiscrepancyRaised` feed into `exception-management` (ADR 0006), and
+  K63 to K65 are three more yard-section feeds the map lacked (`yard-management`
+  and `dock-scheduling` into `exception-management`, `dock-scheduling` into
+  `inbound-receiving`). K28 no longer says `dock-scheduling` has no
+  `warehouse-infra` registration: it has had one since #193 (2026-11-09).
+- The agent's section said every edge was a read, that the agent has no client
+  for `pick-face-replenishment`, `task-interleaving`, `returns-processing` or
+  `exception-management`, and that the `process-path-management` client was
+  removed. On `warehouse-ops-agent` `develop` all four MCP clients exist (A16 to
+  A19), the `process-path-management` client was re-added (A9), and three A2A
+  clients exist (A22 to A24: two human-gated act slices and one advisory read).
+  It still has no client for `dock-scheduling` or `yard-management` (A20, A21).
 - `returns-processing` and `exception-management` (decided 2026-10-20, merged
   2026-10-20/21) are added with edges K50 to K61 and two nodes in the diagram.
-  K50 to K59 are wired-but-unused: every consumer and both handovers are built
+  K50 to K59 were added as wired-but-unused, and became **live** when both services were registered in `warehouse-infra` `develop` on 2026-10-22: every consumer and both handovers are built
   (`inventory-storage` ADR 0044 for K53; the `exception-management` consumers
   for K54 to K59), and the four types that were analytics-only on
   2026-10-20 — `PackageDiverted` and `WeightDiscrepancyDetected`
