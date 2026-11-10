@@ -7,8 +7,8 @@ description: "Yard Management's neighbourhood on the yard context map, with the 
 
 # Context Map
 
-:::info[Built on develop, registered in infra, not applied]
-Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), registered in warehouse-infra develop (apps.yaml entry, helm values, dashboards and alert rules, image pinned at v0.1.1), not applied to the k3s cluster (no pods). The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
+:::info[Built, released at v0.1.2, applied to k3s (reduced footprint)]
+Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), released at v0.1.2 (first release v0.1.0 on 2026-11-09) and applied to the k3s cluster on 2026-11-10 in a reduced footprint: dock-scheduling runs its API only (it relays inline); yard-management runs its API and relay. Their MCP servers, analytics projectors, report services and sweeps are registered in warehouse-infra but switched off until the cluster has room, so the KPI reports of yard-management ADR 0011 are released, not yet served. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 Following ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping).

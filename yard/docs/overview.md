@@ -2,7 +2,7 @@
 id: overview
 title: Yard Management
 sidebar_label: Overview
-description: "A yard management domain for the warehouse-systems fleet, modelled with Domain-Driven Design as two bounded contexts, built on develop, registered in infra and not applied to k3s: dock-scheduling (door time) and yard-management (the physical yard)."
+description: "A yard management domain for the warehouse-systems fleet, modelled with Domain-Driven Design as two bounded contexts, built, released at v0.1.2 and applied to k3s in a reduced footprint: dock-scheduling (door time) and yard-management (the physical yard)."
 slug: /
 ---
 
@@ -15,11 +15,15 @@ inventory and equipment ([Benchmarks](/yard/research/benchmarks)). This instance
 models a yard management system (YMS) for the warehouse-systems fleet as
 **two bounded contexts** in the `wms` tier.
 
-:::info[Built on develop, registered in infra, not applied]
+:::info[Built, released at v0.1.2, applied to k3s (reduced footprint)]
 Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling) and
-[IQVO/yard-management](https://github.com/IQVO/yard-management), registered in warehouse-infra develop (apps.yaml entry, helm
-values, dashboards and alert rules, images pinned at v0.1.1), not applied to the k3s cluster (no pods). An edge is live only when
-both ends run, so with no pod of either service every edge is wired in infra, not applied.
+[IQVO/yard-management](https://github.com/IQVO/yard-management), released at v0.1.2 (first release v0.1.0 on 2026-11-09, images
+and charts on GHCR) and applied to the k3s cluster on 2026-11-10 in a reduced footprint, because the cluster is nearly full:
+dock-scheduling runs its API only (it relays its outbox inline) and yard-management runs its API and relay. MCP servers,
+analytics projectors, report services and sweeps are registered in warehouse-infra and switched off until capacity is freed, so
+the KPI reports are released but not yet served. The cross-context journey (appointment, gate, dock, receive, depart, ship-confirm)
+is proven end to end by the `@yard-journey` scenarios of IQVO/e2e-tests, which run the services as local processes against their
+own broker, not on the cluster.
 The canonical model is
 [`model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml);
 every page still derives from it, and the as-built refresh of 2026-11-09 folded the differences back in.

@@ -44,4 +44,8 @@ This page is generated from [`model/model.yaml`](https://github.com/IQVO/warehou
 | Seal | The numbered seal on a trailer's doors; INTACT, BROKEN or NONE. | `trailer.SealState` |
 | Yard Check | A yard audit reconciling observed trailers with the model. | `yardcheck.Check` |
 | Detention | Carrier waiting time charged beyond the agreed free time; the free time is a site setting. | `yardpolicy.Policy` |
+| Turn Time | Gate-to-gate minutes of a visit: VisitCheckedIn arrived_at to VisitCheckedOut departed_at (the on_site_minutes the event carries), reported per visit purpose with average, p50, p90 and maximum. | `report.TurnTime` |
+| Percentile (p50 | Median and 90th percentile of a duration, given next to the average because an average hides the long tail; computed by Postgres percentile_cont. | `report.Percentile` |
+| Detention Exposure | Share of trailers that departed in the window with a dwell strictly over a threshold (default 120 minutes, the two hour norm), plus the excess minutes. Exposure to a detention claim, not billing. | `report.DetentionExposure` |
+| Exception Rate | Per site over a window: rejected visits over arrivals, seal exceptions per check-in, holds by reason and yard-check discrepancies. Null when the denominator is zero. | `report.ExceptionRates` |
 
