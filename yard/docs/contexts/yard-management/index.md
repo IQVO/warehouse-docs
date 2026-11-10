@@ -2,13 +2,13 @@
 id: index
 title: Yard Management
 sidebar_label: Yard Management
-description: "A Supporting context, built on develop, registered in infra and not applied to k3s, that owns the present of the yard: who passed the gate, which trailer is where, hostler moves, door work, seals, holds, dwell and yard checks."
+description: "A Supporting context, built, released at v0.1.2 and applied to k3s (api and relay), that owns the present of the yard: who passed the gate, which trailer is where, hostler moves, door work, seals, holds, dwell and yard checks."
 ---
 
 # Yard Management
 
-:::info[Built on develop, registered in infra, not applied]
-Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), registered in warehouse-infra develop (apps.yaml entry, helm values, dashboards and alert rules, image pinned at v0.1.1), not applied to the k3s cluster (no pods). The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
+:::info[Built, released at v0.1.2, applied to k3s (reduced footprint)]
+Built on develop (merged 2026-11-08) in [IQVO/yard-management](https://github.com/IQVO/yard-management), released at v0.1.2 (first release v0.1.0 on 2026-11-09) and applied to the k3s cluster on 2026-11-10 in a reduced footprint: dock-scheduling runs its API only (it relays inline); yard-management runs its API and relay. Their MCP servers, analytics projectors, report services and sweeps are registered in warehouse-infra but switched off until the cluster has room, so the KPI reports of yard-management ADR 0011 are released, not yet served. The page still derives from [`yard/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml); where the as-built service differs, the model and this page say so (see the as-built notes).
 :::
 
 <span className="badge-supporting">Supporting</span>
@@ -61,13 +61,12 @@ industry basis for the capabilities is on
 - **Service:** [IQVO/yard-management](https://github.com/IQVO/yard-management), merged on `develop`
   2026-11-08 (door work and departure on the integration topic, and the KPI reports, 2026-11-09). Registered in
   warehouse-infra develop (`terraform/apps.yaml` entry with a database and analytics, `helm-values/yard-management.yaml`, a
-  dashboard, alert rules and the image pinned at its v0.1.1 main commit `b106934`) but not applied to the k3s cluster: no pod of
-  the service runs. The helm values give the api three consumer groups (`yard-management-dock-scheduling`,
+  dashboard, alert rules and the image pinned at v0.1.2, main commit `da1e30e`), released at v0.1.2 and applied to the k3s cluster on 2026-11-10 in a reduced footprint: the api and the relay run (this api does not relay), while the mcp, projector, reports and sweeps are switched off until the cluster has room, so the KPI reports of ADR 0011 are released but not served. The helm values give the api three consumer groups (`yard-management-dock-scheduling`,
   `yard-management-facility`, `yard-management-inbound-receiving`), the projector `yard-management-analytics`, Kong routes
   `/api/yard-management`, `/api/yard-management/reports` and `/api/mcp/yard-management`, a relay Deployment and the dwell
   (every five minutes) and move-lease (every minute) sweeps; there is no A2A component. The yard-domain Kafka topics must be
   pre-created before the first sync (`docs/kafka-topics-yard-dock.md` in warehouse-infra). An edge is live only when both
-  ends run, so every edge of this context is wired in infra, not applied. The contracts are copied under `yard/apis/yard-management/`
+  ends run: the dock-scheduling edges are live, the others depend on the other end's deployment. The contracts are copied under `yard/apis/yard-management/`
   and `scripts/check_model.py` compares the model with them. Five binaries: `api`, `mcp`, `relay`,
   `yard-projector` and `yard-reports`. Eleven ADRs, indexed on the [ADR page](/yard/adr/).
 - **Runtime:** Postgres and Kafka only (no in-memory mode). Every published

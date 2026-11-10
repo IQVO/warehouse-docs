@@ -126,6 +126,12 @@ Opendock splits on-site time into waiting time (arrival to in progress) and
 processing time (in progress to completed).[13]
 Lower dwell reduces detention and demurrage costs.[13]
 
+There is no industry-standard definition of detention. The US DOT Office of Inspector General found no accurate industry-wide
+detention data: stakeholders mostly measure only the time beyond the contractual limit, "often 2 hours", and research has used
+dwell time over 2 hours as a proxy; existing data cannot readily tell detention from legitimate loading and unloading.[15]
+Truck driver detention costs were quantified by ATRI in 2024.[16] The WERC DC Measures survey collects dock-to-stock cycle time
+and on-time receipts from suppliers.[17]
+
 ## 5. Facts about the estate that shape the design
 
 These come from the service repositories (origin/develop, 2026-11-05), not from the web.
@@ -172,3 +178,6 @@ These come from the service repositories (origin/develop, 2026-11-05), not from 
 [12] https://fourkites.com/yms — FourKites Site Intelligence / Facility Twin
 [13] https://blog.opendock.com/yard-management-system-roi — Opendock, How to measure YMS ROI and KPIs (Feb 2026)
 [14] https://terminal-industries.com/all-resources/yms-vs-yos-vs-wms-vs-tms-what-s-the-difference- — Terminal Industries, YMS vs YOS vs WMS vs TMS
+[15] https://www.oig.dot.gov/sites/default/files/FMCSA%20Driver%20Detention%20Final%20Report.pdf — US DOT OIG, Report ST2018019, FMCSA driver detention (2018)
+[16] https://truckingresearch.org/2024/09/new-research-documents-substantial-financial-and-safety-impacts-from-truck-driver-detention — ATRI, Truck driver detention costs (Sep 2024; public summary read, full report not)
+[17] https://wercmetrics.werc.org/WERC-DC-Measures-Survey-2025.pdf — WERC, DC Measures Survey 2025

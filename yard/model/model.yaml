@@ -1,4 +1,4 @@
-# Yard management canonical domain model (BUILT on develop 2026-11-08, registered in warehouse-infra develop, not applied to k3s)
+# Yard management canonical domain model (BUILT on develop 2026-11-08, released v0.1.2, applied to k3s 2026-11-10 in a reduced footprint)
 #
 # Single source of truth for the yard design, in the same shape as
 # warehouse-docs network/model/model.yaml and storefront/model/model.yaml:
@@ -35,11 +35,14 @@ meta:
     schedule (process-path-management CPTScheduleChanged), which the network
     integration page defines as the network's pickup cutoff.
   status: >-
-    BUILT on develop 2026-11-08 (dock-scheduling, yard-management). Registered in warehouse-infra develop (PR 193: terraform/apps.yaml
-    entries, helm-values, dashboards and alert rules; PR 194: images pinned at their v0.1.1 main commits) and not applied to the k3s
-    cluster: no pod of either service runs. An edge is live only when both ends run, so every edge of the two contexts is wired in
-    infra, not applied (infra gives each service a consumer group on the other's integration topic). The ADR 0010 integration events (DockAppointmentDoorReassigned,
-    DoorWorkCompleted, TrailerDeparted) and the yard KPI reports (yard-management ADR 0011) merged 2026-11-09.
+    BUILT on develop 2026-11-08 (dock-scheduling, yard-management); released v0.1.0 (2026-11-09) and v0.1.2 (2026-11-10); registered in
+    warehouse-infra (apps.yaml entries, helm-values, dashboards, alert rules; images pinned at v0.1.2, PR 200) and APPLIED to k3s on
+    2026-11-10 in a reduced footprint because the cluster is nearly full: dock-scheduling api only (it relays inline, ADR 0008),
+    yard-management api and relay. MCP, analytics projector, reports and sweeps are off in both (registered, switched off), so the yard
+    KPI reports (yard-management ADR 0011) are released but not served and the dwell and no-show sweeps do not run. The ADR 0010
+    integration events (DockAppointmentDoorReassigned, DoorWorkCompleted, TrailerDeparted) reached the integration topic 2026-11-09 and
+    are pinned in outbound-shipping's contract gate. The cross-context journey is proven by the @yard-journey scenarios of IQVO/e2e-tests
+    (3 scenarios: inbound visit, gate rejections, ship-confirm on departure; local processes and a throwaway broker, not the cluster).
     Decisions D1-D8 are FINAL. The model gap register decisions (S1/S2 resolved here) are in docs strategic-design/model-gap-register.
     As-built refresh 2026-11-09: the differences between this model and the services are folded in below
     (keys named as_built carry facts that are not model rules: binaries, tables, MCP tools).
@@ -267,7 +270,7 @@ contexts:
     as_built:
       repo: IQVO/dock-scheduling
       develop_merged: "2026-11-08 (ADR 0010 integration event 2026-11-09)"
-      deployed: "no pod: registered in warehouse-infra develop (apps.yaml entry, helm-values/dock-scheduling.yaml, dashboards, alert rules, image pinned at v0.1.1), not applied to k3s"
+      deployed: "k3s since 2026-11-10 at v0.1.2, reduced footprint: api only (relays inline); mcp, projector, relay, reports and sweep registered in warehouse-infra but off"
       spec_copies: yard/apis/dock-scheduling/{openapi.yaml, asyncapi.yaml, openapi-reports.yaml}
       asyncapi: "2.6.0; channel keys are the topics; 7 integration types, 11 analytics types"
       binaries: [api, mcp, projector, relay, reports, sweep]
@@ -591,7 +594,7 @@ contexts:
     as_built:
       repo: IQVO/yard-management
       develop_merged: "2026-11-08 (ADR 0010 and the KPI standard 2026-11-09)"
-      deployed: "no pod: registered in warehouse-infra develop (apps.yaml entry, helm-values/yard-management.yaml, dashboards, alert rules, image pinned at v0.1.1), not applied to k3s"
+      deployed: "k3s since 2026-11-10 at v0.1.2, reduced footprint: api and relay; mcp, projector, reports and sweep registered in warehouse-infra but off"
       spec_copies: yard/apis/yard-management/{openapi.yaml, asyncapi.yaml}
       asyncapi: "3.0.0; friendly channel keys, topic in address; 9 integration types, 19 analytics types"
       binaries: [api, mcp, relay, yard-projector, yard-reports]
@@ -618,11 +621,15 @@ contexts:
       - {term: Seal, definition: "The numbered seal on a trailer's doors; INTACT, BROKEN or NONE.", code: trailer.SealState}
       - {term: Yard Check, definition: "A yard audit reconciling observed trailers with the model.", code: yardcheck.Check}
       - {term: Detention, definition: "Carrier waiting time charged beyond the agreed free time; the free time is a site setting.", code: yardpolicy.Policy}
+      - {term: Turn Time, definition: "Gate-to-gate minutes of a visit: VisitCheckedIn arrived_at to VisitCheckedOut departed_at (the on_site_minutes the event carries), reported per visit purpose with average, p50, p90 and maximum.", code: report.TurnTime}
+      - {term: Percentile (p50, p90), definition: "Median and 90th percentile of a duration, given next to the average because an average hides the long tail; computed by Postgres percentile_cont.", code: report.Percentile}
+      - {term: Detention Exposure, definition: "Share of trailers that departed in the window with a dwell strictly over a threshold (default 120 minutes, the two hour norm), plus the excess minutes. Exposure to a detention claim, not billing.", code: report.DetentionExposure}
+      - {term: Exception Rate, definition: "Per site over a window: rejected visits over arrivals, seal exceptions per check-in, holds by reason and yard-check discrepancies. Null when the denominator is zero.", code: report.ExceptionRates}
 
 # Changes the yard contexts need in EXISTING contexts (each its own PR and ADR).
 fleet_changes:
-  - {context: inbound-receiving, kind: ownership-transfer, summary: "DockAppointment moves to dock-scheduling (strangler A-E). BUILT on develop (its ADR 0019): the appointment write routes are retired, an appointments local copy fed by dock-scheduling DockAppointmentBooked, Cancelled, Rescheduled and DoorReassigned validates Receipt.Open(appointment_id) and stamps the door; closing a receipt no longer completes the appointment (yard door release does). The optional TrailerDocked consumer was not built. Infra: helm-values/inbound-receiving.yaml sets dockAppointmentConsumerGroup inbound-receiving-dock-appointments, so the edge is wired in infra, not applied (dock-scheduling has no pod)."}
-  - {context: warehouse-planning, kind: consumer-source-switch, summary: "BUILT on develop (its ADR 0020), the helm values read dock-scheduling. ADR 0017 inbound demand switches from inbound-receiving DockAppointmentBooked/Cancelled to dock-scheduling DockAppointmentBooked/Rescheduled/Cancelled/NoShow; it gains site_id and direction, closing ADR 0017's no-site limitation. Infra: helm-values/warehouse-planning.yaml sets dockAppointments.consumerGroup warehouse-planning-dock-appointments, so the edge is wired in infra, not applied."}
+  - {context: inbound-receiving, kind: ownership-transfer, summary: "DockAppointment moves to dock-scheduling (strangler A-E). BUILT on develop (its ADR 0019): the appointment write routes are retired, an appointments local copy fed by dock-scheduling DockAppointmentBooked, Cancelled, Rescheduled and DoorReassigned validates Receipt.Open(appointment_id) and stamps the door; closing a receipt no longer completes the appointment (yard door release does). The optional TrailerDocked consumer was not built. Infra: helm-values/inbound-receiving.yaml sets dockAppointmentConsumerGroup inbound-receiving-dock-appointments, so the edge is wired in infra (dock-scheduling runs on k3s since 2026-11-10; the edge is live when this consumer runs too)."}
+  - {context: warehouse-planning, kind: consumer-source-switch, summary: "BUILT on develop (its ADR 0020), the helm values read dock-scheduling. ADR 0017 inbound demand switches from inbound-receiving DockAppointmentBooked/Cancelled to dock-scheduling DockAppointmentBooked/Rescheduled/Cancelled/NoShow; it gains site_id and direction, closing ADR 0017's no-site limitation. Infra: helm-values/warehouse-planning.yaml sets dockAppointments.consumerGroup warehouse-planning-dock-appointments, so the edge is wired in infra (dock-scheduling runs on k3s since 2026-11-10; live when this consumer runs too)."}
   - {context: exception-management, kind: new-consumer, summary: "BUILT on develop (its yard and dock-scheduling consumers). Open problem cases from VisitRejected, SealExceptionRaised, TrailerDwellExceeded, YardCheckClosed (one per discrepancy) and DockAppointmentNoShow; routing per source type. Infra: helm-values/exception-management.yaml sets no consumer group for the yard-management or dock-scheduling topics (six other consumers only), so these edges are not wired in infra."}
   - {context: facility-layout, kind: additive-ask, phase: 2, summary: "Yard slot attribute spotKind (PARKING, HOLDING, REEFER_PLUG, STAGING_LANE) on LocationSlotRegistered; until then holding spots live in yard-management's YardPolicy."}
   - {context: warehouse-ops-agent, kind: read-only-client, summary: "MCP tools of both contexts. AS BUILT each service ships its own MCP server (cmd/mcp): dock-scheduling 5 L1 read tools and 4 L3 write tools (book, reschedule, cancel, report_eta), yard-management 8 L1 read tools and 6 L3 write tools (request_move, cancel_move, place_hold, release_hold, record_seal, open_yard_check); every L3 call needs a human approval and initiated_by. Arrival and door release (physical facts) and the calendar changes and sweeps are not exposed."}
