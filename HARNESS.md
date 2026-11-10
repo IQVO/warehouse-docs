@@ -30,6 +30,7 @@ harness-template: v4
 | `build-check` | `.github/workflows/docs.yml` | `npm run typecheck`; `gen-alert-catalogue --check`; `scripts/capability-map/generate.py --check`; `scripts/a2a-cards.py --check-page`; `scripts/test_agent_catalogue.py` + `scripts/agent-catalogue.py --check-page`; develop-drift gate (`scripts/test_check_develop_drift.py`, then `scripts/check-develop-drift.py`: spec copies byte-equal to each context's develop, cited REST routes exist, no retired REST-guideline shapes); `check:model:*` and `check:pages:*` for network, storefront and yard; Spectral on the storefront OpenAPI contracts; `npm run build` | every PR into main | yes |
 | `build` + `deploy` | docs.yml | `npm run build`, GitHub Pages upload and deploy | push to main | delivery |
 | `drift` | `.github/workflows/develop-drift.yml` | the develop-drift gate (tests + live check) | nightly + manual | scheduled signal |
+| `specs-refresh` (healer) | `.github/workflows/specs-refresh.yml` | `scripts/test_sync_spec_copies.py`, `scripts/sync-spec-copies.py` (every copy the gate compares, from the producers' develop), then `clean-api-docs` + `npm run build` and the gate; on drift opens/updates the bot PR `chore/specs-refresh` and dispatches its `build-check` and `guide-lint` | 4x a day + manual | no (it fixes what the gate reports) |
 | CodeQL | `.github/workflows/codeql.yml` | JavaScript analysis | PR, push, weekly | yes |
 | `make check-fast` | `Makefile` (`gen-check` + `drift-test`) | every generated page matches its model or registry, and the offline develop-drift tests | agent Stop hook, when the turn changed code or config files | blocks "done" |
 | Mermaid render check | `npm run validate:mermaid` | parse and render every Mermaid diagram in a real browser (`docusaurus build` does not) | by hand, per the verification checklist | no (local) |
@@ -37,7 +38,9 @@ harness-template: v4
 
 `check-develop-drift.py` reads the producers' develop through the GitHub API, so `build-check` can go
 red on a PR that did not touch the drifted page when a producer moves meanwhile: fix the hit at its
-source, never relax the gate.
+source, never relax the gate. Spec-copy drift fixes itself: the `specs-refresh` workflow opens the bot
+PR `chore/specs-refresh` within hours (merge it on green, then `update-branch` the red PRs). Flow and the
+token/setting it needs: `.claude/rules/spec-sync.md`.
 
 ## Agent runtime harness
 
