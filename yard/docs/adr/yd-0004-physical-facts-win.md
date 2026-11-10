@@ -9,7 +9,7 @@ description: "dock-scheduling applies physical facts from events and never recor
 
 ## Status
 
-Accepted (2026-11-05): decisions confirmed by the owner the same day; built in both services on develop (merged 2026-11-08), not deployed.
+Accepted (2026-11-05): decisions confirmed by the owner the same day; built in both services on develop (merged 2026-11-08); both are registered in warehouse-infra develop (apps.yaml entry, helm values, image pinned at v0.1.1) but not applied to the k3s cluster (no pods).
 
 ## Decision
 

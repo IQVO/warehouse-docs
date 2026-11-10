@@ -15,4 +15,4 @@ description: "The two yard bounded contexts and their ddd-crew documentation pac
 Each pack lists the same 14 pages as the network and storefront packs, derived from
 the [model](https://github.com/IQVO/warehouse-docs/blob/main/yard/model/model.yaml).
 
-Both services are built on `develop` (merged 2026-11-08) and not deployed: neither is registered in warehouse-infra.
+Both services are built on `develop` (merged 2026-11-08) and registered in warehouse-infra develop (apps.yaml entry, helm values, dashboards and alert rules, images pinned at v0.1.1), but not applied to the k3s cluster (no pods).
