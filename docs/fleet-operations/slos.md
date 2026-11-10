@@ -2,7 +2,7 @@
 id: slos
 title: Fleet SLOs
 sidebar_label: Fleet SLOs
-description: The service level objectives every bounded context is held to, the indicator behind each one, how to measure it on the kind cluster, and which alert protects it.
+description: The service level objectives every bounded context is held to, the indicator behind each one, how to measure it on the k3s cluster, and which alert protects it.
 ---
 
 # Fleet SLOs
@@ -14,14 +14,21 @@ target is lost. Where no signal exists yet, the SLO says so instead of
 inventing one.
 
 :::note[Scope and limits]
-- These are the objectives for the local kind fleet. Prometheus keeps
-  **24 h** of data (`retention = "24h"` in warehouse-infra
-  `terraform/observability.tf`), so every window below is **1 day**, not
-  the usual 28 days.
-- Alertmanager is on in the kind cluster, but its only receiver is `null`:
-  **nothing is delivered anywhere**, because a local cluster has no pager.
-  An alert shows in Alertmanager (`/api/v2/alerts`), on Prometheus'
-  `/alerts` page and in Grafana. The error-budget policy below is a
+- These are the objectives for the fleet on the k3s cluster (nodes
+  `k3s-server` and `k3s-agent`, namespace `warehouse-systems`). Prometheus
+  keeps **24 h** of data (`retention = "24h"` in warehouse-infra
+  `terraform/10-platform/observability.tf`, `--storage.tsdb.retention.time=24h`
+  on the live pod), so every window below is **1 day**, not the usual 28 days.
+  Prometheus has no persistent volume (`persistentVolume.enabled = false`), so
+  a restart of the `prometheus-server` pod also empties the window.
+- Alertmanager is on in the k3s cluster (`prometheus-alertmanager` in
+  `observability`), but its only receiver is `null`: **nothing is delivered
+  anywhere**, because no pager is wired up. An alert shows in Alertmanager
+  (`/api/v2/alerts`, reached with
+  `kubectl -n observability port-forward svc/prometheus-alertmanager 9093:9093`,
+  not forwarded by `scripts/k3s-edges.sh`), on Prometheus' `/alerts` page
+  (`http://localhost:9090` while `scripts/k3s-edges.sh` runs) and in Grafana.
+  The error-budget policy below is a
   **proposal**, not in force. Treat a missed SLO as an incident to
   investigate with the [incident runbook](./incident-runbook.md).
 - Availability and latency are measured **at Kong**, the only place that
@@ -33,12 +40,18 @@ inventing one.
 
 | # | SLO | SLI | Target (1 day) | Protected by | Contexts |
 | --- | --- | --- | --- | --- | --- |
-| 1 | API availability | share of Kong requests to the context's routes that do not answer 5xx | ≥ 99% | `WarehouseApiAvailabilityBurnFast` and `WarehouseApiAvailabilityBurnSlow`; `WarehouseKong5xxRatioHigh` (5% over 5 min) stays as the coarse signal | all 15 |
-| 2 | API latency | share of Kong requests whose upstream latency is ≤ 400 ms (Kong exports no 500 ms bucket) | ≥ 95% | `WarehouseApiLatencyBurnFast` and `WarehouseApiLatencyBurnSlow` | all 15 |
+| 1 | API availability | share of Kong requests to the context's routes that do not answer 5xx | ≥ 99% | `WarehouseApiAvailabilityBurnFast` and `WarehouseApiAvailabilityBurnSlow`; `WarehouseKong5xxRatioHigh` (5% over 5 min) stays as the coarse signal | all 41 registered |
+| 2 | API latency | share of Kong requests whose upstream latency is ≤ 400 ms (Kong exports no 500 ms bucket) | ≥ 95% | `WarehouseApiLatencyBurnFast` and `WarehouseApiLatencyBurnSlow` | all 41 registered |
 | 3 | Event delivery | share of minutes in which the oldest unpublished outbox row is younger than 60 s | ≥ 99% | `WarehouseOutboxLagHigh` (> 60 s for 5 min) | the 5 contexts with an outbox-lag gauge |
 | 4 | No parked events | outbox rows that reached `OUTBOX_MAX_ATTEMPTS` and were not re-armed | 0 at the end of the day | none (log line and SQL only) | every context with an outbox |
-| 5 | Pod stability | containers restarting 2 or more times in 15 minutes | 0 | `WarehousePodRestarting` | all 15 |
+| 5 | Pod stability | containers restarting 2 or more times in 15 minutes | 0 | `WarehousePodRestarting` | all 41 registered |
 | 6 | Report freshness | `lagSeconds` of a reports binary's `/reports/<name>/freshness` | p95 ≤ 30 s | none (probe by hand) | contexts with a reports binary |
+
+The 41 are the contexts registered in warehouse-infra `terraform/apps.yaml`,
+each with its own rule groups (82 groups in the [alert catalogue](./alert-catalogue.md)).
+A registered context that is not applied has silent rules until its pods exist:
+on 2026-11-09 the k3s Prometheus had loaded 78 of the 82 groups: those of
+`dock-scheduling` and `yard-management`, which had no pods, were missing.
 
 ## 1. API availability
 
@@ -102,7 +115,7 @@ burn rate is the observed bad share divided by the share the SLO allows
 (1% for availability, 5% for latency), so a burn of 1 spends the day's error
 budget in exactly one day. Both windows of a pair must hold, and the route
 needs at least 30 requests in the long window, so one failed request on an
-idle local route cannot fire a `critical` alert.
+idle route cannot fire a `critical` alert.
 
 | Alert | SLO | Severity | Fires when | `for` | The day's budget is gone in |
 | --- | --- | --- | --- | --- | --- |
@@ -139,7 +152,11 @@ avg_over_time((max(order_outbox_lag_seconds) < bool 60)[1d:1m])
 
 **Target**: 99% of minutes under 60 s.
 
-**Gap**: the other ten contexts export no outbox-lag gauge, so their event
+Not verified on k3s: on 2026-11-09 Prometheus held live series for four of
+these gauges but none for `labor_performance_outbox_lag_seconds`, so check that
+the labor-performance gauge appears before relying on its alert.
+
+**Gap**: the other 36 registered contexts export no outbox-lag gauge, so their event
 delivery is measured only by SQL
 (`SELECT min(created_at) FROM outbox_events WHERE published_at IS NULL`)
 and by the relay's `outbox relay pass failed` log line. Consumer lag is not
