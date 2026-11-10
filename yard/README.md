@@ -6,11 +6,10 @@ in the `wms` tier, `dock-scheduling` and `yard-management`.
 
 Served at `/yard/` inside [warehouse-docs](https://github.com/IQVO/warehouse-docs); not a standalone site.
 
-**Status: built on develop (merged 2026-11-08), registered in warehouse-infra develop, not applied to k3s** (as-built refresh 2026-11-09,
-infra status 2026-11-09). Both services
+**Status: built, released at v0.1.2, applied to k3s in a reduced footprint** (as-built refresh 2026-11-10). Both services
 ([IQVO/dock-scheduling](https://github.com/IQVO/dock-scheduling), [IQVO/yard-management](https://github.com/IQVO/yard-management))
-exist on `develop` and each has a `terraform/apps.yaml` entry, helm values, dashboards, alert rules and an image pinned at v0.1.1 in
-warehouse-infra develop; the k3s cluster runs no pod of either, so every edge is wired in infra, not applied. The model records the as-built contracts and the
+are released at v0.1.2 and run on k3s since 2026-11-10 (dock-scheduling: api; yard-management: api and relay); their MCP servers, projectors, report services and
+sweeps are registered in warehouse-infra and switched off until the cluster has room. The model records the as-built contracts and the
 REST reference of this section is not generated yet.
 
 ## Layout
