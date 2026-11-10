@@ -14,11 +14,25 @@ order across the three contexts that move it to the dock:
 **fulfillment-execution** (tasks, packages). It tells you which hop to
 check first and links to the context runbook that owns the fix.
 
-Everything here works on the local kind cluster: Kong on
-`http://localhost:8000` (every context under `/api/<context>`), Grafana on
-`http://localhost:3000`, Prometheus on `http://localhost:9090`, the Kafka
-broker `kafka-controller-0` (container `kafka`) in namespace
-`warehouse-systems`.
+Everything here works on the k3s cluster (nodes `k3s-server` and
+`k3s-agent`, namespace `warehouse-systems`, one Kafka broker). Kong, Grafana,
+Prometheus and Jaeger are ClusterIP Services, so the `localhost` URLs below
+exist only while warehouse-infra's `scripts/k3s-edges.sh` runs on your
+workstation (it runs `kubectl port-forward` bound to `127.0.0.1` and re-runs
+itself under `sudo` for port 80):
+
+| What | URL | Service |
+| --- | --- | --- |
+| Kong (every context under `/api/<context>`) | `http://localhost:8000` | `kong-kong-proxy` in `kong` |
+| Grafana | `http://localhost:3000` | `grafana` in `observability` |
+| Prometheus | `http://localhost:9090` | `prometheus-server` in `observability` |
+| Jaeger | `http://localhost:16686` | `jaeger` in `observability` |
+| Alertmanager | not forwarded by the script: `kubectl -n observability port-forward svc/prometheus-alertmanager 9093:9093` | `prometheus-alertmanager` in `observability` |
+
+The Kafka broker is the pod `kafka-controller-0` (container `kafka`) in
+`warehouse-systems`: one combined controller and broker, so a restart or an
+out-of-memory kill of that pod stops every context's events at once. Kafka has
+no host-reachable listener, so every Kafka command here runs inside that pod.
 
 ## The path an order takes
 
@@ -51,8 +65,10 @@ message, or the next step waits for a person or a station.
 
 ## 1. Start from the alerts
 
-Open Prometheus `/alerts` (or the `ALERTS` series in Grafana) and filter on
-the three contexts. The [alert catalogue](./alert-catalogue.md) lists every
+Open Prometheus `/alerts` on `http://localhost:9090` (or the `ALERTS` series
+in Grafana), or Alertmanager's `/api/v2/alerts` after the port-forward above,
+and filter on the three contexts. Alertmanager's only receiver is `null`:
+nothing pages anyone, so an alert exists only where you look at it. The [alert catalogue](./alert-catalogue.md) lists every
 rule.
 
 | Firing alert | Likely hop | Go to |
@@ -60,7 +76,7 @@ rule.
 | `WarehouseOutboxLagHigh` for `order-management` | allocated orders are not reaching Kafka | [step 3](#3-order-management-did-the-event-leave) |
 | `WarehouseOutboxLagHigh` for `wes-work-planning` | released work is not reaching Kafka | [step 5](#5-wes-work-planning-was-the-work-released-and-did-workreleased-leave) |
 | `WarehouseKong5xxRatioHigh` for one of the three | the API itself fails (often a dependency: inventory-storage behind the order-management breaker, Postgres) | that context's troubleshooting page |
-| `WarehousePodRestarting` for one of the three | a binary exits on purpose (projector consumer stopped, boot retry exhausted, migration failed) or is OOM-killed | `kubectl logs --previous` on the pod, then the context runbook |
+| `WarehousePodRestarting` for one of the three | a binary exits on purpose (projector consumer stopped, boot retry exhausted, migration failed) or is OOM-killed | `kubectl -n warehouse-systems logs --previous` on the pod, then the context runbook |
 | nothing fires | consumer lag, a dead-lettered message, or work that waits for a release or a station | follow steps 2 to 7 in order |
 
 fulfillment-execution exports no outbox-lag gauge and no context exports
@@ -110,8 +126,8 @@ LIMIT 20;
 Since the gap-fix wave (D27) the outbox row stores the request's W3C trace
 context and the relay sends it as Kafka headers, so a consumer that
 extracts it continues the trace of the `POST /orders` call. Search Jaeger
-for the order-management trace first; when it ends at the relay, the event
-was not consumed yet.
+(`http://localhost:16686`) for the order-management trace first; when it
+ends at the relay, the event was not consumed yet.
 
 ## 4. wes-work-planning: did it read the order?
 
@@ -127,9 +143,14 @@ order:
 
    ```bash
    kubectl -n warehouse-systems exec kafka-controller-0 -c kafka -- \
-     kafka-consumer-groups.sh --bootstrap-server localhost:9092 \
-     --describe --group wes-work-planning
+     bash -c 'env KAFKA_HEAP_OPTS=-Xmx128m kafka-consumer-groups.sh \
+     --bootstrap-server localhost:9092 --describe --group wes-work-planning'
    ```
+
+   Keep the `KAFKA_HEAP_OPTS=-Xmx128m` prefix: the CLI shares the broker
+   container's memory limit, its full-heap default has OOM-killed the single
+   broker before, and that stops every consumer (warehouse-infra
+   `docs/dlq-runbook.md`, "Broker access").
 
    Lag on `warehouse.order-management.events` with no progress means the
    consumer stopped. The loop exits on purpose when a DLQ publish or an
@@ -189,7 +210,7 @@ Check the group the same way as in step 4 with
 | Task state | Meaning | Next |
 | --- | --- | --- |
 | `PENDING` | no station has pulled it | stations must call `POST /stations/<stationId>/task-claims`; `GET /queues/<taskType>/depth` shows the backlog. Too few stations with the required capability, or none checked in |
-| `CLAIMED` | a station holds the lease | an expired lease goes back to `PENDING` on the next lease-expiry sweep (`POST /task-lease-expirations`, called every minute by the `<release>-expire-leases` CronJob) |
+| `CLAIMED` | a station holds the lease | an expired lease goes back to `PENDING` on the next lease-expiry sweep (`POST /task-lease-expirations`, called every minute by the `fulfillment-execution-expire-leases` CronJob in `warehouse-systems`) |
 | `COMPLETED` | `TaskCompleted` went into the outbox | check fulfillment-execution's `outbox_events` as in step 3; this context has no outbox-lag gauge, so the SQL query and the log line `outbox relay pass failed` are the only signals |
 
 When `TaskCompleted` is published, wes-work-planning applies it and marks
