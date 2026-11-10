@@ -1,7 +1,7 @@
 # warehouse-docs: thin wrappers over the npm scripts and the offline gates that CI `build-check`
 # (.github/workflows/docs.yml) runs. The live develop-drift check needs GITHUB_TOKEN and the network,
 # so it is not part of check-fast; run it with `make drift-gate`.
-.PHONY: install typecheck gen-check drift-test drift-gate mermaid build check check-all
+.PHONY: install typecheck gen-check drift-test specs-sync drift-gate mermaid build check check-all
 
 install: ## npm ci at the root, then the isolated AsyncAPI toolchain (a root npm ci does not recurse)
 	npm ci
@@ -23,8 +23,12 @@ gen-check: ## every generated page matches its model / registry (offline, stdlib
 	python3 yard/scripts/check_model.py
 	python3 yard/scripts/gen_pages.py --check
 
-drift-test: ## offline unit tests of the develop-drift gate
+drift-test: ## offline unit tests of the develop-drift gate and of its spec-copy refresher
 	python3 scripts/test_check_develop_drift.py
+	python3 scripts/test_sync_spec_copies.py
+
+specs-sync: ## refresh every spec copy the gate compares (then clean-api-docs + npm run build)
+	python3 scripts/sync-spec-copies.py
 
 drift-gate: ## the live gate against every context repo's develop (needs GITHUB_TOKEN; exit 2 = producer unreadable)
 	python3 scripts/check-develop-drift.py

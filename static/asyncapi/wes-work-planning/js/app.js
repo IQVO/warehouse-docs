@@ -498,8 +498,8 @@
                           },
                           "site_id": {
                             "type": "string",
-                            "description": "OPTIONAL (ADR-0033). The network site anchoring this transfer leg — origin for pick/dispatch, destination for arrival. Present only on a transfer-referenced unit.",
-                            "example": "site-north-1",
+                            "description": "OPTIONAL (ADR-0048). The site the released work happens at, published for EVERY work kind whose unit carries a site: a transfer leg's network site (ADR-0033), an order unit's fulfillment site (read from OrderAllocated / OrderPartiallyAllocated's additive site_id), a RELOCATE unit's plan site, a REPLENISH unit's request site. Absent — never an empty string — when the unit has none; consumers must treat absent as \"site unknown\".",
+                            "example": "WH1",
                             "x-parser-schema-id": "<anonymous-schema-42>"
                           },
                           "quantity": {
@@ -646,11 +646,17 @@
                                 "example": "CASE",
                                 "x-parser-schema-id": "<anonymous-schema-61>"
                               },
+                              "site_id": {
+                                "type": "string",
+                                "description": "OPTIONAL (ADR-0048). The site the pick happens at — the released unit's site, repeated here so a pick consumer reads one object. Absent when the unit has none.",
+                                "example": "WH1",
+                                "x-parser-schema-id": "<anonymous-schema-62>"
+                              },
                               "from_bin": {
                                 "type": "string",
-                                "description": "Source bin; absent when none was given.",
+                                "description": "Source bin: caller-given at enqueue, or derived at release from the local slot-plan copy (the SKU's forward-pick face, ADR-0048). Absent when neither exists — the unit then completes exactly as before.",
                                 "example": "BIN-A1",
-                                "x-parser-schema-id": "<anonymous-schema-62>"
+                                "x-parser-schema-id": "<anonymous-schema-63>"
                               }
                             },
                             "x-parser-schema-id": "<anonymous-schema-58>"
@@ -669,25 +675,25 @@
                                 "type": "string",
                                 "description": "Licence plate of the sealed case.",
                                 "example": "LPN-0001",
-                                "x-parser-schema-id": "<anonymous-schema-64>"
+                                "x-parser-schema-id": "<anonymous-schema-65>"
                               },
                               "sku": {
                                 "type": "string",
                                 "example": "SKU-2",
-                                "x-parser-schema-id": "<anonymous-schema-65>"
+                                "x-parser-schema-id": "<anonymous-schema-66>"
                               },
                               "loose_bin": {
                                 "type": "string",
                                 "example": "LOOSE-A1",
-                                "x-parser-schema-id": "<anonymous-schema-66>"
+                                "x-parser-schema-id": "<anonymous-schema-67>"
                               },
                               "pick_task_id": {
                                 "type": "string",
                                 "example": "task-482910",
-                                "x-parser-schema-id": "<anonymous-schema-67>"
+                                "x-parser-schema-id": "<anonymous-schema-68>"
                               }
                             },
-                            "x-parser-schema-id": "<anonymous-schema-63>"
+                            "x-parser-schema-id": "<anonymous-schema-64>"
                           }
                         },
                         "x-parser-schema-id": "<anonymous-schema-30>"
@@ -851,13 +857,13 @@
                         "type": "string",
                         "description": "Fixed event type for this message.",
                         "const": "com.warehouse.wes.work-planning.workunit.WorkUnitCompleted",
-                        "x-parser-schema-id": "<anonymous-schema-69>"
+                        "x-parser-schema-id": "<anonymous-schema-70>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed integration-payload schema id for this message.",
                         "const": "urn:warehouse:wes-work-planning:events:WorkUnitCompleted:v1",
-                        "x-parser-schema-id": "<anonymous-schema-70>"
+                        "x-parser-schema-id": "<anonymous-schema-71>"
                       },
                       "data": {
                         "type": "object",
@@ -870,18 +876,18 @@
                           "path_id": {
                             "type": "string",
                             "description": "Identifier of the process path the completed unit belonged to.",
-                            "x-parser-schema-id": "<anonymous-schema-72>"
+                            "x-parser-schema-id": "<anonymous-schema-73>"
                           },
                           "work_unit_id": {
                             "type": "string",
                             "description": "Identifier of the completed work unit.",
-                            "x-parser-schema-id": "<anonymous-schema-73>"
+                            "x-parser-schema-id": "<anonymous-schema-74>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-71>"
+                        "x-parser-schema-id": "<anonymous-schema-72>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-68>"
+                    "x-parser-schema-id": "<anonymous-schema-69>"
                   }
                 ],
                 "x-parser-schema-id": "WorkUnitCompletedEvent"
@@ -935,13 +941,13 @@
                         "type": "string",
                         "description": "Fixed event type for this message.",
                         "const": "com.warehouse.wes.work-planning.workpool.BacklogThresholdBreached",
-                        "x-parser-schema-id": "<anonymous-schema-75>"
+                        "x-parser-schema-id": "<anonymous-schema-76>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed integration-payload schema id for this message.",
                         "const": "urn:warehouse:wes-work-planning:events:BacklogThresholdBreached:v1",
-                        "x-parser-schema-id": "<anonymous-schema-76>"
+                        "x-parser-schema-id": "<anonymous-schema-77>"
                       },
                       "data": {
                         "type": "object",
@@ -953,13 +959,13 @@
                           "path_id": {
                             "type": "string",
                             "description": "Identifier of the process path whose backlog crossed its alarm threshold.",
-                            "x-parser-schema-id": "<anonymous-schema-78>"
+                            "x-parser-schema-id": "<anonymous-schema-79>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-77>"
+                        "x-parser-schema-id": "<anonymous-schema-78>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-74>"
+                    "x-parser-schema-id": "<anonymous-schema-75>"
                   }
                 ],
                 "x-parser-schema-id": "BacklogThresholdBreachedEvent"
@@ -1013,13 +1019,13 @@
                         "type": "string",
                         "description": "Fixed event type for this message.",
                         "const": "com.warehouse.wes.work-planning.workpool.RateDeviationDetected",
-                        "x-parser-schema-id": "<anonymous-schema-80>"
+                        "x-parser-schema-id": "<anonymous-schema-81>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed integration-payload schema id for this message.",
                         "const": "urn:warehouse:wes-work-planning:events:RateDeviationDetected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-81>"
+                        "x-parser-schema-id": "<anonymous-schema-82>"
                       },
                       "data": {
                         "type": "object",
@@ -1031,13 +1037,13 @@
                           "path_id": {
                             "type": "string",
                             "description": "Identifier of the process path whose actual rate deviated from plan.",
-                            "x-parser-schema-id": "<anonymous-schema-83>"
+                            "x-parser-schema-id": "<anonymous-schema-84>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-82>"
+                        "x-parser-schema-id": "<anonymous-schema-83>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-79>"
+                    "x-parser-schema-id": "<anonymous-schema-80>"
                   }
                 ],
                 "x-parser-schema-id": "RateDeviationDetectedEvent"
@@ -1091,13 +1097,13 @@
                         "type": "string",
                         "description": "Fixed event type for this message.",
                         "const": "com.warehouse.wes.work-planning.workpool.PathThrottled",
-                        "x-parser-schema-id": "<anonymous-schema-85>"
+                        "x-parser-schema-id": "<anonymous-schema-86>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed integration-payload schema id for this message.",
                         "const": "urn:warehouse:wes-work-planning:events:PathThrottled:v1",
-                        "x-parser-schema-id": "<anonymous-schema-86>"
+                        "x-parser-schema-id": "<anonymous-schema-87>"
                       },
                       "data": {
                         "type": "object",
@@ -1109,13 +1115,13 @@
                           "path_id": {
                             "type": "string",
                             "description": "Identifier of the process path whose upstream release was throttled.",
-                            "x-parser-schema-id": "<anonymous-schema-88>"
+                            "x-parser-schema-id": "<anonymous-schema-89>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-87>"
+                        "x-parser-schema-id": "<anonymous-schema-88>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-84>"
+                    "x-parser-schema-id": "<anonymous-schema-85>"
                   }
                 ],
                 "x-parser-schema-id": "PathThrottledEvent"
@@ -1169,13 +1175,13 @@
                         "type": "string",
                         "description": "Fixed event type for this message.",
                         "const": "com.warehouse.wes.work-planning.workpool.LaborReassignmentFlagged",
-                        "x-parser-schema-id": "<anonymous-schema-90>"
+                        "x-parser-schema-id": "<anonymous-schema-91>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed integration-payload schema id for this message.",
                         "const": "urn:warehouse:wes-work-planning:events:LaborReassignmentFlagged:v1",
-                        "x-parser-schema-id": "<anonymous-schema-91>"
+                        "x-parser-schema-id": "<anonymous-schema-92>"
                       },
                       "data": {
                         "type": "object",
@@ -1187,13 +1193,13 @@
                           "path_id": {
                             "type": "string",
                             "description": "Identifier of the process path labor should be moved onto.",
-                            "x-parser-schema-id": "<anonymous-schema-93>"
+                            "x-parser-schema-id": "<anonymous-schema-94>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-92>"
+                        "x-parser-schema-id": "<anonymous-schema-93>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-89>"
+                    "x-parser-schema-id": "<anonymous-schema-90>"
                   }
                 ],
                 "x-parser-schema-id": "LaborReassignmentFlaggedEvent"
@@ -1246,13 +1252,13 @@
                         "type": "string",
                         "description": "Fixed event type for this message.",
                         "const": "com.warehouse.wes.work-planning.workpool.PathCapacityChanged",
-                        "x-parser-schema-id": "<anonymous-schema-95>"
+                        "x-parser-schema-id": "<anonymous-schema-96>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "Fixed integration-payload schema id for this message.",
                         "const": "urn:warehouse:wes-work-planning:events:PathCapacityChanged:v1",
-                        "x-parser-schema-id": "<anonymous-schema-96>"
+                        "x-parser-schema-id": "<anonymous-schema-97>"
                       },
                       "data": {
                         "type": "object",
@@ -1267,30 +1273,30 @@
                           "path_id": {
                             "type": "string",
                             "description": "Identifier of the process path this capacity figure applies to.",
-                            "x-parser-schema-id": "<anonymous-schema-98>"
+                            "x-parser-schema-id": "<anonymous-schema-99>"
                           },
                           "cutoff_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "RFC3339 CPT cutoff timestamp this remaining-capacity figure applies to — this service's own native CPT currency, NOT process-path-management's site-schedule `cptId` string (see ADR-0018's correlation-by-timestamp discussion). A consumer must correlate this timestamp against its own cached CPT-window schedule to resolve which `cptId` it corresponds to.",
-                            "x-parser-schema-id": "<anonymous-schema-99>"
+                            "x-parser-schema-id": "<anonymous-schema-100>"
                           },
                           "remaining_units": {
                             "type": "integer",
                             "format": "int32",
                             "description": "How many more units this path can admit right now (WIP limit minus current WIP; always non-negative since the aggregate never admits past its own limit). Meaningful only when `known` is `true`; always `0` when `known` is `false`.",
-                            "x-parser-schema-id": "<anonymous-schema-100>"
+                            "x-parser-schema-id": "<anonymous-schema-101>"
                           },
                           "known": {
                             "type": "boolean",
                             "description": "`false` when this path is FlowFed (no hard admission ceiling — only a backlog alarm threshold, not a capacity figure) or when it is ReleaseFed with no WIP limit provisioned. `true` otherwise.",
-                            "x-parser-schema-id": "<anonymous-schema-101>"
+                            "x-parser-schema-id": "<anonymous-schema-102>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-97>"
+                        "x-parser-schema-id": "<anonymous-schema-98>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-94>"
+                    "x-parser-schema-id": "<anonymous-schema-95>"
                   }
                 ],
                 "x-parser-schema-id": "PathCapacityChangedEvent"
@@ -1365,12 +1371,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.work-planning.pathplan.PathPlanDriftDetected",
-                        "x-parser-schema-id": "<anonymous-schema-103>"
+                        "x-parser-schema-id": "<anonymous-schema-104>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:wes-work-planning:events:PathPlanDriftDetected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-104>"
+                        "x-parser-schema-id": "<anonymous-schema-105>"
                       },
                       "data": {
                         "type": "object",
@@ -1384,37 +1390,37 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-106>"
+                            "x-parser-schema-id": "<anonymous-schema-107>"
                           },
                           "wes_planned_heads": {
                             "type": "integer",
                             "format": "int32",
                             "description": "Planned heads on this service's committed PathPlan.",
-                            "x-parser-schema-id": "<anonymous-schema-107>"
+                            "x-parser-schema-id": "<anonymous-schema-108>"
                           },
                           "observed_planned_heads": {
                             "type": "integer",
                             "format": "int32",
                             "description": "Planned heads in the latest LaborPlanObserved for the path.",
-                            "x-parser-schema-id": "<anonymous-schema-108>"
+                            "x-parser-schema-id": "<anonymous-schema-109>"
                           },
                           "drift_heads": {
                             "type": "integer",
                             "format": "int32",
                             "description": "Signed `observed_planned_heads - wes_planned_heads`; never zero on this event (agreeing plans raise nothing).",
-                            "x-parser-schema-id": "<anonymous-schema-109>"
+                            "x-parser-schema-id": "<anonymous-schema-110>"
                           },
                           "observed_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Workforce's own commit timestamp, carried from LaborPlanObserved (not the detection time — that is the envelope `time`).",
-                            "x-parser-schema-id": "<anonymous-schema-110>"
+                            "x-parser-schema-id": "<anonymous-schema-111>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-105>"
+                        "x-parser-schema-id": "<anonymous-schema-106>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-102>"
+                    "x-parser-schema-id": "<anonymous-schema-103>"
                   }
                 ],
                 "x-parser-schema-id": "PathPlanDriftDetectedEvent"
@@ -1485,12 +1491,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.work-planning.charge.ChargeForecastReceived",
-                        "x-parser-schema-id": "<anonymous-schema-112>"
+                        "x-parser-schema-id": "<anonymous-schema-113>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:wes-work-planning:analytics:ChargeForecastReceived:v1",
-                        "x-parser-schema-id": "<anonymous-schema-113>"
+                        "x-parser-schema-id": "<anonymous-schema-114>"
                       },
                       "data": {
                         "type": "object",
@@ -1500,13 +1506,13 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-115>"
+                            "x-parser-schema-id": "<anonymous-schema-116>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-114>"
+                        "x-parser-schema-id": "<anonymous-schema-115>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-111>"
+                    "x-parser-schema-id": "<anonymous-schema-112>"
                   }
                 ],
                 "x-parser-schema-id": "ChargeForecastReceivedAnalyticsEvent"
@@ -1537,12 +1543,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.work-planning.plan.ShiftPlanCommitted",
-                        "x-parser-schema-id": "<anonymous-schema-117>"
+                        "x-parser-schema-id": "<anonymous-schema-118>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:wes-work-planning:analytics:ShiftPlanCommitted:v1",
-                        "x-parser-schema-id": "<anonymous-schema-118>"
+                        "x-parser-schema-id": "<anonymous-schema-119>"
                       },
                       "data": {
                         "type": "object",
@@ -1552,13 +1558,13 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-120>"
+                            "x-parser-schema-id": "<anonymous-schema-121>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-119>"
+                        "x-parser-schema-id": "<anonymous-schema-120>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-116>"
+                    "x-parser-schema-id": "<anonymous-schema-117>"
                   }
                 ],
                 "x-parser-schema-id": "ShiftPlanCommittedAnalyticsEvent"
@@ -1589,12 +1595,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.work-planning.workunit.WorkUnitCreated",
-                        "x-parser-schema-id": "<anonymous-schema-122>"
+                        "x-parser-schema-id": "<anonymous-schema-123>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:wes-work-planning:analytics:WorkUnitCreated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-123>"
+                        "x-parser-schema-id": "<anonymous-schema-124>"
                       },
                       "data": {
                         "type": "object",
@@ -1605,17 +1611,17 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-125>"
+                            "x-parser-schema-id": "<anonymous-schema-126>"
                           },
                           "work_unit_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-126>"
+                            "x-parser-schema-id": "<anonymous-schema-127>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-124>"
+                        "x-parser-schema-id": "<anonymous-schema-125>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-121>"
+                    "x-parser-schema-id": "<anonymous-schema-122>"
                   }
                 ],
                 "x-parser-schema-id": "WorkUnitCreatedAnalyticsEvent"
@@ -1646,12 +1652,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.work-planning.workunit.WorkReleased",
-                        "x-parser-schema-id": "<anonymous-schema-128>"
+                        "x-parser-schema-id": "<anonymous-schema-129>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:wes-work-planning:analytics:WorkReleased:v1",
-                        "x-parser-schema-id": "<anonymous-schema-129>"
+                        "x-parser-schema-id": "<anonymous-schema-130>"
                       },
                       "data": {
                         "type": "object",
@@ -1662,11 +1668,11 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-131>"
+                            "x-parser-schema-id": "<anonymous-schema-132>"
                           },
                           "work_unit_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-132>"
+                            "x-parser-schema-id": "<anonymous-schema-133>"
                           },
                           "line_no": {
                             "type": "integer",
@@ -1675,13 +1681,13 @@
                             "maximum": 2147483647,
                             "description": "OPTIONAL (ADR-0036). The 1-based order line the released unit was made for (1..2147483647); the same value, with the same omit-when-unknown rule, as `line_no` on the integration `WorkReleased`. Absent — never `0` or `null` — when the line is unknown.",
                             "example": 3,
-                            "x-parser-schema-id": "<anonymous-schema-133>"
+                            "x-parser-schema-id": "<anonymous-schema-134>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-130>"
+                        "x-parser-schema-id": "<anonymous-schema-131>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-127>"
+                    "x-parser-schema-id": "<anonymous-schema-128>"
                   }
                 ],
                 "x-parser-schema-id": "WorkReleasedAnalyticsEvent"
@@ -1733,12 +1739,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.work-planning.workunit.WorkUnitCompleted",
-                        "x-parser-schema-id": "<anonymous-schema-135>"
+                        "x-parser-schema-id": "<anonymous-schema-136>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:wes-work-planning:analytics:WorkUnitCompleted:v1",
-                        "x-parser-schema-id": "<anonymous-schema-136>"
+                        "x-parser-schema-id": "<anonymous-schema-137>"
                       },
                       "data": {
                         "type": "object",
@@ -1749,17 +1755,17 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-138>"
+                            "x-parser-schema-id": "<anonymous-schema-139>"
                           },
                           "work_unit_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-139>"
+                            "x-parser-schema-id": "<anonymous-schema-140>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-137>"
+                        "x-parser-schema-id": "<anonymous-schema-138>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-134>"
+                    "x-parser-schema-id": "<anonymous-schema-135>"
                   }
                 ],
                 "x-parser-schema-id": "WorkUnitCompletedAnalyticsEvent"
@@ -1790,12 +1796,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.work-planning.workpool.BacklogThresholdBreached",
-                        "x-parser-schema-id": "<anonymous-schema-141>"
+                        "x-parser-schema-id": "<anonymous-schema-142>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:wes-work-planning:analytics:BacklogThresholdBreached:v1",
-                        "x-parser-schema-id": "<anonymous-schema-142>"
+                        "x-parser-schema-id": "<anonymous-schema-143>"
                       },
                       "data": {
                         "type": "object",
@@ -1805,13 +1811,13 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-144>"
+                            "x-parser-schema-id": "<anonymous-schema-145>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-143>"
+                        "x-parser-schema-id": "<anonymous-schema-144>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-140>"
+                    "x-parser-schema-id": "<anonymous-schema-141>"
                   }
                 ],
                 "x-parser-schema-id": "BacklogThresholdBreachedAnalyticsEvent"
@@ -1843,12 +1849,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.work-planning.workpool.RateDeviationDetected",
-                        "x-parser-schema-id": "<anonymous-schema-146>"
+                        "x-parser-schema-id": "<anonymous-schema-147>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:wes-work-planning:analytics:RateDeviationDetected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-147>"
+                        "x-parser-schema-id": "<anonymous-schema-148>"
                       },
                       "data": {
                         "type": "object",
@@ -1858,13 +1864,13 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-149>"
+                            "x-parser-schema-id": "<anonymous-schema-150>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-148>"
+                        "x-parser-schema-id": "<anonymous-schema-149>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-145>"
+                    "x-parser-schema-id": "<anonymous-schema-146>"
                   }
                 ],
                 "x-parser-schema-id": "RateDeviationDetectedAnalyticsEvent"
@@ -1895,12 +1901,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.work-planning.workpool.PathThrottled",
-                        "x-parser-schema-id": "<anonymous-schema-151>"
+                        "x-parser-schema-id": "<anonymous-schema-152>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:wes-work-planning:analytics:PathThrottled:v1",
-                        "x-parser-schema-id": "<anonymous-schema-152>"
+                        "x-parser-schema-id": "<anonymous-schema-153>"
                       },
                       "data": {
                         "type": "object",
@@ -1910,13 +1916,13 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-154>"
+                            "x-parser-schema-id": "<anonymous-schema-155>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-153>"
+                        "x-parser-schema-id": "<anonymous-schema-154>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-150>"
+                    "x-parser-schema-id": "<anonymous-schema-151>"
                   }
                 ],
                 "x-parser-schema-id": "PathThrottledAnalyticsEvent"
@@ -1947,12 +1953,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.work-planning.workpool.LaborReassignmentFlagged",
-                        "x-parser-schema-id": "<anonymous-schema-156>"
+                        "x-parser-schema-id": "<anonymous-schema-157>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:wes-work-planning:analytics:LaborReassignmentFlagged:v1",
-                        "x-parser-schema-id": "<anonymous-schema-157>"
+                        "x-parser-schema-id": "<anonymous-schema-158>"
                       },
                       "data": {
                         "type": "object",
@@ -1962,13 +1968,13 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-159>"
+                            "x-parser-schema-id": "<anonymous-schema-160>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-158>"
+                        "x-parser-schema-id": "<anonymous-schema-159>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-155>"
+                    "x-parser-schema-id": "<anonymous-schema-156>"
                   }
                 ],
                 "x-parser-schema-id": "LaborReassignmentFlaggedAnalyticsEvent"
@@ -1999,12 +2005,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.work-planning.workpool.PathCapacityChanged",
-                        "x-parser-schema-id": "<anonymous-schema-161>"
+                        "x-parser-schema-id": "<anonymous-schema-162>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:wes-work-planning:analytics:PathCapacityChanged:v1",
-                        "x-parser-schema-id": "<anonymous-schema-162>"
+                        "x-parser-schema-id": "<anonymous-schema-163>"
                       },
                       "data": {
                         "type": "object",
@@ -2017,26 +2023,26 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-164>"
+                            "x-parser-schema-id": "<anonymous-schema-165>"
                           },
                           "cutoff_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-165>"
+                            "x-parser-schema-id": "<anonymous-schema-166>"
                           },
                           "remaining_units": {
                             "type": "integer",
-                            "x-parser-schema-id": "<anonymous-schema-166>"
+                            "x-parser-schema-id": "<anonymous-schema-167>"
                           },
                           "known": {
                             "type": "boolean",
-                            "x-parser-schema-id": "<anonymous-schema-167>"
+                            "x-parser-schema-id": "<anonymous-schema-168>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-163>"
+                        "x-parser-schema-id": "<anonymous-schema-164>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-160>"
+                    "x-parser-schema-id": "<anonymous-schema-161>"
                   }
                 ],
                 "x-parser-schema-id": "PathCapacityChangedAnalyticsEvent"
@@ -2067,12 +2073,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.work-planning.pathplan.PathPlanDriftDetected",
-                        "x-parser-schema-id": "<anonymous-schema-169>"
+                        "x-parser-schema-id": "<anonymous-schema-170>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:wes-work-planning:analytics:PathPlanDriftDetected:v1",
-                        "x-parser-schema-id": "<anonymous-schema-170>"
+                        "x-parser-schema-id": "<anonymous-schema-171>"
                       },
                       "data": {
                         "type": "object",
@@ -2086,37 +2092,37 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-172>"
+                            "x-parser-schema-id": "<anonymous-schema-173>"
                           },
                           "wes_planned_heads": {
                             "type": "integer",
                             "format": "int32",
                             "description": "Planned heads on this service's committed PathPlan.",
-                            "x-parser-schema-id": "<anonymous-schema-173>"
+                            "x-parser-schema-id": "<anonymous-schema-174>"
                           },
                           "observed_planned_heads": {
                             "type": "integer",
                             "format": "int32",
                             "description": "Planned heads in the latest LaborPlanObserved for the path.",
-                            "x-parser-schema-id": "<anonymous-schema-174>"
+                            "x-parser-schema-id": "<anonymous-schema-175>"
                           },
                           "drift_heads": {
                             "type": "integer",
                             "format": "int32",
                             "description": "Signed `observed_planned_heads - wes_planned_heads`; never zero on this event (agreeing plans raise nothing).",
-                            "x-parser-schema-id": "<anonymous-schema-175>"
+                            "x-parser-schema-id": "<anonymous-schema-176>"
                           },
                           "observed_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Workforce's own commit timestamp, carried from LaborPlanObserved (not the detection time — that is the envelope `time`).",
-                            "x-parser-schema-id": "<anonymous-schema-176>"
+                            "x-parser-schema-id": "<anonymous-schema-177>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-171>"
+                        "x-parser-schema-id": "<anonymous-schema-172>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-168>"
+                    "x-parser-schema-id": "<anonymous-schema-169>"
                   }
                 ],
                 "x-parser-schema-id": "PathPlanDriftDetectedAnalyticsEvent"
@@ -2159,12 +2165,12 @@
                   "type": {
                     "type": "string",
                     "const": "com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted",
-                    "x-parser-schema-id": "<anonymous-schema-178>"
+                    "x-parser-schema-id": "<anonymous-schema-179>"
                   },
                   "dataschema": {
                     "type": "string",
                     "const": "urn:warehouse:workforce-management:events:ShiftPlanCommitted:v1",
-                    "x-parser-schema-id": "<anonymous-schema-179>"
+                    "x-parser-schema-id": "<anonymous-schema-180>"
                   },
                   "data": {
                     "type": "object",
@@ -2179,36 +2185,36 @@
                     "properties": {
                       "building_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-181>"
+                        "x-parser-schema-id": "<anonymous-schema-182>"
                       },
                       "shift_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-182>"
+                        "x-parser-schema-id": "<anonymous-schema-183>"
                       },
                       "path_id": {
                         "type": "string",
                         "description": "Key of the LaborPlanObserved view.",
-                        "x-parser-schema-id": "<anonymous-schema-183>"
+                        "x-parser-schema-id": "<anonymous-schema-184>"
                       },
                       "planned_heads": {
                         "type": "integer",
-                        "x-parser-schema-id": "<anonymous-schema-184>"
+                        "x-parser-schema-id": "<anonymous-schema-185>"
                       },
                       "planned_rate": {
                         "type": "number",
                         "format": "double",
-                        "x-parser-schema-id": "<anonymous-schema-185>"
+                        "x-parser-schema-id": "<anonymous-schema-186>"
                       },
                       "planned_hours": {
                         "type": "number",
                         "format": "double",
-                        "x-parser-schema-id": "<anonymous-schema-186>"
+                        "x-parser-schema-id": "<anonymous-schema-187>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-180>"
+                    "x-parser-schema-id": "<anonymous-schema-181>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-177>"
+                "x-parser-schema-id": "<anonymous-schema-178>"
               }
             ],
             "x-parser-schema-id": "WorkforceShiftPlanCommittedEvent"
@@ -2272,12 +2278,12 @@
                   "type": {
                     "type": "string",
                     "const": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
-                    "x-parser-schema-id": "<anonymous-schema-188>"
+                    "x-parser-schema-id": "<anonymous-schema-189>"
                   },
                   "dataschema": {
                     "type": "string",
                     "const": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
-                    "x-parser-schema-id": "<anonymous-schema-189>"
+                    "x-parser-schema-id": "<anonymous-schema-190>"
                   },
                   "data": {
                     "type": "object",
@@ -2289,27 +2295,27 @@
                     "properties": {
                       "task_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-191>"
+                        "x-parser-schema-id": "<anonymous-schema-192>"
                       },
                       "station_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-192>"
+                        "x-parser-schema-id": "<anonymous-schema-193>"
                       },
                       "work_unit_id": {
                         "type": "string",
                         "description": "The work unit to complete.",
-                        "x-parser-schema-id": "<anonymous-schema-193>"
+                        "x-parser-schema-id": "<anonymous-schema-194>"
                       },
                       "task_type": {
                         "type": "string",
                         "description": "OPTIONAL. PICK, PACK, SLAM or REBIN; read for logging only.",
-                        "x-parser-schema-id": "<anonymous-schema-194>"
+                        "x-parser-schema-id": "<anonymous-schema-195>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-190>"
+                    "x-parser-schema-id": "<anonymous-schema-191>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-187>"
+                "x-parser-schema-id": "<anonymous-schema-188>"
               }
             ],
             "x-parser-schema-id": "TaskCompletedEvent"
@@ -2373,12 +2379,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.order-management.order.OrderAllocated",
-                        "x-parser-schema-id": "<anonymous-schema-196>"
+                        "x-parser-schema-id": "<anonymous-schema-197>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:order-management:events:OrderAllocated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-197>"
+                        "x-parser-schema-id": "<anonymous-schema-198>"
                       },
                       "data": {
                         "type": "object",
@@ -2391,13 +2397,13 @@
                           "order_id": {
                             "type": "string",
                             "description": "Becomes the work units' reference and the id prefix `<order_id>-line-<line_no>`.",
-                            "x-parser-schema-id": "<anonymous-schema-199>"
+                            "x-parser-schema-id": "<anonymous-schema-200>"
                           },
                           "promise_date": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Becomes each work unit's CPT.",
-                            "x-parser-schema-id": "<anonymous-schema-200>"
+                            "x-parser-schema-id": "<anonymous-schema-201>"
                           },
                           "lines": {
                             "type": "array",
@@ -2412,31 +2418,31 @@
                                 "line_no": {
                                   "type": "integer",
                                   "minimum": 1,
-                                  "x-parser-schema-id": "<anonymous-schema-203>"
+                                  "x-parser-schema-id": "<anonymous-schema-204>"
                                 },
                                 "sku": {
                                   "type": "string",
-                                  "x-parser-schema-id": "<anonymous-schema-204>"
+                                  "x-parser-schema-id": "<anonymous-schema-205>"
                                 },
                                 "path_id": {
                                   "type": "string",
                                   "description": "Validated against the process-path catalogue.",
-                                  "x-parser-schema-id": "<anonymous-schema-205>"
+                                  "x-parser-schema-id": "<anonymous-schema-206>"
                                 },
                                 "gift_wrap": {
                                   "type": "boolean",
-                                  "x-parser-schema-id": "<anonymous-schema-206>"
+                                  "x-parser-schema-id": "<anonymous-schema-207>"
                                 }
                               },
-                              "x-parser-schema-id": "<anonymous-schema-202>"
+                              "x-parser-schema-id": "<anonymous-schema-203>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-201>"
+                            "x-parser-schema-id": "<anonymous-schema-202>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-198>"
+                        "x-parser-schema-id": "<anonymous-schema-199>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-195>"
+                    "x-parser-schema-id": "<anonymous-schema-196>"
                   }
                 ],
                 "x-parser-schema-id": "OrderAllocatedEvent"
@@ -2496,12 +2502,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.order-management.order.OrderPartiallyAllocated",
-                        "x-parser-schema-id": "<anonymous-schema-208>"
+                        "x-parser-schema-id": "<anonymous-schema-209>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:order-management:events:OrderPartiallyAllocated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-209>"
+                        "x-parser-schema-id": "<anonymous-schema-210>"
                       },
                       "data": {
                         "type": "object",
@@ -2514,13 +2520,13 @@
                           "order_id": {
                             "type": "string",
                             "description": "Becomes the work units' reference and the id prefix `<order_id>-line-<line_no>`.",
-                            "x-parser-schema-id": "<anonymous-schema-211>"
+                            "x-parser-schema-id": "<anonymous-schema-212>"
                           },
                           "promise_date": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Becomes each work unit's CPT.",
-                            "x-parser-schema-id": "<anonymous-schema-212>"
+                            "x-parser-schema-id": "<anonymous-schema-213>"
                           },
                           "lines": {
                             "type": "array",
@@ -2535,31 +2541,31 @@
                                 "line_no": {
                                   "type": "integer",
                                   "minimum": 1,
-                                  "x-parser-schema-id": "<anonymous-schema-215>"
+                                  "x-parser-schema-id": "<anonymous-schema-216>"
                                 },
                                 "sku": {
                                   "type": "string",
-                                  "x-parser-schema-id": "<anonymous-schema-216>"
+                                  "x-parser-schema-id": "<anonymous-schema-217>"
                                 },
                                 "path_id": {
                                   "type": "string",
                                   "description": "Validated against the process-path catalogue.",
-                                  "x-parser-schema-id": "<anonymous-schema-217>"
+                                  "x-parser-schema-id": "<anonymous-schema-218>"
                                 },
                                 "gift_wrap": {
                                   "type": "boolean",
-                                  "x-parser-schema-id": "<anonymous-schema-218>"
+                                  "x-parser-schema-id": "<anonymous-schema-219>"
                                 }
                               },
-                              "x-parser-schema-id": "<anonymous-schema-214>"
+                              "x-parser-schema-id": "<anonymous-schema-215>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-213>"
+                            "x-parser-schema-id": "<anonymous-schema-214>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-210>"
+                        "x-parser-schema-id": "<anonymous-schema-211>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-207>"
+                    "x-parser-schema-id": "<anonymous-schema-208>"
                   }
                 ],
                 "x-parser-schema-id": "OrderPartiallyAllocatedEvent"
@@ -2631,12 +2637,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathCreated",
-                        "x-parser-schema-id": "<anonymous-schema-220>"
+                        "x-parser-schema-id": "<anonymous-schema-221>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:process-path-management:events:ProcessPathCreated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-221>"
+                        "x-parser-schema-id": "<anonymous-schema-222>"
                       },
                       "data": {
                         "type": "object",
@@ -2647,44 +2653,44 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-223>"
+                            "x-parser-schema-id": "<anonymous-schema-224>"
                           },
                           "match_prefix": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-224>"
+                            "x-parser-schema-id": "<anonymous-schema-225>"
                           },
                           "direct": {
                             "type": "boolean",
                             "description": "Decoded and discarded.",
-                            "x-parser-schema-id": "<anonymous-schema-225>"
+                            "x-parser-schema-id": "<anonymous-schema-226>"
                           },
                           "required_capabilities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-227>"
+                              "x-parser-schema-id": "<anonymous-schema-228>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-226>"
+                            "x-parser-schema-id": "<anonymous-schema-227>"
                           },
                           "destination_location_role": {
                             "type": "string",
                             "description": "OPTIONAL.",
-                            "x-parser-schema-id": "<anonymous-schema-228>"
+                            "x-parser-schema-id": "<anonymous-schema-229>"
                           },
                           "intake": {
                             "type": "array",
                             "description": "OPTIONAL. Declared demand sources; absent decodes to none.",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-230>"
+                              "x-parser-schema-id": "<anonymous-schema-231>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-229>"
+                            "x-parser-schema-id": "<anonymous-schema-230>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-222>"
+                        "x-parser-schema-id": "<anonymous-schema-223>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-219>"
+                    "x-parser-schema-id": "<anonymous-schema-220>"
                   }
                 ],
                 "x-parser-schema-id": "ProcessPathCreatedEvent"
@@ -2741,12 +2747,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated",
-                        "x-parser-schema-id": "<anonymous-schema-232>"
+                        "x-parser-schema-id": "<anonymous-schema-233>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:process-path-management:events:ProcessPathUpdated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-233>"
+                        "x-parser-schema-id": "<anonymous-schema-234>"
                       },
                       "data": {
                         "type": "object",
@@ -2757,44 +2763,44 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-235>"
+                            "x-parser-schema-id": "<anonymous-schema-236>"
                           },
                           "match_prefix": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-236>"
+                            "x-parser-schema-id": "<anonymous-schema-237>"
                           },
                           "direct": {
                             "type": "boolean",
                             "description": "Decoded and discarded.",
-                            "x-parser-schema-id": "<anonymous-schema-237>"
+                            "x-parser-schema-id": "<anonymous-schema-238>"
                           },
                           "required_capabilities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-239>"
+                              "x-parser-schema-id": "<anonymous-schema-240>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-238>"
+                            "x-parser-schema-id": "<anonymous-schema-239>"
                           },
                           "destination_location_role": {
                             "type": "string",
                             "description": "OPTIONAL.",
-                            "x-parser-schema-id": "<anonymous-schema-240>"
+                            "x-parser-schema-id": "<anonymous-schema-241>"
                           },
                           "intake": {
                             "type": "array",
                             "description": "OPTIONAL. Declared demand sources; absent decodes to none.",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-242>"
+                              "x-parser-schema-id": "<anonymous-schema-243>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-241>"
+                            "x-parser-schema-id": "<anonymous-schema-242>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-234>"
+                        "x-parser-schema-id": "<anonymous-schema-235>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-231>"
+                    "x-parser-schema-id": "<anonymous-schema-232>"
                   }
                 ],
                 "x-parser-schema-id": "ProcessPathUpdatedEvent"
@@ -2851,12 +2857,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wes.process-path-management.processpath.ProcessPathDeactivated",
-                        "x-parser-schema-id": "<anonymous-schema-244>"
+                        "x-parser-schema-id": "<anonymous-schema-245>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:process-path-management:events:ProcessPathDeactivated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-245>"
+                        "x-parser-schema-id": "<anonymous-schema-246>"
                       },
                       "data": {
                         "type": "object",
@@ -2867,44 +2873,44 @@
                         "properties": {
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-247>"
+                            "x-parser-schema-id": "<anonymous-schema-248>"
                           },
                           "match_prefix": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-248>"
+                            "x-parser-schema-id": "<anonymous-schema-249>"
                           },
                           "direct": {
                             "type": "boolean",
                             "description": "Decoded and discarded.",
-                            "x-parser-schema-id": "<anonymous-schema-249>"
+                            "x-parser-schema-id": "<anonymous-schema-250>"
                           },
                           "required_capabilities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-251>"
+                              "x-parser-schema-id": "<anonymous-schema-252>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-250>"
+                            "x-parser-schema-id": "<anonymous-schema-251>"
                           },
                           "destination_location_role": {
                             "type": "string",
                             "description": "OPTIONAL.",
-                            "x-parser-schema-id": "<anonymous-schema-252>"
+                            "x-parser-schema-id": "<anonymous-schema-253>"
                           },
                           "intake": {
                             "type": "array",
                             "description": "OPTIONAL. Declared demand sources; absent decodes to none.",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-254>"
+                              "x-parser-schema-id": "<anonymous-schema-255>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-253>"
+                            "x-parser-schema-id": "<anonymous-schema-254>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-246>"
+                        "x-parser-schema-id": "<anonymous-schema-247>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-243>"
+                    "x-parser-schema-id": "<anonymous-schema-244>"
                   }
                 ],
                 "x-parser-schema-id": "ProcessPathDeactivatedEvent"
@@ -2972,13 +2978,13 @@
                     "type": "string",
                     "description": "Fixed event type (the producer's own).",
                     "const": "com.warehouse.wes.network-inventory-planning.workdemand.WorkDemandReleased",
-                    "x-parser-schema-id": "<anonymous-schema-256>"
+                    "x-parser-schema-id": "<anonymous-schema-257>"
                   },
                   "dataschema": {
                     "type": "string",
                     "description": "The producer's payload schema id. Overrides CloudEventBase's pattern (which only admits THIS repo's own urns): a consumed event carries the PRODUCER's urn.",
                     "const": "urn:warehouse:network-inventory-planning:events:WorkDemandReleased:v1",
-                    "x-parser-schema-id": "<anonymous-schema-257>"
+                    "x-parser-schema-id": "<anonymous-schema-258>"
                   },
                   "data": {
                     "type": "object",
@@ -2995,7 +3001,7 @@
                       "demand_id": {
                         "type": "string",
                         "description": "Identity of the work demand. Becomes the deterministic work_unit_id (and the generic operator `ref`) of the enqueued work unit.",
-                        "x-parser-schema-id": "<anonymous-schema-259>"
+                        "x-parser-schema-id": "<anonymous-schema-260>"
                       },
                       "work_kind": {
                         "type": "string",
@@ -3005,44 +3011,44 @@
                           "TRANSFER_DISPATCH",
                           "TRANSFER_ARRIVAL"
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-260>"
+                        "x-parser-schema-id": "<anonymous-schema-261>"
                       },
                       "transfer_ref": {
                         "type": "string",
                         "description": "The network transfer this demand belongs to.",
-                        "x-parser-schema-id": "<anonymous-schema-261>"
+                        "x-parser-schema-id": "<anonymous-schema-262>"
                       },
                       "path_id": {
                         "type": "string",
                         "description": "Process path the demand's work executes on (validated against this service's process-path catalogue).",
-                        "x-parser-schema-id": "<anonymous-schema-262>"
+                        "x-parser-schema-id": "<anonymous-schema-263>"
                       },
                       "site_id": {
                         "type": "string",
                         "description": "Network site anchoring the leg — origin for pick/dispatch, destination for arrival.",
-                        "x-parser-schema-id": "<anonymous-schema-263>"
+                        "x-parser-schema-id": "<anonymous-schema-264>"
                       },
                       "cpt": {
                         "type": "string",
                         "description": "RFC3339 Critical Pull Time carried by the demand.",
-                        "x-parser-schema-id": "<anonymous-schema-264>"
+                        "x-parser-schema-id": "<anonymous-schema-265>"
                       },
                       "sku": {
                         "type": "string",
                         "description": "OPTIONAL. SKU the demand moves, when known.",
-                        "x-parser-schema-id": "<anonymous-schema-265>"
+                        "x-parser-schema-id": "<anonymous-schema-266>"
                       },
                       "quantity": {
                         "type": "integer",
                         "description": "OPTIONAL. Units of the SKU the leg moves.",
                         "minimum": 0,
-                        "x-parser-schema-id": "<anonymous-schema-266>"
+                        "x-parser-schema-id": "<anonymous-schema-267>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-258>"
+                    "x-parser-schema-id": "<anonymous-schema-259>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-255>"
+                "x-parser-schema-id": "<anonymous-schema-256>"
               }
             ],
             "x-parser-schema-id": "WorkDemandReleasedEvent"
@@ -3108,12 +3114,12 @@
                   "type": {
                     "type": "string",
                     "const": "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved",
-                    "x-parser-schema-id": "<anonymous-schema-268>"
+                    "x-parser-schema-id": "<anonymous-schema-269>"
                   },
                   "dataschema": {
                     "type": "string",
                     "const": "urn:warehouse:slotting-optimization:events:SlotPlanApproved:v1",
-                    "x-parser-schema-id": "<anonymous-schema-269>"
+                    "x-parser-schema-id": "<anonymous-schema-270>"
                   },
                   "data": {
                     "type": "object",
@@ -3126,30 +3132,30 @@
                     "properties": {
                       "plan_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-271>"
+                        "x-parser-schema-id": "<anonymous-schema-272>"
                       },
                       "site_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-272>"
+                        "x-parser-schema-id": "<anonymous-schema-273>"
                       },
                       "approved_at": {
                         "type": "string",
                         "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-273>"
+                        "x-parser-schema-id": "<anonymous-schema-274>"
                       },
                       "supersedes_plan_id": {
                         "type": "string",
                         "description": "OPTIONAL. The plan this one replaces.",
-                        "x-parser-schema-id": "<anonymous-schema-274>"
+                        "x-parser-schema-id": "<anonymous-schema-275>"
                       },
                       "assignments": {
                         "type": "array",
                         "description": "Full forward map; ignored by this service.",
                         "items": {
                           "type": "object",
-                          "x-parser-schema-id": "<anonymous-schema-276>"
+                          "x-parser-schema-id": "<anonymous-schema-277>"
                         },
-                        "x-parser-schema-id": "<anonymous-schema-275>"
+                        "x-parser-schema-id": "<anonymous-schema-276>"
                       },
                       "moves": {
                         "type": "array",
@@ -3162,17 +3168,17 @@
                           "properties": {
                             "sku": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-279>"
+                              "x-parser-schema-id": "<anonymous-schema-280>"
                             },
                             "from_slot": {
                               "type": "string",
                               "description": "Absent for Assign.",
-                              "x-parser-schema-id": "<anonymous-schema-280>"
+                              "x-parser-schema-id": "<anonymous-schema-281>"
                             },
                             "to_slot": {
                               "type": "string",
                               "description": "Absent for Vacate.",
-                              "x-parser-schema-id": "<anonymous-schema-281>"
+                              "x-parser-schema-id": "<anonymous-schema-282>"
                             },
                             "kind": {
                               "type": "string",
@@ -3181,18 +3187,18 @@
                                 "Relocate",
                                 "Vacate"
                               ],
-                              "x-parser-schema-id": "<anonymous-schema-282>"
+                              "x-parser-schema-id": "<anonymous-schema-283>"
                             }
                           },
-                          "x-parser-schema-id": "<anonymous-schema-278>"
+                          "x-parser-schema-id": "<anonymous-schema-279>"
                         },
-                        "x-parser-schema-id": "<anonymous-schema-277>"
+                        "x-parser-schema-id": "<anonymous-schema-278>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-270>"
+                    "x-parser-schema-id": "<anonymous-schema-271>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-267>"
+                "x-parser-schema-id": "<anonymous-schema-268>"
               }
             ],
             "x-parser-schema-id": "SlotPlanApprovedEvent"
@@ -3280,12 +3286,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentRequested",
-                        "x-parser-schema-id": "<anonymous-schema-284>"
+                        "x-parser-schema-id": "<anonymous-schema-285>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:pick-face-replenishment:events:ReplenishmentRequested:v1",
-                        "x-parser-schema-id": "<anonymous-schema-285>"
+                        "x-parser-schema-id": "<anonymous-schema-286>"
                       },
                       "data": {
                         "type": "object",
@@ -3302,30 +3308,30 @@
                         "properties": {
                           "request_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-287>"
+                            "x-parser-schema-id": "<anonymous-schema-288>"
                           },
                           "site_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-288>"
+                            "x-parser-schema-id": "<anonymous-schema-289>"
                           },
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-289>"
+                            "x-parser-schema-id": "<anonymous-schema-290>"
                           },
                           "forward_bin": {
                             "type": "string",
                             "description": "The pick face to fill; becomes the work unit's `to_bin`.",
-                            "x-parser-schema-id": "<anonymous-schema-290>"
+                            "x-parser-schema-id": "<anonymous-schema-291>"
                           },
                           "source_bin": {
                             "type": "string",
                             "description": "The reserve bin the stock comes from; becomes `from_bin`.",
-                            "x-parser-schema-id": "<anonymous-schema-291>"
+                            "x-parser-schema-id": "<anonymous-schema-292>"
                           },
                           "quantity": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-292>"
+                            "x-parser-schema-id": "<anonymous-schema-293>"
                           },
                           "priority": {
                             "type": "string",
@@ -3333,28 +3339,28 @@
                               "NORMAL",
                               "URGENT"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-293>"
+                            "x-parser-schema-id": "<anonymous-schema-294>"
                           },
                           "policy_min": {
                             "type": "integer",
                             "description": "Ignored by this service.",
-                            "x-parser-schema-id": "<anonymous-schema-294>"
+                            "x-parser-schema-id": "<anonymous-schema-295>"
                           },
                           "policy_max": {
                             "type": "integer",
                             "description": "Ignored by this service.",
-                            "x-parser-schema-id": "<anonymous-schema-295>"
+                            "x-parser-schema-id": "<anonymous-schema-296>"
                           },
                           "requested_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-296>"
+                            "x-parser-schema-id": "<anonymous-schema-297>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-286>"
+                        "x-parser-schema-id": "<anonymous-schema-287>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-283>"
+                    "x-parser-schema-id": "<anonymous-schema-284>"
                   }
                 ],
                 "x-parser-schema-id": "ReplenishmentRequestedEvent"
@@ -3414,12 +3420,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentCancelled",
-                        "x-parser-schema-id": "<anonymous-schema-298>"
+                        "x-parser-schema-id": "<anonymous-schema-299>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:pick-face-replenishment:events:ReplenishmentCancelled:v1",
-                        "x-parser-schema-id": "<anonymous-schema-299>"
+                        "x-parser-schema-id": "<anonymous-schema-300>"
                       },
                       "data": {
                         "type": "object",
@@ -3430,17 +3436,17 @@
                         "properties": {
                           "request_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-301>"
+                            "x-parser-schema-id": "<anonymous-schema-302>"
                           },
                           "site_id": {
                             "type": "string",
                             "description": "Ignored by this service.",
-                            "x-parser-schema-id": "<anonymous-schema-302>"
+                            "x-parser-schema-id": "<anonymous-schema-303>"
                           },
                           "sku": {
                             "type": "string",
                             "description": "Ignored by this service.",
-                            "x-parser-schema-id": "<anonymous-schema-303>"
+                            "x-parser-schema-id": "<anonymous-schema-304>"
                           },
                           "reason": {
                             "type": "string",
@@ -3450,18 +3456,18 @@
                               "POLICY_REMOVED"
                             ],
                             "description": "Carried for logs only.",
-                            "x-parser-schema-id": "<anonymous-schema-304>"
+                            "x-parser-schema-id": "<anonymous-schema-305>"
                           },
                           "cancelled_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-305>"
+                            "x-parser-schema-id": "<anonymous-schema-306>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-300>"
+                        "x-parser-schema-id": "<anonymous-schema-301>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-297>"
+                    "x-parser-schema-id": "<anonymous-schema-298>"
                   }
                 ],
                 "x-parser-schema-id": "ReplenishmentCancelledEvent"
@@ -3530,13 +3536,13 @@
                         "type": "string",
                         "description": "Fixed event type (the producer's own).",
                         "const": "com.warehouse.wms.product-master.product.ProductClassified",
-                        "x-parser-schema-id": "<anonymous-schema-307>"
+                        "x-parser-schema-id": "<anonymous-schema-308>"
                       },
                       "dataschema": {
                         "type": "string",
                         "description": "The producer's payload schema id. Overrides CloudEventBase's pattern (which only admits THIS repo's own urns): a consumed event carries the PRODUCER's urn.",
                         "const": "urn:warehouse:product-master:events:ProductClassified:v1",
-                        "x-parser-schema-id": "<anonymous-schema-308>"
+                        "x-parser-schema-id": "<anonymous-schema-309>"
                       },
                       "data": {
                         "type": "object",
@@ -3551,7 +3557,7 @@
                           "sku": {
                             "type": "string",
                             "description": "The classified SKU (also the Kafka key and the CloudEvents subject).",
-                            "x-parser-schema-id": "<anonymous-schema-310>"
+                            "x-parser-schema-id": "<anonymous-schema-311>"
                           },
                           "handling_tags": {
                             "type": "array",
@@ -3566,9 +3572,9 @@
                                 "Oversized",
                                 "HighValue"
                               ],
-                              "x-parser-schema-id": "<anonymous-schema-312>"
+                              "x-parser-schema-id": "<anonymous-schema-313>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-311>"
+                            "x-parser-schema-id": "<anonymous-schema-312>"
                           },
                           "temperature_class": {
                             "type": "string",
@@ -3578,14 +3584,14 @@
                               "Chilled",
                               "Frozen"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-313>"
+                            "x-parser-schema-id": "<anonymous-schema-314>"
                           },
                           "dot_hazard_class": {
                             "type": "integer",
                             "description": "OPTIONAL. Present only with Hazmat. Stored, not surfaced.",
                             "minimum": 1,
                             "maximum": 9,
-                            "x-parser-schema-id": "<anonymous-schema-314>"
+                            "x-parser-schema-id": "<anonymous-schema-315>"
                           },
                           "classification_source": {
                             "type": "string",
@@ -3594,19 +3600,19 @@
                               "native",
                               "legacy-import"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-315>"
+                            "x-parser-schema-id": "<anonymous-schema-316>"
                           },
                           "version": {
                             "type": "integer",
                             "description": "The producer's aggregate version after the change. The local copy applies a message only when this is greater than the stored version.",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-316>"
+                            "x-parser-schema-id": "<anonymous-schema-317>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-309>"
+                        "x-parser-schema-id": "<anonymous-schema-310>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-306>"
+                    "x-parser-schema-id": "<anonymous-schema-307>"
                   }
                 ],
                 "x-parser-schema-id": "ProductClassifiedEvent"
@@ -3666,12 +3672,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wms.product-master.product.ProductPackLevelDeclared",
-                        "x-parser-schema-id": "<anonymous-schema-318>"
+                        "x-parser-schema-id": "<anonymous-schema-319>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:product-master:events:ProductPackLevelDeclared:v1",
-                        "x-parser-schema-id": "<anonymous-schema-319>"
+                        "x-parser-schema-id": "<anonymous-schema-320>"
                       },
                       "data": {
                         "type": "object",
@@ -3688,55 +3694,55 @@
                         "properties": {
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-321>"
+                            "x-parser-schema-id": "<anonymous-schema-322>"
                           },
                           "level": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-322>"
+                            "x-parser-schema-id": "<anonymous-schema-323>"
                           },
                           "gtin": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-323>"
+                            "x-parser-schema-id": "<anonymous-schema-324>"
                           },
                           "child_gtin": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-324>"
+                            "x-parser-schema-id": "<anonymous-schema-325>"
                           },
                           "qty_of_child": {
                             "type": "integer",
                             "minimum": 2,
                             "description": "Absent for EACH.",
-                            "x-parser-schema-id": "<anonymous-schema-325>"
+                            "x-parser-schema-id": "<anonymous-schema-326>"
                           },
                           "units_per_pack": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "Direct factor to eaches; 1 for EACH.",
-                            "x-parser-schema-id": "<anonymous-schema-326>"
+                            "x-parser-schema-id": "<anonymous-schema-327>"
                           },
                           "is_orderable": {
                             "type": "boolean",
-                            "x-parser-schema-id": "<anonymous-schema-327>"
+                            "x-parser-schema-id": "<anonymous-schema-328>"
                           },
                           "is_despatch_unit": {
                             "type": "boolean",
-                            "x-parser-schema-id": "<anonymous-schema-328>"
+                            "x-parser-schema-id": "<anonymous-schema-329>"
                           },
                           "effective_from": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-329>"
+                            "x-parser-schema-id": "<anonymous-schema-330>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-330>"
+                            "x-parser-schema-id": "<anonymous-schema-331>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-320>"
+                        "x-parser-schema-id": "<anonymous-schema-321>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-317>"
+                    "x-parser-schema-id": "<anonymous-schema-318>"
                   }
                 ],
                 "x-parser-schema-id": "ProductPackLevelDeclaredEvent"
@@ -3769,12 +3775,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wms.product-master.product.ProductPackLevelRetired",
-                        "x-parser-schema-id": "<anonymous-schema-332>"
+                        "x-parser-schema-id": "<anonymous-schema-333>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:product-master:events:ProductPackLevelRetired:v1",
-                        "x-parser-schema-id": "<anonymous-schema-333>"
+                        "x-parser-schema-id": "<anonymous-schema-334>"
                       },
                       "data": {
                         "type": "object",
@@ -3789,35 +3795,35 @@
                         "properties": {
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-335>"
+                            "x-parser-schema-id": "<anonymous-schema-336>"
                           },
                           "level": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-336>"
+                            "x-parser-schema-id": "<anonymous-schema-337>"
                           },
                           "gtin": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-337>"
+                            "x-parser-schema-id": "<anonymous-schema-338>"
                           },
                           "effective_to": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-338>"
+                            "x-parser-schema-id": "<anonymous-schema-339>"
                           },
                           "reason": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-339>"
+                            "x-parser-schema-id": "<anonymous-schema-340>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-340>"
+                            "x-parser-schema-id": "<anonymous-schema-341>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-334>"
+                        "x-parser-schema-id": "<anonymous-schema-335>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-331>"
+                    "x-parser-schema-id": "<anonymous-schema-332>"
                   }
                 ],
                 "x-parser-schema-id": "ProductPackLevelRetiredEvent"
@@ -3850,12 +3856,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wms.product-master.product.ProductPackLevelMeasured",
-                        "x-parser-schema-id": "<anonymous-schema-342>"
+                        "x-parser-schema-id": "<anonymous-schema-343>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:product-master:events:ProductPackLevelMeasured:v1",
-                        "x-parser-schema-id": "<anonymous-schema-343>"
+                        "x-parser-schema-id": "<anonymous-schema-344>"
                       },
                       "data": {
                         "type": "object",
@@ -3870,15 +3876,15 @@
                         "properties": {
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-345>"
+                            "x-parser-schema-id": "<anonymous-schema-346>"
                           },
                           "level": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-346>"
+                            "x-parser-schema-id": "<anonymous-schema-347>"
                           },
                           "gtin": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-347>"
+                            "x-parser-schema-id": "<anonymous-schema-348>"
                           },
                           "dims": {
                             "type": "object",
@@ -3893,49 +3899,49 @@
                                 "type": "integer",
                                 "minimum": 1,
                                 "maximum": 20000,
-                                "x-parser-schema-id": "<anonymous-schema-349>"
+                                "x-parser-schema-id": "<anonymous-schema-350>"
                               },
                               "width_mm": {
                                 "type": "integer",
                                 "minimum": 1,
                                 "maximum": 20000,
-                                "x-parser-schema-id": "<anonymous-schema-350>"
+                                "x-parser-schema-id": "<anonymous-schema-351>"
                               },
                               "height_mm": {
                                 "type": "integer",
                                 "minimum": 1,
                                 "maximum": 20000,
-                                "x-parser-schema-id": "<anonymous-schema-351>"
+                                "x-parser-schema-id": "<anonymous-schema-352>"
                               },
                               "weight_g": {
                                 "type": "integer",
                                 "minimum": 1,
                                 "maximum": 2000000,
-                                "x-parser-schema-id": "<anonymous-schema-352>"
+                                "x-parser-schema-id": "<anonymous-schema-353>"
                               }
                             },
-                            "x-parser-schema-id": "<anonymous-schema-348>"
+                            "x-parser-schema-id": "<anonymous-schema-349>"
                           },
                           "measured_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-353>"
+                            "x-parser-schema-id": "<anonymous-schema-354>"
                           },
                           "device_id": {
                             "type": "string",
                             "description": "Omitted for a manual measurement.",
-                            "x-parser-schema-id": "<anonymous-schema-354>"
+                            "x-parser-schema-id": "<anonymous-schema-355>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-355>"
+                            "x-parser-schema-id": "<anonymous-schema-356>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-344>"
+                        "x-parser-schema-id": "<anonymous-schema-345>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-341>"
+                    "x-parser-schema-id": "<anonymous-schema-342>"
                   }
                 ],
                 "x-parser-schema-id": "ProductPackLevelMeasuredEvent"
@@ -3979,12 +3985,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wms.inventory-storage.reservation.StockReserved",
-                        "x-parser-schema-id": "<anonymous-schema-357>"
+                        "x-parser-schema-id": "<anonymous-schema-358>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:inventory-storage:events:StockReserved:v1",
-                        "x-parser-schema-id": "<anonymous-schema-358>"
+                        "x-parser-schema-id": "<anonymous-schema-359>"
                       },
                       "data": {
                         "type": "object",
@@ -3998,24 +4004,24 @@
                           "sku": {
                             "type": "string",
                             "description": "The stock keeping unit the quantity was reserved against.",
-                            "x-parser-schema-id": "<anonymous-schema-360>"
+                            "x-parser-schema-id": "<anonymous-schema-361>"
                           },
                           "quantity": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "Quantity bound to the demand; decrements usable inventory.",
-                            "x-parser-schema-id": "<anonymous-schema-361>"
+                            "x-parser-schema-id": "<anonymous-schema-362>"
                           },
                           "demand_ref": {
                             "type": "string",
                             "description": "Opaque reference to the demand the reservation serves.",
-                            "x-parser-schema-id": "<anonymous-schema-362>"
+                            "x-parser-schema-id": "<anonymous-schema-363>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-359>"
+                        "x-parser-schema-id": "<anonymous-schema-360>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-356>"
+                    "x-parser-schema-id": "<anonymous-schema-357>"
                   }
                 ],
                 "x-parser-schema-id": "StockReservedEvent"
@@ -4068,12 +4074,12 @@
                       "type": {
                         "type": "string",
                         "const": "com.warehouse.wms.inventory-storage.reservation.ReservationRevoked",
-                        "x-parser-schema-id": "<anonymous-schema-364>"
+                        "x-parser-schema-id": "<anonymous-schema-365>"
                       },
                       "dataschema": {
                         "type": "string",
                         "const": "urn:warehouse:inventory-storage:events:ReservationRevoked:v1",
-                        "x-parser-schema-id": "<anonymous-schema-365>"
+                        "x-parser-schema-id": "<anonymous-schema-366>"
                       },
                       "data": {
                         "type": "object",
@@ -4087,24 +4093,24 @@
                           "sku": {
                             "type": "string",
                             "description": "The stock keeping unit whose quantity returns to usable.",
-                            "x-parser-schema-id": "<anonymous-schema-367>"
+                            "x-parser-schema-id": "<anonymous-schema-368>"
                           },
                           "quantity": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "Quantity released back into usable inventory.",
-                            "x-parser-schema-id": "<anonymous-schema-368>"
+                            "x-parser-schema-id": "<anonymous-schema-369>"
                           },
                           "demand_ref": {
                             "type": "string",
                             "description": "The demand reference the revoked reservation was serving.",
-                            "x-parser-schema-id": "<anonymous-schema-369>"
+                            "x-parser-schema-id": "<anonymous-schema-370>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-366>"
+                        "x-parser-schema-id": "<anonymous-schema-367>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-363>"
+                    "x-parser-schema-id": "<anonymous-schema-364>"
                   }
                 ],
                 "x-parser-schema-id": "ReservationRevokedEvent"

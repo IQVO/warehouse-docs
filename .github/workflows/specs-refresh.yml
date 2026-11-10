@@ -1,0 +1,163 @@
+name: specs-refresh
+
+# Self-healing for the develop-drift gate's spec-drift findings. The spec copies under apis/, network/apis/,
+# storefront/apis/ and yard/apis/ must equal each producer's develop, so build-check goes red on EVERY open PR the
+# moment a producer merges a contract change. This job runs the sanctioned refresh (.claude/rules/spec-sync.md:
+# scripts/sync-spec-copies.py writes exactly what the gate expects, then clean-api-docs + npm run build regenerate
+# the committed REST and AsyncAPI reference) and opens or updates ONE bot PR `chore/specs-refresh` into main.
+# It never pushes main and never relaxes the gate: build-check and the nightly drift job stay the sensor.
+#
+# Checks on the bot PR: commits and PRs made with GITHUB_TOKEN trigger no workflows, so without a token secret the
+# job dispatches docs.yml (its build-check runs on a dispatch from a non-main ref; build/deploy never do) and ci.yml
+# on the bot branch; their check runs land on the PR head and satisfy branch protection. With a
+# `SPECS_REFRESH_TOKEN` secret (fine-grained PAT or GitHub App token: contents + pull requests write on this repo)
+# the normal pull_request runs fire instead. Opening the PR with GITHUB_TOKEN needs the repository setting
+# "Allow GitHub Actions to create and approve pull requests"; without it the job pushes the branch and fails loudly.
+on:
+  schedule:
+    - cron: "53 2,8,14,20 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: specs-refresh
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write       # push the bot branch
+      pull-requests: write  # open / update the bot PR
+      actions: write        # dispatch the PR's checks when no token secret exists
+    env:
+      BRANCH: chore/specs-refresh
+      BASE: main
+      HAS_PAT: ${{ secrets.SPECS_REFRESH_TOKEN != '' }}
+      GH_TOKEN: ${{ secrets.SPECS_REFRESH_TOKEN || github.token }}
+      GITHUB_TOKEN: ${{ github.token }}   # the gate and the sync read the producers through the API
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 0
+          token: ${{ secrets.SPECS_REFRESH_TOKEN || github.token }}
+      - name: Refresh the spec copies from each producer's develop
+        id: sync
+        run: |
+          set -euo pipefail
+          python3 scripts/test_sync_spec_copies.py
+          python3 scripts/sync-spec-copies.py | tee "$RUNNER_TEMP/sync.out"
+          if grep -q '^changed ' "$RUNNER_TEMP/sync.out"; then echo "drift=true" >> "$GITHUB_OUTPUT"
+          else echo "drift=false" >> "$GITHUB_OUTPUT"; fi
+      - name: No drift, so close a leftover bot PR
+        if: steps.sync.outputs.drift == 'false'
+        run: |
+          set -euo pipefail
+          n=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number -q '.[0].number')
+          if [ -n "$n" ]; then
+            gh pr close "$n" --delete-branch --comment "main already carries every producer's current contract; nothing left to refresh."
+          fi
+          echo "spec copies equal every producer's develop"
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
+        if: steps.sync.outputs.drift == 'true'
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Regenerate the committed REST + AsyncAPI reference and build the site
+        if: steps.sync.outputs.drift == 'true'
+        run: |
+          set -euo pipefail
+          npm ci
+          npm --prefix tools/asyncapi-gen ci --no-audit --no-fund
+          npm run clean-api-docs:all
+          npm run clean-api-docs:network
+          npm run clean-api-docs:storefront
+          npm run build
+      - name: Run the develop-drift gate on the refreshed tree
+        if: steps.sync.outputs.drift == 'true'
+        run: |
+          pip install pyyaml
+          rc=0; python3 scripts/check-develop-drift.py > "$RUNNER_TEMP/gate.out" 2>&1 || rc=$?
+          cat "$RUNNER_TEMP/gate.out"
+          # 1 = findings a copy refresh cannot fix (a page cites a removed route, a producer dropped a file):
+          # still open the PR so the refreshed copies are not lost; build-check will name the pages to fix.
+          [ "$rc" = 2 ] && { echo "::error::a producer could not be read"; exit 2; }
+          echo "GATE_RC=$rc" >> "$GITHUB_ENV"
+      - name: Commit, push the bot branch, open or update the bot PR
+        if: steps.sync.outputs.drift == 'true'
+        run: |
+          set -euo pipefail
+          changed=$(sed -n 's/^changed //p' "$RUNNER_TEMP/sync.out")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          paths=()
+          for p in apis network/apis storefront/apis yard/apis docs/api-reference network/docs/api-reference \
+                   storefront/docs/api-reference yard/docs/api-reference static/asyncapi; do
+            [ -e "$p" ] && paths+=("$p")
+          done
+          git add -A -- "${paths[@]}"
+          {
+            echo "docs(apis): re-sync drifted spec copies from the producers' develop (bot)"
+            echo
+            echo "scripts/sync-spec-copies.py, then clean-api-docs + npm run build (run $GITHUB_RUN_ID):"
+            while read -r f; do echo "- $f"; done <<<"$changed"
+          } > "$RUNNER_TEMP/msg.txt"
+          git commit -q -F "$RUNNER_TEMP/msg.txt"
+          old=""; push=true
+          if git fetch -q origin "refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null; then
+            old=$(git rev-parse "origin/$BRANCH")
+            if git diff --quiet "origin/$BRANCH" HEAD; then
+              echo "bot branch already carries these bytes on the current main; nothing to push"
+              push=false
+            fi
+          fi
+          if [ "$push" = true ]; then
+            # the bot branch is owned by this job and rebuilt from main on every run: humans never push to it
+            git push --force-with-lease="refs/heads/$BRANCH:$old" origin "HEAD:refs/heads/$BRANCH"
+          fi
+          echo "PUSHED=$push" >> "$GITHUB_ENV"
+          {
+            echo "Automated by \`.github/workflows/specs-refresh.yml\` (run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID)."
+            echo
+            echo "A producer merged a contract change, so build-check's develop-drift gate is red on every PR here."
+            echo "This branch is \`main\` plus the sanctioned refresh: \`scripts/sync-spec-copies.py\` (the gate's own"
+            echo "expected bytes), then \`clean-api-docs\` + \`npm run build\` regenerating the committed reference."
+            echo "Spec copies refreshed:"
+            echo
+            while read -r f; do echo "- \`$f\`"; done <<<"$changed"
+            echo
+            if [ "${GATE_RC:-0}" != 0 ]; then
+              echo "The gate still reports findings a copy refresh cannot fix; build-check will be red until a human"
+              echo "fixes them in a separate PR (pages citing a removed route, a producer that dropped a file):"
+              echo
+              echo '```'
+              grep -v '^$' "$RUNNER_TEMP/gate.out" | head -40
+              echo '```'
+              echo
+            fi
+            echo "Review the contract diff, squash-merge on green, then \`update-branch\` the PRs that were red on"
+            echo "build-check. Do not push to this branch: every run rebuilds it from main."
+            [ "$HAS_PAT" = true ] || echo "Checks were dispatched on the branch (GITHUB_TOKEN events trigger no pull_request runs)."
+          } > "$RUNNER_TEMP/body.md"
+          n=$(gh pr list --head "$BRANCH" --base "$BASE" --state open --json number -q '.[0].number')
+          if [ -n "$n" ]; then
+            gh pr edit "$n" --body-file "$RUNNER_TEMP/body.md"
+          elif ! gh pr create --base "$BASE" --head "$BRANCH" \
+                 --title "docs(apis): re-sync drifted spec copies (bot)" --body-file "$RUNNER_TEMP/body.md"; then
+            echo "::error::branch $BRANCH is pushed but the PR could not be opened: enable 'Allow GitHub Actions to create and approve pull requests' (Settings > Actions > General) or add the SPECS_REFRESH_TOKEN secret"
+            echo "PR_FAILED=true" >> "$GITHUB_ENV"
+          fi
+      - name: Run the PR's checks on the bot branch (GITHUB_TOKEN pushes trigger none)
+        if: steps.sync.outputs.drift == 'true' && env.HAS_PAT != 'true' && env.PUSHED == 'true'
+        run: |
+          set -euo pipefail
+          gh workflow run docs.yml --ref "$BRANCH"
+          gh workflow run ci.yml --ref "$BRANCH"
+      - name: Fail when the PR could not be opened
+        if: env.PR_FAILED == 'true'
+        run: exit 1

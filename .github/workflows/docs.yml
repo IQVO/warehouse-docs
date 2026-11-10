@@ -12,8 +12,10 @@ permissions:
   pages: write
   id-token: write
 
+# Deploys (push to main, or a manual run on main) share the one "pages" group; PR and bot-branch
+# build-checks get a group per ref, so a check run can never cancel a pending deploy (or another PR's run).
 concurrency:
-  group: "pages"
+  group: ${{ (github.event_name == 'push' || github.ref == 'refs/heads/main') && 'pages' || format('docs-check-{0}', github.ref) }}
   cancel-in-progress: false
 
 jobs:
@@ -28,8 +30,10 @@ jobs:
   # (minus the Pages upload/deploy) on every PR targeting main so a
   # broken build is caught BEFORE merge, not after.
   # ============================================================
+  # Also runs on a manual dispatch from a non-main branch: the specs-refresh bot opens its PR with
+  # GITHUB_TOKEN, which triggers no pull_request run, so it dispatches this workflow on its branch.
   build-check:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -68,6 +72,7 @@ jobs:
       - name: Develop drift gate (unit tests, then the live check)
         run: |
           python3 scripts/test_check_develop_drift.py
+          python3 scripts/test_sync_spec_copies.py
           python3 scripts/check-develop-drift.py
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -92,7 +97,7 @@ jobs:
       - run: npm run build
 
   build:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -108,7 +113,7 @@ jobs:
           path: build
 
   deploy:
-    if: github.event_name != 'pull_request'
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
     needs: build
     runs-on: ubuntu-latest
     environment:
