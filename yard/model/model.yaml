@@ -184,7 +184,6 @@ contexts:
       - {name: EtaRisk, rule: "ReportEta with eta_at > window_start + arrival_tolerance raises DockAppointmentAtRisk once per ETA report"}
       - {name: CancelWhenAllAsnsCancelled, rule: "on inbound-receiving ASNCancelled, an INBOUND BOOKED appointment whose ASNs are all cancelled is cancelled with reason ASN_CANCELLED"}
       - {name: PickupFromCutoffs, phase: 2, rule: "on CPTScheduleChanged, keep one OUTBOUND appointment per cutoff and operating day on a 7-day horizon, on the door the site's PickupDoorRule names for the ship_method, window [cutoff - pickup_lead, cutoff). AS BUILT (decision D-3): only the first half exists. CPTScheduleChanged is consumed and stored (CutoffView, tables cutoff_schedules and cutoffs); no appointment is created from it and there is no PickupDoorRule"}
-      - {name: LegacyImport, rule: "strangler stage A: consume inbound-receiving DockAppointmentBooked, CheckedIn, Cancelled and Completed and import each appointment once (provenance legacy-import, direction INBOUND, version 1, carrier_scac null); an unknown door skips the event and counts it; none of window-in-past, hours, closures, overlap or known-ASN is enforced; off when DOCK_LEGACY_IMPORT_CONSUMER_GROUP is unset"}
     inbound:
       - {from: carrier scheduler (carrier portal), type: cmd, channel: REST, routes: ["POST /appointments", "POST /appointments/{appointmentId}/reschedules", "POST /appointments/{appointmentId}/cancellations", "POST /appointments/{appointmentId}/eta-reports"], message: "BookAppointment, RescheduleAppointment, CancelAppointment, ReportEta", relationship: OHS}
       - {from: dock planner, type: cmd, channel: REST, routes: ["POST /appointments/{appointmentId}/reschedules", "POST /appointments/{appointmentId}/cancellations"], message: "RescheduleAppointment, CancelAppointment", relationship: UI}
@@ -265,7 +264,6 @@ contexts:
       - {producer: facility-layout, topic: warehouse.facility.events, events: [LocationSlotRegistered, LocationSlotDecommissioned, ZoneRegistered], fields: {LocationSlotRegistered: [locationCode, zoneId, role, dockFlow], ZoneRegistered: [zoneId, siteCode]}}
       - {producer: inbound-receiving, topic: warehouse.inbound-receiving.events, events: [ASNRegistered, ASNCancelled], fields: {ASNRegistered: [asn_number, expected_arrival, lines], ASNCancelled: [asn_number]}}
       - {producer: process-path-management, topic: warehouse.process-path-management.events, events: [CPTScheduleChanged], fields: {CPTScheduleChanged: [site_id, timezone, cutoffs]}}
-      - {producer: inbound-receiving, topic: warehouse.inbound-receiving.events, events: [DockAppointmentBooked, DockAppointmentCheckedIn, DockAppointmentCancelled, DockAppointmentCompleted], stage: legacy-import (strangler A-D, removed at E)}
     sync_calls: []
     as_built:
       repo: IQVO/dock-scheduling
