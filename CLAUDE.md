@@ -1,5 +1,7 @@
 # Project: warehouse-docs (fleet-wide documentation aggregator)
 
+<!-- harness-template: v4 -->
+
 Fleet-wide documentation for the **warehouse-systems** ecosystem: strategic
 and tactical Domain-Driven Design artifacts, generated REST and AsyncAPI
 references, and business context for twenty backend contexts: nineteen domain
@@ -438,3 +440,8 @@ Don't report "the site is built" from a green `npm run build` alone.
    page per major section (incl. `/wms-wes` and
    `/business-capability-architecture`), one generated REST reference page, one generated
    AsyncAPI static page. All must be 200.
+
+## Harness
+
+`HARNESS.md`: what each sensor (CI job, gate script) runs and when, and why this hub has no agent
+hooks yet. `INCIDENTS.md`: the fleet incident log (fix + guard per escape).
