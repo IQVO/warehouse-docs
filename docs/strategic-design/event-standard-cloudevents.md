@@ -149,7 +149,7 @@ Subdomain and bounded-context segments (authoritative):
 
 `dock-scheduling` and `yard-management` (wms, proposed 2026-11-05, built on
 `develop` and merged 2026-11-08, registered in `warehouse-infra` `develop` since
-#193 and not applied to the cluster as far as the yard pages record): the type
+#193, released at v0.1.2 and applied to the k3s cluster on 2026-11-10 in a reduced footprint: dock-scheduling api only, yard-management api and relay): the type
 prefixes `com.warehouse.wms.dock-scheduling.` and
 `com.warehouse.wms.yard-management.` and the topics
 `warehouse.dock-scheduling.events` / `.analytics` and
@@ -208,7 +208,7 @@ Entity segments for repos that had no catalogue yet:
 - labor-performance: `LaborStandardDefined`/`LaborStandardRevised` → `standard`; `TaskPerformanceRecorded` → `performance`
 - product-master: every `Product*` event → `product` (product-master ADR 0004)
 - network-inventory-planning: `TransferPlanApproved` / `TransferAllocationRequested` → `transfer`; `WorkDemandReleased` → `workdemand` (the name wes-work-planning's consumed contract uses); the analytics occurrences `TransferStateAdvanced` / `TransferStuckDetected` / `RebalanceRunCompleted` → `saga` (network-inventory-planning ADR 0004)
-- inbound-receiving: `ASN*` → `asn`; `DockAppointment*` → `dockappointment`; `Receipt*` → `receipt` (inbound-receiving ADR 0004)
+- inbound-receiving: `ASN*` → `asn`; `DockAppointment*` → `dockappointment` (retired: the four types are no longer published, ADR 0022); `Receipt*` → `receipt` (inbound-receiving ADR 0004)
 - slotting-optimization: every `SlotPlan*` event → `slotplan` (slotting-optimization ADR 0004)
 - pick-face-replenishment (built and deployed): `ReplenishmentRequested` / `ReplenishmentCompleted` / `ReplenishmentCancelled` → `replenishment`; `ReplenishmentPolicyDeclared` (analytics only) → `policy`
 - task-interleaving (built and deployed): `InterleavingHintIssued` / `InterleavingHintConsumed` / `InterleavingHintExpired` → `stationtrip`; `InterleavingPolicyDeclared` (analytics only) → `policy`
@@ -249,10 +249,10 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wms.product-master.product.ProductPackLevelMeasured` | wes-work-planning, slotting-optimization (context map K62) |
 | `com.warehouse.wms.inbound-receiving.asn.ASNRegistered` | dock-scheduling, yard-management (the yard section; no row on the context map) |
 | `com.warehouse.wms.inbound-receiving.asn.ASNCancelled` | dock-scheduling, yard-management (the yard section; no row on the context map) |
-| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked` | warehouse-planning (inbound labour demand, its ADR 0017; context map K28; its source switched to dock-scheduling by ADR 0020) |
-| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCheckedIn` | (published contract; no consumer yet) |
-| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled` | warehouse-planning (withdraws the appointment's labour demand, its ADR 0017; context map K28; its source switched to dock-scheduling by ADR 0020) |
-| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCompleted` | (published contract; no consumer yet) |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked` | **retired** (inbound-receiving ADR 0022, stage E, on `develop` 2026-11-10): no longer declared or published; warehouse-planning read it under its ADR 0017 until its ADR 0020 switched the source to dock-scheduling (context map K28) |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCheckedIn` | **retired** (ADR 0022); had no consumer |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled` | **retired** (ADR 0022); warehouse-planning read it under its ADR 0017 until its ADR 0020 switched the source to dock-scheduling (K28) |
+| `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCompleted` | **retired** (ADR 0022); had no consumer |
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptOpened` | yard-management (the yard section; no row on the context map) |
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` | inventory-storage (its ADR 0037) |
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed` | yard-management (the yard section; no row on the context map) |

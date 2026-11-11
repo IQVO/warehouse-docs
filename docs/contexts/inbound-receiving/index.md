@@ -39,19 +39,22 @@ pack-level consumer (`packagingConsumerGroup`, product-master's
 `ProductPackLevelDeclared`/`Retired` for carton-level receiving);
 `inventory-storage` consumes the handover event `ReceiptLineReceived` (its ADR
 0037) and the identity-only `ReceiptCartonReceived` (its ADR 0045/0046, the same
-consumer group) and books `Good` lines only; `warehouse-planning` consumes
-`DockAppointmentBooked` and `DockAppointmentCancelled` as inbound-labor demand
-(its ADR 0017, K28); `exception-management` consumes `CartonDiscrepancyRaised`
+consumer group) and books `Good` lines only; `warehouse-planning` no longer reads
+this context's appointment events (its ADR 0020 moved the source to
+`dock-scheduling`, K28); `exception-management` consumes `CartonDiscrepancyRaised`
 (its ADR 0006); `network-fulfillment` consumes `ReceiptCartonReceived`,
 `CartonDiscrepancyRaised` and `ReceiptClosed` for its seller inbound loop (its
 ADR 0028, live mode); `warehouse-ops-agent` reads it over MCP (its ADR 0021).
-Five of the eleven published event types have no consumer today
-(`ASNRegistered`, `ASNCancelled`, `DockAppointmentCheckedIn`,
-`DockAppointmentCompleted`, `ReceiptOpened`).
+Four of the eight published event types have no consumer today
+(`ASNRegistered`, `ASNCancelled`, `ReceiptOpened`, `ReceiptStowCompleted`). The four
+`dockappointment` types are retired: the appointment strangler (ADR 0019) is
+finished on `develop` for the migration code (stage E, ADR 0022, 2026-11-10), so
+nothing raises them and the contract no longer declares them.
 :::
 
-It owns three aggregates, each its own consistency boundary: **`Asn`**,
-**`DockAppointment`** and **`Receipt`**. The richest package is `receipt`.
+It owns two aggregates, each its own consistency boundary: **`Asn`** and
+**`Receipt`**; the `DockAppointment` moved to `dock-scheduling` (ADR 0019) and
+is kept here as a read-only local copy. The richest package is `receipt`.
 
 ## This context's pages
 
@@ -71,8 +74,8 @@ It owns three aggregates, each its own consistency boundary: **`Asn`**,
   pattern, technology and status, planned edges labelled.
 - [Aggregate Design Canvas](/contexts/inbound-receiving/aggregate-design-canvas):
   `Asn`, `DockAppointment` and `Receipt`.
-- [Domain Events](/contexts/inbound-receiving/domain-events): the eleven
-  published events and five consumed ones.
+- [Domain Events](/contexts/inbound-receiving/domain-events): the published
+  events and the consumed ones.
 - [Domain Message Flow](/contexts/inbound-receiving/domain-message-flow),
   [EventStorming](/contexts/inbound-receiving/eventstorming),
   [Class Diagram](/contexts/inbound-receiving/class-diagram),
@@ -90,7 +93,11 @@ It owns three aggregates, each its own consistency boundary: **`Asn`**,
   Its ADRs live under `docs/adr/`: 0001 (bounded context), 0002 (aggregates and
   invariants), 0003 (local copies and the handover), 0004 (CloudEvents
   envelope and type catalogue), 0005 (MCP server adoption), 0006 (analytics
-  read side).
+  read side). The appointment move and the dock-to-stock KPI are 0019 (the
+  DockAppointment moves to dock-scheduling), 0020 (the appointment copy follows
+  reschedules and door reassignments), 0021 (dock-to-stock from yard arrival and
+  inventory stow facts) and 0022 (stage E removes the backfill, the legacy
+  encoders and `Replay`).
 - **Fleet-level**: [Context Map](/strategic-design/context-map) (K22 to K24
   and K28), the [Event Standard](/strategic-design/event-standard-cloudevents)
   (subdomain table and type catalogue),

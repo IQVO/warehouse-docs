@@ -74,7 +74,7 @@ context's own projector and are never read by a sibling.
 | | | `ProductPackLevelMeasured` | wes-work-planning, slotting-optimization (K62) |
 | `warehouse.inbound-receiving.events` | inbound-receiving | `ReceiptLineReceived` | inventory-storage (its ADR 0037) |
 | | | `CartonDiscrepancyRaised` | exception-management (its ADR 0006, K66) |
-| | | `DockAppointmentBooked`, `DockAppointmentCancelled` | warehouse-planning (inbound labour demand per site, declared labour standards, its ADR 0017, K28; source switched to dock-scheduling by ADR 0020) |
+| | | `DockAppointmentBooked`, `DockAppointmentCheckedIn`, `DockAppointmentCancelled`, `DockAppointmentCompleted` | **retired** (stage E, inbound-receiving ADR 0022, on `develop` 2026-11-10): no longer declared or published. warehouse-planning read the first and third under its ADR 0017 until its ADR 0020 switched the source to dock-scheduling (K28) |
 | `warehouse.slotting-optimization.events` | slotting-optimization | `SlotPlanApproved` | wes-work-planning (one `RELOCATE` work unit per move, its ADR-0040); pick-face-replenishment (forward map) |
 | `warehouse.pick-face-replenishment.events` | pick-face-replenishment | `ReplenishmentRequested` | wes-work-planning (one `REPLENISH` work unit per request, its ADR 0042; opt-in, and `REPLENISHMENT_MODE=kafka` is set in the reference deployment, K44) |
 | | | `ReplenishmentCancelled` | wes-work-planning (cancels the unit only while it is still Pending, same opt-in) |
@@ -94,7 +94,7 @@ example `PathPlanDriftDetected` and `WorkUnitCompleted`),
 `BottleneckDetected`, `TransferPlanApproved`, every `warehouse.network-fulfillment.events` type,
 `ProductDescriptionChanged`, every
 `warehouse.inbound-receiving.events` type except `ReceiptLineReceived`,
-`CartonDiscrepancyRaised` (K66), `DockAppointmentBooked` and `DockAppointmentCancelled`
+`CartonDiscrepancyRaised` (K66; the four `dockappointment` types are retired, ADR 0022)
 (the yard section's own readers of the rest are on the
 [yard section context map](/yard/strategic-design/context-map)),
 `SlotPlanGenerated` and `SlotPlanRejected` on

@@ -12,7 +12,7 @@ This page is a copy of [`docs/docs/ddd/domain-events.md`](https://github.com/IQV
 
 
 :::caution[DockAppointment moved (ADR 0019)]
-The dock appointment is owned by dock-scheduling since [ADR 0019](https://iqvo.github.io/inbound-receiving/docs/adr/0019-dockappointment-moves-to-dock-scheduling). This context keeps a read-only local copy fed by dock-scheduling's `DockAppointmentBooked` / `DockAppointmentCancelled`, no longer books, checks in, cancels or completes appointments, and no longer raises the four `DockAppointment*` events (only the one-shot `api republish-appointments` backfill does). Where this page describes those commands, rules or events, read it as the pre-transfer design; the page is not yet rewritten.
+The dock appointment is owned by dock-scheduling since [ADR 0019](https://iqvo.github.io/inbound-receiving/docs/adr/0019-dockappointment-moves-to-dock-scheduling). This context keeps a read-only local copy fed by dock-scheduling's `DockAppointmentBooked` / `DockAppointmentCancelled`, no longer books, checks in, cancels or completes appointments, and no longer raises the four `DockAppointment*` events (the one-shot `api republish-appointments` backfill that re-announced them was removed, [ADR 0022](https://iqvo.github.io/inbound-receiving/docs/adr/0022-stage-e-removes-the-backfill-the-legacy-encoders-and-replay)). Where this page describes those commands, rules or events, read it as the pre-transfer design; the page is not yet rewritten.
 :::
 
 Every event this context publishes or consumes. All are CloudEvents 1.0 in
@@ -47,6 +47,7 @@ balancer on the Kafka key.
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptOpened` | `receipt_id` / `asn_number` | `OpenReceipt` | `receipt_id`, `asn_number`, `appointment_id?`, `door_code?`, `opened_at` | none |
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` | `receipt_id` / `asn_number` | `ReceiveLine` | `receipt_id`, `asn_number`, `line_no`, `sku`, `quantity`, `condition` (`Good` or `Damaged`), `received_at` | `inventory-storage` (`INBOUND_RECEIPT_CONSUMER_GROUP`, books `Good` only) |
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed` | `receipt_id` / `asn_number` | `CloseReceipt` | `receipt_id`, `asn_number`, `closed_at`, `discrepancies[]` = `{line_no, sku, kind, expected_qty, received_qty, damaged_qty}` | none |
+| `com.warehouse.wms.inbound-receiving.receipt.ReceiptStowCompleted` | `receipt_id` / `asn_number` | `ApplyVisitCheckedIn`, `ApplyContainerStowed`, `CloseReceipt` (whichever completes the evidence; ADR 0021) | `receipt_id`, `asn_number`, `appointment_id`, `arrived_at`, `closed_at`, `stowed_at`, `dock_to_stock_seconds`, `carton_count` | none yet (the projector folds the analytics copy) |
 
 `?` marks a field omitted when unset. `kind` is `Short`, `Over` or `Damaged`.
 `discrepancies` is present and empty (`[]`) when everything matched, and a line
