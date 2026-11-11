@@ -118,7 +118,7 @@ def page_context_map():
 
     for ev, (prod, p) in PUB.items():
         for cons in p["consumers"]:
-            if cons == "analytics only":
+            if cons in ("analytics only", "none yet"):
                 continue
             pat = "Customer/Supplier" if cons in CTX else "Customer/Supplier"
             for row in CTX[cons]["inbound"] if cons in CTX else []:

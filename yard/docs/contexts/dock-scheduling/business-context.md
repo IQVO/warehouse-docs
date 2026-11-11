@@ -141,7 +141,7 @@ and makes no claim about any vendor's internal design. The names here
   event-fed copy of the ASNs (`AsnView`) to check that an inbound booking
   covers known, non-cancelled ASNs.
 - **Outbound shipment planning.** The context `outbound-shipping`
-  (trailer load planning, loading, bill of lading, ship-confirm) is built on develop in
+  (trailer load planning, loading, bill of lading, ship-confirm) is released as v0.1.0 in
   its own repository and is outside this section. An outbound appointment only carries a
   `cpt_id` or shipment references. The outbound pickup appointments planned from the CPT
   schedule (`PickupFromCutoffs`) are phase 2 and not built: an outbound appointment is booked by a caller.

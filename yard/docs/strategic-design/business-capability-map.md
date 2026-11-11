@@ -43,5 +43,5 @@ this design's decisions, not Gartner's.
 | Capability | Where it lives |
 | --- | --- |
 | Receiving, discrepancy capture, putaway handover | `inbound-receiving` and `inventory-storage` |
-| Truck loading, manifesting, bill of lading | `outbound-shipping` (built on develop, not yet deployed): ship-confirm follows the physical `TrailerDeparted` of `yard-management`, proven by the `@yard-journey` end-to-end scenario; the dock operator still closes outbound door work in `yard-management` |
+| Truck loading, manifesting, bill of lading | `outbound-shipping` (released v0.1.0, registered in warehouse-infra, not applied): ship-confirm follows the physical `TrailerDeparted` of `yard-management`, proven by the `@yard-journey` end-to-end scenario; the dock operator still closes outbound door work in `yard-management` |
 | Detention billing | Out of scope; detention exposure (share over a 120-minute threshold) is a KPI only |
