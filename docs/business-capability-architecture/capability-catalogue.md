@@ -185,8 +185,8 @@ The ability to book dock doors and windows and track carriers through them.
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 5.2.1 | Appointment Booking | The ability to book and cancel a dock appointment against a dock door. | [inbound-receiving](/contexts/inbound-receiving) | `REST POST /appointments`<br/>`REST POST /appointments/{appointmentId}/cancellations`<br/>`REST GET /docks`<br/>`event DockAppointmentBooked` | Implemented |
-| 5.2.2 | Carrier Check-in | The ability to check a carrier in and complete the appointment when its receipt closes. | [inbound-receiving](/contexts/inbound-receiving) | `REST POST /appointments/{appointmentId}/check-ins`<br/>`event DockAppointmentCheckedIn`<br/>`event DockAppointmentCompleted` | Implemented |
+| 5.2.1 | Appointment Booking | The ability to book and cancel a dock appointment against a dock door. | [inbound-receiving](/contexts/inbound-receiving) | `REST GET /docks`<br/>`REST GET /appointments` | Partial: booking and cancelling moved to dock-scheduling (inbound-receiving ADR 0019): the write routes answer 410 and the four dockappointment events are retired (stage E, ADR 0022); inbound-receiving keeps a read-only copy |
+| 5.2.2 | Carrier Check-in | The ability to check a carrier in and complete the appointment when its receipt closes. | [inbound-receiving](/contexts/inbound-receiving) | `REST GET /appointments/{appointmentId}` | Partial: check-in moved to yard-management and the appointment to dock-scheduling (inbound-receiving ADR 0019): the route answers 410 and the events are retired (stage E, ADR 0022); only the deprecated read of the local copy remains |
 
 ### L2 5.3 Receiving
 

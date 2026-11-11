@@ -122,7 +122,7 @@ never a source of truth, and can be rebuilt by replay (see below).
 |---|---|---|
 | `analytics_processed_events` | applied CloudEvents `id` (with `event_type`, `occurred_at`); `max(occurred_at)` is the freshness | every applied event, same transaction as its effect |
 | `asn_facts` | ASN: `expected_arrival`, `registered_at`, `cancelled_at`, earliest `receipt_opened_at` | `ASNRegistered`, `ASNCancelled`, `ReceiptOpened` |
-| `appointment_facts` | appointment: `booked_at`, `checked_in_at`, `cancelled_at`, `completed_at` | the four legacy `DockAppointment*` events (no new ones since ADR 0019) |
+| `appointment_facts` | appointment: `booked_at`, `checked_in_at`, `cancelled_at`, `completed_at` | the four retired `DockAppointment*` events (none produced since ADR 0019; the projector still folds the ones already on the stream, ADR 0022) |
 | `receipt_facts` | receipt: `asn_number`, `opened_at`, `closed_at` | `ReceiptOpened`, `ReceiptClosed` |
 | `receipt_line_events` | `ReceiptLineReceived` (keyed by event id): line, SKU, quantity, `Good`/`Damaged` | `ReceiptLineReceived` |
 | `receipt_discrepancies` | (receipt, line, kind `Short`/`Over`/`Damaged`) stamped with the close time | `ReceiptClosed` |
@@ -139,7 +139,7 @@ All messages are CloudEvents 1.0 in structured mode
 
 | Topic | Direction | Binary | Consumer group | Notes |
 |---|---|---|---|---|
-| `warehouse.inbound-receiving.events` | produced | `cmd/api` (outbox relay) | — | the 7 integration events; key = ASN number (ASN and receipt events). The four legacy `DockAppointment*` events are no longer raised (ADR 0019) except by `republish-appointments` |
+| `warehouse.inbound-receiving.events` | produced | `cmd/api` (outbox relay) | — | the 7 integration events; key = ASN number (ASN and receipt events). The four legacy `DockAppointment*` events are no longer raised (ADR 0019) and the `republish-appointments` command is removed (ADR 0022) |
 | `warehouse.inbound-receiving.analytics` | produced and consumed | `cmd/api` produces; `cmd/inbound-projector` consumes | `ANALYTICS_CONSUMER_GROUP` (`inbound-receiving-analytics`) | same 9 events, same `id` and `type` as the integration row, `dataschema` `...:analytics:...` |
 | `warehouse.inbound-receiving.analytics.dlq` | produced | `cmd/inbound-projector` | — | raw poison message + `x-dlq-source-topic`, `x-dlq-source-partition`, `x-dlq-source-offset`, `x-dlq-error`, `x-dlq-failed-at` headers; auto-created on first write |
 | `warehouse.product-master.events` | consumed | `cmd/api` (only when `PRODUCT_MODE=kafka`) | `PRODUCT_CONSUMER_GROUP` (`inbound-receiving-product` in kind) | `ProductRegistered` fills `known_skus` |
@@ -255,6 +255,7 @@ the numbers are illustrative):
 {
   "from": "2026-09-12T00:00:00Z",
   "to": "2026-10-12T00:00:00Z",
+  "dock_to_stock_target_seconds": 11160,
   "days": [
     {
       "day": "2026-10-11",
@@ -265,7 +266,8 @@ the numbers are illustrative):
       "discrepancies": {"short": 1, "over": 0, "damaged": 1},
       "receipt_cycle": {"count": 3, "p50_seconds": 5400, "p95_seconds": 9000},
       "appointments": {"booked": 4, "checked_in": 3, "cancelled": 1, "completed": 3},
-      "dock_dwell": {"count": 3, "p50_seconds": 4200, "p95_seconds": 7100}
+      "dock_dwell": {"count": 3, "p50_seconds": 4200, "p95_seconds": 7100},
+      "dock_to_stock": {"count": 2, "p50_seconds": 9300, "p90_seconds": 12100, "under_target": 1, "share_under_target": 0.5}
     }
   ],
   "current": {"open_receipts": 2, "expected_today": 5, "expected_today_started": 3}
@@ -275,6 +277,18 @@ the numbers are illustrative):
 One `days` entry per UTC calendar day intersecting the range. `p50_seconds` /
 `p95_seconds` are `null` when `count` is 0. `current` is computed for today's
 UTC day.
+
+`appointments` and `dock_dwell` are **frozen since ADR 0019**: the appointment
+moved to dock-scheduling, so nothing new feeds them. `dock_to_stock` (ADR 0021)
+is the time from the carrier's gate arrival (yard-management's `VisitCheckedIn`)
+to the stow of the last Good carton (inventory-storage's `ContainerStowed`),
+counted in the UTC day of that last stow. `p50_seconds` / `p90_seconds` are
+null when `count` is 0, `under_target` counts the facts at or under
+`dock_to_stock_target_seconds` (11160 s = 3.1 h, WERC best-in-class) and
+`share_under_target` is `under_target / count` (null when `count` is 0). Walk-in
+receipts (no appointment arrival) and receipts without cartons have no
+dock-to-stock and are not counted. The `dock_to_stock_facts` table is rebuilt by
+replaying the analytics topic under a new `ANALYTICS_CONSUMER_GROUP`.
 
 ### `GET /reports/freshness`
 

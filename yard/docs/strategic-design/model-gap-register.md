@@ -48,7 +48,7 @@ The two packs were written before these decisions. The as-built refresh (2026-11
 | DS-G04, G05 | S3 | PickupFromCutoffs rule, ship_method and cpt shape | Decided D-3: phase 2; consume and store CPTScheduleChanged only. |
 | DS-G06 | S3 | Reschedule door change | Decided D-4 and X1: a reschedule may change the door; previous_door_code added. |
 | DS-G07 | S3 | DockCalendar creation and defaults | Decided D-1: lazy creation; open 24x7 without hours; defaults in contracts-delta. |
-| DS-G08 | S3 | Legacy import invariants | Decided D-2. |
+| DS-G08 | S3 | Legacy import invariants | Decided D-2; moot since dock-scheduling ADR 0011 removed the legacy importer (2026-11-10). |
 | DS-G09 | S3 | ArrivalStatus formula | Decided X6. |
 | DS-G10 | S3 | Dock planner cannot cancel or reschedule | Decided D-5. |
 | DS-G11 | S3 | At-risk visibility and MCP tools | Decided D-6. |

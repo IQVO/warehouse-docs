@@ -23,6 +23,7 @@ flowchart LR
     DS1["dock-scheduling<br/>Supporting"]
     FL["facility-layout"]
     IR1["inbound-receiving"]
+    IR2["inbound-receiving"]
     GC(["gate clerk or kiosk"])
     HO(["hostler"])
     DO(["dock operator"])
@@ -41,6 +42,7 @@ flowchart LR
     DO -->|"UI - REST<br/>door work"| YM
     SU -->|"UI - REST<br/>moves, holds, seals,<br/>policy, yard checks"| YM
     YM -->|"U/D: C/S<br/>Kafka VisitCheckedIn,<br/>VisitRejected,<br/>TrailerDocked, TrailerUndocked"| DS2
+    YM -->|"U/D: C/S<br/>Kafka VisitCheckedIn<br/>(arrival copy)"| IR2
     YM -->|"U/D: C/S<br/>Kafka TrailerDocked,<br/>DoorWorkCompleted,<br/>TrailerDeparted"| OS
     YM -->|"U/D: C/S<br/>Kafka exception events"| EM
     YM -.->|"U/D: OHS<br/>REST GET"| ANY
@@ -52,8 +54,8 @@ Derived from: `model.yaml → contexts[yard-management].inbound`,
 source); `fleet_changes`.
 
 Legend: arrows point from upstream to downstream. Solid = events or commands;
-dotted = synchronous query. `dock-scheduling` appears twice because it is on both sides: it feeds
-this context and consumes from it. `inbound-receiving` only feeds it: as built it does not consume
+dotted = synchronous query. `dock-scheduling` and `inbound-receiving` appear twice because they are on both sides: they feed
+this context and consume from it. `inbound-receiving` consumes only `VisitCheckedIn`; as built it does not consume
 `TrailerDocked`.
 People are rounded boxes.
 
@@ -73,6 +75,7 @@ only channel to the network stays `network-fulfillment` and the Vendor API.
 | `dock-scheduling` | Downstream | **Customer/Supplier** (`dock-scheduling` is the Customer) | Kafka `warehouse.yard-management.events` | `VisitCheckedIn`, `VisitRejected`, `TrailerDocked`, `TrailerUndocked` | Physical facts win ([YD-0004](/yard/adr/yd-0004-physical-facts-win)): `dock-scheduling` applies arrival (`ArrivalFromGate`), the actual door (`ActualDoorWins`) and door release (`CompleteOnDoorRelease`) from them. Neither context writes into the other's aggregates. |
 | `facility-layout` | Upstream | **Conformist** | Kafka `warehouse.facility.events` | `LocationSlotRegistered`, `LocationSlotDecommissioned`, `ZoneRegistered` | A registry for every context; it does not adapt to this one. Roles `Yard` and `Dock`, `dockFlow` and `zoneId` to `siteCode` are taken as given into `LocationView`. |
 | `inbound-receiving` | Upstream | **Conformist** | Kafka `warehouse.inbound-receiving.events` | `ASNRegistered`, `ASNCancelled`, `ReceiptOpened`, `ReceiptClosed` | ASNs say what an inbound trailer holds (`AsnContentView`); receipts at a door close the unload (`AutoCompleteUnload`, via `ReceiptAtDoorView`). |
+| `inbound-receiving` | Downstream (one event) | **Customer/Supplier** (this pack's reading; the model names no pattern for this consumer) | Kafka `warehouse.yard-management.events` | `VisitCheckedIn` | The gate arrival feeds `inbound-receiving`'s `visit_arrivals` local copy, joined to a receipt by `appointment_id`, for the dock-to-stock KPI (its ADR 0021, `visit_arrival_consumer.go`, group `VISIT_ARRIVAL_CONSUMER_GROUP`, set to `inbound-receiving-visit-arrivals` in `helm-values/inbound-receiving.yaml`). Every other type on the topic is committed past, a walk-in visit (no `appointment_id`) is ignored and nothing flows back. Both ends run on k3s (this service at v0.1.2, `inbound-receiving` at `484490f`, whose ConfigMap carries the group; read-only, 2026-11-10), so the edge is registered and applied. |
 | `outbound-shipping` | Downstream | **Customer/Supplier** (this pack's reading) | Kafka `warehouse.yard-management.events` | `TrailerDocked`, `DoorWorkCompleted`, `TrailerDeparted` | Ship-confirm follows the physical departure: a closed load is confirmed shipped when its trailer leaves the site (`outbound-shipping` is merged on `develop` but not registered in warehouse-infra: no apps.yaml entry, no chart; the two door-work and departure events moved to the integration topic for it, service ADR 0010). The optional `inbound-receiving` consumer of `TrailerDocked` the model named was not built. |
 | `exception-management` | Downstream | **Customer/Supplier** (this pack's reading) | Kafka `warehouse.yard-management.events` | `VisitRejected`, `SealExceptionRaised`, `TrailerDwellExceeded`, `YardCheckClosed` | The model lists it as consumer; `fleet_changes` records a new consumer that opens problem cases (one per yard-check discrepancy). |
 | Gate clerk or kiosk | Upstream (person / device) | UI on this context's REST | REST `POST /visits`, `POST /visit-rejections`, `POST /visits/{visitId}/check-outs` | `CheckInVisit`, `RejectAtGate`, `CheckOutVisit` | The gate is operated by a person or issued by an adapter (kiosk, camera, ANPR) around `CheckInVisit`. |

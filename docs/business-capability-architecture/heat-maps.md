@@ -111,7 +111,7 @@ flowchart TB
     class H4_3 impl
     class H4_4 impl
     class H5_1 impl
-    class H5_2 impl
+    class H5_2 partial
     class H5_3 impl
     class H5_4 impl
     class G5_0 gap
@@ -356,7 +356,7 @@ not.
 | Task Interleaving | L1 8 Warehouse Task Execution | The ability to combine tasks of different types into one trip. | [12] | No L3 yet: the capability has an owner but the industry qualification of the owner is still open. Pull dispatch still hands one task at a time. Owner: the task-interleaving context (wes, Supporting), built and deployed in the reference cluster; it issues an advisory hint of nearby open tasks after each completed task, and fulfillment-execution consumes the hint as a tie-break inside one claimNext priority band (ADR 0051, TASK_INTERLEAVING_MODE=kafka); it never reorders across a priority or CPT boundary and fails open to the unhinted order. |
 | Equipment Control | L1 8 Warehouse Task Execution | The ability to drive conveyors, sorters, AS/RS and robot fleets deterministically. | [13] | fulfillment-execution reserves an EquipmentCommandPort with no methods; no WCS is integrated. |
 | Value-added Services and Kitting | L1 8 Warehouse Task Execution | The ability to perform kitting, light assembly and other value-added work. | [12] | facility-layout can model VAS work centres, but no VAS or kitting task type exists. |
-| Yard Management | L1 5 Inbound Management | The ability to manage trailers in the yard between gate and dock. | [12] | Yard locations exist in facility-layout and dock appointments in inbound-receiving, but trailers are not tracked. |
+| Yard Management | L1 5 Inbound Management | The ability to manage trailers in the yard between gate and dock. | [12] | Yard locations exist in facility-layout, but none of this map's contexts tracks trailers: the dock appointment moved to dock-scheduling and trailer tracking to yard-management, both in the yard section (see /yard/), which this map does not cover. |
 | Outbound Transportation | a new L1 | The ability to plan carriers, rate and tender shipments and track delivery. | [10] | Shipping stops at the SLAM label and manifest event; no carrier or transport integration. |
 | Logistics Billing | a new L1 | The ability to bill clients for storage and handling, as a third-party logistics provider does. | [12] | No billing in any context. |
 

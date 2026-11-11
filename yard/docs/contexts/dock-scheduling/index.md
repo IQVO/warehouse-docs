@@ -30,7 +30,9 @@ API. The model records the decision as YD-0004, "Physical facts win".
 
 The appointment itself moves here from `inbound-receiving` (YD-0002): one
 owner of door time for both directions, delivered through the strangler
-stages A to E listed in `fleet_changes`.
+stages A to E listed in `fleet_changes`. Stage E is done on develop: the
+legacy appointment importer (stage A) was removed from this service in its
+ADR 0011 and inbound-receiving removed its side in its ADR 0022 (2026-11-10).
 
 ## This context's pages
 
@@ -42,7 +44,7 @@ stages A to E listed in `fleet_changes`.
 | [Bounded Context Canvas](/yard/contexts/dock-scheduling/bounded-context-canvas) | Purpose, classification, roles, every inbound and outbound message | [bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas) v5 |
 | [Context Map](/yard/contexts/dock-scheduling/context-map) | Every upstream and downstream neighbour with its pattern and channel | [context-mapping](https://github.com/ddd-crew/context-mapping) |
 | [Aggregate Design Canvas](/yard/contexts/dock-scheduling/aggregate-design-canvas) | `DockAppointment` and `DockCalendar`: states, invariants, commands, events | [aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas) v1.1 |
-| [Domain Events](/yard/contexts/dock-scheduling/domain-events) | The eleven published (seven integration, four analytics only) and fourteen consumed events, with full CloudEvents types | — (event catalogue) |
+| [Domain Events](/yard/contexts/dock-scheduling/domain-events) | The eleven published (seven integration, four analytics only) and ten consumed events, with full CloudEvents types | — (event catalogue) |
 | [Domain Message Flow](/yard/contexts/dock-scheduling/domain-message-flow) | Booking, arrival to completion, late ETA and no-show, closure and ASN cancellation | [domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
 | [EventStorming](/yard/contexts/dock-scheduling/eventstorming) | Process-level boards with hotspots | [eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
 | [Use Cases](/yard/contexts/dock-scheduling/use-cases) | One section per command: trigger, adapter, flow, errors, events | — (application layer) |
@@ -56,10 +58,10 @@ stages A to E listed in `fleet_changes`.
 | --- | --- | --- |
 | Aggregates | 2: `DockAppointment` (5 states), `DockCalendar` (1 state) | [Aggregate Design Canvas](/yard/contexts/dock-scheduling/aggregate-design-canvas) |
 | Invariants with an `Err` name | 16 (12 + 4) | same page |
-| Commands | 13 (9 + 4) | [Use Cases](/yard/contexts/dock-scheduling/use-cases) |
+| Commands | 12 (8 + 4) | [Use Cases](/yard/contexts/dock-scheduling/use-cases) |
 | REST routes | 15 | [Bounded Context Canvas](/yard/contexts/dock-scheduling/bounded-context-canvas) |
 | Published events | 11: 7 on `warehouse.dock-scheduling.events` (and its analytics twin), 4 analytics only | [Domain Events](/yard/contexts/dock-scheduling/domain-events) |
-| Consumed events | 14 (4 of them legacy-import, stage A to D only) | same page |
+| Consumed events | 10 | same page |
 | Policies | 10 (one of them phase 2, half built) | same page |
 | Read models | 5 | [Aggregate Design Canvas](/yard/contexts/dock-scheduling/aggregate-design-canvas) |
 
@@ -72,10 +74,10 @@ the image pinned at v0.1.2, main commit `d5db895`), released at v0.1.2 and appli
 helm values give the api four consumer groups (`dock-scheduling-yard`, `dock-scheduling-facility`, `dock-scheduling-asn`,
 `dock-scheduling-cpt`), the projector `dock-scheduling-analytics`, Kong routes `/api/dock-scheduling`,
 `/api/dock-scheduling/reports` and `/api/mcp/dock-scheduling`, a dedicated relay and the no-show sweep every five minutes;
-there is no A2A component, and the strangler stage A group is empty (off). The yard-domain Kafka topics must be pre-created before the
+there is no A2A component, and the infra values still set `config.dockLegacyImportConsumerGroup: ""`, a dead key since the importer and the chart value were removed on develop (ADR 0011; the running v0.1.2 binary still contains the importer, switched off by the empty group). The yard-domain Kafka topics must be pre-created before the
 first sync (`docs/kafka-topics-yard-dock.md` in warehouse-infra). An edge is live only when both ends run: the yard-management edges are live (both run), the others depend on the other end's deployment. The no-show sweep does not run while the sweep is off. The model's status line records the same. The contracts
 are copied under `yard/apis/dock-scheduling/` and `scripts/check_model.py` compares the model with them.
-The service ships six binaries (`api`, `mcp`, `projector`, `relay`, `reports`, `sweep`) and ten ADRs, indexed on the
+The service ships six binaries (`api`, `mcp`, `projector`, `relay`, `reports`, `sweep`) and eleven ADRs, indexed on the
 [ADR page](/yard/adr/).
 
 Where the model was silent, the pages first said **proposed** and reported a gap with an id of the form `DS-Gnn`.

@@ -16,7 +16,7 @@ generator; do not edit this page by hand. The method and the sources are on
 
 The map has **14 L1**, **54 L2** and **135 L3** capabilities, and every one
 has code behind it: each L3 names the routes, events or MCP tools on `develop`
-that realize it. 2 L3 capabilities are marked partial, with the limitation
+that realize it. 4 L3 capabilities are marked partial, with the limitation
 stated (see the [catalogue](/business-capability-architecture/capability-catalogue)).
 Capabilities the fleet does not have are on the
 [heat maps](/business-capability-architecture/heat-maps#gaps-against-the-industry-reference).
@@ -276,7 +276,7 @@ flowchart LR
     class N5_1 impl
     N5_2["<b>L2 5.2 Dock Appointment Scheduling</b><br/>5.2.1 Appointment Booking<br/>5.2.2 Carrier Check-in"]
     L1 --> N5_2
-    class N5_2 impl
+    class N5_2 partial
     N5_3["<b>L2 5.3 Receiving</b><br/>5.3.1 Receipt Management<br/>5.3.2 Receipt Line Recording"]
     L1 --> N5_3
     class N5_3 impl

@@ -9,7 +9,7 @@ description: "The yard splits on time, not on nouns: door time (future) and yard
 
 ## Status
 
-Accepted (2026-11-05): decisions confirmed by the owner the same day; built in both services on develop (merged 2026-11-08); both are registered in warehouse-infra develop (apps.yaml entry, helm values, image pinned at v0.1.1) but not applied to the k3s cluster (no pods).
+Accepted (2026-11-05): decisions confirmed by the owner the same day; built in both services on develop (merged 2026-11-08); both are registered in warehouse-infra develop (apps.yaml entry, helm values, image pinned at v0.1.2), released at v0.1.2 and applied to the k3s cluster on 2026-11-10 (reduced footprint).
 
 ## Context
 

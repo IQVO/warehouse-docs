@@ -39,7 +39,7 @@ shipment references. The appointment used to live in `inbound-receiving` and
 cover inbound only; it moved here (YD-0002) through the strangler stages A to E, so that
 a `Both` door never has two owners of its time. As built, `inbound-receiving` retired its
 appointment write routes and keeps a copy fed by this context's events (its ADR 0019); the
-legacy import (stage A) is off unless `DOCK_LEGACY_IMPORT_CONSUMER_GROUP` is set.
+legacy import (stage A) was removed on develop in this service's ADR 0011 (stage E; inbound-receiving's side is its ADR 0022). It had never run: its group was unset, so no appointment was imported. The `legacy-import` provenance value stays in the published appointment view as a historical enum value that nothing sets.
 
 ## The yard decides what physically happened
 
@@ -90,7 +90,7 @@ Two things go wrong between a booking and a door.
 | Any context | Client | Reads appointments, door availability and the dock calendar over REST |
 | `yard-management` | Sibling context (upstream and downstream) | Sends the physical facts (`VisitCheckedIn`, `VisitRejected`, `TrailerDocked`, `TrailerUndocked`); consumes appointments and door closures |
 | `facility-layout` | Sibling context (upstream) | Publishes dock slots (with `dockFlow`) and zones, which map a door to its site |
-| `inbound-receiving` | Sibling context (upstream and downstream) | Publishes ASNs; consumes appointment events (`Booked`, `Rescheduled`, `Cancelled`, `DoorReassigned`); handed the appointment over (strangler) |
+| `inbound-receiving` | Sibling context (upstream and downstream) | Publishes ASNs; consumes appointment events (`Booked`, `Rescheduled`, `Cancelled`, `DoorReassigned`); handed the appointment over (strangler stages A to E, done on develop) |
 | `process-path-management` | Sibling context (upstream) | Publishes the CPT schedule used by outbound appointments |
 | `warehouse-planning` | Sibling context (downstream) | Reads appointments as inbound labour demand (its ADR 0020) |
 | `outbound-shipping` | Sibling context (downstream) | Reads `DockAppointmentBooked`; confirms shipment from the yard's departure facts |
