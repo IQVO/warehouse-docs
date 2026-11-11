@@ -182,7 +182,7 @@ def page_events():
         out += f"## `{c['id']}` published events\n\n| Event | CloudEvents type | Stream | Data | Consumers |\n| --- | --- | --- | --- | --- |\n"
         for p in c["publishes"]:
             stream = "analytics only" if p["consumers"] == ["analytics only"] else "integration + analytics"
-            out += f"| `{p['event']}` | `{ce_type(c['id'], p['entity'], p['event'])}` | {stream} | {', '.join('`'+d+'`' for d in p['data'])} | {', '.join(p['consumers'])} |\n"
+            out += f"| `{p['event']}` | `{ce_type(c['id'], p['entity'], p['event'])}` | {stream} | {', '.join('`'+d+'`' for d in p['data'])} | {', '.join(p['consumers']) or 'none yet'} |\n"
         out += "\n"
     return out
 

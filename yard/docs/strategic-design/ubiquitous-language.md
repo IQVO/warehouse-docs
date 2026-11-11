@@ -22,6 +22,7 @@ This page is generated from [`model/model.yaml`](https://github.com/IQVO/warehou
 | Arrival Status | EARLY, ON_TIME or LATE, from the gate arrival against the window and the tolerance. | `dockappointment.ArrivalStatus` |
 | No-Show | A booked appointment whose carrier did not arrive by window end plus grace. | `dockappointment.NoShow` |
 | SCAC | Standard Carrier Alpha Code identifying the carrier. | `shared.Carrier` |
+| Carrier Registry | The carriers known to the calendar, keyed by SCAC, each ACTIVE or SUSPENDED; a suspended carrier cannot book or reschedule, an unregistered one can. | `carrier.Carrier` |
 | CPT | Critical pull time: the fleet's outbound cutoff, which the network uses as its pickup cutoff. | `consumed from process-path-management` |
 
 ## `yard-management`
@@ -41,7 +42,9 @@ This page is generated from [`model/model.yaml`](https://github.com/IQVO/warehou
 | Yard Move | An instruction to take one trailer to a spot or a door. | `yardmove.Move` |
 | Door Work | Unloading or loading while a trailer is docked; WAITING, IN_PROGRESS, DONE. | `trailer.DoorWork` |
 | Dwell | Time on site from gate-in to gate-out (per trailer: arrival to departure). | `trailer.Trailer` |
-| Seal | The numbered seal on a trailer's doors; INTACT, BROKEN or NONE. | `trailer.SealState` |
+| Seal | The numbered seal on a trailer's doors; NONE, INTACT, APPLIED, VERIFIED, MISMATCH or BROKEN, with an optional ISO 17712 class. | `trailer.SealState` |
+| Securing | The restraint or wheel chocks that hold a docked trailer to its door while it is worked; recorded by a person, released before the trailer leaves. | `trailer.Securing` |
+| Classification | What a trailer carries that limits where it may stand: a hazard class, a UN number, a temperature-control need. | `trailer.Classification` |
 | Yard Check | A yard audit reconciling observed trailers with the model. | `yardcheck.Check` |
 | Detention | Carrier waiting time charged beyond the agreed free time; the free time is a site setting. | `yardpolicy.Policy` |
 | Turn Time | Gate-to-gate minutes of a visit: VisitCheckedIn arrived_at to VisitCheckedOut departed_at (the on_site_minutes the event carries), reported per visit purpose with average, p50, p90 and maximum. | `report.TurnTime` |
