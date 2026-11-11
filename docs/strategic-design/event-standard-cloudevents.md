@@ -147,15 +147,18 @@ Subdomain and bounded-context segments (authoritative):
 | exception-management     | wes       | exception-management     | /warehouse/exception-management |
 | outbound-shipping        | wms       | outbound-shipping        | /warehouse/outbound-shipping |
 
-`dock-scheduling` and `yard-management` (wms, PROPOSED 2026-11-05, nothing built):
-the type prefixes `com.warehouse.wms.dock-scheduling.` and
+`dock-scheduling` and `yard-management` (wms, proposed 2026-11-05, built on
+`develop` and merged 2026-11-08, registered in `warehouse-infra` `develop` since
+#193 and not applied to the cluster as far as the yard pages record): the type
+prefixes `com.warehouse.wms.dock-scheduling.` and
 `com.warehouse.wms.yard-management.` and the topics
 `warehouse.dock-scheduling.events` / `.analytics` and
-`warehouse.yard-management.events` / `.analytics` are pinned here before any event
-ships, so producers and consumers build against identical strings. The design is
-the [yard instance](/yard/). The managed fleet rule `agents/fleet/cloudevents.md`
-and its template copy gain the two names in a separate coordinated change when the
-first service repo is bootstrapped.
+`warehouse.yard-management.events` / `.analytics` were pinned here before any
+event shipped, so producers and consumers build against identical strings. The
+design is the [yard instance](/yard/). The harness template's copy of the managed
+fleet rule (`warehouse-harness-template` `main`,
+`.claude/rules/fleet/cloudevents.md`) does not list the two names yet (checked
+2026-11-10).
 
 `pick-face-replenishment` and `task-interleaving`: both merged on `develop`
 2026-10-17 (each publishes through a transactional outbox) and both run in the
@@ -241,15 +244,19 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wms.product-master.product.ProductClassified` | inventory-storage, order-management, wes-work-planning, fulfillment-execution (local copies; inventory-storage ADR 0034, order-management ADR 0036, wes-work-planning ADR 0035, fulfillment-execution ADR 0039), slotting-optimization |
 | `com.warehouse.wms.product-master.product.ProductDimensionsDeclared` | slotting-optimization |
 | `com.warehouse.wms.product-master.product.ProductMeasured` | slotting-optimization |
-| `com.warehouse.wms.inbound-receiving.asn.ASNRegistered` | (published contract; no consumer yet) |
-| `com.warehouse.wms.inbound-receiving.asn.ASNCancelled` | (published contract; no consumer yet) |
+| `com.warehouse.wms.product-master.product.ProductPackLevelDeclared` | inbound-receiving, inventory-storage, pick-face-replenishment, slotting-optimization, wes-work-planning, fulfillment-execution, network-inventory-planning (local pack views; context map K62) |
+| `com.warehouse.wms.product-master.product.ProductPackLevelRetired` | the same seven consumers (context map K62) |
+| `com.warehouse.wms.product-master.product.ProductPackLevelMeasured` | wes-work-planning, slotting-optimization (context map K62) |
+| `com.warehouse.wms.inbound-receiving.asn.ASNRegistered` | dock-scheduling, yard-management (the yard section; no row on the context map) |
+| `com.warehouse.wms.inbound-receiving.asn.ASNCancelled` | dock-scheduling, yard-management (the yard section; no row on the context map) |
 | `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentBooked` | warehouse-planning (inbound labour demand, its ADR 0017; context map K28; its source switched to dock-scheduling by ADR 0020) |
 | `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCheckedIn` | (published contract; no consumer yet) |
 | `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCancelled` | warehouse-planning (withdraws the appointment's labour demand, its ADR 0017; context map K28; its source switched to dock-scheduling by ADR 0020) |
 | `com.warehouse.wms.inbound-receiving.dockappointment.DockAppointmentCompleted` | (published contract; no consumer yet) |
-| `com.warehouse.wms.inbound-receiving.receipt.ReceiptOpened` | (published contract; no consumer yet) |
+| `com.warehouse.wms.inbound-receiving.receipt.ReceiptOpened` | yard-management (the yard section; no row on the context map) |
 | `com.warehouse.wms.inbound-receiving.receipt.ReceiptLineReceived` | inventory-storage (its ADR 0037) |
-| `com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed` | (published contract; no consumer yet) |
+| `com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed` | yard-management (the yard section; no row on the context map) |
+| `com.warehouse.wms.inbound-receiving.receipt.CartonDiscrepancyRaised` | exception-management (its ADR 0006, one case per receipt, SSCC and kind; context map K66) |
 | `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanGenerated` | (published contract; no consumer yet) |
 | `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved` | wes-work-planning (one `RELOCATE` work unit per move, its ADR-0040; slotting-optimization ADR 0010); pick-face-replenishment (forward map; consumer deployed) |
 | `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanRejected` | (published contract; no consumer yet) |
@@ -258,7 +265,7 @@ a suffix match) and these must be byte-identical on both sides:
 | `com.warehouse.wms.pick-face-replenishment.replenishment.ReplenishmentCancelled` | wes-work-planning (cancels the request's `REPLENISH` unit while it is still Pending, its ADR 0042; same opt-in as `ReplenishmentRequested`; producer deployed) |
 | `com.warehouse.wes.order-management.order.OrderAllocated` | wes-work-planning |
 | `com.warehouse.wes.order-management.order.OrderPartiallyAllocated` | wes-work-planning |
-| `com.warehouse.wes.order-management.order.OrderRepromised` | (published contract) |
+| `com.warehouse.wes.order-management.order.OrderRepromised` | exception-management (auto-resolve correlation only, never a case source; context map K58) |
 | `com.warehouse.wes.order-management.siteskudemand.SiteSkuDemandChanged` | network-inventory-planning, slotting-optimization |
 | `com.warehouse.wes.process-path-management.processpath.ProcessPathCreated` | fulfillment-execution, wes-work-planning, workforce-management, order-management |
 | `com.warehouse.wes.process-path-management.processpath.ProcessPathUpdated` | same four |

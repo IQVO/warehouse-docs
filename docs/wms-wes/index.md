@@ -2,7 +2,7 @@
 id: index
 title: WMS and WES
 sidebar_label: Overview
-description: Where each of the seventeen bounded contexts sits in the warehouse software stack (WMS, WES, WCS and the systems above them), qualified against Gartner, MHI, Interact Analysis, KNAPP, APQC and O'Reilly sources.
+description: Where seventeen of the twenty backend contexts sit in the warehouse software stack (WMS, WES, WCS and the systems above them), qualified against Gartner, MHI, Interact Analysis, KNAPP, APQC and O'Reilly sources.
 ---
 
 # WMS and WES
@@ -11,10 +11,11 @@ A warehouse runs on a stack of software categories: a **warehouse management
 system (WMS)** keeps the inventory and the transactions, a **warehouse
 execution system (WES)** decides when and where work runs, and a **warehouse
 control system (WCS)** drives the equipment. This section explains those
-categories from industry sources, then qualifies each of the seventeen bounded
+categories from industry sources, then qualifies seventeen of the twenty backend
 contexts on this site against them. Two of them, `pick-face-replenishment` and
 `task-interleaving`, are listed but not yet qualified: both are built and
-deployed, but nobody has run the industry tests on them.
+deployed, but nobody has run the industry tests on them. `returns-processing`,
+`exception-management` and `outbound-shipping` have no row yet.
 
 ## The fleet in the stack
 
@@ -67,8 +68,8 @@ flowchart TB
     class NOWCS gap
 ```
 
-`warehouse-ops-agent` is not drawn: it is a read-only decision-support layer
-over all of these tiers. `pick-face-replenishment` (`wms`, built and deployed in
+`warehouse-ops-agent` is not drawn: it is a decision-support layer
+over all of these tiers (read-only apart from two human-confirmed act slices). `pick-face-replenishment` (`wms`, built and deployed in
 the reference cluster) and `task-interleaving` (`wes`, built and deployed) are
 not drawn either, because their industry category is not yet qualified (see
 [the qualification](/wms-wes/qualification)). Thick arrows are Kafka events (CloudEvents 1.0); the
@@ -109,7 +110,7 @@ stands for the event families listed on the tier pages.
 | Page | What it answers |
 | --- | --- |
 | [Industry reference](/wms-wes/industry-reference) | What WMS, WES and WCS mean, according to Gartner, MHI, Interact Analysis, Modern Materials Handling, KNAPP, APQC and O'Reilly titles, and the five tests derived from them. |
-| [Qualification of the 17 contexts](/wms-wes/qualification) | The verdict per context: industry category, ISA-95 level, decision horizon, WES criteria, and where it differs from the fleet tier. |
+| [Qualification of 17 of 20 contexts](/wms-wes/qualification) | The verdict per context: industry category, ISA-95 level, decision horizon, WES criteria, and where it differs from the fleet tier. |
 | [WMS tier](/wms-wes/wms-tier) | One card per `wms` context, with the WMS functions it owns and its inputs and outputs. |
 | [WES tier](/wms-wes/wes-tier) | One card per `wes` context, grouped as WES, labor management, above the WMS, and decision support. |
 | [Tier interactions](/wms-wes/tier-interactions) | Inbound, outbound and transfer flows drawn across the tiers. |

@@ -9,7 +9,8 @@ description: What a warehouse management system, a warehouse execution system an
 
 This page records what the industry means by **WMS**, **WES** and **WCS**
 before the [qualification](/wms-wes/qualification) applies those definitions
-to the seventeen contexts of this fleet. Every definition below comes from a
+to the contexts of this fleet (seventeen of the twenty have a row there).
+Every definition below comes from a
 named source, listed under [Sources](#sources) at the end of the page. Where
 the sources disagree, the page says so.
 

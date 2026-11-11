@@ -40,7 +40,7 @@ Everything else in the platform — physical location structure
 (`labor-performance`) — exists to feed that orchestration loop trustworthy,
 current facts, never to make decisions on its own.
 
-## The seventeen contexts on this site, one sentence each
+## The twenty contexts on this site, one sentence each
 
 | Context | One-sentence purpose |
 | --- | --- |
@@ -61,6 +61,9 @@ current facts, never to make decisions on its own.
 | `slotting-optimization` | Decides which SKUs deserve a forward pick slot: ranks SKUs by pick velocity, proposes a slot plan under the `abc-velocity-v1` policy, and publishes the approved forward-pick map after a human approves it; the moves are then executed as `RELOCATE` work by `wes-work-planning` and `fulfillment-execution` and recorded by `inventory-storage`, and this context reads the progress back. Decided 2026-10-08, built and deployed in the reference cluster. |
 | `pick-face-replenishment` | Keeps every forward pick face stocked: holds a min/max policy per site and SKU, watches bin levels through event-fed local copies and, when a face reaches its minimum, requests a move from the fullest reserve bin; it closes the request when `inventory-storage` records the relocation. It never creates floor work and never writes the ledger. Decided and merged 2026-10-17; deployed in the reference cluster since 2026-10-20/21. The `inventory-storage` ends of the chain behind it (the `BinStockLevelChanged` producer, the `REPLENISHMENT` relocation of a completed `REPLENISH` task) and the `fulfillment-execution` `REPLENISH` task are built, and `wes-work-planning` plans `REPLENISH` work from its requests (its ADR 0042, with the `REPLENISH` path from `process-path-management`'s ADR 0036), so the whole chain exists on `develop`; the planner's consumer is opt-in and `REPLENISHMENT_MODE=kafka` is set in the reference deployment, but no request has been traced through the chain there yet. |
 | `task-interleaving` | After a station completes a task, ranks the nearby open tasks by travel distance and issues an advisory, expiring hint of up to five candidates; it never assigns work and owns no task state. Decided and merged 2026-10-17; deployed in the reference cluster since 2026-10-20/21, and `fulfillment-execution` consumes the hint as a tie-break inside one priority band (its ADR 0051). |
+| `returns-processing` | The reverse flow of goods: authorizes a return (RMA) against a shipped order line, records the return receipt and inspection grade, decides the disposition, and hands restockable units back to `inventory-storage` as staged lines. Decided 2026-10-20, merged on `develop` 2026-10-20/21 and registered in `warehouse-infra` `develop` since 2026-10-22. |
+| `exception-management` | The Problem Solve lifecycle: opens one owned case per anomaly fact another context published, with dedup, triage, assignment, an SLA clock and declarative auto-resolve rules; it never writes to a producer. Decided 2026-10-20, merged on `develop` 2026-10-20/21 and registered in `warehouse-infra` `develop` since 2026-10-22. |
+| `outbound-shipping` | What leaves on which trailer: plans a load from the first manifested package, tracks staging and loading, issues the bill of lading and confirms the shipment on the trailer's physical departure. Decided 2026-11-05 and built on `develop`; not deployed (no Helm chart, no `warehouse-infra` entry). |
 
 See [Subdomain Classification](./subdomain-classification) for the
 Core/Supporting/Generic verdict on each, and [Context Map](./context-map)
@@ -75,7 +78,7 @@ actual inbound and outbound value streams described in public
 material and industry trade coverage. This table is that flow, stage by
 stage, against what this platform actually implements — so "which of these
 is real code, and which is deliberately out of scope" is answerable in one
-place instead of scattered across seventeen repos' own docs.
+place instead of scattered across twenty repos' own docs.
 
 | Real fulfillment-center stage | What physically happens | Built here? |
 | --- | --- | --- |
