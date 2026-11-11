@@ -361,7 +361,7 @@ Appears in: `FulfillmentCancelRefused.reason`.
 | --- | --- |
 | `CANCEL_AFTER_LOCK` | The cancel request arrived after the assignment locked; the vendor ships and the shopper's path is a return. |
 
-**`ReleaseOutcome`**: What the node answered to a release.
+**`ReleaseOutcome`**: What the node answered to a release, or WITHDRAWN when order-sourcing took the release back.
 
 Appears in: REST `ReleaseOutcome`, REST `Release.outcome`.
 
@@ -371,6 +371,7 @@ Appears in: REST `ReleaseOutcome`, REST `Release.outcome`.
 | `ACCEPTED` | The node accepted; the assignment locks. |
 | `REJECTED` | The node rejected; Release.reasonCode holds the vendor's code. |
 | `EXPIRED` | The node did not answer before its deadline. |
+| `WITHDRAWN` | Order-sourcing took the release back because the consolidation merge it belonged to was dissolved (order-sourcing ADR 0015); it is not an answer from the node. |
 
 ### Reasons of `vendor-connectivity`
 

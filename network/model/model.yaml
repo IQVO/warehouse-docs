@@ -981,12 +981,13 @@ contexts:
           - {value: CANCEL_AFTER_LOCK, meaning: "The cancel request arrived after the assignment locked; the vendor ships and the shopper's path is a return."}
       - name: ReleaseOutcome
         fields: ["rest:ReleaseOutcome", "rest:Release.outcome"]
-        about: "What the node answered to a release."
+        about: "What the node answered to a release, or WITHDRAWN when order-sourcing took the release back."
         values:
           - {value: PENDING, meaning: "Released and not yet answered."}
           - {value: ACCEPTED, meaning: "The node accepted; the assignment locks."}
           - {value: REJECTED, meaning: "The node rejected; Release.reasonCode holds the vendor's code."}
           - {value: EXPIRED, meaning: "The node did not answer before its deadline."}
+          - {value: WITHDRAWN, meaning: "Order-sourcing took the release back because the consolidation merge it belonged to was dissolved (order-sourcing ADR 0015); it is not an answer from the node."}
     consumes:
       - {event: CustomerOrderPlaced, from: customer-ordering}
       - {event: CustomerOrderCancelled, from: customer-ordering}
