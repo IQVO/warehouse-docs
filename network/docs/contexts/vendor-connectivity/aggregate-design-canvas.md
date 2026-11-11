@@ -144,6 +144,7 @@ applies; the model lists the transitions without naming the condition.
 | --- | --- | --- |
 | `IssueOnRelease` | On `FulfillmentReleasedToNode` for a `VENDOR` node, issue a purchase order (`poNumber` idempotent on `assignmentId + releaseNo`) | `IssuePurchaseOrder` |
 | `CancelOnSourcingCancel` | On `FulfillmentCancelled`, cancel the `ISSUED` purchase order of that release | `CancelPurchaseOrder`; refused after acknowledgement |
+| `CancelOnReleaseWithdrawn` | On `FulfillmentReleaseWithdrawn` (a consolidation merge dissolved by a promise revision), cancel the `ISSUED` purchase order of that `releaseNo` | `CancelPurchaseOrder`; refused after acknowledgement, logged and acknowledged |
 | `ExpireUnacknowledged` | Sweep: `ISSUED` past `ackBy` becomes `EXPIRED` | `ExpireUnacknowledgedOrders` |
 | `SimulationKnobs` | `PO_REDELIVERY_RATE` re-delivers purchase orders on poll | None on state; vendors must be idempotent on `poNumber` |
 | order-sourcing `ReassignOnRefusal` (neighbour) | On `PurchaseOrderRejected` or `PurchaseOrderExpired`, exclude the node and re-queue | A later release may issue a new purchase order to another node |
@@ -158,7 +159,7 @@ applies; the model lists the transitions without naming the condition.
 | `RequestLabel` | vendor | Vendor API `POST /vendor/shipping-labels` |
 | `SubmitShipmentConfirmation` | vendor | Vendor API `POST /vendor/shipment-confirmations` |
 | `ExpireUnacknowledgedOrders` | policy `ExpireUnacknowledged` (sweep) | internal timer |
-| `CancelPurchaseOrder` | policy `CancelOnSourcingCancel` | Kafka `FulfillmentCancelled` |
+| `CancelPurchaseOrder` | policy `CancelOnSourcingCancel`, policy `CancelOnReleaseWithdrawn` | Kafka `FulfillmentCancelled`, `FulfillmentReleaseWithdrawn` |
 | `ProcessSubmission` (transitions only) | the submission processor | internal, after `notBefore` |
 
 ### 7. Created Events

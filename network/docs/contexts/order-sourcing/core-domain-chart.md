@@ -70,9 +70,10 @@ witness).
 
 ### Why complexity is high (x = 0.80)
 
-- One aggregate, but a rich one: 7 states, 11 transitions, 9 commands,
-  6 invariants, 8 published events.
-- It reacts to 29 consumed event types from 9 contexts and keeps five
+- One rich aggregate and one small policy document: `FulfillmentAssignment` has
+  7 states, 18 transitions, 13 commands, 7 invariants and 13 events (15 published in
+  all, with the policy event and the three analytics-only ones).
+- It reacts to 34 consumed event types from 9 contexts and keeps five
   event-fed read models (`NodeProfileView`, `NetworkGraphView`,
   `AvailabilityView`, `ScorecardView`, `PromiseBookPressureView`), because
   the model forbids synchronous calls on this path (`sync_calls: []`).
@@ -85,6 +86,9 @@ witness).
   its rules are crisp (`ErrNodeExcluded`, `ErrReleaseInFlight`,
   `ErrAssignmentLocked`), but they are what keeps every candidate decision
   honest once a vendor is involved.
+- **Consolidation** adds a pure merge function over the queue (identity, node,
+  window overlap, one covering owner per summed item, caps) and a dissolution path
+  with a withdrawn release, which is the part that needs the most care.
 
 ## Evolution
 

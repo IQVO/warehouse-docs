@@ -59,14 +59,17 @@ ship-to PII.** `CustomerOrderPlaced` carries `destinationPostalPrefix` only
 | `shopperId` | string | The shopper who placed it. An id, not PII. |
 | `destinationPostalPrefix` | string | The ship-to's postal prefix, the one every promise was quoted for. |
 | `placedAt` | timestamp | When the order was placed. |
+| `consolidationKey` | string, optional | An opaque keyed hash of the shopper and the normalised ship-to (64 lower-case hex characters), derived here so `order-sourcing` can merge the groups of one shopper and one address without seeing the address. It is omitted when no secret is configured, and an absent key means the order never merges (never an empty key). It carries no PII and is not in REST, MCP or A2A (customer-ordering ADR 0012). |
 | `groups[]` | array | One entry per shipment group. |
 | `groups[].groupNo` | integer | Group number inside the order. |
 | `groups[].promiseId` | string | The `delivery-promise` promise for this group (still `PROVISIONAL` when published). |
-| `groups[].tier` | enum | `SAME_DAY`, `NEXT_DAY`, `TWO_DAY` or `STANDARD`. |
+| `groups[].tier` | enum | `SAME_DAY`, `NEXT_DAY`, `TWO_DAY`, `STANDARD` or `CONSOLIDATED`: the REAL tier of the promise, never mapped (customer-ordering ADR 0013). |
 | `groups[].witnessNodeId` | string | The node of the promise's witness path. `order-sourcing` may choose another node. |
 | `groups[].shipBy` | timestamp | The pickup cutoff the promise assumed. |
 | `groups[].deliverByEarliest` | timestamp | Start of the window shown to the shopper. |
 | `groups[].deliverByLatest` | timestamp | End of the window; the hard constraint for `order-sourcing`. |
+| `groups[].chosenDeliveryDay` | date, optional | The local calendar date the shopper chose for a `CONSOLIDATED` group, taken from `deliverByLatest` in the group's time zone at placement; omitted for every other tier and when unknown. |
+| `groups[].consolidationEligible` | boolean, optional | `delivery-promise`'s answer for a `CONSOLIDATED` group; an absent value means unknown or not a `CONSOLIDATED` option, never `false`. |
 | `groups[].lines[]` | array | The lines of this group. |
 | `groups[].lines[].lineNo` | integer | Line number inside the order. |
 | `groups[].lines[].catalogItemId` | string | The catalogue item. |
@@ -128,7 +131,7 @@ never on a suffix. Proposed consumer groups: `customer-ordering.order-sourcing`,
 | --- | --- | --- | --- |
 | `LabelIssued` | `com.retailnetwork.logistics.shipping-and-tracking.label.LabelIssued` | `trackingNumber`, `assignmentId`, `packageNo`, `tier`, `carrier` | Adds the package to `OrderTrackingView`, linked to the group through `assignmentId`. No command. |
 | `PackageScanned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageScanned` | `trackingNumber`, `nodeId`, `scanType`, `at`, `state` | Advances the package line in `OrderTrackingView` (linked by `trackingNumber`). No command. |
-| `PackageDelivered` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDelivered` | `trackingNumber`, `assignmentId`, `orderId`, `deliveredAt` | `MarkGroupDelivered` once every tracking number of the group is delivered; the order becomes `DELIVERED` when every group is. Updates `OrderTrackingView`. |
+| `PackageDelivered` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDelivered` | `trackingNumber`, `assignmentId`, `orderId`, `deliveredAt` | `MarkGroupDelivered` once every tracking number of the group is delivered, for EVERY group that shares the package (a merged shipment carries several groups, often of several orders of one shopper), plus the group the event itself resolves; the order becomes `DELIVERED` when every group is. `PackageLost` and `PackageReturned` act the same way. Updates `OrderTrackingView`. |
 | `PackageExceptionRaised` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageExceptionRaised` | `trackingNumber`, `orderId`, `reason`, `at` | Shows the exception in `OrderTrackingView`. No command. |
 
 **Ordering.** Producers key by their own root id (`assignmentId`,

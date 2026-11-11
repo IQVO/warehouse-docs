@@ -164,6 +164,7 @@ asynchronous transaction a vendor reconciles.
 | network-fulfillment | GetScorecard | Query | Vendor API `GET /vendor/nodes/{nodeId}/scorecard` | OHS + PL |
 | Network partner managers (human) | OnboardVendor | Command | REST `POST /vendors` | UI |
 | order-sourcing | FulfillmentReleasedToNode | Event | Kafka `retailnetwork.order-sourcing.events`, `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | Customer/Supplier |
+| order-sourcing | FulfillmentReleaseWithdrawn | Event | Kafka `retailnetwork.order-sourcing.events`, `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleaseWithdrawn` | Customer/Supplier |
 | order-sourcing | FulfillmentCancelled | Event | Kafka `retailnetwork.order-sourcing.events`, `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | Customer/Supplier |
 | node-topology | NodeRegistered | Event | Kafka `retailnetwork.node-topology.events`, `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | Conformist |
 | node-topology | NodeActivated | Event | Kafka `retailnetwork.node-topology.events`, `com.retailnetwork.logistics.node-topology.node.NodeActivated` | Conformist |

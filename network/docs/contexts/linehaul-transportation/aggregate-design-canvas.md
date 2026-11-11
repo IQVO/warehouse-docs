@@ -73,7 +73,9 @@ model, so they are drawn as terminal.
   future pickups (`CancelDeparture`).
 - **`BookOnLock`** (this context): on `FulfillmentLocked`, book one package
   on the pickup departure (`BookCapacity`); on `FulfillmentCancelled` or
-  reassignment, release it (`ReleaseCapacity`).
+  reassignment, release it (`ReleaseCapacity`). A lock that carries
+  `consolidatedInto` (a follower of a merged release) books nothing
+  (**`FollowerLockBooksNothing`**): the carrier's lock books the one package that ships.
 - **`HorizonRoll`** (this context): nightly `GenerateDepartures` keeps a
   14-day horizon.
 - **`RepromiseOnRisk`** (`delivery-promise`, a neighbour's reaction): a
@@ -277,6 +279,6 @@ capacity in tracking numbers; three events per instance.
 | --- | --- | --- | --- |
 | `NodeProfileView` | `node-topology` `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | Node type, operator, status, time zone, operating hours, holidays and cutoffs for `PickupFromCutoffs` | A local copy of `node-topology`'s `Node`; this context never changes it and enforces no rule on it. |
 | `LaneView` | `node-topology` `LaneOpened`, `LaneClosed` | `ErrLaneClosed` check, origin and destination of a lane, mode | A copy of `node-topology`'s `Lane`; the lane's own invariants live there. |
-| `ExpectedVolumeView` | `order-sourcing` `FulfillmentReleasedToNode`, `FulfillmentReassigned`, `FulfillmentLocked`, `FulfillmentCancelled`; `shipping-and-tracking` `LabelIssued` | Which assignments and tracking numbers are heading for which pickup departure | A projection of other contexts' facts; it decides nothing. Booking is done on `Departure`. |
+| `ExpectedVolumeView` | `order-sourcing` `FulfillmentReleasedToNode`, `FulfillmentReassigned`, `FulfillmentLocked`, `FulfillmentCancelled`; `shipping-and-tracking` `LabelIssued` | Which assignments and tracking numbers are heading for which pickup departure; a follower lock writes no row | A projection of other contexts' facts; it decides nothing. Booking is done on `Departure`. |
 
 Derived from: `model.yaml → contexts[linehaul-transportation].read_models`.

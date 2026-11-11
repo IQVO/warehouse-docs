@@ -29,7 +29,7 @@ states of its aggregates.
 | **Departure Kind** | `PICKUP`, `LINEHAUL` or `AIR`. | `DepartureKind(PICKUP\|LINEHAUL\|AIR)` | **Lane Mode** (`GROUND\|AIR`, a property of the lane, not of one trip) |
 | **Departure Times** | `cutoffAt`, `departsAt`, `arrivesAt`; `cutoffAt <= departsAt < arrivesAt`. | `Times{cutoffAt, departsAt, arrivesAt}` | **Nominal Transit** (the lane's planning figure in minutes) |
 | **Capacity** | Packages a departure can carry, and how many are booked. Remaining = capacity − booked. | `Capacity{packages, booked}` | **Throughput Cap** (a node's declared orders per time unit) and **Promise Book** capacity (`delivery-promise`'s order ledger per pickup cutoff) |
-| **Booking** | Counting one package against a departure's capacity. Done on `FulfillmentLocked` (policy `BookOnLock`). | `BookCapacity`, `ReleaseCapacity` | **Capacity Hold** (`delivery-promise`'s provisional reservation at promise time) |
+| **Booking** | Counting one package against a departure's capacity. Done on `FulfillmentLocked` (policy `BookOnLock`), except for a follower of a consolidation merge, whose lock books nothing. | `BookCapacity`, `ReleaseCapacity` | **Capacity Hold** (`delivery-promise`'s provisional reservation at promise time) |
 | **Departure Cutoff** | The instant after which no booking is accepted on a departure (`ErrDepartureClosed`). | `Times.cutoffAt` | **Delivery Wave induct cutoff** (`last-mile-delivery`) |
 | **Load** | The packages consolidated onto one departure. | `load.Load` | **Departure** (the trip and its capacity; a load is what is physically put on it) |
 | **Lane Schedule** | The weekly template that generates a lane's departures. | `schedule.LaneSchedule` | **Departure** (one concrete trip generated from a template slot) |

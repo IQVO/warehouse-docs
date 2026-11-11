@@ -209,7 +209,9 @@ Top terms: **Middle Mile**, **Departure** (kinds `PICKUP`, `LINEHAUL`,
    (`ErrLoadOverCapacity`).
 6. **Book on lock.** One package is booked on the pickup departure when an
    assignment locks (`FulfillmentLocked`); it is released on
-   `FulfillmentCancelled` or reassignment (policy `BookOnLock`).
+   `FulfillmentCancelled` or reassignment (policy `BookOnLock`). A follower's lock of a
+   consolidation merge (`consolidatedInto` set) books nothing, so one merged package occupies
+   one package of pickup capacity (policy `FollowerLockBooksNothing`).
 7. **Announce cancellations early.** A cancelled departure is announced
    before its cutoff wherever possible, so `delivery-promise` can revise the
    promises on it.

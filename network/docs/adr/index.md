@@ -33,7 +33,7 @@ accepts it.
 ## Service ADRs (one sequence per context repository)
 
 Each of the eleven context repositories records its own decisions on top of
-the domain-level ones above: 151 ADRs on `develop` as of 2026-11-09. They are
+the domain-level ones above: 160 ADRs on `develop` as of 2026-11-11. They are
 linked, never copied; the *Status* column is the word from each ADR's own
 status line. Since the fleet observability standard (accepted 2026-10-26),
 every repository added an A2A inbound adapter and adopted the fleet REST API
@@ -47,7 +47,17 @@ estimates (G60) and the analytics read sides of four contexts. Wave 1
 (2026-11-09) added the fast-tier eligibility decision of `node-performance`
 and the four promise-quality ADRs of `delivery-promise`: calibrated quotes
 with a confidence, a sweep that flags promises whose load is running late, a
-fast-tier candidate filter on node eligibility, and a capacity band on offers.
+fast-tier candidate filter on node eligibility, and a capacity band on offers. Wave 2 (2026-11-09/10) added the versioned
+sourcing policy of `order-sourcing` (cross-region surcharge and a regional budget,
+refining gap G26), cross-order consolidation (a consolidation key in
+`customer-ordering`, carrier and follower merge at release in `order-sourcing`, the
+purchase-order cancel of `vendor-connectivity`, the follower lock of
+`linehaul-transportation`, and one tracking number shared by several assignments or
+groups in `delivery-promise` and `customer-ordering`) and the opt-in `CONSOLIDATED`
+tier with a customer-chosen delivery day (`delivery-promise`, `customer-ordering`,
+`order-sourcing`). `linehaul-transportation` ADR 0013 (a direct-lane advisory) is
+Proposed on a feature branch only and not on `develop`, so the sequence there
+jumps from 0012 to 0014.
 
 
 ### node-topology
@@ -116,6 +126,8 @@ fast-tier candidate filter on node eligibility, and a capacity band on offers.
 | [0021](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0021-a-sweep-flags-promises-whose-locked-path-is-running-late.md) | A sweep flags promises whose locked path is running late | Accepted |
 | [0022](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0022-fast-tier-candidates-are-filtered-on-node-eligibility.md) | Fast-tier candidates are filtered on node eligibility | Accepted |
 | [0023](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0023-offers-carry-a-capacity-band.md) | Offers carry a capacity band | Accepted |
+| [0024](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0024-an-opt-in-consolidated-tier-with-a-customer-chosen-delivery-day.md) | An opt-in CONSOLIDATED tier with a customer-chosen delivery day | Accepted |
+| [0025](https://github.com/IQVO/delivery-promise/blob/develop/docs/adr/0025-a-tracking-number-may-belong-to-several-assignments.md) | A tracking number may belong to several assignments | Accepted |
 
 ### customer-ordering
 
@@ -132,6 +144,8 @@ fast-tier candidate filter on node eligibility, and a capacity band on offers.
 | [0009](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0009-delivery-window-time-zone.md) | The delivery window carries its local time zone | Accepted |
 | [0010](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 | [0011](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0011-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
+| [0012](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0012-consolidation-key-and-shared-tracking-numbers.md) | The consolidation key and shared tracking numbers | Accepted |
+| [0013](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0013-consolidated-tier-and-chosen-delivery-day.md) | The CONSOLIDATED tier and the stored chosen delivery day | Accepted |
 
 ### order-sourcing
 
@@ -150,6 +164,9 @@ fast-tier candidate filter on node eligibility, and a capacity band on offers.
 | [0011](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0011-money-denominated-assignment-cost.md) | The money-denominated AssignmentCost | Accepted |
 | [0012](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0012-owner-aware-availability-and-sourcing.md) | Owner-aware availability and sourcing | Accepted |
 | [0013](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0013-analytics-read-side-and-the-sourcing-decision-fact.md) | Analytics read side and the sourcing-decision fact | Accepted |
+| [0014](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0014-a-versioned-sourcing-policy.md) | A versioned sourcing policy | Accepted |
+| [0015](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0015-carrier-and-follower-consolidation-at-release.md) | Carrier and follower consolidation at release | Accepted |
+| [0016](https://github.com/IQVO/order-sourcing/blob/develop/docs/adr/0016-consolidated-delivery-day-search-and-latest-pickup-hold.md) | The CONSOLIDATED delivery day, search window and latest-pickup hold | Accepted |
 
 ### vendor-connectivity
 
@@ -167,6 +184,7 @@ fast-tier candidate filter on node eligibility, and a capacity band on offers.
 | [0010](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 | [0011](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0011-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
 | [0012](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0012-purchase-order-lines-name-the-stock-owner.md) | Purchase-order lines name the stock owner | Accepted |
+| [0013](https://github.com/IQVO/vendor-connectivity/blob/develop/docs/adr/0013-cancel-the-purchase-order-when-a-release-is-withdrawn.md) | Cancel the purchase order when a release is withdrawn | Accepted |
 
 ### linehaul-transportation
 
@@ -184,6 +202,7 @@ fast-tier candidate filter on node eligibility, and a capacity band on offers.
 | [0010](https://github.com/IQVO/linehaul-transportation/blob/develop/docs/adr/0010-fleet-observability-standard.md) | Adopt the fleet observability standard (logs, metrics, traces) | Accepted |
 | [0011](https://github.com/IQVO/linehaul-transportation/blob/develop/docs/adr/0011-a2a-inbound-adapter.md) | An A2A inbound adapter | Accepted |
 | [0012](https://github.com/IQVO/linehaul-transportation/blob/develop/docs/adr/0012-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
+| [0014](https://github.com/IQVO/linehaul-transportation/blob/develop/docs/adr/0014-consolidated-follower-lock-books-nothing.md) | A follower lock books nothing | Accepted |
 
 ### last-mile-delivery
 

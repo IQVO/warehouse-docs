@@ -47,10 +47,15 @@ Two Core contexts turn those facts into decisions:
   on-time handover has collapsed. It learns from its own judgements: a quote
   carries a one-sided buffer and an optional confidence, an offer reports a
   coarse capacity band, and a promise whose load is running late is flagged at
-  risk before it is broken.
+  risk before it is broken. A shopper can opt in to a later, consolidated
+  delivery day, which the quote marks as eligible only when the day leaves the
+  network at least one local day to merge the order.
 - `order-sourcing` decides **who fulfils**: it keeps each shipment group in a
   virtual queue, re-optimizes against current cost and capacity, releases it
-  to one node, and locks the path when that node commits.
+  to one node, and locks the path when that node commits. An operator's
+  versioned policy trades a bounded extra cost for in-region fulfilment, and
+  the groups of one shopper and one address that chose the consolidated day
+  can be merged at release into one purchase order and one package.
 
 Everything else exists to feed those two decisions trustworthy, current facts,
 or to carry out what they decided.
@@ -96,8 +101,8 @@ different reasons, under different owners.
 
 | Context | Classification | Purpose |
 | --- | --- | --- |
-| `delivery-promise` | Core | Quote and make the promise from a feasible witness path with capacity held; judge it kept or broken. |
-| `order-sourcing` | Core | Decide late which node and path fulfil each shipment group; lock at commitment. |
+| `delivery-promise` | Core | Quote and make the promise from a feasible witness path with capacity held, including the opt-in consolidated day; judge it kept or broken. |
+| `order-sourcing` | Core | Decide late which node and path fulfil each shipment group, under a versioned cost policy and with optional merging of consolidated groups at release; lock at commitment. |
 | `node-topology` | Supporting | The registry of nodes, declared operational profiles, lanes, regions and service areas. |
 | `offer-availability` | Supporting | Catalogue items, listings per node and claimed availability with its basis. |
 | `vendor-connectivity` | Supporting | The Open Host Service for vendors: purchase orders, acknowledgements, labels, shipment confirmations, async transactions. |

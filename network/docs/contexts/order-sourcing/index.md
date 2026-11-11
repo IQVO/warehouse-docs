@@ -25,15 +25,27 @@ assignment for good. When no node can still meet the promise's
 `deliverByLatest`, the group becomes **UNSOURCEABLE** and goes back to
 `delivery-promise` for a re-promise. Sourcing never breaks a promise silently.
 
+Two operator levers sit on top. A versioned **SourcingPolicy** (a second, small aggregate)
+adds a cross-region surcharge to the effective cost of a candidate and lets an in-region
+candidate within a deviation percent of the cheapest win. And groups of one shopper and one
+address that chose the opt-in `CONSOLIDATED` delivery day can be **merged at release** into one
+carrier release with followers, when the policy allows it. Both are inert until a policy is
+published: with no policy the ordering, the events and the views are unchanged.
+
 :::info[What this pack describes]
 - **Inbound:** nine Kafka topics of sibling contexts (orders, promises,
   purchase-order outcomes, delivery, topology, availability, departures,
   waves, scorecards) and a small REST surface for the network-ops planner
   (`GET /assignments`, `GET /assignments/{assignmentId}`,
-  `POST /assignments/{assignmentId}/reoptimisations`).
-- **Outbound:** eight CloudEvents types
-  (`com.retailnetwork.commerce.order-sourcing.assignment.*`) on
-  `retailnetwork.order-sourcing.events`. No synchronous call to any other
+  `POST /assignments/{assignmentId}/reoptimisations`) and for the sourcing policy
+  (`GET /sourcing-policy`, `PUT /sourcing-policy`).
+- **Outbound:** fifteen CloudEvents types: nine integration events
+  (`com.retailnetwork.commerce.order-sourcing.assignment.*`, among them the
+  consolidation event `FulfillmentReleaseWithdrawn`) on
+  `retailnetwork.order-sourcing.events`, and six analytics-only events
+  (`AssignmentsConsolidated`, `AssignmentsDeconsolidated`, the policy event
+  `SourcingPolicyPublished` and three of the assignment events) on
+  `retailnetwork.order-sourcing.analytics`. No synchronous call to any other
   context (`sync_calls: []`).
 - **Not here:** the promise itself ([Delivery Promise](/network/contexts/delivery-promise/bounded-context-canvas)),
   the purchase-order protocol and its clock
@@ -51,7 +63,7 @@ assignment for good. When no node can still meet the promise's
 | [Bounded Context Canvas](/network/contexts/order-sourcing/bounded-context-canvas) | Purpose, classification, roles, every inbound and outbound message, decisions, open questions | [bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas) v5 |
 | [Context Map](/network/contexts/order-sourcing/context-map) | Every upstream and downstream neighbour with its pattern and channel | [context-mapping](https://github.com/ddd-crew/context-mapping) |
 | [Aggregate Design Canvas](/network/contexts/order-sourcing/aggregate-design-canvas) | `FulfillmentAssignment`: states, invariants, policies, commands, events, read models | [aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas) v1.1 |
-| [Domain Events](/network/contexts/order-sourcing/domain-events) | The 8 published events with data fields and consumers; the 29 consumed events | — (CloudEvents catalogue) |
+| [Domain Events](/network/contexts/order-sourcing/domain-events) | The 15 published events with data fields and consumers; the 34 consumed events | — (CloudEvents catalogue) |
 | [Domain Message Flow](/network/contexts/order-sourcing/domain-message-flow) | Happy path, refusal and re-promise, cancellation, across contexts | [domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
 | [EventStorming](/network/contexts/order-sourcing/eventstorming) | Process-level boards with hotspots | [eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
 | [Use Cases](/network/contexts/order-sourcing/use-cases) | One section per command: trigger, adapter, flow, errors, events, idempotency | — (application layer) |

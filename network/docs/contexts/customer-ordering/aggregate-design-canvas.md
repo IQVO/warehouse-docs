@@ -31,7 +31,8 @@ the customer-facing status. It holds three value objects:
 | --- | --- | --- |
 | `ShipTo` | `name`, `line1`, `line2`, `city`, `region`, `postalCode`, `countryCode`, `phone` | PII, synthetic. Read outside this context only through `GET /orders/{orderId}/ship-to`. |
 | `OrderLine` | `lineNo`, `catalogItemId`, `quantity` | One per cart line. |
-| `GroupPromise` | `groupNo`, `promiseId`, `deliverByEarliest`, `deliverByLatest`, `lineNos[]` | The order's snapshot of one group's promise. `UpdateGroupPromise` refreshes the window. |
+| `GroupPromise` | `groupNo`, `promiseId`, `tier` (five values, `CONSOLIDATED` included), `deliverByEarliest`, `deliverByLatest`, `lineNos[]`, optional `chosenDeliveryDay` and `consolidationEligible` (`CONSOLIDATED` only) | The order's snapshot of one group's promise. `UpdateGroupPromise` refreshes the window; the chosen day records the shopper's choice and is NOT recomputed by a later revision. |
+| `ConsolidationKey` | empty, or 64 lower-case hex characters | The keyed hash of shopper and ship-to; rows written before it read back empty and never merge. |
 
 The aggregate also has to remember, per group, what `CustomerOrderPlaced`
 publishes (`tier`, `witnessNodeId`, `shipBy`) and what the consumed events
@@ -89,6 +90,7 @@ the [canvas](/network/contexts/customer-ordering/bounded-context-canvas):
 | The promise's destination postal prefix matches the ship-to | `PlaceOrder` → `ErrPromiseDestinationMismatch` |
 | Cancel only while no group is locked | `CancelOrder` → `ErrCancelAfterLock` |
 | Status moves forward only | `MarkInFulfillment`, `MarkGroupShipped`, `MarkGroupDelivered`, `CancelOrder` → `ErrStatusRegression` |
+| `chosenDeliveryDay` and `consolidationEligible` only on a `CONSOLIDATED` group, the day a valid calendar date; `consolidationKey` empty or 64 lower-case hex | `PlaceOrder` → `ErrValidation` (on restore, `ErrInvalidSnapshot`) |
 
 Derived from: `model.yaml → contexts[customer-ordering].aggregates[CustomerOrder].invariants`.
 
@@ -103,6 +105,9 @@ aggregate exists; see [Use Cases](/network/contexts/customer-ordering/use-cases)
 | Policy | Owner | Rule | Effect on this aggregate |
 | --- | --- | --- | --- |
 | `CheckoutPromising` | this context | For each shipment group call `MakePromise` with the offer the shopper saw; if the offer expired, re-quote and show the new window before placing. | No order is created until every group has a promise; an expired offer returns new offers to the shopper instead. |
+| `ConsolidationKeyDerivation` | this context | `PlaceOrder` derives the key after the address is resolved, with a secret from the environment (at least 16 bytes); with no secret nothing is derived and the order never merges. | The key is stored on the order and published on `CustomerOrderPlaced`; never exposed on REST. |
+| `ConsolidatedChoiceStored` | this context | A `CONSOLIDATED` offer id at checkout becomes a group that keeps the tier, the chosen local day and `consolidationEligible`. A re-quote asks for the default tiers, so it never offers `CONSOLIDATED` again. | `GroupPromise` fields above; optional fields on `POST /checkout` 201, `GET /orders/{orderId}` and `GET /orders`. |
+| `SharedTrackingNumbers` | this context | A tracking number belongs to a SET of groups; one package event closes every group that shares it (`MarkGroupDelivered`, `MarkGroupLost`, `MarkGroupReturned`). | A group that has not shipped yet is replayed from `FulfillmentShipped`; nothing removes a link. |
 | `CancelOnUnfulfillable` | this context | When a group is unsourceable and no revised promise is feasible, cancel the group and the order if nothing remains. | `CancelOrder` for that group; `CustomerOrderCancelled` with its `groupNos`. The model gives no signal for "no revised promise is feasible" (open question). |
 | `ReleaseExpiredHolds` | `delivery-promise` | A `PROVISIONAL` promise not confirmed before `holdExpiresAt` is `RELEASED`. | Cleans up the promises of a checkout that failed after some `MakePromise` calls succeeded. This context sends nothing. |
 | `ConfirmPromise` on `CustomerOrderPlaced` | `delivery-promise` | The provisional promise of each group becomes `CONFIRMED`. | None; the order is already `PLACED`. |
