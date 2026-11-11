@@ -19,12 +19,13 @@ database), and publishes Kafka events. `warehouse-ops-agent` is the exception: a
 read-side agent with no database and no Kafka, which serves its own MCP tools
 in-process. This site documents all nineteen domain contexts and the agent,
 each with its synced artifact pack and, where it has specs, generated API
-references. Nineteen of the twenty have an entry in the application registry of
+references. All twenty have an entry in the application registry of
 `warehouse-infra` `develop` (`terraform/apps.yaml`), `returns-processing` and
 `exception-management` since 2026-10-22. The twentieth, `outbound-shipping`
-(built on `develop` in November 2026, with no Helm chart), has none yet. That is
-the wiring in `warehouse-infra` `develop`; whether a given cluster has
-applied it is not something this site records.
+(released as `v0.1.0` on 2026-11-11, Helm chart merged), was registered and
+image-pinned there by PR 205 and is **not applied**: it has no pod in the k3s
+cluster. That is the wiring in `warehouse-infra` `develop`; whether a given
+cluster has applied a context is not something most pages here record.
 
 No single repository's docs site can show the **strategic** picture: the
 context map, the core-domain classification, the shared ubiquitous language,
@@ -62,7 +63,7 @@ organization.
 | [`outbound-shipping`](/contexts/outbound-shipping) | Supporting | `wms` |
 
 The newest context on this site is `outbound-shipping` (`wms`, Supporting;
-built on `develop`, not deployed): trailer load planning, staging, loading, the
+released `v0.1.0`, registered in `warehouse-infra`, not applied): trailer load planning, staging, loading, the
 bill of lading and the ship-confirm on the trailer's physical departure, which
 hands `order-management` the `ShipmentConfirmed` and `PackageMissedLoad` facts.
 Before it came `returns-processing` and

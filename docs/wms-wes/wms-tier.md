@@ -18,8 +18,8 @@ card here yet; see the [qualification](/wms-wes/qualification). Neither has
 the seventh, `returns-processing` (built on `develop` 2026-10-20/21 and wired in
 `warehouse-infra` `develop` since 2026-10-22 — the reverse flow of goods: RMA, return receipt, grading and
 disposition, handing restockable units to `inventory-storage` as staged
-lines). Nor has the eighth, `outbound-shipping` (built on `develop`, not
-deployed: trailer load planning, staging, loading, the bill of lading and the
+lines). Nor has the eighth, `outbound-shipping` (released `v0.1.0`, registered in
+`warehouse-infra` and not applied: trailer load planning, staging, loading, the bill of lading and the
 ship-confirm on the trailer's physical departure).
 
 ## Coverage of the WMS functions

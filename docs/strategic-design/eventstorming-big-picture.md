@@ -20,8 +20,8 @@ Every orange sticky is a real domain event: it appears in a synced
 `apis/<context>/asyncapi.yaml` or on that context's Domain Events page.
 Every hotspot is a gap that is already documented somewhere, and the
 [hotspot table](#hotspots-and-their-sources) cites the source for each one.
-Nothing on this page is a guess. `outbound-shipping` (built on `develop`, not
-deployed) is drawn in the [timeline overview](#timeline-overview) and in
+Nothing on this page is a guess. `outbound-shipping` (released `v0.1.0`, registered in
+`warehouse-infra`, not applied) is drawn in the [timeline overview](#timeline-overview) and in
 [Phase 4](#phase-4-ship-close-and-the-exception-loop), from its synced
 `asyncapi.yaml`. Four other recent contexts,
 `inbound-receiving` (before the first stow), `slotting-optimization`
@@ -211,7 +211,7 @@ and an operator closes the loop by hand (hotspot H26). `outbound-shipping`
 is the context that would close it: it plans a load from `PackageManifested`
 (dotted, because the producer omits `site_id` today and a manifest without it
 plans nothing, H45) and raises `ShipmentConfirmed` on the trailer's physical
-departure, but it is built, not deployed (H43), and
+departure, but it is registered in infra and not applied (H43), and
 `network-fulfillment` has no handler for the event (H44).
 
 Sources: event names from every `apis/*/asyncapi.yaml`. Causal order from
@@ -822,8 +822,8 @@ Sources: [fulfillment-execution scenarios 1 and 2](/contexts/fulfillment-executi
 
 A manifested package, or a missed CPT, re-promises the order line. The
 network order is closed by an explicit shipment confirmation. Overdue
-acknowledgements are reported and then refused. `outbound-shipping`, built on
-`develop` and not deployed, owns what is loaded on which trailer: it raises
+acknowledgements are reported and then refused. `outbound-shipping`, released
+(`v0.1.0`), registered in infra and not applied, owns what is loaded on which trailer: it raises
 `ShipmentConfirmed` only on the physical departure the yard reports, and flags
 every package a departing trailer left behind as `PackageMissedLoad`.
 
@@ -906,7 +906,7 @@ flowchart LR
     Y2 --> P3 --> E13
     E8 --> R2
 
-    H43["H43 built, not deployed: no Helm chart, no infra entry"]:::hotspot
+    H43["H43 registered in infra, not applied: no pod"]:::hotspot
     H44["H44 network-fulfillment and yard-management have no handler for its events"]:::hotspot
     H45["H45 a manifest without site_id plans no load"]:::hotspot
     E12 -.- H43
@@ -987,7 +987,7 @@ this site, and the corroborating context page is linked instead.
 | ~~H41~~ | task-interleaving | ~~Not deployed: `warehouse-infra` `develop` has no database, Kong route, ArgoCD application, values file or dashboard for it.~~ **Resolved 2026-10-20/21.** The ArgoCD application is Synced and Healthy with five pods (API, MCP, analytics projector and reports, frontend); its inputs K41, K45 and K46 are consumed by a running instance. Still open: its `cmd/api` emits no metrics or traces. | [task-interleaving Business Context](/contexts/task-interleaving/business-context), [Runbook](/contexts/task-interleaving/runbook) (deployment status) |
 | ~~H42~~ | task-interleaving | ~~The hint has no reader: `fulfillment-execution` has no consumer of `InterleavingHintIssued`, no hint table and no `claimNext` tie-break (K47)~~ **Resolved 2026-10-18 on `develop`, deployed 2026-10-20/21.** `fulfillment-execution` ADR 0051 (`fulfillment-execution#224`) stores one active hint per station and uses it as a tie-break inside one `claimNext` priority band. | [task-interleaving context map](/contexts/task-interleaving/context-map), [Async API](/contexts/task-interleaving/async-api) |
 | ~~H35~~ | product-master | ~~Stage E (remove the legacy importer, the inventory-storage backfill and the deprecated classification endpoint) has no date~~ **Resolved 2026-10-17**: stage E removed the legacy importer, the `inventory-storage` backfill and the legacy `ProductClassified` type (product-master ADR 0003 index: "importer removed at stage E (2026-10-17)"). | [product-master EventStorming](/contexts/product-master/eventstorming) (ADR 0003, stage E) |
-| H43 | outbound-shipping | Built on `develop`, not deployed: no Helm chart in its repository and no `terraform/apps.yaml` entry or `helm-values` file in `warehouse-infra` `develop`, so no load is planned or confirmed in the reference cluster | [outbound-shipping Async API](/contexts/outbound-shipping/async-api), [Context Map](/strategic-design/context-map) K67 to K75 |
+| H43 | outbound-shipping | Released as `v0.1.0` (2026-11-11), chart merged, registered and image-pinned in `warehouse-infra` `develop` (PR 205: `terraform/apps.yaml` entry, `helm-values/outbound-shipping.yaml` with one API replica, MCP off and no relay deployment, dashboards, alert rules, image `857edfd-arm64`), **not applied**: no outbound-shipping pod exists in the reference cluster (read-only `kubectl`, 2026-11-11), so no load is planned or confirmed and every edge of it is not live | [outbound-shipping Async API](/contexts/outbound-shipping/async-api), [Context Map](/strategic-design/context-map) K67 to K75 |
 | H44 | outbound-shipping | The two consumers its ADRs name for `ShipmentConfirmed` (network-fulfillment, ADR 0004) and for `LoadingStarted`, `LoadClosed`, `LoadReopened` (yard-management, ADR 0005) have no handler on their `develop`; the asyncapi marks the three yard-bound types `pending` | [outbound-shipping Async API](/contexts/outbound-shipping/async-api), [Context Map](/strategic-design/context-map) K74 and K75 |
 | H45 | fulfillment-execution | `PackageManifested` omits `site_id` today (no source in the order-work chain yet), and outbound-shipping ignores a manifest without it, so no load is planned from a manifest even when both ends run | [outbound-shipping Business Context](/contexts/outbound-shipping/business-context), outbound-shipping ADR 0003, [Context Map](/strategic-design/context-map) K67 |
 

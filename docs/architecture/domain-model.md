@@ -36,7 +36,7 @@ in the outbound Postgres adapter.
 
 53 aggregate roots across nineteen contexts. The twentieth, `warehouse-ops-agent`,
 owns none, and that is a design decision. The three newest contexts are built and
-counted: `outbound-shipping` (decided 2026-11-05, built on `develop`, not deployed) has three aggregates
+counted: `outbound-shipping` (decided 2026-11-05, built on `develop`, released `v0.1.0`, registered in `warehouse-infra`, not applied) has three aggregates
 (`OutboundLoad`, `ShippingPackage`, `BillOfLading`), `returns-processing` (decided 2026-10-20) has three aggregates
 (`ReturnAuthorization`, `ReturnReceipt`, `Disposition`; its versioned
 `DispositionPolicy` is data without behaviour, not an aggregate) and

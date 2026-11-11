@@ -13,8 +13,8 @@ to seventeen of the twenty contexts on this site. Every verdict is backed by cod
 `develop` (routes, events, domain packages), except for
 `pick-face-replenishment` and `task-interleaving`, whose rows are marked
 **not yet qualified**: no verdict has been derived for them yet. The
-newest context, `outbound-shipping` (`wms`, Supporting; built on `develop`,
-not deployed), has no row at all yet, like `returns-processing` and
+newest context, `outbound-shipping` (`wms`, Supporting; released `v0.1.0`, registered in
+`warehouse-infra`, not applied), has no row at all yet, like `returns-processing` and
 `exception-management`. The detailed evidence for each
 context is in its card on [WMS tier](/wms-wes/wms-tier) or
 [WES tier](/wms-wes/wes-tier).
@@ -26,8 +26,8 @@ Two labels appear side by side throughout this section. Do not confuse them:
   `wms` is facility-layout, inventory-storage, product-master,
   inbound-receiving, slotting-optimization,
   pick-face-replenishment (built and deployed), returns-processing
-  (registered in `warehouse-infra`) and outbound-shipping (built, not
-  deployed); `wes` is every other context,
+  (registered in `warehouse-infra`) and outbound-shipping (released
+  `v0.1.0`, registered in `warehouse-infra`, not applied); `wes` is every other context,
   `task-interleaving` (built and deployed) among them. The
   [Event Standard](/strategic-design/event-standard-cloudevents#what-the-subdomain-segment-means)
   defines it as a fixed contract label, not an industry category: `wms` is the

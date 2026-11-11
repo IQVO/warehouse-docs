@@ -23,7 +23,8 @@ Domain Chart, all in the Supporting quadrant. Two rows,
 2026-10-20/21), are built on `develop` and their canvases are written for
 this site from their ADR 0001s (their repositories ship no ddd-crew pack
 yet, so there is no chart page to link). The newest row, `outbound-shipping`
-(`wms`, ADR 0001 of 2026-11-05), is built on `develop` and not deployed; it
+(`wms`, ADR 0001 of 2026-11-05), is released as `v0.1.0`, registered in
+`warehouse-infra` `develop` and not applied (no pod); it
 ships its own synced canvas and Core Domain Chart, in the Supporting quadrant.
 
 The **CloudEvents subdomain** column is the `<subdomain>` segment of every
@@ -67,8 +68,8 @@ server, an outbox publisher and Kafka consumers; service PR #2 plus packaging PR
 and have been registered in `warehouse-infra` `develop` since 2026-10-22; all four are in the count above, the last
 two with pages written for this site until their repositories ship a ddd-crew pack.
 `outbound-shipping` is built on `develop` (REST API, read-only MCP server, outbox
-relay and six Kafka consumers) but not deployed: it has no Helm chart and no
-`warehouse-infra` entry. It is in the count above.
+relay and six Kafka consumers), released as `v0.1.0` with its Helm chart merged and registered and
+image-pinned in `warehouse-infra` `develop` (PR 205), but not applied (no pod). It is in the count above.
 
 ## The "extract once, don't duplicate" pattern
 
