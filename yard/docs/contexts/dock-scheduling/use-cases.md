@@ -12,7 +12,7 @@ Built on develop (merged 2026-11-08) in [IQVO/dock-scheduling](https://github.co
 :::
 
 One section per command in `contexts[dock-scheduling].aggregates[*].commands`
-(13 commands: nine on `DockAppointment`, four on `DockCalendar`). Package
+(12 commands: eight on `DockAppointment`, four on `DockCalendar`; `ImportLegacyAppointment`, the thirteenth, was removed in dock-scheduling ADR 0011). Package
 (as built): `internal/application/usecases`. The runtime sequence of each is on
 [Sequence Diagrams](/yard/contexts/dock-scheduling/sequence-diagrams). Reads
 (`GET /appointments`, `GET /appointments/{appointmentId}`,
@@ -248,25 +248,6 @@ the separate `reports` binary from the analytics database.
 - **Events emitted:** `DockAppointmentNoShow`, one per appointment.
 - **Idempotency:** `Idempotency-Key`; a rerun marks only what still
   qualifies, so it is idempotent by construction.
-
-## ImportLegacyAppointment
-
-- **Actor / trigger:** policy `LegacyImport` (strangler stage A) on
-  `inbound-receiving` `DockAppointmentBooked`, `CheckedIn`, `Cancelled` and `Completed` events; off
-  when `DOCK_LEGACY_IMPORT_CONSUMER_GROUP` is unset; removed at stage E.
-- **Inbound adapter:** Kafka consumer of `warehouse.inbound-receiving.events`.
-- **Preconditions:** the appointment has not been imported yet.
-- **Main flow:**
-  1. Inbox check on the CloudEvents `id`.
-  2. If this legacy appointment was imported, stop (import once).
-  3. Create the appointment with provenance `legacy-import` and direction
-     `INBOUND`; the door gives the `site_id`.
-  4. Save and write `DockAppointmentBooked` with the provenance, one transaction.
-- **Errors:** none returned. An import enforces none of window-in-past, hours, closures, overlap or
-  known ASN (decision D-2); an unknown door skips the event and counts it (`unknown_door`).
-  The importer must be enabled after the facility consumer has caught up.
-- **Events emitted:** `DockAppointmentBooked`.
-- **Idempotency:** inbox, and one import per legacy appointment.
 
 ## DeclareOperatingHours
 

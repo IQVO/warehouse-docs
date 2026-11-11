@@ -105,7 +105,7 @@ constraint** `ex_dock_appointments_door_window` on `(door_code, tstzrange(window
 for `BOOKED` and `CHECKED_IN` rows that are native and not `door_override` (a losing writer
 fails with `23P01`, mapped to `ErrDoorDoubleBooked`; the domain service under the per-door advisory
 lock decides first), and the primary key of `asn_claims` (one row per ASN of every active native
-appointment, `ErrAsnAlreadyScheduled`). Legacy imports and `ActualDoorWins` rows are deliberately exempt.
+appointment, `ErrAsnAlreadyScheduled`). Legacy imports (none can be created since dock-scheduling ADR 0011; the `provenance` check constraint still admits the value) and `ActualDoorWins` rows are deliberately exempt.
 The earlier version of this page said there is no exclusion constraint on `dock_appointments`; as built there is,
 with those exemptions. Comparison operators are written `lt` / `gt` / `ge` inside the diagrams, `..`
 abbreviates the full state list, and an array column is written `TEXT_ARRAY`. `site_id` is the `siteCode`

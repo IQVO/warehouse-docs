@@ -168,8 +168,8 @@ Derived from: `model.yaml → contexts[dock-scheduling].aggregates[DockCalendar]
 
 Omitted: `DoorOperatingHoursDeclared` (analytics only) and
 `DeclareOperatingHours`, which is refused with `ErrHoursConflictWithAppointments` when it would
-leave an active appointment outside the hours (decision D-8); the strangler import and the phase-2 pickup appointments
-(`LegacyImport`, `PickupFromCutoffs`), which are described on
+leave an active appointment outside the hours (decision D-8); the phase-2 pickup policy
+(`PickupFromCutoffs`), which is described on
 [Domain Events](/yard/contexts/dock-scheduling/domain-events). The refusal that
 lists the appointment ids is the model's only help for a planner closing a
 door; `ListAppointments` takes filters (for example `atRisk`), which are in the OpenAPI contract.

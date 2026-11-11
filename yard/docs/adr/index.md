@@ -7,7 +7,7 @@ description: "Design decisions of the yard domain (YD-0001 to YD-0005, mirrored 
 
 # ADRs
 
-The design decisions of the yard domain (YD), then the implementation ADRs of the two built services. Each service ADR lives in its own repo; the tables below (dock-scheduling 10, yard-management 11) copy the Status from the ADR body (first sentence) and link the file on `develop`. ADR bodies are immutable; read them in their repo.
+The design decisions of the yard domain (YD), then the implementation ADRs of the two built services. Each service ADR lives in its own repo; the tables below (dock-scheduling 11, yard-management 11) copy the Status from the ADR body (first sentence) and link the file on `develop`. ADR bodies are immutable; read them in their repo.
 
 ## Yard design decisions (YD)
 
@@ -24,15 +24,16 @@ The design decisions of the yard domain (YD), then the implementation ADRs of th
 | ADR | Title | Status |
 | --- | --- | --- |
 | [0001](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0001-dock-scheduling-bounded-context.md) | Dock Scheduling is a bounded context of the yard domain | Accepted (bootstrap). |
-| [0002](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0002-aggregates-invariants-and-assumptions.md) | Aggregates, invariants, error names and assumptions | Accepted. |
-| [0003](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0003-consumed-contracts-and-local-copies.md) | Consumed contracts and local copies | Accepted. |
+| [0002](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0002-aggregates-invariants-and-assumptions.md) | Aggregates, invariants, error names and assumptions | Accepted; amended in part by 0011 (the legacy importer). |
+| [0003](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0003-consumed-contracts-and-local-copies.md) | Consumed contracts and local copies | Accepted; amended in part by 0011 (the legacy importer's consumed row and group). |
 | [0004](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0004-cloudevents-catalogue.md) | CloudEvents catalogue | Accepted. |
 | [0005](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0005-postgres-persistence-and-outbox.md) | Postgres persistence and the transactional outbox | Accepted. |
 | [0006](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0006-analytics-read-side.md) | Analytics read side: an analytics stream, a projector and a schedule-adherence report over a separate analytical database | Accepted (2026-11-06). |
 | [0007](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0007-mcp-server.md) | MCP server | Accepted. |
 | [0008](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0008-rest-adapter-and-api-composition-root.md) | REST adapter and the API composition root | Accepted. |
-| [0009](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0009-kafka-consumers.md) | Kafka consumers | Accepted. |
+| [0009](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0009-kafka-consumers.md) | Kafka consumers | Accepted; amended in part by 0011 (the legacy import consumer). |
 | [0010](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0010-door-reassigned-is-an-integration-event.md) | DockAppointmentDoorReassigned is an integration event | Accepted (2026-11-09). |
+| [0011](https://github.com/IQVO/dock-scheduling/blob/develop/docs/adr/0011-legacy-importer-removed.md) | The legacy appointment importer is removed (ADR 0019 stage E, dock-scheduling side) | Accepted (2026-11-10). |
 
 ## yard-management
 

@@ -2,7 +2,7 @@
 id: eventstorming
 title: EventStorming
 sidebar_label: EventStorming
-description: "Process-level EventStorming boards for Dock Scheduling (booking, yard facts, ETA risk and no-show, ASN cancellation, door calendar, strangler and pickups), with hotspots taken from the model's genuine gaps."
+description: "Process-level EventStorming boards for Dock Scheduling (booking, yard facts, ETA risk and no-show, ASN cancellation, door calendar and pickups), with hotspots taken from the model's genuine gaps."
 ---
 
 # EventStorming
@@ -253,7 +253,7 @@ Omitted: `ErrInvalidOperatingHours`, `ErrOverlappingClosure` and
 `ErrClosureConflictsWithAppointments` refusals. `DeclareCalendarSettings`
 raises no event; `DoorOperatingHoursDeclared` is `analytics only`.
 
-## 7. Strangler import and phase-2 pickups
+## 7. Phase-2 pickups
 
 ```mermaid
 flowchart TB
@@ -264,34 +264,25 @@ flowchart TB
     classDef rm fill:#b2f2bb,stroke:#2f9e44,color:#000
     classDef ext fill:#fcc2d7,stroke:#c2255c,color:#000
     classDef hot fill:#ff8787,stroke:#c92a2a,color:#000
-    IR["inbound-receiving"]:::ext
     PP["process-path-<br/>management"]:::ext
-    E0["DockAppointment-<br/>Booked<br/>CheckedIn, Cancelled,<br/>Completed<br/>legacy, stage A to D"]:::evt
     E1["CPTScheduleChanged"]:::evt
-    P1["LegacyImport"]:::pol
     P2["PickupFromCutoffs<br/>phase 2"]:::pol
     RM["CutoffView"]:::rm
-    C1["ImportLegacy-<br/>Appointment"]:::cmd
     A1["DockAppointment"]:::agg
-    E2["DockAppointmentBooked"]:::evt
-    H11["H11 which rules does<br/>the import enforce?"]:::hot
     H12["H12 PickupDoorRule and<br/>pickup_lead are undefined"]:::hot
-    IR --> E0 --> P1 --> C1 --> A1
-    A1 --> E2
     PP --> E1 --> RM
     E1 --> P2
     P2 -.-> A1
-    P1 --- H11
     P2 --- H12
 ```
 
-Derived from: `model.yaml → contexts[dock-scheduling].policies[LegacyImport, PickupFromCutoffs]`,
-`.consumes`, `.read_models[CutoffView]`, `fleet_changes`.
+Derived from: `model.yaml → contexts[dock-scheduling].policies[PickupFromCutoffs]`,
+`.consumes`, `.read_models[CutoffView]`.
 
 Omitted: the dotted arrow from `PickupFromCutoffs` is the policy keeping one
 `OUTBOUND` appointment per cutoff and operating day; the model names no
 command for it, and as built it does not exist: the schedule is stored and no appointment is
-created from it. `DockAppointmentBooked` is raised after an import.
+created from it. The strangler import that this board once showed (policy `LegacyImport`, hotspot H11) was removed in dock-scheduling ADR 0011.
 
 ## Hotspots
 
@@ -307,5 +298,5 @@ created from it. `DockAppointmentBooked` is raised after an import.
 | H8 | `TURNED_AWAY` has no producer, and `VisitRejected` is not consumed here. | `reasons[CancellationReason]`, `consumes`, `contexts[yard-management].publishes[VisitRejected]` | `DS-G02` | Settled (X2): `VisitRejected` is consumed (policy `CancelOnVisitRejected`), `TURNED_AWAY` is its cancellation reason. |
 | H9 | A closure is refused if it covers an active appointment; a change of operating hours and a decommissioned door are not. | `aggregates[DockCalendar].invariants`, `consumes[facility-layout]` | `DS-G12`, `DS-G13` | Settled: new hours that strand an appointment are refused (D-8); a decommissioned door blocks new bookings only (D-7). |
 | H10 | `DeclareCalendarSettings` raises no event, and no default is given for the arrival tolerance or the no-show grace. | `aggregates[DockCalendar]`, `publishes` | `DS-G07`, `DS-G01` | Settled (D-1): defaults 240, 15, 15 and 60 minutes, created lazily; the tolerance travels on the booking events. |
-| H11 | `ImportLegacyAppointment` lists no invariants, and the effect of the legacy check-in, cancel and complete events is not stated. | `policies[LegacyImport]`, `consumes[inbound-receiving]` | `DS-G08` | Settled (D-2): no invariant is enforced; later legacy events move only `legacy-import` appointments. |
+| H11 | `ImportLegacyAppointment` lists no invariants, and the effect of the legacy check-in, cancel and complete events is not stated. | `policies[LegacyImport]`, `consumes[inbound-receiving]` | `DS-G08` | Settled (D-2): no invariant is enforced; later legacy events move only `legacy-import` appointments. Moot since dock-scheduling ADR 0011: the importer was removed. |
 | H12 | `PickupFromCutoffs` names `PickupDoorRule` and `pickup_lead`, defined nowhere, and creates an appointment with no carrier. | `policies[PickupFromCutoffs]`, `aggregates[DockAppointment].invariants` | `DS-G04` | Open by decision (D-3): phase 2. The schedule is consumed and stored; no appointment is created. |
