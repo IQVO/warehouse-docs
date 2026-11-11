@@ -89,15 +89,18 @@ flowchart LR
         out1["outbound-shipping"]:::ctx
         out2["exception-management"]:::ctx
         out3["analytics topic only<br/>no named consumer"]:::none
+        out4["inbound-receiving"]:::ctx
     end
     BC ==>|"evt - Kafka<br/>VisitCheckedIn, VisitRejected,<br/>TrailerDocked, TrailerUndocked"| out0
     BC ==>|"evt - Kafka<br/>TrailerDocked, DoorWorkCompleted,<br/>TrailerDeparted"| out1
     BC ==>|"evt - Kafka<br/>VisitRejected,<br/>SealExceptionRaised,<br/>TrailerDwellExceeded,<br/>YardCheckClosed"| out2
     BC ==>|"evt - Kafka analytics<br/>VisitCheckedOut,<br/>TrailerParked, DoorWorkStarted,<br/>TrailerHeld, TrailerHoldReleased,<br/>YardMove x5"| out3
+    BC ==>|"evt - Kafka<br/>VisitCheckedIn"| out4
     linkStyle 0 stroke:#e8590c,stroke-width:2.5px
     linkStyle 1 stroke:#e8590c,stroke-width:2.5px
     linkStyle 2 stroke:#e8590c,stroke-width:2.5px
     linkStyle 3 stroke:#e8590c,stroke-width:2.5px
+    linkStyle 4 stroke:#e8590c,stroke-width:2.5px
 ```
 
 Derived from: `model.yaml → contexts[yard-management].inbound`, `.rest`,
@@ -189,7 +192,7 @@ AsyncAPI: `apis/` for `facility-layout` and `inbound-receiving`, `yard/apis/dock
 
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
-| `dock-scheduling` | `VisitCheckedIn` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.yardvisit.VisitCheckedIn` | Customer/Supplier (`dock-scheduling` is the Customer) |
+| `dock-scheduling`, `inbound-receiving` | `VisitCheckedIn` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.yardvisit.VisitCheckedIn` | Customer/Supplier (`dock-scheduling` is the Customer; `inbound-receiving` is a Customer, this pack's reading) |
 | `dock-scheduling`, `outbound-shipping` | `TrailerDocked` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.trailer.TrailerDocked` | Customer/Supplier |
 | `dock-scheduling` | `TrailerUndocked` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.trailer.TrailerUndocked` | Customer/Supplier |
 | `dock-scheduling`, `exception-management` | `VisitRejected` | Event | Kafka `warehouse.yard-management.events`, `com.warehouse.wms.yard-management.yardvisit.VisitRejected` | Customer/Supplier |
@@ -202,10 +205,10 @@ AsyncAPI: `apis/` for `facility-layout` and `inbound-receiving`, `yard/apis/dock
 | analytics only | `YardMoveRequested`, `YardMoveClaimed`, `YardMoveLeaseExpired`, `YardMoveCompleted`, `YardMoveCancelled` | Event | Kafka `warehouse.yard-management.analytics`, `com.warehouse.wms.yard-management.yardmove.<Event>` | PL, no named consumer |
 | — | (no synchronous calls) | — | `sync_calls: []` | — |
 
-The relationship for `exception-management` and `outbound-shipping` is this
+The relationship for `exception-management`, `outbound-shipping` and `inbound-receiving` is this
 pack's reading: the model lists them as consumers of the events and as
-`fleet_changes`, and the strategic context map marks both edges Customer/Supplier. Both
-consumers are merged on `develop`. `inbound-receiving` is not a consumer of `TrailerDocked`: the optional
+`fleet_changes`, and the strategic context map marks the edges Customer/Supplier. All
+consumers are merged on `develop`. `inbound-receiving` consumes `VisitCheckedIn` only (its ADR 0021, commit `484490f`); it is not a consumer of `TrailerDocked`: the optional
 consumer in the model was not built. Neither context's own `inbound` rows are in this model.
 
 Full message details: [Domain Events](/yard/contexts/yard-management/domain-events).

@@ -51,7 +51,7 @@ Topic `warehouse.yard-management.events` (each message also goes, as a twin, to 
 
 | Event | Full `type` | `data` fields | Producing command / use case | Consumers |
 | --- | --- | --- | --- | --- |
-| `VisitCheckedIn` | `com.warehouse.wms.yard-management.yardvisit.VisitCheckedIn` | `visit_id`, `site_id`, `carrier`, `carrier_scac`, `purpose`, `appointment_id`, `trailers`, `arrived_at`, `version` | `CheckInVisit` | `dock-scheduling` |
+| `VisitCheckedIn` | `com.warehouse.wms.yard-management.yardvisit.VisitCheckedIn` | `visit_id`, `site_id`, `carrier`, `carrier_scac`, `purpose`, `appointment_id`, `trailers`, `arrived_at`, `version` | `CheckInVisit` | `dock-scheduling`, `inbound-receiving` |
 | `VisitRejected` | `com.warehouse.wms.yard-management.yardvisit.VisitRejected` | `visit_id`, `site_id`, `carrier_scac`, `appointment_id`, `reason`, `rejected_at` | `RejectAtGate` (also the `REJECT` outcome of `SealCheckAtGate`) | `dock-scheduling`, `exception-management` |
 
 `reason` is a `RejectionReason`: `APPOINTMENT_REQUIRED`, `UNKNOWN_APPOINTMENT`,
@@ -224,6 +224,7 @@ The gaps this page used to list are closed by the service's decisions (see the
 - `StartMoving` and `ArriveAt` run inside the move's use cases and raise `TrailerParked`, `TrailerDocked` and
   `TrailerUndocked`; a live visit that leaves from the door raises `TrailerUndocked` then `TrailerDeparted` (decision
   Y-6, `YM-G8`).
+- `VisitCheckedIn` is also consumed by `inbound-receiving` (its ADR 0021): it stores the earliest `arrived_at` per `appointment_id` in a `visit_arrivals` local copy for the dock-to-stock KPI and ignores a visit without an `appointment_id`.
 - `VisitRejected` is consumed by `dock-scheduling`, which cancels the appointment with `TURNED_AWAY` (decision X2,
   `YM-G17`), and by `exception-management`.
 - The AsyncAPI description of `TrailerDocked` says `inbound-receiving` consumes it; on `develop` it does not (the optional

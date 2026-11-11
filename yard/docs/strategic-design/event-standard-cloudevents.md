@@ -50,7 +50,7 @@ Events marked `analytics only` go ONLY to warehouse.\<context>.analytics; integr
 
 | Event | CloudEvents type | Stream | Data | Consumers |
 | --- | --- | --- | --- | --- |
-| `VisitCheckedIn` | `com.warehouse.wms.yard-management.yardvisit.VisitCheckedIn` | integration + analytics | `visit_id`, `site_id`, `carrier`, `carrier_scac`, `purpose`, `appointment_id`, `trailers`, `arrived_at`, `version` | dock-scheduling |
+| `VisitCheckedIn` | `com.warehouse.wms.yard-management.yardvisit.VisitCheckedIn` | integration + analytics | `visit_id`, `site_id`, `carrier`, `carrier_scac`, `purpose`, `appointment_id`, `trailers`, `arrived_at`, `version` | dock-scheduling, inbound-receiving |
 | `VisitRejected` | `com.warehouse.wms.yard-management.yardvisit.VisitRejected` | integration + analytics | `visit_id`, `site_id`, `carrier_scac`, `appointment_id`, `reason`, `rejected_at` | dock-scheduling, exception-management |
 | `VisitCheckedOut` | `com.warehouse.wms.yard-management.yardvisit.VisitCheckedOut` | analytics only | `visit_id`, `site_id`, `trailers_out`, `departed_at`, `on_site_minutes`, `version` | analytics only |
 | `TrailerDocked` | `com.warehouse.wms.yard-management.trailer.TrailerDocked` | integration + analytics | `trailer_id`, `site_id`, `door_code`, `appointment_id`, `asn_numbers`, `visit_id`, `docked_at`, `version` | dock-scheduling, outbound-shipping |
