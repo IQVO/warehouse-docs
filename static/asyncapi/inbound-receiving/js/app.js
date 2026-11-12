@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **inbound-receiving** bounded context (WMS subdomain):\nthe inbound dock workflow of ASNs, dock appointments and receipts\n(ADR 0001, ADR 0002).\n\n**Published.** The `Asn` and `Receipt` aggregates raise eight events,\npublished to `warehouse.inbound-receiving.events` through a\n**transactional outbox**: the aggregate row and its already-encoded events\nare written in ONE database transaction and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is stored with the outbox row, so a\nretry republishes the same `id`). Consumers dedupe on `id`.\nThe four `dockappointment` types (Booked, CheckedIn, Cancelled, Completed)\nare **RETIRED**: the DockAppointment moved to dock-scheduling (ADR 0019,\nplan YD-0002), the backfill command that republished them is gone and\nthis service raises none (ADR 0022), so they are no longer declared. Read\ndock-scheduling's events instead.\n`ReceiptLineReceived` is the **handover event**: inventory-storage consumes\nit and books `condition=Good` quantities into stock (ADR 0003); Damaged\nquantities are recorded here and not booked.\n\n**Consumed (ADR 0003).** `ProductRegistered` from\n`warehouse.product-master.events` feeds the `known_skus` local copy\n(group from env `PRODUCT_CONSUMER_GROUP`); `ProductPackLevelDeclared` and\n`ProductPackLevelRetired` from the same topic feed the packaging view\n(group from env `PACKAGING_CONSUMER_GROUP`).\n`LocationSlotRegistered` and `LocationSlotDecommissioned` from\n`warehouse.facility.events` feed the `dock_doors` local copy\n(group from env `DOCK_DOOR_CONSUMER_GROUP`). The three consumers always\nrun: `PRODUCT_MODE` / `DOCK_DOOR_MODE` accept only `kafka` (or unset) and\n`permissive` / `off` are boot errors, as is an unset group variable.\n`DockAppointmentBooked` and `DockAppointmentCancelled` from\n`warehouse.dock-scheduling.events` feed the `appointments` local copy\n(group from env `DOCK_APPOINTMENT_CONSUMER_GROUP`, ADR 0019), and\n`DockAppointmentRescheduled` / `DockAppointmentDoorReassigned` keep its\ndoor and window current (ADR 0020): inbound appointments only, guarded by\ndock-scheduling's `version`; applying them publishes nothing. Receipts\nvalidate their appointment against that copy and take its door when they\nopen; an open receipt keeps its door.\n\n**Analytics (ADR 0006).** The eight events are ALSO written, in the\nsame transaction, to `warehouse.inbound-receiving.analytics` with the same\n`type` and the same `id` per occurrence, `dataschema`\n`urn:warehouse:inbound-receiving:analytics:<EventName>:v1` and payloads\nequal to the integration payloads. Only this service's `inbound-projector`\nconsumes it; it is not an integration contract. The retired\n`dockappointment` events already on that stream stay projected (ADR 0022).\n\n**Planned.** warehouse-planning reads appointments from dock-scheduling\n(companion of plan YD-0002).\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0009); consumers may extract them, and must not require\nthem.\n`specversion`, `id`, `source` (`/warehouse/inbound-receiving`), `type`,\n`subject` (the aggregate instance id), `time`, `datacontenttype`\n(`application/json`) and `dataschema`\n(`urn:warehouse:inbound-receiving:events:<EventName>:v1`) are all required.\n`type` = `com.warehouse.wms.inbound-receiving.<entity>.<EventName>` with\n`<entity>` one of `asn`, `receipt`. Kafka key:\n`asn_number` for `asn.*` and `receipt.*`. `data` is snake_case, optional fields are omitted when\nunset, timestamps are RFC 3339 UTC. A breaking payload change is a new\n`.v2` type, never a mutation.\n"
+    "description": "Event catalog for the **inbound-receiving** bounded context (WMS subdomain):\nthe inbound dock workflow of ASNs, dock appointments and receipts\n(ADR 0001, ADR 0002).\n\n**Published.** The `Asn` and `Receipt` aggregates raise eight events,\npublished to `warehouse.inbound-receiving.events` through a\n**transactional outbox**: the aggregate row and its already-encoded events\nare written in ONE database transaction and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is stored with the outbox row, so a\nretry republishes the same `id`). Consumers dedupe on `id`.\nThe four `dockappointment` types (Booked, CheckedIn, Cancelled, Completed)\nare **RETIRED**: the DockAppointment moved to dock-scheduling (ADR 0019,\nplan YD-0002), the backfill command that republished them is gone and\nthis service raises none (ADR 0022), so they are no longer declared. Read\ndock-scheduling's events instead.\n`ReceiptLineReceived` is the **handover event**: inventory-storage consumes\nit and books `condition=Good` quantities into stock (ADR 0003); Damaged\nquantities are recorded here and not booked.\n\n**Consumed (ADR 0003).** `ProductRegistered` from\n`warehouse.product-master.events` feeds the `known_skus` local copy\n(group from env `PRODUCT_CONSUMER_GROUP`); `ProductPackLevelDeclared` and\n`ProductPackLevelRetired` from the same topic feed the packaging view\n(group from env `PACKAGING_CONSUMER_GROUP`).\n`LocationSlotRegistered` and `LocationSlotDecommissioned` from\n`warehouse.facility.events` feed the `dock_doors` local copy\n(group from env `DOCK_DOOR_CONSUMER_GROUP`). The three consumers always\nrun: `PRODUCT_MODE` / `DOCK_DOOR_MODE` accept only `kafka` (or unset) and\n`permissive` / `off` are boot errors, as is an unset group variable.\n`DockAppointmentBooked` and `DockAppointmentCancelled` from\n`warehouse.dock-scheduling.events` feed the `appointments` local copy\n(group from env `DOCK_APPOINTMENT_CONSUMER_GROUP`, ADR 0019), and\n`DockAppointmentRescheduled` / `DockAppointmentDoorReassigned` keep its\ndoor and window current (ADR 0020): inbound appointments only, guarded by\ndock-scheduling's `version`; applying them publishes nothing. Receipts\nvalidate their appointment against that copy and take its door when they\nopen; an open receipt keeps its door.\n\n**Analytics (ADR 0006).** The ten events are ALSO written, in the\nsame transaction, to `warehouse.inbound-receiving.analytics` with the same\n`type` and the same `id` per occurrence, `dataschema`\n`urn:warehouse:inbound-receiving:analytics:<EventName>:v1` and payloads\nequal to the integration payloads. Only this service's `inbound-projector`\nconsumes it; it is not an integration contract. The retired\n`dockappointment` events already on that stream stay projected (ADR 0022).\n\n**Planned.** warehouse-planning reads appointments from dock-scheduling\n(companion of plan YD-0002).\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0009); consumers may extract them, and must not require\nthem.\n`specversion`, `id`, `source` (`/warehouse/inbound-receiving`), `type`,\n`subject` (the aggregate instance id), `time`, `datacontenttype`\n(`application/json`) and `dataschema`\n(`urn:warehouse:inbound-receiving:events:<EventName>:v1`) are all required.\n`type` = `com.warehouse.wms.inbound-receiving.<entity>.<EventName>` with\n`<entity>` one of `asn`, `receipt`. Kafka key:\n`asn_number` for `asn.*` and `receipt.*`. `data` is snake_case, optional fields are omitted when\nunset, timestamps are RFC 3339 UTC. A breaking payload change is a new\n`.v2` type, never a mutation.\n"
   },
   "servers": {
     "production": {
@@ -712,6 +712,61 @@
                             "type": "string",
                             "format": "date-time",
                             "x-parser-schema-id": "<anonymous-schema-79>"
+                          },
+                          "sscc_source": {
+                            "type": "string",
+                            "enum": [
+                              "supplier",
+                              "receiver"
+                            ],
+                            "description": "Who gave the carton its SSCC (ADR 0024). `receiver` is an SSCC assigned by AssignSscc under the receiver's own GS1 company prefix. Additive and optional.",
+                            "x-parser-schema-id": "<anonymous-schema-80>"
+                          },
+                          "best_before": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "AI 15 of the scanned label, as an ISO date; a day 00 is the last day of the month (ADR 0024). Optional.",
+                            "x-parser-schema-id": "<anonymous-schema-81>"
+                          },
+                          "expiry": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "AI 17 of the scanned label (ADR 0024). Optional.",
+                            "x-parser-schema-id": "<anonymous-schema-82>"
+                          },
+                          "production_date": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "AI 11 of the scanned label (ADR 0024). Optional.",
+                            "x-parser-schema-id": "<anonymous-schema-83>"
+                          },
+                          "packaging_date": {
+                            "type": "string",
+                            "format": "date",
+                            "description": "AI 13 of the scanned label (ADR 0024). Optional.",
+                            "x-parser-schema-id": "<anonymous-schema-84>"
+                          },
+                          "serial": {
+                            "type": "string",
+                            "description": "AI 21 of the scanned label (ADR 0024). Optional.",
+                            "x-parser-schema-id": "<anonymous-schema-85>"
+                          },
+                          "purchase_order": {
+                            "type": "string",
+                            "description": "AI 400 of the scanned label (ADR 0024). Optional.",
+                            "x-parser-schema-id": "<anonymous-schema-86>"
+                          },
+                          "ship_to_gln": {
+                            "type": "string",
+                            "pattern": "^[0-9]{13}$",
+                            "description": "AI 410 of the scanned label (ADR 0024). Optional.",
+                            "x-parser-schema-id": "<anonymous-schema-87>"
+                          },
+                          "ship_for_gln": {
+                            "type": "string",
+                            "pattern": "^[0-9]{13}$",
+                            "description": "AI 413 of the scanned label; stored, never enforced (ADR 0024). Optional.",
+                            "x-parser-schema-id": "<anonymous-schema-88>"
                           }
                         },
                         "x-parser-schema-id": "<anonymous-schema-62>"
@@ -782,12 +837,12 @@
                         "properties": {
                           "receipt_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-82>"
+                            "x-parser-schema-id": "<anonymous-schema-91>"
                           },
                           "sscc": {
                             "type": "string",
                             "description": "Omitted when the finding has no SSCC.",
-                            "x-parser-schema-id": "<anonymous-schema-83>"
+                            "x-parser-schema-id": "<anonymous-schema-92>"
                           },
                           "kind": {
                             "type": "string",
@@ -800,30 +855,54 @@
                               "MixedCaseDeclaredAsCasePack",
                               "UnlabelledCarton",
                               "CartonOverLimit",
-                              "MixedCartonContentMismatch"
+                              "MixedCartonContentMismatch",
+                              "LabelNonCompliant",
+                              "WrongDestination"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-84>"
+                            "x-parser-schema-id": "<anonymous-schema-93>"
                           },
                           "expected": {
                             "type": "string",
-                            "description": "A count, a SKU, or `sku:qty` / `grossWeightG:<n>` pairs (CartonOverLimit: the breached limits; MixedCartonContentMismatch: the manifest).",
-                            "x-parser-schema-id": "<anonymous-schema-85>"
+                            "description": "A count, a SKU, or `sku:qty` / `grossWeightG:<n>` pairs (CartonOverLimit: the breached limits; MixedCartonContentMismatch: the manifest; LabelNonCompliant: the reason code, e.g. `conflicting_ais`).",
+                            "x-parser-schema-id": "<anonymous-schema-94>"
                           },
                           "actual": {
                             "type": "string",
-                            "description": "The counterpart of `expected`.",
-                            "x-parser-schema-id": "<anonymous-schema-86>"
+                            "description": "The counterpart of `expected` (LabelNonCompliant: the raw scan; WrongDestination: the GLN the label named).",
+                            "x-parser-schema-id": "<anonymous-schema-95>"
                           },
                           "at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-87>"
+                            "x-parser-schema-id": "<anonymous-schema-96>"
+                          },
+                          "w13_code": {
+                            "type": "string",
+                            "enum": [
+                              "01",
+                              "02",
+                              "03",
+                              "05",
+                              "09"
+                            ],
+                            "description": "X12 W13 receiving condition code (ADR 0023). Absent when the standard has no code for the kind (LabelNonCompliant and WrongDestination have none).",
+                            "x-parser-schema-id": "<anonymous-schema-97>"
+                          },
+                          "cbv_disposition": {
+                            "type": "string",
+                            "description": "GS1 CBV disposition (ADR 0023, 0024), derived from the kind.",
+                            "x-parser-schema-id": "<anonymous-schema-98>"
+                          },
+                          "supplier_ref": {
+                            "type": "string",
+                            "description": "The supplier of the ASN; set on LabelNonCompliant and WrongDestination so a first-pass rate can be told per supplier (ADR 0024). Optional.",
+                            "x-parser-schema-id": "<anonymous-schema-99>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-81>"
+                        "x-parser-schema-id": "<anonymous-schema-90>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-80>"
+                    "x-parser-schema-id": "<anonymous-schema-89>"
                   }
                 ],
                 "x-parser-schema-id": "CartonDiscrepancyRaisedEvent"
@@ -855,7 +934,7 @@
               "name": "ReceiptClosed",
               "title": "Receipt closed",
               "summary": "Receiving ended, with the discrepancies against the ASN.",
-              "description": "`type` = `com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed`;\nsubject = the receipt id, key = the ASN number. `discrepancies` is\npresent and empty when everything matched; a line can appear once per\nkind (`Short`, `Over`, `Damaged`).\n",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed`;\nsubject = the receipt id, key = the ASN number. `discrepancies` is\npresent and empty when everything matched; a line can appear once per\nkind (`Short`, `Over`, `Damaged`); each carries `w13_code` and\n`cbv_disposition` (ADR 0023).\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -879,16 +958,16 @@
                         "properties": {
                           "receipt_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-90>"
+                            "x-parser-schema-id": "<anonymous-schema-102>"
                           },
                           "asn_number": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-91>"
+                            "x-parser-schema-id": "<anonymous-schema-103>"
                           },
                           "closed_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-92>"
+                            "x-parser-schema-id": "<anonymous-schema-104>"
                           },
                           "discrepancies": {
                             "type": "array",
@@ -907,11 +986,11 @@
                                 "line_no": {
                                   "type": "integer",
                                   "minimum": 1,
-                                  "x-parser-schema-id": "<anonymous-schema-94>"
+                                  "x-parser-schema-id": "<anonymous-schema-106>"
                                 },
                                 "sku": {
                                   "type": "string",
-                                  "x-parser-schema-id": "<anonymous-schema-95>"
+                                  "x-parser-schema-id": "<anonymous-schema-107>"
                                 },
                                 "kind": {
                                   "type": "string",
@@ -920,34 +999,53 @@
                                     "Over",
                                     "Damaged"
                                   ],
-                                  "x-parser-schema-id": "<anonymous-schema-96>"
+                                  "x-parser-schema-id": "<anonymous-schema-108>"
                                 },
                                 "expected_qty": {
                                   "type": "integer",
                                   "minimum": 1,
-                                  "x-parser-schema-id": "<anonymous-schema-97>"
+                                  "x-parser-schema-id": "<anonymous-schema-109>"
                                 },
                                 "received_qty": {
                                   "type": "integer",
                                   "minimum": 0,
                                   "description": "Good plus damaged.",
-                                  "x-parser-schema-id": "<anonymous-schema-98>"
+                                  "x-parser-schema-id": "<anonymous-schema-110>"
                                 },
                                 "damaged_qty": {
                                   "type": "integer",
                                   "minimum": 0,
-                                  "x-parser-schema-id": "<anonymous-schema-99>"
+                                  "x-parser-schema-id": "<anonymous-schema-111>"
+                                },
+                                "w13_code": {
+                                  "type": "string",
+                                  "enum": [
+                                    "01",
+                                    "02",
+                                    "03"
+                                  ],
+                                  "description": "X12 W13 receiving condition code of the kind (ADR 0023): Damaged 01, Short 02, Over 03.",
+                                  "x-parser-schema-id": "<anonymous-schema-112>"
+                                },
+                                "cbv_disposition": {
+                                  "type": "string",
+                                  "enum": [
+                                    "damaged",
+                                    "mismatch_quantity"
+                                  ],
+                                  "description": "GS1 CBV disposition of the kind (ADR 0023).",
+                                  "x-parser-schema-id": "<anonymous-schema-113>"
                                 }
                               },
                               "x-parser-schema-id": "DiscrepancyData"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-93>"
+                            "x-parser-schema-id": "<anonymous-schema-105>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-89>"
+                        "x-parser-schema-id": "<anonymous-schema-101>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-88>"
+                    "x-parser-schema-id": "<anonymous-schema-100>"
                   }
                 ],
                 "x-parser-schema-id": "ReceiptClosedEvent"
@@ -1033,51 +1131,51 @@
                         "properties": {
                           "receipt_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-102>"
+                            "x-parser-schema-id": "<anonymous-schema-116>"
                           },
                           "asn_number": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-103>"
+                            "x-parser-schema-id": "<anonymous-schema-117>"
                           },
                           "appointment_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-104>"
+                            "x-parser-schema-id": "<anonymous-schema-118>"
                           },
                           "arrived_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "yard-management's gate arrival.",
-                            "x-parser-schema-id": "<anonymous-schema-105>"
+                            "x-parser-schema-id": "<anonymous-schema-119>"
                           },
                           "closed_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-106>"
+                            "x-parser-schema-id": "<anonymous-schema-120>"
                           },
                           "stowed_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "The latest stow of a Good carton.",
-                            "x-parser-schema-id": "<anonymous-schema-107>"
+                            "x-parser-schema-id": "<anonymous-schema-121>"
                           },
                           "dock_to_stock_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "minimum": 0,
                             "description": "stowed_at - arrived_at, clamped at 0.",
-                            "x-parser-schema-id": "<anonymous-schema-108>"
+                            "x-parser-schema-id": "<anonymous-schema-122>"
                           },
                           "carton_count": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "How many Good cartons were stowed.",
-                            "x-parser-schema-id": "<anonymous-schema-109>"
+                            "x-parser-schema-id": "<anonymous-schema-123>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-101>"
+                        "x-parser-schema-id": "<anonymous-schema-115>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-100>"
+                    "x-parser-schema-id": "<anonymous-schema-114>"
                   }
                 ],
                 "x-parser-schema-id": "ReceiptStowCompletedEvent"
@@ -1103,6 +1201,483 @@
                       "stowed_at": "2026-10-09T07:00:00Z",
                       "dock_to_stock_seconds": 7200,
                       "carton_count": 12
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "x-no-consumer-reason": "none yet: partner-connectivity renders it as EANCOM RECADV / X12 861 / 944 later (D-3 not taken)",
+              "name": "ReceivingAdviceIssued",
+              "title": "Receiving advice issued",
+              "summary": "What was received and accepted per line, with W13/CBV-coded discrepancies, for the supplier or the 3PL depositor (ADR 0023).",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.receipt.ReceivingAdviceIssued`;\nsubject = the receipt id, key = the ASN number. The domain fact only: this\nservice renders no EANCOM, X12 or transport. Raised exactly once per\nreceipt, in the same transaction as `ReceiptClosed` (right after it), for a\nreceipt closed after this event existed; a receipt closed earlier gets no\nadvice. `despatch_advice_ref` is the ASN number (the reference to the\ndespatch advice), `supplier_ref` the supplier as the ASN knows it and\n`owner_ref` the 3PL depositor (omitted for fleet-owned stock). `last_carton_at`\nis when the last unit was received (the receipt's opening when nothing\nwas); `within_sla` is `issued_at - last_carton_at <= sla_seconds`\n(`RECEIVING_ADVICE_SLA`, default 24 h). Per line the three quantities are\nexclusive: `accepted_qty` is the Good units not held, `rejected_qty` the\nDamaged ones and `held_qty` the Good units declared held; `received_qty`\nis their sum. `discrepancies` carry the line kinds `Short`, `Over`, `Damaged`,\n`IncorrectProduct` and `Hold` with `w13_code` and `cbv_disposition`.\nThe payload is bounded because a message the broker refuses blocks the\noutbox (ADR 0007): at most 1000 lines (lines with exceptions first, then\nin line order; `lines_total` is the real count and `lines_truncated` is\ntrue when some are left out), at most 1000 SSCCs per line (`sscc_count` is\nthe real count, `ssccs_truncated` is true when listed ones are fewer) and\nat most 200 carton findings (`carton_findings_total`). A consumer that\nneeds the full list reads the receipt over REST.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "receipt"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "receipt_id",
+                          "asn_number",
+                          "despatch_advice_ref",
+                          "supplier_ref",
+                          "issued_at",
+                          "last_carton_at",
+                          "sla_seconds",
+                          "within_sla",
+                          "lines",
+                          "lines_total",
+                          "carton_findings",
+                          "carton_findings_total"
+                        ],
+                        "properties": {
+                          "receipt_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-126>"
+                          },
+                          "asn_number": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-127>"
+                          },
+                          "despatch_advice_ref": {
+                            "type": "string",
+                            "description": "The reference to the despatch advice: the ASN number.",
+                            "x-parser-schema-id": "<anonymous-schema-128>"
+                          },
+                          "supplier_ref": {
+                            "type": "string",
+                            "description": "The supplier as the ASN knows it.",
+                            "x-parser-schema-id": "<anonymous-schema-129>"
+                          },
+                          "owner_ref": {
+                            "type": "string",
+                            "description": "The 3PL depositor. Omitted for fleet-owned stock.",
+                            "x-parser-schema-id": "<anonymous-schema-130>"
+                          },
+                          "issued_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-131>"
+                          },
+                          "last_carton_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "When the last unit was received; the receipt's opening when nothing was.",
+                            "x-parser-schema-id": "<anonymous-schema-132>"
+                          },
+                          "sla_seconds": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 1,
+                            "description": "The committed window (RECEIVING_ADVICE_SLA) in force at close.",
+                            "x-parser-schema-id": "<anonymous-schema-133>"
+                          },
+                          "within_sla": {
+                            "type": "boolean",
+                            "description": "issued_at - last_carton_at <= sla_seconds.",
+                            "x-parser-schema-id": "<anonymous-schema-134>"
+                          },
+                          "lines": {
+                            "type": "array",
+                            "maxItems": 1000,
+                            "description": "Lines with exceptions first, then the rest, each group in line order; bounded.",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "line_no",
+                                "sku",
+                                "expected_qty",
+                                "received_qty",
+                                "accepted_qty",
+                                "rejected_qty",
+                                "held_qty",
+                                "sscc_count",
+                                "discrepancies"
+                              ],
+                              "properties": {
+                                "line_no": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "x-parser-schema-id": "<anonymous-schema-137>"
+                                },
+                                "sku": {
+                                  "type": "string",
+                                  "x-parser-schema-id": "<anonymous-schema-138>"
+                                },
+                                "gtin": {
+                                  "type": "string",
+                                  "pattern": "^[0-9]{14}$",
+                                  "description": "Omitted when the line has no known GTIN.",
+                                  "x-parser-schema-id": "<anonymous-schema-139>"
+                                },
+                                "expected_qty": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "x-parser-schema-id": "<anonymous-schema-140>"
+                                },
+                                "received_qty": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "description": "Accepted plus rejected plus held.",
+                                  "x-parser-schema-id": "<anonymous-schema-141>"
+                                },
+                                "accepted_qty": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "description": "The Good units that are not held.",
+                                  "x-parser-schema-id": "<anonymous-schema-142>"
+                                },
+                                "rejected_qty": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "description": "The Damaged units.",
+                                  "x-parser-schema-id": "<anonymous-schema-143>"
+                                },
+                                "held_qty": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "description": "The Good units declared held by the Hold command.",
+                                  "x-parser-schema-id": "<anonymous-schema-144>"
+                                },
+                                "sscc_count": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "description": "The real number of SSCCs received on the line.",
+                                  "x-parser-schema-id": "<anonymous-schema-145>"
+                                },
+                                "ssccs": {
+                                  "type": "array",
+                                  "maxItems": 1000,
+                                  "items": {
+                                    "type": "string",
+                                    "pattern": "^[0-9]{18}$",
+                                    "x-parser-schema-id": "<anonymous-schema-147>"
+                                  },
+                                  "x-parser-schema-id": "<anonymous-schema-146>"
+                                },
+                                "ssccs_truncated": {
+                                  "type": "boolean",
+                                  "description": "True when ssccs lists fewer than sscc_count. Omitted when false.",
+                                  "x-parser-schema-id": "<anonymous-schema-148>"
+                                },
+                                "earliest_best_before": {
+                                  "type": "string",
+                                  "format": "date",
+                                  "description": "The earliest best-before date (AI 15) of the accepted cartons of the line (ADR 0024). Omitted when none carried one.",
+                                  "x-parser-schema-id": "<anonymous-schema-149>"
+                                },
+                                "earliest_expiry": {
+                                  "type": "string",
+                                  "format": "date",
+                                  "description": "The earliest expiry date (AI 17) of the accepted cartons of the line (ADR 0024). Omitted when none carried one.",
+                                  "x-parser-schema-id": "<anonymous-schema-150>"
+                                },
+                                "discrepancies": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "required": [
+                                      "kind",
+                                      "quantity",
+                                      "cbv_disposition"
+                                    ],
+                                    "properties": {
+                                      "kind": {
+                                        "type": "string",
+                                        "enum": [
+                                          "Short",
+                                          "Over",
+                                          "Damaged",
+                                          "IncorrectProduct",
+                                          "Hold"
+                                        ],
+                                        "x-parser-schema-id": "<anonymous-schema-153>"
+                                      },
+                                      "quantity": {
+                                        "type": "integer",
+                                        "minimum": 1,
+                                        "x-parser-schema-id": "<anonymous-schema-154>"
+                                      },
+                                      "w13_code": {
+                                        "type": "string",
+                                        "enum": [
+                                          "01",
+                                          "02",
+                                          "03",
+                                          "05",
+                                          "09"
+                                        ],
+                                        "x-parser-schema-id": "<anonymous-schema-155>"
+                                      },
+                                      "cbv_disposition": {
+                                        "type": "string",
+                                        "enum": [
+                                          "damaged",
+                                          "mismatch_quantity",
+                                          "mismatch_class",
+                                          "non_conformant"
+                                        ],
+                                        "x-parser-schema-id": "<anonymous-schema-156>"
+                                      }
+                                    },
+                                    "x-parser-schema-id": "<anonymous-schema-152>"
+                                  },
+                                  "x-parser-schema-id": "<anonymous-schema-151>"
+                                }
+                              },
+                              "x-parser-schema-id": "<anonymous-schema-136>"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-135>"
+                          },
+                          "lines_total": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "description": "The real number of lines.",
+                            "x-parser-schema-id": "<anonymous-schema-157>"
+                          },
+                          "lines_truncated": {
+                            "type": "boolean",
+                            "description": "True when lines lists fewer than lines_total. Omitted when false.",
+                            "x-parser-schema-id": "<anonymous-schema-158>"
+                          },
+                          "carton_findings": {
+                            "type": "array",
+                            "maxItems": 200,
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "kind",
+                                "at"
+                              ],
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "x-parser-schema-id": "<anonymous-schema-161>"
+                                },
+                                "sscc": {
+                                  "type": "string",
+                                  "x-parser-schema-id": "<anonymous-schema-162>"
+                                },
+                                "expected": {
+                                  "type": "string",
+                                  "x-parser-schema-id": "<anonymous-schema-163>"
+                                },
+                                "actual": {
+                                  "type": "string",
+                                  "x-parser-schema-id": "<anonymous-schema-164>"
+                                },
+                                "at": {
+                                  "type": "string",
+                                  "format": "date-time",
+                                  "x-parser-schema-id": "<anonymous-schema-165>"
+                                },
+                                "w13_code": {
+                                  "type": "string",
+                                  "enum": [
+                                    "01",
+                                    "02",
+                                    "03",
+                                    "05",
+                                    "09"
+                                  ],
+                                  "description": "Absent for a kind with no W13 code.",
+                                  "x-parser-schema-id": "<anonymous-schema-166>"
+                                },
+                                "cbv_disposition": {
+                                  "type": "string",
+                                  "x-parser-schema-id": "<anonymous-schema-167>"
+                                },
+                                "supplier_ref": {
+                                  "type": "string",
+                                  "description": "Set on label findings (ADR 0024).",
+                                  "x-parser-schema-id": "<anonymous-schema-168>"
+                                }
+                              },
+                              "x-parser-schema-id": "<anonymous-schema-160>"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-159>"
+                          },
+                          "carton_findings_total": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "x-parser-schema-id": "<anonymous-schema-169>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-125>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-124>"
+                  }
+                ],
+                "x-parser-schema-id": "ReceivingAdviceIssuedEvent"
+              },
+              "examples": [
+                {
+                  "name": "example",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7c1d9e3f-5a2b-4c8d-9e0f-1a2b3c4d5e66",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.receipt.ReceivingAdviceIssued",
+                    "subject": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-09T09:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:events:ReceivingAdviceIssued:v1",
+                    "data": {
+                      "receipt_id": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                      "asn_number": "ASN-1001",
+                      "despatch_advice_ref": "ASN-1001",
+                      "supplier_ref": "ACME",
+                      "owner_ref": "tenant-7f3a",
+                      "issued_at": "2026-10-09T09:30:00Z",
+                      "last_carton_at": "2026-10-09T09:10:00Z",
+                      "sla_seconds": 86400,
+                      "within_sla": true,
+                      "lines": [
+                        {
+                          "line_no": 1,
+                          "sku": "SKU-1",
+                          "gtin": "13041090004824",
+                          "expected_qty": 40,
+                          "received_qty": 34,
+                          "accepted_qty": 25,
+                          "rejected_qty": 4,
+                          "held_qty": 5,
+                          "sscc_count": 2,
+                          "ssccs": [
+                            "340123450000000017",
+                            "340123450000000024"
+                          ],
+                          "discrepancies": [
+                            {
+                              "kind": "Short",
+                              "quantity": 6,
+                              "w13_code": "02",
+                              "cbv_disposition": "mismatch_quantity"
+                            },
+                            {
+                              "kind": "Hold",
+                              "quantity": 5,
+                              "w13_code": "09",
+                              "cbv_disposition": "non_conformant"
+                            }
+                          ]
+                        }
+                      ],
+                      "lines_total": 1,
+                      "carton_findings": [
+                        {
+                          "kind": "UnexpectedCarton",
+                          "sscc": "340123450000000031",
+                          "at": "2026-10-09T09:05:00Z",
+                          "w13_code": "05",
+                          "cbv_disposition": "mismatch_instance"
+                        }
+                      ],
+                      "carton_findings_total": 1
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "x-no-consumer-reason": "none yet: an alarm for the planned partner-connectivity and warehouse-ops consumers (D-3)",
+              "name": "ReceivingAdviceOverdue",
+              "title": "Receiving advice overdue",
+              "summary": "An Open receipt is past the advice SLA since its last unit was received (ADR 0023).",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.receipt.ReceivingAdviceOverdue`;\nsubject = the receipt id, key = the ASN number. Raised by the housekeeping\nsweep exactly once per receipt that is still Open when\n`last_carton_at + sla_seconds` (`due_at`) is in the past. It does not stop\nthe receipt: closing it later still issues the advice, with `within_sla`\nfalse. `overdue_at` (the CloudEvents `time`) is when the sweep saw it.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "receipt"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "receipt_id",
+                          "asn_number",
+                          "last_carton_at",
+                          "due_at",
+                          "sla_seconds",
+                          "overdue_at"
+                        ],
+                        "properties": {
+                          "receipt_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-172>"
+                          },
+                          "asn_number": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-173>"
+                          },
+                          "last_carton_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-174>"
+                          },
+                          "due_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "last_carton_at + sla_seconds.",
+                            "x-parser-schema-id": "<anonymous-schema-175>"
+                          },
+                          "sla_seconds": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-176>"
+                          },
+                          "overdue_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "When the sweep saw the receipt past due.",
+                            "x-parser-schema-id": "<anonymous-schema-177>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-171>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-170>"
+                  }
+                ],
+                "x-parser-schema-id": "ReceivingAdviceOverdueEvent"
+              },
+              "examples": [
+                {
+                  "name": "example",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "8d2e0f4a-6b3c-4d9e-af10-2b3c4d5e6f77",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.receipt.ReceivingAdviceOverdue",
+                    "subject": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-10T10:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:events:ReceivingAdviceOverdue:v1",
+                    "data": {
+                      "receipt_id": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                      "asn_number": "ASN-1001",
+                      "last_carton_at": "2026-10-09T09:10:00Z",
+                      "due_at": "2026-10-10T09:10:00Z",
+                      "sla_seconds": 86400,
+                      "overdue_at": "2026-10-10T10:00:00Z"
                     }
                   }
                 }
@@ -1455,6 +2030,125 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "ReceivingAdviceIssued",
+              "title": "Receiving advice issued (analytics)",
+              "summary": "The receiving advice, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.receipt.ReceivingAdviceIssued` (the same as on the integration topic); dataschema `urn:warehouse:inbound-receiving:analytics:ReceivingAdviceIssued:v1`; payload equal to the integration payload. The projector folds `within_sla` into `advice_facts`, one row per receipt (ADR 0023).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[8].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7c1d9e3f-5a2b-4c8d-9e0f-1a2b3c4d5e66",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.receipt.ReceivingAdviceIssued",
+                    "subject": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-09T09:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:analytics:ReceivingAdviceIssued:v1",
+                    "data": {
+                      "receipt_id": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                      "asn_number": "ASN-1001",
+                      "despatch_advice_ref": "ASN-1001",
+                      "supplier_ref": "ACME",
+                      "owner_ref": "tenant-7f3a",
+                      "issued_at": "2026-10-09T09:30:00Z",
+                      "last_carton_at": "2026-10-09T09:10:00Z",
+                      "sla_seconds": 86400,
+                      "within_sla": true,
+                      "lines": [
+                        {
+                          "line_no": 1,
+                          "sku": "SKU-1",
+                          "gtin": "13041090004824",
+                          "expected_qty": 40,
+                          "received_qty": 34,
+                          "accepted_qty": 25,
+                          "rejected_qty": 4,
+                          "held_qty": 5,
+                          "sscc_count": 2,
+                          "ssccs": [
+                            "340123450000000017",
+                            "340123450000000024"
+                          ],
+                          "discrepancies": [
+                            {
+                              "kind": "Short",
+                              "quantity": 6,
+                              "w13_code": "02",
+                              "cbv_disposition": "mismatch_quantity"
+                            },
+                            {
+                              "kind": "Hold",
+                              "quantity": 5,
+                              "w13_code": "09",
+                              "cbv_disposition": "non_conformant"
+                            }
+                          ]
+                        }
+                      ],
+                      "lines_total": 1,
+                      "carton_findings": [
+                        {
+                          "kind": "UnexpectedCarton",
+                          "sscc": "340123450000000031",
+                          "at": "2026-10-09T09:05:00Z",
+                          "w13_code": "05",
+                          "cbv_disposition": "mismatch_instance"
+                        }
+                      ],
+                      "carton_findings_total": 1
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ReceivingAdviceOverdue",
+              "title": "Receiving advice overdue (analytics)",
+              "summary": "The overdue alarm, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.receipt.ReceivingAdviceOverdue` (the same as on the integration topic); dataschema `urn:warehouse:inbound-receiving:analytics:ReceivingAdviceOverdue:v1`; payload equal to the integration payload. The projector acknowledges and ignores it: the KPI reads the advices issued, not the alarms.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[9].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "8d2e0f4a-6b3c-4d9e-af10-2b3c4d5e6f77",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.receipt.ReceivingAdviceOverdue",
+                    "subject": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                    "time": "2026-10-10T10:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:analytics:ReceivingAdviceOverdue:v1",
+                    "data": {
+                      "receipt_id": "rcpt-223e4567-e89b-12d3-a456-426614174000",
+                      "asn_number": "ASN-1001",
+                      "last_carton_at": "2026-10-09T09:10:00Z",
+                      "due_at": "2026-10-10T09:10:00Z",
+                      "sla_seconds": 86400,
+                      "overdue_at": "2026-10-10T10:00:00Z"
+                    }
+                  }
+                }
+              ]
             }
           ]
         }
@@ -1500,22 +2194,22 @@
                         "properties": {
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-112>"
+                            "x-parser-schema-id": "<anonymous-schema-180>"
                           },
                           "description": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-113>"
+                            "x-parser-schema-id": "<anonymous-schema-181>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-114>"
+                            "x-parser-schema-id": "<anonymous-schema-182>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-111>"
+                        "x-parser-schema-id": "<anonymous-schema-179>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-110>"
+                    "x-parser-schema-id": "<anonymous-schema-178>"
                   }
                 ],
                 "x-parser-schema-id": "ProductRegisteredEvent"
@@ -1574,7 +2268,7 @@
                         "properties": {
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-117>"
+                            "x-parser-schema-id": "<anonymous-schema-185>"
                           },
                           "level": {
                             "type": "string",
@@ -1584,55 +2278,55 @@
                               "CASE",
                               "PALLET"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-118>"
+                            "x-parser-schema-id": "<anonymous-schema-186>"
                           },
                           "gtin": {
                             "type": "string",
                             "pattern": "^[0-9]{14}$",
-                            "x-parser-schema-id": "<anonymous-schema-119>"
+                            "x-parser-schema-id": "<anonymous-schema-187>"
                           },
                           "child_gtin": {
                             "type": "string",
                             "pattern": "^[0-9]{14}$",
-                            "x-parser-schema-id": "<anonymous-schema-120>"
+                            "x-parser-schema-id": "<anonymous-schema-188>"
                           },
                           "qty_of_child": {
                             "type": "integer",
                             "minimum": 2,
                             "maximum": 1000000,
                             "description": "Absent for EACH.",
-                            "x-parser-schema-id": "<anonymous-schema-121>"
+                            "x-parser-schema-id": "<anonymous-schema-189>"
                           },
                           "units_per_pack": {
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 1000000,
                             "description": "Direct factor to eaches; 1 for EACH.",
-                            "x-parser-schema-id": "<anonymous-schema-122>"
+                            "x-parser-schema-id": "<anonymous-schema-190>"
                           },
                           "is_orderable": {
                             "type": "boolean",
-                            "x-parser-schema-id": "<anonymous-schema-123>"
+                            "x-parser-schema-id": "<anonymous-schema-191>"
                           },
                           "is_despatch_unit": {
                             "type": "boolean",
-                            "x-parser-schema-id": "<anonymous-schema-124>"
+                            "x-parser-schema-id": "<anonymous-schema-192>"
                           },
                           "effective_from": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-125>"
+                            "x-parser-schema-id": "<anonymous-schema-193>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-126>"
+                            "x-parser-schema-id": "<anonymous-schema-194>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-116>"
+                        "x-parser-schema-id": "<anonymous-schema-184>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-115>"
+                    "x-parser-schema-id": "<anonymous-schema-183>"
                   }
                 ],
                 "x-parser-schema-id": "ProductPackLevelDeclaredEvent"
@@ -1668,7 +2362,7 @@
                         "properties": {
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-129>"
+                            "x-parser-schema-id": "<anonymous-schema-197>"
                           },
                           "level": {
                             "type": "string",
@@ -1678,34 +2372,34 @@
                               "CASE",
                               "PALLET"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-130>"
+                            "x-parser-schema-id": "<anonymous-schema-198>"
                           },
                           "gtin": {
                             "type": "string",
                             "pattern": "^[0-9]{14}$",
-                            "x-parser-schema-id": "<anonymous-schema-131>"
+                            "x-parser-schema-id": "<anonymous-schema-199>"
                           },
                           "effective_to": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-132>"
+                            "x-parser-schema-id": "<anonymous-schema-200>"
                           },
                           "reason": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 200,
-                            "x-parser-schema-id": "<anonymous-schema-133>"
+                            "x-parser-schema-id": "<anonymous-schema-201>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-134>"
+                            "x-parser-schema-id": "<anonymous-schema-202>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-128>"
+                        "x-parser-schema-id": "<anonymous-schema-196>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-127>"
+                    "x-parser-schema-id": "<anonymous-schema-195>"
                   }
                 ],
                 "x-parser-schema-id": "ProductPackLevelRetiredEvent"
@@ -1758,37 +2452,37 @@
                         "properties": {
                           "eventName": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-137>"
+                            "x-parser-schema-id": "<anonymous-schema-205>"
                           },
                           "eventType": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-138>"
+                            "x-parser-schema-id": "<anonymous-schema-206>"
                           },
                           "occurredAt": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-139>"
+                            "x-parser-schema-id": "<anonymous-schema-207>"
                           },
                           "locationCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-140>"
+                            "x-parser-schema-id": "<anonymous-schema-208>"
                           },
                           "aisleId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-141>"
+                            "x-parser-schema-id": "<anonymous-schema-209>"
                           },
                           "zoneId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-142>"
+                            "x-parser-schema-id": "<anonymous-schema-210>"
                           },
                           "locationType": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-143>"
+                            "x-parser-schema-id": "<anonymous-schema-211>"
                           },
                           "role": {
                             "type": "string",
                             "description": "Storage, Dock, Yard, WorkCenter, Drop, Staging, QC, Consolidation or Shipping; absent means Storage.",
-                            "x-parser-schema-id": "<anonymous-schema-144>"
+                            "x-parser-schema-id": "<anonymous-schema-212>"
                           },
                           "dockFlow": {
                             "type": "string",
@@ -1798,30 +2492,30 @@
                               "Both"
                             ],
                             "description": "Present only when role is Dock.",
-                            "x-parser-schema-id": "<anonymous-schema-145>"
+                            "x-parser-schema-id": "<anonymous-schema-213>"
                           },
                           "activities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-147>"
+                              "x-parser-schema-id": "<anonymous-schema-215>"
                             },
                             "description": "Present only when role is WorkCenter.",
-                            "x-parser-schema-id": "<anonymous-schema-146>"
+                            "x-parser-schema-id": "<anonymous-schema-214>"
                           },
                           "maxWeightKg": {
                             "type": "number",
-                            "x-parser-schema-id": "<anonymous-schema-148>"
+                            "x-parser-schema-id": "<anonymous-schema-216>"
                           },
                           "maxVolumeM3": {
                             "type": "number",
-                            "x-parser-schema-id": "<anonymous-schema-149>"
+                            "x-parser-schema-id": "<anonymous-schema-217>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-136>"
+                        "x-parser-schema-id": "<anonymous-schema-204>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-135>"
+                    "x-parser-schema-id": "<anonymous-schema-203>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotRegisteredEvent"
@@ -1881,26 +2575,26 @@
                         "properties": {
                           "eventName": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-152>"
+                            "x-parser-schema-id": "<anonymous-schema-220>"
                           },
                           "eventType": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-153>"
+                            "x-parser-schema-id": "<anonymous-schema-221>"
                           },
                           "occurredAt": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-154>"
+                            "x-parser-schema-id": "<anonymous-schema-222>"
                           },
                           "locationCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-155>"
+                            "x-parser-schema-id": "<anonymous-schema-223>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-151>"
+                        "x-parser-schema-id": "<anonymous-schema-219>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-150>"
+                    "x-parser-schema-id": "<anonymous-schema-218>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotDecommissionedEvent"
@@ -1977,7 +2671,7 @@
                         "properties": {
                           "appointment_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-158>"
+                            "x-parser-schema-id": "<anonymous-schema-226>"
                           },
                           "direction": {
                             "type": "string",
@@ -1986,47 +2680,47 @@
                               "OUTBOUND"
                             ],
                             "description": "Only INBOUND is copied.",
-                            "x-parser-schema-id": "<anonymous-schema-159>"
+                            "x-parser-schema-id": "<anonymous-schema-227>"
                           },
                           "door_code": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-160>"
+                            "x-parser-schema-id": "<anonymous-schema-228>"
                           },
                           "carrier": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-161>"
+                            "x-parser-schema-id": "<anonymous-schema-229>"
                           },
                           "window_start": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-162>"
+                            "x-parser-schema-id": "<anonymous-schema-230>"
                           },
                           "window_end": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-163>"
+                            "x-parser-schema-id": "<anonymous-schema-231>"
                           },
                           "asn_numbers": {
                             "type": "array",
                             "description": "At least one for an INBOUND appointment.",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-165>"
+                              "x-parser-schema-id": "<anonymous-schema-233>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-164>"
+                            "x-parser-schema-id": "<anonymous-schema-232>"
                           },
                           "version": {
                             "type": "integer",
                             "format": "int64",
                             "minimum": 1,
                             "description": "dock-scheduling's aggregate version; the version guard of the copy.",
-                            "x-parser-schema-id": "<anonymous-schema-166>"
+                            "x-parser-schema-id": "<anonymous-schema-234>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-157>"
+                        "x-parser-schema-id": "<anonymous-schema-225>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-156>"
+                    "x-parser-schema-id": "<anonymous-schema-224>"
                   }
                 ],
                 "x-parser-schema-id": "DockSchedulingAppointmentBookedEvent"
@@ -2091,19 +2785,19 @@
                         "properties": {
                           "appointment_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-169>"
+                            "x-parser-schema-id": "<anonymous-schema-237>"
                           },
                           "version": {
                             "type": "integer",
                             "format": "int64",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-170>"
+                            "x-parser-schema-id": "<anonymous-schema-238>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-168>"
+                        "x-parser-schema-id": "<anonymous-schema-236>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-167>"
+                    "x-parser-schema-id": "<anonymous-schema-235>"
                   }
                 ],
                 "x-parser-schema-id": "DockSchedulingAppointmentCancelledEvent"
@@ -2162,63 +2856,63 @@
                         "properties": {
                           "appointment_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-173>"
+                            "x-parser-schema-id": "<anonymous-schema-241>"
                           },
                           "site_id": {
                             "type": "string",
                             "description": "Ignored.",
-                            "x-parser-schema-id": "<anonymous-schema-174>"
+                            "x-parser-schema-id": "<anonymous-schema-242>"
                           },
                           "door_code": {
                             "type": "string",
                             "description": "The new door.",
-                            "x-parser-schema-id": "<anonymous-schema-175>"
+                            "x-parser-schema-id": "<anonymous-schema-243>"
                           },
                           "previous_door_code": {
                             "type": "string",
                             "description": "Logged only.",
-                            "x-parser-schema-id": "<anonymous-schema-176>"
+                            "x-parser-schema-id": "<anonymous-schema-244>"
                           },
                           "window_start": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-177>"
+                            "x-parser-schema-id": "<anonymous-schema-245>"
                           },
                           "window_end": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Must be after `window_start`.",
-                            "x-parser-schema-id": "<anonymous-schema-178>"
+                            "x-parser-schema-id": "<anonymous-schema-246>"
                           },
                           "previous_window_start": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Ignored.",
-                            "x-parser-schema-id": "<anonymous-schema-179>"
+                            "x-parser-schema-id": "<anonymous-schema-247>"
                           },
                           "previous_window_end": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Ignored.",
-                            "x-parser-schema-id": "<anonymous-schema-180>"
+                            "x-parser-schema-id": "<anonymous-schema-248>"
                           },
                           "arrival_tolerance_minutes": {
                             "type": "integer",
                             "description": "Ignored.",
-                            "x-parser-schema-id": "<anonymous-schema-181>"
+                            "x-parser-schema-id": "<anonymous-schema-249>"
                           },
                           "version": {
                             "type": "integer",
                             "format": "int64",
                             "minimum": 1,
                             "description": "dock-scheduling's aggregate version; the version guard of the copy.",
-                            "x-parser-schema-id": "<anonymous-schema-182>"
+                            "x-parser-schema-id": "<anonymous-schema-250>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-172>"
+                        "x-parser-schema-id": "<anonymous-schema-240>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-171>"
+                    "x-parser-schema-id": "<anonymous-schema-239>"
                   }
                 ],
                 "x-parser-schema-id": "DockSchedulingAppointmentRescheduledEvent"
@@ -2280,34 +2974,34 @@
                         "properties": {
                           "appointment_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-185>"
+                            "x-parser-schema-id": "<anonymous-schema-253>"
                           },
                           "site_id": {
                             "type": "string",
                             "description": "Ignored.",
-                            "x-parser-schema-id": "<anonymous-schema-186>"
+                            "x-parser-schema-id": "<anonymous-schema-254>"
                           },
                           "from_door_code": {
                             "type": "string",
                             "description": "Logged only.",
-                            "x-parser-schema-id": "<anonymous-schema-187>"
+                            "x-parser-schema-id": "<anonymous-schema-255>"
                           },
                           "to_door_code": {
                             "type": "string",
                             "description": "The new door.",
-                            "x-parser-schema-id": "<anonymous-schema-188>"
+                            "x-parser-schema-id": "<anonymous-schema-256>"
                           },
                           "version": {
                             "type": "integer",
                             "format": "int64",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-189>"
+                            "x-parser-schema-id": "<anonymous-schema-257>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-184>"
+                        "x-parser-schema-id": "<anonymous-schema-252>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-183>"
+                    "x-parser-schema-id": "<anonymous-schema-251>"
                   }
                 ],
                 "x-parser-schema-id": "DockSchedulingAppointmentDoorReassignedEvent"
@@ -2379,7 +3073,7 @@
                     "properties": {
                       "visit_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-192>"
+                        "x-parser-schema-id": "<anonymous-schema-260>"
                       },
                       "appointment_id": {
                         "type": [
@@ -2387,25 +3081,25 @@
                           "null"
                         ],
                         "description": "Null for a walk-in visit, which is ignored.",
-                        "x-parser-schema-id": "<anonymous-schema-193>"
+                        "x-parser-schema-id": "<anonymous-schema-261>"
                       },
                       "arrived_at": {
                         "type": "string",
                         "format": "date-time",
                         "description": "The gate arrival: the start of dock-to-stock.",
-                        "x-parser-schema-id": "<anonymous-schema-194>"
+                        "x-parser-schema-id": "<anonymous-schema-262>"
                       },
                       "version": {
                         "type": "integer",
                         "format": "int64",
                         "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-195>"
+                        "x-parser-schema-id": "<anonymous-schema-263>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-191>"
+                    "x-parser-schema-id": "<anonymous-schema-259>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-190>"
+                "x-parser-schema-id": "<anonymous-schema-258>"
               }
             ],
             "x-parser-schema-id": "VisitCheckedInEvent"
@@ -2475,19 +3169,19 @@
                       "lpn": {
                         "type": "string",
                         "description": "The license plate; for a receipt carton it is its SSCC.",
-                        "x-parser-schema-id": "<anonymous-schema-198>"
+                        "x-parser-schema-id": "<anonymous-schema-266>"
                       },
                       "at": {
                         "type": "string",
                         "format": "date-time",
                         "description": "When the container was stowed.",
-                        "x-parser-schema-id": "<anonymous-schema-199>"
+                        "x-parser-schema-id": "<anonymous-schema-267>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-197>"
+                    "x-parser-schema-id": "<anonymous-schema-265>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-196>"
+                "x-parser-schema-id": "<anonymous-schema-264>"
               }
             ],
             "x-parser-schema-id": "ContainerStowedEvent"
@@ -2536,6 +3230,10 @@
       "ContainerStowed": "$ref:$.channels.warehouse.inventory.events.publish.message",
       "ReceiptStowCompleted": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[7]",
       "ReceiptStowCompletedAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[7]",
+      "ReceivingAdviceIssued": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[8]",
+      "ReceivingAdviceIssuedAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[8]",
+      "ReceivingAdviceOverdue": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[9]",
+      "ReceivingAdviceOverdueAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[9]",
       "ASNRegisteredAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[0]",
       "ASNCancelledAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[1]",
       "ReceiptOpenedAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[2]",
@@ -2564,6 +3262,8 @@
       "ReceiptCartonReceivedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[4].payload",
       "CartonDiscrepancyRaisedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[5].payload",
       "ReceiptClosedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[6].payload",
+      "ReceivingAdviceIssuedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[8].payload",
+      "ReceivingAdviceOverdueEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[9].payload",
       "VisitCheckedInEvent": "$ref:$.channels.warehouse.yard-management.events.publish.message.payload",
       "ContainerStowedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.payload",
       "ReceiptStowCompletedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[7].payload",
