@@ -44,10 +44,14 @@ facts that only `yard-management` records; `dock-scheduling` applies them from e
 
 ## What changes in the fleet
 
-These changes are merged on `develop` in the neighbouring contexts. In warehouse-infra develop, `inbound-receiving` and
-`warehouse-planning` have a consumer group for the `dock-scheduling` topic, `helm-values/exception-management.yaml` sets no
-group for the yard or `dock-scheduling` topics, and `outbound-shipping` is not registered (no apps.yaml entry, no chart). No yard
-service runs, so none of these edges is live:
+These changes are merged on `develop` in the neighbouring contexts. In warehouse-infra `develop`, `inbound-receiving`,
+`warehouse-planning` and `exception-management` set a consumer group for the `dock-scheduling` topic
+(`exception-management` also for the yard topic) and the yard services are registered. `dock-scheduling`
+and `yard-management` run on k3s at v0.1.2 (applied 2026-11-10, read-only `kubectl`), so the edges into
+`inbound-receiving`, `warehouse-planning` and `exception-management` are live. `outbound-shipping`
+is released as `v0.1.0` and registered and image-pinned in warehouse-infra `develop` (PR 205, consumer groups
+for the yard and dock topics set) but not applied (no pod), so its two edges from the yard are wired in infra
+and not live (see [Context Map](/yard/strategic-design/context-map)):
 
 - `DockAppointment` moved from `inbound-receiving` to `dock-scheduling` (a door that
   serves both directions cannot have two owners of its time). `inbound-receiving` retired its

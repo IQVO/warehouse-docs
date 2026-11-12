@@ -10,19 +10,22 @@ description: "Kafka integration for outbound-shipping — one published integrat
 This page is written here from `apis/asyncapi.yaml` (AsyncAPI 2.6), the
 relay and event sink in `internal/adapters/outbound/` and the consumers in
 `internal/adapters/inbound/kafka/` on `outbound-shipping`'s `develop`
-(`1a071bb`). The machine-generated reference is at the bottom. For per-event
+(`1a071bb`; the deployment status below was re-checked on 2026-11-11). The machine-generated reference is at the bottom. For per-event
 payloads and the raising use cases, see
 [Domain Events](/contexts/outbound-shipping/domain-events).
 
-:::info[Built on develop, not deployed]
-`warehouse-infra` `develop` (`c42c475`) has no `outbound-shipping` entry
-(`terraform/apps.yaml`, `helm-values/`) and the repository has no Helm chart:
-no outbound-shipping pod, consumer group or topic exists in the reference
-cluster. The tables state what the code does. Per leg, `order-management` and
-`exception-management` have a consumer of what this context publishes on their
-`develop`; `network-fulfillment` and `yard-management` do not, although ADR
+:::info[Released v0.1.0, registered in infra, not applied]
+`outbound-shipping` is released as `v0.1.0` (2026-11-11), its Helm chart is merged,
+and `warehouse-infra` `develop` (`db829ff`) registers it and pins its image
+(PR 205: `terraform/apps.yaml`, `helm-values/outbound-shipping.yaml` with the six
+consumer groups, dashboards, alert rules). It is not applied: no outbound-shipping
+pod, consumer group or topic exists in the reference cluster (read-only
+`kubectl`, 2026-11-11), so no edge is live. The tables state what the code does.
+Per leg, `order-management` and `exception-management` have a consumer of what
+this context publishes on their `develop` (`exception-management`'s group is wired in
+infra and its pod carries it; `order-management`'s consumer is dark and no variable
+is set for it); `network-fulfillment` and `yard-management` do not, although ADR
 0004 and ADR 0005 name them.
-:::
 
 ## Topics
 
@@ -66,7 +69,7 @@ Events leave only through the outbox: the aggregate rows and their two
 outbox rows per event (integration and analytics) commit in one Postgres
 transaction, and a relay inside `cmd/api` drains them to Kafka (rows claimed
 `FOR UPDATE SKIP LOCKED`, `RequireAll` acks). The relay runs with
-`OUTBOX_INTERVAL_MS` 250, `OUTBOX_BATCH` 100 and `OUTBOX_MAX_ATTEMPTS` 10; a
+`OUTBOX_INTERVAL_MS` 250, `OUTBOX_BATCH` 100 and `OUTBOX_MAX_ATTEMPTS` 20 (`0` means unlimited); a
 row past the cap is excluded from future claims until re-armed by hand.
 Delivery is at-least-once with the same `id` on a retry.
 
@@ -93,10 +96,9 @@ reader and logged; the service stays ready.
   order of the schedule and layout copies and a departure before the close
   (handled, flagged, never confirmed).
 
-The yard-management consumed types are pinned to a copy of the producer's
-AsyncAPI in `contracts/` and gated in CI (ADR 0006). The dock-scheduling
-type is pinned by hand (ADR 0005), and the pin has not been refreshed since
-the producer's `develop` AsyncAPI began declaring the type; the other
+The yard-management consumed types (ADR 0006) and the dock-scheduling
+type (ADR 0007) are pinned to a copy of the producer's AsyncAPI in
+`contracts/` and gated in CI; the other
 consumed contracts are mirrored by hand.
 
 ## Who reads what it publishes

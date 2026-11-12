@@ -24,10 +24,10 @@ bill of lading, or the fact that the goods left; an order's last state was
 physical facts and never to a person's say-so: **ship-confirm follows the
 trailer's physical departure** (its ADR 0002).
 
-:::info[What is built, what is deployed, and what is planned]
-Per this context's ADRs, `apis/` and `cmd/` on `develop` (`1a071bb`, the merge
-of its own docs site) and `warehouse-infra` `develop` (`c42c475`), checked
-2026-11-09:
+:::info[What is built, released, registered, applied and planned]
+Per this context's ADRs, `apis/` and `cmd/` on `develop` (`7ce7b14`, the merge
+of its status-docs PR 21; `main` and the `v0.1.0` tag are at `857edfd`) and
+`warehouse-infra` `develop` (`db829ff`), checked 2026-11-11:
 
 **Built on `develop`:** the REST API (13 routes plus `/healthz` and
 `/readyz` in `apis/openapi.yaml`), a transactional outbox with relay, **six**
@@ -35,14 +35,28 @@ Kafka consumers inside `cmd/api` (fulfillment-execution, dock-scheduling,
 yard-management, process-path-management cutoffs, facility-layout and its own
 analytics stream, group ids from six mandatory env vars), a read-only MCP
 server (`cmd/mcp`: `loads_at_risk` and `missed_loads`, one resource, one
-prompt), a Dockerfile, and its own documentation site.
+prompt), a Dockerfile, a Helm chart (`charts/outbound-shipping`, its PR 17),
+and its own documentation site.
 
-**Not deployed:** the repository has **no Helm chart**, and
-`warehouse-infra` `develop` has no `outbound-shipping` entry in
-`terraform/apps.yaml` and no `helm-values/outbound-shipping.yaml`. Nothing of
-this context runs in the reference cluster, so every edge of it on the
-[Context Map](/strategic-design/context-map) is *built, not deployed*
-(wired-but-unused where the other end is built too), never live.
+**Released:** `v0.1.0` on 2026-11-11, cut from `main` (Go 1.27.4).
+
+**Registered and image-pinned, not applied:** `warehouse-infra` `develop`
+registers it (PR 205): a `terraform/apps.yaml` entry (a database, no analytics
+read side), `helm-values/outbound-shipping.yaml` (one API replica, the six
+consumer groups set, the MCP server off for pod capacity, no relay
+Deployment because the API relays the outbox inline), a context dashboard,
+alert rules and the image pin `857edfd-arm64` in
+`terraform/targets/k3s.images.yaml`. Nothing is applied: no outbound-shipping
+pod, deployment or ArgoCD application exists in the reference cluster
+(read-only `kubectl`, context `k3s-multipass`, 2026-11-11). It is therefore not
+deployed or running, and every edge of it on the
+[Context Map](/strategic-design/context-map) is **not live**, whatever the
+wiring. Per edge: wired in infra on the consumer side for the five inbound
+feeds (K67 to K71) and for `exception-management`'s group (K73); not wired for
+`order-management` (K72, no `OUTBOUND_SHIPPING_*` variable set). The
+neighbours `fulfillment-execution`, `dock-scheduling`, `yard-management`,
+`process-path-management`, `facility-layout`, `order-management` and
+`exception-management` all run.
 
 **Around it, checked on each sibling's `develop`:** the nine consumed types
 are published by their five producers in code. `order-management` (its ADR
@@ -91,11 +105,12 @@ troubleshooting, testing). The REST reference is generated from its
   Its ADRs live under `docs/adr/`: 0001 (bounded context), 0002 (ship-confirm
   follows the physical departure), 0003 (`PackageManifested` carries the ship
   correlation), 0004 (`ShipmentConfirmed` replaces the manual network
-  confirmation), 0005 (CloudEvents envelope and type catalogue) and 0006 (the
-  yard-management contract is pinned). It also has its own documentation site
+  confirmation), 0005 (CloudEvents envelope and type catalogue), 0006 (the
+  yard-management contract is pinned) and 0007 (the dock-scheduling contract is
+  pinned). It also has its own documentation site
   with the same pack plus architecture, quickstart, integration and MCP pages.
 - **Fleet-level**: [Context Map](/strategic-design/context-map) (its edges
-  K67 to K75, all built, not deployed), the
+  K67 to K75, all not live: registered in infra, not applied), the
   [Event Standard](/strategic-design/event-standard-cloudevents) (subdomain
   table and type catalogue),
   [Subdomain Classification](/strategic-design/subdomain-classification) and

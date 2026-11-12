@@ -9,9 +9,11 @@ description: "Why what leaves on which trailer is its own bounded context — lo
 
 Written here from the context's ADRs under `docs/adr/` in
 [IQVO/outbound-shipping](https://github.com/IQVO/outbound-shipping) (0001 to
-0006), its own `docs/docs` pages (introduction, integration, runbook) and its
-`apis/openapi.yaml` / `apis/asyncapi.yaml`, all checked against `develop`
-(`1a071bb`) on 2026-11-09.
+0007), its own `docs/docs` pages (introduction, integration, runbook) and its
+`apis/openapi.yaml` / `apis/asyncapi.yaml`, checked against `develop`
+(`1a071bb`) on 2026-11-09. The ADR set, the deployment status and the pinned
+contracts were re-checked against `develop` (`7ce7b14`) and `warehouse-infra`
+`develop` (`db829ff`) on 2026-11-11.
 
 ## The gap
 
@@ -38,7 +40,7 @@ operator (ADR 0001).
 | Data store | one Postgres database (embedded migrations, one pair). `DATABASE_URL` and `KAFKA_BROKERS` are mandatory; real Postgres and real Kafka only |
 | Kafka | publishes thirteen types on `warehouse.outbound-shipping.events` and an analytics twin; consumes nine types from five sibling topics plus its own analytics stream |
 | Auth | none (fleet-wide decision) |
-| Deployment | **not deployed**: no Helm chart, no `warehouse-infra` registration |
+| Deployment | released `v0.1.0` (2026-11-11) with its Helm chart merged; registered and image-pinned in `warehouse-infra` `develop` (PR 205); **not applied**: no pod in the reference cluster, so nothing runs and no edge is live |
 
 ## The lifecycle
 
@@ -101,8 +103,9 @@ carrier that needs the document in hand before leaving is not served by v1.
 
 Per its own pages: godog scenarios under `features/` (including the departure
 before close case), architecture fitness tests in `internal/architecture`, a
-consumed-type test against the pinned yard-management contract
-(`TestConsumedYardTypesMatchTheProducersIntegrationContract`, ADR 0006) gated
+consumed-type tests against the pinned yard-management and dock-scheduling contracts
+(`TestConsumedYardTypesMatchTheProducersIntegrationContract`, ADR 0006, and
+`TestDockAppointmentBookedMatchesTheProducersIntegrationContract`, ADR 0007) gated
 in CI by `pinned-contracts`, and integration tests on real Postgres and Kafka.
 This page states what the repository's documentation says; the aggregator did
 not run the binaries.

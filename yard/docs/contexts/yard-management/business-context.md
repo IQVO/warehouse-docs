@@ -69,7 +69,7 @@ and door release from `yard-management` events
 | --- | --- | --- |
 | Gate clerk or kiosk | Person / device | Checks a visit in, rejects it, checks it out (`CheckInVisit`, `RejectAtGate`, `CheckOutVisit`). A camera, ANPR or kiosk is an inbound adapter issuing `CheckInVisit`, not a context. |
 | Hostler | Person (floor client) | Claims the next move and completes it (`ClaimNextMove`, `CompleteMove`). Also called jockey, spotter or shunter. |
-| Dock operator | Person (floor client) | Starts and completes door work (`StartDoorWork`, `CompleteDoorWork`). Outbound door work is completed here; `outbound-shipping` (built on develop, outside this section) only reads the yard's facts. |
+| Dock operator | Person (floor client) | Starts and completes door work (`StartDoorWork`, `CompleteDoorWork`). Outbound door work is completed here; `outbound-shipping` (released v0.1.0, outside this section) only reads the yard's facts. |
 | Yard supervisor | Person (console) | Requests and cancels moves, places and releases holds, records seals, declares the yard policy, runs yard checks. |
 | Dock planner | Person (console) | Not an actor here: declares door hours and closures in `dock-scheduling`. This context only reads the closures. |
 | Scheduler (cron) | Kubernetes CronJob | Calls `POST /dwell-sweeps` and `POST /move-lease-sweeps`. |
@@ -77,7 +77,7 @@ and door release from `yard-management` events
 | `facility-layout` | Fleet context (upstream) | Publishes the Yard and Dock slots and the zone-to-site mapping. |
 | `inbound-receiving` | Fleet context (upstream and downstream) | Publishes ASNs and receipts; consumes `VisitCheckedIn` (its ADR 0021, the dock-to-stock KPI). It does not consume `TrailerDocked` as built; the optional consumer was not built. |
 | `exception-management` | Fleet context (downstream) | Opens problem cases from rejected visits, seal exceptions, dwell breaches and yard-check discrepancies (merged on develop). |
-| `outbound-shipping` | Fleet context (downstream) | Confirms a shipment when the trailer leaves: reads `TrailerDocked`, `DoorWorkCompleted` and `TrailerDeparted` (`outbound-shipping` is merged on develop but not registered in warehouse-infra: no apps.yaml entry, no chart). |
+| `outbound-shipping` | Fleet context (downstream) | Confirms a shipment when the trailer leaves: reads `TrailerDocked`, `DoorWorkCompleted` and `TrailerDeparted` (`outbound-shipping` is released as v0.1.0 and registered and image-pinned in warehouse-infra develop, PR 205, with the consumer group `outbound-shipping-yard` set, but not applied: no pod, so the edge is not live). |
 
 ## Decisions this context makes
 
@@ -118,7 +118,7 @@ boundary stated in `meta`.
 - **Door calendar, bookings, opening hours, no-shows, ETA risk.** These belong
   to `dock-scheduling`.
 - **Trailer load planning, loading, bill of lading and ship-confirm.** The context
-  `outbound-shipping` (Supporting), built on develop in its own repository and outside this section.
+  `outbound-shipping` (Supporting), released as v0.1.0 in its own repository and outside this section.
 - **Real-time ETA feeds.** A future context, `transport-visibility` (Generic);
   an ETA enters `dock-scheduling` first.
 - **Detention and yard service charges.** A future context, `yard-billing`

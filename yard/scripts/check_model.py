@@ -227,7 +227,7 @@ def main():
             findings.append(f"{cid}: rest route {r} has no inbound row")
         for ev, pub in published.items():
             for consumer in pub["consumers"]:
-                if consumer == "analytics only":
+                if consumer in ("analytics only", "none yet"):
                     continue
                 if consumer in contexts:
                     rows = [c for c in contexts[consumer].get("consumes", []) if c["producer"] == cid]

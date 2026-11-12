@@ -19,14 +19,14 @@ the analytical read side is a separate process family from the operational
 one. `fulfillment-execution` also ships `cmd/sweep`, the entrypoint of its two
 sweep CronJobs (expire-leases, sweep-cpt-misses), which POSTs the sweep
 endpoints of its own Service. `warehouse-ops-agent` is one binary with no
-database. The nineteenth, `outbound-shipping` (built on `develop`, not
-deployed), ships two binaries (`cmd/api` with its consumers and outbox relay,
+database. The nineteenth, `outbound-shipping` (released `v0.1.0`, registered in
+`warehouse-infra`, not applied), ships two binaries (`cmd/api` with its consumers and outbox relay,
 and a read-only `cmd/mcp`), one Postgres database, no analytics read side and no
-frontend remote, and has no Helm chart. Nineteen of the twenty have an entry in
-`warehouse-infra` `develop`'s application registry (`terraform/apps.yaml`; not
-`outbound-shipping`), and each registered domain
+frontend remote. Its Helm chart is merged (PR 17). All twenty have an entry in
+`warehouse-infra` `develop`'s application registry (`terraform/apps.yaml`;
+`outbound-shipping` since PR 205, image pinned at `857edfd-arm64`, not applied). Each registered domain
 context's entry declares `database: true`, an `analytics:` read side and a
-`frontend_remote:`. The five most recent read sides
+`frontend_remote:`, except `outbound-shipping`'s, which declares `database: true` only. The five most recent read sides
 (`slotting-optimization`, `pick-face-replenishment`, `task-interleaving`,
 `returns-processing`, `exception-management`) have `mcp.enabled: true` and
 `analytics.enabled: true` in their value files; `returns-processing` and
@@ -414,11 +414,12 @@ flowchart LR
 | `warehouse.task-interleaving.events` | task-interleaving | 1 | fulfillment-execution (`InterleavingHintIssued`, an advisory tie-break inside one `claimNext` priority band, its ADR 0051; `TASK_INTERLEAVING_MODE=kafka`) |
 | `warehouse.returns-processing.events` | returns-processing | 7 | inventory-storage (`ReturnLineStaged`, once per `RESTOCK` disposition, into its staged-receipt use case, its ADR 0044); exception-management (`UnexpectedReturnReceived`, one case per receipt line); the other five types have no consumer |
 | `warehouse.exception-management.events` | exception-management | 7 | none: no context consumes any of its seven types |
-| `warehouse.outbound-shipping.events` | outbound-shipping (built, not deployed) | 13 | order-management (`ShipmentConfirmed`, `PackageMissedLoad`, its ADR 0051; dark unless `OUTBOUND_SHIPPING_CONSUMER_MODE=kafka`); exception-management (`PackageMissedLoad`, its ADR 0011); `LoadingStarted`, `LoadClosed`, `LoadReopened` and `ShipmentConfirmed` toward yard-management and network-fulfillment have no handler; the other eight types are analytics-only by design |
+| `warehouse.outbound-shipping.events` | outbound-shipping (released v0.1.0, registered, not applied) | 13 | order-management (`ShipmentConfirmed`, `PackageMissedLoad`, its ADR 0051; dark unless `OUTBOUND_SHIPPING_CONSUMER_MODE=kafka`); exception-management (`PackageMissedLoad`, its ADR 0011); `LoadingStarted`, `LoadClosed`, `LoadReopened` and `ShipmentConfirmed` toward yard-management and network-fulfillment have no handler; the other eight types are analytics-only by design |
 
 The type counts are the messages each producer's `asyncapi.yaml` declares on
 its integration channel (counted on `origin/develop`, 2026-10-27; the
-`outbound-shipping` row on 2026-11-09). `outbound-shipping` is not deployed, so it
+`outbound-shipping` row on 2026-11-09). `outbound-shipping` is registered in
+`warehouse-infra` `develop` (PR 205) but not applied, so it
 has no pod, no topic in the cluster and none of the diagrams above; it also
 *consumes* five sibling topics (`warehouse.fulfillment.events`,
 `warehouse.process-path-management.events`, `warehouse.facility.events`,

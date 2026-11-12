@@ -82,8 +82,8 @@ context's own projector and are never read by a sibling.
 | `warehouse.task-interleaving.events` | task-interleaving | `InterleavingHintIssued` | fulfillment-execution (advisory tie-break inside one `claimNext` priority band, its ADR 0051, K47) |
 | `warehouse.returns-processing.events` | returns-processing | `ReturnLineStaged` | inventory-storage (its ADR 0044, K53) |
 | | | `UnexpectedReturnReceived` | exception-management (K54) |
-| `warehouse.outbound-shipping.events` | outbound-shipping | `ShipmentConfirmed`, `PackageMissedLoad` | order-management (its ADR 0051, K72; wired-but-unused, `outbound-shipping` is not deployed) |
-| | | `PackageMissedLoad` | exception-management (its ADR 0011, K73; wired-but-unused) |
+| `warehouse.outbound-shipping.events` | outbound-shipping | `ShipmentConfirmed`, `PackageMissedLoad` | order-management (its ADR 0051, K72; wired-but-unused: `outbound-shipping` is registered in infra but not applied, and no `OUTBOUND_SHIPPING_*` variable is set for `order-management`) |
+| | | `PackageMissedLoad` | exception-management (its ADR 0011, K73; wired-but-unused: the consumer group is wired in infra, the producer is not applied) |
 | `warehouse.exception-management.events` | exception-management | all seven types | none |
 
 Several published types have no sibling consumer today. These are

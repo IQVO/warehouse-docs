@@ -64,10 +64,10 @@ two databases each, because the analytical read side is a separate process
 family from the operational one; `fulfillment-execution` adds a fifth,
 `cmd/sweep`, the entrypoint of its two sweep CronJobs.
 `warehouse-ops-agent` is one binary with no database. The nineteenth domain
-context, `outbound-shipping`, is built on `develop` with two binaries and one
-database and is not deployed. Nineteen of the twenty are
+context, `outbound-shipping`, is released as `v0.1.0` with two binaries and one
+database and is registered in `warehouse-infra` `develop` (PR 205) but not applied. All twenty are
 registered in `warehouse-infra` `develop`, `returns-processing` and
-`exception-management` since 2026-10-22; `outbound-shipping` is not. That is
+`exception-management` since 2026-10-22 and `outbound-shipping` since 2026-11-11. That is
 [Containers](/architecture/containers).
 
 **The domain layer depends on nothing, and CI proves it.** Every context has an

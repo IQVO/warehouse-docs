@@ -44,7 +44,7 @@ Nineteen contexts on this site persist. Eighteen of them have an
 **OLTP** database and a separate **analytical** database, and all eighteen are
 registered with `database: true` and an `analytics:` read side in
 `warehouse-infra` `develop`'s `terraform/apps.yaml`. The nineteenth,
-`outbound-shipping` (built, not deployed, no `terraform/apps.yaml` entry), has
+`outbound-shipping` (registered in `terraform/apps.yaml` with `database: true` and no `analytics:` read side, not applied), has
 one Postgres database only: its `load_board` read model is a table in it, fed
 by its own analytics topic, and it has no projector or reports binary. The OLTP binary (and
 its MCP sibling) owns the first.
