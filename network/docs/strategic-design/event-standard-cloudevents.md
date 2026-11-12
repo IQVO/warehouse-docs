@@ -206,9 +206,11 @@ Topic `retailnetwork.last-mile-delivery.events`.
 | `DeliveryWaveCancelled` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCancelled` | `delivery-promise`, `order-sourcing` |
 | `RoutePlanned` | `com.retailnetwork.logistics.last-mile-delivery.route.RoutePlanned` | analytics only |
 | `PackageOutForDelivery` | `com.retailnetwork.logistics.last-mile-delivery.route.PackageOutForDelivery` | `shipping-and-tracking` |
+| `StopEtaWindowAssigned` | `com.retailnetwork.logistics.last-mile-delivery.route.StopEtaWindowAssigned` | `shipping-and-tracking` |
 | `DeliveryAttempted` | `com.retailnetwork.logistics.last-mile-delivery.route.DeliveryAttempted` | `shipping-and-tracking` |
 | `PackageInductionDeferred` | `com.retailnetwork.logistics.last-mile-delivery.packageattempthistory.PackageInductionDeferred` | `delivery-promise` |
 | `PackageReturnInitiated` | `com.retailnetwork.logistics.last-mile-delivery.packageattempthistory.PackageReturnInitiated` | `shipping-and-tracking` |
+| `DeliveryPointFlagged` | `com.retailnetwork.logistics.last-mile-delivery.deliverypointprofile.DeliveryPointFlagged` | `shipping-and-tracking` |
 
 ### `shipping-and-tracking`
 
@@ -224,6 +226,8 @@ Topic `retailnetwork.shipping-and-tracking.events`.
 | `PackageExceptionRaised` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageExceptionRaised` | `delivery-promise`, `customer-ordering` |
 | `PackageReturned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` | `delivery-promise`, `customer-ordering` |
 | `PackageLost` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | `delivery-promise`, `customer-ordering` |
+| `PackageEtaWindowAssigned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageEtaWindowAssigned` | `customer-ordering` |
+| `PackageDeliveryPointFlagged` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDeliveryPointFlagged` | `customer-ordering` |
 
 ### `node-performance`
 
@@ -425,7 +429,7 @@ Appears in: `BookingFailed.reason`.
 
 ### Reasons of `last-mile-delivery`
 
-**`DeliveryAttemptOutcome`**: The result of one delivery attempt of one package. A FAILED attempt carries a failureReason of free text, which is not listed here.
+**`DeliveryAttemptOutcome`**: The result of one delivery attempt of one package. A FAILED attempt carries a failureReason of free text, which is not listed here; the optional category is the DeliveryAttemptOutcomeDetail vocabulary below.
 
 Appears in: `DeliveryAttempted.outcome`, REST `Outcome`, REST `Attempt.outcome`.
 
@@ -435,6 +439,17 @@ Appears in: `DeliveryAttempted.outcome`, REST `Outcome`, REST `Attempt.outcome`.
 | `FAILED` | The package was not handed over; failureReason is required. |
 
 Branched on by `shipping-and-tracking` (`DELIVERED`, `FAILED`): DELIVERED becomes a DELIVERED scan; any other outcome becomes a DELIVERY_FAILED scan.
+
+**`DeliveryAttemptOutcomeDetail`**: The optional category of an attempt, reported by the driver client and dormant until one does (last-mile-delivery ADR 0014). Empty means not reported (a legacy client), which is not the same as OTHER; a detail never replaces failureReason. FAILED carries NOT_HOME, ACCESS_PROBLEM or OTHER; DELIVERED carries SAFE_PLACE_USED; any other pairing is 422 validation-failed. Only NOT_HOME and ACCESS_PROBLEM count as failures on the DeliveryPointProfile.
+
+Appears in: `DeliveryAttempted.outcomeDetail`, REST `OutcomeDetail`, REST `RecordAttemptRequest.outcomeDetail`, REST `Attempt.outcomeDetail`.
+
+| Value | Meaning |
+| --- | --- |
+| `NOT_HOME` | Failed: nobody was at the point to receive the package. A counted failure. |
+| `ACCESS_PROBLEM` | Failed: the point could not be reached or entered. A counted failure. |
+| `SAFE_PLACE_USED` | Delivered: the package was left in an agreed safe place. |
+| `OTHER` | Failed: a category outside the closed list. Tallied, never counted as a strike. |
 
 ### Reasons of `shipping-and-tracking`
 

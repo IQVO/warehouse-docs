@@ -76,8 +76,22 @@ erDiagram
         TEXT route_id FK
         TEXT tracking_number
         TEXT outcome "DELIVERED or FAILED"
+        TEXT outcome_detail "nullable, NOT_HOME, ACCESS_PROBLEM, OTHER or SAFE_PLACE_USED"
         TEXT failure_reason "nullable"
         TIMESTAMPTZ attempted_at
+    }
+    delivery_point_profiles {
+        TEXT stop_key PK "CHECK not pkg-prefixed"
+        INTEGER attempts
+        INTEGER delivered
+        INTEGER safe_place_used
+        INTEGER failed_not_home
+        INTEGER failed_access
+        INTEGER failed_other
+        JSONB strikes
+        TIMESTAMPTZ flagged_at "nullable"
+        TIMESTAMPTZ last_attempt_at
+        BIGINT version
     }
 ```
 

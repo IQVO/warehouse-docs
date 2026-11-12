@@ -109,7 +109,10 @@ The customer-visible timeline of one package. It owns its `Scan` entities
 (`scanId`, `nodeId`, `scanType`, `at`) and folds facts from three producers
 into one forward-only state: the vendor's shipment confirmation and the first
 pickup scan, linehaul load departures and arrivals, and last-mile
-out-for-delivery and attempts. It ends in `DELIVERED`, `RETURNED` or `LOST`.
+out-for-delivery and attempts. It also carries the day-of ETA window
+(`AssignEta`, ADR 0013) and the delivery-point flag (`FlagDeliveryPoint`,
+ADR 0014), neither of which is a scan: both are stored without moving the
+state. It ends in `DELIVERED`, `RETURNED` or `LOST`.
 
 ### 3. State Transitions
 
@@ -165,6 +168,8 @@ Every applied scan raises `PackageScanned` with the new `state`.
 | Scans apply in time order; an older scan is stored but does not move the state | `ErrScanOutOfOrder` |
 | A `scanId` is applied once | `ErrDuplicateScan` |
 | `DELIVERED`, `RETURNED` and `LOST` are terminal | `ErrJourneyClosed` |
+| The stored ETA window is empty or has `etaStart < etaEnd` and a non-zero `etaAssignedAt`; an assignment not strictly newer than the stored one is refused, and a terminal journey refuses `AssignEta` | `ErrEtaStale` (stale) / `ErrJourneyClosed` (terminal) |
+| `pointFlagReason` and `pointFlaggedAt` are null together and the reason is `NOT_HOME` or `ACCESS_PROBLEM`; a flag not strictly newer than the stored one is refused, and a terminal journey refuses `FlagDeliveryPoint` | `ErrPointFlagStale` (stale) / `ErrJourneyClosed` (terminal) |
 | Only the transitions drawn above exist (forward only) | The model names no `Err...` for a scan whose fact has no edge from the current state (for example `PackageOutForDelivery` on an `IN_TRANSIT` journey). These pages store such a scan as not applied, like an out-of-order one, and list the missing error as a model gap |
 
 ### 5. Corrective Policies
@@ -191,6 +196,8 @@ Every applied scan raises `PackageScanned` with the new `state`.
 | --- | --- | --- |
 | `StartJourney` | The `IssueLabel` use case (no trigger is named in the model) | none of its own |
 | `RecordScan` | Kafka consumers of `VendorShipmentConfirmed`, `LoadDeparted`, `LoadArrived`, `PackageOutForDelivery`, `DeliveryAttempted`; an unnamed REST caller | `internal/adapters/inbound/kafka`; REST `POST /journeys/{trackingNumber}/scans` |
+| `AssignEta` | The Kafka consumer of `StopEtaWindowAssigned` (use case `ApplyEtaWindows`, one unit per event, inbox claim first) | `internal/adapters/inbound/kafka` |
+| `FlagDeliveryPoint` | The Kafka consumer of `DeliveryPointFlagged` (one unit per event, inbox claim first) | `internal/adapters/inbound/kafka` |
 | `RaiseException` | The `ExceptionOnSilence` sweep | internal scheduler |
 | `ReturnToSender` | Not named in the model | none |
 | `DeclareLost` | Not named in the model | none |
@@ -205,9 +212,17 @@ Every applied scan raises `PackageScanned` with the new `state`.
 | `PackageExceptionRaised` | `RaiseException` (no transition) | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageExceptionRaised` |
 | `PackageReturned` | `AT_STATION -> RETURNED` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` |
 | `PackageLost` | `IN_TRANSIT -> LOST` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` |
+| `PackageEtaWindowAssigned` | `AssignEta` stores a window (no transition) | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageEtaWindowAssigned` |
+| `PackageDeliveryPointFlagged` | `FlagDeliveryPoint` stores a flag (no transition) | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDeliveryPointFlagged` |
 
 Subject and Kafka key: `trackingNumber`. A handover or delivery scan raises
 two events in one transaction: `PackageScanned` and the milestone event.
+`AssignEta` and `FlagDeliveryPoint` raise theirs in the same unit of work as
+the stored window or flag, one per journey of the stop. The journey view
+(`GET /journeys/{trackingNumber}`, MCP and A2A) shows `etaStart` and `etaEnd`
+only while `EtaCurrent` holds: the state is `OUT_FOR_DELIVERY`, the
+`etaAssignedAt` is non-zero and not before `lastScanAt`. The window is shown
+as received, never clipped to the promised window.
 
 ### 8. Throughput
 

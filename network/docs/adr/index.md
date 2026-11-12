@@ -33,7 +33,7 @@ accepts it.
 ## Service ADRs (one sequence per context repository)
 
 Each of the eleven context repositories records its own decisions on top of
-the domain-level ones above: 160 ADRs on `develop` as of 2026-11-11. They are
+the domain-level ones above: 166 ADRs on `develop` as of 2026-11-12. They are
 linked, never copied; the *Status* column is the word from each ADR's own
 status line. Since the fleet observability standard (accepted 2026-10-26),
 every repository added an A2A inbound adapter and adopted the fleet REST API
@@ -55,7 +55,11 @@ purchase-order cancel of `vendor-connectivity`, the follower lock of
 `linehaul-transportation`, and one tracking number shared by several assignments or
 groups in `delivery-promise` and `customer-ordering`) and the opt-in `CONSOLIDATED`
 tier with a customer-chosen delivery day (`delivery-promise`, `customer-ordering`,
-`order-sourcing`). `linehaul-transportation` ADR 0013 (a direct-lane advisory) is
+`order-sourcing`). Wave 3 (2026-11-11/12) added the day-of stop ETA window of
+`last-mile-delivery` and its relay onto the journey (`shipping-and-tracking`)
+and the tracking view (`customer-ordering`), and the delivery-point profile
+with its flag, relay and shopper advisory across the same three contexts.
+`linehaul-transportation` ADR 0013 (a direct-lane advisory) is
 Proposed on a feature branch only and not on `develop`, so the sequence there
 jumps from 0012 to 0014.
 
@@ -146,6 +150,8 @@ jumps from 0012 to 0014.
 | [0011](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0011-agent-authority-levels-and-complete-mcp-surface.md) | Agent authority levels and the complete MCP surface | Accepted |
 | [0012](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0012-consolidation-key-and-shared-tracking-numbers.md) | The consolidation key and shared tracking numbers | Accepted |
 | [0013](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0013-consolidated-tier-and-chosen-delivery-day.md) | The CONSOLIDATED tier and the stored chosen delivery day | Accepted |
+| [0014](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0014-day-of-eta-window-on-the-tracking-view.md) | The day-of ETA window on the tracking view | Accepted |
+| [0015](https://github.com/IQVO/customer-ordering/blob/develop/docs/adr/0015-delivery-point-advisory-on-the-tracking-view.md) | The delivery-point advisory on the tracking view | Accepted |
 
 ### order-sourcing
 
@@ -220,6 +226,8 @@ jumps from 0012 to 0014.
 | [0010](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 | [0011](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0011-wave-stop-cost-declaration.md) | Wave stop-cost declaration (cents, planner-declared) | Accepted |
 | [0012](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0012-analytics-read-side.md) | Analytics read side | Accepted |
+| [0013](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0013-stop-eta-window.md) | The day-of stop ETA window (StopEtaWindowAssigned at StartRoute) | Accepted |
+| [0014](https://github.com/IQVO/last-mile-delivery/blob/develop/docs/adr/0014-delivery-point-profile.md) | The delivery-point profile (outcome detail, DeliveryPointFlagged) | Accepted |
 
 ### shipping-and-tracking
 
@@ -237,6 +245,8 @@ jumps from 0012 to 0014.
 | [0010](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0010-adopt-the-fleet-rest-api-guideline.md) | Adopt the fleet REST API guideline | Accepted |
 | [0011](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0011-label-time-address-deliverability-check.md) | Label-time address deliverability check | Accepted |
 | [0012](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0012-analytics-read-side.md) | Analytics read side | Accepted |
+| [0013](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0013-day-of-eta-window-on-the-journey.md) | The day-of ETA window on the journey | Accepted |
+| [0014](https://github.com/IQVO/shipping-and-tracking/blob/develop/docs/adr/0014-relay-the-delivery-point-flag-by-order-id.md) | Relay the delivery-point flag by orderId | Accepted |
 
 ### node-performance
 

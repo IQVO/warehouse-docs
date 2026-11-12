@@ -30,6 +30,8 @@ Derived from: `model.yaml → contexts[shipping-and-tracking].ul`.
 | **Package Journey** | The customer-visible timeline of one package. | `journey.PackageJourney` | `customer-ordering`'s `OrderTrackingView`, a read model per order fed by this context's events |
 | **Scan** | One observation of a package at a node. | `journey.Scan` | A **Delivery Attempt** (`route.Attempt`), which is a last-mile fact this context turns into a scan |
 | **Handover** | The instant a vendor node's package enters the network. | `journey.HandedOver` | `VendorShipmentConfirmed`, the vendor's own statement that it shipped. Handover is the network's observation (`HandoverOnFirstScan`) |
+| **Day-of ETA Window** | The at-most-two-hours delivery window consumed from last-mile-delivery at route start and stored on the journey (`etaStart`, `etaEnd`, `etaAssignedAt`). Not a scan: it never moves the state, and it shows on the journey view only while `EtaCurrent` holds (`OUT_FOR_DELIVERY`, assigned at or after the last applied scan). | `journey.PackageJourney` | The **Deliver-By Window** of the promise, which is never revised by the window and never clips it |
+| **Delivery-Point Flag** | The `pointFlagReason` and `pointFlaggedAt` stored on each journey of a flagged delivery point (consumed from last-mile-delivery without the stop key) and republished per package by `orderId`. Not a scan; there is no cleared event, so it ends when the package ends. | `journey.PackageJourney` | The **advisory** shown by `customer-ordering`: the shopper-facing wording of this fact, which this context never writes |
 
 ## Other names in this context's model
 

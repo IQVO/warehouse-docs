@@ -106,7 +106,7 @@ flowchart TB
     VC ==>|"C/S 1e"| ST
     LH ==>|"CF 2e"| ST
     LH ==>|"C/S 1e"| LM
-    LM ==>|"? + CF 3e"| ST
+    LM ==>|"? + CF 5e"| ST
     ST ==>|"? + CF 2e"| LH
     ST ==>|"? 1e"| LM
     ST -->|"C/S +REST"| VC
@@ -199,7 +199,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `delivery-promise` | `order-sourcing` | C/S | `PromiseRevised`, `PromiseBookExhausted` | - |
 | `last-mile-delivery` | `delivery-promise` | ? + CF | `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged`, `DeliveryWaveCancelled`, `PackageInductionDeferred` | - |
 | `last-mile-delivery` | `order-sourcing` | ? + CF | `DeliveryWaveScheduled`, `WaveCostDeclared`, `DeliveryWaveCapacityChanged`, `DeliveryWaveCancelled` | - |
-| `last-mile-delivery` | `shipping-and-tracking` | ? + CF | `PackageOutForDelivery`, `DeliveryAttempted`, `PackageReturnInitiated` | - |
+| `last-mile-delivery` | `shipping-and-tracking` | ? + CF | `PackageOutForDelivery`, `StopEtaWindowAssigned`, `DeliveryAttempted`, `PackageReturnInitiated`, `DeliveryPointFlagged` | - |
 | `linehaul-transportation` | `delivery-promise` | ? + CF | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`, `LoadDeparted`, `LoadArrived`, `BookingMoved`, `BookingFailed` | - |
 | `linehaul-transportation` | `last-mile-delivery` | C/S | `LoadArrived` | - |
 | `linehaul-transportation` | `order-sourcing` | ? + CF | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`, `BookingMoved`, `BookingFailed` | - |
@@ -229,7 +229,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `seller-inbound` | `node-performance` | CF | `InboundShipmentShipped` | - |
 | `seller-inbound` | `offer-availability` | CF | `SellerSuspended`, `SellerReinstated`, `InboundShipmentReceived` | - |
 | `seller-inbound` | `vendor-connectivity` | C/S | `InboundShipmentLabelled`, `InboundShipmentShipped`, `InboundShipmentReceived` | - |
-| `shipping-and-tracking` | `customer-ordering` | ? + CF | `LabelIssued`, `LabelVoided`, `PackageScanned`, `PackageDelivered`, `PackageExceptionRaised`, `PackageReturned`, `PackageLost` | - |
+| `shipping-and-tracking` | `customer-ordering` | ? + CF | `LabelIssued`, `LabelVoided`, `PackageScanned`, `PackageDelivered`, `PackageExceptionRaised`, `PackageReturned`, `PackageLost`, `PackageEtaWindowAssigned`, `PackageDeliveryPointFlagged` | - |
 | `shipping-and-tracking` | `delivery-promise` | ? + CF | `PackageDelivered`, `PackageExceptionRaised`, `PackageReturned`, `PackageLost` | - |
 | `shipping-and-tracking` | `last-mile-delivery` | ? | `LabelIssued` | - |
 | `shipping-and-tracking` | `linehaul-transportation` | ? + CF | `LabelIssued`, `LabelVoided` | - |
