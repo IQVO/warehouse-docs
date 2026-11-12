@@ -486,6 +486,39 @@ contexts:
         events: [YardCheckClosed]
         throughput_estimate: low
         size_estimate: one per site per shift
+      - name: InspectionTemplate
+        root_id: "templateId + version"
+        description: "A versioned, immutable compliance checklist (built-ins ship in code); an item's failure names the hold reason it places."
+        states: [PUBLISHED]
+        value_objects:
+          - "Item{itemCode, text, required, allowNotApplicable, holdReason SECURITY|SEAL_BROKEN|DAMAGED|QUALITY|NOT_FOUND}"
+        invariants:
+          - {rule: "a version is published once and never changes; republishing the same content is idempotent, other content under a published version is refused", error: ErrTemplateVersionImmutable}
+          - {rule: "a built-in template is read-only", error: ErrTemplateIsBuiltIn}
+          - {rule: "1 to 100 items, unique lower-case item codes", error: ErrValidation}
+        commands: [PublishTemplateVersion, ListLatestTemplates, GetTemplateVersion]
+        events: []
+        throughput_estimate: low
+        size_estimate: a handful of templates per site
+      - name: Inspection
+        root_id: inspectionId
+        description: "One compliance inspection of a trailer against a template version, taken at a policy gate (before dock, load or departure) or on demand; a failed check holds the trailer in the same instant."
+        states: [OPEN, COMPLETED]
+        transitions:
+          - [OPEN, OPEN, RecordItemResult]
+          - [OPEN, COMPLETED, CompleteInspection]
+        value_objects:
+          - "Gate PRE_DOCK|PRE_LOAD|PRE_DEPARTURE|ON_DEMAND"
+          - "Outcome PASSED|FAILED"
+          - "ConditionGrade CLEAN|DIRTY?"
+        invariants:
+          - {rule: "an item is recorded at most once per inspection and its code exists in the template version", error: ErrUnknownItem}
+          - {rule: "an inspection is completed once; the record is final", error: ErrInspectionFinal}
+          - {rule: "a FAILED outcome places a hold on the trailer when any failed item carries a hold reason", error: ErrTrailerHeld}
+        commands: [StartInspection, RecordItemResult, CompleteInspection, ListInspections]
+        events: [InspectionCompleted, InspectionFailed]
+        throughput_estimate: low (one per trailer at each policy gate)
+        size_estimate: one record per inspection, retained as the audit trail
       - name: YardPolicy
         root_id: siteId
         description: The per-site yard rules every gate and move decision reads.
@@ -530,7 +563,8 @@ contexts:
       - {from: hostler (floor client), type: cmd, channel: REST, routes: ["POST /moves/claims", "POST /moves/{moveId}/completions"], message: "ClaimNextMove, CompleteMove", relationship: UI}
       - {from: dock operator (floor client), type: cmd, channel: REST, routes: ["POST /trailers/{trailerId}/door-work-starts", "POST /trailers/{trailerId}/door-work-completions", "POST /trailers/{trailerId}/securings", "POST /trailers/{trailerId}/securing-releases"], message: "StartDoorWork, CompleteDoorWork, SecureTrailer, ReleaseTrailerSecuring", relationship: UI}
       - {from: yard supervisor, type: cmd, channel: REST, routes: ["POST /moves", "POST /moves/{moveId}/cancellations", "POST /trailers/{trailerId}/holds", "POST /trailers/{trailerId}/hold-releases", "POST /trailers/{trailerId}/seals", "POST /trailers/{trailerId}/classifications", "PUT /sites/{siteId}/yard-policy", "POST /yard-checks", "POST /yard-checks/{yardCheckId}/observations", "POST /yard-checks/{yardCheckId}/closures"], message: "RequestMove, CancelMove, PlaceHold, ReleaseHold, RecordSeal, ClassifyTrailer, DeclareYardPolicy, OpenYardCheck, RecordObservation, CloseYardCheck", relationship: UI}
-      - {from: any context, type: qry, channel: REST, routes: ["GET /visits", "GET /visits/{visitId}", "GET /trailers", "GET /trailers/{trailerId}", "GET /moves", "GET /sites/{siteId}/yard-board", "GET /sites/{siteId}/yard-policy"], message: "ListVisits, GetVisit, ListTrailers, GetTrailer, ListMoves, GetYardBoard, GetYardPolicy", relationship: OHS}
+      - {from: gate clerk or dock operator, type: cmd, channel: REST, routes: ["POST /trailers/{trailerId}/inspections", "PUT /inspections/{inspectionId}/items/{itemCode}", "POST /inspections/{inspectionId}/completions", "PUT /inspection-templates/{templateId}/versions/{version}"], message: "StartInspection, RecordItemResult, CompleteInspection, PublishTemplateVersion", relationship: UI}
+      - {from: any context, type: qry, channel: REST, routes: ["GET /visits", "GET /visits/{visitId}", "GET /trailers", "GET /trailers/{trailerId}", "GET /moves", "GET /sites/{siteId}/yard-board", "GET /sites/{siteId}/yard-policy", "GET /trailers/{trailerId}/inspections", "GET /inspections/{inspectionId}", "GET /inspection-templates", "GET /inspection-templates/{templateId}", "GET /inspection-templates/{templateId}/versions/{version}"], message: "ListVisits, GetVisit, ListTrailers, GetTrailer, ListMoves, GetYardBoard, GetYardPolicy", relationship: OHS}
       - {from: scheduler (cron), type: cmd, channel: REST, routes: ["POST /dwell-sweeps", "POST /move-lease-sweeps"], message: "DwellSweep, ExpireLease", relationship: UI}
       - {from: yard supervisor, type: qry, channel: REST (cmd/yard-reports), routes: ["GET /reports/yard-dwell", "GET /reports/door-utilisation", "GET /reports/hostler-productivity", "GET /reports/turn-time", "GET /reports/detention-exposure", "GET /reports/exceptions", "GET /reports/freshness"], message: "GetYardDwellReport, GetDoorUtilisationReport, GetHostlerProductivityReport, GetTurnTimeReport, GetDetentionExposureReport, GetExceptionsReport, GetReportsFreshness", relationship: UI}
       - {from: dock-scheduling, type: evt, channel: Kafka warehouse.dock-scheduling.events, message: "DockAppointmentBooked, DockAppointmentRescheduled, DockAppointmentCancelled, DockAppointmentNoShow, DoorClosureScheduled, DoorClosureLifted", relationship: Customer/Supplier}
@@ -552,6 +586,15 @@ contexts:
       - POST /trailers/{trailerId}/classifications
       - POST /trailers/{trailerId}/securings
       - POST /trailers/{trailerId}/securing-releases
+      - POST /trailers/{trailerId}/inspections
+      - GET /trailers/{trailerId}/inspections
+      - GET /inspections/{inspectionId}
+      - PUT /inspections/{inspectionId}/items/{itemCode}
+      - POST /inspections/{inspectionId}/completions
+      - GET /inspection-templates
+      - GET /inspection-templates/{templateId}
+      - GET /inspection-templates/{templateId}/versions/{version}
+      - PUT /inspection-templates/{templateId}/versions/{version}
       - POST /moves
       - GET /moves
       - POST /moves/claims
@@ -617,6 +660,14 @@ contexts:
         entity: trailer
         data: [trailer_id, site_id, door_code, released_at, version]
         consumers: []
+      - event: InspectionCompleted
+        entity: inspection
+        data: [inspection_id, site_id, trailer_id, visit_id, template_id, template_version, gate, outcome, condition_grade, completed_at, failed_item_codes]
+        consumers: []
+      - event: InspectionFailed
+        entity: inspection
+        data: [inspection_id, site_id, trailer_id, template_id, gate, failed_items, failed_at, hold_placed]
+        consumers: [exception-management]
       - event: SealExceptionRaised
         entity: trailer
         data: [trailer_id, site_id, appointment_id, expected_seal_number, found_seal_number, raised_at]
@@ -670,7 +721,7 @@ contexts:
       develop_merged: "2026-11-08 (ADR 0010 and the KPI standard 2026-11-09)"
       deployed: "k3s since 2026-11-10 at v0.1.2, reduced footprint: api and relay; mcp, projector, reports and sweep registered in warehouse-infra but off"
       spec_copies: yard/apis/yard-management/{openapi.yaml, asyncapi.yaml}
-      asyncapi: "3.0.0; friendly channel keys, topic in address; 11 integration types, 21 analytics types (all 21 on the analytics twin); TrailerSecured and TrailerSecuringReleased have no consumer yet"
+      asyncapi: "3.0.0; friendly channel keys, topic in address; 13 integration types, 23 analytics types (all 23 on the analytics twin); TrailerSecured, TrailerSecuringReleased and InspectionCompleted have no consumer yet"
       binaries: [api, mcp, relay, yard-projector, yard-reports]
       tables: [yard_visits, trailers, yard_moves, yard_checks, yard_policies, zones, locations, appointments, door_closures, asns, receipts, processed_events, outbox, idempotency_keys]
       analytics_tables: [analytics.processed_events, analytics.trailer_facts, analytics.door_dockings, analytics.door_work, analytics.hostler_moves, analytics.visit_facts, analytics.gate_exceptions, analytics.trailer_holds, analytics.yard_check_results]

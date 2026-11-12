@@ -30,5 +30,5 @@ Pages: [Subdomain Classification](/yard/strategic-design/subdomain-classificatio
 | --- | --- |
 | `dock-scheduling` aggregates / invariants | 3 / 25 |
 | `dock-scheduling` published events / REST routes | 14 / 21 |
-| `yard-management` aggregates / invariants | 5 / 33 |
-| `yard-management` published events / REST routes | 21 / 35 |
+| `yard-management` aggregates / invariants | 7 / 39 |
+| `yard-management` published events / REST routes | 23 / 44 |

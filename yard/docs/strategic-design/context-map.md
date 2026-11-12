@@ -32,7 +32,7 @@ flowchart TD
   dock_scheduling -->|Customer/Supplier, 1| exception_management
   yard_management -->|Customer/Supplier, 4| dock_scheduling
   yard_management -->|Customer/Supplier, 1| inbound_receiving
-  yard_management -->|Customer/Supplier, 4| exception_management
+  yard_management -->|Customer/Supplier, 5| exception_management
   yard_management -->|Customer/Supplier, 3| outbound_shipping
   facility_layout -->|Conformist, 3| dock_scheduling
   inbound_receiving -->|Conformist, 2| dock_scheduling
@@ -52,7 +52,7 @@ flowchart TD
 | `dock-scheduling` | `exception-management` | Customer/Supplier | `DockAppointmentNoShow` |
 | `yard-management` | `dock-scheduling` | Customer/Supplier | `VisitCheckedIn`, `VisitRejected`, `TrailerDocked`, `TrailerUndocked` |
 | `yard-management` | `inbound-receiving` | Customer/Supplier | `VisitCheckedIn` |
-| `yard-management` | `exception-management` | Customer/Supplier | `VisitRejected`, `SealExceptionRaised`, `TrailerDwellExceeded`, `YardCheckClosed` |
+| `yard-management` | `exception-management` | Customer/Supplier | `VisitRejected`, `InspectionFailed`, `SealExceptionRaised`, `TrailerDwellExceeded`, `YardCheckClosed` |
 | `yard-management` | `outbound-shipping` | Customer/Supplier | `TrailerDocked`, `DoorWorkCompleted`, `TrailerDeparted` |
 | `facility-layout` | `dock-scheduling` | Conformist | `LocationSlotRegistered`, `LocationSlotDecommissioned`, `ZoneRegistered` |
 | `inbound-receiving` | `dock-scheduling` | Conformist | `ASNRegistered`, `ASNCancelled` |
