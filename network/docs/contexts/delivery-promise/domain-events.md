@@ -59,7 +59,7 @@ timestamps are RFC 3339 UTC strings.
 | --- | --- | --- |
 | `promiseId` | string | the new promise |
 | `offerId` | string | the `DeliveryOffer` it consumed |
-| `tier` | enum | `SAME_DAY`, `NEXT_DAY`, `TWO_DAY`, `STANDARD` |
+| `tier` | enum | `SAME_DAY`, `NEXT_DAY`, `TWO_DAY`, `STANDARD` or `CONSOLIDATED` (opt-in: only on a quote that asked for it) |
 | `nodeId` | string | witness node |
 | `pickupDepartureId` | string | witness pickup departure (its book is `nodeId:pickupDepartureId`) |
 | `shipBy` | timestamp | pickup cutoff the package must be ready for |
@@ -67,6 +67,7 @@ timestamps are RFC 3339 UTC strings.
 | `deliverByLatest` | timestamp | window end; the judgement line |
 | `basis` | enum | `SCHEDULED`, `MEASURED` or `NOMINAL` |
 | `confidence` | number, optional | in [0,1], three decimals: the calibration segment's observed share of judged promises within the quote's buffer; omitted when the segment has too few judgements (unknown, never zero) |
+| `consolidationEligible` | boolean, optional | present only for the tier `CONSOLIDATED`: true when the chosen day leaves the network at least one local day after the fastest window to merge the order with others, false when it is that window itself; never `false` by default and it never says another order exists |
 | `policyVersion` | string | version of the promise policies used |
 | `holdExpiresAt` | timestamp | the provisional hold is released after this instant |
 | `lines` | array of `{catalogItemId, quantity}` | the shipment group |
@@ -113,6 +114,7 @@ expired).
 `retailnetwork.delivery-promise.analytics` for every quote. Its data fields in the
 model are `offerId`, `tier`, `destinationPostalPrefix`, `nodeId`,
 `deliverByEarliest`, `deliverByLatest`, `basis`, `confidence` (optional),
+`consolidationEligible` (optional, `CONSOLIDATED` only),
 `policyVersion`, `expiresAt` and `capacityBand` (optional: `AMPLE`, `TIGHT` or
 `SCARCE`, omitted when unknown, never an empty string). Consumers of the
 analytics topic decode tolerantly and ignore what they do not use.
@@ -163,8 +165,8 @@ row backwards.
 | `customer-ordering` | `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderCancelled` | `orderId`, `groupNos`, `reason` | `CancelPromise` for the promises of those groups, releasing confirmed capacity (this pack's reading; no policy named) | a `CANCELLED` promise is a no-op |
 | `order-sourcing` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentUnsourceable` | `promiseId`, `orderId`, `groupNo`, `excludedNodes`, `reason` | `RepromiseOnRisk`: `FlagPromiseAtRisk`, recompute (excluding `excludedNodes`, this pack's reading), `RevisePromise` | an `AT_RISK` promise is not flagged twice |
 | `order-sourcing` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | `assignmentId`, `orderId`, `groupNo`, `nodeId`, `pickupDepartureId` | The model names no use. This pack records the `assignmentId` against the group's promise, so that `PackageDelivered` and `PackageExceptionRaised` can find it (open question) | last write wins; a lock happens once per assignment |
-| `shipping-and-tracking` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDelivered` | `assignmentId`, `orderId`, `deliveredAt` | `JudgeOnDelivery`: `JudgePromise` for the group's promise | a judged promise is terminal (`ErrPromiseClosed` is swallowed as a duplicate) |
-| `shipping-and-tracking` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageExceptionRaised` | `assignmentId`, `orderId`, `reason`, `at` | `RepromiseOnRisk` for the group's promise | as above |
+| `shipping-and-tracking` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDelivered` | `assignmentId`, `orderId`, `deliveredAt` | `JudgeOnDelivery`: `JudgePromise` for the group's promise, and for every promise that shares the package's tracking number (`SharedTrackingJudgement`, each judged on its own window; `PackageLost` and `PackageReturned` break every sharing promise) | a judged promise is terminal (`ErrPromiseClosed` is swallowed as a duplicate) |
+| `shipping-and-tracking` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageExceptionRaised` | `assignmentId`, `orderId`, `reason`, `at` | `RepromiseOnRisk` for the group's promise; when the event carries a tracking number, every assignment that shares it is flagged `AT_RISK` | as above |
 | `linehaul-transportation` | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureScheduled` | `departureId`, `laneId`, `kind`, `originNodeId`, `destinationNodeId`, `cutoffAt`, `departsAt`, `arrivesAt`, `capacityPackages` | upsert `DepartureView` | insert-if-absent on `departureId` |
 | `linehaul-transportation` | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCapacityChanged` | `departureId`, `capacityPackages`, `bookedPackages`, `remainingPackages` | update `DepartureView` remaining capacity | applied only if the CloudEvents `time` is newer than the row's |
 | `linehaul-transportation` | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCancelled` | `departureId`, `reason`, `cancelledAt` | mark cancelled in `DepartureView`; `RepromiseOnRisk` for every open promise whose witness path uses the departure | a cancelled row stays cancelled |

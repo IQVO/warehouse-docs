@@ -24,18 +24,19 @@ network-level walk-through with times is the
 | --- | --- | --- |
 | `QueueAssignment` | `CustomerOrderPlaced` | `internal/adapters/inbound/kafka`, topic `retailnetwork.customer-ordering.events` |
 | `ReoptimiseAssignment` | re-optimisation sweep; network-ops planner | scheduler in `cmd/order-sourcing`; `internal/adapters/inbound/http` `POST /assignments/{assignmentId}/reoptimisations` |
-| `ReleaseToNode` | `releaseAt` reached; `SAME_DAY` right after queueing | scheduler in `cmd/order-sourcing` (release timer) |
+| `ReleaseToNode` | `releaseAt` reached; `SAME_DAY` right after queueing | scheduler in `cmd/order-sourcing` (release timer); the same use case calls `ReleaseConsolidated` and `ReleaseAsFollower` when a merge applies |
 | `HandleNodeRefusal` | `PurchaseOrderRejected`, `PurchaseOrderExpired` | Kafka, topic `retailnetwork.vendor-connectivity.events` |
 | `LockAssignment` | `PurchaseOrderAccepted` | Kafka, topic `retailnetwork.vendor-connectivity.events` |
 | `MarkShipped` | `VendorShipmentConfirmed` | Kafka, topic `retailnetwork.vendor-connectivity.events` |
 | `MarkDelivered` | `PackageDelivered` | Kafka, topic `retailnetwork.shipping-and-tracking.events` |
 | `CancelAssignment` | `CustomerOrderCancelled` | Kafka, topic `retailnetwork.customer-ordering.events` |
-| `ApplyRevisedPromise` | `PromiseRevised` | Kafka, topic `retailnetwork.delivery-promise.events` |
+| `ApplyRevisedPromise` | `PromiseRevised` | Kafka, topic `retailnetwork.delivery-promise.events` (a revision of a `RELEASED` merged member runs `Requeue`) |
+| `PublishSourcingPolicy` | network-ops planner | `PUT /sourcing-policy`, behind the `Idempotency-Key` middleware |
 
 Queries are not use cases here. `GET /assignments?state=&nodeId=&orderId=`
 (`ListAssignments`) and `GET /assignments/{assignmentId}` (`GetAssignment`)
-read the repository directly. The read-model projectors (29 consumed event
-types into five views) are not use cases either: they apply no domain rule.
+read the repository directly. So does `GET /sourcing-policy`. The read-model projectors (34 consumed event
+types into the event-fed views) are not use cases either: they apply no domain rule.
 
 ## How a change commits
 
@@ -141,7 +142,14 @@ retried forever.
      `FulfillmentReleasedToNode`.
   4. If no candidate meets `deliverByLatest`: state `UNSOURCEABLE`, raise
      `FulfillmentUnsourceable` with `excludedNodes`.
-  5. Save with the version check and the outbox row.
+  5. Consolidation (only when the current `SourcingPolicy` has
+     `consolidationMaxAssignments` of 2 or more and the due carrier has a key and is
+     `CONSOLIDATED`): read the queued groups of the same key, run the pure
+     `sourcing.Merge`; with at least one follower the carrier calls
+     `ReleaseConsolidated` and each follower `ReleaseAsFollower` in the same unit of
+     work (`FulfillmentReleasedToNode` with `members`, `AssignmentsConsolidated`).
+     Otherwise the carrier releases alone, as before.
+  6. Save with the version check and the outbox row.
 - **Errors:**
 
   | Error | When | HTTP | Problem `type` |
@@ -247,7 +255,7 @@ retried forever.
   `CustomerOrderCancelled`.
 - **Inbound adapter:** Kafka consumer of
   `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderCancelled`.
-- **Preconditions:** state `QUEUED`, `RELEASED` or `UNSOURCEABLE`; from `LOCKED`, `SHIPPED` or `DELIVERED` the request is refused (below).
+- **Preconditions:** state `QUEUED`, an unmerged `RELEASED` or `UNSOURCEABLE`; from `LOCKED`, `SHIPPED` or `DELIVERED`, and from a `RELEASED` member of a live merge, the request is refused (below).
 - **Main flow:**
   1. Inbox check.
   2. For each `groupNo` in `groupNos`, load the assignment of (`orderId`,
@@ -260,6 +268,7 @@ retried forever.
   | Error | When | HTTP | Problem `type` |
   | --- | --- | --- | --- |
   | `ErrCancelAfterLock` | state `LOCKED`, `SHIPPED` or `DELIVERED` | no HTTP (consumer): `RefuseCancel` keeps the state and publishes `FulfillmentCancelRefused` (`CANCEL_AFTER_LOCK`) | `cancel-after-lock` |
+  | `ErrCancelWhileMerged` | a `RELEASED` carrier or follower of a live merge | no HTTP (consumer): `RefuseCancel` keeps the state, withdraws nothing and publishes `FulfillmentCancelRefused` (`CANCEL_WHILE_MERGED`); the order side keeps the group and may retry | not an HTTP error |
   | `ErrStaleAssignmentVersion` | concurrent change | 409 | `stale-assignment-version` (retry) |
 
 - **Events:** `FulfillmentCancelled`, or `FulfillmentCancelRefused` for a refused request.
@@ -271,7 +280,7 @@ retried forever.
   (its answer to `FulfillmentUnsourceable`).
 - **Inbound adapter:** Kafka consumer of
   `com.retailnetwork.commerce.delivery-promise.promise.PromiseRevised`.
-- **Preconditions:** the assignment of `promiseId` is `UNSOURCEABLE`.
+- **Preconditions:** the assignment of `promiseId` is `UNSOURCEABLE`, or a `RELEASED` member of a merge whose new window excludes the merged `eta`.
 - **Main flow:**
   1. Inbox check; load the assignment by `promiseId`.
   2. Update `PromiseConstraint.deliverByLatest` (a revision never moves it
@@ -283,4 +292,12 @@ retried forever.
   (retry). For an assignment in any other state the model defines no
   transition; the event is recorded and ignored (open question).
 - **Events:** none in the model (open question).
-- **Idempotency:** inbox; applied only from `UNSOURCEABLE`.
+- **Idempotency:** inbox; applied from `UNSOURCEABLE`, and for a merged `RELEASED` member through `Requeue`: when the revised window (after the new latest, or before the new earliest when known) excludes the merged `eta`, the release is withdrawn (`FulfillmentReleaseWithdrawn`), every member's pending release gets outcome `WITHDRAWN`, every member returns to `QUEUED` and is re-searched with no node exclusion (`FulfillmentReassigned` with `CONSOLIDATION_WITHDRAWN` if its node changed), and `AssignmentsDeconsolidated` is raised. A stale revision stays ignored.
+
+## PublishSourcingPolicy
+
+- **Actor / trigger:** the network-ops planner, `PUT /sourcing-policy` with the whole document (`crossRegionSurchargeCents`, `maxCostDeviationPercent`, `consolidationMaxAssignments`).
+- **Main flow:** validate the ranges; publish version current + 1; raise the analytics-only `SourcingPolicyPublished` in the same transaction.
+- **Errors:** an out-of-range field is 422 `validation-failed`; an empty body is 400; a publish that loses a race for the same version is retried once, then 409 `concurrent-update`.
+- **Idempotency:** the route sits behind the `Idempotency-Key` middleware like a POST, so a retried publish replays instead of publishing twice. Because the body is the whole document, a PUT that omits `consolidationMaxAssignments` switches consolidation off again.
+

@@ -78,7 +78,7 @@ flowchart TB
     DP ==>|"C/S 2e"| OS
     CO ==>|"C/S 2e"| OS
     CO ==>|"C/S 2e"| DP
-    OS ==>|"C/S 2e"| VC
+    OS ==>|"C/S 3e"| VC
     OS ==>|"? + C/S 3e"| DP
     OS ==>|"? + CF 5e"| CO
     VC ==>|"C/S 4e"| OS
@@ -225,7 +225,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `order-sourcing` | `delivery-promise` | ? + C/S | `FulfillmentLocked`, `FulfillmentShipped`, `FulfillmentUnsourceable` | - |
 | `order-sourcing` | `linehaul-transportation` | C/S | `FulfillmentReleasedToNode`, `FulfillmentReassigned`, `FulfillmentLocked`, `FulfillmentCancelled` | - |
 | `order-sourcing` | `seller-inbound` | CF | `FulfillmentReleasedToNode`, `FulfillmentCancelled` | - |
-| `order-sourcing` | `vendor-connectivity` | C/S | `FulfillmentReleasedToNode`, `FulfillmentCancelled` | - |
+| `order-sourcing` | `vendor-connectivity` | C/S | `FulfillmentReleasedToNode`, `FulfillmentReleaseWithdrawn`, `FulfillmentCancelled` | - |
 | `seller-inbound` | `node-performance` | CF | `InboundShipmentShipped` | - |
 | `seller-inbound` | `offer-availability` | CF | `SellerSuspended`, `SellerReinstated`, `InboundShipmentReceived` | - |
 | `seller-inbound` | `vendor-connectivity` | C/S | `InboundShipmentLabelled`, `InboundShipmentShipped`, `InboundShipmentReceived` | - |

@@ -2,7 +2,7 @@
 id: domain-events
 title: Domain Events
 sidebar_label: Domain Events
-description: "Every CloudEvents type Order Sourcing publishes (eight, entity assignment) with topic, key, data fields, producing command and consumers, and every event it consumes with what it does and how it stays idempotent."
+description: "Every CloudEvents type Order Sourcing publishes (fifteen: entity assignment, and entity policy for the sourcing policy) with topic, key, data fields, producing command and consumers, and every event it consumes with what it does and how it stays idempotent."
 ---
 
 # Domain Events
@@ -24,19 +24,19 @@ Every Kafka message is a CloudEvents 1.0 event in structured JSON mode.
 | `specversion` | `1.0` |
 | `id` | a UUID minted once per event and stored in the outbox row, so a re-delivery carries the same `id` |
 | `source` | `/retailnetwork/order-sourcing` |
-| `type` | `com.retailnetwork.commerce.order-sourcing.assignment.<EventName>` (tier `commerce`, entity `assignment` for every event) |
+| `type` | `com.retailnetwork.commerce.order-sourcing.assignment.<EventName>` (tier `commerce`; entity `assignment` for every event except `SourcingPolicyPublished`, whose entity is `policy`) |
 | `subject` | the `assignmentId` |
 | `time` | when the transition happened, UTC |
 | `datacontenttype` | `application/json` |
-| `dataschema` | `urn:retailnetwork:order-sourcing:events:<EventName>:v1` |
-| Kafka topic | `retailnetwork.order-sourcing.events` |
+| `dataschema` | `urn:retailnetwork:order-sourcing:events:<EventName>:v1` (stream segment `analytics` for an analytics-only event) |
+| Kafka topic | `retailnetwork.order-sourcing.events`; `retailnetwork.order-sourcing.analytics` for an analytics-only event |
 | Kafka key | the `assignmentId`, so one assignment's events stay in order on one partition |
 
 Every event leaves through the transactional outbox, written in the same
-transaction as the aggregate. The conventions also define an analytics topic,
-`retailnetwork.order-sourcing.analytics`; no entry of this context names it,
-so "analytics only" below means "published on the events topic with no
-domain consumer".
+transaction as the aggregate. An event marked "analytics only" below goes
+ONLY to `retailnetwork.order-sourcing.analytics` (never to the events topic)
+and has no domain consumer; a sibling cannot consume it. The three consolidation
+events and the policy event were added by wave 2.
 
 ## Published
 
@@ -44,13 +44,18 @@ domain consumer".
 | --- | --- | --- | --- |
 | `FulfillmentQueued` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentQueued` | `QueueAssignment` | analytics only |
 | `FulfillmentReleasedToNode` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | `ReleaseToNode` | `vendor-connectivity`, `linehaul-transportation`, `seller-inbound` |
-| `FulfillmentReassigned` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReassigned` | `ReoptimiseAssignment`, `HandleNodeRefusal` (node changed) | `linehaul-transportation` |
+| `FulfillmentReleaseWithdrawn` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleaseWithdrawn` | `Requeue` (a merge dissolved by a promise revision) | `vendor-connectivity` |
+| `FulfillmentReassigned` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReassigned` | `ReoptimiseAssignment`, `HandleNodeRefusal` (node changed), `Requeue` (node changed) | `linehaul-transportation` |
 | `FulfillmentLocked` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | `LockAssignment` | `delivery-promise`, `customer-ordering`, `linehaul-transportation` |
 | `FulfillmentShipped` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | `MarkShipped` | `customer-ordering` |
 | `FulfillmentDelivered` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentDelivered` | `MarkDelivered` | analytics only |
 | `FulfillmentUnsourceable` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentUnsourceable` | `ReleaseToNode`, `HandleNodeRefusal` (no candidate left) | `delivery-promise`, `customer-ordering` |
 | `FulfillmentCancelled` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | `CancelAssignment` | `vendor-connectivity`, `linehaul-transportation`, `customer-ordering`, `seller-inbound` |
+| `FulfillmentCancelRefused` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelRefused` | `RefuseCancel` | `customer-ordering` |
 | `FulfillmentSourcingDecided` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentSourcingDecided` | `ReleaseToNode` | analytics only (read by this context's own projector, service ADR 0013) |
+| `AssignmentsConsolidated` | `com.retailnetwork.commerce.order-sourcing.assignment.AssignmentsConsolidated` | `ReleaseConsolidated` | analytics only |
+| `AssignmentsDeconsolidated` | `com.retailnetwork.commerce.order-sourcing.assignment.AssignmentsDeconsolidated` | `HandleNodeRefusal` (a merged carrier refused), `Requeue` | analytics only |
+| `SourcingPolicyPublished` | `com.retailnetwork.commerce.order-sourcing.policy.SourcingPolicyPublished` | `PublishSourcingPolicy` | analytics only |
 
 The field lists below are the model's `publishes[*].data`, in order. Types
 are the proposed JSON types; the model gives names only.
@@ -78,8 +83,12 @@ are the proposed JSON types; the model gives names only.
 | `pickupDepartureId` | string | The pickup departure the group must make |
 | `requiredShipBy` | date-time | That departure's cutoff at this node |
 | `promisedDeliverByLatest` | date-time | The promise's `deliverByLatest` |
-| `tier` | string | `SAME_DAY`, `NEXT_DAY`, `TWO_DAY` or `STANDARD` |
-| `lines` | array of `{catalogItemId, listingId, quantity, ownerRef?}` | The whole group (fill-or-kill); `listingId` is this node's listing; `ownerRef` is the owner OwnerChoice picked, omitted when operator-owned (service ADR 0012) |
+| `tier` | string | `SAME_DAY`, `NEXT_DAY`, `TWO_DAY` or `STANDARD`: the FULFILMENT CLASS. A `CONSOLIDATED` group is released as `STANDARD`, so the fifth tier never reaches the vendor or linehaul |
+| `estimatedCostCents` | integer | Optional; omitted when the estimate is incomplete (service ADR 0011) |
+| `policyVersion` | integer | Optional; the sourcing policy version the search read, present only when version 1 or more was in force (service ADR 0014) |
+| `effectiveCostCents` | integer | Optional; the estimate plus the cross-region surcharge, present only when the surcharge changed the cost (service ADR 0014) |
+| `lines` | array of `{catalogItemId, listingId, quantity, ownerRef?, assignmentId?}` | The whole group (fill-or-kill); `listingId` is this node's listing; `ownerRef` is the owner OwnerChoice picked, omitted when operator-owned (service ADR 0012). For a merged release the union of the members' lines in member order, each line naming its own `assignmentId` |
+| `members` | array of `{assignmentId, orderId, groupNo, promiseId}` | Optional; present only on a merged release: the carrier first, then ascending `assignmentId`. Absent means a single-group release (service ADR 0015) |
 
 No ship-to data: the release carries no PII
 ([ADR 0006](/network/adr/0006-pii-confinement)).
@@ -91,7 +100,7 @@ No ship-to data: the release carries no PII
 | `assignmentId` | string | The assignment |
 | `fromNodeId` | string | The node it leaves (the refusing node, or the previous best candidate) |
 | `toNodeId` | string | The new candidate node |
-| `reason` | string | Why it moved; values are not enumerated in the model |
+| `reason` | string | Why it moved: `REOPTIMISED`, `RELEASE_RECHECK`, `PURCHASE_ORDER_REJECTED`, `PURCHASE_ORDER_EXPIRED`, `PROMISE_REVISED` or `CONSOLIDATION_WITHDRAWN` (a member of a dissolved merge, re-searched, landed on another node) |
 | `assignmentVersion` | integer | The version after the change, so consumers can drop stale copies |
 
 ### FulfillmentLocked
@@ -105,6 +114,8 @@ No ship-to data: the release carries no PII
 | `pickupDepartureId` | string | The pickup departure the package will make |
 | `lockedAt` | date-time | When the acceptance was applied |
 | `lockReason` | string | Why it locked; the only trigger the model names is `PurchaseOrderAccepted` |
+| `consolidatedInto` | string | Optional; the carrier a FOLLOWER of a merged release locks with. Omitted unless the assignment is a follower (service ADR 0015) |
+| `mergedAssignmentIds` | array of string | Optional; every merged assignment id, carrier included, ascending. Omitted when the assignment is not merged. A merge has one `FulfillmentLocked` per member |
 
 ### FulfillmentShipped
 
@@ -145,6 +156,67 @@ No ship-to data: the release carries no PII
 | `orderId` | string | The customer order |
 | `groupNo` | integer | The shipment group |
 | `reason` | string | From `CustomerOrderCancelled.reason` |
+
+### FulfillmentCancelRefused
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `assignmentId` | string | The assignment |
+| `orderId` | string | The customer order |
+| `groupNo` | integer | The shipment group |
+| `reason` | string | `CANCEL_AFTER_LOCK` (the cancel arrived after the lock) or `CANCEL_WHILE_MERGED` (the group is a member of a live merge that has not locked yet; the cancel can be retried) |
+
+### FulfillmentReleaseWithdrawn
+
+Subject and key: the carrier's `assignmentId`. Raised when a promise revision dissolves a merged release; `vendor-connectivity` cancels the issued purchase order of that `releaseNo`.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `assignmentId` | string | The carrier |
+| `releaseNo` | integer | The withdrawn release |
+| `orderId` | string | The carrier's order |
+| `groupNo` | integer | The carrier's group |
+| `reason` | string | `PROMISE_REVISED` only: a cancel of a merged member is refused, not withdrawn |
+| `withdrawnAt` | date-time | When the release was taken back |
+
+### AssignmentsConsolidated
+
+Analytics only. Raised when a release carries followers.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `carrierAssignmentId` | string | The carrier |
+| `releaseNo` | integer | The merged release |
+| `nodeId` | string | The node released to |
+| `memberCount` | integer | Carrier plus followers |
+| `units` | integer | The sum of every member's line quantities |
+| `members` | array | `assignmentId`, `orderId`, `groupNo`, `promiseId`, `units` per member |
+| `consolidatedAt` | date-time | When the merge was released |
+
+### AssignmentsDeconsolidated
+
+Analytics only. Raised when a merge ends before the lock.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `carrierAssignmentId` | string | The carrier |
+| `releaseNo` | integer | The dissolved release |
+| `reason` | string | `PROMISE_REVISED`, `PURCHASE_ORDER_REJECTED` or `PURCHASE_ORDER_EXPIRED` |
+| `triggerAssignmentId` | string | Optional; the member whose promise revision broke the merged delivery; omitted for a purchase order refusal |
+| `memberAssignmentIds` | array of string | Every member |
+| `deconsolidatedAt` | date-time | When the merge was dissolved |
+
+### SourcingPolicyPublished
+
+Analytics only. Subject and Kafka key `policy`, entity `policy`. Raised in the same transaction as the save of version n + 1.
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `version` | integer | The published version |
+| `crossRegionSurchargeCents` | integer | 0 to 100000 |
+| `maxCostDeviationPercent` | integer | 0 to 200 |
+| `consolidationMaxAssignments` | integer | Optional; 0 to 10, 0 and 1 mean consolidation is off |
+| `publishedAt` | date-time | When it was published |
 
 ### Example envelope
 
@@ -191,9 +263,9 @@ idempotency comes on top, per row below.
 
 | Producer | Event | Full `type` | Fields used | What this context does | Domain idempotency |
 | --- | --- | --- | --- | --- | --- |
-| `customer-ordering` | `CustomerOrderPlaced` | `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderPlaced` | `orderId`, `destinationPostalPrefix`, `groups(groupNo, promiseId, tier, witnessNodeId, deliverByLatest, lines(lineNo, catalogItemId, quantity))` | `QueueAssignment` per group; `SAME_DAY` groups go straight to `ReleaseToNode` | one assignment per (`orderId`, `groupNo`); a repeat finds it and does nothing |
+| `customer-ordering` | `CustomerOrderPlaced` | `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderPlaced` | `orderId`, `destinationPostalPrefix`, optional `consolidationKey`, `groups(groupNo, promiseId, tier (five values, `CONSOLIDATED` included), witnessNodeId, optional deliverByEarliest, deliverByLatest, lines(lineNo, catalogItemId, quantity))` | `QueueAssignment` per group; `SAME_DAY` groups go straight to `ReleaseToNode` | one assignment per (`orderId`, `groupNo`); a repeat finds it and does nothing |
 | `customer-ordering` | `CustomerOrderCancelled` | `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderCancelled` | `orderId`, `groupNos`, `reason` | `CancelAssignment` for each listed group | an already `CANCELLED` assignment is left as is |
-| `delivery-promise` | `PromiseRevised` | `com.retailnetwork.commerce.delivery-promise.promise.PromiseRevised` | `promiseId`, `revisionNo`, `deliverByLatest`, `nodeId` (new witness) | `ApplyRevisedPromise` on the `UNSOURCEABLE` assignment of that promise | applied only from `UNSOURCEABLE`; a lower or equal `revisionNo` than the last applied is ignored |
+| `delivery-promise` | `PromiseRevised` | `com.retailnetwork.commerce.delivery-promise.promise.PromiseRevised` | `promiseId`, `revisionNo`, optional `deliverByEarliest`, `deliverByLatest`, `nodeId` (new witness) | `ApplyRevisedPromise` on the `UNSOURCEABLE` assignment of that promise | applied from `UNSOURCEABLE`; also from `RELEASED`, where a revised window that excludes the merged `eta` dissolves a consolidation merge (`PROMISE_REVISED`); a lower or equal `revisionNo` than the last applied is ignored |
 | `vendor-connectivity` | `PurchaseOrderAccepted` | `com.retailnetwork.partner.vendor-connectivity.purchaseorder.PurchaseOrderAccepted` | `assignmentId`, `releaseNo`, `nodeId`, `acceptedAt` | `LockAssignment` (`LockOnCommit`) | only if `releaseNo` is the current `PENDING` release; a repeat on a `LOCKED` assignment is a no-op |
 | `vendor-connectivity` | `PurchaseOrderRejected` | `com.retailnetwork.partner.vendor-connectivity.purchaseorder.PurchaseOrderRejected` | `assignmentId`, `releaseNo`, `nodeId`, `reasonCode`, `rejectedAt` | `HandleNodeRefusal` with outcome `REJECTED` (`ReassignOnRefusal`) | only for the current `PENDING` release; an older `releaseNo` is ignored |
 | `vendor-connectivity` | `PurchaseOrderExpired` | `com.retailnetwork.partner.vendor-connectivity.purchaseorder.PurchaseOrderExpired` | `assignmentId`, `releaseNo`, `nodeId`, `ackBy` | `HandleNodeRefusal` with outcome `EXPIRED` | as above |

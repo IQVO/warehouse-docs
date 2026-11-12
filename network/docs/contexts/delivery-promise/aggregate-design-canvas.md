@@ -114,7 +114,7 @@ version. It is created `PROVISIONAL` at checkout with a capacity hold, becomes
 judged `KEPT` or `BROKEN`, or `RELEASED` / `CANCELLED`.
 
 Value objects: `ShipmentGroup{lines[{catalogItemId, quantity}]}`,
-`PromiseTerms{tier, shipBy, deliverByEarliest, deliverByLatest, basis(SCHEDULED|NOMINAL), policyVersion}`,
+`PromiseTerms{tier (SAME_DAY|NEXT_DAY|TWO_DAY|STANDARD|CONSOLIDATED), shipBy, deliverByEarliest, deliverByLatest, basis(SCHEDULED|MEASURED|NOMINAL), policyVersion, consolidationEligible (optional, CONSOLIDATED only)}`,
 `WitnessPath{nodeId, pickupDepartureId, legs[departureId], deliveryWaveId}`,
 `Revision{revisionNo, previousTerms, reason, revisedAt}`. Scalar fields carried
 on its events: `offerId`, `orderId`, `groupNo`, `holdExpiresAt`.
@@ -152,7 +152,7 @@ either becomes `CONFIRMED` or is `RELEASED` when its hold expires.
 | Invariant | Enforced by |
 | --- | --- |
 | `deliverByEarliest <= deliverByLatest` and `shipBy < deliverByEarliest` | `ErrInvalidPromiseTerms` |
-| A fast-tier promise (`SAME_DAY`, `NEXT_DAY`, `TWO_DAY`) has basis `SCHEDULED` | `ErrNominalBasisNotAllowedForTier` |
+| A fast-tier promise (`SAME_DAY`, `NEXT_DAY`, `TWO_DAY`) has basis `SCHEDULED` or `MEASURED`, never `NOMINAL`; `STANDARD` and `CONSOLIDATED` may be `NOMINAL` | `ErrNominalBasisNotAllowedForTier` |
 | A provisional promise is confirmed only before `holdExpiresAt` | `ErrPromiseHoldExpired` |
 | A revision never moves `deliverByLatest` earlier | `ErrRevisionMovesEarlier` |
 | `KEPT`, `BROKEN`, `RELEASED` and `CANCELLED` are terminal | `ErrPromiseClosed` |
@@ -164,6 +164,17 @@ either becomes `CONFIRMED` or is `RELEASED` when its hold expires.
 - **`ReleaseExpiredHolds`** (sweep): a `PROVISIONAL` promise past
   `holdExpiresAt` becomes `RELEASED` and its provisional hold is returned to the
   book (`ReleaseCapacity`).
+- **`ConsolidatedTierQuote`** and **`ConsolidationEligibility`**: `CONSOLIDATED` is
+  quoted only when a request lists it or names `consolidatedDeliveryDay`. From the group's own
+  STANDARD candidates the quote takes the fastest window, picks the local day (the request's day, else
+  two days after the fastest, never before it, at most 14 local days ahead), puts the final wave on that
+  day (or a NOMINAL window of 09:00 to 21:00 local), and ranks the later `shipBy` first. The offer says
+  `consolidationEligible` when the day is at least one local day after the fastest.
+- **`ConsolidatedRepromise`**: a `CONSOLIDATED` promise is re-promised only inside its own tier, walking
+  forward day by day from the local day of its window; it never falls through to `STANDARD`.
+- **`SharedTrackingJudgement`**: one package event judges every promise that shares the tracking number,
+  each on its own window; the capacity charge stays per promise, so a merged package is over-charged on
+  the departure book on purpose.
 - **`RepromiseOnRisk`**: on `FulfillmentUnsourceable`, `PackageExceptionRaised`
   or a `DepartureCancelled` on the witness path, flag the promise at risk,
   recompute and `RevisePromise`; if nothing is feasible even at `STANDARD`, the

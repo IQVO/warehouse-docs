@@ -28,11 +28,18 @@ are the proposed Go package and type names. Each context's own
 | **Calibration Buffer** | `delivery-promise` | The minutes a quote adds to its arrival, learned from the lateness of this service's own judged promises in the same segment; one-sided and capped. | `search.Calibration.BufferMinutes` |
 | **Capacity Band** | `delivery-promise` | AMPLE, TIGHT or SCARCE: how full the promise book behind an offer's window is at quote time (under 60%, 60% to under 85%, 85% and over of its share). A signal, never a price. | `shared.CapacityBand` |
 | **Capacity Hold** | `delivery-promise` | A provisional reservation on a promise book released if the order is not placed in time. | `book.Capacity.Provisional` |
+| **Carrier** | `order-sourcing` | The QUEUED assignment whose release is due and which carries a consolidation merge: one purchase order, one label and one tracking number carry its id. | `assignment.Assignment.Members` |
 | **Carton** | `seller-inbound` | One physical outer carton of a shipment, identified by an SSCC and holding the contents it declares. | `inboundshipment.Carton` |
 | **Case Pack** | `seller-inbound` | The quantity of eaches in one case of an item (unitsPerPack). Fixed by the case's GTIN; a different quantity needs a different GTIN. | `catalog.PackLevelDef.UnitsPerPack` |
 | **Catalog Item** | `offer-availability` | The network's own entry for a product, independent of who ships it. | `catalog.Item` |
 | **Checkout** | `customer-ordering` | The act of turning a cart into a customer order, promising every group. | `order.PlaceOrder` |
+| **Chosen Delivery Day** | `customer-ordering` | The local calendar date a shopper picked for a CONSOLIDATED group, stored on the group at placement. | `order.GroupPromise.ChosenDeliveryDay` |
+| **Chosen Delivery Day** | `delivery-promise` | The local calendar date of the destination station the shopper wants a CONSOLIDATED order delivered on; a day before the fastest window is moved up to it. | `search.Input.ConsolidatedDay` |
 | **Confidence** | `delivery-promise` | The observed share of a segment's judged promises that were within the quote's buffer; present only with enough judgements, absence means unknown. | `search.Calibration.Confidence` |
+| **Consolidated Tier** | `delivery-promise` | The opt-in fifth tier: a delivery on a day the shopper chooses, at or after the fastest feasible window, so the network can merge the order with others. Quoted only when requested. | `shared.TierConsolidated` |
+| **Consolidation Eligible** | `delivery-promise` | True when the chosen day leaves the network at least one local day after the fastest window to merge the order with others, false when the day is that window itself; it never says another order exists. | `search.Candidate.ConsolidationEligible` |
+| **Consolidation Key** | `customer-ordering` | An opaque keyed hash of one shopper and one ship-to, derived here and carried on the placed order so order-sourcing can merge the groups of one stop without seeing the address; absent means the order never merges. | `order.ConsolidationKey` |
+| **Consolidation Merge** | `order-sourcing` | The carrier and its followers released as one; it exists only from release until the lock or until it is dissolved. | `sourcing.Merge` |
 | **Customer Order** | `customer-ordering` | What the shopper bought, with a promise per shipment group. | `order.CustomerOrder` |
 | **Cutoff** | `node-topology` | A local time by which a node declares packages are ready to be handed over; the network schedules one pickup departure per cutoff. | `node.CutoffSlot` |
 | **Declared vs Measured** | `node-performance` | What a vendor says (profile) against what the network observes (scorecard). | `(principle)` |
@@ -45,8 +52,10 @@ are the proposed Go package and type names. Each context's own
 | **Departure** | `linehaul-transportation` | One scheduled trip on a lane with a cutoff and a capacity. | `departure.Departure` |
 | **Each** | `seller-inbound` | The lowest packaging level, intended for individual resale and the unit of every quantity in the network's ledgers. | `catalog.PackLevel.EACH` |
 | **EAN** | `seller-inbound` | A 13-digit GTIN as printed on a consumer unit. Treated as a GTIN input like any other length. | `gs1.GTIN` |
+| **Effective Cost** | `order-sourcing` | The estimated cost of a candidate plus the policy's cross-region surcharge; the leading key of the comparator. | `sourcing.Option.EffectiveCostCents` |
 | **Fast-Tier Eligibility** | `delivery-promise` | Whether a node may be offered SAME_DAY and NEXT_DAY, as decided by node-performance and held locally; a missing row means eligible. | `NodeTierEligibility` |
 | **Fast-Tier Eligibility** | `node-performance` | Whether a node may be offered SAME_DAY and NEXT_DAY: suspended when the graded 7-day on-time handover rate falls below 0.90, reinstated after three successive recompute days at 0.95 or more. | `scorecard.FastTierEligibility` |
+| **Follower** | `order-sourcing` | A QUEUED assignment absorbed into a carrier's release; it keeps its own events and locks, ships and delivers with the carrier. | `assignment.Assignment.ConsolidatedInto` |
 | **Fulfillment Assignment** | `order-sourcing` | The decision of which node and path fulfil one shipment group. | `assignment.FulfillmentAssignment` |
 | **Full Feed** | `offer-availability` | A feed that is the complete truth for its node; omitted listings become zero. | `feed.InventoryFeed.FullUpdate` |
 | **Grade** | `node-performance` | A, B, C or D; PROVISIONAL below the observation minimum. | `scorecard.Grade` |
@@ -104,7 +113,7 @@ are the proposed Go package and type names. Each context's own
 | **Scorecard** | `node-performance` | A node's measured performance over a rolling window, with a grade. | `scorecard.NodeScorecard` |
 | **Seller** | `seller-inbound` | An organisation that sends its own stock to the network. Distinct from a Vendor, which operates fulfillment nodes. | `seller.Account` |
 | **Service Area** | `node-topology` | The postal prefixes one delivery station serves. | `servicearea.ServiceArea` |
-| **Service Tier** | `delivery-promise` | SAME_DAY, NEXT_DAY, TWO_DAY or STANDARD. | `promise.Tier` |
+| **Service Tier** | `delivery-promise` | SAME_DAY, NEXT_DAY, TWO_DAY, STANDARD or the opt-in CONSOLIDATED. | `promise.Tier` |
 | **Ship-By** | `delivery-promise` | The pickup cutoff at the witness node the package must be ready for. | `promise.PromiseTerms.ShipBy` |
 | **Ship-To** | `customer-ordering` | The delivery address; synthetic PII held only here. | `order.ShipTo` |
 | **Ship-To Snapshot** | `shipping-and-tracking` | The encrypted copy of the ship-to address kept to print a label; never published and purged 30 days after the journey closes. | `label.ShipToSnapshot` |
@@ -112,6 +121,7 @@ are the proposed Go package and type names. Each context's own
 | **Shipping Label** | `shipping-and-tracking` | What is printed on the package; the only artefact outside customer-ordering that carries the address. | `label.ShippingLabel` |
 | **Shopper** | `customer-ordering` | The (synthetic) customer placing orders. | `shopper.Shopper` |
 | **Sort Dwell** | `node-topology` | Declared minutes a package normally spends inside a sortation centre or air hub between arrival and departure; declared only by those node types. | `node.OperationalProfile.SortDwellMinutes` |
+| **Sourcing Policy** | `order-sourcing` | The operator's versioned lever over cross-region cost and consolidation: a surcharge in cents, a deviation percent and a cap on merged groups; version 0 is the default and changes nothing. | `policy.Policy` |
 | **SSCC** | `seller-inbound` | The 18-digit serial shipping container code identifying one logistic unit. Unique network-wide, with a mod-10 check digit. | `gs1.SSCC` |
 | **Stop** | `last-mile-delivery` | The packages of one route that share one stop key; wave capacity is counted in stops. | `route.Stop` |
 | **Stop Key** | `shipping-and-tracking` | An opaque keyed hash of the normalized ship-to address, put on the label event so last-mile-delivery can group packages into stops without ever receiving an address. | `label.StopKey` |
@@ -143,6 +153,7 @@ are the proposed Go package and type names. Each context's own
 | `NEXT_DAY` | 1 | no |
 | `TWO_DAY` | 2 | no |
 | `STANDARD` | 7 | yes (basis NOMINAL) |
+| `CONSOLIDATED` | 14 | yes (basis NOMINAL) |
 
 ## Translation to the warehouse-systems fleet
 

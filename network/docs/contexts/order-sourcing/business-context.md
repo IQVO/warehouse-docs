@@ -75,24 +75,26 @@ so it is the vendor-node equivalent of "the item is picked"
 | Shopper | Person (synthetic), indirect | Places the order in `customer-ordering`; sees lock, shipment and re-promise only through that context |
 | `customer-ordering` | Sibling context | Announces placed and cancelled orders; shows the shopper locked, shipped and unsourceable groups |
 | `delivery-promise` | Sibling context (Core) | Supplies the promise constraint; re-promises an unsourceable group; signals exhausted promise books |
-| `vendor-connectivity` | Sibling context | Turns a release into a purchase order and reports the vendor's acceptance, rejection, expiry and shipment |
+| `vendor-connectivity` | Sibling context | Turns a release into a purchase order (one order for a merged release) and reports the vendor's acceptance, rejection, expiry and shipment; cancels the order when a release is withdrawn |
 | Vendor node | External organisation, indirect | Accepts or rejects the purchase order through the Vendor API. The warehouse-systems fleet is vendor `V-WS`; its `network-fulfillment` context is the only fleet system that talks to the network |
 | `linehaul-transportation` | Sibling context | Supplies departures and their remaining capacity; follows releases, reassignments, locks and cancellations to expect volume and book the pickup |
-| Network-ops planner | Person | Lists and inspects assignments; asks for an immediate re-optimisation |
+| Network-ops planner | Person | Lists and inspects assignments; asks for an immediate re-optimisation; publishes and reads the sourcing policy |
 | Timers | Scheduler | Fire the release at `releaseAt` and the re-optimisation sweeps over `QUEUED` assignments |
 
 ## Decisions it makes
 
 | Decision | Rule (from `business_decisions` and `policies`) |
 | --- | --- |
-| Which node and path | The cheapest candidate whose `eta` still meets `deliverByLatest`. `cost = legs + crossRegionPenalty + scorecardPenalty + bookPressurePenalty`; ties go to the witness node (`AssignmentCost`). |
+| Which node and path | The cheapest candidate whose `eta` still meets `deliverByLatest`: effective cost in cents first (the estimate plus the policy's cross-region surcharge), then `legs + crossRegionPenalty + scorecardPenalty + bookPressurePenalty`; ties go to the witness node (`AssignmentCost`, `RegionalBudget`). |
 | May it differ from the witness? | Yes. The only hard constraint is that the assigned path still meets `deliverByLatest`. |
 | When to release | At `releaseAt` (`VirtualQueue`); at once for `SAME_DAY`. |
 | What to send | The whole group to one node: fill-or-kill. A partial answer does not exist. |
 | What a refusal means | `PurchaseOrderRejected` or `PurchaseOrderExpired` excludes that node for the current promise revision and re-queues the group (`ReassignOnRefusal`). |
 | When the choice is final | On `PurchaseOrderAccepted` (`LockOnCommit`). |
 | When to give up | When no candidate meets `deliverByLatest`: `UNSOURCEABLE`, and `delivery-promise` re-promises. |
-| Where to look first | In-region nodes. Cross-region only when it is the only way to keep the promise. |
+| Where to look first | In-region nodes, as a bounded trade: an in-region candidate within the cheapest effective cost plus the policy's deviation percent beats a cross-region one. |
+| Whether to merge | At release only: groups of one shopper and one address that chose the `CONSOLIDATED` delivery day may ride in one carrier release, up to the policy's cap, when the window, node, stock and caps allow (`ConsolidationAtRelease`). A group that does not fit releases alone. |
+| How long to hold a consolidated group | Until the latest pickup that still reaches the day the shopper chose (`ConsolidatedHold`). |
 
 ## How this relates to the real fulfillment networks
 

@@ -71,7 +71,9 @@ are not use cases: the HTTP adapter reads the departure repository directly.
 - **Inbound adapter:** Kafka consumer of `retailnetwork.order-sourcing.events`
   (type `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked`).
 - **Preconditions:** the departure `pickupDepartureId` exists and is
-  `SCHEDULED`; no booking is recorded for this `assignmentId`.
+  `SCHEDULED`; no booking is recorded for this `assignmentId`; the lock does
+  not carry `consolidatedInto` (a follower's lock books nothing: the inbox row
+  is claimed and the use case stops).
 - **Main flow:**
   1. Insert the CloudEvents `id` into `processed_events`; if present, stop.
   2. Load the departure by `pickupDepartureId` with its `version`.

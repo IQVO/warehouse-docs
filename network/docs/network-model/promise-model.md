@@ -53,7 +53,7 @@ events.
 
 A cold or stale read model is not a reason to guess. Fast tiers require every
 input (see [ADR 0008](/network/adr/0008-capacity-held-at-promise-time)); only
-`STANDARD` may fall back to nominal lane times, and the promise then records
+`STANDARD` and the opt-in `CONSOLIDATED` may fall back to nominal lane times, and the promise then records
 `basis = NOMINAL`.
 
 ## The search
@@ -84,7 +84,7 @@ quote(item, qty, postalPrefix, tiers, now):
      best = candidate with min(window.end) that satisfies tier,
             ties: in-region, then fewer legs, then better grade
      if none: constraint DELIVERY_SLA_UNAVAILABLE for that tier
-     if tier == STANDARD and some input is missing:
+     if tier in (STANDARD, CONSOLIDATED) and some input is missing:
             nominal candidate from LaneView transit times, basis NOMINAL
   offer.expiresAt = min(now + offerTtl, best.pickup.cutoffAt - best.node.handlingTime)
 ```
@@ -214,6 +214,40 @@ group). This is the same rule the fleet's `order-management` applies to
 | `NEXT_DAY` | 1 | no | |
 | `TWO_DAY` | 2 | no | |
 | `STANDARD` | 7 | yes (`basis NOMINAL`) | |
+| `CONSOLIDATED` | 14 | yes (`basis NOMINAL`) | opt-in: quoted only when the request lists it or names a chosen delivery day; never in the default quote set and never in an estimate |
+
+### The opt-in CONSOLIDATED tier
+
+A shopper who does not need a parcel soon can let the network wait, so that orders of one
+shopper to one address that are released together ship as one package. The saving exists only
+when the promise leaves the network time to hold the group, so the shopper says WHEN, and the
+quote says whether the choice leaves room to merge. The fifth tier is therefore requested, never
+volunteered: a quote returns it only when `tiers` lists it or `consolidatedDeliveryDay` is present
+(policy `ConsolidatedTierQuote`), and the batch estimates refuse it with 422 `validation-failed`.
+
+```text
+fastest = min(window.latest) over the group's STANDARD candidates   # none: tier unavailable
+D       = request.consolidatedDeliveryDay                            # a local date of the destination station
+          or localDay(fastest) + 2 days
+D       = max(D, localDay(fastest))                                  # earlier days are moved up
+if D > today + 14 local days: DELIVERY_SLA_UNAVAILABLE
+candidate wave = earliest usable wave whose window END falls on local day D
+                 (none scheduled: NOMINAL window D 09:00-21:00 local)
+rank: the usual order, then the LATER shipBy first (the longest hold)
+consolidationEligible = D >= localDay(fastest) + 1
+```
+
+Derived from: `model.yaml` → `contexts[delivery-promise].policies[ConsolidatedTierQuote]`,
+`[ConsolidationEligibility]`, `[ConsolidatedRepromise]`, `service_tiers`.
+
+`consolidationEligible` is present only for this tier, never `false` by default and never a claim that
+another order exists. A `false` offer is still quotable: the shopper chose the fastest day and there is
+nothing to hold. A re-promise of a `CONSOLIDATED` promise searches only this tier, walking forward day by
+day from the local day of its window, and never falls through to `STANDARD`. Because each promise
+keeps its own capacity charge, a merged package charges one order of capacity per promise while
+linehaul books one package: a deliberate, conservative over-charge. At delivery one package event
+judges every promise that shares the tracking number, each on its own window
+(policy `SharedTrackingJudgement`).
 
 `TierOrderDeadline` adds a policy-versioned local deadline per tier and region
 (for example "order by 23:59 for NEXT_DAY"). At peak the network can move the

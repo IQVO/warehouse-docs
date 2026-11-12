@@ -21,7 +21,10 @@ address is synthetic PII and is held only here. The context publishes
 `CustomerOrderPlaced`, which carries the promise snapshot of every group, so
 `order-sourcing` can queue the work from one event without correlating it with
 the promise stream. Afterwards it follows fulfilment, promise and package
-events into a customer-facing status and tracking view. It handles customer
+events into a customer-facing status and tracking view. It also derives the opaque consolidation key that lets `order-sourcing`
+merge the groups of one shopper and one address, stores the shopper's chosen
+delivery day for the opt-in `CONSOLIDATED` tier, and lets one tracking number
+close several groups. It handles customer
 cancellation only while no shipment group is locked. The same storefront API
 is what the e2e-tests and the console remote (`/mfes/customer-ordering/`) drive. `shipping-and-tracking`
 is the only other context that ever reads the ship-to address: it calls the

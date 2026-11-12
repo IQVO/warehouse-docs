@@ -207,14 +207,17 @@ It holds no PII and calls no other context synchronously.
 | Network-ops planner | `ListAssignments` | Query | REST `GET /assignments?state=&nodeId=&orderId=` | UI |
 | Network-ops planner | `GetAssignment` | Query | REST `GET /assignments/{assignmentId}` | UI |
 | Network-ops planner | `ReoptimiseAssignment` | Command | REST `POST /assignments/{assignmentId}/reoptimisations` | UI (the route is in `rest`; the model's `inbound` list names only the two queries, see Open Questions) |
+| Network-ops planner | `GetSourcingPolicy` | Query | REST `GET /sourcing-policy` | UI |
+| Network-ops planner | `PublishSourcingPolicy` | Command | REST `PUT /sourcing-policy` (the whole document; every call publishes a new version) | UI |
 | Own scheduler | `ReleaseToNode` | Command | internal timer at `releaseAt` (`VirtualQueue`); immediately for `SAME_DAY` | Internal |
 | Own scheduler | `ReoptimiseAssignment` | Command | internal re-optimisation sweep over `QUEUED` assignments | Internal |
 
 ## Outbound Communication
 
-All events: topic `retailnetwork.order-sourcing.events`, source
+Integration events: topic `retailnetwork.order-sourcing.events`, source
 `/retailnetwork/order-sourcing`, subject and Kafka key `assignmentId`,
-dataschema `urn:retailnetwork:order-sourcing:events:<EventName>:v1`.
+dataschema `urn:retailnetwork:order-sourcing:events:<EventName>:v1`. Analytics-only
+events go only to `retailnetwork.order-sourcing.analytics`.
 
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
@@ -225,6 +228,8 @@ dataschema `urn:retailnetwork:order-sourcing:events:<EventName>:v1`.
 | `customer-ordering` | `FulfillmentShipped` | Event | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | Conformist |
 | none (analytics only) | `FulfillmentDelivered` | Event | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentDelivered` | Published Language |
 | `delivery-promise`, `customer-ordering` | `FulfillmentUnsourceable` | Event | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentUnsourceable` | Customer/Supplier (`delivery-promise`); Conformist (`customer-ordering`) |
+| `vendor-connectivity` | `FulfillmentReleaseWithdrawn` | Event | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleaseWithdrawn` | Customer/Supplier |
+| none (analytics only) | `AssignmentsConsolidated`, `AssignmentsDeconsolidated`, `SourcingPolicyPublished` | Event | `com.retailnetwork.commerce.order-sourcing.assignment.AssignmentsConsolidated`, `com.retailnetwork.commerce.order-sourcing.assignment.AssignmentsDeconsolidated`, `com.retailnetwork.commerce.order-sourcing.policy.SourcingPolicyPublished` | Published Language |
 | `vendor-connectivity`, `linehaul-transportation` | `FulfillmentCancelled` | Event | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | Customer/Supplier |
 | — | (no synchronous call) | — | `sync_calls: []` | — |
 
@@ -256,14 +261,26 @@ value objects **Promise Constraint**, **Candidate**, **Release record**,
    `FulfillmentUnsourceable` asks `delivery-promise` to re-promise
    (`RepromiseOnRisk`). A revised promise re-queues the group
    (`ApplyRevisedPromise`).
-5. **In-region first.** Cross-region is allowed only when it is the only way
-   to keep the promise; `AssignmentCost` carries a `crossRegionPenalty`.
+5. **In-region first, as a bounded trade.** Cross-region is a cost, never a
+   filter: the effective cost adds the policy's cross-region surcharge, and an
+   in-region candidate within the cheapest effective cost plus
+   `maxCostDeviationPercent` beats a cross-region one (`RegionalBudget`, gap G26).
+   With no policy published the ordering is by cost and then the ordinal penalties.
 6. **A refusing node is excluded.** It is never released to again for the
    same promise revision (`ErrNodeExcluded`).
 7. **Release late, but in time to be acknowledged.** `releaseAt` = best
    candidate's pickup cutoff − node handling time − vendor ack budget;
    `SAME_DAY` releases immediately.
-8. **Cancel only before the lock** (`ErrCancelAfterLock`).
+8. **Cancel only before the lock** (`ErrCancelAfterLock`), and never while the
+   group is a member of a live merge (`ErrCancelWhileMerged`, reason
+   `CANCEL_WHILE_MERGED`).
+9. **Merge at release, never before.** Groups of one shopper and one address
+   that chose `CONSOLIDATED` may be released as one carrier release with followers
+   (`ConsolidationAtRelease`); the merge never moves the carrier's node, only
+   `CONSOLIDATED` groups merge, and a group that does not fit releases alone.
+10. **Hold a consolidated group as late as its day allows.** The search is
+    bounded by the window start and releases at the latest pickup that still reaches
+    the chosen day (`ConsolidatedHold`).
 
 ## Assumptions
 
@@ -319,10 +336,17 @@ resolved here.
   `CancelAssignment` is allowed from `QUEUED`, `RELEASED` and `UNSOURCEABLE`,
   so `customer-ordering`'s `CancelOnUnfulfillable` has a target.
 - **Cancel decision (resolved, G12).** `CustomerOrderCancelled` is a request.
-  From `QUEUED`, `RELEASED` or `UNSOURCEABLE` this context publishes
-  `FulfillmentCancelled`; from `LOCKED`, `SHIPPED` or `DELIVERED` it keeps the
-  state and publishes `FulfillmentCancelRefused` with reason `CANCEL_AFTER_LOCK`
-  (policy `CancelDecision`).
+  From `QUEUED`, `UNSOURCEABLE` or an unmerged `RELEASED` assignment this context
+  publishes `FulfillmentCancelled`; from `LOCKED`, `SHIPPED` or `DELIVERED` it keeps the
+  state and publishes `FulfillmentCancelRefused` with reason `CANCEL_AFTER_LOCK`;
+  from a `RELEASED` member of a live merge it also refuses, with reason
+  `CANCEL_WHILE_MERGED` (policy `CancelDecision`).
+- **Consolidation race (known residual, open).** Between this context dissolving a
+  merge after a promise revision and `vendor-connectivity` cancelling the issued
+  purchase order, the vendor may acknowledge it. The acceptance is then ignored here
+  (`ErrReleaseNotPending`, counted) and the vendor holds an accepted order for the old
+  union while the survivors get a new one. The window is one message hop, the same
+  one a plain cancel after release has.
 - **Acceptance after cancellation (known residual, open).** If
   `CancelAssignment` runs while the vendor's acceptance is being processed,
   `vendor-connectivity` can cancel only an `ISSUED` purchase order
@@ -350,8 +374,10 @@ resolved here.
 - **Book pressure only rises.** `PromiseBookPressureView` is fed only by
   `PromiseBookExhausted`; no event says a book has room again. The `bookId`
   contains the pickup departure, so the entry ages out with the cutoff.
-- **Soft vs hard cross-region rule.** Business decision 5 reads as a filter
-  ("only when it is the only way"); `AssignmentCost` encodes it as a penalty.
+- **Soft vs hard cross-region rule (resolved, G26).** Cross-region is a cost, not a
+  filter: money decides first and the policy's budget tier lets an operator buy
+  in-region fulfilment for a bounded deviation (`RegionalBudget`). The split surcharge
+  of the first contract is not built, because this context never splits an order.
 - **A cancelled pickup departure after the lock.** "No change of node after
   LOCKED" says nothing about the departure; the model has no transition for a
   locked assignment whose `pickupDepartureId` is cancelled.
