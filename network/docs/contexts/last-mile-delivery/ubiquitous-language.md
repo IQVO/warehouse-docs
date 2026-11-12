@@ -17,7 +17,7 @@ implementation must use. The network-wide glossary is
 
 ## This context's terms
 
-The first six rows are the model's `ul` entries for `last-mile-delivery`. The
+The first eight rows are the model's `ul` entries for `last-mile-delivery`. The
 rest are aggregate states, value objects and policies of the same context.
 
 | Term | Definition | Code identifier | Not to be confused with |
@@ -27,7 +27,9 @@ rest are aggregate states, value objects and policies of the same context.
 | **Induction** | Placing an arrived package into a wave. | `wave.InductPackage` | **Load arrival** (`LoadArrived`): the package is at the station but in no wave yet |
 | **Route** | One van's ordered stops in one wave. | `route.Route` | **Lane** (`node-topology`): a directed node-to-node connection |
 | **Delivery Service Partner (DSP)** | An independent delivery business working for a station. | `partner.DeliveryServicePartner` | **Vendor** (`vendor-connectivity`): operates fulfillment nodes, never stations |
-| **Delivery Attempt** | One try to hand a package over: `DELIVERED` or `FAILED` with a reason. | `route.Attempt` | **Delivered** journey state (`shipping-and-tracking`): the customer-visible outcome derived from the attempt |
+| **Delivery Attempt** | One try to hand a package over: `DELIVERED` or `FAILED` with a reason, plus an optional `outcomeDetail` category the driver client reports (ADR 0014). | `route.Attempt` | **Delivered** journey state (`shipping-and-tracking`): the customer-visible outcome derived from the attempt |
+| **Stop ETA Window** | The day-of delivery window of one stop of a started route: at most two hours, spread linearly over what is left of the wave's delivery window at the start instant. A deterministic spread, not a prediction; never retracted. | `route.StopEta` | **Delivery window** of the wave, which the spread is computed over, and the **Deliver-By Window** (`delivery-promise`), which it never revises |
+| **Delivery Point Profile** | The learning record of one delivery point (an opaque stop key, never an address): outcome tallies and counted-failure strikes. Two counted failures inside 60 days flag the point; the flag changes no route, no ETA and no promise. | `deliverypoint.DeliveryPointProfile` | **Stop**: the packages of one route visit; the profile is per address key across routes and days |
 | **Induct cutoff** | The instant by which a package must be at the station to join a wave. | `DeliveryWave.inductCutoffAt` | **Cutoff** (`node-topology`): a vendor node's handover time for a pickup departure |
 | **Delivery window** | When the wave delivers: `windowStart` to `windowEnd`. | `wave.Window{start, end}` | **Deliver-By Window** (`delivery-promise`): what the customer was promised |
 | **Stop capacity** | How many stops a wave can take, and how many are assigned. | `wave.StopCapacity{stops, assigned}` | **Van capacity**: the stop limit of one partner's van, enforced on a route |

@@ -255,6 +255,21 @@ deadline earlier to slow the arrival of new work, the use of a promise policy
 described in the MIT thesis cited on the research page. Every promise records
 its `policyVersion`.
 
+## The day-of window is not a promise
+
+On the day of delivery the shopper is shown a finer fact than the promise
+window: the **stop ETA window**, at most two hours, assigned by
+`last-mile-delivery` when the route starts (a deterministic spread of the
+route's stops over what is left of the wave's delivery window — not a
+prediction; this context holds no travel-time data), kept on the journey by
+`shipping-and-tracking` and shown on the tracking view by `customer-ordering`.
+It is deliberately outside this model: it never reaches `delivery-promise`,
+never revises, re-promises or re-judges a promise, and may end after the
+group's `deliverByLatest` (it is shown as received, unclipped, because hiding
+a late window would contradict the judgement the promise still uses). A
+currency rule hides it once a newer scan exists, a failed attempt returns the
+package to the station, or the journey reaches a terminal state.
+
 ## Worked example
 
 Thursday 2026-10-22, 14:05 in Austin. A shopper in postal prefix `787` views

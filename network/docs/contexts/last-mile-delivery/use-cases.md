@@ -201,6 +201,8 @@ the adapters and the repository.
 - **Inbound adapter**: REST `POST /routes/{routeId}/attempts` with
   `Idempotency-Key`.
 - **Input**: `trackingNumber`, `outcome` (`DELIVERED` or `FAILED`),
+  `outcomeDetail` (optional: `NOT_HOME`, `ACCESS_PROBLEM` or `OTHER` on
+  `FAILED`, `SAFE_PLACE_USED` on `DELIVERED`; omitted means not reported),
   `failureReason` (when `FAILED`), `at`.
 - **Preconditions**: the route is `OUT_FOR_DELIVERY` and carries the
   tracking number.
@@ -209,15 +211,20 @@ the adapters and the repository.
   2. Check the state (`ErrRouteNotStarted`).
   3. Check the package was not delivered before (`ErrAlreadyDelivered`).
   4. Record the attempt and set the stop's outcome.
-  5. In one transaction: save (version checked), write `DeliveryAttempted`.
+  5. In one transaction: save (version checked), write `DeliveryAttempted`,
+     and fold the attempt into the `DeliveryPointProfile` of the stop
+     (ADR 0014), which may raise `DeliveryPointFlagged` for the packages
+     newly affected.
   6. Return `201` with the attempt.
   7. After the commit, if `FAILED`, `RetryNextWave` runs `InductPackage` in
      its own transaction (one aggregate per transaction).
 - **Errors**: `ErrRouteNotStarted` → 409 `route-not-started`;
   `ErrAlreadyDelivered` → 409 `already-delivered`; 404 `not-found` (route,
   or a tracking number not on it); 409 `stale-version`; 422
-  `invalid-request`.
-- **Events**: `DeliveryAttempted`.
+  `invalid-request` (including an `outcomeDetail` that does not pair with
+  the outcome).
+- **Events**: `DeliveryAttempted`; `DeliveryPointFlagged` when the stop's
+  profile crosses the two-strike threshold.
 - **Idempotency**: `Idempotency-Key`. A retried `DELIVERED` with a new key
   fails with `ErrAlreadyDelivered`, which is the invariant doing its job.
 

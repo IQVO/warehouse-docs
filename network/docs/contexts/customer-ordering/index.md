@@ -21,7 +21,11 @@ address is synthetic PII and is held only here. The context publishes
 `CustomerOrderPlaced`, which carries the promise snapshot of every group, so
 `order-sourcing` can queue the work from one event without correlating it with
 the promise stream. Afterwards it follows fulfilment, promise and package
-events into a customer-facing status and tracking view. It also derives the opaque consolidation key that lets `order-sourcing`
+events into a customer-facing status and tracking view; on the day of delivery
+the view also shows each package's **day-of delivery window** (at most two
+hours, current only while the package is out for delivery) and, when the
+delivery point has been flagged, a **delivery-point advisory** — a reason
+code for the storefront to word, never driver prose. It also derives the opaque consolidation key that lets `order-sourcing`
 merge the groups of one shopper and one address, stores the shopper's chosen
 delivery day for the opt-in `CONSOLIDATED` tier, and lets one tracking number
 close several groups. It handles customer

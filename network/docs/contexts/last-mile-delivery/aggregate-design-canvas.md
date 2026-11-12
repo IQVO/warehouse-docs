@@ -127,7 +127,10 @@ one `DeliveryWaveCapacityChanged` per induction, and at most one
 One delivery service partner's van route within one wave: ordered stops.
 Each `Stop{stopNo, trackingNumbers[], outcome}` is an entity of the route.
 The route records each delivery attempt (`route.Attempt`) as `DELIVERED` or
-`FAILED` with a reason.
+`FAILED` with a reason and an optional `outcomeDetail` category, and at
+`StartRoute` it assigns each stop a day-of ETA window (ADR 0013) without
+persisting anything about it: the events and the analytics read side are the
+record.
 
 ### 3. State Transitions
 
@@ -152,6 +155,7 @@ Derived from: model.yaml → `contexts[last-mile-delivery].aggregates[Route].sta
 | stops `<=` van capacity of the partner | `ErrRouteOverCapacity` |
 | an attempt is recorded only on an `OUT_FOR_DELIVERY` route | `ErrRouteNotStarted` |
 | a package is delivered at most once | `ErrAlreadyDelivered` |
+| `outcomeDetail`, when reported, pairs with the outcome: `FAILED` carries `NOT_HOME`, `ACCESS_PROBLEM` or `OTHER`, `DELIVERED` carries `SAFE_PLACE_USED`; empty means not reported and never replaces `failureReason` | `ErrValidation` (422) |
 
 The van capacity belongs to another aggregate (`DeliveryServicePartner`).
 `PlanRoute` reads it when the route is created and checks the stop count
@@ -162,11 +166,20 @@ planned routes.
 
 - **`RetryNextWave`**: on a `FAILED` attempt, re-induct the package into the
   next wave of the same station; after three failures, return it to sender.
+- **`EtaWindowAtRouteStart`**: `StartRoute` raises one `StopEtaWindowAssigned`
+  per stop, after every `PackageOutForDelivery`, in the same transaction —
+  the stops spread linearly over what is left of the wave's delivery window,
+  each stop a window of at most two hours; with less than 30 minutes left no
+  event is raised and the route starts normally.
+- **`DeliveryPointProfileLearns`**: `RecordAttempt` also folds the attempt
+  into the `DeliveryPointProfile` of the stop in the same unit of work
+  (see that aggregate's canvas below).
 - **Neighbour reaction**: `shipping-and-tracking` turns
   `PackageOutForDelivery` and `DeliveryAttempted` into scans on the
   `PackageJourney` (`AT_STATION` → `OUT_FOR_DELIVERY`, then `DELIVERED` or
-  back to `AT_STATION`). Its `ExceptionOnSilence` raises an exception if no
-  scan follows in time.
+  back to `AT_STATION`), and relays `StopEtaWindowAssigned` and
+  `DeliveryPointFlagged` per package. Its `ExceptionOnSilence` raises an
+  exception if no scan follows in time.
 
 ### 6. Handled Commands
 
@@ -183,6 +196,7 @@ planned routes.
 | --- | --- | --- |
 | `RoutePlanned` | `PlanRoute` is saved | `com.retailnetwork.logistics.last-mile-delivery.route.RoutePlanned` |
 | `PackageOutForDelivery` | `StartRoute` is saved, once per tracking number on the route | `com.retailnetwork.logistics.last-mile-delivery.route.PackageOutForDelivery` |
+| `StopEtaWindowAssigned` | `StartRoute` is saved, once per stop, after every `PackageOutForDelivery` | `com.retailnetwork.logistics.last-mile-delivery.route.StopEtaWindowAssigned` |
 | `DeliveryAttempted` | `RecordAttempt` is saved | `com.retailnetwork.logistics.last-mile-delivery.route.DeliveryAttempted` |
 
 ### 8. Throughput
@@ -196,8 +210,8 @@ window.
 
 *Estimate (model: "routes per wave").* One route holds up to the van
 capacity in stops, each with one or more tracking numbers. A route produces
-one `RoutePlanned`, one `PackageOutForDelivery` per package and one
-`DeliveryAttempted` per attempt.
+one `RoutePlanned`, one `PackageOutForDelivery` per package, one
+`StopEtaWindowAssigned` per stop and one `DeliveryAttempted` per attempt.
 
 ## DeliveryServicePartner
 
@@ -253,6 +267,77 @@ None (`events: []`).
 ### 9. Size
 
 *Estimate (model: "small").* One row per partner.
+
+## DeliveryPointProfile
+
+### 1. Name
+
+`DeliveryPointProfile` (`deliverypoint.DeliveryPointProfile`), identified by
+the `stopKey` (the opaque keyed hash of the address; never an address).
+
+### 2. Description
+
+The learning record of one delivery point (last-mile-delivery ADR 0014):
+outcome tallies and a ring of at most five counted-failure strikes. It has no
+states and no command route of its own — `RecordAttempt` folds every attempt
+into the profile of its stop inside the same unit of work, so there is no lag
+and no second consumer group. A key starting with `pkg:` (a package with no
+label data) has no address key and gets no profile.
+
+### 3. State Transitions
+
+None: the profile is a tally, not a state machine.
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+| --- | --- |
+| `attempts = delivered + failedNotHome + failedAccess + failedOther`, where `OTHER` and not reported both tally as `failedOther` | `ErrValidation` on `Observe`, `ErrInvalidSnapshot` on `Restore` |
+| `safePlaceUsed <= delivered` | `ErrValidation` / `ErrInvalidSnapshot` |
+| at most five strikes, each a counted category (`NOT_HOME` or `ACCESS_PROBLEM`), no two with one `routeId` | `ErrValidation` / `ErrInvalidSnapshot` |
+| `flaggedAt` is non-zero exactly when two or more strikes are open inside the 60-day window | `ErrValidation` / `ErrInvalidSnapshot` |
+| the `stopKey` is valid and does not start with `pkg:` | `ErrValidation` |
+
+### 5. Corrective Policies
+
+- **Strike decay is lazy**: strikes older than 60 days are dropped at the
+  next observation, and the flag clears when fewer than two remain. A point
+  never visited again keeps its row and its open flag.
+- **A `DELIVERED` attempt ends the episode** (clears strikes and flag) unless
+  the delivering visit itself has a strike.
+- **Dormant until activated**: until the driver client reports
+  `outcomeDetail`, every attempt is tallied as not reported, no strike is
+  counted and no event is raised.
+- **No influence**: a flagged point changes no route, no ETA and no promise;
+  `PlanRoute` gains no error and no status from it. The read-only exposure
+  decided in the ADR (a delivery-point route and a summary on the wave stops)
+  is not built yet.
+
+### 6. Handled Commands
+
+| Command | Transition | Issued by |
+| --- | --- | --- |
+| `Observe` | no state (tally) | `RecordAttempt`, in the same unit of work as the attempt |
+
+### 7. Created Events
+
+| Event | Raised when | Full CloudEvents type |
+| --- | --- | --- |
+| `DeliveryPointFlagged` | two or more strikes are open and packages not yet told exist (one event, only their tracking numbers, `failures` = open strikes) | `com.retailnetwork.logistics.last-mile-delivery.deliverypointprofile.DeliveryPointFlagged` |
+
+The `reason` is `ACCESS_PROBLEM` when any open strike has it, else
+`NOT_HOME`. A later parcel of another order failing at an already flagged
+point is told too, once. There is no "cleared" event.
+
+### 8. Throughput
+
+*Estimate (model: "one Observe per attempt").* One extra write inside every
+`RecordAttempt`.
+
+### 9. Size
+
+*Estimate (model: "one small row per distinct delivery point").* About 300
+bytes per distinct address key; no retention job in this slice.
 
 ## Read models
 

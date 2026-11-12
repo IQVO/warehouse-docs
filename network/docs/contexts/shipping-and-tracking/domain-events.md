@@ -49,6 +49,8 @@ it.
 | `PackageExceptionRaised` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageExceptionRaised` | `trackingNumber` | `RaiseException` (`ExceptionOnSilence`) | `delivery-promise`, `customer-ordering` |
 | `PackageReturned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` | `trackingNumber` | `ReturnToSender` | analytics only |
 | `PackageLost` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | `trackingNumber` | `DeclareLost` | analytics only |
+| `PackageEtaWindowAssigned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageEtaWindowAssigned` | `trackingNumber` | `AssignEta` (the consumer of `StopEtaWindowAssigned`) | `customer-ordering` |
+| `PackageDeliveryPointFlagged` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDeliveryPointFlagged` | `trackingNumber` | `FlagDeliveryPoint` (the consumer of `DeliveryPointFlagged`) | `customer-ordering` |
 
 "Analytics only" is the model's wording: no in-org context consumes the
 event. Types in the data tables below are proposed; the field names are the
@@ -131,6 +133,39 @@ model's.
 | `orderId` | string | The customer order |
 | `declaredAt` | timestamp | When the package was declared lost |
 
+### PackageEtaWindowAssigned
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `trackingNumber` | string | The package |
+| `assignmentId` | string | The assignment |
+| `orderId` | string | The customer order, so `customer-ordering` can show the window |
+| `etaStart` | timestamp | Window start |
+| `etaEnd` | timestamp | Window end, after `etaStart` |
+| `assignedAt` | timestamp | The route start instant: the CloudEvents `time` of the consumed `StopEtaWindowAssigned` |
+
+One event per journey of the stop, raised by `AssignEta` in the same unit of
+work as the stored window (shipping-and-tracking ADR 0013). Under one key the
+`OUT_FOR_DELIVERY` `PackageScanned` precedes it, because last-mile-delivery
+writes `PackageOutForDelivery` first; the currency rule (`EtaCurrent`)
+tolerates any order.
+
+### PackageDeliveryPointFlagged
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `trackingNumber` | string | The package |
+| `assignmentId` | string | The assignment |
+| `orderId` | string | The customer order of THIS journey |
+| `reason` | `NOT_HOME` \| `ACCESS_PROBLEM` | A code the storefront words; never driver prose |
+| `flaggedAt` | timestamp | When the flag was raised |
+
+One event per journey of the flagged stop, raised by `FlagDeliveryPoint`
+(shipping-and-tracking ADR 0014). The `stopKey` and the failure count are
+read and dropped: no address-derived value of a stop is kept here. There is
+no cleared event — `customer-ordering` ends the advisory when the package
+ends.
+
 ### Example envelope: PackageDelivered
 
 `PackageDelivered` is the most important event: it closes the journey,
@@ -164,7 +199,9 @@ the promise. Values are synthetic.
 | `linehaul-transportation` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted` | `retailnetwork.linehaul-transportation.events` | `originNodeId`, `trackingNumbers`, `departedAt`, `departureKind` | For each tracking number, `RecordScan` at `originNodeId`. Kind `PICKUP` (or no kind on a `LABELLED` journey) is the pickup: `HANDED_OVER` and `PackageHandedOver`; any other kind is a departure scan |
 | `linehaul-transportation` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived` | `retailnetwork.linehaul-transportation.events` | `destinationNodeId`, `trackingNumbers`, `arrivedAt`, `nodeType` | For each tracking number, `RecordScan` at `destinationNodeId`: `AT_STATION` when `nodeType` is `DELIVERY_STATION` (from `IN_TRANSIT`, or from `HANDED_OVER` on direct injection), otherwise `IN_TRANSIT` |
 | `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.route.PackageOutForDelivery` | `retailnetwork.last-mile-delivery.events` | `trackingNumber`, `stationNodeId`, `at` | `RecordScan` at `stationNodeId`: `OUT_FOR_DELIVERY` |
-| `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.route.DeliveryAttempted` | `retailnetwork.last-mile-delivery.events` | `trackingNumber`, `outcome`, `failureReason`, `at` | `RecordScan`: `DELIVERED` and `PackageDelivered` on `DELIVERED`; back to `AT_STATION` on `FAILED`. The event has no node id; the scan takes the station of the journey's last out-for-delivery scan |
+| `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.route.DeliveryAttempted` | `retailnetwork.last-mile-delivery.events` | `trackingNumber`, `outcome`, `failureReason`, `at` | `RecordScan`: `DELIVERED` and `PackageDelivered` on `DELIVERED`; back to `AT_STATION` on `FAILED`. The event has no node id; the scan takes the station of the journey's last out-for-delivery scan. The optional `outcomeDetail` is ignored here (tolerant decoding); the delivery-point profile that counts it stays in `last-mile-delivery` |
+| `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.route.StopEtaWindowAssigned` | `retailnetwork.last-mile-delivery.events` | `routeId`, `stopNo`, `stopKey` (dropped), `trackingNumbers`, `etaStart`, `etaEnd` | `AssignEta` per tracking number (not a scan): a terminal journey is counted and acknowledged, an `assignedAt` not strictly newer than the stored one is counted (`ErrEtaStale`), otherwise the window is stored and `PackageEtaWindowAssigned` published with the journey's `orderId`. The `stopKey` is dropped: this context keeps no address-derived value of a stop (ADR 0013) |
+| `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.deliverypointprofile.DeliveryPointFlagged` | `retailnetwork.last-mile-delivery.events` | `trackingNumbers`, `reason`, `flaggedAt`; `stopKey` and `failures` read and dropped | `FlagDeliveryPoint` per journey (not a scan): a terminal journey is counted and acknowledged, a `flaggedAt` not strictly newer is counted (`ErrPointFlagStale`), otherwise `pointFlagReason` and `pointFlaggedAt` are stored and `PackageDeliveryPointFlagged` published with the journey's own `orderId` (ADR 0014) |
 | `offer-availability` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | `retailnetwork.offer-availability.events` | all eight fields | Upsert `CatalogDimensionsView` |
 
 Consumers dispatch on the full `type` string, never on a suffix.

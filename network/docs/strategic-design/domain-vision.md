@@ -107,7 +107,7 @@ different reasons, under different owners.
 | `offer-availability` | Supporting | Catalogue items, listings per node and claimed availability with its basis. |
 | `vendor-connectivity` | Supporting | The Open Host Service for vendors: purchase orders, acknowledgements, labels, shipment confirmations, async transactions. |
 | `linehaul-transportation` | Supporting | Scheduled departures with capacity, pickups at vendor cutoffs, loads. |
-| `last-mile-delivery` | Supporting | Delivery waves, routes for delivery partners, delivery attempts. |
+| `last-mile-delivery` | Supporting | Delivery waves, routes for delivery partners, delivery attempts, the day-of stop ETA window at route start and the delivery-point profile that learns from failed attempts. |
 | `node-performance` | Supporting | Scorecards and grades from observed facts. |
 | `seller-inbound` | Supporting | Sellers plan, pack, label and ship stock in eaches or case-packed cartons identified by SSCC; receipts close each shipment. |
 | `customer-ordering` | Generic | Checkout and the customer order; holds the ship-to address. |

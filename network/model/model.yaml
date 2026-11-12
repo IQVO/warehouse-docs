@@ -796,9 +796,11 @@ contexts:
         throughput_estimate: "low"
         size_estimate: "small"
     read_models:
-      - {name: OrderTrackingView, source: "shipping-and-tracking LabelIssued, PackageScanned, PackageDelivered, PackageExceptionRaised; order-sourcing FulfillmentLocked, FulfillmentShipped; delivery-promise PromiseAtRisk, PromiseRevised, PromiseKept, PromiseBroken. A tracking number belongs to a SET of groups: tracking_package_groups(tracking_number, order_id, group_no) with a primary key on all three, written only by adding (ON CONFLICT DO NOTHING) and read through for DeliveredPackages, OutcomePackages and the tracking view; the package facts stay one row per tracking number (customer-ordering ADR 0012)"}
+      - {name: OrderTrackingView, source: "shipping-and-tracking LabelIssued, PackageScanned, PackageDelivered, PackageExceptionRaised; order-sourcing FulfillmentLocked, FulfillmentShipped; delivery-promise PromiseAtRisk, PromiseRevised, PromiseKept, PromiseBroken. A tracking number belongs to a SET of groups: tracking_package_groups(tracking_number, order_id, group_no) with a primary key on all three, written only by adding (ON CONFLICT DO NOTHING) and read through for DeliveredPackages, OutcomePackages and the tracking view; the package facts stay one row per tracking number (customer-ordering ADR 0012). The row also carries the day-of window (etaStart, etaEnd, etaAssignedAt, upserted by ApplyEta, newest wins, migration 0009) and the delivery-point flag (pointFlagReason, pointFlaggedAt, upserted by ApplyPointFlag, newest wins, migration 0010), both stored only as read-model facts: no aggregate, no outbox event (customer-ordering ADR 0014/0015)"}
     policies:
       - {name: CheckoutPromising, rule: "for each shipment group call MakePromise with the offer the shopper saw; if the offer expired, re-quote and show the new window before placing"}
+      - {name: EtaWindowOnTracking, rule: "views.TrackingFrom shows a package's etaStart and etaEnd only while its state is OUT_FOR_DELIVERY, etaAssignedAt is non-zero and not before lastScanAt, the same currency rule as shipping-and-tracking's EtaCurrent; a newer scan, a failed attempt (back to AT_STATION) or any terminal state omits both. The window is shown as received, never clipped to the group's deliverByLatest (hiding a late window would contradict the judgement the promise still uses), and a window event never touches the group promise, status or verdict: they are byte-identical before and after (customer-ordering ADR 0014)"}
+      - {name: DeliveryPointAdvisory, rule: "views.TrackingFrom carries deliveryPointAdvisory{reason, flaggedAt} on a package while its state is not DELIVERED, RETURNED, LOST or VOIDED and a flag is stored: the advisory ends when the package ends, because no cleared event exists. The API carries the reason code and the instant only, the words belong to the storefront. It is not an address change (the ship-to stays as placed), not delivery instructions (nothing the shopper types reaches the driver) and not a notification; it changes no ETA window, no group, no promise field and no status (customer-ordering ADR 0015)"}
       - {name: ConsolidationKeyDerivation, rule: "PlaceOrder computes the key after resolveAddress through the ConsolidationKeyer port (an HMAC adapter) with the secret from the environment (at least 16 bytes); with no secret configured no key is computed, the event omits the field and the order never merges. Rotating the secret only stops merges between orders keyed under different secrets. The key is not in REST, MCP or A2A, and the placed event still carries no address field. A new normalisation rule is a new derivation version, never an edit of the old one (customer-ordering ADR 0012)"}
       - {name: ConsolidatedChoiceStored, rule: "the Tier enum accepts CONSOLIDATED (aggregate, constraint and OpenAPI); PlaceOrder copies tier, window and consolidationEligible from the made promise and derives chosenDeliveryDay with the time zone database in the use case (the domain only checks the SHAPE of a zone). GroupPromise on POST /checkout 201, GET /orders/{orderId} and GET /orders gains the two optional fields, omitted when unknown. A re-quote after an expired offer asks for the default tiers, so the 409 offer-not-quotable answer never offers CONSOLIDATED (an accepted limitation). Nothing here asks delivery-promise for the tier: it stays invisible until a caller opts in (customer-ordering ADR 0013)"}
       - {name: SharedTrackingNumbers, rule: "AttachTrackingNumbers and the assignment link only ADD a link row, never overwrite or remove one; tracking_packages.order_id and group_no keep meaning the first group that named the package. ApplyPackageDelivered, ApplyPackageLost and ApplyPackageReturned record the package fact once, then run MarkGroupDelivered, MarkGroupLost or MarkGroupReturned for EVERY group of GroupsOfTracking plus the group the event itself resolves, each in its own mutate inside the event's unit of work. A group that has not shipped yet is not in the set and is replayed by reconcile when its own FulfillmentShipped arrives. The tracking view of a follower order shows the shared package under the follower's group; the package's assignmentId stays the carrier's (customer-ordering ADR 0012)"}
@@ -815,7 +817,7 @@ contexts:
       - {from: shipping-and-tracking, type: qry, channel: "REST GET /orders/{orderId}/ship-to (in-org, restricted)", routes: ["GET /orders/{orderId}/ship-to"], message: "GetShipTo", relationship: Customer/Supplier}
       - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentLocked, FulfillmentShipped, FulfillmentUnsourceable", relationship: Conformist}
       - {from: delivery-promise, type: evt, channel: "Kafka retailnetwork.delivery-promise.events", message: "PromiseAtRisk, PromiseRevised, PromiseKept, PromiseBroken", relationship: Customer/Supplier}
-      - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "LabelIssued, PackageScanned, PackageDelivered, PackageExceptionRaised", relationship: Conformist}
+      - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "LabelIssued, PackageScanned, PackageDelivered, PackageExceptionRaised, PackageEtaWindowAssigned, PackageDeliveryPointFlagged", relationship: Conformist}
     rest:
       - "POST /checkout"
       - "GET /orders/{orderId}"
@@ -849,6 +851,8 @@ contexts:
       - {event: LabelVoided, from: shipping-and-tracking}
       - {event: PackageLost, from: shipping-and-tracking}
       - {event: PackageReturned, from: shipping-and-tracking}
+      - {event: PackageEtaWindowAssigned, from: shipping-and-tracking}
+      - {event: PackageDeliveryPointFlagged, from: shipping-and-tracking}
     sync_calls:
       - {to: delivery-promise, type: qry, message: QuoteDeliveryOffers, channel: "REST POST /delivery-quotes"}
       - {to: delivery-promise, type: cmd, message: "MakePromise, ConfirmPromise, CancelPromise", channel: "REST POST /promises, POST /promises/{promiseId}/confirmations, POST /promises/{promiseId}/cancellations"}
@@ -858,6 +862,8 @@ contexts:
       - {term: Ship-To, definition: "The delivery address; synthetic PII held only here.", code: "order.ShipTo"}
       - {term: Consolidation Key, definition: "An opaque keyed hash of one shopper and one ship-to, derived here and carried on the placed order so order-sourcing can merge the groups of one stop without seeing the address; absent means the order never merges.", code: "order.ConsolidationKey"}
       - {term: Chosen Delivery Day, definition: "The local calendar date a shopper picked for a CONSOLIDATED group, stored on the group at placement.", code: "order.GroupPromise.ChosenDeliveryDay"}
+      - {term: Day-of Delivery Window, definition: "The at-most-two-hours window consumed from shipping-and-tracking and stored on the tracking package row (a read-model fact, never an order fact). Shown on the tracking view only while the package is OUT_FOR_DELIVERY and the window was assigned at or after the last scan; never clipped to the promised window, and never touching the promise.", code: "readmodel.Package.EtaStart"}
+      - {term: Delivery-Point Advisory, definition: "The reason-and-flaggedAt pair shown on the tracking view while the package has not ended and its delivery point is flagged (two counted failed attempts). A code for the storefront to word: not an address change, not delivery instructions, not a notification.", code: "readmodel.Package.PointFlagReason"}
       - {term: Checkout, definition: "The act of turning a cart into a customer order, promising every group.", code: "order.PlaceOrder"}
 
   # =========================================================================
@@ -1448,6 +1454,8 @@ contexts:
       - A package joins the earliest wave whose induct cutoff it arrived before and that has stop capacity left.
       - A route never exceeds its van's stop capacity.
       - A package is delivered at most once; a failed attempt returns it to the station for the next wave.
+      - At route start every stop gets a day-of ETA window of at most two hours, spread linearly over what is left of the wave's delivery window. It is a deterministic spread, not a prediction (this context holds no travel-time data and no stop sequencer), it never revises a promise, and it is never retracted.
+      - A delivery point that accumulates two counted failed attempts inside 60 days is flagged to the network. The point is identified only by the opaque stopKey; the flag changes no route, no ETA and no promise (last-mile-delivery ADR 0014).
     aggregates:
       - name: DeliveryWave
         root_id: waveId
@@ -1472,14 +1480,15 @@ contexts:
         description: "One delivery service partner's van route within one wave: ordered stops."
         states: [PLANNED, OUT_FOR_DELIVERY, COMPLETED]
         transitions: [[PLANNED, OUT_FOR_DELIVERY, StartRoute], [OUT_FOR_DELIVERY, COMPLETED, CompleteRoute]]
-        entities: ["Stop{stopNo, trackingNumbers[], outcome}"]
+        entities: ["Stop{stopNo, trackingNumbers[], outcome}", "Attempt{trackingNumber, outcome, outcomeDetail (optional), failureReason, at}"]
         invariants:
           - {rule: "stops <= van capacity of the partner", error: ErrRouteOverCapacity}
           - {rule: "an attempt is recorded only on an OUT_FOR_DELIVERY route", error: ErrRouteNotStarted}
           - {rule: "a package is delivered at most once", error: ErrAlreadyDelivered}
           - {rule: "the packages of one stop share one stopKey", error: ErrStopKeyMismatch}
+          - {rule: "outcomeDetail, when reported, pairs with the outcome: FAILED carries NOT_HOME, ACCESS_PROBLEM or OTHER, DELIVERED carries SAFE_PLACE_USED; empty means not reported (a legacy client) and never replaces failureReason", error: ErrValidation}
         commands: [PlanRoute, StartRoute, RecordAttempt, CompleteRoute]
-        events: [RoutePlanned, PackageOutForDelivery, DeliveryAttempted]
+        events: [RoutePlanned, PackageOutForDelivery, StopEtaWindowAssigned, DeliveryAttempted]
         throughput_estimate: "high (per stop)"
         size_estimate: "routes per wave"
       - name: DeliveryServicePartner
@@ -1492,16 +1501,32 @@ contexts:
         events: []
         throughput_estimate: "rare"
         size_estimate: "small"
+      - name: DeliveryPointProfile
+        root_id: stopKey
+        description: "The learning record of one delivery point, keyed by the opaque stopKey of the label (never an address): outcome tallies and a ring of counted-failure strikes, folded in inside RecordAttempt's unit of work (last-mile-delivery ADR 0014). Dormant until the driver client reports outcomeDetail."
+        value_objects:
+          - "Strike{routeId, trackingNumber, category, at, notified}: one counted failure of one route visit; at most MaxStrikes (5) in the ring"
+        invariants:
+          - {rule: "attempts = delivered + failedNotHome + failedAccess + failedOther, where OTHER and not reported both tally as failedOther (ErrValidation on Observe, ErrInvalidSnapshot on Restore)", error: ErrValidation}
+          - {rule: "safePlaceUsed <= delivered; at most MaxStrikes (5) strikes, each a counted category (NOT_HOME or ACCESS_PROBLEM), no two with one routeId", error: ErrValidation}
+          - {rule: "flaggedAt is non-zero exactly when FlagAfterStrikes (2) or more strikes are open inside the StrikeWindow (60 days); a DELIVERED attempt ends the episode unless the delivering visit itself has a strike", error: ErrValidation}
+          - {rule: "the stopKey is valid and does not start with pkg: (a package with no label data has no address key and gets no profile)", error: ErrValidation}
+        commands: [Observe]
+        events: [DeliveryPointFlagged]
+        throughput_estimate: "one Observe per attempt"
+        size_estimate: "one small row per distinct delivery point"
     read_models:
       - {name: StationView, source: "node-topology NodeRegistered, ServiceAreaAssigned"}
       - {name: InboundPackagesView, source: "linehaul-transportation LoadArrived"}
       - {name: PackageStopView, source: "shipping-and-tracking LabelIssued (trackingNumber, stopKey, destinationPostalPrefix, assignmentId)"}
-      - {name: LastMileAnalytics, source: "analytical read side (last-mile-delivery ADR 0012): cmd/lm-projector, the only writer of a SEPARATE analytical database, projects this context's OWN topics only (retailnetwork.last-mile-delivery.events and .analytics, RoutePlanned included) in one consumer group, deduped in the projection transaction; cmd/lm-reports serves the read-only /reports routes on :8092"}
+      - {name: LastMileAnalytics, source: "analytical read side (last-mile-delivery ADR 0012): cmd/lm-projector, the only writer of a SEPARATE analytical database, projects this context's OWN topics only (retailnetwork.last-mile-delivery.events and .analytics, RoutePlanned included) in one consumer group, deduped in the projection transaction; cmd/lm-reports serves the read-only /reports routes on :8092. ADR 0013 adds the stop_eta_windows fact (one row per package of a StopEtaWindowAssigned, migration 0002) and the GET /reports/eta-window report: per UTC day of the DELIVERED attempt and per station, deliveriesWithEta, deliveriesInsideEta, deliveriesBeforeEta, deliveriesAfterEta and etaHitRate = inside / withEta (null when no delivery had an ETA); only the attempt that DELIVERED counts, and a delivered package whose ETA row was never projected is not in the denominator. DeliveryPointFlagged is acknowledged without a fact"}
     policies:
       - {name: InductOnArrival, rule: "on LoadArrived at a delivery station induct every package into the earliest eligible wave"}
       - {name: RetryNextWave, rule: "a FAILED attempt re-inducts the package into the next wave; three failures return it to sender"}
       - {name: GroupByStopKey, rule: "packages are grouped into stops by the stopKey of LabelIssued, never by an address. Wave capacity counts stops: assignedStops is the number of distinct stopKeys among the wave's inductions, so a package for a stop already in the wave adds no stop and raises no DeliveryWaveCapacityChanged. A package with no label data is its own stop (key pkg: followed by the tracking number)"}
       - {name: NoAddressAtLastMile, rule: "last-mile-delivery never receives an address: it holds a stopKey and a postal prefix only, and no address route exists (shipping-and-tracking policy NoAddressRoute). How the driver learns the address is not decided"}
+      - {name: EtaWindowAtRouteStart, rule: "StartRoute raises one StopEtaWindowAssigned per stop, after every PackageOutForDelivery, in the same transaction and under the same Kafka key (the routeId): the stops are spread linearly over what is left of the wave's delivery window (from max(now, windowStart) to windowEnd), each stop a window of at most two hours truncated to the minute; when less than 30 minutes of the wave window is left at the start instant no event is raised (counted skipped, reason window_elapsed) and the route starts normally. The CloudEvents time is the route start instant; an ETA is never retracted, never re-raised for the same start, and a re-inducted package gets a new one from its next StartRoute. Nothing is persisted on the route and GET /routes/{routeId} shows no window: the events and the analytics read side are the record (last-mile-delivery ADR 0013)"}
+      - {name: DeliveryPointProfileLearns, rule: "RecordAttempt folds the attempt, in the same unit of work, into the DeliveryPointProfile of the stop's stopKey: the outcome detail is tallied, only NOT_HOME and ACCESS_PROBLEM count as failures (one strike per route visit, however many packages failed), strikes decay lazily 60 days back at the next observation, and while two or more are open the packages not yet told are marked notified and raise ONE DeliveryPointFlagged carrying only their tracking numbers. The feature is dormant until the driver client reports outcomeDetail: until then every attempt is tallied as not reported, no strike is counted and no event is raised. A flagged point changes no route, no ETA and no promise, and no address, name, phone or free text is copied into the profile (failureReason stays out). The read-only exposure decided in ADR 0014 (a delivery-point route and a summary on the wave stops) is not built yet"}
     inbound:
       # caller inferred for close-induction, cancel, POST /partners and :deactivate (ADR 0003 names only the station planner and the driver app as UI callers; sibling of the wave and route commands)
       - {from: "station planner (human)", type: cmd, channel: "REST POST /waves, POST /waves/{waveId}:close-induction, POST /waves/{waveId}:dispatch, POST /waves/{waveId}:cancel, POST /routes, POST /partners, POST /partners/{dspId}:deactivate", routes: ["POST /waves", "POST /waves/{waveId}:close-induction", "POST /waves/{waveId}:dispatch", "POST /waves/{waveId}:cancel", "POST /routes", "POST /partners", "POST /partners/{dspId}:deactivate"], message: "ScheduleWave, CloseInduction, DispatchWave, CancelWave, PlanRoute, ContractPartner, DeactivatePartner", relationship: UI}
@@ -1513,7 +1538,7 @@ contexts:
       - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "LoadArrived", relationship: Customer/Supplier}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, ServiceAreaAssigned", relationship: Conformist}
       # caller inferred: ADR 0012 names the report questions, not a client; the routes are served by cmd/lm-reports on :8092, not cmd/api
-      - {from: network analysts (human), type: qry, channel: "REST GET /reports/route-efficiency, GET /reports/attempt-outcomes, GET /reports/wave-utilisation, GET /reports/freshness (cmd/lm-reports, :8092)", routes: ["GET /reports/route-efficiency", "GET /reports/attempt-outcomes", "GET /reports/wave-utilisation", "GET /reports/freshness"], message: "GetRouteEfficiencyReport, GetAttemptOutcomesReport, GetWaveUtilisationReport, GetReportFreshness", relationship: UI}
+      - {from: network analysts (human), type: qry, channel: "REST GET /reports/route-efficiency, GET /reports/attempt-outcomes, GET /reports/eta-window, GET /reports/wave-utilisation, GET /reports/freshness (cmd/lm-reports, :8092)", routes: ["GET /reports/route-efficiency", "GET /reports/attempt-outcomes", "GET /reports/eta-window", "GET /reports/wave-utilisation", "GET /reports/freshness"], message: "GetRouteEfficiencyReport, GetAttemptOutcomesReport, GetEtaWindowReport, GetWaveUtilisationReport, GetReportFreshness", relationship: UI}
     rest:
       - "POST /waves"
       - "GET /waves?stationNodeId=&serviceDate="
@@ -1529,6 +1554,7 @@ contexts:
       - "POST /partners/{dspId}:deactivate"
       - "GET /reports/route-efficiency?from=&to="
       - "GET /reports/attempt-outcomes?from=&to="
+      - "GET /reports/eta-window?from=&to="
       - "GET /reports/wave-utilisation?from=&to="
       - "GET /reports/freshness"
     publishes:
@@ -1538,18 +1564,29 @@ contexts:
       - {event: DeliveryWaveCancelled, entity: wave, data: [waveId, reason], consumers: [delivery-promise, order-sourcing]}
       - {event: RoutePlanned, entity: route, data: [routeId, waveId, dspId, stopCount], consumers: [analytics only]}
       - {event: PackageOutForDelivery, entity: route, data: [routeId, trackingNumber, stationNodeId, at], consumers: [shipping-and-tracking]}
-      - {event: DeliveryAttempted, entity: route, data: [routeId, trackingNumber, outcome, failureReason, at], consumers: [shipping-and-tracking]}
+      - {event: StopEtaWindowAssigned, entity: route, data: [routeId, stopNo, stopKey, trackingNumbers, etaStart, etaEnd], consumers: [shipping-and-tracking]}
+      - {event: DeliveryAttempted, entity: route, data: [routeId, trackingNumber, outcome, outcomeDetail, failureReason, at], consumers: [shipping-and-tracking]}
       - {event: PackageInductionDeferred, entity: packageattempthistory, data: [trackingNumber, assignmentId], consumers: [delivery-promise]}
       - {event: PackageReturnInitiated, entity: packageattempthistory, data: [trackingNumber], consumers: [shipping-and-tracking]}
+      - {event: DeliveryPointFlagged, entity: deliverypointprofile, data: [stopKey, reason, failures, trackingNumbers, flaggedAt], consumers: [shipping-and-tracking]}
     reasons:
       - name: DeliveryAttemptOutcome
         fields: [DeliveryAttempted.outcome, "rest:Outcome", "rest:Attempt.outcome"]
-        about: "The result of one delivery attempt of one package. A FAILED attempt carries a failureReason of free text, which is not listed here."
+        about: "The result of one delivery attempt of one package. A FAILED attempt carries a failureReason of free text, which is not listed here; the optional category is the DeliveryAttemptOutcomeDetail vocabulary below."
         values:
           - {value: DELIVERED, meaning: "The package was handed over."}
           - {value: FAILED, meaning: "The package was not handed over; failureReason is required."}
         consumers:
           - {context: shipping-and-tracking, uses: [DELIVERED, FAILED], rule: "DELIVERED becomes a DELIVERED scan; any other outcome becomes a DELIVERY_FAILED scan."}
+      - name: DeliveryAttemptOutcomeDetail
+        fields: [DeliveryAttempted.outcomeDetail, "rest:OutcomeDetail", "rest:RecordAttemptRequest.outcomeDetail", "rest:Attempt.outcomeDetail"]
+        about: "The optional category of an attempt, reported by the driver client and dormant until one does (last-mile-delivery ADR 0014). Empty means not reported (a legacy client), which is not the same as OTHER; a detail never replaces failureReason. FAILED carries NOT_HOME, ACCESS_PROBLEM or OTHER; DELIVERED carries SAFE_PLACE_USED; any other pairing is 422 validation-failed. Only NOT_HOME and ACCESS_PROBLEM count as failures on the DeliveryPointProfile."
+        values:
+          - {value: NOT_HOME, meaning: "Failed: nobody was at the point to receive the package. A counted failure."}
+          - {value: ACCESS_PROBLEM, meaning: "Failed: the point could not be reached or entered. A counted failure."}
+          - {value: SAFE_PLACE_USED, meaning: "Delivered: the package was left in an agreed safe place."}
+          - {value: OTHER, meaning: "Failed: a category outside the closed list. Tallied, never counted as a strike."}
+        consumers: []   # no consumer reads it: shipping-and-tracking's tolerant decoding ignores the unknown field, and the profile that counts it is last-mile-delivery's own
     consumes:
       - {event: LoadArrived, from: linehaul-transportation}
       - {event: NodeRegistered, from: node-topology}
@@ -1563,7 +1600,9 @@ contexts:
       - {term: Route, definition: "One van's ordered stops in one wave.", code: "route.Route"}
       - {term: Stop, definition: "The packages of one route that share one stop key; wave capacity is counted in stops.", code: "route.Stop"}
       - {term: Delivery Service Partner (DSP), definition: "An independent delivery business working for a station.", code: "partner.DeliveryServicePartner"}
-      - {term: Delivery Attempt, definition: "One try to hand a package over: DELIVERED or FAILED with a reason.", code: "route.Attempt"}
+      - {term: Delivery Attempt, definition: "One try to hand a package over: DELIVERED or FAILED with a reason, and an optional outcomeDetail category the driver client reports (ADR 0014).", code: "route.Attempt"}
+      - {term: Stop ETA Window, definition: "The day-of delivery window of one stop of a started route: at most two hours, spread linearly over what is left of the wave's delivery window at the start instant. A deterministic spread, not a prediction; never retracted.", code: "route.StopEta"}
+      - {term: Delivery Point Profile, definition: "The learning record of one delivery point (an opaque stop key, never an address): outcome tallies and counted-failure strikes. Two counted failures inside 60 days flag the point; the flag changes no route, no ETA and no promise.", code: "deliverypoint.DeliveryPointProfile"}
 
   # =========================================================================
   - id: shipping-and-tracking
@@ -1618,12 +1657,16 @@ contexts:
           - [AT_STATION, RETURNED, ReturnToSender]
           - [IN_TRANSIT, LOST, DeclareLost]
         entities: ["Scan{scanId, nodeId, scanType, at}"]
+        value_objects:
+          - "EtaWindow{etaStart, etaEnd, etaAssignedAt}: the day-of window stored by AssignEta (migration 0003) and the point flag {pointFlagReason, pointFlaggedAt} stored by FlagDeliveryPoint (migration 0004); neither is a scan, neither moves the state, and no terminal journey carries a current one"
         invariants:
           - {rule: "scans apply in time order; an older scan is stored but does not move the state", error: ErrScanOutOfOrder}
           - {rule: "a scanId is applied once", error: ErrDuplicateScan}
           - {rule: "DELIVERED, RETURNED and LOST are terminal", error: ErrJourneyClosed}
-        commands: [StartJourney, RecordScan, RaiseException, ReturnToSender, DeclareLost]
-        events: [PackageScanned, PackageHandedOver, PackageDelivered, PackageExceptionRaised, PackageReturned, PackageLost]
+          - {rule: "the stored ETA window is empty or has etaStart < etaEnd and a non-zero etaAssignedAt; an assignment not strictly newer than the stored one is refused (ErrEtaStale) and a terminal journey refuses AssignEta (ErrJourneyClosed)", error: ErrEtaStale}
+          - {rule: "pointFlagReason and pointFlaggedAt are null together and the reason is NOT_HOME or ACCESS_PROBLEM; a flag not strictly newer than the stored one is refused (ErrPointFlagStale) and a terminal journey refuses FlagDeliveryPoint (ErrJourneyClosed)", error: ErrPointFlagStale}
+        commands: [StartJourney, RecordScan, AssignEta, FlagDeliveryPoint, RaiseException, ReturnToSender, DeclareLost]
+        events: [PackageScanned, PackageHandedOver, PackageDelivered, PackageExceptionRaised, PackageReturned, PackageLost, PackageEtaWindowAssigned, PackageDeliveryPointFlagged]
         throughput_estimate: "very high (every scan)"
         size_estimate: "one per package + scans"
     read_models:
@@ -1636,6 +1679,8 @@ contexts:
       - {name: StopKeyAtLabelTime, rule: "at IssueLabel the address is read from customer-ordering (GetShipTo), normalized (upper case, letters and digits only; line1, line2, city, region, postalCode and countryCode, not the recipient name or phone) and hashed with a service secret into the stopKey, so neighbours at one address share a stop. stopKey and destinationPostalPrefix go on LabelIssued; the address is then encrypted into the ship-to snapshot and dropped from memory"}
       - {name: NoAddressRoute, rule: "no address leaves shipping-and-tracking and customer-ordering: no route, event or read model carries it, and no restricted label route is built. How a delivery partner learns the address at the door is not decided"}
       - {name: ShipToRetention, rule: "a periodic job (PurgeShipTo) deletes a ship-to snapshot 30 days after its journey closed: DELIVERED, RETURNED or LOST, or VOIDED when the label was voided before handover. A journey still open keeps its snapshot"}
+      - {name: EtaWindowOnJourney, rule: "the use case ApplyEtaWindows (same shape as ApplyScans: inbox claim, then per tracking number) consumes StopEtaWindowAssigned and stores etaStart/etaEnd/etaAssignedAt on each journey of the stop via AssignEta; the stopKey is received and dropped (this context keeps no address-derived value of a stop). Each journey then publishes PackageEtaWindowAssigned with its own orderId. EtaCurrent() is the one currency rule, shared with customer-ordering: the window shows only while the state is OUT_FOR_DELIVERY, etaAssignedAt is non-zero and not before lastScanAt, so a newer scan, a failed attempt (back to AT_STATION) or any terminal state hides it; yesterday's window never survives a newer OUT_FOR_DELIVERY scan. The window is relayed as received, never clipped to the promised window (shipping-and-tracking ADR 0013)"}
+      - {name: DeliveryPointFlagRelay, rule: "FlagDeliveryPoint consumes DeliveryPointFlagged, drops the stopKey and the failure count (no address-derived value of a stop is kept), stores pointFlagReason and pointFlaggedAt on each journey of the stop, and publishes PackageDeliveryPointFlagged per journey with that journey's own orderId, so customer-ordering can show the advisory per order. Not a scan: the state never moves. A flag for an unknown or terminal journey is counted and acknowledged. There is no cleared event: the advisory ends when the package ends, which the consumer decides (shipping-and-tracking ADR 0014)"}
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /labels (in-org)", routes: ["POST /labels"], message: "IssueLabel", relationship: Customer/Supplier}
       # caller inferred: the spec names no caller for either route; both are ground-operations actions (a scan is recorded at a scanner, a label is voided before handover); no sibling service has a client for them
@@ -1643,7 +1688,7 @@ contexts:
       - {from: shopper / customer-ordering, type: qry, channel: "REST GET /journeys/{trackingNumber}", routes: ["GET /journeys/{trackingNumber}"], message: "GetJourney", relationship: OHS}
       - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: "VendorShipmentConfirmed", relationship: Customer/Supplier}
       - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "LoadDeparted, LoadArrived", relationship: Conformist}
-      - {from: last-mile-delivery, type: evt, channel: "Kafka retailnetwork.last-mile-delivery.events", message: "PackageOutForDelivery, DeliveryAttempted", relationship: Conformist}
+      - {from: last-mile-delivery, type: evt, channel: "Kafka retailnetwork.last-mile-delivery.events", message: "PackageOutForDelivery, DeliveryAttempted, StopEtaWindowAssigned, DeliveryPointFlagged", relationship: Conformist}
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated", relationship: Conformist}
       # caller inferred: ADR 0012 names the report questions, not a client; the routes are served by cmd/st-reports on :8092, not cmd/api
       - {from: network analysts (human), type: qry, channel: "REST GET /reports/package-touches, GET /reports/delivery-outcomes, GET /reports/freshness (cmd/st-reports, :8092)", routes: ["GET /reports/package-touches", "GET /reports/delivery-outcomes", "GET /reports/freshness"], message: "GetPackageTouchesReport, GetDeliveryOutcomesReport, GetReportFreshness", relationship: UI}
@@ -1664,6 +1709,8 @@ contexts:
       - {event: PackageExceptionRaised, entity: journey, data: [trackingNumber, assignmentId, orderId, reason, at], consumers: [delivery-promise, customer-ordering]}
       - {event: PackageReturned, entity: journey, data: [trackingNumber, orderId, returnedAt], consumers: [delivery-promise, customer-ordering]}
       - {event: PackageLost, entity: journey, data: [trackingNumber, orderId, declaredAt], consumers: [delivery-promise, customer-ordering]}
+      - {event: PackageEtaWindowAssigned, entity: journey, data: [trackingNumber, assignmentId, orderId, etaStart, etaEnd, assignedAt], consumers: [customer-ordering]}
+      - {event: PackageDeliveryPointFlagged, entity: journey, data: [trackingNumber, assignmentId, orderId, reason, flaggedAt], consumers: [customer-ordering]}
     reasons:
       - name: PackageExceptionReason
         fields: [PackageExceptionRaised.reason]
@@ -1678,6 +1725,8 @@ contexts:
       - {event: DeliveryAttempted, from: last-mile-delivery}
       - {event: CatalogItemCreated, from: offer-availability}
       - {event: PackageReturnInitiated, from: last-mile-delivery}
+      - {event: StopEtaWindowAssigned, from: last-mile-delivery}
+      - {event: DeliveryPointFlagged, from: last-mile-delivery}
     sync_calls:
       - {to: customer-ordering, type: qry, message: GetShipTo, channel: "REST GET /orders/{orderId}/ship-to"}
     ul:
@@ -1688,6 +1737,8 @@ contexts:
       - {term: Handover, definition: "The instant a vendor node's package enters the network.", code: "journey.HandedOver"}
       - {term: Stop Key, definition: "An opaque keyed hash of the normalized ship-to address, put on the label event so last-mile-delivery can group packages into stops without ever receiving an address.", code: "label.StopKey"}
       - {term: Ship-To Snapshot, definition: "The encrypted copy of the ship-to address kept to print a label; never published and purged 30 days after the journey closes.", code: "label.ShipToSnapshot"}
+      - {term: Day-of ETA Window, definition: "The at-most-two-hours delivery window consumed from last-mile-delivery at route start and stored on the journey (etaStart, etaEnd, etaAssignedAt). Not a scan: it never moves the state, and it shows on the journey view only while EtaCurrent holds (OUT_FOR_DELIVERY, assigned at or after the last applied scan).", code: "journey.PackageJourney"}
+      - {term: Delivery-Point Flag, definition: "The pointFlagReason and pointFlaggedAt stored on each journey of a flagged delivery point (consumed from last-mile-delivery without the stop key) and republished per package by orderId. Not a scan; there is no cleared event, so it ends when the package ends.", code: "journey.PackageJourney"}
 
   # =========================================================================
   - id: node-performance

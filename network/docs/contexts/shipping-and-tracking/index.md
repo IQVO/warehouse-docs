@@ -24,11 +24,15 @@ only an encrypted snapshot needed to print it. It is the only context outside
 After the label, it folds facts from three other contexts into one
 customer-visible, forward-only timeline: the vendor's
 `VendorShipmentConfirmed` and the first pickup scan, linehaul `LoadDeparted`
-and `LoadArrived`, and last-mile `PackageOutForDelivery` and
-`DeliveryAttempted`. The timeline ends in delivered, returned or lost.
-`PackageHandedOver` feeds `node-performance`. `PackageDelivered` feeds the
-promise judgement in `delivery-promise`. A package that goes silent is raised
-as an exception (`ExceptionOnSilence`).
+and `LoadArrived`, and last-mile `PackageOutForDelivery`,
+`DeliveryAttempted`, the stop ETA windows and the delivery-point flags. The
+timeline ends in delivered, returned or lost. The day-of ETA window and the
+delivery-point flag are stored on the journey but are not scans: they never
+move the state, and each is republished per package with its `orderId` so
+`customer-ordering` can show it to the shopper. `PackageHandedOver` feeds
+`node-performance`. `PackageDelivered` feeds the promise judgement in
+`delivery-promise`. A package that goes silent is raised as an exception
+(`ExceptionOnSilence`).
 
 :::info[What its pages describe]
 - **Inbound:** `IssueLabel` from `vendor-connectivity` (REST, in-org);
@@ -36,7 +40,7 @@ as an exception (`ExceptionOnSilence`).
   `last-mile-delivery` and `offer-availability`; `GetJourney` from shoppers
   and `customer-ordering`.
 - **Outbound:** one synchronous query, `GetShipTo`, to `customer-ordering`;
-  eight CloudEvents types on `retailnetwork.shipping-and-tracking.events`.
+  ten CloudEvents types on `retailnetwork.shipping-and-tracking.events`.
 - **Aggregates:** `ShippingLabel` (`labelRef`) and `PackageJourney`
   (`trackingNumber`).
 :::
@@ -51,7 +55,7 @@ as an exception (`ExceptionOnSilence`).
 | [Bounded Context Canvas](/network/contexts/shipping-and-tracking/bounded-context-canvas) | Purpose, roles, every inbound and outbound message | [Bounded Context Canvas v5](https://github.com/ddd-crew/bounded-context-canvas) |
 | [Context Map](/network/contexts/shipping-and-tracking/context-map) | Every neighbour, direction and pattern | [Context Mapping](https://github.com/ddd-crew/context-mapping) |
 | [Aggregate Design Canvas](/network/contexts/shipping-and-tracking/aggregate-design-canvas) | `ShippingLabel` and `PackageJourney`: states, invariants, commands, events | [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas) |
-| [Domain Events](/network/contexts/shipping-and-tracking/domain-events) | Eight published and six consumed events, with full CloudEvents types | [EventStorming glossary](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) (domain event) |
+| [Domain Events](/network/contexts/shipping-and-tracking/domain-events) | Ten published and eight consumed events, with full CloudEvents types | [EventStorming glossary](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) (domain event) |
 | [Domain Message Flow](/network/contexts/shipping-and-tracking/domain-message-flow) | Label issue, journey to delivery, failure paths | [Domain Message Flow Modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
 | [EventStorming](/network/contexts/shipping-and-tracking/eventstorming) | Process-level boards with hotspots | [EventStorming glossary & cheat sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
 | [Use Cases](/network/contexts/shipping-and-tracking/use-cases) | One section per command, errors mapped to HTTP | none (application layer) |
