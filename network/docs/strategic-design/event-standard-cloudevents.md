@@ -145,6 +145,7 @@ Topic `retailnetwork.order-sourcing.events`.
 | --- | --- | --- |
 | `FulfillmentQueued` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentQueued` | analytics only |
 | `FulfillmentReleasedToNode` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | `vendor-connectivity`, `linehaul-transportation`, `seller-inbound` |
+| `FulfillmentReleaseWithdrawn` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleaseWithdrawn` | `vendor-connectivity` |
 | `FulfillmentReassigned` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReassigned` | `linehaul-transportation` |
 | `FulfillmentLocked` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | `delivery-promise`, `customer-ordering`, `linehaul-transportation` |
 | `FulfillmentShipped` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | `customer-ordering`, `delivery-promise` |
@@ -154,6 +155,9 @@ Topic `retailnetwork.order-sourcing.events`.
 | `FulfillmentCancelRefused` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelRefused` | `customer-ordering` |
 | `FulfillmentConstraintRevised` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentConstraintRevised` | analytics only |
 | `FulfillmentSourcingDecided` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentSourcingDecided` | analytics only |
+| `SourcingPolicyPublished` | `com.retailnetwork.commerce.order-sourcing.policy.SourcingPolicyPublished` | analytics only |
+| `AssignmentsConsolidated` | `com.retailnetwork.commerce.order-sourcing.assignment.AssignmentsConsolidated` | analytics only |
+| `AssignmentsDeconsolidated` | `com.retailnetwork.commerce.order-sourcing.assignment.AssignmentsDeconsolidated` | analytics only |
 
 ### `vendor-connectivity`
 
@@ -310,7 +314,7 @@ Appears in: REST `OfferConstraint`.
 | `DESTINATION_NOT_SERVED` | No delivery station serves the destination postal prefix. |
 | `ITEM_QUANTITY_NOT_AVAILABLE` | No set of nodes can cover every requested line and quantity. |
 | `PAST_ORDER_DEADLINE` | The tier's order deadline in the destination region has passed. |
-| `DELIVERY_SLA_UNAVAILABLE` | No feasible path (cutoff, departures, delivery wave) reaches the destination inside the tier. |
+| `DELIVERY_SLA_UNAVAILABLE` | No feasible path (cutoff, departures, delivery wave) reaches the destination inside the tier. For CONSOLIDATED also: the group has no STANDARD candidate to anchor the fastest window, or the chosen day is more than 14 local days from now or has no wave (ADR 0024). |
 | `NODE_CAPACITY_EXHAUSTED` | A feasible path exists, but its pickup cutoff has no remaining capacity. |
 
 ### Reasons of `order-sourcing`
@@ -326,6 +330,7 @@ Appears in: `FulfillmentReassigned.reason`.
 | `PURCHASE_ORDER_REJECTED` | The node rejected the purchase order; the next candidate takes over. |
 | `PURCHASE_ORDER_EXPIRED` | The node did not acknowledge the purchase order in time; the next candidate takes over. |
 | `PROMISE_REVISED` | A revised promise (PromiseRevised) changed the constraint and a QUEUED assignment moved to a new candidate. |
+| `CONSOLIDATION_WITHDRAWN` | A consolidation merge was dissolved by a promise revision and the member, back in the queue, was re-searched and now has a different node (order-sourcing ADR 0015). |
 
 **`FulfillmentLockReason`**: Why an assignment locked its path.
 
@@ -360,6 +365,25 @@ Appears in: `FulfillmentCancelRefused.reason`.
 | Value | Meaning |
 | --- | --- |
 | `CANCEL_AFTER_LOCK` | The cancel request arrived after the assignment locked; the vendor ships and the shopper's path is a return. |
+| `CANCEL_WHILE_MERGED` | The assignment is a member of a live consolidation merge that has not locked yet; the merge stays intact and the cancel can be retried after the carrier's lock or after the merge is dissolved (order-sourcing ADR 0015). |
+
+**`FulfillmentReleaseWithdrawnReason`**: Why order-sourcing took a published release back. A member cancel never withdraws (it is refused), so there is one value.
+
+Appears in: `FulfillmentReleaseWithdrawn.reason`.
+
+| Value | Meaning |
+| --- | --- |
+| `PROMISE_REVISED` | A promise revision moved the delivery window of a member so that the merged eta no longer fits; the merge is dissolved and the issued purchase order is cancelled by vendor-connectivity, which carries the value as opaque text and does not branch on it. |
+
+**`AssignmentsDeconsolidatedReason`**: Why a consolidation merge was dissolved.
+
+Appears in: `AssignmentsDeconsolidated.reason`.
+
+| Value | Meaning |
+| --- | --- |
+| `PROMISE_REVISED` | A promise revision of a RELEASED member excluded the merged eta; the release is withdrawn first (FulfillmentReleaseWithdrawn). |
+| `PURCHASE_ORDER_REJECTED` | The vendor rejected the carrier's purchase order; every member is re-searched on its own with the node excluded, and no withdraw is raised because the vendor holds the terminal state. |
+| `PURCHASE_ORDER_EXPIRED` | The vendor did not acknowledge the carrier's purchase order in time; every member is re-searched on its own with the node excluded, and no withdraw is raised. |
 
 **`ReleaseOutcome`**: What the node answered to a release, or WITHDRAWN when order-sourcing took the release back.
 

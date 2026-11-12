@@ -278,6 +278,24 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 - **Gap:** nothing tells the vendor or order-sourcing when the cancel is
   refused after acknowledgement.
 
+## CancelOnReleaseWithdrawn
+
+- **Actor / trigger:** policy `CancelOnReleaseWithdrawn`, on
+  `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleaseWithdrawn`
+  (`assignmentId`, `releaseNo`, `orderId`, `groupNo`, `reason`, `withdrawnAt`).
+- **Inbound adapter:** the Kafka consumer already subscribed to `retailnetwork.order-sourcing.events`.
+- **Preconditions:** a PO exists for (`assignmentId`, `releaseNo`) and is `ISSUED`.
+- **Main flow:** claim the event `id` in the inbox; find the order by (`assignmentId`, `releaseNo`);
+  not found is a no-op; `po.Cancel('release withdrawn: ' + reason)` (sanitised, at most 200 characters);
+  save and write `PurchaseOrderCancelled` in the same transaction as the inbox row.
+- **Errors:** `ErrCancelAfterAcknowledgement` (the vendor already accepted) and `ErrIllegalTransition`
+  (rejected, expired, already cancelled) are logged at INFO and acknowledged, not retried.
+- **Events:** `PurchaseOrderCancelled`.
+- **Idempotency:** the inbox. The lookup is by release number, so it never touches the order of a later
+  release. The reason is carried as opaque text; this context does not branch on it.
+- **Residual (owned by `order-sourcing`):** between the dissolve and this cancel the vendor may acknowledge;
+  the order is then `ACCEPTED`, it is left as it is and `order-sourcing` ignores the stale acceptance.
+
 ## ReceiveSubmission
 
 - **Actor / trigger:** vendor, for the three relay writes below. The

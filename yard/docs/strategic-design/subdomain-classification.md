@@ -52,6 +52,7 @@ Both are Supporting: every site with trucks needs them and the rules (window len
 - An ETA later than window_start plus the arrival tolerance raises an advisory DockAppointmentAtRisk; nothing reschedules automatically.
 - An ASN sits on only one active native appointment (decision D-12); one appointment covers exactly one trailer (X3).
 - COMPLETED, CANCELLED and NO_SHOW are terminal, so a late carrier books anew (D-9). The dock planner may reschedule and cancel (CARRIER_REQUEST, SITE_REQUEST) like the carrier portal (D-5).
+- A booking or reschedule naming the SCAC of a registered SUSPENDED carrier is refused (carrier-suspended); an unregistered SCAC is accepted as before, so the registry is opt-in (ADR 0012). Appointments a carrier already holds are not cancelled by its suspension: a person decides.
 
 ### `yard-management`
 
@@ -62,3 +63,6 @@ Both are Supporting: every site with trucks needs them and the rules (window len
 - A visit checks out only when every trailer it takes is released (not docked, no open move) and every loaded outbound trailer carries a seal.
 - Walk-ins are allowed into a holding spot unless the site's policy requires an appointment.
 - A seal mismatch at the gate raises SealExceptionRaised; whether it also rejects the visit is site policy (FLAG or REJECT).
+- A container, or a unit declared ISO6346, carries a valid ISO 6346 unit number; a seal carries an optional ISO 17712 class (I, S, H) and a site may set a minimum class (ADR 0012).
+- \{'Dock safety interlock (ADR 0013)': 'a DOCKED trailer is secured (RESTRAINT or WHEEL_CHOCKS) before door work starts where the site policy requires it, and a secured trailer leaves neither its door nor the gate until the securing is released.'\}
+- \{'Hazmat and reefer placement (ADR 0014)': 'a trailer that declares a hazard class or a temperature-control need is placed only on a yard spot whose kind its contents allow.'\}

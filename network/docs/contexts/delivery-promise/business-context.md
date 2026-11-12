@@ -68,8 +68,12 @@ directly. Their decisions reach it as events from the contexts they do talk to.
   scorecard grade (the **handicap**), never silently dropped.
 - **How a cart splits.** One node for the whole cart if possible; otherwise
   the fewest shipment groups, one promise each.
+- **Whether to offer a later, consolidated day.** The opt-in `CONSOLIDATED` tier is quoted only when the
+  caller asks for it, on a day the shopper chooses at or after the fastest window. It may fall back to
+  nominal lane times like `STANDARD`, and it says whether the day leaves room to merge the order
+  (`consolidationEligible`). The estimates route never returns it.
 - **When a fast tier is honest.** `SAME_DAY`, `NEXT_DAY` and `TWO_DAY` are
-  quoted only from scheduled departures and waves. Only `STANDARD` may fall
+  quoted only from scheduled departures and waves. Only `STANDARD` and `CONSOLIDATED` may fall
   back to nominal lane times, and the promise then records basis `NOMINAL`.
 - **How much demand a pickup cutoff can take.** Provisional plus confirmed
   holds never exceed the node's share of that cutoff.

@@ -22,7 +22,9 @@ delivery wave at the destination's delivery station. A **promise** holds
 capacity on the node's pickup cutoff (the **PromiseBook**) until the order is
 placed or the hold expires. When the path breaks, the context re-promises to a
 later window, never an earlier one. At delivery it judges every promise
-**kept** or **broken**. It owns three aggregates (`DeliveryOffer`, `Promise`,
+**kept** or **broken**, including every promise that shares the delivered package's
+tracking number. Besides the four classic tiers it can quote the opt-in
+`CONSOLIDATED` tier for a delivery day the shopper chooses. It owns three aggregates (`DeliveryOffer`, `Promise`,
 `PromiseBook`), its event-fed read models (plus one local read model fed by its own judgements) and its policies. It makes **no
 synchronous call** to any other context: every input of the promise hot path is
 a local read model fed by events.
