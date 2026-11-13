@@ -90,7 +90,8 @@ GitHub Pages: **https://iqvo.github.io/warehouse-docs/**. Page map:
   contexts, `dock-scheduling` (the door calendar) and `yard-management` (the
   physical yard), both built on `develop`, released (v0.1.2) and registered in warehouse-infra
   `develop` (apps.yaml entry, helm values, alert rules) and applied to the k3s cluster since 2026-11-10. `outbound-shipping`, the yard's downstream
-  consumer, lives in the fleet section: released v0.1.0, registered in warehouse-infra, not applied. The source of truth is `yard/model/model.yaml`;
+  consumer, lives in the fleet section: released v0.1.0, registered in warehouse-infra and
+  applied to the k3s cluster since 2026-11-12. The source of truth is `yard/model/model.yaml`;
   the `yard/docs/strategic-design/` pages it feeds are regenerated via
   `yard/scripts/gen_pages.py`, and the context packs are written here from the
   model. Gates: `npm run check:model:yard` and `npm run check:pages:yard`.

@@ -25,9 +25,10 @@ physical facts and never to a person's say-so: **ship-confirm follows the
 trailer's physical departure** (its ADR 0002).
 
 :::info[What is built, released, registered, applied and planned]
-Per this context's ADRs, `apis/` and `cmd/` on `develop` (`7ce7b14`, the merge
-of its status-docs PR 21; `main` and the `v0.1.0` tag are at `857edfd`) and
-`warehouse-infra` `develop` (`db829ff`), checked 2026-11-11:
+Per this context's ADRs, `apis/` and `cmd/` on `develop` (`fea067b`, the merge
+of its applied-status docs PR 27; the `v0.1.0` tag is `857edfd`) and
+`warehouse-infra` `develop` (`db829ff`), checked 2026-11-11, the cluster
+re-read read-only on 2026-11-13:
 
 **Built on `develop`:** the REST API (13 routes plus `/healthz` and
 `/readyz` in `apis/openapi.yaml`), a transactional outbox with relay, **six**
@@ -40,20 +41,29 @@ and its own documentation site.
 
 **Released:** `v0.1.0` on 2026-11-11, cut from `main` (Go 1.27.4).
 
-**Registered and image-pinned, not applied:** `warehouse-infra` `develop`
+**Applied and running:** `warehouse-infra` `develop`
 registers it (PR 205): a `terraform/apps.yaml` entry (a database, no analytics
 read side), `helm-values/outbound-shipping.yaml` (one API replica, the six
 consumer groups set, the MCP server off for pod capacity, no relay
-Deployment because the API relays the outbox inline), a context dashboard,
-alert rules and the image pin `857edfd-arm64` in
-`terraform/targets/k3s.images.yaml`. Nothing is applied: no outbound-shipping
-pod, deployment or ArgoCD application exists in the reference cluster
-(read-only `kubectl`, context `k3s-multipass`, 2026-11-11). It is therefore not
-deployed or running, and every edge of it on the
-[Context Map](/strategic-design/context-map) is **not live**, whatever the
-wiring. Per edge: wired in infra on the consumer side for the five inbound
-feeds (K67 to K71) and for `exception-management`'s group (K73); not wired for
-`order-management` (K72, no `OUTBOUND_SHIPPING_*` variable set). The
+Deployment because the API relays the outbox inline), a context dashboard and
+alert rules (both registered in the repo and not yet loaded on the cluster:
+the platform apply is pending) and the image pin `857edfd-arm64` in
+`terraform/targets/k3s.images.yaml`. Applied to the k3s cluster on 2026-11-12:
+one `api` replica runs at `857edfd-arm64` on `k3s-agent`, the Argo CD
+application is Synced/Healthy and the Kong route `/api/outbound-shipping`
+answers 200 (read-only `kubectl`, context `k3s-multipass`, re-read
+2026-11-13). The seven Kafka topics were pre-created before the first sync
+(8 partitions, replication factor 1), the MCP server is off and there is no
+relay Deployment. Seven edges on the
+[Context Map](/strategic-design/context-map) are **live** (both ends run):
+the five inbound feeds (K67 to K71), its own analytics fold and
+`exception-management` (K73, its live ConfigMap carries
+`OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP`). Not live: `order-management`
+(K72 — both ends run but its consumer is dark: `OUTBOUND_SHIPPING_CONSUMER_MODE`
+defaults to `off` and no variable is set), `network-fulfillment` (K74 — its
+consumer landed on `develop` on 2026-11-12, PR 165, but the running image
+`49587d0` predates the merge) and `yard-management`'s handler for
+`LoadingStarted`, `LoadClosed` and `LoadReopened` (K75, not built). The
 neighbours `fulfillment-execution`, `dock-scheduling`, `yard-management`,
 `process-path-management`, `facility-layout`, `order-management` and
 `exception-management` all run.
@@ -110,7 +120,10 @@ troubleshooting, testing). The REST reference is generated from its
   pinned). It also has its own documentation site
   with the same pack plus architecture, quickstart, integration and MCP pages.
 - **Fleet-level**: [Context Map](/strategic-design/context-map) (its edges
-  K67 to K75, all not live: registered in infra, not applied), the
+  K67 to K75: seven live since the 2026-11-12 apply — the five inbound feeds,
+  the analytics fold and `exception-management`; three not — K72's consumer is
+  dark, K74's running image predates its just-merged consumer, K75's handler
+  is unbuilt), the
   [Event Standard](/strategic-design/event-standard-cloudevents) (subdomain
   table and type catalogue),
   [Subdomain Classification](/strategic-design/subdomain-classification) and

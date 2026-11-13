@@ -24,7 +24,7 @@ database. The nineteenth, `outbound-shipping` (released `v0.1.0`, registered in
 and a read-only `cmd/mcp`), one Postgres database, no analytics read side and no
 frontend remote. Its Helm chart is merged (PR 17). All twenty have an entry in
 `warehouse-infra` `develop`'s application registry (`terraform/apps.yaml`;
-`outbound-shipping` since PR 205, image pinned at `857edfd-arm64`, not applied). Each registered domain
+`outbound-shipping` since PR 205, image pinned at `857edfd-arm64`, applied to k3s since 2026-11-12). Each registered domain
 context's entry declares `database: true`, an `analytics:` read side and a
 `frontend_remote:`, except `outbound-shipping`'s, which declares `database: true` only. The five most recent read sides
 (`slotting-optimization`, `pick-face-replenishment`, `task-interleaving`,
@@ -414,7 +414,7 @@ flowchart LR
 | `warehouse.task-interleaving.events` | task-interleaving | 1 | fulfillment-execution (`InterleavingHintIssued`, an advisory tie-break inside one `claimNext` priority band, its ADR 0051; `TASK_INTERLEAVING_MODE=kafka`) |
 | `warehouse.returns-processing.events` | returns-processing | 7 | inventory-storage (`ReturnLineStaged`, once per `RESTOCK` disposition, into its staged-receipt use case, its ADR 0044); exception-management (`UnexpectedReturnReceived`, one case per receipt line); the other five types have no consumer |
 | `warehouse.exception-management.events` | exception-management | 7 | none: no context consumes any of its seven types |
-| `warehouse.outbound-shipping.events` | outbound-shipping (released v0.1.0, registered, not applied) | 13 | order-management (`ShipmentConfirmed`, `PackageMissedLoad`, its ADR 0051; dark unless `OUTBOUND_SHIPPING_CONSUMER_MODE=kafka`); exception-management (`PackageMissedLoad`, its ADR 0011); `LoadingStarted`, `LoadClosed`, `LoadReopened` and `ShipmentConfirmed` toward yard-management and network-fulfillment have no handler; the other eight types are analytics-only by design |
+| `warehouse.outbound-shipping.events` | outbound-shipping (released v0.1.0, registered, applied to k3s since 2026-11-12) | 13 | order-management (`ShipmentConfirmed`, `PackageMissedLoad`, its ADR 0051; dark unless `OUTBOUND_SHIPPING_CONSUMER_MODE=kafka`); exception-management (`PackageMissedLoad`, its ADR 0011); `LoadingStarted`, `LoadClosed` and `LoadReopened` toward yard-management have no handler, and `ShipmentConfirmed` toward network-fulfillment is built on its `develop` (2026-11-12, its PR 165) but not running yet (its image predates the merge); the other eight types are analytics-only by design |
 
 The type counts are the messages each producer's `asyncapi.yaml` declares on
 its integration channel (counted on `origin/develop`, 2026-10-27; the

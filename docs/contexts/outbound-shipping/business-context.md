@@ -13,7 +13,8 @@ Written here from the context's ADRs under `docs/adr/` in
 `apis/openapi.yaml` / `apis/asyncapi.yaml`, checked against `develop`
 (`1a071bb`) on 2026-11-09. The ADR set, the deployment status and the pinned
 contracts were re-checked against `develop` (`7ce7b14`) and `warehouse-infra`
-`develop` (`db829ff`) on 2026-11-11.
+`develop` (`db829ff`) on 2026-11-11; the cluster was re-read read-only on
+2026-11-13.
 
 ## The gap
 
@@ -40,7 +41,7 @@ operator (ADR 0001).
 | Data store | one Postgres database (embedded migrations, one pair). `DATABASE_URL` and `KAFKA_BROKERS` are mandatory; real Postgres and real Kafka only |
 | Kafka | publishes thirteen types on `warehouse.outbound-shipping.events` and an analytics twin; consumes nine types from five sibling topics plus its own analytics stream |
 | Auth | none (fleet-wide decision) |
-| Deployment | released `v0.1.0` (2026-11-11) with its Helm chart merged; registered and image-pinned in `warehouse-infra` `develop` (PR 205); **not applied**: no pod in the reference cluster, so nothing runs and no edge is live |
+| Deployment | released `v0.1.0` (2026-11-11) with its Helm chart merged; registered and image-pinned in `warehouse-infra` `develop` (PR 205); **applied to the k3s cluster on 2026-11-12**: one `api` replica at `857edfd-arm64`, Argo CD Synced/Healthy, Kong route answering 200 (re-read 2026-11-13); seven edges live (five inbound, the analytics fold, `exception-management`), three not (`order-management`'s consumer dark, `network-fulfillment`'s image predates its consumer, `yard-management`'s handler unbuilt) |
 
 ## The lifecycle
 
