@@ -26,7 +26,7 @@ Both are Supporting: every site with trucks needs them and the rules (window len
 
 | Context | Classification | Note |
 | --- | --- | --- |
-| `outbound-shipping` | Supporting | Trailer load planning, loading, bill of lading and ship-confirm (Gartner lists truck loading and manifesting as WMS capabilities). BUILT on develop as IQVO/outbound-shipping (not registered in warehouse-infra) and consuming the yard facts; it is outside the yard section. Outbound door work is still completed by the dock operator in yard-management. |
+| `outbound-shipping` | Supporting | Trailer load planning, loading, bill of lading and ship-confirm (Gartner lists truck loading and manifesting as WMS capabilities). BUILT on develop as IQVO/outbound-shipping, registered in warehouse-infra (PR 205) and applied to k3s since 2026-11-12, consuming the yard facts; it is outside the yard section (its pages are in the fleet section). Outbound door work is still completed by the dock operator in yard-management. |
 | `transport-visibility` | Generic | ACL to a real-time transportation visibility platform for ETAs; stub mode first (network-fulfillment *_MODE=stub precedent). Feeds dock-scheduling ReportEta. |
 | `yard-billing` | Generic | Detention and yard service charges; out of scope. |
 

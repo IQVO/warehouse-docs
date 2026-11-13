@@ -10,22 +10,25 @@ description: "Kafka integration for outbound-shipping — one published integrat
 This page is written here from `apis/asyncapi.yaml` (AsyncAPI 2.6), the
 relay and event sink in `internal/adapters/outbound/` and the consumers in
 `internal/adapters/inbound/kafka/` on `outbound-shipping`'s `develop`
-(`1a071bb`; the deployment status below was re-checked on 2026-11-11). The machine-generated reference is at the bottom. For per-event
+(`fea067b`; the deployment status below was re-checked on 2026-11-13). The machine-generated reference is at the bottom. For per-event
 payloads and the raising use cases, see
 [Domain Events](/contexts/outbound-shipping/domain-events).
 
-:::info[Released v0.1.0, registered in infra, not applied]
+:::info[Applied to k3s, running v0.1.0]
 `outbound-shipping` is released as `v0.1.0` (2026-11-11), its Helm chart is merged,
-and `warehouse-infra` `develop` (`db829ff`) registers it and pins its image
+`warehouse-infra` `develop` (`db829ff`) registers it and pins its image
 (PR 205: `terraform/apps.yaml`, `helm-values/outbound-shipping.yaml` with the six
-consumer groups, dashboards, alert rules). It is not applied: no outbound-shipping
-pod, consumer group or topic exists in the reference cluster (read-only
-`kubectl`, 2026-11-11), so no edge is live. The tables state what the code does.
-Per leg, `order-management` and `exception-management` have a consumer of what
-this context publishes on their `develop` (`exception-management`'s group is wired in
-infra and its pod carries it; `order-management`'s consumer is dark and no variable
-is set for it); `network-fulfillment` and `yard-management` do not, although ADR
-0004 and ADR 0005 name them.
+consumer groups, dashboards, alert rules), and it was applied to the k3s cluster
+on 2026-11-12: one `api` replica runs at `857edfd-arm64`, the seven topics were
+pre-created before the first sync and the six consumer groups run (read-only
+`kubectl`, re-read 2026-11-13). An edge is live only where both ends run: the
+five inbound feeds, the analytics fold and `exception-management`'s consumer
+(its live ConfigMap carries `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP`) are
+live; `order-management`'s consumer stays dark (no `OUTBOUND_SHIPPING_*`
+variable is set for it), `network-fulfillment`'s landed on its `develop` on
+2026-11-12 (its PR 165) but its running image `49587d0` predates the merge,
+and `yard-management` still has no handler, although ADR 0004 and ADR 0005
+name the last two.
 
 ## Topics
 
@@ -107,7 +110,7 @@ consumed contracts are mirrored by hand.
 | --- | --- | --- |
 | `order-management` | `ShipmentConfirmed`, `PackageMissedLoad` | Consumer built (ADR 0051), dark by default: `OUTBOUND_SHIPPING_CONSUMER_MODE=off` unless set to `kafka`, with a mandatory `OUTBOUND_SHIPPING_CONSUMER_GROUP` in that mode. |
 | `exception-management` | `PackageMissedLoad` | Consumer built (ADR 0011), group `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` with a chart default. |
-| `network-fulfillment` | `ShipmentConfirmed` (ADR 0004) | No handler on its `develop`. |
+| `network-fulfillment` | `ShipmentConfirmed` (ADR 0004) | Consumer merged on its `develop` on 2026-11-12 (its PR 165, `shipment_confirmed_consumer.go`, group `OUTBOUND_SHIPPING_CONSUMER_GROUP`); the running image `49587d0-arm64` predates it, so the leg is not live yet. |
 | `yard-management` | `LoadingStarted`, `LoadClosed`, `LoadReopened` (ADR 0005) | No handler on its `develop`; the AsyncAPI marks the three `pending`. |
 
 The other eight types are analytics-only by design.

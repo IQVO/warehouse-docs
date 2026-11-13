@@ -77,7 +77,7 @@ and door release from `yard-management` events
 | `facility-layout` | Fleet context (upstream) | Publishes the Yard and Dock slots and the zone-to-site mapping. |
 | `inbound-receiving` | Fleet context (upstream and downstream) | Publishes ASNs and receipts; consumes `VisitCheckedIn` (its ADR 0021, the dock-to-stock KPI). It does not consume `TrailerDocked` as built; the optional consumer was not built. |
 | `exception-management` | Fleet context (downstream) | Opens problem cases from rejected visits, seal exceptions, dwell breaches and yard-check discrepancies (merged on develop). |
-| `outbound-shipping` | Fleet context (downstream) | Confirms a shipment when the trailer leaves: reads `TrailerDocked`, `DoorWorkCompleted` and `TrailerDeparted` (`outbound-shipping` is released as v0.1.0 and registered and image-pinned in warehouse-infra develop, PR 205, with the consumer group `outbound-shipping-yard` set, but not applied: no pod, so the edge is not live). |
+| `outbound-shipping` | Fleet context (downstream) | Confirms a shipment when the trailer leaves: reads `TrailerDocked`, `DoorWorkCompleted` and `TrailerDeparted` (`outbound-shipping` is released as v0.1.0, registered and image-pinned in warehouse-infra develop, PR 205, and applied to k3s on 2026-11-12 at `857edfd`, with the consumer group `outbound-shipping-yard` set, so the edge is live: both ends run). |
 
 ## Decisions this context makes
 
