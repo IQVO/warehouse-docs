@@ -29,6 +29,8 @@ accepts it.
 | [0007](/network/adr/0007-cloudevents-namespace) | CloudEvents namespace com.retailnetwork, no shared topic | Proposed |
 | [0008](/network/adr/0008-capacity-held-at-promise-time) | Fast tiers are never promised from nominal times, and capacity is held at promise time | Proposed |
 | [0009](/network/adr/0009-seller-inbound-and-case-packed-shipments) | Seller inbound and case-packed shipments: SSCC cartons, owner-segregated stock, eaches as the ledger unit | Proposed |
+| [0010](./0010-carrier-handoff-delivery.md) | Carrier handoff delivery for low-density service areas (amends 0004) | Accepted |
+| [0011](./0011-pickup-points.md) | Pickup points and lockers (extends 0004) | Accepted |
 
 ## Service ADRs (one sequence per context repository)
 

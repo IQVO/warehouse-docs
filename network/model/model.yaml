@@ -2092,3 +2092,5 @@ decisions:
   - {id: RN-0007, title: "CloudEvents namespace com.retailnetwork.<tier>.<context>; no topic is shared with the fleet"}
   - {id: RN-0008, title: "Fast tiers are never promised from nominal times; capacity is held at promise time in a PromiseBook"}
   - {id: RN-0009, title: "Seller inbound and case-packed shipments: SSCC-identified cartons, owner-segregated stock, eaches as the ledger unit, GS1 pack immutability, boundary unchanged"}
+  - {id: RN-0010, title: "Carrier handoff delivery for low-density service areas (amends RN-0004: the carrier operates a delivery mode, never a node)"}
+  - {id: RN-0011, title: "Pickup points and lockers: a PICKUP_POINT node type operated NETWORK or PARTNER; a checkout destination that shrinks PII; collection states on the package"}
