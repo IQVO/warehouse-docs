@@ -22,8 +22,9 @@ references, and business context for twenty backend contexts: nineteen domain
 bounded contexts plus `warehouse-ops-agent` (`pick-face-replenishment`,
 `task-interleaving`, `returns-processing` and `exception-management` are built
 on `develop`, onboarded here and registered in `warehouse-infra` `develop`;
-`outbound-shipping` is built on `develop` and onboarded here, but not deployed:
-no Helm chart and no `warehouse-infra` entry).
+`outbound-shipping` is built on `develop`, onboarded here, released as
+`v0.1.0`, registered in `warehouse-infra` `develop` (PR 205) and applied to
+the k3s cluster since 2026-11-12).
 Built with [Docusaurus](https://docusaurus.io/), published to GitHub Pages.
 
 Live site: https://iqvo.github.io/warehouse-docs/
