@@ -46,8 +46,8 @@ registers it (PR 205): a `terraform/apps.yaml` entry (a database, no analytics
 read side), `helm-values/outbound-shipping.yaml` (one API replica, the six
 consumer groups set, the MCP server off for pod capacity, no relay
 Deployment because the API relays the outbox inline), a context dashboard and
-alert rules (both registered in the repo and not yet loaded on the cluster:
-the platform apply is pending) and the image pin `857edfd-arm64` in
+alert rules (both loaded onto the cluster by the platform apply of
+2026-11-13) and the image pin `857edfd-arm64` in
 `terraform/targets/k3s.images.yaml`. Applied to the k3s cluster on 2026-11-12:
 one `api` replica runs at `857edfd-arm64` on `k3s-agent`, the Argo CD
 application is Synced/Healthy and the Kong route `/api/outbound-shipping`
