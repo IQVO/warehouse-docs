@@ -270,18 +270,18 @@ contexts:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /nodes (in-org)", routes: ["POST /nodes"], message: "RegisterNode (vendor node)", relationship: Customer/Supplier}
       - {from: vendor-connectivity, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile (in-org)", routes: ["PUT /nodes/{nodeId}/operational-profile"], message: "DeclareOperationalProfile", relationship: Customer/Supplier}
       - {from: network-ops planner, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile", routes: ["PUT /nodes/{nodeId}/operational-profile"], message: "DeclareOperationalProfile (declaredBy NETWORK_OPS)", relationship: UI}
-      - {from: network-ops planner, type: cmd, channel: "REST POST /nodes, POST /nodes/{nodeId}:activate, POST /nodes/{nodeId}:suspend, POST /nodes/{nodeId}:retire, POST /lanes, POST /lanes/{laneId}:close, PUT /service-areas/{postalPrefix}, POST /regions", routes: ["POST /nodes", "POST /nodes/{nodeId}:activate", "POST /nodes/{nodeId}:suspend", "POST /nodes/{nodeId}:retire", "POST /lanes", "POST /lanes/{laneId}:close", "PUT /service-areas/{postalPrefix}", "POST /regions"], message: "RegisterNode (network node), ActivateNode, SuspendNode, RetireNode, OpenLane, CloseLane, AssignServiceArea, DefineRegion", relationship: UI}
+      - {from: network-ops planner, type: cmd, channel: "REST POST /nodes, POST /nodes/{nodeId}/activations, POST /nodes/{nodeId}/suspensions, POST /nodes/{nodeId}/retirements, POST /lanes, POST /lanes/{laneId}/closures, PUT /service-areas/{postalPrefix}, POST /regions", routes: ["POST /nodes", "POST /nodes/{nodeId}/activations", "POST /nodes/{nodeId}/suspensions", "POST /nodes/{nodeId}/retirements", "POST /lanes", "POST /lanes/{laneId}/closures", "PUT /service-areas/{postalPrefix}", "POST /regions"], message: "RegisterNode (network node), ActivateNode, SuspendNode, RetireNode, OpenLane, CloseLane, AssignServiceArea, DefineRegion", relationship: UI}
       - {from: any context, type: qry, channel: "REST GET /nodes/{nodeId}, GET /nodes, GET /lanes, GET /service-areas/{postalPrefix}, GET /regions, GET /regions/{regionId}", routes: ["GET /nodes/{nodeId}", "GET /nodes", "GET /lanes", "GET /service-areas/{postalPrefix}", "GET /regions", "GET /regions/{regionId}"], message: "GetNode, ListNodes, ListLanes, ResolveServiceArea, ListRegions, GetRegion", relationship: OHS}
     rest:
       - "POST /nodes"
       - "GET /nodes/{nodeId}"
       - "GET /nodes?type=&region=&status="
       - "PUT /nodes/{nodeId}/operational-profile"
-      - "POST /nodes/{nodeId}:activate"
-      - "POST /nodes/{nodeId}:suspend"
-      - "POST /nodes/{nodeId}:retire"
+      - "POST /nodes/{nodeId}/activations"
+      - "POST /nodes/{nodeId}/suspensions"
+      - "POST /nodes/{nodeId}/retirements"
       - "POST /lanes"
-      - "POST /lanes/{laneId}:close"
+      - "POST /lanes/{laneId}/closures"
       - "GET /lanes?origin=&destination="
       - "PUT /service-areas/{postalPrefix}"
       - "GET /service-areas/{postalPrefix}"

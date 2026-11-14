@@ -73,7 +73,7 @@ Derived from: model.yaml → `contexts[node-topology].business_decisions`,
 
 | Node type | Operator allowed | Capabilities | Subtypes |
 | --- | --- | --- | --- |
-| `FULFILLMENT_CENTER` | `VENDOR` | `OUTBOUND` | `SORTABLE`, `NON_SORTABLE`, `XL`, `SOFT_LINES`, `SUB_SAME_DAY`, `FRESH`, `MICRO` |
+| `FULFILLMENT_CENTER` | `VENDOR` | `OUTBOUND`, `INBOUND` (node-topology ADR 0015: a seller's cartons are received at the building that stores them) | `SORTABLE`, `NON_SORTABLE`, `XL`, `SOFT_LINES`, `SUB_SAME_DAY`, `FRESH`, `MICRO` |
 | `INBOUND_CROSS_DOCK` | `VENDOR` | `INBOUND` | none |
 | `RETURNS_CENTER` | `VENDOR` | `RETURNS` | none |
 | `SORTATION_CENTER` | `NETWORK` | `SORT` | none |

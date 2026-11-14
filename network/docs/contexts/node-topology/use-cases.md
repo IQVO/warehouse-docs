@@ -230,20 +230,22 @@ Problems are `application/problem+json` (RFC 9457) with `type`, `title`,
   `AIR`), `nominalTransitMinutes`.
 - **Preconditions**: both nodes exist and are `ACTIVE`; no `OPEN` lane with
   the same origin, destination and mode.
-- **Main flow**:
-  1. Refuse a loop.
-  2. Load both `Node` aggregates (read only).
+- **Main flow** (as built, `internal/application/usecases/lanes.go` and `lane.Open`):
+  1. Load both `Node` aggregates (read only); an unknown node is 404
+     `not-found`, before any lane rule runs.
+  2. In `lane.Open`, refuse a loop (`ErrLaneLoop`).
   3. Check the type pair against `lane_rules.allowed`.
   4. Check both ends are `ACTIVE`.
   5. Create the `Lane` in `OPEN` with a new `laneId`.
-  6. Save (the partial unique index on open lanes guards
-     `ErrDuplicateLane` against a concurrent open), write `LaneOpened`,
-     commit.
+  6. Check no `OPEN` lane exists for the same origin, destination and mode
+     (`ErrDuplicateLane`); save (the partial unique index on open lanes guards a concurrent
+     open), write `LaneOpened`, commit.
   7. Answer `201` with the lane.
 - **Errors**:
 
 | `Err...` | HTTP | Problem `type` slug |
 | --- | --- | --- |
+| unknown node (`ErrNotFound`, a port error) | 404 | `not-found` |
 | `ErrLaneLoop` | 422 | `lane-loop` |
 | `ErrLaneTypePairNotAllowed` | 422 | `lane-type-pair-not-allowed` |
 | `ErrLaneEndpointNotActive` | 409 | `lane-endpoint-not-active` |

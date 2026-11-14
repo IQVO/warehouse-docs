@@ -268,7 +268,14 @@ Proposed, measurable once built:
   "inside the hours of every operating day".
 - **Region membership is not checked.** No invariant makes a node's or a
   service area's `regionId` name a defined region.
-- **Not-found and illegal-transition errors are unnamed.** The model names
+- **Not-found and illegal-transition errors (as built).** The model names
   no `Err...` for an unknown `nodeId`, `laneId` or `postalPrefix`, nor for a
-  transition outside the table (for example `SuspendNode` on a `PROPOSED`
-  node).
+  transition outside the table; the service answers 404 `not-found` and 409
+  `illegal-transition` (shared problem types, `apis/openapi.yaml`).
+- **Pickup points (open: service ADR 0017, merged in `develop`).** The model's
+  `node_types` has `PICKUP_POINT` (capability `COLLECTION`, operator `NETWORK` or
+  `PARTNER`, never a lane endpoint), but these pages do not describe it: the
+  node-types table, the operator rules, the `servingStationNodeId` on
+  registration and its invariants, and the resulting use-case and sequence
+  changes are not written up here. Needs a pass against
+  `docs/adr/0017-pickup-points.md` in the service repo; not invented here.
