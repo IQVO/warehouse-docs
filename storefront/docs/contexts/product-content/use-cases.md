@@ -30,10 +30,11 @@ triggers the `RetireOnDiscontinue` policy, which is a use case below.)
 | Use case | Trigger | Inbound adapter | Emits |
 | --- | --- | --- | --- |
 | `CreateProductContent` | Content manager | REST `POST /product-contents` | none |
-| `ReviseContent` | Content manager | REST `POST /product-contents/{catalogItemId}/revisions` | none (re-publication is a model gap) |
+| `ReviseContent` | Content manager | REST `POST /product-contents/{catalogItemId}/revisions` (`ReviseDraft` for a DRAFT, `ReviseContent` for PUBLISHED) | none (shoppers see a new revision after a publish) |
+| `DiscardDraft` | Content manager | REST `DELETE /product-contents/{catalogItemId}/draft` | none |
 | `PublishContent` | Content manager | REST `POST /product-contents/{catalogItemId}/publications` | `ProductContentPublished` |
 | `RetireContent` | Content manager | REST `POST /product-contents/{catalogItemId}/retirements` | `ProductContentRetired` |
-| `RetireContent` (policy) | `RetireOnDiscontinue` | Kafka consumer, `CatalogItemDiscontinued` | `ProductContentRetired` |
+| `RetireContent` (policy) | `RetireOnDiscontinue` | Kafka consumer, `CatalogItemDiscontinued` | `ProductContentRetired` for PUBLISHED content only; a DRAFT retires silently |
 | `CreateCategory` | Content manager | REST `POST /categories` | none |
 | `MoveCategory` | Content manager | REST `PUT /categories/{categoryId}/parent` | none |
 | `RenameCategory` | Content manager | REST `PUT /categories/{categoryId}/name` | none |
@@ -63,18 +64,20 @@ key returns the stored response of the first call.
 - **Inbound adapter:** REST `POST /product-contents`, header
   `Idempotency-Key` required; body `catalogItemId`, `description`,
   `bullets[]`, `attributes[]`, `media[]`, `primaryCategoryId`.
-- **Preconditions:** the item exists in `CatalogItemView`; the content does
-  not exist yet.
+- **Preconditions:** the item exists in `CatalogItemView` and is not
+  `DISCONTINUED`; the content does not exist yet.
 - **Main flow:**
   1. Look up the `Idempotency-Key`. On a hit with the same request body,
      return the stored response.
   2. Check the `catalogItemId` against `CatalogItemView`
-     (`ErrUnknownCatalogItem`).
-  3. Check `primaryCategoryId` against the current tree
+     (`ErrUnknownCatalogItem`) and that the item is not `DISCONTINUED`
+     (`ErrItemDiscontinued`).
+  3. Check `primaryCategoryId`, when given, against the current tree
      (`ErrUnknownCategory`).
-  4. `ProductContent.CreateProductContent(...)`: state `DRAFT`. This pack's
-     reading: the full content arrives in one call, because the model has
-     no `DRAFT → DRAFT` transition to edit a draft with.
+  4. `ProductContent.CreateProductContent(...)`: state `DRAFT`, revision 1. A
+     DRAFT may be incomplete (every body field is optional); it is edited
+     later through `ReviseContent` (`DRAFT → DRAFT`) and must be complete only
+     to publish.
   5. In one transaction, insert the content and store the response under
      the `Idempotency-Key`.
   6. Answer `201` with the content.
@@ -83,6 +86,7 @@ key returns the stored response of the first call.
 | Error | HTTP | Problem `type` slug | Note |
 | --- | --- | --- | --- |
 | `ErrUnknownCatalogItem` | 422 | `unknown-catalog-item` | The item is not in `CatalogItemView`: never created, or the projection lags. |
+| `ErrItemDiscontinued` | 422 | `item-discontinued` | The item is `DISCONTINUED` in `CatalogItemView`: content is neither created nor published for a discontinued item. |
 | `ErrUnknownCategory` | 422 | `unknown-category` | The `primaryCategoryId` is not in the current tree. |
 | validation | 422 | `validation-failed` | Schema rules, including the collection bounds (bullets at most 10, attributes at most 50, media at most 12), which have no `Err` names. |
 | duplicate content for the item | 409 | `concurrent-update` | The API maps a second create to 409 (as built too); the model names no `Err` for it. |
@@ -90,24 +94,28 @@ key returns the stored response of the first call.
 - **Events emitted:** none.
 - **Idempotency:** `Idempotency-Key`; the primary key on `catalogItemId` is
   the last guard.
-- **Risk:** the model does not say whether a **discontinued** item passes
-  `ErrUnknownCatalogItem` (unlike `pricing`'s rule, the invariant checks
-  existence only). Content for a discontinued item may be created until the
-  model says otherwise.
+- **Discontinued items:** content for a discontinued item is **not** created:
+  the aggregate's invariant (see the
+  [Aggregate Design Canvas](/storefront/contexts/product-content/aggregate-design-canvas))
+  refuses it with `ErrItemDiscontinued`, the same check as on publish.
 
 ## ReviseContent
 
 - **Actor / trigger:** the storefront content manager.
 - **Inbound adapter:** REST `POST /product-contents/{catalogItemId}/revisions`,
   header `Idempotency-Key` required; same body as create.
-- **Preconditions:** the content exists and is PUBLISHED (the only source
-  state of the modelled transition); the named category exists.
+- **Preconditions:** the content exists and is DRAFT or PUBLISHED (RETIRED
+  never changes again); the named category exists.
 - **Main flow:**
   1. Look up the `Idempotency-Key`; replay on a hit.
   2. Load `ProductContent` with its `version` (404 if absent).
-  3. `ReviseContent(...)`: replaces description, bullets, attributes, media
-     and primary category; state stays PUBLISHED. It checks
-     `ErrContentRetired` and `ErrUnknownCategory`.
+  3. One route, two commands picked by the state: `ReviseDraft(...)` for a
+     DRAFT (`DRAFT → DRAFT`) and `ReviseContent(...)` for PUBLISHED
+     (`PUBLISHED → PUBLISHED`). Each replaces description, bullets,
+     attributes, media and primary category with the body and takes the next
+     `revision`; the state does not change. They check `ErrContentRetired`
+     and `ErrUnknownCategory`; revised PUBLISHED content must stay complete
+     (`ErrIncompleteContent`).
   4. Save (version checked) and store the key response in one transaction.
   5. Answer `200` with the revised content.
 - **Errors:**
@@ -117,14 +125,14 @@ key returns the stored response of the first call.
 | content not found | 404 | `not-found` | No content for the item. |
 | `ErrContentRetired` | 409 | `content-retired` | RETIRED content never changes again. |
 | `ErrUnknownCategory` | 422 | `unknown-category` | The new primary category is not in the current tree. |
+| `ErrIncompleteContent` | 422 | `incomplete-content` | PUBLISHED content would be left without a description, exactly one PRIMARY medium or a category. |
 | validation | 422 | `validation-failed` | Schema rules and collection bounds. |
 | version conflict | 409 | `concurrent-update` | Retried once inside the use case before it is returned. |
 
-- **Events emitted:** none modelled. How a revised PUBLISHED content reaches
-  `product-discovery` is a model gap: `PublishContent` is `DRAFT →
-  PUBLISHED` only, so no transition re-publishes, yet the design-time API said
-  the revision bumps "once published again" and `product-discovery` orders
-  content by `revision`.
+- **Events emitted:** none. Shoppers see the new revision only after a
+  publish: `PublishContent` is `DRAFT → PUBLISHED` and `PUBLISHED →
+  PUBLISHED` (the re-publication path), carrying the new `revision` in
+  `ProductContentPublished`, which `product-discovery` orders by.
 - **Idempotency:** `Idempotency-Key`.
 
 ## PublishContent
@@ -132,14 +140,15 @@ key returns the stored response of the first call.
 - **Actor / trigger:** the storefront content manager.
 - **Inbound adapter:** REST `POST /product-contents/{catalogItemId}/publications`,
   header `Idempotency-Key` required.
-- **Preconditions:** the content exists and is DRAFT; the publish gate
-  passes.
+- **Preconditions:** the content exists and is DRAFT or PUBLISHED; the item
+  is known and not `DISCONTINUED`; the publish gate passes.
 - **Main flow:**
   1. Look up the `Idempotency-Key`; replay on a hit.
   2. Load `ProductContent` with its `version` (404 if absent).
-  3. `PublishContent(...)`: checks `ErrContentRetired`, `ErrUnknownCategory`
-     and the publish gate `ErrIncompleteContent` (a description, exactly one
-     PRIMARY medium and a category). State PUBLISHED, revision bumped.
+  3. `PublishContent(...)`: checks `ErrContentRetired`, `ErrItemDiscontinued`,
+     `ErrUnknownCategory` and the publish gate `ErrIncompleteContent` (a
+     description, exactly one PRIMARY medium and a category). State
+     PUBLISHED, `publishedRevision` set to the current `revision`.
   4. In one transaction, save (version checked), write
      `ProductContentPublished` to the outbox, store the key response.
   5. Answer `200` with the published content.
@@ -149,16 +158,17 @@ key returns the stored response of the first call.
 | --- | --- | --- | --- |
 | content not found | 404 | `not-found` | No content for the item. |
 | `ErrIncompleteContent` | 422 | `incomplete-content` | Missing description, not exactly one PRIMARY medium, or no category. |
+| `ErrItemDiscontinued` | 422 | `item-discontinued` | The item is `DISCONTINUED`: a discontinued item can never publish. |
 | `ErrUnknownCategory` | 422 | `unknown-category` | The primary category left the current tree. |
 | `ErrContentRetired` | 409 | `content-retired` | RETIRED never publishes again. |
 | version conflict | 409 | `concurrent-update` | Retried once inside the use case. |
 
 - **Events emitted:** `ProductContentPublished` with the full content and
   the new `revision`.
-- **Idempotency:** `Idempotency-Key`; a repeated publish of the same
-  revision is a no-op because the state is already PUBLISHED (the transition
-  no longer applies from PUBLISHED — the model has no
-  `PUBLISHED → PUBLISHED` publish, which is the re-publication gap).
+- **Idempotency:** `Idempotency-Key`; publishing PUBLISHED content whose
+  `publishedRevision` already equals its `revision` has nothing new to
+  publish: the call succeeds, saves nothing and raises nothing (ADR 0002 A1).
+  A revision made after the last publish is published again by the next call.
 
 ## RetireContent (content manager)
 
@@ -169,7 +179,7 @@ key returns the stored response of the first call.
 - **Main flow:**
   1. Look up the `Idempotency-Key`; replay on a hit.
   2. Load `ProductContent` with its `version` (404 if absent).
-  3. `RetireContent(...)`: state RETIRED (terminal).
+  3. `RetireContent(...)`: state RETIRED (terminal), reason `MANUAL`.
   4. In one transaction, save (version checked), write
      `ProductContentRetired` to the outbox, store the key response.
   5. Answer `200` with the retired content.
@@ -178,12 +188,24 @@ key returns the stored response of the first call.
 | Error | HTTP | Problem `type` slug | Note |
 | --- | --- | --- | --- |
 | content not found | 404 | `not-found` | No content for the item. |
-| illegal transition | 409 | `illegal-transition` | The content is DRAFT (no `DRAFT → RETIRED` transition) or already RETIRED. |
+| illegal transition | 409 | `illegal-transition` | The content is DRAFT (a manager discards a DRAFT with `DiscardDraft`) or already RETIRED. |
 | version conflict | 409 | `concurrent-update` | Retried once inside the use case. |
 
-- **Events emitted:** `ProductContentRetired`.
+- **Events emitted:** `ProductContentRetired` (the retired reason, `MANUAL`,
+  is on the REST read, not on the event).
 - **Idempotency:** `Idempotency-Key`; retiring a RETIRED content is the
   409 above, not a no-op.
+
+## DiscardDraft (content manager)
+
+- **Actor / trigger:** the storefront content manager.
+- **Inbound adapter:** REST `DELETE /product-contents/{catalogItemId}/draft`.
+- **Preconditions:** the content exists and is DRAFT.
+- **Main flow:** load `ProductContent` (404 if absent), `DiscardDraft(...)`:
+  `DRAFT → RETIRED`, reason `DISCARDED`; save (version checked).
+- **Errors:** 404 `not-found`; 409 `illegal-transition` for content that is
+  not a DRAFT; 409 `concurrent-update`.
+- **Events emitted:** none: nothing was ever published.
 
 ## RetireContent (policy RetireOnDiscontinue)
 
@@ -191,17 +213,20 @@ key returns the stored response of the first call.
 - **Inbound adapter:** Kafka consumer on
   `retailnetwork.offer-availability.events`, type
   `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued`.
-- **Preconditions:** the item has PUBLISHED content. A DRAFT is left alone;
-  the model does not say what happens to it (model gap).
+- **Preconditions:** the item has content that is not yet RETIRED: PUBLISHED
+  content retires with an event, a DRAFT retires silently.
 - **Main flow:**
   1. Inbox check on the CloudEvents `id`; a duplicate is acknowledged.
   2. Mark the item discontinued in `CatalogItemView`.
-  3. Load the item's `ProductContent`. If none or not PUBLISHED, stop.
-  4. `RetireContent(...)`: state RETIRED.
-  5. Save, outbox `ProductContentRetired`, inbox row, one transaction.
-- **Errors:** none expected: the policy only touches PUBLISHED content, so
-  `illegal-transition` cannot fire. An anomaly is logged and acknowledged.
-- **Events emitted:** `ProductContentRetired`.
+  3. Load the item's `ProductContent`. If none, or already RETIRED, stop.
+  4. `RetireOnDiscontinue(...)`: PUBLISHED or DRAFT becomes RETIRED, reason
+     `DISCONTINUED`. A discontinued item can never publish again
+     (`ErrItemDiscontinued`).
+  5. Save, outbox `ProductContentRetired` (PUBLISHED content only), inbox
+     row, one transaction.
+- **Errors:** none expected. An anomaly is logged and acknowledged.
+- **Events emitted:** `ProductContentRetired` for PUBLISHED content only; a
+  DRAFT retires silently, because nothing was ever published.
 - **Idempotency:** inbox on the CloudEvents `id`; the state check makes a
   replayed effect a no-op.
 
