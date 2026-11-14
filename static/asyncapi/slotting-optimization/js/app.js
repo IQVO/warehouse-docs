@@ -1,0 +1,1812 @@
+
+    const schema = {
+  "asyncapi": "2.6.0",
+  "info": {
+    "title": "slotting-optimization Domain Events",
+    "version": "1.0.0",
+    "contact": {
+      "name": "slotting-optimization maintainers",
+      "url": "https://github.com/IQVO/slotting-optimization",
+      "email": "slotting-optimization@iqvo.example.com"
+    },
+    "license": {
+      "name": "UNLICENSED"
+    },
+    "description": "Event catalog for the **slotting-optimization** bounded context (WMS\nsubdomain): reviewable plans that assign SKUs to forward pick slots, and the\nhuman decision taken on them (ADR 0001, ADR 0002).\n\n**Published.** The `SlotPlan` aggregate raises three events, published to\n`warehouse.slotting-optimization.events` through a **transactional outbox**:\nthe plan row and its already-encoded events are written in ONE database\ntransaction and a relay drains them to Kafka (at-least-once; the CloudEvents\n`id` is stored with the outbox row, so a retry republishes the same `id`).\n`SlotPlanApproved` carries the FULL forward assignment map and the moves, so\na consumer needs no lookup; `supersedes_plan_id` names the previously\nApproved plan of the site, if any.\n\n**Consumed (ADR 0003, ADR 0010, ADR 0012).** `SiteSkuDemandChanged` from\norder-management; `ProductClassified`, `ProductDimensionsDeclared`,\n`ProductMeasured` and the three `ProductPackLevel*` events from\nproduct-master; `ZoneRegistered`, `LocationSlotRegistered` and\n`LocationSlotDecommissioned` from facility-layout; `StockRelocated` from\ninventory-storage. Each feeds a durable local copy. Five consumers always\nrun on real Kafka (env `DEMAND_MODE`, `PRODUCT_MODE`, `LAYOUT_MODE`,\n`RELOCATION_MODE`, `PACK_LEVEL_MODE`; the only accepted value, and the\ndefault, is `kafka`: `permissive` and `off` are refused at boot) and each\nneeds its consumer group (`DEMAND_CONSUMER_GROUP`, `PRODUCT_CONSUMER_GROUP`,\n`LAYOUT_CONSUMER_GROUP`, `RELOCATION_CONSUMER_GROUP`,\n`PACK_LEVEL_CONSUMER_GROUP`; boot fails without it). A message that is not a\nvalid CloudEvent, or whose type is not handled, is skipped. A transient\nfailure retries the same message up to 5 attempts, then the message goes to\n`<topic>.dlq` with `x-dlq-*` headers. A handled event whose payload can\nnever be applied is skipped with a WARN, except for `StockRelocated` and the\n`ProductPackLevel*` events, which are dead-lettered at once. The consumed\nmessages below are the producers' own contracts, decoded independently here\nand never imported.\n\n**Analytics (ADR 0006).** The same three events are ALSO published, in\nthe same transaction and under the same `id` per occurrence, to\n`warehouse.slotting-optimization.analytics` with\n`dataschema urn:warehouse:slotting-optimization:analytics:<EventName>:v1`.\nThat stream is not an integration contract: only this service's own\nprojector (`cmd/slotting-projector`, consumer group from\n`ANALYTICS_CONSUMER_GROUP`) consumes it, folding it into the slot-plan\nfunnel read model; `cmd/slotting-reports` serves the report. Other\ncontexts keep reading `warehouse.slotting-optimization.events`.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0009); consumers may extract them, and must not require\nthem.\n`specversion`, `id`, `source` (`/warehouse/slotting-optimization`), `type`,\n`subject` (the plan id), `time`, `datacontenttype` (`application/json`) and\n`dataschema` (`urn:warehouse:slotting-optimization:<events|analytics>:<EventName>:v1`)\nare all required. Kafka key = the plan id. Type =\n`com.warehouse.wms.slotting-optimization.slotplan.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
+  },
+  "servers": {
+    "production": {
+      "url": "{brokers}",
+      "protocol": "kafka",
+      "description": "Fleet-shared Kafka broker (host supplied by the deployment environment).",
+      "variables": {
+        "brokers": {
+          "default": "kafka.warehouse-systems.internal:9092"
+        }
+      }
+    }
+  },
+  "defaultContentType": "application/cloudevents+json",
+  "tags": [
+    {
+      "name": "slotting-optimization",
+      "description": "The slotting-optimization bounded context (WMS subdomain)."
+    },
+    {
+      "name": "slotplan",
+      "description": "Events raised by the SlotPlan aggregate."
+    },
+    {
+      "name": "consumed",
+      "description": "Events produced by sibling contexts that this service consumes (ADR 0003)."
+    },
+    {
+      "name": "analytics",
+      "description": "This service's own analytics stream and read side (ADR 0006)."
+    }
+  ],
+  "channels": {
+    "warehouse.slotting-optimization.events": {
+      "description": "This service's integration topic. Written by the outbox relay; key = plan\nid; every message carries the CloudEvents content-type header (plus the\noptional W3C `traceparent` of the writing request, ADR 0009). Dispatch on\nthe full `type`, ignore unknown types, dedupe on `id`. A row the relay\nexcluded after `OUTBOX_MAX_ATTEMPTS` failures (ADR 0008) is overtaken by\nlater events of the same plan.\n",
+      "subscribe": {
+        "operationId": "receiveSlotPlanEvents",
+        "summary": "Receive SlotPlan events.",
+        "description": "Subscribe to the slotting decisions. Route on the full `type`\n(`com.warehouse.wms.slotting-optimization.slotplan.<EventName>`). Only\n`SlotPlanApproved` changes the published forward-slot picture.\n",
+        "tags": [
+          {
+            "name": "slotplan"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "x-no-consumer-reason": "slotting run outcome fact; consumed on demand",
+              "name": "SlotPlanGenerated",
+              "title": "Slot plan generated",
+              "summary": "A Draft slot plan was generated.",
+              "description": "`type` = `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanGenerated`; subject and key = the plan id. Sizes only; the assignments are not part of this event.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "slotplan"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "specversion",
+                      "id",
+                      "source",
+                      "type",
+                      "subject",
+                      "time",
+                      "datacontenttype",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "specversion": {
+                        "type": "string",
+                        "const": "1.0",
+                        "x-parser-schema-id": "<anonymous-schema-1>"
+                      },
+                      "id": {
+                        "type": "string",
+                        "format": "uuid",
+                        "x-parser-schema-id": "<anonymous-schema-2>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-3>"
+                      },
+                      "type": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-4>"
+                      },
+                      "subject": {
+                        "type": "string",
+                        "description": "The aggregate instance id (the plan id for published events).",
+                        "x-parser-schema-id": "<anonymous-schema-5>"
+                      },
+                      "time": {
+                        "type": "string",
+                        "format": "date-time",
+                        "x-parser-schema-id": "<anonymous-schema-6>"
+                      },
+                      "datacontenttype": {
+                        "type": "string",
+                        "const": "application/json",
+                        "x-parser-schema-id": "<anonymous-schema-7>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-8>"
+                      }
+                    },
+                    "x-parser-schema-id": "CloudEventEnvelope"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "plan_id",
+                          "site_id",
+                          "window_from",
+                          "window_to",
+                          "policy",
+                          "assignment_count",
+                          "move_count",
+                          "unassigned_count"
+                        ],
+                        "properties": {
+                          "plan_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-11>"
+                          },
+                          "site_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-12>"
+                          },
+                          "window_from": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-13>"
+                          },
+                          "window_to": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "Exclusive.",
+                            "x-parser-schema-id": "<anonymous-schema-14>"
+                          },
+                          "policy": {
+                            "type": "string",
+                            "example": "abc-velocity-v1",
+                            "x-parser-schema-id": "<anonymous-schema-15>"
+                          },
+                          "assignment_count": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "x-parser-schema-id": "<anonymous-schema-16>"
+                          },
+                          "move_count": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "x-parser-schema-id": "<anonymous-schema-17>"
+                          },
+                          "unassigned_count": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "x-parser-schema-id": "<anonymous-schema-18>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-10>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-9>"
+                  }
+                ],
+                "x-parser-schema-id": "SlotPlanGeneratedEvent"
+              },
+              "examples": [
+                {
+                  "name": "generated",
+                  "summary": "A 28-day plan for SITE-1 with 2 assignments, 3 moves and 1 unassigned SKU.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1d2c3b-4a5e-4b7c-8d9e-0a1b2c3d4e5f",
+                    "source": "/warehouse/slotting-optimization",
+                    "type": "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanGenerated",
+                    "subject": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                    "time": "2026-10-08T12:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:slotting-optimization:events:SlotPlanGenerated:v1",
+                    "data": {
+                      "plan_id": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                      "site_id": "SITE-1",
+                      "window_from": "2026-09-10T12:00:00Z",
+                      "window_to": "2026-10-08T12:00:00Z",
+                      "policy": "abc-velocity-v1",
+                      "assignment_count": 2,
+                      "move_count": 3,
+                      "unassigned_count": 1
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "SlotPlanApproved",
+              "title": "Slot plan approved",
+              "summary": "A Draft slot plan was approved; it is now the site's forward-slot map.",
+              "description": "`type` = `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved`;\nsubject and key = the plan id. `assignments` is the FULL map of the plan\n(replace your picture of the site's forward slots from it); `moves` is\nwhat changes against the previous map. `kind` is `Assign`, `Relocate` or\n`Vacate`; a `Vacate` omits `to_slot` and sets `from_slot`, an `Assign`\nomits `from_slot`. `supersedes_plan_id` is omitted when the site had no\nApproved plan.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "slotplan"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "plan_id",
+                          "site_id",
+                          "approved_at",
+                          "assignments",
+                          "moves"
+                        ],
+                        "properties": {
+                          "plan_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-21>"
+                          },
+                          "site_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-22>"
+                          },
+                          "approved_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-23>"
+                          },
+                          "supersedes_plan_id": {
+                            "type": "string",
+                            "description": "Omitted when the site had no Approved plan.",
+                            "x-parser-schema-id": "<anonymous-schema-24>"
+                          },
+                          "assignments": {
+                            "type": "array",
+                            "description": "The FULL assignment map of the plan.",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "sku",
+                                "slot"
+                              ],
+                              "properties": {
+                                "sku": {
+                                  "type": "string",
+                                  "x-parser-schema-id": "<anonymous-schema-26>"
+                                },
+                                "slot": {
+                                  "type": "string",
+                                  "description": "The facility-layout location code of the forward slot.",
+                                  "x-parser-schema-id": "<anonymous-schema-27>"
+                                },
+                                "pick_unit": {
+                                  "type": "string",
+                                  "enum": [
+                                    "CASE"
+                                  ],
+                                  "description": "Additive (ADR 0012). Present only for a CASE-pick face; absent means EACH.",
+                                  "x-parser-schema-id": "<anonymous-schema-28>"
+                                },
+                                "cases_capacity": {
+                                  "type": "integer",
+                                  "format": "int64",
+                                  "minimum": 1,
+                                  "description": "Additive (ADR 0012). Whole cases the CASE-pick face holds; present only with pick_unit CASE.",
+                                  "x-parser-schema-id": "<anonymous-schema-29>"
+                                }
+                              },
+                              "x-parser-schema-id": "SlotAssignment"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-25>"
+                          },
+                          "moves": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "sku",
+                                "kind"
+                              ],
+                              "properties": {
+                                "sku": {
+                                  "type": "string",
+                                  "x-parser-schema-id": "<anonymous-schema-31>"
+                                },
+                                "from_slot": {
+                                  "type": "string",
+                                  "description": "Omitted for an Assign.",
+                                  "x-parser-schema-id": "<anonymous-schema-32>"
+                                },
+                                "to_slot": {
+                                  "type": "string",
+                                  "description": "Omitted for a Vacate.",
+                                  "x-parser-schema-id": "<anonymous-schema-33>"
+                                },
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "Assign",
+                                    "Relocate",
+                                    "Vacate"
+                                  ],
+                                  "x-parser-schema-id": "<anonymous-schema-34>"
+                                }
+                              },
+                              "x-parser-schema-id": "SlotMove"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-30>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-20>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-19>"
+                  }
+                ],
+                "x-parser-schema-id": "SlotPlanApprovedEvent"
+              },
+              "examples": [
+                {
+                  "name": "approvedWithSupersede",
+                  "summary": "Plan approved; SKU-1 assigned, SKU-2 relocated, SKU-3 vacated.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "0b9a8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d",
+                    "source": "/warehouse/slotting-optimization",
+                    "type": "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved",
+                    "subject": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                    "time": "2026-10-08T12:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:slotting-optimization:events:SlotPlanApproved:v1",
+                    "data": {
+                      "plan_id": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                      "site_id": "SITE-1",
+                      "approved_at": "2026-10-08T12:30:00Z",
+                      "supersedes_plan_id": "plan-8e7d6c5b-4a39-4281-b0c9-d8e7f6a5b4c3",
+                      "assignments": [
+                        {
+                          "sku": "SKU-1",
+                          "slot": "WH1-FWD-A01-01-01-A"
+                        },
+                        {
+                          "sku": "SKU-2",
+                          "slot": "WH1-FWD-A01-01-02-A"
+                        }
+                      ],
+                      "moves": [
+                        {
+                          "sku": "SKU-1",
+                          "to_slot": "WH1-FWD-A01-01-01-A",
+                          "kind": "Assign"
+                        },
+                        {
+                          "sku": "SKU-2",
+                          "from_slot": "WH1-FWD-A02-03-01-A",
+                          "to_slot": "WH1-FWD-A01-01-02-A",
+                          "kind": "Relocate"
+                        },
+                        {
+                          "sku": "SKU-3",
+                          "from_slot": "WH1-FWD-A01-01-03-A",
+                          "kind": "Vacate"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "x-no-consumer-reason": "slotting run outcome fact (rejection record); consumed on demand",
+              "name": "SlotPlanRejected",
+              "title": "Slot plan rejected",
+              "summary": "A Draft slot plan was rejected.",
+              "description": "`type` = `com.warehouse.wms.slotting-optimization.slotplan.SlotPlanRejected`; subject and key = the plan id. `reason` is omitted when none was given.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "slotplan"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "plan_id",
+                          "site_id",
+                          "rejected_at"
+                        ],
+                        "properties": {
+                          "plan_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-37>"
+                          },
+                          "site_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-38>"
+                          },
+                          "rejected_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-39>"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "maxLength": 500,
+                            "description": "Omitted when none was given.",
+                            "x-parser-schema-id": "<anonymous-schema-40>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-36>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-35>"
+                  }
+                ],
+                "x-parser-schema-id": "SlotPlanRejectedEvent"
+              },
+              "examples": [
+                {
+                  "name": "rejected",
+                  "summary": "Plan rejected with a reason.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "4d3c2b1a-0f9e-4d8c-8b7a-6f5e4d3c2b1a",
+                    "source": "/warehouse/slotting-optimization",
+                    "type": "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanRejected",
+                    "subject": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                    "time": "2026-10-08T12:15:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:slotting-optimization:events:SlotPlanRejected:v1",
+                    "data": {
+                      "plan_id": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                      "site_id": "SITE-1",
+                      "rejected_at": "2026-10-08T12:15:00Z",
+                      "reason": "Too many relocations before peak season."
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.slotting-optimization.analytics": {
+      "description": "This service's own analytics stream (ADR 0006), written by the SAME\ntransactional outbox as the integration topic: every published event\nappears here too, under the SAME CloudEvents id and `type`, with only\nthe `dataschema` stream segment different\n(urn:warehouse:slotting-optimization:analytics:<EventName>:v1). It is\nNOT an integration contract: the only consumer is this service's\ncmd/slotting-projector (fixed group from ANALYTICS_CONSUMER_GROUP),\nwhich folds the events into the analytical database; its deterministic\npoison goes to warehouse.slotting-optimization.analytics.dlq. Other\ncontexts keep reading warehouse.slotting-optimization.events.\n",
+      "subscribe": {
+        "operationId": "receiveSlotPlanAnalytics",
+        "summary": "Receive the analytics twin of every SlotPlan event.",
+        "description": "Payloads are byte-for-byte the integration payloads (ADR 0006\nsection 2); only the dataschema names the analytics stream.\n",
+        "tags": [
+          {
+            "name": "analytics"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "SlotPlanGenerated",
+              "title": "Slot plan generated (analytics twin)",
+              "summary": "The analytics-stream twin of SlotPlanGenerated (ADR 0006).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:slotting-optimization:analytics:SlotPlanGenerated:v1`. Consumed only by cmd/slotting-projector.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload",
+              "examples": [
+                {
+                  "name": "generated",
+                  "summary": "The analytics twin of the generated example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "6f1d2c3b-4a5e-4b7c-8d9e-0a1b2c3d4e5f",
+                    "source": "/warehouse/slotting-optimization",
+                    "type": "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanGenerated",
+                    "subject": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                    "time": "2026-10-08T12:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:slotting-optimization:analytics:SlotPlanGenerated:v1",
+                    "data": {
+                      "plan_id": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                      "site_id": "SITE-1",
+                      "window_from": "2026-09-10T12:00:00Z",
+                      "window_to": "2026-10-08T12:00:00Z",
+                      "policy": "abc-velocity-v1",
+                      "assignment_count": 2,
+                      "move_count": 3,
+                      "unassigned_count": 1
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "SlotPlanApproved",
+              "title": "Slot plan approved (analytics twin)",
+              "summary": "The analytics-stream twin of SlotPlanApproved (ADR 0006).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:slotting-optimization:analytics:SlotPlanApproved:v1`. The `supersedes_plan_id`, when present, stamps the SUPERSEDED plan's supersession day in the read model.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[1].payload",
+              "examples": [
+                {
+                  "name": "approvedWithSupersede",
+                  "summary": "The analytics twin of the approved example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "0b9a8c7d-6e5f-4a3b-9c2d-1e0f9a8b7c6d",
+                    "source": "/warehouse/slotting-optimization",
+                    "type": "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanApproved",
+                    "subject": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                    "time": "2026-10-08T12:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:slotting-optimization:analytics:SlotPlanApproved:v1",
+                    "data": {
+                      "plan_id": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                      "site_id": "SITE-1",
+                      "approved_at": "2026-10-08T12:30:00Z",
+                      "supersedes_plan_id": "plan-8e7d6c5b-4a39-4281-b0c9-d8e7f6a5b4c3",
+                      "assignments": [
+                        {
+                          "sku": "SKU-1",
+                          "slot": "WH1-FWD-A01-01-01-A"
+                        },
+                        {
+                          "sku": "SKU-2",
+                          "slot": "WH1-FWD-A01-01-02-A"
+                        }
+                      ],
+                      "moves": [
+                        {
+                          "sku": "SKU-1",
+                          "to_slot": "WH1-FWD-A01-01-01-A",
+                          "kind": "Assign"
+                        }
+                      ]
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "SlotPlanRejected",
+              "title": "Slot plan rejected (analytics twin)",
+              "summary": "The analytics-stream twin of SlotPlanRejected (ADR 0006).",
+              "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:slotting-optimization:analytics:SlotPlanRejected:v1`.",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[2].payload",
+              "examples": [
+                {
+                  "name": "rejected",
+                  "summary": "The analytics twin of the rejected example above.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "4d3c2b1a-0f9e-4d8c-8b7a-6f5e4d3c2b1a",
+                    "source": "/warehouse/slotting-optimization",
+                    "type": "com.warehouse.wms.slotting-optimization.slotplan.SlotPlanRejected",
+                    "subject": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                    "time": "2026-10-08T12:15:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:slotting-optimization:analytics:SlotPlanRejected:v1",
+                    "data": {
+                      "plan_id": "plan-3b0e8d2a-7c41-4f6a-9d15-2a8b6c4e1f07",
+                      "site_id": "SITE-1",
+                      "rejected_at": "2026-10-08T12:15:00Z",
+                      "reason": "Too many relocations before peak season."
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.order-management.events": {
+      "description": "order-management's integration topic. This service consumes ONLY\n`SiteSkuDemandChanged` (key `<order>/line/<n>`, so one line's stream is\ntotally ordered), under a stable consumer group read from env\n`DEMAND_CONSUMER_GROUP` when `DEMAND_MODE=kafka`. Every other type on the\ntopic is ignored.\n",
+      "publish": {
+        "operationId": "consumeSiteSkuDemand",
+        "summary": "Consume the per-line site/SKU demand projection.",
+        "description": "Last writer wins per source order line; `state=REMOVED` deactivates the\nline. The CloudEvents `id` claim and the effect commit in one\ntransaction; the offset is committed afterwards (ADR 0003).\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "name": "SiteSkuDemandChanged",
+          "title": "SiteSkuDemandChanged (consumed, order-management)",
+          "summary": "One source order line's demand at the configured site changed.",
+          "description": "`type` = `com.warehouse.wes.order-management.siteskudemand.SiteSkuDemandChanged`,\nsource `/warehouse/order-management`, dataschema\n`urn:warehouse:order-management:events:SiteSkuDemandChanged:v1`. Subject and\nKafka key = `<source_order_id>/line/<line_no>`. Produced by\norder-management (its ADR 0035).\n",
+          "contentType": "application/cloudevents+json",
+          "tags": [
+            {
+              "name": "consumed"
+            }
+          ],
+          "payload": {
+            "allOf": [
+              "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+              {
+                "type": "object",
+                "properties": {
+                  "data": {
+                    "type": "object",
+                    "required": [
+                      "source_order_id",
+                      "line_no",
+                      "site_id",
+                      "sku",
+                      "demanded_units",
+                      "due_at",
+                      "state",
+                      "assignment_version"
+                    ],
+                    "properties": {
+                      "source_order_id": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-43>"
+                      },
+                      "line_no": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "x-parser-schema-id": "<anonymous-schema-44>"
+                      },
+                      "site_id": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-45>"
+                      },
+                      "sku": {
+                        "type": "string",
+                        "x-parser-schema-id": "<anonymous-schema-46>"
+                      },
+                      "demanded_units": {
+                        "type": "integer",
+                        "minimum": 1,
+                        "x-parser-schema-id": "<anonymous-schema-47>"
+                      },
+                      "due_at": {
+                        "type": "string",
+                        "format": "date-time",
+                        "x-parser-schema-id": "<anonymous-schema-48>"
+                      },
+                      "state": {
+                        "type": "string",
+                        "enum": [
+                          "ACTIVE",
+                          "REMOVED"
+                        ],
+                        "x-parser-schema-id": "<anonymous-schema-49>"
+                      },
+                      "assignment_version": {
+                        "type": "string",
+                        "enum": [
+                          "static-site-v1"
+                        ],
+                        "x-parser-schema-id": "<anonymous-schema-50>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-42>"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-41>"
+              }
+            ],
+            "x-parser-schema-id": "SiteSkuDemandChangedEvent"
+          },
+          "examples": [
+            {
+              "name": "active",
+              "summary": "An ACTIVE line of 12 units of SKU-1.",
+              "payload": {
+                "specversion": "1.0",
+                "id": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+                "source": "/warehouse/order-management",
+                "type": "com.warehouse.wes.order-management.siteskudemand.SiteSkuDemandChanged",
+                "subject": "ord-7c9e6679-7d5a-4b37-b2f1-93b0c4a1d8f2/line/1",
+                "time": "2026-10-07T09:00:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:order-management:events:SiteSkuDemandChanged:v1",
+                "data": {
+                  "source_order_id": "ord-7c9e6679-7d5a-4b37-b2f1-93b0c4a1d8f2",
+                  "line_no": 1,
+                  "site_id": "SITE-1",
+                  "sku": "SKU-1",
+                  "demanded_units": 12,
+                  "due_at": "2026-10-09T10:00:00Z",
+                  "state": "ACTIVE",
+                  "assignment_version": "static-site-v1"
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.product-master.events": {
+      "description": "product-master's integration topic (key and subject = the SKU). This\nservice consumes `ProductClassified`, `ProductDimensionsDeclared` and\n`ProductMeasured` under a stable consumer group read from env\n`PRODUCT_CONSUMER_GROUP` when `PRODUCT_MODE=kafka`, and\n`ProductPackLevelDeclared`, `ProductPackLevelRetired` and\n`ProductPackLevelMeasured` into its local PackLevelView (ADR 0012) under\n`PACK_LEVEL_CONSUMER_GROUP` when `PACK_LEVEL_MODE=kafka`. A message is\napplied only when its `version` is greater than the stored one. Every\nother type is ignored.\n",
+      "publish": {
+        "operationId": "consumeProductMasterEvents",
+        "summary": "Consume product classification and physical profile events.",
+        "description": "Full-state per concern: a classification replaces the classification, a\nphysical profile (declared or measured) replaces the physical profile,\nacting on `effective`.\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "ProductClassified",
+              "title": "ProductClassified (consumed, product-master)",
+              "summary": "A product's handling classification was set or replaced (full state).",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductClassified`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductClassified:v1`. Subject and key =\nthe SKU. Applied only when `version` is greater than the stored one.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "handling_tags",
+                          "classification_source",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-53>"
+                          },
+                          "handling_tags": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "enum": [
+                                "Hazmat",
+                                "Fragile",
+                                "TemperatureSensitive",
+                                "Oversized",
+                                "HighValue"
+                              ],
+                              "x-parser-schema-id": "HandlingTag"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-54>"
+                          },
+                          "temperature_class": {
+                            "type": "string",
+                            "enum": [
+                              "Ambient",
+                              "Chilled",
+                              "Frozen"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-55>"
+                          },
+                          "dot_hazard_class": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 9,
+                            "x-parser-schema-id": "<anonymous-schema-56>"
+                          },
+                          "classification_source": {
+                            "type": "string",
+                            "enum": [
+                              "native",
+                              "legacy-import"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-57>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-58>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-52>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-51>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductClassifiedEvent"
+              },
+              "examples": [
+                {
+                  "name": "hazmatFrozen",
+                  "summary": "SKU-9 classified Hazmat + TemperatureSensitive (Frozen).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "0f6d8a2b-3c4e-4d5f-8a9b-7c6d5e4f3a2b",
+                    "source": "/warehouse/product-master",
+                    "type": "com.warehouse.wms.product-master.product.ProductClassified",
+                    "subject": "SKU-9",
+                    "time": "2026-10-06T21:02:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:product-master:events:ProductClassified:v1",
+                    "data": {
+                      "sku": "SKU-9",
+                      "handling_tags": [
+                        "Hazmat",
+                        "TemperatureSensitive"
+                      ],
+                      "temperature_class": "Frozen",
+                      "dot_hazard_class": 3,
+                      "classification_source": "native",
+                      "version": 3
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProductDimensionsDeclared",
+              "title": "ProductDimensionsDeclared (consumed, product-master)",
+              "summary": "Declared unit dimensions and weight were set or replaced (full physical profile).",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductDimensionsDeclared`,\ndataschema `urn:warehouse:product-master:events:ProductDimensionsDeclared:v1`.\nAct on `effective` and `version`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "effective_source",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-61>"
+                          },
+                          "declared": {
+                            "type": "object",
+                            "required": [
+                              "length_mm",
+                              "width_mm",
+                              "height_mm",
+                              "weight_g",
+                              "volume_mm3"
+                            ],
+                            "properties": {
+                              "length_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "x-parser-schema-id": "<anonymous-schema-62>"
+                              },
+                              "width_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "x-parser-schema-id": "<anonymous-schema-63>"
+                              },
+                              "height_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "x-parser-schema-id": "<anonymous-schema-64>"
+                              },
+                              "weight_g": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "x-parser-schema-id": "<anonymous-schema-65>"
+                              },
+                              "volume_mm3": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "x-parser-schema-id": "<anonymous-schema-66>"
+                              }
+                            },
+                            "x-parser-schema-id": "Dimensions"
+                          },
+                          "measured": {
+                            "type": "object",
+                            "description": "Measured dimensions plus measured_at and an optional device_id (ignored here).",
+                            "x-parser-schema-id": "<anonymous-schema-67>"
+                          },
+                          "effective": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[1].payload.allOf[1].properties.data.properties.declared",
+                          "effective_source": {
+                            "type": "string",
+                            "enum": [
+                              "measured",
+                              "declared",
+                              "none"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-68>"
+                          },
+                          "discrepancy": {
+                            "type": "boolean",
+                            "x-parser-schema-id": "<anonymous-schema-69>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-70>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-60>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-59>"
+                  }
+                ],
+                "x-parser-schema-id": "PhysicalProfileEvent"
+              },
+              "examples": [
+                {
+                  "name": "declared",
+                  "summary": "SKU-1 declared at 200x120x80 mm, 1500 g.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d",
+                    "source": "/warehouse/product-master",
+                    "type": "com.warehouse.wms.product-master.product.ProductDimensionsDeclared",
+                    "subject": "SKU-1",
+                    "time": "2026-10-06T21:03:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:product-master:events:ProductDimensionsDeclared:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "declared": {
+                        "length_mm": 200,
+                        "width_mm": 120,
+                        "height_mm": 80,
+                        "weight_g": 1500,
+                        "volume_mm3": 1920000
+                      },
+                      "effective": {
+                        "length_mm": 200,
+                        "width_mm": 120,
+                        "height_mm": 80,
+                        "weight_g": 1500,
+                        "volume_mm3": 1920000
+                      },
+                      "effective_source": "declared",
+                      "discrepancy": false,
+                      "version": 4
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProductMeasured",
+              "title": "ProductMeasured (consumed, product-master)",
+              "summary": "A measurement of one unit was recorded and is now effective (full physical profile).",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductMeasured`,\ndataschema `urn:warehouse:product-master:events:ProductMeasured:v1`. Act on\n`effective` and `version`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[1].payload",
+              "examples": [
+                {
+                  "name": "measured",
+                  "summary": "SKU-1 measured heavier than declared.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "9e8d7c6b-5a4f-4e3d-8c2b-1a0f9e8d7c6b",
+                    "source": "/warehouse/product-master",
+                    "type": "com.warehouse.wms.product-master.product.ProductMeasured",
+                    "subject": "SKU-1",
+                    "time": "2026-10-06T21:04:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:product-master:events:ProductMeasured:v1",
+                    "data": {
+                      "sku": "SKU-1",
+                      "declared": {
+                        "length_mm": 200,
+                        "width_mm": 120,
+                        "height_mm": 80,
+                        "weight_g": 1500,
+                        "volume_mm3": 1920000
+                      },
+                      "measured": {
+                        "length_mm": 205,
+                        "width_mm": 121,
+                        "height_mm": 82,
+                        "weight_g": 1720,
+                        "volume_mm3": 2034010,
+                        "measured_at": "2026-10-06T14:05:00Z",
+                        "device_id": "CUBISCAN-03"
+                      },
+                      "effective": {
+                        "length_mm": 205,
+                        "width_mm": 121,
+                        "height_mm": 82,
+                        "weight_g": 1720,
+                        "volume_mm3": 2034010
+                      },
+                      "effective_source": "measured",
+                      "discrepancy": true,
+                      "version": 5
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProductPackLevelDeclared",
+              "title": "ProductPackLevelDeclared (consumed, product-master)",
+              "summary": "A pack level of a SKU was declared or revised.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelDeclared`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductPackLevelDeclared:v1`. Subject and key =\nthe SKU. Applied to the local PackLevelView (ADR 0012,\n`PACK_LEVEL_MODE=kafka`, group `PACK_LEVEL_CONSUMER_GROUP`) only when\n`version` is greater than the stored one. Payload pinned by\nproduct-master's `apis/asyncapi.yaml` on `develop`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "type": "object",
+                "description": "CloudEvents 1.0 envelope of product-master's ProductPackLevelDeclared, as consumed here.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wms.product-master.product.ProductPackLevelDeclared",
+                        "x-parser-schema-id": "<anonymous-schema-72>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:product-master:events:ProductPackLevelDeclared:v1",
+                        "x-parser-schema-id": "<anonymous-schema-73>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "units_per_pack",
+                          "is_orderable",
+                          "is_despatch_unit",
+                          "effective_from",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-75>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-76>"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-77>"
+                          },
+                          "child_gtin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-78>"
+                          },
+                          "qty_of_child": {
+                            "type": "integer",
+                            "minimum": 2,
+                            "description": "Absent for EACH.",
+                            "x-parser-schema-id": "<anonymous-schema-79>"
+                          },
+                          "units_per_pack": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Direct factor to eaches; 1 for EACH.",
+                            "x-parser-schema-id": "<anonymous-schema-80>"
+                          },
+                          "is_orderable": {
+                            "type": "boolean",
+                            "x-parser-schema-id": "<anonymous-schema-81>"
+                          },
+                          "is_despatch_unit": {
+                            "type": "boolean",
+                            "x-parser-schema-id": "<anonymous-schema-82>"
+                          },
+                          "effective_from": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-83>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-84>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-74>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-71>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelDeclaredEvent"
+              }
+            },
+            {
+              "name": "ProductPackLevelRetired",
+              "title": "ProductPackLevelRetired (consumed, product-master)",
+              "summary": "A pack level of a SKU was retired.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelRetired`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductPackLevelRetired:v1`. Subject and key =\nthe SKU. Applied to the local PackLevelView (ADR 0012,\n`PACK_LEVEL_MODE=kafka`, group `PACK_LEVEL_CONSUMER_GROUP`) only when\n`version` is greater than the stored one. Payload pinned by\nproduct-master's `apis/asyncapi.yaml` on `develop`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "type": "object",
+                "description": "CloudEvents 1.0 envelope of product-master's ProductPackLevelRetired, as consumed here.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wms.product-master.product.ProductPackLevelRetired",
+                        "x-parser-schema-id": "<anonymous-schema-86>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:product-master:events:ProductPackLevelRetired:v1",
+                        "x-parser-schema-id": "<anonymous-schema-87>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "effective_to",
+                          "reason",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-89>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-90>"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-91>"
+                          },
+                          "effective_to": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-92>"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-93>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-94>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-88>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-85>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelRetiredEvent"
+              }
+            },
+            {
+              "name": "ProductPackLevelMeasured",
+              "title": "ProductPackLevelMeasured (consumed, product-master)",
+              "summary": "A pack level of a SKU was physically measured.",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelMeasured`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductPackLevelMeasured:v1`. Subject and key =\nthe SKU. Applied to the local PackLevelView (ADR 0012,\n`PACK_LEVEL_MODE=kafka`, group `PACK_LEVEL_CONSUMER_GROUP`) only when\n`version` is greater than the stored one. Payload pinned by\nproduct-master's `apis/asyncapi.yaml` on `develop`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "type": "object",
+                "description": "CloudEvents 1.0 envelope of product-master's ProductPackLevelMeasured, as consumed here.",
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wms.product-master.product.ProductPackLevelMeasured",
+                        "x-parser-schema-id": "<anonymous-schema-96>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:product-master:events:ProductPackLevelMeasured:v1",
+                        "x-parser-schema-id": "<anonymous-schema-97>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "sku",
+                          "level",
+                          "gtin",
+                          "dims",
+                          "measured_at",
+                          "version"
+                        ],
+                        "properties": {
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-99>"
+                          },
+                          "level": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-100>"
+                          },
+                          "gtin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-101>"
+                          },
+                          "dims": {
+                            "type": "object",
+                            "required": [
+                              "length_mm",
+                              "width_mm",
+                              "height_mm",
+                              "weight_g"
+                            ],
+                            "properties": {
+                              "length_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20000,
+                                "x-parser-schema-id": "<anonymous-schema-103>"
+                              },
+                              "width_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20000,
+                                "x-parser-schema-id": "<anonymous-schema-104>"
+                              },
+                              "height_mm": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 20000,
+                                "x-parser-schema-id": "<anonymous-schema-105>"
+                              },
+                              "weight_g": {
+                                "type": "integer",
+                                "minimum": 1,
+                                "maximum": 2000000,
+                                "x-parser-schema-id": "<anonymous-schema-106>"
+                              }
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-102>"
+                          },
+                          "measured_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-107>"
+                          },
+                          "device_id": {
+                            "type": "string",
+                            "description": "Omitted for a manual measurement.",
+                            "x-parser-schema-id": "<anonymous-schema-108>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-109>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-98>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-95>"
+                  }
+                ],
+                "x-parser-schema-id": "ProductPackLevelMeasuredEvent"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.facility.events": {
+      "description": "facility-layout's integration topic. This service consumes\n`ZoneRegistered` (key `zoneId`), `LocationSlotRegistered` and\n`LocationSlotDecommissioned` (key `locationCode`) under a stable consumer\ngroup read from env `LAYOUT_CONSUMER_GROUP` when `LAYOUT_MODE=kafka`.\nEvery other type is ignored.\n",
+      "publish": {
+        "operationId": "consumeFacilityLayoutEvents",
+        "summary": "Consume zones and location slots.",
+        "description": "A slot is joined to its zone through `zoneId` at plan time. An absent\n`role` on `LocationSlotRegistered` means Storage. Forward slots are the\nStorage slots in zones listed in `FORWARD_ZONE_CODES` (default `FWD`).\nDecommissioning removes the slot and is irreversible.\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "ZoneRegistered",
+              "title": "ZoneRegistered (consumed, facility-layout)",
+              "summary": "A behavioural zone was added inside a site's area.",
+              "description": "`type` = `com.warehouse.wms.facility-layout.zone.ZoneRegistered`, source\n`/warehouse/facility-layout`, dataschema\n`urn:warehouse:facility-layout:events:ZoneRegistered:v1`. Subject and Kafka\nkey = `zoneId`. `data` also carries `eventName`, `eventType` and\n`occurredAt`, which are ignored.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "zoneId",
+                          "siteCode",
+                          "areaCode",
+                          "zoneCode",
+                          "temperatureClass",
+                          "hazmat"
+                        ],
+                        "properties": {
+                          "zoneId": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-112>"
+                          },
+                          "siteCode": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-113>"
+                          },
+                          "areaCode": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-114>"
+                          },
+                          "zoneCode": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-115>"
+                          },
+                          "temperatureClass": {
+                            "type": "string",
+                            "enum": [
+                              "Ambient",
+                              "Chilled",
+                              "Frozen"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-116>"
+                          },
+                          "hazmat": {
+                            "type": "boolean",
+                            "x-parser-schema-id": "<anonymous-schema-117>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-111>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-110>"
+                  }
+                ],
+                "x-parser-schema-id": "ZoneRegisteredEvent"
+              },
+              "examples": [
+                {
+                  "name": "forwardZone",
+                  "summary": "An ambient, non-hazmat forward zone.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "2b1a0f9e-8d7c-4b6a-a594-837261504f3e",
+                    "source": "/warehouse/facility-layout",
+                    "type": "com.warehouse.wms.facility-layout.zone.ZoneRegistered",
+                    "subject": "WH1-FWD-AMB",
+                    "time": "2026-09-01T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:facility-layout:events:ZoneRegistered:v1",
+                    "data": {
+                      "eventName": "ZoneRegistered",
+                      "eventType": "com.warehouse.wms.facility-layout.zone.ZoneRegistered",
+                      "occurredAt": "2026-09-01T08:00:00Z",
+                      "zoneId": "WH1-FWD-AMB",
+                      "siteCode": "WH1",
+                      "areaCode": "FWD",
+                      "zoneCode": "FWD",
+                      "temperatureClass": "Ambient",
+                      "hazmat": false
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "LocationSlotRegistered",
+              "title": "LocationSlotRegistered (consumed, facility-layout)",
+              "summary": "A coded leaf slot now exists on the warehouse map.",
+              "description": "`type` = `com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered`,\ndataschema `urn:warehouse:facility-layout:events:LocationSlotRegistered:v1`.\nSubject and Kafka key = `locationCode`. An absent `role` means Storage.\n`data` also carries `eventName`, `eventType` and `occurredAt`, which are\nignored.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "locationCode",
+                          "aisleId",
+                          "zoneId",
+                          "locationType",
+                          "maxWeightKg",
+                          "maxVolumeM3"
+                        ],
+                        "properties": {
+                          "locationCode": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-120>"
+                          },
+                          "aisleId": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-121>"
+                          },
+                          "zoneId": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-122>"
+                          },
+                          "locationType": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-123>"
+                          },
+                          "role": {
+                            "type": "string",
+                            "description": "Absent means Storage.",
+                            "x-parser-schema-id": "<anonymous-schema-124>"
+                          },
+                          "dockFlow": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-125>"
+                          },
+                          "activities": {
+                            "type": "array",
+                            "items": {
+                              "type": "string",
+                              "x-parser-schema-id": "<anonymous-schema-127>"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-126>"
+                          },
+                          "maxWeightKg": {
+                            "type": "number",
+                            "x-parser-schema-id": "<anonymous-schema-128>"
+                          },
+                          "maxVolumeM3": {
+                            "type": "number",
+                            "x-parser-schema-id": "<anonymous-schema-129>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-119>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-118>"
+                  }
+                ],
+                "x-parser-schema-id": "LocationSlotRegisteredEvent"
+              },
+              "examples": [
+                {
+                  "name": "storageSlot",
+                  "summary": "A forward storage slot of 0.5 m3 and 40 kg.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3c2b1a0f-9e8d-4c7b-a695-8372615a4f3d",
+                    "source": "/warehouse/facility-layout",
+                    "type": "com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered",
+                    "subject": "WH1-FWD-A01-01-01-A",
+                    "time": "2026-09-01T08:05:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:facility-layout:events:LocationSlotRegistered:v1",
+                    "data": {
+                      "eventName": "LocationSlotRegistered",
+                      "eventType": "com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered",
+                      "occurredAt": "2026-09-01T08:05:00Z",
+                      "locationCode": "WH1-FWD-A01-01-01-A",
+                      "aisleId": "WH1-FWD-AMB-A01",
+                      "zoneId": "WH1-FWD-AMB",
+                      "locationType": "ShelfBin",
+                      "role": "Storage",
+                      "maxWeightKg": 40,
+                      "maxVolumeM3": 0.5
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "LocationSlotDecommissioned",
+              "title": "LocationSlotDecommissioned (consumed, facility-layout)",
+              "summary": "A coded slot was permanently retired.",
+              "description": "`type` = `com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned`,\ndataschema `urn:warehouse:facility-layout:events:LocationSlotDecommissioned:v1`.\nSubject and Kafka key = `locationCode`. Irreversible: the slot is removed\nfrom the local copy.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "locationCode"
+                        ],
+                        "properties": {
+                          "locationCode": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-132>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-131>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-130>"
+                  }
+                ],
+                "x-parser-schema-id": "LocationSlotDecommissionedEvent"
+              },
+              "examples": [
+                {
+                  "name": "decommissioned",
+                  "summary": "A forward slot retired.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "1a0f9e8d-7c6b-4a5f-b493-726150493e2d",
+                    "source": "/warehouse/facility-layout",
+                    "type": "com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned",
+                    "subject": "WH1-FWD-A01-01-03-A",
+                    "time": "2026-10-01T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:facility-layout:events:LocationSlotDecommissioned:v1",
+                    "data": {
+                      "eventName": "LocationSlotDecommissioned",
+                      "eventType": "com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned",
+                      "occurredAt": "2026-10-01T08:00:00Z",
+                      "locationCode": "WH1-FWD-A01-01-03-A"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    },
+    "warehouse.inventory.events": {
+      "description": "inventory-storage's integration topic (its ADR 0039). This service\nconsumes `StockRelocated` only (ADR 0010), under a stable consumer group\nread from env `RELOCATION_CONSUMER_GROUP` when `RELOCATION_MODE=kafka`,\nto record the execution progress of its slot plans. Every other type on\nthe topic is ignored.\n",
+      "publish": {
+        "operationId": "consumeInventoryStorageRelocations",
+        "summary": "Consume relocations to record slot-plan execution progress.",
+        "description": "A relocation is matched to a plan's move by `source_ref` first: the\nmove reference `<plan_id>:<move_seq>` (fulfillment-execution's\n`relocation_ref`, carried by inventory-storage as the relocation's\nsource_ref) names the move at that 0-based position of the plan's moves.\nOnly when `source_ref` is no move reference is it matched by\n`site_code`, `sku` and the bins on the site's Approved plan. The\nCloudEvents `id` is claimed with the effect in one transaction; a\nrelocation is recorded once per `relocation_id`. A relocation of no\nknown move is claimed and counted, never dead-lettered. A\n`StockRelocated` whose data cannot be decoded or misses a required\nfield is dead-lettered at once to `warehouse.inventory.events.dlq`.\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "StockRelocated",
+              "title": "StockRelocated (consumed, inventory-storage)",
+              "summary": "A quantity of one SKU moved from one bin to another bin of the same site.",
+              "description": "`type` = `com.warehouse.wms.inventory-storage.stock.StockRelocated`,\ndataschema `urn:warehouse:inventory-storage:events:StockRelocated:v1`.\nSubject and Kafka key = `relocation_id`. Restated from\ninventory-storage's contract (its ADR 0039), never imported.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "relocation_id",
+                          "site_code",
+                          "sku",
+                          "from_bin",
+                          "to_bin",
+                          "quantity",
+                          "reason",
+                          "source_ref",
+                          "occurred_at"
+                        ],
+                        "properties": {
+                          "relocation_id": {
+                            "type": "string",
+                            "description": "The relocation id; recorded once per id.",
+                            "x-parser-schema-id": "<anonymous-schema-135>"
+                          },
+                          "site_code": {
+                            "type": "string",
+                            "description": "The site both bins belong to (this service's site id).",
+                            "x-parser-schema-id": "<anonymous-schema-136>"
+                          },
+                          "sku": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-137>"
+                          },
+                          "from_bin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-138>"
+                          },
+                          "to_bin": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-139>"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-140>"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "SLOTTING",
+                              "CONSOLIDATION",
+                              "MANUAL",
+                              "REPLENISHMENT"
+                            ],
+                            "description": "Only SLOTTING can execute a slot-plan move; every other reason (including REPLENISHMENT, added by pick-face-replenishment's REPLENISH tasks) is recorded as unmatched with reason=reason-not-slotting.",
+                            "x-parser-schema-id": "<anonymous-schema-141>"
+                          },
+                          "source_ref": {
+                            "type": "string",
+                            "maxLength": 200,
+                            "description": "`<plan_id>:<move_seq>` on slot-plan moves (matched first); a task id, a ticket or \"\" otherwise.",
+                            "x-parser-schema-id": "<anonymous-schema-142>"
+                          },
+                          "occurred_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-143>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-134>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-133>"
+                  }
+                ],
+                "x-parser-schema-id": "StockRelocatedEvent"
+              },
+              "examples": [
+                {
+                  "name": "slottingMoveFromATask",
+                  "summary": "Seven units of SKU-R1 moved between two WH1 bins by a completed RELOCATE task of plan-9's move 0.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3c9e1a52-7b4d-4e18-a6f2-5d0b8c7e9f21",
+                    "source": "/warehouse/inventory-storage",
+                    "type": "com.warehouse.wms.inventory-storage.stock.StockRelocated",
+                    "subject": "rel-42",
+                    "time": "2026-10-13T12:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inventory-storage:events:StockRelocated:v1",
+                    "data": {
+                      "relocation_id": "rel-42",
+                      "site_code": "WH1",
+                      "sku": "SKU-R1",
+                      "from_bin": "WH1-STOR-AMB-A01-01-01-A",
+                      "to_bin": "WH1-STOR-AMB-A02-01-01-A",
+                      "quantity": 7,
+                      "reason": "SLOTTING",
+                      "source_ref": "plan-9:0",
+                      "occurred_at": "2026-10-13T12:00:00Z"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
+    }
+  },
+  "components": {
+    "messages": {
+      "SlotPlanGenerated": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0]",
+      "SlotPlanApproved": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[1]",
+      "SlotPlanRejected": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[2]",
+      "SiteSkuDemandChanged": "$ref:$.channels.warehouse.order-management.events.publish.message",
+      "ProductClassified": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[0]",
+      "ProductDimensionsDeclared": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[1]",
+      "ProductMeasured": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[2]",
+      "ZoneRegistered": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[0]",
+      "LocationSlotRegistered": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1]",
+      "LocationSlotDecommissioned": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[2]",
+      "StockRelocated": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0]",
+      "SlotPlanGeneratedAnalytics": "$ref:$.channels.warehouse.slotting-optimization.analytics.subscribe.message.oneOf[0]",
+      "SlotPlanApprovedAnalytics": "$ref:$.channels.warehouse.slotting-optimization.analytics.subscribe.message.oneOf[1]",
+      "SlotPlanRejectedAnalytics": "$ref:$.channels.warehouse.slotting-optimization.analytics.subscribe.message.oneOf[2]",
+      "ProductPackLevelDeclared": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[3]",
+      "ProductPackLevelRetired": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[4]",
+      "ProductPackLevelMeasured": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[5]"
+    },
+    "schemas": {
+      "CloudEventEnvelope": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload.allOf[0]",
+      "SlotAssignment": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[1].payload.allOf[1].properties.data.properties.assignments.items",
+      "SlotMove": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[1].payload.allOf[1].properties.data.properties.moves.items",
+      "SlotPlanGeneratedEvent": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[0].payload",
+      "SlotPlanApprovedEvent": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[1].payload",
+      "SlotPlanRejectedEvent": "$ref:$.channels.warehouse.slotting-optimization.events.subscribe.message.oneOf[2].payload",
+      "SiteSkuDemandChangedEvent": "$ref:$.channels.warehouse.order-management.events.publish.message.payload",
+      "HandlingTag": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[0].payload.allOf[1].properties.data.properties.handling_tags.items",
+      "ProductClassifiedEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[0].payload",
+      "Dimensions": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[1].payload.allOf[1].properties.data.properties.declared",
+      "PhysicalProfileEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[1].payload",
+      "ZoneRegisteredEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[0].payload",
+      "LocationSlotRegisteredEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[1].payload",
+      "LocationSlotDecommissionedEvent": "$ref:$.channels.warehouse.facility.events.publish.message.oneOf[2].payload",
+      "StockRelocatedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0].payload",
+      "ProductPackLevelDeclaredEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[3].payload",
+      "ProductPackLevelRetiredEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[4].payload",
+      "ProductPackLevelMeasuredEvent": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[5].payload"
+    }
+  },
+  "x-parser-spec-parsed": true,
+  "x-parser-api-version": 3,
+  "x-parser-spec-stringified": true
+};
+    const config = {"show":{"sidebar":true},"sidebar":{"showOperations":"byDefault"}};
+    const appRoot = document.getElementById('root');
+    AsyncApiStandalone.render(
+        { schema, config, }, appRoot
+    );
+  
