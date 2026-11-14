@@ -1,0 +1,1188 @@
+{
+  "event_derivation": "subscriptions derived from non-test topic literals in each consumer's cmd/ and internal/ (reader config truth), NOT from asyncapi operation semantics; producers by topic-name ownership",
+  "events": [
+    {
+      "consumer": "dock-scheduling",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "facility-layout",
+      "topics": [
+        "warehouse.facility.events"
+      ]
+    },
+    {
+      "consumer": "dock-scheduling",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inbound-receiving",
+      "topics": [
+        "warehouse.inbound-receiving.events"
+      ]
+    },
+    {
+      "consumer": "dock-scheduling",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
+    },
+    {
+      "consumer": "dock-scheduling",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "yard-management",
+      "topics": [
+        "warehouse.yard-management.events"
+      ]
+    },
+    {
+      "consumer": "exception-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "dock-scheduling",
+      "topics": [
+        "warehouse.dock-scheduling.events"
+      ]
+    },
+    {
+      "consumer": "exception-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "fulfillment-execution",
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "exception-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inbound-receiving",
+      "topics": [
+        "warehouse.inbound-receiving.events"
+      ]
+    },
+    {
+      "consumer": "exception-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inventory-storage",
+      "topics": [
+        "warehouse.inventory.events"
+      ]
+    },
+    {
+      "consumer": "exception-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "network-fulfillment",
+      "topics": [
+        "warehouse.network-fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "exception-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "order-management",
+      "topics": [
+        "warehouse.order-management.events"
+      ]
+    },
+    {
+      "consumer": "exception-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "outbound-shipping",
+      "topics": [
+        "warehouse.outbound-shipping.events"
+      ]
+    },
+    {
+      "consumer": "exception-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "returns-processing",
+      "topics": [
+        "warehouse.returns-processing.events"
+      ]
+    },
+    {
+      "consumer": "exception-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "wes-work-planning",
+      "topics": [
+        "warehouse.work-planning.events"
+      ]
+    },
+    {
+      "consumer": "exception-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "yard-management",
+      "topics": [
+        "warehouse.yard-management.events"
+      ]
+    },
+    {
+      "consumer": "fulfillment-execution",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
+    },
+    {
+      "consumer": "fulfillment-execution",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "product-master",
+      "topics": [
+        "warehouse.product-master.events"
+      ]
+    },
+    {
+      "consumer": "fulfillment-execution",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "task-interleaving",
+      "topics": [
+        "warehouse.task-interleaving.events"
+      ]
+    },
+    {
+      "consumer": "fulfillment-execution",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "wes-work-planning",
+      "topics": [
+        "warehouse.work-planning.events"
+      ]
+    },
+    {
+      "consumer": "inbound-receiving",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "dock-scheduling",
+      "topics": [
+        "warehouse.dock-scheduling.events"
+      ]
+    },
+    {
+      "consumer": "inbound-receiving",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "facility-layout",
+      "topics": [
+        "warehouse.facility.events"
+      ]
+    },
+    {
+      "consumer": "inbound-receiving",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inventory-storage",
+      "topics": [
+        "warehouse.inventory.events"
+      ]
+    },
+    {
+      "consumer": "inbound-receiving",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "product-master",
+      "topics": [
+        "warehouse.product-master.events"
+      ]
+    },
+    {
+      "consumer": "inbound-receiving",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "yard-management",
+      "topics": [
+        "warehouse.yard-management.events"
+      ]
+    },
+    {
+      "consumer": "inventory-storage",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "facility-layout",
+      "topics": [
+        "warehouse.facility.events"
+      ]
+    },
+    {
+      "consumer": "inventory-storage",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "fulfillment-execution",
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "inventory-storage",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inbound-receiving",
+      "topics": [
+        "warehouse.inbound-receiving.events"
+      ]
+    },
+    {
+      "consumer": "inventory-storage",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "network-inventory-planning",
+      "topics": [
+        "warehouse.network-inventory-planning.events"
+      ]
+    },
+    {
+      "consumer": "inventory-storage",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "product-master",
+      "topics": [
+        "warehouse.product-master.events"
+      ]
+    },
+    {
+      "consumer": "inventory-storage",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "returns-processing",
+      "topics": [
+        "warehouse.returns-processing.events"
+      ]
+    },
+    {
+      "consumer": "inventory-storage",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "slotting-optimization",
+      "topics": [
+        "warehouse.slotting-optimization.events"
+      ]
+    },
+    {
+      "consumer": "labor-performance",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "fulfillment-execution",
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "network-fulfillment",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inbound-receiving",
+      "topics": [
+        "warehouse.inbound-receiving.events"
+      ]
+    },
+    {
+      "consumer": "network-fulfillment",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "outbound-shipping",
+      "topics": [
+        "warehouse.outbound-shipping.events"
+      ]
+    },
+    {
+      "consumer": "network-fulfillment",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
+    },
+    {
+      "consumer": "network-fulfillment",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "wes-work-planning",
+      "topics": [
+        "warehouse.work-planning.events"
+      ]
+    },
+    {
+      "consumer": "network-inventory-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "facility-layout",
+      "topics": [
+        "warehouse.facility.events"
+      ]
+    },
+    {
+      "consumer": "network-inventory-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "fulfillment-execution",
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "network-inventory-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inventory-storage",
+      "topics": [
+        "warehouse.inventory.events"
+      ]
+    },
+    {
+      "consumer": "network-inventory-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "order-management",
+      "topics": [
+        "warehouse.order-management.events"
+      ]
+    },
+    {
+      "consumer": "network-inventory-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "product-master",
+      "topics": [
+        "warehouse.product-master.events"
+      ]
+    },
+    {
+      "consumer": "network-inventory-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "warehouse-planning",
+      "topics": [
+        "warehouse.warehouse-planning.events"
+      ]
+    },
+    {
+      "consumer": "order-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "fulfillment-execution",
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "order-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "outbound-shipping",
+      "topics": [
+        "warehouse.outbound-shipping.events"
+      ]
+    },
+    {
+      "consumer": "order-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
+    },
+    {
+      "consumer": "order-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "product-master",
+      "topics": [
+        "warehouse.product-master.events"
+      ]
+    },
+    {
+      "consumer": "order-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "warehouse-planning",
+      "topics": [
+        "warehouse.warehouse-planning.events"
+      ]
+    },
+    {
+      "consumer": "order-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "wes-work-planning",
+      "topics": [
+        "warehouse.work-planning.events"
+      ]
+    },
+    {
+      "consumer": "outbound-shipping",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "dock-scheduling",
+      "topics": [
+        "warehouse.dock-scheduling.events"
+      ]
+    },
+    {
+      "consumer": "outbound-shipping",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "facility-layout",
+      "topics": [
+        "warehouse.facility.events"
+      ]
+    },
+    {
+      "consumer": "outbound-shipping",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "fulfillment-execution",
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "outbound-shipping",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
+    },
+    {
+      "consumer": "outbound-shipping",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "yard-management",
+      "topics": [
+        "warehouse.yard-management.events"
+      ]
+    },
+    {
+      "consumer": "pick-face-replenishment",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "facility-layout",
+      "topics": [
+        "warehouse.facility.events"
+      ]
+    },
+    {
+      "consumer": "pick-face-replenishment",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inventory-storage",
+      "topics": [
+        "warehouse.inventory.events"
+      ]
+    },
+    {
+      "consumer": "pick-face-replenishment",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "product-master",
+      "topics": [
+        "warehouse.product-master.events"
+      ]
+    },
+    {
+      "consumer": "pick-face-replenishment",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "slotting-optimization",
+      "topics": [
+        "warehouse.slotting-optimization.events"
+      ]
+    },
+    {
+      "consumer": "returns-processing",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "fulfillment-execution",
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "returns-processing",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "order-management",
+      "topics": [
+        "warehouse.order-management.events"
+      ]
+    },
+    {
+      "consumer": "returns-processing",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "product-master",
+      "topics": [
+        "warehouse.product-master.events"
+      ]
+    },
+    {
+      "consumer": "slotting-optimization",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "facility-layout",
+      "topics": [
+        "warehouse.facility.events"
+      ]
+    },
+    {
+      "consumer": "slotting-optimization",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inventory-storage",
+      "topics": [
+        "warehouse.inventory.events"
+      ]
+    },
+    {
+      "consumer": "slotting-optimization",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "order-management",
+      "topics": [
+        "warehouse.order-management.events"
+      ]
+    },
+    {
+      "consumer": "slotting-optimization",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "product-master",
+      "topics": [
+        "warehouse.product-master.events"
+      ]
+    },
+    {
+      "consumer": "task-interleaving",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "facility-layout",
+      "topics": [
+        "warehouse.facility.events"
+      ]
+    },
+    {
+      "consumer": "task-interleaving",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "fulfillment-execution",
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "warehouse-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "dock-scheduling",
+      "topics": [
+        "warehouse.dock-scheduling.events"
+      ]
+    },
+    {
+      "consumer": "warehouse-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "facility-layout",
+      "topics": [
+        "warehouse.facility.events"
+      ]
+    },
+    {
+      "consumer": "warehouse-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "fulfillment-execution",
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "warehouse-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "order-management",
+      "topics": [
+        "warehouse.order-management.events"
+      ]
+    },
+    {
+      "consumer": "warehouse-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "workforce-management",
+      "topics": [
+        "warehouse.workforce.events"
+      ]
+    },
+    {
+      "consumer": "wes-work-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "fulfillment-execution",
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "wes-work-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inventory-storage",
+      "topics": [
+        "warehouse.inventory.events"
+      ]
+    },
+    {
+      "consumer": "wes-work-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "network-inventory-planning",
+      "topics": [
+        "warehouse.network-inventory-planning.events"
+      ]
+    },
+    {
+      "consumer": "wes-work-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "order-management",
+      "topics": [
+        "warehouse.order-management.events"
+      ]
+    },
+    {
+      "consumer": "wes-work-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "pick-face-replenishment",
+      "topics": [
+        "warehouse.pick-face-replenishment.events"
+      ]
+    },
+    {
+      "consumer": "wes-work-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
+    },
+    {
+      "consumer": "wes-work-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "product-master",
+      "topics": [
+        "warehouse.product-master.events"
+      ]
+    },
+    {
+      "consumer": "wes-work-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "slotting-optimization",
+      "topics": [
+        "warehouse.slotting-optimization.events"
+      ]
+    },
+    {
+      "consumer": "wes-work-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "workforce-management",
+      "topics": [
+        "warehouse.workforce.events"
+      ]
+    },
+    {
+      "consumer": "workforce-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "labor-performance",
+      "topics": [
+        "warehouse.labor-performance.events"
+      ]
+    },
+    {
+      "consumer": "workforce-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
+    },
+    {
+      "consumer": "yard-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "dock-scheduling",
+      "topics": [
+        "warehouse.dock-scheduling.events"
+      ]
+    },
+    {
+      "consumer": "yard-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "facility-layout",
+      "topics": [
+        "warehouse.facility.events"
+      ]
+    },
+    {
+      "consumer": "yard-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inbound-receiving",
+      "topics": [
+        "warehouse.inbound-receiving.events"
+      ]
+    }
+  ],
+  "external": [
+    {
+      "consumer": "checkout",
+      "default": "http://shopping-cart.example.invalid",
+      "env": "SHOPPING_CART_URL",
+      "evidence": "charts/checkout/templates/configmap.yaml (SHOPPING_CART_URL)"
+    },
+    {
+      "consumer": "checkout",
+      "default": "http://delivery-promise.example.invalid",
+      "env": "DELIVERY_PROMISE_URL",
+      "evidence": "charts/checkout/templates/configmap.yaml (DELIVERY_PROMISE_URL)"
+    },
+    {
+      "consumer": "checkout",
+      "default": "http://pricing.example.invalid",
+      "env": "PRICING_URL",
+      "evidence": "charts/checkout/templates/configmap.yaml (PRICING_URL)"
+    },
+    {
+      "consumer": "checkout",
+      "default": "http://customer-payments.example.invalid",
+      "env": "CUSTOMER_PAYMENTS_URL",
+      "evidence": "charts/checkout/templates/configmap.yaml (CUSTOMER_PAYMENTS_URL)"
+    },
+    {
+      "consumer": "checkout",
+      "default": "http://customer-ordering.example.invalid",
+      "env": "CUSTOMER_ORDERING_URL",
+      "evidence": "charts/checkout/templates/configmap.yaml (CUSTOMER_ORDERING_URL)"
+    },
+    {
+      "consumer": "customer-ordering",
+      "default": "http://delivery-promise.example.invalid",
+      "env": "DELIVERY_PROMISE_URL",
+      "evidence": "charts/customer-ordering/templates/configmap.yaml (DELIVERY_PROMISE_URL)"
+    },
+    {
+      "consumer": "customer-payments",
+      "default": "http://payment-provider.example.invalid",
+      "env": "PAYMENT_PROVIDER_URL",
+      "evidence": "charts/customer-payments/templates/configmap.yaml (PAYMENT_PROVIDER_URL)"
+    },
+    {
+      "consumer": "shipping-and-tracking",
+      "default": "http://customer-ordering.example.invalid",
+      "env": "CUSTOMER_ORDERING_URL",
+      "evidence": "charts/shipping-and-tracking/templates/configmap.yaml (CUSTOMER_ORDERING_URL)"
+    },
+    {
+      "consumer": "storefront-bff",
+      "default": "http://product-discovery.example.invalid",
+      "env": "PRODUCT_DISCOVERY_URL",
+      "evidence": "charts/storefront-bff/templates/configmap.yaml (PRODUCT_DISCOVERY_URL)"
+    },
+    {
+      "consumer": "storefront-bff",
+      "default": "http://delivery-promise.example.invalid",
+      "env": "DELIVERY_PROMISE_URL",
+      "evidence": "charts/storefront-bff/templates/configmap.yaml (DELIVERY_PROMISE_URL)"
+    },
+    {
+      "consumer": "storefront-bff",
+      "default": "http://shopping-cart.example.invalid",
+      "env": "SHOPPING_CART_URL",
+      "evidence": "charts/storefront-bff/templates/configmap.yaml (SHOPPING_CART_URL)"
+    },
+    {
+      "consumer": "storefront-bff",
+      "default": "http://checkout.example.invalid",
+      "env": "CHECKOUT_URL",
+      "evidence": "charts/storefront-bff/templates/configmap.yaml (CHECKOUT_URL)"
+    },
+    {
+      "consumer": "storefront-bff",
+      "default": "http://customer-ordering.example.invalid",
+      "env": "CUSTOMER_ORDERING_URL",
+      "evidence": "charts/storefront-bff/templates/configmap.yaml (CUSTOMER_ORDERING_URL)"
+    },
+    {
+      "consumer": "storefront-bff",
+      "default": "http://pricing.example.invalid",
+      "env": "PRICING_URL",
+      "evidence": "charts/storefront-bff/templates/configmap.yaml (PRICING_URL)"
+    },
+    {
+      "consumer": "storefront-web",
+      "default": "http://storefront-bff.example.invalid",
+      "env": "BFF_URL",
+      "evidence": "charts/storefront-web/templates/configmap.yaml (BFF_URL)"
+    }
+  ],
+  "findings": [
+    {
+      "env": "WORK_PLANNING_A2A_URL",
+      "note": "read in Go code but not wired in charts (deploy-time or missing wiring)",
+      "repo": "fulfillment-execution"
+    },
+    {
+      "env": "LLM_BASE_URL",
+      "note": "read in Go code but not wired in charts (deploy-time or missing wiring)",
+      "repo": "warehouse-ops-agent"
+    }
+  ],
+  "rest": [
+    {
+      "consumer": "checkout",
+      "default": "",
+      "env": "SHOPPING_CART_URL",
+      "evidence": "charts/checkout/templates/deployment.yaml (SHOPPING_CART_URL)",
+      "kind": "rest",
+      "producer": "shopping-cart"
+    },
+    {
+      "consumer": "checkout",
+      "default": "",
+      "env": "DELIVERY_PROMISE_URL",
+      "evidence": "charts/checkout/templates/deployment.yaml (DELIVERY_PROMISE_URL)",
+      "kind": "rest",
+      "producer": "delivery-promise"
+    },
+    {
+      "consumer": "checkout",
+      "default": "",
+      "env": "PRICING_URL",
+      "evidence": "charts/checkout/templates/deployment.yaml (PRICING_URL)",
+      "kind": "rest",
+      "producer": "pricing"
+    },
+    {
+      "consumer": "checkout",
+      "default": "",
+      "env": "CUSTOMER_PAYMENTS_URL",
+      "evidence": "charts/checkout/templates/deployment.yaml (CUSTOMER_PAYMENTS_URL)",
+      "kind": "rest",
+      "producer": "customer-payments"
+    },
+    {
+      "consumer": "checkout",
+      "default": "",
+      "env": "CUSTOMER_ORDERING_URL",
+      "evidence": "charts/checkout/templates/deployment.yaml (CUSTOMER_ORDERING_URL)",
+      "kind": "rest",
+      "producer": "customer-ordering"
+    },
+    {
+      "consumer": "customer-ordering",
+      "default": "",
+      "env": "DELIVERY_PROMISE_URL",
+      "evidence": "charts/customer-ordering/templates/deployment.yaml (DELIVERY_PROMISE_URL)",
+      "kind": "rest",
+      "producer": "delivery-promise"
+    },
+    {
+      "consumer": "facility-layout",
+      "default": "",
+      "env": "REPORTS_BASE_URL",
+      "evidence": "charts/facility-layout/templates/mcp-deployment.yaml (REPORTS_BASE_URL)",
+      "kind": "reports",
+      "producer": "facility-layout"
+    },
+    {
+      "consumer": "fulfillment-execution",
+      "default": "",
+      "env": "INVENTORY_STORAGE_BASE_URL",
+      "evidence": "charts/fulfillment-execution/templates/deployment.yaml (INVENTORY_STORAGE_BASE_URL)",
+      "kind": "rest",
+      "producer": "inventory-storage"
+    },
+    {
+      "consumer": "fulfillment-execution",
+      "default": "",
+      "env": "REPORTS_BASE_URL",
+      "evidence": "charts/fulfillment-execution/templates/mcp-deployment.yaml (REPORTS_BASE_URL)",
+      "kind": "reports",
+      "producer": "fulfillment-execution"
+    },
+    {
+      "consumer": "fulfillment-execution",
+      "default": "http://facility-layout.warehouse-systems.svc.cluster.local:80",
+      "env": "FACILITY_LAYOUT_BASE_URL",
+      "evidence": "charts/fulfillment-execution/tests/warehouse-infra-values.yaml (FACILITY_LAYOUT_BASE_URL)",
+      "kind": "rest",
+      "producer": "facility-layout"
+    },
+    {
+      "consumer": "inventory-storage",
+      "default": "",
+      "env": "FACILITY_LAYOUT_BASE_URL",
+      "evidence": "charts/inventory-storage/templates/configmap.yaml (FACILITY_LAYOUT_BASE_URL)",
+      "kind": "rest",
+      "producer": "facility-layout"
+    },
+    {
+      "consumer": "inventory-storage",
+      "default": "",
+      "env": "REPORTS_BASE_URL",
+      "evidence": "charts/inventory-storage/templates/mcp-deployment.yaml (REPORTS_BASE_URL)",
+      "kind": "reports",
+      "producer": "inventory-storage"
+    },
+    {
+      "consumer": "network-fulfillment",
+      "default": "",
+      "env": "INBOUND_RECEIVING_URL",
+      "evidence": "charts/network-fulfillment/templates/configmap.yaml (INBOUND_RECEIVING_URL)",
+      "kind": "rest",
+      "producer": "inbound-receiving"
+    },
+    {
+      "consumer": "network-fulfillment",
+      "default": "",
+      "env": "PRODUCT_MASTER_URL",
+      "evidence": "charts/network-fulfillment/templates/configmap.yaml (PRODUCT_MASTER_URL)",
+      "kind": "rest",
+      "producer": "product-master"
+    },
+    {
+      "consumer": "network-fulfillment",
+      "default": "http://order-management.warehouse-systems.svc.cluster.local:80",
+      "env": "ORDER_MANAGEMENT_URL",
+      "evidence": "charts/network-fulfillment/templates/configmap.yaml (ORDER_MANAGEMENT_URL)",
+      "kind": "rest",
+      "producer": "order-management"
+    },
+    {
+      "consumer": "network-fulfillment",
+      "default": "",
+      "env": "REPORTS_BASE_URL",
+      "evidence": "charts/network-fulfillment/templates/mcp-deployment.yaml (REPORTS_BASE_URL)",
+      "kind": "reports",
+      "producer": "network-fulfillment"
+    },
+    {
+      "consumer": "network-fulfillment",
+      "default": "http://inventory-storage.warehouse-systems.svc.cluster.local:80",
+      "env": "INVENTORY_STORAGE_URL",
+      "evidence": "charts/network-fulfillment/tests/warehouse-infra-values.yaml (INVENTORY_STORAGE_URL)",
+      "kind": "rest",
+      "producer": "inventory-storage"
+    },
+    {
+      "consumer": "order-management",
+      "default": "",
+      "env": "INVENTORY_STORAGE_BASE_URL",
+      "evidence": "charts/order-management/templates/configmap.yaml (INVENTORY_STORAGE_BASE_URL)",
+      "kind": "rest",
+      "producer": "inventory-storage"
+    },
+    {
+      "consumer": "process-path-management",
+      "default": "",
+      "env": "REPORTS_BASE_URL",
+      "evidence": "charts/process-path-management/templates/mcp-deployment.yaml (REPORTS_BASE_URL)",
+      "kind": "reports",
+      "producer": "process-path-management"
+    },
+    {
+      "consumer": "product-discovery",
+      "default": "",
+      "env": "OFFER_AVAILABILITY_URL",
+      "evidence": "charts/product-discovery/templates/rebuild-job.yaml (OFFER_AVAILABILITY_URL)",
+      "kind": "rest",
+      "producer": "offer-availability"
+    },
+    {
+      "consumer": "product-discovery",
+      "default": "",
+      "env": "PRICING_URL",
+      "evidence": "charts/product-discovery/templates/rebuild-job.yaml (PRICING_URL)",
+      "kind": "rest",
+      "producer": "pricing"
+    },
+    {
+      "consumer": "product-discovery",
+      "default": "",
+      "env": "PRODUCT_CONTENT_URL",
+      "evidence": "charts/product-discovery/templates/rebuild-job.yaml (PRODUCT_CONTENT_URL)",
+      "kind": "rest",
+      "producer": "product-content"
+    },
+    {
+      "consumer": "shipping-and-tracking",
+      "default": "",
+      "env": "CUSTOMER_ORDERING_URL",
+      "evidence": "charts/shipping-and-tracking/templates/deployment.yaml (CUSTOMER_ORDERING_URL)",
+      "kind": "rest",
+      "producer": "customer-ordering"
+    },
+    {
+      "consumer": "shopping-cart",
+      "default": "",
+      "env": "DELIVERY_PROMISE_URL",
+      "evidence": "charts/shopping-cart/templates/configmap.yaml (DELIVERY_PROMISE_URL)",
+      "kind": "rest",
+      "producer": "delivery-promise"
+    },
+    {
+      "consumer": "storefront-bff",
+      "default": "",
+      "env": "PRODUCT_DISCOVERY_URL",
+      "evidence": "charts/storefront-bff/templates/deployment.yaml (PRODUCT_DISCOVERY_URL)",
+      "kind": "rest",
+      "producer": "product-discovery"
+    },
+    {
+      "consumer": "storefront-bff",
+      "default": "",
+      "env": "DELIVERY_PROMISE_URL",
+      "evidence": "charts/storefront-bff/templates/deployment.yaml (DELIVERY_PROMISE_URL)",
+      "kind": "rest",
+      "producer": "delivery-promise"
+    },
+    {
+      "consumer": "storefront-bff",
+      "default": "",
+      "env": "SHOPPING_CART_URL",
+      "evidence": "charts/storefront-bff/templates/deployment.yaml (SHOPPING_CART_URL)",
+      "kind": "rest",
+      "producer": "shopping-cart"
+    },
+    {
+      "consumer": "storefront-bff",
+      "default": "",
+      "env": "CHECKOUT_URL",
+      "evidence": "charts/storefront-bff/templates/deployment.yaml (CHECKOUT_URL)",
+      "kind": "rest",
+      "producer": "checkout"
+    },
+    {
+      "consumer": "storefront-bff",
+      "default": "",
+      "env": "CUSTOMER_ORDERING_URL",
+      "evidence": "charts/storefront-bff/templates/deployment.yaml (CUSTOMER_ORDERING_URL)",
+      "kind": "rest",
+      "producer": "customer-ordering"
+    },
+    {
+      "consumer": "storefront-bff",
+      "default": "",
+      "env": "PRICING_URL",
+      "evidence": "charts/storefront-bff/templates/deployment.yaml (PRICING_URL)",
+      "kind": "rest",
+      "producer": "pricing"
+    },
+    {
+      "consumer": "vendor-connectivity",
+      "default": "",
+      "env": "NODE_TOPOLOGY_URL",
+      "evidence": "charts/vendor-connectivity/templates/a2a-deployment.yaml (NODE_TOPOLOGY_URL)",
+      "kind": "rest",
+      "producer": "node-topology"
+    },
+    {
+      "consumer": "vendor-connectivity",
+      "default": "",
+      "env": "OFFER_AVAILABILITY_URL",
+      "evidence": "charts/vendor-connectivity/templates/a2a-deployment.yaml (OFFER_AVAILABILITY_URL)",
+      "kind": "rest",
+      "producer": "offer-availability"
+    },
+    {
+      "consumer": "vendor-connectivity",
+      "default": "",
+      "env": "SHIPPING_AND_TRACKING_URL",
+      "evidence": "charts/vendor-connectivity/templates/a2a-deployment.yaml (SHIPPING_AND_TRACKING_URL)",
+      "kind": "rest",
+      "producer": "shipping-and-tracking"
+    },
+    {
+      "consumer": "vendor-connectivity",
+      "default": "",
+      "env": "NODE_PERFORMANCE_URL",
+      "evidence": "charts/vendor-connectivity/templates/a2a-deployment.yaml (NODE_PERFORMANCE_URL)",
+      "kind": "rest",
+      "producer": "node-performance"
+    },
+    {
+      "consumer": "warehouse-ops-agent",
+      "default": "",
+      "env": "WORKFORCE_MANAGEMENT_A2A_URL",
+      "evidence": "charts/warehouse-ops-agent/templates/configmap.yaml (WORKFORCE_MANAGEMENT_A2A_URL)",
+      "kind": "rest",
+      "producer": "workforce-management"
+    },
+    {
+      "consumer": "wes-work-planning",
+      "default": "",
+      "env": "REPORTS_BASE_URL",
+      "evidence": "charts/wes-work-planning/templates/mcp-deployment.yaml (REPORTS_BASE_URL)",
+      "kind": "reports",
+      "producer": "wes-work-planning"
+    },
+    {
+      "consumer": "wes-work-planning",
+      "default": "http://facility-layout.warehouse-systems.svc.cluster.local:80",
+      "env": "FACILITY_LAYOUT_BASE_URL",
+      "evidence": "charts/wes-work-planning/tests/warehouse-infra-values.yaml (FACILITY_LAYOUT_BASE_URL)",
+      "kind": "rest",
+      "producer": "facility-layout"
+    },
+    {
+      "consumer": "workforce-management",
+      "default": "",
+      "env": "FULFILLMENT_EXECUTION_BASE_URL",
+      "evidence": "charts/workforce-management/templates/configmap.yaml (FULFILLMENT_EXECUTION_BASE_URL)",
+      "kind": "rest",
+      "producer": "fulfillment-execution"
+    },
+    {
+      "consumer": "workforce-management",
+      "default": "",
+      "env": "REPORTS_BASE_URL",
+      "evidence": "charts/workforce-management/templates/mcp-deployment.yaml (REPORTS_BASE_URL)",
+      "kind": "reports",
+      "producer": "workforce-management"
+    },
+    {
+      "consumer": "workforce-management",
+      "default": "http://labor-performance.warehouse-systems.svc.cluster.local:80",
+      "env": "LABOR_PERFORMANCE_BASE_URL",
+      "evidence": "charts/workforce-management/tests/warehouse-infra-values.yaml (LABOR_PERFORMANCE_BASE_URL)",
+      "kind": "rest",
+      "producer": "labor-performance"
+    }
+  ],
+  "unmatched_subscribed_topics": []
+}
