@@ -29,8 +29,11 @@ benchmarks.
 | Path | What |
 | --- | --- |
 | `model/model.yaml` | The canonical model. Every aggregate, invariant, command, event, consumer and relationship on the site exists here first. |
+| `model/contract-edges.json` | The fleet consumer->producer contract edge registry (33 cross-repo REST edges, 7 intra-repo reports edges, 103 cross-repo event topic edges), derived from every sibling repo's `origin/develop`. |
+| `model/pin-lists.json` | Per-consumer pin lists: the exact producer specs each of the 26 consumers must pin (drives the consumer contract testing standard). |
 | `scripts/check_model.py` | Consistency gate: publish/consume symmetry, states, routes and reason vocabularies, and every CloudEvents type printed under `docs/`. |
 | `scripts/gen_pages.py` | Generates `docs/strategic-design/{context-map,ubiquitous-language,event-standard-cloudevents}.md` from the model; `--check` fails when they are stale. |
+| `scripts/fleet_contract_edges.py` | Regenerates the contract edge registry and pin lists from the sibling repos' `origin/develop`; run locally, commit the output JSON. |
 | `research/citations-ledger.json` | The grounded-citations ledger (verbatim quotes and source URLs) is held privately, outside this repo. |
 | `docs/` | The site (Docusaurus). |
 | `apis/<context>/openapi.yaml` | REST contracts of the eleven contexts, copied from each service's `apis/openapi.yaml` on `develop`; `vendor-connectivity` is the Published Language the fleet's `network-fulfillment` conforms to. |

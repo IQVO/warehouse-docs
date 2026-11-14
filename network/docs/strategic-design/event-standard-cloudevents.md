@@ -439,6 +439,7 @@ Appears in: `DeliveryAttempted.outcome`, REST `Outcome`, REST `Attempt.outcome`.
 | Value | Meaning |
 | --- | --- |
 | `DELIVERED` | The package was handed over. |
+| `COLLECTED` | The package was collected (e.g. picked up at the courier by the recipient). |
 | `FAILED` | The package was not handed over; failureReason is required. |
 
 Branched on by `shipping-and-tracking` (`DELIVERED`, `FAILED`): DELIVERED becomes a DELIVERED scan; any other outcome becomes a DELIVERY_FAILED scan.

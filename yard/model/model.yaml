@@ -618,7 +618,7 @@ contexts:
     publishes:
       - event: VisitCheckedIn
         entity: yardvisit
-        data: [visit_id, site_id, carrier, carrier_scac, purpose, appointment_id, trailers, arrived_at, version]
+        data: [visit_id, site_id, carrier, carrier_scac, carrier_flag, purpose, appointment_id, trailers, arrived_at, version]
         consumers: [dock-scheduling, inbound-receiving]
       - event: VisitRejected
         entity: yardvisit
