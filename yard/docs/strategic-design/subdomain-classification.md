@@ -47,6 +47,7 @@ Both are Supporting: every site with trucks needs them and the rules (window len
 - No two active (BOOKED or CHECKED_IN) appointments overlap on the same door. Windows are half-open, so [10:00, 12:00) and [12:00, 14:00) are compatible.
 - An appointment's direction must be allowed by the door's dockFlow.
 - A window lies inside the door's operating hours and outside every closure of that door.
+- The availability query answers at most 14 days per call (from < to) and cuts free windows to `minutes`, an integer 1..240 that defaults to the site's slot granularity when left out; an explicit minutes=0 is refused over HTTP (400 invalid-query-parameter). A site's maximum window is at most 240 minutes. An Idempotency-Key is 1 to 128 printable ASCII characters and a closure or suspension reason 1 to 200 characters.
 - Arrival and door release are physical facts owned by yard-management; this context applies them from events and never records them from its own API.
 - A BOOKED appointment with no arrival by window_end plus the site's no-show grace becomes NO_SHOW (sweep).
 - An ETA later than window_start plus the arrival tolerance raises an advisory DockAppointmentAtRisk; nothing reschedules automatically.
@@ -60,9 +61,14 @@ Both are Supporting: every site with trucks needs them and the rules (window len
 - A spot or a door holds at most one trailer.
 - A trailer has at most one open move, and a move's destination is reserved when the move is requested.
 - Moves are pulled by hostlers (claim-next with a lease), never pushed, as in fulfillment-execution.
-- A visit checks out only when every trailer it takes is released (not docked, no open move) and every loaded outbound trailer carries a seal.
-- Walk-ins are allowed into a holding spot unless the site's policy requires an appointment.
-- A seal mismatch at the gate raises SealExceptionRaised; whether it also rejects the visit is site policy (FLAG or REJECT).
+- A visit checks out only when every trailer it takes is released (on site, no open move, and either parked or docked with door work DONE) and every loaded outbound trailer carries a seal. A trailer that is not released answers 409 trailer-not-released first, so a docked trailer with open door work is refused at check-out as trailer-not-released, never as door-work-open.
+- Walk-ins are allowed into a holding spot unless the site's policy requires an appointment. When every holding spot is taken the check-in does not fail; the trailer goes to the first free Yard spot of the parking zones (any free Yard spot of the site when no zone is declared), by location code. 409 no-free-spot answers only when no spot at all is free.
+- An appointment the visit names must be known for this site and cover exactly one trailer, else 422 unknown-appointment, and that check comes first, so another site's appointment is unknown-appointment even where the site requires appointments. 409 appointment-required answers only when none is named or the named one is known for this site and not BOOKED.
+- A seal mismatch at the gate raises SealExceptionRaised; whether it also rejects the visit is site policy (FLAG or REJECT). The recorded seal is compared with the appointment's expected_seal_number at check-in (SealCheckAtGate, ADR 0002 A9); RecordSeal never compares it.
+- A repeated command has one outcome. Start-door-work and complete-door-work on work that is not in the right state, cancel-move on a COMPLETED or CANCELLED move, and a second check-out of a visit are 409 illegal-transition; release-hold on a trailer that is not on hold is 409 trailer-not-on-hold. Only SecureTrailer with the same method and ClassifyTrailer with the same facts answer the unchanged trailer, saving and raising nothing.
+- The dwell sweep raises TrailerDwellExceeded for a trailer once its dwell reaches its kind's threshold (dwell equal to the threshold alerts), once per trailer.
+- \{'A hostler lease has run out at its expiry instant, not after it': 'at exactly lease_seconds after the claim the move is expired by the sweep (the domain, the memory store and Postgres all treat equality as expired).'\}
+- Every accepted PUT of the yard policy replaces it and raises its version by one, a body identical to the current policy included (the first declaration takes an undeclared site from version 1 to 2); a stale If-Match is 412 precondition-failed.
 - A container, or a unit declared ISO6346, carries a valid ISO 6346 unit number; a seal carries an optional ISO 17712 class (I, S, H) and a site may set a minimum class (ADR 0012).
 - \{'Dock safety interlock (ADR 0013)': 'a DOCKED trailer is secured (RESTRAINT or WHEEL_CHOCKS) before door work starts where the site policy requires it, and a secured trailer leaves neither its door nor the gate until the securing is released.'\}
 - \{'Hazmat and reefer placement (ADR 0014)': 'a trailer that declares a hazard class or a temperature-control need is placed only on a yard spot whose kind its contents allow.'\}
