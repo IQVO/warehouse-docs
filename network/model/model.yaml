@@ -1683,8 +1683,10 @@ contexts:
       - name: PackageJourney
         root_id: trackingNumber
         description: "The customer-visible timeline of one package."
-        states: [LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, WITH_CARRIER, READY_FOR_COLLECTION, DELIVERED, COLLECTED, RETURNED, LOST]
+        states: [LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, WITH_CARRIER, READY_FOR_COLLECTION, DELIVERED, COLLECTED, RETURNED, LOST, VOIDED]
         transitions:
+          - [LABELLED, LABELLED, RecordScan]
+          - [LABELLED, VOIDED, VoidLabel]
           - [LABELLED, HANDED_OVER, RecordScan]
           - [HANDED_OVER, IN_TRANSIT, RecordScan]
           - [HANDED_OVER, AT_STATION, RecordScan]
@@ -1708,7 +1710,8 @@ contexts:
         invariants:
           - {rule: "scans apply in time order; an older scan is stored but does not move the state", error: ErrScanOutOfOrder}
           - {rule: "a scanId is applied once", error: ErrDuplicateScan}
-          - {rule: "DELIVERED, COLLECTED, RETURNED and LOST are terminal", error: ErrJourneyClosed}
+          - {rule: "DELIVERED, COLLECTED, RETURNED, LOST and VOIDED are terminal; RecordScan checks the journey is open before it checks the scanId, so a redelivered scan on a closed journey answers ErrJourneyClosed, not ErrDuplicateScan", error: ErrJourneyClosed}
+          - {rule: "a label is voided only before handover: VoidLabel closes a LABELLED journey as VOIDED in the same transaction; a journey that is past LABELLED and still open answers ErrVoidAfterHandover (409 void-after-handover) and a closed one, for example DELIVERED, ErrJourneyClosed (409 journey-closed) (ADR 0002 A13)", error: ErrVoidAfterHandover}
           - {rule: "a CARRIER_HANDOFF scan applies only to a journey whose area is CARRIER_HANDOFF, and a POINT_DEPOSITED or COLLECTED scan only to a pickup journey (destinationKind PICKUP_POINT); anything else is stored with applied=false and answers ErrIllegalTransition (shipping-and-tracking ADR 0015/0016)", error: ErrIllegalTransition}
           - {rule: "the stored ETA window is empty or has etaStart < etaEnd and a non-zero etaAssignedAt; an assignment not strictly newer than the stored one is refused (ErrEtaStale) and a terminal journey refuses AssignEta (ErrJourneyClosed)", error: ErrEtaStale}
           - {rule: "pointFlagReason and pointFlaggedAt are null together and the reason is NOT_HOME or ACCESS_PROBLEM; a flag not strictly newer than the stored one is refused (ErrPointFlagStale) and a terminal journey refuses FlagDeliveryPoint (ErrJourneyClosed)", error: ErrPointFlagStale}
@@ -1723,8 +1726,11 @@ contexts:
       - {name: DeliveryAnalytics, source: "analytical read side (shipping-and-tracking ADR 0012, the pilot): cmd/st-projector, the only writer of a SEPARATE analytical database, projects this context's OWN integration topic only (retailnetwork.shipping-and-tracking.events; the analytics topic is not subscribed while nothing is published on it), deduped in the projection transaction; cmd/st-reports serves the read-only /reports routes on :8092"}
     policies:
       - {name: HandoverOnFirstScan, rule: "the first PICKUP_DEPARTURE scan, made from a LoadDeparted whose departureKind is PICKUP, moves LABELLED to HANDED_OVER; its origin node and departedAt are the handover node and instant used by node-performance. A LoadDeparted with no departureKind counts as a pickup only while the journey is still LABELLED"}
-      - {name: ScanTypeFromLoadFacts, rule: "LoadDeparted of kind PICKUP is a PICKUP_DEPARTURE scan (LABELLED to HANDED_OVER) and of any other kind a DEPARTURE scan (HANDED_OVER or IN_TRANSIT to IN_TRANSIT). LoadArrived whose nodeType is DELIVERY_STATION is a STATION_ARRIVAL scan (HANDED_OVER or IN_TRANSIT to AT_STATION) and any other or absent nodeType a TRANSIT_ARRIVAL scan (HANDED_OVER or IN_TRANSIT to IN_TRANSIT). HANDED_OVER to AT_STATION is direct injection: a package that goes from a fulfillment centre straight to a delivery station, the SAME_DAY path, has no IN_TRANSIT step. A scan with no edge from the current state is stored with applied=false and answers ErrIllegalTransition"}
+      - {name: ScanTypeFromLoadFacts, rule: "VendorShipmentConfirmed is an applied SHIPMENT_CONFIRMED scan: LABELLED stays LABELLED and PackageScanned is raised (ADR 0002 A5). LoadDeparted of kind PICKUP is a PICKUP_DEPARTURE scan (LABELLED to HANDED_OVER) and of any other kind a DEPARTURE scan (HANDED_OVER or IN_TRANSIT to IN_TRANSIT). LoadArrived whose nodeType is DELIVERY_STATION is a STATION_ARRIVAL scan (HANDED_OVER or IN_TRANSIT to AT_STATION) and any other or absent nodeType a TRANSIT_ARRIVAL scan (HANDED_OVER or IN_TRANSIT to IN_TRANSIT). HANDED_OVER to AT_STATION is direct injection: a package that goes from a fulfillment centre straight to a delivery station, the SAME_DAY path, has no IN_TRANSIT step. A scan with no edge from the current state is stored with applied=false and answers ErrIllegalTransition"}
       - {name: ExceptionOnSilence, rule: "no scan within expected leg time + tolerance raises PackageExceptionRaised(NO_SCAN)"}
+      - {name: DeclareLostOnSilence, rule: "the silence sweep declares an IN_TRANSIT journey LOST (DeclareLost, PackageLost) when its NO_SCAN exception has stayed unanswered, with no applied scan since, for 48 hours (ADR 0002 A8)"}
+      - {name: ReturnOnReturnInitiated, rule: "on last-mile-delivery's PackageReturnInitiated (the third failed attempt) run ReturnToSender on an AT_STATION journey: RETURNED and PackageReturned, whose returnedAt is the CloudEvents time of the consumed event (ADR 0002 A8)"}
+      - {name: EventTimeIsCommitTime, rule: "the CloudEvents time of every event this context publishes is the instant the change was committed (the aggregate's own clock, OccurredAt), not the instant the fact happened; the fact instant is a data field (deliveredAt, handedOverAt, returnedAt, the scan's at) and can be earlier (ADR 0004; encoder.go)"}
       - {name: StopKeyAtLabelTime, rule: "at IssueLabel the address is read from customer-ordering (GetShipTo), normalized (upper case, letters and digits only; line1, line2, city, region, postalCode and countryCode, not the recipient name or phone) and hashed with a service secret into the stopKey, so neighbours at one address share a stop. stopKey and destinationPostalPrefix go on LabelIssued; the address is then encrypted into the ship-to snapshot and dropped from memory"}
       - {name: NoAddressRoute, rule: "no address leaves shipping-and-tracking and customer-ordering: no route, event or read model carries it, and no restricted label route is built. How a delivery partner learns the address at the door is not decided"}
       - {name: ShipToRetention, rule: "a periodic job (PurgeShipTo) deletes a ship-to snapshot 30 days after its journey closed: DELIVERED, RETURNED or LOST, or VOIDED when the label was voided before handover. A journey still open keeps its snapshot"}
@@ -1735,7 +1741,7 @@ contexts:
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /labels (in-org)", routes: ["POST /labels"], message: "IssueLabel", relationship: Customer/Supplier}
       # caller inferred: the spec names no caller for either route; both are ground-operations actions (a scan is recorded at a scanner, a label is voided before handover); no sibling service has a client for them
-      - {from: "sort-centre and station operators (human/scanner)", type: cmd, channel: "REST POST /labels/{labelRef}:void, POST /journeys/{trackingNumber}/scans", routes: ["POST /labels/{labelRef}:void", "POST /journeys/{trackingNumber}/scans"], message: "VoidLabel, RecordScan", relationship: UI}
+      - {from: "sort-centre and station operators (human/scanner)", type: cmd, channel: "REST POST /labels/{labelRef}/voids, POST /journeys/{trackingNumber}/scans", routes: ["POST /labels/{labelRef}/voids", "POST /journeys/{trackingNumber}/scans"], message: "VoidLabel, RecordScan", relationship: UI}
       - {from: carrier, type: cmd, channel: "REST POST /carrier-events (the carrier webhook of CARRIER_HANDOFF areas, an inbound translation layer, RN-0010)", routes: ["POST /carrier-events"], message: "RecordCarrierEvent", relationship: OHS}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events (area modes and pickup points, ST_AREAS_CONSUMER_GROUP)", message: "NodeRegistered, NodeActivated, NodeSuspended, NodeRetired, ServiceAreaAssigned", relationship: Conformist}
       - {from: shopper / customer-ordering, type: qry, channel: "REST GET /journeys/{trackingNumber}", routes: ["GET /journeys/{trackingNumber}"], message: "GetJourney", relationship: OHS}
@@ -1747,7 +1753,7 @@ contexts:
       - {from: network analysts (human), type: qry, channel: "REST GET /reports/package-touches, GET /reports/delivery-outcomes, GET /reports/freshness (cmd/st-reports, :8092)", routes: ["GET /reports/package-touches", "GET /reports/delivery-outcomes", "GET /reports/freshness"], message: "GetPackageTouchesReport, GetDeliveryOutcomesReport, GetReportFreshness", relationship: UI}
     rest:
       - "POST /labels"
-      - "POST /labels/{labelRef}:void"
+      - "POST /labels/{labelRef}/voids"
       - "GET /journeys/{trackingNumber}"
       - "POST /journeys/{trackingNumber}/scans"
       - "POST /carrier-events"

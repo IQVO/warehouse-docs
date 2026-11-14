@@ -27,7 +27,7 @@ Every Kafka message is a CloudEvents 1.0 event in structured JSON mode.
 | `source` | `/retailnetwork/shipping-and-tracking` |
 | `type` | `com.retailnetwork.logistics.shipping-and-tracking.<entity>.<EventName>`, entity `label` or `journey` |
 | `subject` | The aggregate root id: `labelRef` for `label` events, `trackingNumber` for `journey` events |
-| `time` | The instant the fact happened (for example `deliveredAt`), UTC |
+| `time` | The instant the change was committed (the aggregate's own clock, `OccurredAt()`), UTC. It is the processing clock, not the instant the fact happened: that instant is a `data` field (`deliveredAt`, `handedOverAt`, `returnedAt`, the scan's `at`) and can be earlier than `time` (ADR 0004; `internal/adapters/outbound/kafka/encoder.go`) |
 | `datacontenttype` | `application/json` |
 | `dataschema` | `urn:retailnetwork:shipping-and-tracking:events:<EventName>:v1` |
 | Kafka topic | `retailnetwork.shipping-and-tracking.events` |
@@ -42,19 +42,21 @@ it.
 | Event | Full `type` | Subject / key | Producing use case | Consumers |
 | --- | --- | --- | --- | --- |
 | `LabelIssued` | `com.retailnetwork.logistics.shipping-and-tracking.label.LabelIssued` | `labelRef` | `IssueLabel` | `linehaul-transportation`, `customer-ordering`, `last-mile-delivery` |
-| `LabelVoided` | `com.retailnetwork.logistics.shipping-and-tracking.label.LabelVoided` | `labelRef` | `VoidLabel` | analytics only |
+| `LabelVoided` | `com.retailnetwork.logistics.shipping-and-tracking.label.LabelVoided` | `labelRef` | `VoidLabel` | `customer-ordering`, `linehaul-transportation` (`ExpectedVolumeView`) |
 | `PackageScanned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageScanned` | `trackingNumber` | `RecordScan` (every applied scan) | `customer-ordering` |
 | `PackageHandedOver` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageHandedOver` | `trackingNumber` | `RecordScan` (`LABELLED -> HANDED_OVER`) | `node-performance` |
 | `PackageDelivered` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDelivered` | `trackingNumber` | `RecordScan` (`OUT_FOR_DELIVERY -> DELIVERED`) | `delivery-promise`, `order-sourcing`, `customer-ordering` |
 | `PackageExceptionRaised` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageExceptionRaised` | `trackingNumber` | `RaiseException` (`ExceptionOnSilence`) | `delivery-promise`, `customer-ordering` |
-| `PackageReturned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` | `trackingNumber` | `ReturnToSender` | analytics only |
-| `PackageLost` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | `trackingNumber` | `DeclareLost` | analytics only |
+| `PackageReturned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` | `trackingNumber` | `ReturnToSender` (on the consumed `PackageReturnInitiated`, `AT_STATION` to `RETURNED`) | `delivery-promise`, `customer-ordering` |
+| `PackageLost` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | `trackingNumber` | `DeclareLost` (the silence sweep, 48 h after an unanswered `NO_SCAN`) | `delivery-promise`, `customer-ordering` |
 | `PackageEtaWindowAssigned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageEtaWindowAssigned` | `trackingNumber` | `AssignEta` (the consumer of `StopEtaWindowAssigned`) | `customer-ordering` |
 | `PackageDeliveryPointFlagged` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDeliveryPointFlagged` | `trackingNumber` | `FlagDeliveryPoint` (the consumer of `DeliveryPointFlagged`) | `customer-ordering` |
 
-"Analytics only" is the model's wording: no in-org context consumes the
-event. Types in the data tables below are proposed; the field names are the
-model's.
+No event of this context is analytics-only: `LabelVoided`, `PackageReturned`
+and `PackageLost` were promoted to integration events (contracts-delta E6,
+E16; shipping-and-tracking ADR 0004), so nothing is written to
+`retailnetwork.shipping-and-tracking.analytics`. Types in the data tables below
+are proposed; the field names are the model's.
 
 ### LabelIssued
 
@@ -195,13 +197,14 @@ the promise. Values are synthetic.
 
 | Producer | Full `type` | Topic | Fields used | What this context does |
 | --- | --- | --- | --- | --- |
-| `vendor-connectivity` | `com.retailnetwork.partner.vendor-connectivity.purchaseorder.VendorShipmentConfirmed` | `retailnetwork.vendor-connectivity.events` | `poNumber`, `nodeId`, `trackingNumbers`, `shippedAt` | For each tracking number, `RecordScan` at `nodeId`, time `shippedAt`. Stored on the timeline; it does not move a `LABELLED` journey (handover comes from the pickup scan) |
+| `vendor-connectivity` | `com.retailnetwork.partner.vendor-connectivity.purchaseorder.VendorShipmentConfirmed` | `retailnetwork.vendor-connectivity.events` | `poNumber`, `nodeId`, `trackingNumbers`, `shippedAt` | For each tracking number, `RecordScan` of type `SHIPMENT_CONFIRMED` at `nodeId`, time `shippedAt`. It is an applied scan that moves no state (`LABELLED` stays `LABELLED`) and raises `PackageScanned` (ADR 0002 A5); handover still comes from the pickup scan |
 | `linehaul-transportation` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted` | `retailnetwork.linehaul-transportation.events` | `originNodeId`, `trackingNumbers`, `departedAt`, `departureKind` | For each tracking number, `RecordScan` at `originNodeId`. Kind `PICKUP` (or no kind on a `LABELLED` journey) is the pickup: `HANDED_OVER` and `PackageHandedOver`; any other kind is a departure scan |
 | `linehaul-transportation` | `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived` | `retailnetwork.linehaul-transportation.events` | `destinationNodeId`, `trackingNumbers`, `arrivedAt`, `nodeType` | For each tracking number, `RecordScan` at `destinationNodeId`: `AT_STATION` when `nodeType` is `DELIVERY_STATION` (from `IN_TRANSIT`, or from `HANDED_OVER` on direct injection), otherwise `IN_TRANSIT` |
 | `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.route.PackageOutForDelivery` | `retailnetwork.last-mile-delivery.events` | `trackingNumber`, `stationNodeId`, `at` | `RecordScan` at `stationNodeId`: `OUT_FOR_DELIVERY` |
 | `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.route.DeliveryAttempted` | `retailnetwork.last-mile-delivery.events` | `trackingNumber`, `outcome`, `failureReason`, `at` | `RecordScan`: `DELIVERED` and `PackageDelivered` on `DELIVERED`; back to `AT_STATION` on `FAILED`. The event has no node id; the scan takes the station of the journey's last out-for-delivery scan. The optional `outcomeDetail` is ignored here (tolerant decoding); the delivery-point profile that counts it stays in `last-mile-delivery` |
 | `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.route.StopEtaWindowAssigned` | `retailnetwork.last-mile-delivery.events` | `routeId`, `stopNo`, `stopKey` (dropped), `trackingNumbers`, `etaStart`, `etaEnd` | `AssignEta` per tracking number (not a scan): a terminal journey is counted and acknowledged, an `assignedAt` not strictly newer than the stored one is counted (`ErrEtaStale`), otherwise the window is stored and `PackageEtaWindowAssigned` published with the journey's `orderId`. The `stopKey` is dropped: this context keeps no address-derived value of a stop (ADR 0013) |
 | `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.deliverypointprofile.DeliveryPointFlagged` | `retailnetwork.last-mile-delivery.events` | `trackingNumbers`, `reason`, `flaggedAt`; `stopKey` and `failures` read and dropped | `FlagDeliveryPoint` per journey (not a scan): a terminal journey is counted and acknowledged, a `flaggedAt` not strictly newer is counted (`ErrPointFlagStale`), otherwise `pointFlagReason` and `pointFlaggedAt` are stored and `PackageDeliveryPointFlagged` published with the journey's own `orderId` (ADR 0014) |
+| `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.packageattempthistory.PackageReturnInitiated` (the `route` entity spelling is accepted) | `retailnetwork.last-mile-delivery.events` | `trackingNumber`, `at` | `ReturnToSender` on an `AT_STATION` journey: `RETURNED`, and `PackageReturned` with `returnedAt` = the event's CloudEvents `time` (ADR 0002 A8) |
 | `offer-availability` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | `retailnetwork.offer-availability.events` | all eight fields | Upsert `CatalogDimensionsView` |
 
 Consumers dispatch on the full `type` string, never on a suffix.
@@ -217,9 +220,10 @@ Consumers dispatch on the full `type` string, never on a suffix.
   failure hits `ErrDuplicateScan` on the journeys already done and applies
   only the rest. `ErrDuplicateScan` and `ErrScanOutOfOrder` are treated as
   success by consumers (no retry).
-- **Closed journeys.** `ErrJourneyClosed` on a consumed event is logged and
-  acknowledged; a scan after delivery is a producer-side anomaly, not a
-  retry case.
+- **Closed journeys.** `RecordScan` checks the journey is open first, then
+  the scan id. `ErrJourneyClosed` on a consumed event is logged and
+  acknowledged, even for a redelivered scan; a scan after delivery is a
+  producer-side anomaly, not a retry case.
 - **Unknown tracking number.** A tracking number this context never issued
   is logged, counted and acknowledged (proposed). The model has no
   dead-letter convention for it.

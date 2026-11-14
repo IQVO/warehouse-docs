@@ -85,8 +85,8 @@ flowchart TB
     U["caller not named<br/>in the model"]:::external
     C3["VoidLabel<br/>POST /labels/labelRef/voids"]:::command
     G1["ShippingLabel<br/>ISSUED to VOIDED"]:::aggregate
-    E2["LabelVoided<br/>analytics only"]:::event
-    H4["Hotspot: void caller unnamed,<br/>journey left LABELLED"]:::hotspot
+    E2["LabelVoided"]:::event
+    H4["Hotspot: void caller unnamed"]:::hotspot
     U --> C3
     C3 --> G1
     G1 --> E2
@@ -221,7 +221,7 @@ flowchart TB
     E2["PackageReturned"]:::event
     E3["PackageLost"]:::event
     H1["Hotspot: expected leg time<br/>and tolerance not available"]:::hotspot
-    H2["Hotspot: no trigger for<br/>ReturnToSender or DeclareLost"]:::hotspot
+    H2["ReturnToSender: PackageReturnInitiated<br/>DeclareLost: 48 h silence sweep"]:::hotspot
     T --> P1
     P1 --> C1
     C1 --> G1
@@ -249,8 +249,8 @@ Derived from: `model.yaml → contexts[shipping-and-tracking].policies[Exception
 `contexts[delivery-promise].policies[RepromiseOnRisk]`;
 `contexts[last-mile-delivery].policies[RetryNextWave]`.
 
-Omitted: `ErrJourneyClosed` on a closed journey; the analytics sink for
-`PackageReturned` and `PackageLost` (no in-org consumer).
+Omitted: `ErrJourneyClosed` on a closed journey. `PackageReturned` and
+`PackageLost` are integration events (`delivery-promise` consumes them).
 
 ## Sticky inventory
 
@@ -273,9 +273,9 @@ Omitted: `ErrJourneyClosed` on a closed journey; the analytics sink for
 | Request fields of `IssueLabel`; no `orderId` reaches this context by event | 1 | `sync_calls[GetShipTo]` needs `orderId`; `publishes[PackageDelivered].data` has `orderId`; `publishes[LabelIssued].data` and `vendor-connectivity` `publishes[PurchaseOrderIssued].data` have none |
 | Printable label not modelled | 1 | `vendor-connectivity` `po.Label` is `labelRef + trackingNumber + carrier`; no route here renders a label |
 | `StartJourney` has no trigger | 1 | `aggregates[PackageJourney].commands` lists it; no policy, route or event starts it |
-| `VoidLabel` caller and journey effect | 1b | `rest` has `POST /labels/{labelRef}/voids`; no `inbound` row; `PackageJourney` has no exit from `LABELLED` |
+| `VoidLabel` caller | 1b | `rest` has `POST /labels/{labelRef}/voids`; no `inbound` row. Resolved (ADR 0002 A13): the void closes a `LABELLED` journey as `VOIDED` |
 | Resolved (G3): node types | 2a | `LoadArrived` carries `nodeType`; policy `ScanTypeFromLoadFacts` |
 | Resolved (G3): `HANDED_OVER -> AT_STATION` | 2b | `lane_rules.allowed` has `FULFILLMENT_CENTER -> DELIVERY_STATION`; `PackageJourney.transitions` now has the edge (direct injection) |
-| Resolved (G3): departure kind; `VendorShipmentConfirmed` effect still open | 2a | `policies[HandoverOnFirstScan]` reads `departureKind` PICKUP from `LoadDeparted`; no `LABELLED -> LABELLED` edge |
+| Resolved (G3): departure kind; `VendorShipmentConfirmed` is an applied `SHIPMENT_CONFIRMED` scan with no state change | 2a | `policies[HandoverOnFirstScan]` reads `departureKind` PICKUP from `LoadDeparted`; ADR 0002 A5 |
 | Expected leg time and tolerance | 3 | `policies[ExceptionOnSilence]`; `consumes` has no departure, lane or wave event |
-| No trigger for `ReturnToSender`, `DeclareLost` | 3 | `aggregates[PackageJourney].commands`; `last-mile-delivery` `policies[RetryNextWave]` publishes no event |
+| Resolved: triggers of `ReturnToSender` and `DeclareLost` | 3 | ADR 0002 A8: `PackageReturnInitiated` from `last-mile-delivery`; the silence sweep declares an `IN_TRANSIT` journey lost 48 h after an unanswered `NO_SCAN` |
