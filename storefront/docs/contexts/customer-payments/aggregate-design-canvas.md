@@ -86,7 +86,7 @@ no state. A provider decline on re-authorization moves the authorization to
 
 | Invariant | Enforced by |
 | --- | --- |
-| One authorization per checkout session; a replay returns it | `AuthorizePayment` → `ErrDuplicateAuthorization` |
+| One live authorization per checkout session; a sequential second authorize returns it (`200`) | `AuthorizePayment` returns the existing authorization; `ErrDuplicateAuthorization` (`409 duplicate-authorization`) only when two concurrent first calls race on the unique index |
 | Allocations sum to the authorized total and name the session's groups | `AuthorizePayment` → `ErrAllocationMismatch` |
 | Captured per group never exceeds the allocation | `CaptureAllocation` → `ErrOverCapture` |
 | No capture after `expiresAt` | `CaptureAllocation` → `ErrCaptureAfterExpiry` |

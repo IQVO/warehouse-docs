@@ -76,7 +76,7 @@ flowchart LR
     BC -.->|"qry - REST<br/>GET /carts/{cartId}<br/>GetCart"| out0
     BC -.->|"qry - REST<br/>GET /delivery-offers/{offerId}<br/>GetDeliveryOffer"| out3
     BC -->|"cmd - REST<br/>POST /price-quotes<br/>IssuePriceQuote"| out1
-    BC -->|"cmd - REST<br/>POST /payment-authorizations, :void<br/>AuthorizePayment, VoidAuthorization"| out2
+    BC -->|"cmd - REST<br/>POST /payment-authorizations, .../voids<br/>AuthorizePayment, VoidAuthorization"| out2
     BC -->|"cmd - REST via ACL<br/>POST /checkout<br/>PlaceOrder"| out4
     BC ==>|"evt - Kafka<br/>retailnetwork.checkout.events<br/>CheckoutCompleted"| out0
     BC ==>|"evt - Kafka<br/>retailnetwork.checkout.events<br/>CheckoutCompleted"| out2

@@ -32,7 +32,7 @@ flowchart LR
     CK -.->|"D to U: C/S, CK is Customer<br/>REST GET /carts/cartId<br/>GetCart"| SC
     CK ==>|"U to D: C/S, SC is Customer<br/>Kafka CheckoutCompleted"| SC
     CK -.->|"D to U: C/S, CK is Customer<br/>REST POST /price-quotes<br/>IssuePriceQuote"| PR
-    CK -.->|"D to U: C/S, CK is Customer<br/>REST POST /payment-authorizations, :void<br/>AuthorizePayment, VoidAuthorization"| CP
+    CK -.->|"D to U: C/S, CK is Customer<br/>REST POST /payment-authorizations, .../voids<br/>AuthorizePayment, VoidAuthorization"| CP
     CK ==>|"U to D: C/S, CP is Customer<br/>Kafka CheckoutCompleted"| CP
     CK -.->|"D to U: OHS<br/>REST GET /delivery-offers/offerId<br/>GetDeliveryOffer"| DP
     CK -.->|"D to U: OHS behind an ACL<br/>REST POST /checkout<br/>PlaceOrder"| CO

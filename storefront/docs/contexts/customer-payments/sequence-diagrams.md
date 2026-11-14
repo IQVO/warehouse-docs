@@ -50,12 +50,12 @@ sequenceDiagram
     H->>DB: find Idempotency-Key
     alt key seen
         DB-->>H: stored response
-        H-->>H: replay 201
+        H-->>H: replay the stored response
     else new key
         H->>UC: Execute(sessionId, token, total, allocations)
-        UC->>DB: find authorization by checkoutSessionId
+        UC->>DB: find live authorization by checkoutSessionId
         alt one exists
-            UC-->>H: 409 duplicate-authorization
+            UC-->>H: 200 the existing authorization, no provider call
         else allocations do not sum to the total
             UC-->>H: 422 allocation-mismatch
         else
@@ -88,8 +88,10 @@ Derived from: `model.yaml → contexts[customer-payments].aggregates[PaymentAuth
 `.sync_calls`, `.publishes[PaymentAuthorized, PaymentDeclined]`.
 
 Omitted: the optimistic-concurrency branch (a new row has none). A unique
-key on `checkout_session_id` also catches two concurrent first calls under
-different keys, answered `409 duplicate-authorization`.
+index on the session's live authorization also catches two concurrent first
+calls under different keys: the loser's insert fails and is answered `409
+duplicate-authorization`. A sequential second authorize under a different key
+is not an error: it returns the existing live authorization with `200`.
 
 ## 2. VoidAuthorization (REST POST /payment-authorizations/authorizationId/voids)
 

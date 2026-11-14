@@ -677,7 +677,7 @@ contexts:
           - "Allocation{groupNo, amountMinor, state(PENDING|CAPTURED|RELEASED), trackingNumber? (nullable, set at capture; PackageLost and PackageReturned map to a group by it)}"
           - "ProviderRef{providerAuthorizationId, providerCaptureIds[]}"
         invariants:
-          - {rule: "one authorization per checkout session; a replay returns it", error: ErrDuplicateAuthorization}
+          - {rule: "one live authorization per checkout session; a sequential second authorize (another Idempotency-Key) returns the existing live authorization (200) and a same-key replay returns the stored response; ErrDuplicateAuthorization (409 duplicate-authorization) is raised only on the concurrent-insert race caught by the unique index", error: ErrDuplicateAuthorization}
           - {rule: "allocations sum to the authorized total and name the session's groups", error: ErrAllocationMismatch}
           - {rule: "captured per group never exceeds the allocation", error: ErrOverCapture}
           - {rule: "no capture after expiresAt", error: ErrCaptureAfterExpiry}

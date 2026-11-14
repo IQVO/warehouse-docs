@@ -156,7 +156,7 @@ sequenceDiagram
     alt definitive 409, offer no longer quotable
         CO-->>CK: cmd: reply 409 with requoted offers
         Note over CK: the ACL maps it to a requote<br/>a definitive rejection allows a void
-        CK->>CP: cmd: VoidAuthorization<br/>POST :void<br/>key sessionId:void
+        CK->>CP: cmd: VoidAuthorization<br/>POST .../voids<br/>key sessionId:void
         CP-->>CK: cmd: reply voided
         Note over CK: RecordRequoteRequired<br/>PLACING to REQUOTE_REQUIRED
         CK->>K: evt: checkoutsession.CheckoutRequoteRequired
