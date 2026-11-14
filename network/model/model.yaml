@@ -2119,7 +2119,7 @@ contexts:
 # (see the gap register).
 # ---------------------------------------------------------------------------
 future_contexts:
-  - {id: customer-returns, classification: Supporting, note: "Return authorisation and routing to a RETURNS_CENTER node; on the fleet side returns-processing receives it."}
+  - {id: customer-returns, classification: Supporting, note: "The twelfth network context (ADR 0012): the shopper-facing ReturnAuthorization and its disposition decided at authorization - KEEP returnless below a caller-declared threshold, NEAREST_RETURNS_CENTER or ORIGIN_NODE; DROP_OFF first, doorstep pickup dormant; fees are facts, never money. returns-processing receives the advices; offer-availability restocks the graded units."}
   - {id: customer-notification, classification: Generic, note: "Emails/push on PromiseRevised and delivery; buy, do not build."}
   - {id: payments-and-invoicing, classification: Generic, note: "Vendor invoices and settlement; out of scope as in the original plan."}
 
@@ -2149,3 +2149,4 @@ decisions:
   - {id: RN-0009, title: "Seller inbound and case-packed shipments: SSCC-identified cartons, owner-segregated stock, eaches as the ledger unit, GS1 pack immutability, boundary unchanged"}
   - {id: RN-0010, title: "Carrier handoff delivery for low-density service areas (amends RN-0004: the carrier operates a delivery mode, never a node)"}
   - {id: RN-0011, title: "Pickup points and lockers: a PICKUP_POINT node type operated NETWORK or PARTNER; a checkout destination that shrinks PII; collection states on the package"}
+  - {id: RN-0012, title: "Customer returns is a bounded context: the ReturnAuthorization and its disposition at authorization (KEEP returnless below a caller-declared threshold, NEAREST_RETURNS_CENTER, ORIGIN_NODE); DROP_OFF first; fees are facts, not money"}
