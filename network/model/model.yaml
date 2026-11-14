@@ -1178,8 +1178,9 @@ contexts:
         invariants:
           - {rule: "ackWindow between 1h and 24h", error: ErrAckWindowOutOfRange}
           - {rule: "a vendor acts only on its own nodes", error: ErrNodeNotOwnedByVendor}
+          - {rule: "a SUSPENDED vendor's writes are refused with 409 vendor-suspended: acknowledgement, inventory, node registration, node profile, label request, shipment confirmation and inbound receipt; reads, polling, new purchase orders, the expiry sweep and submissions already received continue. Suspending a SUSPENDED vendor or reinstating an ACTIVE one is a no-op, 200 with the account unchanged and no event (ADR 0002 A8, A9)", error: ErrVendorSuspended}
         commands: [OnboardVendor, SuspendVendor, ReinstateVendor]
-        events: [VendorOnboarded]
+        events: [VendorOnboarded, VendorSuspended, VendorReinstated]
         throughput_estimate: "rare"
         size_estimate: "tens"
       - name: PurchaseOrder
@@ -1207,7 +1208,7 @@ contexts:
           - {rule: "no acknowledgement after ackBy", error: ErrAckWindowClosed}
           - {rule: "no label before ACCEPTED", error: ErrLabelBeforeAcceptance}
           - {rule: "no shipment confirmation without a label for every package", error: ErrConfirmWithoutLabel}
-          - {rule: "cancel only while ISSUED", error: ErrCancelAfterAcknowledgement}
+          - {rule: "cancel only while ISSUED: an order past acknowledgement (ACK_PROCESSING, ACCEPTED, REJECTED, SHIPMENT_PROCESSING, SHIPPED) is ErrCancelAfterAcknowledgement; an EXPIRED or CANCELLED order is ErrIllegalTransition (PurchaseOrder.Cancel); the observable result is the same, logged and acknowledged", error: ErrCancelAfterAcknowledgement}
         commands: [IssuePurchaseOrder, SubmitAcknowledgement, RequestLabel, SubmitShipmentConfirmation, ExpireUnacknowledgedOrders, CancelPurchaseOrder]
         events: [PurchaseOrderIssued, PurchaseOrderAccepted, PurchaseOrderRejected, PurchaseOrderExpired, PurchaseOrderCancelled, VendorShipmentConfirmed]
         throughput_estimate: "medium; polling reads dominate"
@@ -1227,23 +1228,24 @@ contexts:
         throughput_estimate: "medium-high"
         size_estimate: "retained 30 days"
     read_models:
-      - {name: VendorNodeView, source: "node-topology NodeRegistered, NodeActivated, NodeSuspended, NodeRetired"}
+      - {name: VendorNodeView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared (handlingTimeMinutes and profileRevision, the source of the handling time in ackBy; a lower revision never overwrites a higher one; a node with no declared profile has handling time 0), NodeActivated, NodeSuspended, NodeRetired. The node status is applied last-delivered-wins: the CloudEvents time is not read, and RETIRED is terminal (no later event changes it)"}
       - {name: ListingView, source: "offer-availability ListingCreated"}
       - {name: InboundShipmentView, source: "seller-inbound InboundShipmentLabelled, InboundShipmentShipped, InboundShipmentReceived"}
       - {name: CatalogPackagingView, source: "offer-availability CatalogItemPackagingDeclared, CatalogItemPackLevelRetired"}
     policies:
       - {name: IssueOnRelease, rule: "on FulfillmentReleasedToNode for a VENDOR node, issue a purchase order (poNumber is idempotent on assignmentId + releaseNo)"}
       - {name: PurchaseOrderOfMergedRelease, rule: "a merged FulfillmentReleasedToNode (carrier id, the union lines in member order with no lineNo, an optional members array and a per-line assignmentId) needs no code change: the tolerant decoder ignores members and the per-line assignmentId, so ONE purchase order is issued under the carrier's assignmentId, orderId, groupNo and tier, its lines are numbered by position (1..n), a listingId that two members both ordered appears on two lines (duplicates are legal) and each line keeps its own ownerRef. The release carries the carrier's fulfilment class (STANDARD for a consolidated group), so the tier validator never sees a fifth tier. The vendor sees one package; the Vendor API is unchanged (vendor-connectivity ADR 0013)"}
-      - {name: CancelOnReleaseWithdrawn, rule: "on FulfillmentReleaseWithdrawn (assignmentId, releaseNo, orderId, groupNo, reason, withdrawnAt) look the order up by (assignmentId, releaseNo), never by the latest release, so a withdraw that arrives after the carrier was released again cannot cancel the new order: not found is a no-op; an ISSUED order is cancelled (CancelPurchaseOrder) with the reason 'release withdrawn: ' + the event reason (sanitised and capped at 200 characters like every cancel reason) and raises PurchaseOrderCancelled in the same transaction; any other state is logged at INFO and acknowledged (ErrCancelAfterAcknowledgement when the vendor already accepted, ErrIllegalTransition for rejected, expired or cancelled). The reason is carried as an opaque string; this context does not branch on it. The existing FulfillmentCancelled policy cannot serve because a withdrawn release does not cancel the carrier assignment, which is released again under the next release number (vendor-connectivity ADR 0013)"}
+      - {name: CancelOnReleaseWithdrawn, rule: "on FulfillmentReleaseWithdrawn (assignmentId, releaseNo, orderId, groupNo, reason, withdrawnAt) look the order up by (assignmentId, releaseNo), never by the latest release, so a withdraw that arrives after the carrier was released again cannot cancel the new order: not found is a no-op; an ISSUED order is cancelled (CancelPurchaseOrder) with the reason 'release withdrawn: ' + the event reason (sanitised and capped at 200 characters like every cancel reason) and raises PurchaseOrderCancelled in the same transaction; any other state is logged at INFO and acknowledged (ErrCancelAfterAcknowledgement when the order is past acknowledgement, ErrIllegalTransition for expired or cancelled; ADR 0013 words rejected as ErrIllegalTransition, the code answers ErrCancelAfterAcknowledgement). The reason is carried as an opaque string; this context does not branch on it. The existing FulfillmentCancelled policy cannot serve because a withdrawn release does not cancel the carrier assignment, which is released again under the next release number (vendor-connectivity ADR 0013)"}
       - {name: PoLineNamesTheOwner, rule: "each purchase-order line carries the ownerRef of its released line (absent or empty = operator-owned), persisted on the line and exposed, optional and additive, on GET /vendor/purchase-orders, GET /vendor/purchase-orders/{poNumber} and PurchaseOrderIssued. Acknowledgement, cancellation, labels and shipment confirmation ignore it. KNOWN RESIDUAL: the fleet's network-fulfillment does not read it yet, so seller-owned lines are still picked without owner segregation (vendor-connectivity ADR 0012, gap G47)"}
       - {name: CancelOnSourcingCancel, rule: "on FulfillmentCancelled cancel the purchase order of the assignment's highest releaseNo (CancelPurchaseOrder; no order is a no-op). If the vendor has already acknowledged it, CancelPurchaseOrder fails with ErrCancelAfterAcknowledgement, which is logged at INFO: nothing is published and the event is not retried, because order-sourcing decides the cancel and learns the order's fate from PurchaseOrderAccepted. Known residual: an acceptance that arrives after order-sourcing cancelled a RELEASED assignment is only logged there (order-sourcing policy AcceptanceAfterCancelOnlyLogged)"}
       - {name: ExpireUnacknowledged, rule: "sweep: ISSUED past ackBy -> EXPIRED"}
+      - {name: LabelUpstreamOutage, rule: "RequestLabel is synchronous: when shipping-and-tracking does not answer the answer is 503 upstream-unavailable, and when it answers with a refusal this context does not translate 502 upstream-refused (apis/openapi.yaml documents both); labels already issued stay stored and a retry issues only the missing ones (ADR 0002 A19)"}
       - {name: ReceiptRelay, rule: "when an INBOUND_RECEIPT submission is accepted, append InboundReceiptSubmitted (subject and key shipmentId) to the outbox in the same unit of work, so a 202 always has its event (vendor-connectivity ADR 0005); SubmissionProcessed still reports the processing. The receipt is not applied to the shipment here, seller-inbound owns that"}
       - {name: SimulationKnobs, rule: "TX_PROCESSING_DELAY, TX_FAILURE_RATE, RATE_LIMIT_RPS, PO_REDELIVERY_RATE; all default to well-behaved"}
     inbound:
       - {from: "network-fulfillment (warehouse-systems, vendor V-WS)", type: cmd, channel: "Vendor API POST /vendor/nodes, PUT /vendor/nodes/{nodeId}/profile, POST /vendor/inventory, POST /vendor/acknowledgements, POST /vendor/shipping-labels, POST /vendor/shipment-confirmations, POST /vendor/inbound-receipts", routes: ["POST /vendor/nodes", "PUT /vendor/nodes/{nodeId}/profile", "POST /vendor/inventory", "POST /vendor/acknowledgements", "POST /vendor/shipping-labels", "POST /vendor/shipment-confirmations", "POST /vendor/inbound-receipts"], message: "RegisterVendorNode, DeclareNodeProfile, SubmitInventory, SubmitAcknowledgement, RequestLabel, SubmitShipmentConfirmation, SubmitInboundReceipt", relationship: "OHS + PL (downstream is Conformist + ACL)"}
       - {from: "network-fulfillment (warehouse-systems, vendor V-WS)", type: qry, channel: "Vendor API GET /vendor/purchase-orders, GET /vendor/purchase-orders/{poNumber}, GET /vendor/transactions/{transactionId}, GET /vendor/nodes, GET /vendor/nodes/{nodeId}, GET /vendor/nodes/{nodeId}/scorecard, GET /vendor/inbound-shipments, GET /vendor/inbound-shipments/{shipmentId}", routes: ["GET /vendor/purchase-orders", "GET /vendor/purchase-orders/{poNumber}", "GET /vendor/transactions/{transactionId}", "GET /vendor/nodes", "GET /vendor/nodes/{nodeId}", "GET /vendor/nodes/{nodeId}/scorecard", "GET /vendor/inbound-shipments", "GET /vendor/inbound-shipments/{shipmentId}"], message: "PollPurchaseOrders, GetPurchaseOrder, GetTransaction, ListVendorNodes, GetNode, GetScorecard, PollInboundShipments, GetInboundShipment", relationship: "OHS + PL"}
-      - {from: "network partner managers (human)", type: cmd, channel: "REST POST /vendors, POST /vendors/{vendorId}:suspend, POST /vendors/{vendorId}:reinstate", routes: ["POST /vendors", "POST /vendors/{vendorId}:suspend", "POST /vendors/{vendorId}:reinstate"], message: "OnboardVendor, SuspendVendor, ReinstateVendor", relationship: UI}
+      - {from: "network partner managers (human)", type: cmd, channel: "REST POST /vendors, POST /vendors/{vendorId}/suspensions, POST /vendors/{vendorId}/reinstatements", routes: ["POST /vendors", "POST /vendors/{vendorId}/suspensions", "POST /vendors/{vendorId}/reinstatements"], message: "OnboardVendor, SuspendVendor, ReinstateVendor", relationship: UI}
       - {from: "network partner managers (human)", type: qry, channel: "REST GET /vendors/{vendorId}", routes: ["GET /vendors/{vendorId}"], message: "GetVendor", relationship: UI}
       - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentReleasedToNode, FulfillmentCancelled, FulfillmentReleaseWithdrawn", relationship: Customer/Supplier}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeActivated, NodeSuspended, NodeRetired", relationship: Conformist}
@@ -1268,8 +1270,8 @@ contexts:
       - "POST /vendors"
       - "GET /vendor/nodes"
       - "GET /vendors/{vendorId}"
-      - "POST /vendors/{vendorId}:suspend"
-      - "POST /vendors/{vendorId}:reinstate"
+      - "POST /vendors/{vendorId}/suspensions"
+      - "POST /vendors/{vendorId}/reinstatements"
     publishes:
       - {event: VendorOnboarded, entity: vendoraccount, data: [vendorId, name, ackWindowMinutes], consumers: [node-performance]}
       - {event: PurchaseOrderIssued, entity: purchaseorder, data: [poNumber, vendorId, nodeId, assignmentId, releaseNo, requiredShipBy, ackBy, "lines(lineNo, listingId, quantity, ownerRef (optional, omitted when operator-owned))"], consumers: [node-performance]}
@@ -1280,8 +1282,8 @@ contexts:
       - {event: VendorShipmentConfirmed, entity: purchaseorder, data: [poNumber, assignmentId, nodeId, trackingNumbers, shippedAt, requiredShipBy], consumers: [order-sourcing, shipping-and-tracking, node-performance]}
       - {event: SubmissionProcessed, entity: submission, data: [transactionId, vendorId, kind, status, errorCount], consumers: [node-performance]}
       - {event: InboundReceiptSubmitted, entity: inboundreceipt, data: [transactionId, vendorId, nodeId, shipmentId, receivedAt, cartons(sscc, status, items(gtin, qtyEaches), complianceCodes)], consumers: [seller-inbound, node-performance]}
-      - {event: VendorSuspended, entity: vendoraccount, data: [vendorId, suspendedAt, reason], consumers: [analytics only]}
-      - {event: VendorReinstated, entity: vendoraccount, data: [vendorId, reinstatedAt], consumers: [analytics only]}
+      - {event: VendorSuspended, entity: vendoraccount, data: [vendorId, suspendedAt, reason], consumers: []}
+      - {event: VendorReinstated, entity: vendoraccount, data: [vendorId, reinstatedAt], consumers: []}
     reasons:
       - name: RejectReason
         fields: [PurchaseOrderRejected.reasonCode, "rest:RejectReason", "rest:Acknowledgement.reasonCode"]
