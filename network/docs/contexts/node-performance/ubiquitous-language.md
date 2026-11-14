@@ -68,7 +68,7 @@ Vendor API; the canonical network ↔ fleet term table is on
 
 | Term | What is missing |
 | --- | --- |
-| `minObservations` | No value, and no rule for which observations count toward it. |
+| `minObservations` | Resolved: 50 outcomes, not 50 messages (ADR 0002 A5, gap G33). The first observation creates a `PROVISIONAL` card; a recompute below the minimum stays `PROVISIONAL` without publishing. |
 | Window values | The model says "7-day and 30-day"; the literal used in `scorecardId` is not named. These pages write `7d` and `30d`. |
 | "last 10% of the window" | Read here as the purchase order's ack window (issue to `ackBy`), not the scorecard window. The model does not say. |
 | Reject, expiry, promise-kept, feed-freshness | No `ul` definition: no denominator and, for feed freshness, no sampling rule. |

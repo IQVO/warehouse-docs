@@ -249,8 +249,8 @@ Handover Rate**, **Late Ack Rate**, **Declared vs Measured**, **Window**
 
 Each comes from a gap in the model; none is answered on these pages.
 
-- **What is `minObservations`, and what counts toward it?** The model
-  names the invariant but no value.
+- **`minObservations` (resolved).** It is 50 outcomes, not 50 messages (ADR 0002
+  A5, gap G33); the model names the invariant but no value.
 - **What are the literal window values?** These pages use `7d` and `30d`.
 - **Which window drives the handicap and the cost?** Both windows publish
   `NodeScorecardUpdated`; neither consumer says which it reads.

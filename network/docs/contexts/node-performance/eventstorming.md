@@ -170,7 +170,7 @@ flowchart LR
     P3["Policy: ThresholdAlert"]:::policy
     E1["NodeScorecardUpdated"]:::event
     E2["NodeThresholdBreached"]:::event
-    H1["Hotspot: minObservations<br/>has no value"]:::hotspot
+    H1["H1 resolved: minObservations = 50<br/>(ADR 0002 A5)"]:::hotspot
     H2["Hotspot: thresholds and<br/>downward undefined"]:::hotspot
     P0 --> C1 --> G1
     G1 --> P1 & P2
@@ -261,7 +261,7 @@ is not a declared read model: it reads the `NodeScorecard` table directly
 | Feed freshness sampling undefined | `Metrics.feedFreshnessP95Minutes` has no definition; `InventoryFeedApplied` has `appliedAt` but no `asOf`. |
 | Consumed, but no command, metric or read model | `consumes` lists `NodeRegistered`, `NodeOperationalProfileDeclared`, `VendorOnboarded`, `SubmissionProcessed`; `read_models: []`; `commands` has only `RecordObservation` and `Recompute`. |
 | No `nodeId` in the payload | `publishes[VendorOnboarded].data`, `publishes[SubmissionProcessed].data` in `vendor-connectivity`. |
-| `minObservations` has no value | invariant `ErrInsufficientObservations`. |
+| `minObservations` (resolved: 50, ADR 0002 A5, gap G33) | invariant `ErrInsufficientObservations`. |
 | Thresholds and "downward" undefined | `policies[ThresholdAlert]`: no per-metric threshold; four metrics are worse when higher. |
 | Which window drives the handicap? | `delivery-promise` and `order-sourcing` read `NodeScorecardUpdated` for both windows; neither policy names one. |
 | No `PROVISIONAL` rule in the handicap | `contexts[delivery-promise].policies[ScorecardHandicap]` covers `A`-`D` and "no scorecard yet". |

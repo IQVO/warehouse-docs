@@ -1857,7 +1857,8 @@ contexts:
           - "FastTierState{eligible, reinstatementStreakDays, streakLastUtcDay}: held on the 7d scorecard only (migration 0004), every node starts eligible; the 30d scorecard never evaluates it and keeps the defaults (node-performance ADR 0013)"
         invariants:
           - {rule: "rates are in [0,1]", error: ErrRateOutOfRange}
-          - {rule: "grade requires observations >= minObservations", error: ErrInsufficientObservations}
+          # as built (node-performance ADR 0002 A5, G33): minObservations = 50 (MinObservations); the only problem types of this context are not-found (404) and validation-failed (422), the three invariants are consumer-side (ADR 0002 A18)
+          - {rule: "grade requires observations >= minObservations (50, ADR 0002 A5)", error: ErrInsufficientObservations}
           - {rule: "an observation is counted once (idempotent on source event id)", error: ErrDuplicateObservation}
         commands: [RecordObservation, Recompute]
         events: [NodeScorecardUpdated, NodeThresholdBreached, NodeTierEligibilityChanged]

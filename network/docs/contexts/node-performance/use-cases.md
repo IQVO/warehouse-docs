@@ -81,9 +81,9 @@ Counts one observed fact on the node's two scorecards.
 
   | Error | HTTP status | Problem `type` | Consumer behaviour |
   | --- | --- | --- | --- |
-  | `ErrDuplicateObservation` | 409 | `duplicate-observation` | Treated as success: commit the inbox row, acknowledge. |
-  | Stale version on save (infrastructure, no `Err...` in the model) | 409 | `concurrent-update` | Roll back and retry the message. |
-  | Undecodable message or missing `nodeId` (infrastructure) | 422 | `invalid-observation` | Do not retry; send to the dead-letter path. |
+  | `ErrDuplicateObservation` | none (consumer-side; the REST contract has no such problem type, ADR 0002 A18) | none | Treated as success: commit the inbox row, acknowledge. |
+  | Stale version on save (infrastructure) | none (consumer-side) | none | Roll back and retry the message. |
+  | Undecodable message or missing `nodeId`, or an unknown purchase order (`ErrValidation`, `ErrPurchaseOrderUnknown`) | none (consumer-side) | none | Retried or sent to the dead-letter path; the REST `validation-failed` is only for the HTTP routes. |
 
 - **Events emitted:** none.
 - **Idempotency:** the inbox on the CloudEvents `id`; behind it,
@@ -104,7 +104,7 @@ Recomputes one scorecard's metrics over its window and grades it.
 - **Main flow:**
   1. List due scorecards.
   2. For each, begin a transaction and load it.
-  3. Call `NodeScorecard.Recompute(now, minObservations, grading)`:
+  3. Call `NodeScorecard.Recompute(now, minObservations, grading)` (`minObservations` is 50, ADR 0002 A5, gap G33):
      1. drop observations older than the window;
      2. compute `Metrics` (each rate in `[0,1]`, `ErrRateOutOfRange`
         otherwise) and `observations`;
@@ -120,9 +120,9 @@ Recomputes one scorecard's metrics over its window and grades it.
 
   | Error | HTTP status | Problem `type` | Timer behaviour |
   | --- | --- | --- | --- |
-  | `ErrRateOutOfRange` | 422 | `rate-out-of-range` | A defect: log, skip this scorecard, keep the pass going. |
-  | `ErrInsufficientObservations` | 409 | `insufficient-observations` | Not reached by `Recompute`, which chooses `PROVISIONAL` for a thin window; it guards any other path that would set a grade. |
-  | Stale version on save (infrastructure) | 409 | `concurrent-update` | Roll back; the scorecard stays due and the next pass retries. |
+  | `ErrRateOutOfRange` | none (timer-side; not an HTTP answer) | none | A defect: log, skip this scorecard, keep the pass going. |
+  | `ErrInsufficientObservations` | none | none | Not reached by `Recompute`, which chooses `PROVISIONAL` for a thin window; it guards any other path that would set a grade. |
+  | Stale version on save (infrastructure) | none | none | Roll back; the scorecard stays due and the next pass retries. |
 
 - **Events emitted:** `NodeScorecardUpdated` after every saved recompute;
   `NodeThresholdBreached` once per metric that crossed its threshold
@@ -136,8 +136,8 @@ Recomputes one scorecard's metrics over its window and grades it.
 
 | Route | Caller | Reads | Errors |
 | --- | --- | --- | --- |
-| `GET /scorecards/{nodeId}` | `vendor-connectivity` (`GetScorecard`) | both scorecards of the node | 404 `scorecard-not-found` when the node has no scorecard yet (no `Err...` in the model) |
-| `GET /scorecards?grade=` | not named in the model | scorecards with that current grade | 422 `invalid-grade` for a value outside `A`, `B`, `C`, `D`, `PROVISIONAL` |
+| `GET /scorecards/{nodeId}` | `vendor-connectivity` (`GetScorecard`) | both scorecards of the node | 404 `not-found` (`ErrNotFound`) until the first observation of the node |
+| `GET /scorecards?grade=` | not named in the model | scorecards with that current grade; optional `window`, `limit` (1 to 500, default 100) and `after` (keyset on `scorecardId`), with `nextCursor` when more rows exist (ADR 0002 A18) | 422 `validation-failed` (`ErrValidation`) for a grade or window outside the accepted values, or an over-long cursor |
 
-Both are in `apis/node-performance/openapi.yaml`. Neither changes state,
+Both are in `apis/node-performance/openapi.yaml`. The only problem types of this context are `not-found` and `validation-failed` (ADR 0002 A18). Neither changes state,
 so neither takes an `Idempotency-Key`.
