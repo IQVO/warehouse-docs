@@ -18,4 +18,5 @@ only thing that talks to the network.
 | [How the fleet connects](/network/integration/wms-wes-integration) | The seam, the hard rules, what the fleet declares and commits, an end-to-end sequence. |
 | [Vendor API](/network/integration/vendor-api) | The Open Host Service and its semantics. |
 | [Stock & paths to promise](/network/integration/stock-to-promise) | How stock levels and process-path cycle times become delivery promises: the chains, their timing, failure rules, class diagrams per hop. |
+| [Producer readiness gaps](/network/integration/contract-gaps) | The Phase 0 contract audit: what each of the 29 producers with consumers still lacks (Schemathesis, oasdiff, spec examples). |
 | [Fleet changes](/network/integration/fleet-changes) | What the fleet must change, with evidence, and what needs no change. |
