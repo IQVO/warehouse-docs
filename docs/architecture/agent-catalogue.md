@@ -23,23 +23,23 @@ server to offer tools, at least one resource and at least one prompt. This page 
 
 | Measure | Declared | Total |
 |---|---|---|
-| MCP tools with an authority level | 51 | 110 |
+| MCP tools with an authority level | 90 | 124 |
 | A2A skills with an authority level | 2 | 68 |
-| MCP servers with a resource and a prompt | 15 | 32 |
+| MCP servers with a resource and a prompt | 27 | 36 |
 
 ## By context
 
 | Context | MCP tools | MCP levels | Resources | Prompts | A2A skills | A2A levels |
 |---|---|---|---|---|---|---|
 | `checkout` | no pinned registry | unknown | 0 | 0 | 1 | none declared |
-| `customer-ordering` | 3 | none declared | 0 | 0 | 2 | none declared |
+| `customer-ordering` | 3 | L1 3 | 1 | 1 | 2 | none declared |
 | `customer-payments` | 4 | L1 4 | 1 | 1 | 2 | none declared |
-| `delivery-promise` | 5 | L1 5 | 1 | 1 | 2 | none declared |
+| `delivery-promise` | 6 | L1 6 | 1 | 1 | 2 | none declared |
 | `exception-management` | 4 | L1 4 | 1 | 1 | 2 | none declared |
 | `facility-layout` | 6 | none declared | 1 | 1 | 2 | none declared |
-| `fulfillment-execution` | 4 | none declared | 1 | 1 | 2 | none declared |
+| `fulfillment-execution` | 5 | none declared | 1 | 1 | 2 | none declared |
 | `inbound-receiving` | 7 | L1 7 | 1 | 1 | 2 | none declared |
-| `inventory-storage` | 5 | none declared | 1 | 1 | 2 | none declared |
+| `inventory-storage` | 6 | none declared | 1 | 1 | 2 | none declared |
 | `labor-performance` | 4 | none declared | 1 | 1 | 2 | none declared |
 | `last-mile-delivery` | 3 | none declared | 0 | 0 | 2 | none declared |
 | `linehaul-transportation` | 2 | none declared | 0 | 0 | 2 | none declared |
@@ -47,21 +47,21 @@ server to offer tools, at least one resource and at least one prompt. This page 
 | `network-inventory-planning` | no pinned registry | unknown | 0 | 0 | 2 | none declared |
 | `node-performance` | 2 | none declared | 0 | 0 | 2 | none declared |
 | `node-topology` | 6 | L1 6 | 1 | 1 | 2 | none declared |
-| `offer-availability` | 4 | none declared | 0 | 0 | 2 | none declared |
-| `order-management` | 2 | none declared | 0 | 0 | 2 | none declared |
+| `offer-availability` | 4 | L1 4 | 1 | 1 | 2 | none declared |
+| `order-management` | 2 | L1 2 | 1 | 1 | 2 | none declared |
 | `order-sourcing` | 2 | none declared | 0 | 0 | 2 | none declared |
 | `pick-face-replenishment` | 5 | L1 5 | 1 | 1 | 2 | none declared |
-| `pricing` | no MCP server | - | - | - | 2 | none declared |
-| `process-path-management` | 3 | none declared | 0 | 0 | 2 | none declared |
-| `product-content` | no MCP server | - | - | - | 2 | none declared |
-| `product-discovery` | no MCP server | - | - | - | 2 | none declared |
+| `pricing` | 2 | L1 2 | 1 | 1 | 2 | none declared |
+| `process-path-management` | 4 | L1 4 | 1 | 1 | 2 | none declared |
+| `product-content` | 2 | L1 2 | 1 | 1 | 2 | none declared |
+| `product-discovery` | 2 | L1 2 | 1 | 1 | 2 | none declared |
 | `product-master` | 8 | L1 6, L3 2 | 1 | 1 | 2 | none declared |
-| `returns-processing` | 3 | none declared | 0 | 0 | 2 | none declared |
-| `seller-inbound` | 4 | none declared | 0 | 0 | 2 | none declared |
+| `returns-processing` | 3 | L1 3 | 1 | 1 | 2 | none declared |
+| `seller-inbound` | 6 | L1 6 | 1 | 1 | 2 | none declared |
 | `shipping-and-tracking` | 1 | none declared | 0 | 0 | 1 | none declared |
-| `shopping-cart` | no MCP server | - | - | - | 2 | none declared |
-| `slotting-optimization` | 4 | none declared | 0 | 0 | 2 | none declared |
-| `task-interleaving` | 4 | none declared | 0 | 0 | 2 | none declared |
+| `shopping-cart` | 2 | L1 2 | 1 | 1 | 2 | none declared |
+| `slotting-optimization` | 4 | L1 4 | 1 | 1 | 2 | none declared |
+| `task-interleaving` | 4 | L1 4 | 1 | 1 | 2 | none declared |
 | `vendor-connectivity` | 9 | L1 9 | 1 | 1 | 2 | none declared |
 | `warehouse-ops-agent` | no pinned registry | unknown | 0 | 0 | no A2A agent | - |
 | `warehouse-planning` | no pinned registry | unknown | 0 | 0 | 2 | none declared |
