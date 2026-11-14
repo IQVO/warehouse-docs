@@ -25,10 +25,10 @@ pre-created before the first sync and the six consumer groups run (read-only
 five inbound feeds, the analytics fold and `exception-management`'s consumer
 (its live ConfigMap carries `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP`) are
 live; `order-management`'s consumer stays dark (no `OUTBOUND_SHIPPING_*`
-variable is set for it), `network-fulfillment`'s landed on its `develop` on
-2026-11-12 (its PR 165) but its running image `49587d0` predates the merge,
-and `yard-management` still has no handler, although ADR 0004 and ADR 0005
-name the last two.
+variable is set for it), `network-fulfillment`'s has run since the v2.0.4
+roll of 2026-11-14 (its group holds all eight partitions of the topic), and
+`yard-management` still has no handler, although ADR 0004 and ADR 0005
+name it.
 
 ## Topics
 
@@ -110,7 +110,7 @@ consumed contracts are mirrored by hand.
 | --- | --- | --- |
 | `order-management` | `ShipmentConfirmed`, `PackageMissedLoad` | Consumer built (ADR 0051), dark by default: `OUTBOUND_SHIPPING_CONSUMER_MODE=off` unless set to `kafka`, with a mandatory `OUTBOUND_SHIPPING_CONSUMER_GROUP` in that mode. |
 | `exception-management` | `PackageMissedLoad` | Consumer built (ADR 0011), group `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP` with a chart default. |
-| `network-fulfillment` | `ShipmentConfirmed` (ADR 0004) | Consumer merged on its `develop` on 2026-11-12 (its PR 165, `shipment_confirmed_consumer.go`, group `OUTBOUND_SHIPPING_CONSUMER_GROUP`); the running image `49587d0-arm64` predates it, so the leg is not live yet. |
+| `network-fulfillment` | `ShipmentConfirmed` (ADR 0004) | Consumer merged on its `develop` on 2026-11-12 (its PR 165, `shipment_confirmed_consumer.go`, group `OUTBOUND_SHIPPING_CONSUMER_GROUP`) and live since the v2.0.4 roll of 2026-11-14 (image `0292f4a-arm64`; the group holds all eight partitions, broker listing read 2026-11-14, log-end offset 0: no event has flowed yet). |
 | `yard-management` | `LoadingStarted`, `LoadClosed`, `LoadReopened` (ADR 0005) | No handler on its `develop`; the AsyncAPI marks the three `pending`. |
 
 The other eight types are analytics-only by design.

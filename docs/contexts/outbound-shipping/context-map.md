@@ -61,7 +61,7 @@ Omitted: Kafka and Postgres as infrastructure. **Separate Ways** (no edge at all
 | yard-management | upstream | Customer/Supplier | `warehouse.yard-management.events` | The only recorder of physical facts. Pinned and tested ([ADR 0006](https://iqvo.github.io/outbound-shipping/docs/adr/0006-yard-contract-pinned)). |
 | order-management | downstream | OHS + PL | `warehouse.outbound-shipping.events` | Implemented in code (shipped lines from `ShipmentConfirmed`, re-promise from `PackageMissedLoad`); off by default and not switched on in warehouse-infra. |
 | exception-management | downstream | OHS + PL | `warehouse.outbound-shipping.events` | Implemented: one case per `PackageMissedLoad`; its consumer group is set in warehouse-infra. |
-| network-fulfillment | downstream | OHS + PL (intended) | `warehouse.outbound-shipping.events` | Built on its `develop` on 2026-11-12 (its PR 165); the running pod's image predates it, so the edge is not live yet. |
+| network-fulfillment | downstream | OHS + PL (intended) | `warehouse.outbound-shipping.events` | Live since 2026-11-14: network-fulfillment v2.0.4 (`0292f4a`) runs the consumer, whose group holds all eight partitions of the topic. |
 | yard-management (reverse edge) | downstream | C/S (intended) | `warehouse.outbound-shipping.events` | Absent: no handler on its `develop`. |
 | dock operators, schedulers | clients | none | REST | Unauthenticated. |
 | MCP agents | clients | none | MCP over Streamable HTTP | Read-only, unauthenticated. |

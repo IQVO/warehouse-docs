@@ -60,9 +60,7 @@ the five inbound feeds (K67 to K71), its own analytics fold and
 `exception-management` (K73, its live ConfigMap carries
 `OUTBOUND_SHIPPING_EXCEPTIONS_CONSUMER_GROUP`). Not live: `order-management`
 (K72 — both ends run but its consumer is dark: `OUTBOUND_SHIPPING_CONSUMER_MODE`
-defaults to `off` and no variable is set), `network-fulfillment` (K74 — its
-consumer landed on `develop` on 2026-11-12, PR 165, but the running image
-`49587d0` predates the merge) and `yard-management`'s handler for
+defaults to `off` and no variable is set), `yard-management`'s handler for
 `LoadingStarted`, `LoadClosed` and `LoadReopened` (K75, not built). The
 neighbours `fulfillment-execution`, `dock-scheduling`, `yard-management`,
 `process-path-management`, `facility-layout`, `order-management` and
@@ -120,10 +118,10 @@ troubleshooting, testing). The REST reference is generated from its
   pinned). It also has its own documentation site
   with the same pack plus architecture, quickstart, integration and MCP pages.
 - **Fleet-level**: [Context Map](/strategic-design/context-map) (its edges
-  K67 to K75: seven live since the 2026-11-12 apply — the five inbound feeds,
-  the analytics fold and `exception-management`; three not — K72's consumer is
-  dark, K74's running image predates its just-merged consumer, K75's handler
-  is unbuilt), the
+  K67 to K75: eight live — the five inbound feeds, the analytics fold,
+  `exception-management` (all since the 2026-11-12 apply) and
+  `network-fulfillment` (K74, since its v2.0.4 roll of 2026-11-14); two not —
+  K72's consumer is dark and K75's handler is unbuilt), the
   [Event Standard](/strategic-design/event-standard-cloudevents) (subdomain
   table and type catalogue),
   [Subdomain Classification](/strategic-design/subdomain-classification) and
