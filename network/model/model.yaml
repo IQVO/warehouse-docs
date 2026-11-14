@@ -99,6 +99,11 @@ node_types:
     operator_allowed: [NETWORK]
     capabilities: [SORT, AIR]
     description: Gateway between the ground network and air lanes.
+  # as built (network ADRs 0010 and 0011): PICKUP_POINT is a route stop, never a lane endpoint; lane_rules is untouched
+  PICKUP_POINT:
+    operator_allowed: [NETWORK, PARTNER]
+    capabilities: [COLLECTION]
+    description: A pickup point or locker the shopper collects a package from. One route stop of its serving delivery station, a checkout destination with no address, and never a lane endpoint.
 
 lane_rules:
   # allowed (origin type -> destination type) pairs for a Lane
@@ -159,9 +164,11 @@ contexts:
     purpose: >-
       The authoritative registry of the network's physical shape: every node
       (vendor fulfillment centres, cross-docks, returns centres, and the
-      network's own sortation centres, delivery stations and air hubs), its
-      declared operational profile, the directed lanes between nodes, the
-      regions, and which delivery station serves which postal area.
+      network's own sortation centres, delivery stations, air hubs, and the
+      pickup points and lockers), its declared operational profile, the
+      directed lanes between nodes, the regions, which delivery station serves
+      which postal area, and how each area is delivered: by the network's own
+      routes or by a carrier.
     roles: [Specification, Gateway for declared capability (owner), Master data]
     business_decisions:
       - A parcel node (SORTATION_CENTER, DELIVERY_STATION, AIR_HUB) is always network-operated; a vendor may register only FULFILLMENT_CENTER, INBOUND_CROSS_DOCK or RETURNS_CENTER nodes.
@@ -169,6 +176,8 @@ contexts:
       - An operational profile is versioned; a new declaration never edits an old revision.
       - A lane joins two different nodes along an allowed type pair; both ends must be ACTIVE to open it.
       - Every postal prefix maps to exactly one delivery station per assignment version.
+      - A service area declares how it is served, NETWORK_ROUTE (the station's own routes) or CARRIER_HANDOFF (declared carrier options). The carrier operates a delivery mode, never a node (RN-0010, ADR 0010).
+      - A pickup point is a PICKUP_POINT node with capability COLLECTION, operated NETWORK or PARTNER; it names its serving delivery station, is a route stop and never a lane endpoint, and may be a checkout destination that carries no address (RN-0011, ADR 0011).
     aggregates:
       - name: Node
         root_id: nodeId
@@ -183,9 +192,10 @@ contexts:
         entities: []
         value_objects:
           - "OperationalProfile{profileRevision, timezone, operatingHoursByDay, holidays[], handlingTime, cutoffs[CutoffSlot{localTime HH:mm, days[] (default every operating day), maxOrders?}], throughputCap{value int>0, timeUnit HOUR|DAY, unit=ORDER}, sortDwellMinutes (sort centres and air hubs only), inbound{maxCartonWeightG, maxCartonDimsMm{l,w,h}, acceptsPallets, requiresSscc} (optional; nodes with the INBOUND capability only), declaredBy(VENDOR|NETWORK_OPS), declaredAt}; operatingHoursByDay{monday..sunday: {start HH:mm, end HH:mm}} (a missing day is closed); holidays[] are ISO dates (closed all day)"
-          - NodeCapabilities{outbound, inbound, returns, sort, lastMile, air}
+          - NodeCapabilities{outbound, inbound, returns, sort, lastMile, air, collection}
           - GeoLocation{postalCode, countryCode, lat, lon}
           - VendorRef{vendorId, vendorNodeCode}
+          - "ServingStationRef{servingStationNodeId}: the serving delivery station of a PICKUP_POINT, declared at RegisterNode and published on NodeRegistered (RN-0011)"
         invariants:
           - {rule: "operator must be allowed for the node type (parcel nodes are NETWORK-operated)", error: ErrOperatorNotAllowedForNodeType}
           - {rule: "vendorNodeCode is unique per vendor", error: ErrVendorNodeCodeTaken}
@@ -194,6 +204,7 @@ contexts:
           - {rule: "every day of a cutoff falls inside the operating hours of that day", error: ErrCutoffOutsideOperatingHours}
           - {rule: "the node's regionId names a defined Region", error: ErrUnknownRegion}
           - {rule: "subtype, when given, is one of the node type's subtypes in node_types", error: ErrSubtypeNotAllowed}
+          - {rule: "servingStationNodeId, when declared, is declared only by a PICKUP_POINT and names an ACTIVE DELIVERY_STATION", error: ErrNotADeliveryStation}
           - {rule: "sortDwellMinutes is declared only by SORTATION_CENTER and AIR_HUB nodes", error: ErrSortDwellNotAllowed}
           # as built (node-topology ADR 0015, gap G64 closed): FULFILLMENT_CENTER carries INBOUND (node_types); a NEW declaration of inbound limits on a type without INBOUND is refused before the ADR 0007 value checks; stored revisions that carry such limits stay restorable (no migration)
           - {rule: "inbound limits are declared only on a node whose type has the INBOUND capability (FULFILLMENT_CENTER, INBOUND_CROSS_DOCK); HTTP 422 inbound-limits-not-allowed. Checked on DeclareOperationalProfile only, before the value checks; an explicit inbound null reads as absent; Restore never refuses a stored revision (node-topology ADR 0015)", error: ErrInboundLimitsNotAllowed}
@@ -221,12 +232,17 @@ contexts:
         size_estimate: "~10^4 lanes"
       - name: ServiceArea
         root_id: postalPrefix
-        description: Which delivery station (and therefore which region) serves a postal prefix, versioned.
+        description: Which delivery station (and therefore which region) serves a postal prefix, versioned, and how the prefix is delivered, by the network's own routes or by a carrier (RN-0010).
         states: [ASSIGNED]
+        value_objects:
+          - "DeliveryMode(NETWORK_ROUTE|CARRIER_HANDOFF): how the prefix is served. Additive and optional; absence is NETWORK_ROUTE (RN-0010)"
+          - "CarrierOption{carrierId, handoffNodeId, costPerPackageCents, transitMinutes}: one carrier declared on a CARRIER_HANDOFF area (node-topology ADR 0016). The handoff node is a network-operated parcel node (a sortation centre or a delivery station) where the carrier picks up; costPerPackageCents is integer cents (0..10000000) and transitMinutes at least 1; the per-package carrier choice is computed downstream from the declared options, never chosen by an operator at handoff. The declared cost and transit feed the promise and the estimate exactly as lane facts do (declared and measured, RN-0010)"
         invariants:
           - {rule: "the assigned node is an ACTIVE DELIVERY_STATION", error: ErrNotADeliveryStation}
           - {rule: "assignment version strictly increases", error: ErrStaleAssignmentVersion}
           - {rule: "the assigned region is a defined Region and matches the station's region", error: ErrUnknownRegion}
+          - {rule: "CARRIER_HANDOFF declares 1 to 4 carrier options with distinct carrierIds and NETWORK_ROUTE declares none", error: ErrValidation}
+          - {rule: "every carrier option's handoff node is an ACTIVE DELIVERY_STATION or SORTATION_CENTER", error: ErrValidation}
         transitions:
           - [ASSIGNED, ASSIGNED, AssignServiceArea]
         initial_state: ASSIGNED
@@ -273,23 +289,28 @@ contexts:
       - "GET /regions"
       - "GET /regions/{regionId}"
     publishes:
-      - {event: NodeRegistered, entity: node, data: [nodeId, nodeType, subtype, operator, vendorId, vendorNodeCode, regionId, timezone, postalCode, countryCode], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, last-mile-delivery, node-performance, vendor-connectivity, seller-inbound]}
+      - {event: NodeRegistered, entity: node, data: [nodeId, nodeType, subtype, operator, vendorId, vendorNodeCode, regionId, timezone, postalCode, countryCode, "servingStationNodeId (nullable; set only on a PICKUP_POINT)"], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, last-mile-delivery, node-performance, vendor-connectivity, seller-inbound, shipping-and-tracking]}
       - {event: NodeOperationalProfileDeclared, entity: node, data: [nodeId, profileRevision, timezone, operatingHoursByDay, holidays, handlingTimeMinutes, cutoffs, throughputCap, sortDwellMinutes, inbound, declaredBy], consumers: [delivery-promise, order-sourcing, linehaul-transportation, node-performance, vendor-connectivity, seller-inbound]}
-      - {event: NodeActivated, entity: node, data: [nodeId, activatedAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity, seller-inbound]}
-      - {event: NodeSuspended, entity: node, data: [nodeId, reason, suspendedAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity, seller-inbound]}
-      - {event: NodeRetired, entity: node, data: [nodeId, retiredAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity, seller-inbound]}
+      - {event: NodeActivated, entity: node, data: [nodeId, activatedAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity, seller-inbound, shipping-and-tracking]}
+      - {event: NodeSuspended, entity: node, data: [nodeId, reason, suspendedAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity, seller-inbound, shipping-and-tracking]}
+      - {event: NodeRetired, entity: node, data: [nodeId, retiredAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity, seller-inbound, shipping-and-tracking]}
       - {event: LaneOpened, entity: lane, data: [laneId, originNodeId, destinationNodeId, mode, nominalTransitMinutes], consumers: [linehaul-transportation, delivery-promise, order-sourcing]}
       - {event: LaneCostDeclared, entity: lane, data: [laneId, costPerUnitCents, declaredAt], consumers: [order-sourcing]}
       - {event: LaneClosed, entity: lane, data: [laneId, closedAt], consumers: [linehaul-transportation, delivery-promise, order-sourcing]}
-      - {event: ServiceAreaAssigned, entity: servicearea, data: [postalPrefix, deliveryStationNodeId, regionId, assignmentVersion], consumers: [delivery-promise, order-sourcing, last-mile-delivery]}
+      - {event: ServiceAreaAssigned, entity: servicearea, data: [postalPrefix, deliveryStationNodeId, regionId, assignmentVersion, "deliveryMode (optional; absence is NETWORK_ROUTE)", "carriers (optional; 1 to 4 CarrierOption entries, CARRIER_HANDOFF only)"], consumers: [delivery-promise, order-sourcing, last-mile-delivery, shipping-and-tracking]}
       - {event: RegionDefined, entity: region, data: [regionId, code, name], consumers: [delivery-promise, order-sourcing]}
     reasons: []   # no closed vocabulary: NodeSuspended.reason is free text (non-blank)
     consumes: []
     sync_calls: []
     ul:
       - {term: Node, definition: "One physical building of the network, of exactly one node type.", code: "node.Node"}
-      - {term: Node Type, definition: "FULFILLMENT_CENTER, INBOUND_CROSS_DOCK, RETURNS_CENTER, SORTATION_CENTER, DELIVERY_STATION or AIR_HUB.", code: "node.Type"}
-      - {term: Node Operator, definition: "Who runs the building: NETWORK or a VENDOR.", code: "node.Operator"}
+      - {term: Node Type, definition: "FULFILLMENT_CENTER, INBOUND_CROSS_DOCK, RETURNS_CENTER, SORTATION_CENTER, DELIVERY_STATION, AIR_HUB or PICKUP_POINT.", code: "node.Type"}
+      - {term: Node Operator, definition: "Who runs the building: NETWORK, a VENDOR, or a PARTNER (a pickup-point operator, RN-0011).", code: "node.Operator"}
+      - {term: Pickup Point, definition: "A PICKUP_POINT node (a staffed point or a locker) the shopper collects a package from: one stop of its serving delivery station's route, a checkout destination with no address, never a lane endpoint.", code: "node.Type"}
+      - {term: Serving Station, definition: "The delivery station that serves a pickup point; declared on the node and published on NodeRegistered.", code: "node.ServingStationRef"}
+      - {term: Service Area, definition: "The postal prefixes a delivery station serves, versioned per assignment, and how each prefix is delivered.", code: "servicearea.ServiceArea"}
+      - {term: Delivery Mode, definition: "How a service area is served: NETWORK_ROUTE by the network's own routes, or CARRIER_HANDOFF by a declared carrier that picks up at the handoff node. The carrier operates a delivery mode, never a node.", code: "servicearea.DeliveryMode"}
+      - {term: Carrier Option, definition: "A carrier declared on a CARRIER_HANDOFF service area: carrier id, handoff node, cost per package and transit minutes.", code: "servicearea.CarrierOption"}
       - {term: Operational Profile, definition: "The node's declared operating hours, cutoffs, handling time, throughput cap and time zone, versioned by profileRevision.", code: "node.OperationalProfile"}
       - {term: Cutoff, definition: "A local time by which a node declares packages are ready to be handed over; the network schedules one pickup departure per cutoff.", code: "node.CutoffSlot"}
       - {term: Handling Time, definition: "Declared time from order release to a package ready for handover.", code: "node.OperationalProfile.HandlingTime"}
@@ -471,6 +492,8 @@ contexts:
       - A confirmed promise whose witness-path departure is past its expected arrival with no arrival seen is flagged AT_RISK with reason PREDICTED_LATE while the customer can still be told (delivery-promise ADR 0021).
       - A fifth tier, CONSOLIDATED, is opt-in: a quote returns it only when the request lists it or names a chosen delivery day, so a caller that never asks never sees it; the shopper picks a delivery day at or after the fastest feasible window, and the offer says whether that day leaves the network at least one local day to merge the order with others (consolidationEligible). The estimates route refuses it (delivery-promise ADR 0024).
       - A tracking number may belong to several assignments: one delivery, loss or return of a package judges every promise that shares it, each on its own window (delivery-promise ADR 0025).
+      - A CARRIER_HANDOFF service area is promised with the carrier's declared transit plus measured actuals, exactly as a lane leg (declared and measured); never a synchronous carrier call on the promise hot path (RN-0010, ADR 0010).
+      - A quote or estimate may name a pickupPointId as the destination; the search resolves the point to its serving delivery station and the window is the point's collection window, and no ship-to address is carried for the group (RN-0011, ADR 0011).
     aggregates:
       - name: DeliveryOffer
         root_id: offerId
@@ -481,12 +504,14 @@ contexts:
           - [QUOTED, EXPIRED, ExpireOffers]
         value_objects:
           - "DeliveryWindow{earliest, latest}"
-          - "WitnessPath{nodeId, pickupDepartureId, legs[departureId], deliveryWaveId}"
+          - "WitnessPath{nodeId, pickupDepartureId, legs[departureId], deliveryWaveId, carrierId (optional), handoffNodeId (optional)}: a carrier path of a CARRIER_HANDOFF area names carrierId and handoffNodeId instead of the delivery wave (delivery-promise ADR 0026)"
           - "OfferConstraint(DESTINATION_NOT_SERVED|ITEM_QUANTITY_NOT_AVAILABLE|DELIVERY_SLA_UNAVAILABLE|NODE_CAPACITY_EXHAUSTED)"
           - "OfferLine{catalogItemId, quantity, ownerRef ('' = operator-owned)}: the owner OwnerChoice picked at quote time (delivery-promise ADR 0017)"
           - "CapacityBand(AMPLE|TIGHT|SCARCE): utilisation (provisional + confirmed) / share of the book the offer's window would charge, under 60% AMPLE, 60% to under 85% TIGHT, 85% and over SCARCE. A read-only snapshot at quote time: not stored, no column, omitted when the book has no finite capacity and on a stored offer read back; it never changes which offers are produced, their windows or their order (delivery-promise ADR 0023)"
           - "ConsolidatedChoice{consolidatedDeliveryDay (optional request field, a calendar date of the destination station's time zone), consolidationEligible (optional boolean, present only for the tier CONSOLIDATED, never false by default)}: computed locally from the group's own STANDARD candidates, see ConsolidatedTierQuote; stored with the offer (jsonb snapshot) and read back as unknown on a row written before ADR 0024 (delivery-promise ADR 0024)"
           - "Confidence: optional number in [0,1] rounded to 3 decimals, the segment's observed share of judged promises whose lateness was within the buffer the quote carries; present only when the segment has at least minCalibrationObservations in-window judgements, absent means unknown, never zero (delivery-promise ADR 0020)"
+          - "PickupPointDestination{pickupPointId}: request field of POST /delivery-quotes and POST /delivery-estimates (delivery-promise ADR 0027, RN-0011): exactly one of destinationPostalPrefix or pickupPointId is required. The point's own prefix becomes the destination prefix and its serving station the wave's station; tiers, constraints, basis and the witness-path rules are unchanged, and no ship-to address exists for the group"
+          - "CarrierArea{carrierArea}: boolean on the offer and on each estimate option, true when its final leg is the chosen carrier of a CARRIER_HANDOFF area instead of a delivery wave (delivery-promise ADR 0026)"
         invariants:
           - {rule: "expiresAt <= min(quotedAt + offerTtl, the latest instant the witness pickup cutoff can still be met)", error: ErrOfferExpiryTooLate}
           - {rule: "an expired or consumed offer cannot back a promise", error: ErrOfferNotQuotable}
@@ -514,7 +539,7 @@ contexts:
         value_objects:
           - "ShipmentGroup{lines[{catalogItemId, quantity, ownerRef ('' = operator-owned; the owner the line was netted against, delivery-promise ADR 0017)}]}"
           - "PromiseTerms{tier (SAME_DAY|NEXT_DAY|TWO_DAY|STANDARD|CONSOLIDATED), shipBy, deliverByEarliest, deliverByLatest, basis(SCHEDULED|MEASURED|NOMINAL), policyVersion, confidence (optional, from the offer's candidate; a revision takes the confidence of the candidate it moves to), consolidationEligible (optional, copied from the offer, CONSOLIDATED only)}"
-          - "WitnessPath{nodeId, pickupDepartureId, legs[departureId], deliveryWaveId}"
+          - "WitnessPath{nodeId, pickupDepartureId, legs[departureId], deliveryWaveId, carrierId (optional), handoffNodeId (optional)}: a carrier path of a CARRIER_HANDOFF area names carrierId and handoffNodeId instead of the delivery wave (delivery-promise ADR 0026)"
           - "Revision{revisionNo, previousTerms, reason, revisedAt}"
         invariants:
           - {rule: "deliverByEarliest <= deliverByLatest and shipBy < deliverByEarliest", error: ErrInvalidPromiseTerms}
@@ -547,7 +572,7 @@ contexts:
         size_estimate: "nodes x cutoffs x horizon days"
     read_models:
       - {name: NodeProfileView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
-      - {name: RegionAndServiceAreaView, source: "node-topology ServiceAreaAssigned, RegionDefined"}
+      - {name: RegionAndServiceAreaView, source: "node-topology ServiceAreaAssigned, RegionDefined; ServiceAreaAssigned carries the additive deliveryMode and carriers, absence meaning NETWORK_ROUTE with no options (RN-0010)"}
       - {name: LaneView, source: "node-topology LaneOpened, LaneClosed"}
       - {name: AvailabilityView, source: "offer-availability ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored, CatalogItemCreated, CatalogItemDiscontinued; keyed by (catalogItemId, nodeId, ownerRef), operator-owned stored as '' (absent ownerRef), the asOf monotonic rule per key (delivery-promise ADR 0017)"}
       - {name: DepartureView, source: "linehaul-transportation DepartureScheduled, DepartureCapacityChanged, DepartureCancelled"}
@@ -572,7 +597,7 @@ contexts:
       - {name: FlagPredictedLate, rule: "ADR 0021: the clock-driven sweeper pass FlagPredictedLate(ctx, limit) examines each CONFIRMED promise's witness-path departures (the pickup departure and the legs; a NOMINAL witness has none): expectedArrival = arrivesAt plus the same one-sided measured-transit adjustment the search uses (0 below minTransitObservations); when now is later than expectedArrival plus lateRiskGrace (15 minutes, a constant, not a policy field) and DepartureArrival has no row for the departure, the promise is flagged AT_RISK with reason PREDICTED_LATE through the existing flagAtRisk path, one INFO log and the counter deliverypromise_predicted_late_flagged_total per flag. RepriceAtRisk does NOT re-promise a PREDICTED_LATE promise while its window is still reachable (the latest remaining expected arrival shifted by the late leg's observed lateness, plus the downstream sort dwell and the wave's last-mile allowance, no later than the window end; a missing, cancelled or unscheduled wave means not reachable); otherwise the normal re-promise runs and never moves the window earlier. DELIBERATE LIMIT: the flag is not cleared when the load arrives later (AT_RISK stays Active until the judgement closes the promise); an event without departureId is ignored by the arrival model and counted"}
       - {name: ShipmentGrouping, rule: "prefer one node for the whole cart; split only when no single node covers every line, minimising the number of groups"}
       - {name: RepromiseOnRisk, rule: "on FulfillmentUnsourceable, PackageExceptionRaised, a cancelled departure on the witness path or the FlagPredictedLate sweep (only when the window is no longer reachable, see FlagPredictedLate), recompute and RevisePromise; if nothing is feasible even at STANDARD, report PromiseBroken at judgement time"}
-      - {name: JudgeOnDelivery, rule: "on PackageDelivered judge every promise of the package's group, and every promise that shares the package's tracking number (SharedTrackingJudgement)"}
+      - {name: JudgeOnDelivery, rule: "on PackageDelivered judge every promise of the package's group, and every promise that shares the package's tracking number (SharedTrackingJudgement); on PackageReadyForCollection the promise of a pickup-point order is judged KEPT exactly as a ship-to promise is judged on PackageDelivered (delivery-promise ADR 0027)"}
       - {name: ConsolidatedTierQuote, rule: "ADR 0024. CONSOLIDATED is the fifth tier: shared.AllTiers() stays the four classic tiers (the default quote set), shared.KnownTiers() returns five, Rank orders it last, MaxCalendarDays is 14 (MaxConsolidatedCalendarDays), AllowsNominal is true for STANDARD and CONSOLIDATED, and a re-promise never falls through from one of them to the other. It is returned ONLY when the quote request lists it in tiers or names consolidatedDeliveryDay; a present day adds CONSOLIDATED to whatever set tiers names. Local construction with no sibling call: fastest = the minimum window latest of the group's STANDARD candidates (none: the tier is unavailable, DELIVERY_SLA_UNAVAILABLE, or NODE_CAPACITY_EXHAUSTED when the same search without the capacity checks would find one); the chosen local day D of the destination station is the request's day, else DefaultConsolidatedOffsetDays (2) after the local day of fastest, clamped UP to the local day of fastest; a D more than 14 local days from now is DELIVERY_SLA_UNAVAILABLE. Candidates are the usual pickups and paths, with the final wave the earliest usable wave whose induct cutoff is not before the arrival and whose window END falls on local day D (a pickup with none is dropped); with no scheduled candidate the NOMINAL fallback gives the window D 09:00 to 21:00 local. Rank: the usual order, then the LATER shipBy first (the longest hold), then fewer legs, better grade, node id. A CONSOLIDATED promise has no TierOrderDeadline, its calibration segment is its own (buffer 0 until it has minCalibrationObservations) and fast-tier eligibility does not govern it. The read models load MaxConsolidatedCalendarDays plus 1 days instead of the 8-day SearchHorizon when the tier is asked for"}
       - {name: ConsolidationEligibility, rule: "ADR 0024: consolidationEligible = (D is at least MinConsolidationHoldDays (1) local days after the local day of the fastest window). It is false when D is the fastest day, and a false offer is still quotable: the shopper chose the fastest day and the network has nothing to hold. It is computed from this service's own candidate set and never asserts that another order exists. Present on the offer, the promise terms, DeliveryOfferQuoted and PromiseMade only for the tier CONSOLIDATED; omitted otherwise and never false by default"}
       - {name: ConsolidatedRepromise, rule: "ADR 0024: ReviseAtRisk of a CONSOLIDATED promise searches only CONSOLIDATED, with the local date of the promise window latest as a MINIMUM day: the search walks forward day by day up to the horizon and the existing rule takes the first candidate that does not move deliverByLatest earlier and whose book accepts the hold; none is PromiseUnkeepable as today. A day without a scheduled wave falls back to a NOMINAL window of that day, so a cancelled wave is re-promised on the same day on a NOMINAL basis rather than moved to a later day. The chosen day is not a stored field: it is the local day of the promise window"}
@@ -581,7 +606,7 @@ contexts:
       - {name: BookShare, rule: "share = ceil(min(CutoffSlot.maxOrders, throughputCap x window) x capacitySharePercent / 100), at least 1. maxOrders applies only when the cutoff slot sets it. window is the node's operating time between its previous cutoff and this one: a HOUR cap gives value x minutes / 60 and a DAY cap value x minutes / operating minutes of the cutoff's day. capacitySharePercent is a PromisePolicy field (default 100). Every hold that makes provisional + confirmed equal to share raises PromiseBookExhausted"}
       - {name: CloseBooksAtCutoff, rule: "a clock job closes every OPEN book at its cutoffAt (CloseBook). Holds are already refused from holdDeadline, before the job runs, and confirm and release stay legal on a CLOSED book"}
       - {name: PromisePolicyParameters, rule: "the versioned PromisePolicy record (POST /promise-policies, event PromisePolicyPublished) carries policyVersion ('v' + version), version, offerTtlMinutes, holdTtlMinutes, packagesPerOrder, capacitySharePercent, transitWindowDays (default 28), transitServiceLevelPercent (default 90), minTransitObservations (default 20), the calibration fields of ADR 0020 targetOnTimeProbabilityPercent (default 95, 50..99, ONE value for every tier), minCalibrationObservations (default 50, 10..10000), calibrationWindowDays (default 28, 1..365) and maxCalibrationBufferMinutes (default 720, 0..2880; 0 switches the buffer off and keeps the confidence), orderDeadlines[{tier, regionId?, localTime}] and publishedAt. The current policy is the highest version. Without a published policy version 0 applies: offerTtl 10, holdTtl 15, packagesPerOrder 1, capacitySharePercent 100, transitWindowDays 28, transitServiceLevelPercent 90, minTransitObservations 20, targetOnTimeProbabilityPercent 95, minCalibrationObservations 50, calibrationWindowDays 28, maxCalibrationBufferMinutes 720, no deadlines. holdExpiresAt = now + holdTtlMinutes; each order needs packagesPerOrder packages of room on the pickup and on every linehaul departure of the witness path"}
-      - {name: MeasuredTransit, rule: "ADR 0014: TransitActualsView pairs LoadDeparted/LoadArrived by loadId into observed transits per (origin, destination) (ring of 200, read-side pruned to transitWindowDays). When a pair has at least minTransitObservations in-window observations and its transitServiceLevelPercent nearest-rank transit exceeds a departure leg's scheduled transit (arrivesAt - departsAt), the leg's arrival becomes arrivesAt + (measured - scheduled): one-sided, measured transit never promises earlier than the timetable. A candidate whose witness path used at least one measured adjustment is quoted basis MEASURED; the pickup leg counts as a departure leg; below minTransitObservations the timetable stands"}
+      - {name: MeasuredTransit, rule: "ADR 0014: TransitActualsView pairs LoadDeparted/LoadArrived by loadId into observed transits per (origin, destination) (ring of 200, read-side pruned to transitWindowDays). When a pair has at least minTransitObservations in-window observations and its transitServiceLevelPercent nearest-rank transit exceeds a departure leg's scheduled transit (arrivesAt - departsAt), the leg's arrival becomes arrivesAt + (measured - scheduled): one-sided, measured transit never promises earlier than the timetable. A candidate whose witness path used at least one measured adjustment is quoted basis MEASURED; the pickup leg counts as a departure leg; below minTransitObservations the timetable stands. A carrier leg is measured the same way (delivery-promise ADR 0026, RN-0010): PackageHandedToCarrier opens a pairing row of the measured-transit ring keyed by tracking number under (handoffNodeId, area-prefixed destination), paired by PackageDelivered; the quote uses the carrier option's declared transitMinutes under the same one-sided rule, carrierDeliveryWindowHours bounds the promised window, and the hot path never calls the carrier"}
     inbound:
       - {from: customer-ordering, type: qry, channel: "REST POST /delivery-quotes (in-org)", routes: ["POST /delivery-quotes"], message: "QuoteDeliveryOffers", relationship: Customer/Supplier}
       - {from: customer-ordering, type: cmd, channel: "REST POST /promises, POST /promises/{promiseId}/confirmations, POST /promises/{promiseId}/cancellations (in-org)", routes: ["POST /promises", "POST /promises/{promiseId}/confirmations", "POST /promises/{promiseId}/cancellations"], message: "MakePromise, ConfirmPromise, CancelPromise", relationship: Customer/Supplier}
@@ -597,7 +622,7 @@ contexts:
       - {from: network-ops planner, type: qry, channel: "REST GET /promise-policies/current, GET /promise-books?nodeId=&date=", routes: ["GET /promise-policies/current", "GET /promise-books"], message: "GetCurrentPromisePolicy, ListPromiseBooks", relationship: UI}
       - {from: customer-ordering, type: evt, channel: "Kafka retailnetwork.customer-ordering.events", message: "CustomerOrderPlaced, CustomerOrderCancelled", relationship: Customer/Supplier}
       - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentUnsourceable, FulfillmentLocked", relationship: Customer/Supplier}
-      - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "PackageDelivered, PackageExceptionRaised", relationship: Conformist}
+      - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "PackageDelivered, PackageHandedToCarrier, PackageReadyForCollection, PackageExceptionRaised", relationship: Conformist}
       - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events (the consumed LoadDeparted and LoadArrived read the optional departureId, delivery-promise ADR 0021)", message: "DepartureScheduled, DepartureCapacityChanged, DepartureCancelled, LoadDeparted, LoadArrived", relationship: Conformist}
       - {from: last-mile-delivery, type: evt, channel: "Kafka retailnetwork.last-mile-delivery.events", message: "DeliveryWaveScheduled, DeliveryWaveCapacityChanged", relationship: Conformist}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired, LaneOpened, LaneClosed, ServiceAreaAssigned, RegionDefined", relationship: Conformist}
@@ -674,6 +699,8 @@ contexts:
       - {event: FulfillmentUnsourceable, from: order-sourcing}
       - {event: FulfillmentLocked, from: order-sourcing}
       - {event: PackageDelivered, from: shipping-and-tracking}
+      - {event: PackageHandedToCarrier, from: shipping-and-tracking}
+      - {event: PackageReadyForCollection, from: shipping-and-tracking}
       - {event: PackageExceptionRaised, from: shipping-and-tracking}
       - {event: DepartureScheduled, from: linehaul-transportation}
       - {event: DepartureCapacityChanged, from: linehaul-transportation}
@@ -1527,6 +1554,8 @@ contexts:
       - {name: NoAddressAtLastMile, rule: "last-mile-delivery never receives an address: it holds a stopKey and a postal prefix only, and no address route exists (shipping-and-tracking policy NoAddressRoute). How the driver learns the address is not decided"}
       - {name: EtaWindowAtRouteStart, rule: "StartRoute raises one StopEtaWindowAssigned per stop, after every PackageOutForDelivery, in the same transaction and under the same Kafka key (the routeId): the stops are spread linearly over what is left of the wave's delivery window (from max(now, windowStart) to windowEnd), each stop a window of at most two hours truncated to the minute; when less than 30 minutes of the wave window is left at the start instant no event is raised (counted skipped, reason window_elapsed) and the route starts normally. The CloudEvents time is the route start instant; an ETA is never retracted, never re-raised for the same start, and a re-inducted package gets a new one from its next StartRoute. Nothing is persisted on the route and GET /routes/{routeId} shows no window: the events and the analytics read side are the record (last-mile-delivery ADR 0013)"}
       - {name: DeliveryPointProfileLearns, rule: "RecordAttempt folds the attempt, in the same unit of work, into the DeliveryPointProfile of the stop's stopKey: the outcome detail is tallied, only NOT_HOME and ACCESS_PROBLEM count as failures (one strike per route visit, however many packages failed), strikes decay lazily 60 days back at the next observation, and while two or more are open the packages not yet told are marked notified and raise ONE DeliveryPointFlagged carrying only their tracking numbers. The feature is dormant until the driver client reports outcomeDetail: until then every attempt is tallied as not reported, no strike is counted and no event is raised. A flagged point changes no route, no ETA and no promise, and no address, name, phone or free text is copied into the profile (failureReason stays out). The read-only exposure decided in ADR 0014 (a delivery-point route and a summary on the wave stops) is not built yet"}
+      - {name: CarrierAreaRefusal, rule: "a ServiceAreaAssigned whose deliveryMode is CARRIER_HANDOFF is not wave territory (RN-0010): StationView marks the prefix carrier-served, InductPackage refuses a package whose destination prefix is carrier-served (no wave, no stop capacity), and the package leaves at the handoff node through shipping-and-tracking's HandToCarrier"}
+      - {name: PointIsOneStop, rule: "a pickup point is one stop of a station route with its own stop identity, the pickupPointId, never an address key (RN-0011): many packages for one point take one unit of stop capacity"}
     inbound:
       # caller inferred for close-induction, cancel, POST /partners and :deactivate (ADR 0003 names only the station planner and the driver app as UI callers; sibling of the wave and route commands)
       - {from: "station planner (human)", type: cmd, channel: "REST POST /waves, POST /waves/{waveId}:close-induction, POST /waves/{waveId}:dispatch, POST /waves/{waveId}:cancel, POST /routes, POST /partners, POST /partners/{dspId}:deactivate", routes: ["POST /waves", "POST /waves/{waveId}:close-induction", "POST /waves/{waveId}:dispatch", "POST /waves/{waveId}:cancel", "POST /routes", "POST /partners", "POST /partners/{dspId}:deactivate"], message: "ScheduleWave, CloseInduction, DispatchWave, CancelWave, PlanRoute, ContractPartner, DeactivatePartner", relationship: UI}
@@ -1644,7 +1673,7 @@ contexts:
       - name: PackageJourney
         root_id: trackingNumber
         description: "The customer-visible timeline of one package."
-        states: [LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, DELIVERED, RETURNED, LOST]
+        states: [LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, WITH_CARRIER, READY_FOR_COLLECTION, DELIVERED, COLLECTED, RETURNED, LOST]
         transitions:
           - [LABELLED, HANDED_OVER, RecordScan]
           - [HANDED_OVER, IN_TRANSIT, RecordScan]
@@ -1654,23 +1683,33 @@ contexts:
           - [AT_STATION, OUT_FOR_DELIVERY, RecordScan]
           - [OUT_FOR_DELIVERY, AT_STATION, RecordScan]
           - [OUT_FOR_DELIVERY, DELIVERED, RecordScan]
+          - [AT_STATION, WITH_CARRIER, RecordScan]
+          - [WITH_CARRIER, OUT_FOR_DELIVERY, RecordScan]
+          - [OUT_FOR_DELIVERY, WITH_CARRIER, RecordScan]
+          - [OUT_FOR_DELIVERY, READY_FOR_COLLECTION, RecordScan]
+          - [READY_FOR_COLLECTION, COLLECTED, RecordScan]
+          - [READY_FOR_COLLECTION, RETURNED, ReturnToSender]
           - [AT_STATION, RETURNED, ReturnToSender]
           - [IN_TRANSIT, LOST, DeclareLost]
         entities: ["Scan{scanId, nodeId, scanType, at}"]
         value_objects:
           - "EtaWindow{etaStart, etaEnd, etaAssignedAt}: the day-of window stored by AssignEta (migration 0003) and the point flag {pointFlagReason, pointFlaggedAt} stored by FlagDeliveryPoint (migration 0004); neither is a scan, neither moves the state, and no terminal journey carries a current one"
+          - "PickupDestination{destinationKind(SHIP_TO|PICKUP_POINT), pickupPointId, readyForCollectionAt, holdUntil}: present only on a pickup journey; holdUntil is the retention deadline the uncollected sweep returns the package after (shipping-and-tracking ADR 0016)"
         invariants:
           - {rule: "scans apply in time order; an older scan is stored but does not move the state", error: ErrScanOutOfOrder}
           - {rule: "a scanId is applied once", error: ErrDuplicateScan}
-          - {rule: "DELIVERED, RETURNED and LOST are terminal", error: ErrJourneyClosed}
+          - {rule: "DELIVERED, COLLECTED, RETURNED and LOST are terminal", error: ErrJourneyClosed}
+          - {rule: "a CARRIER_HANDOFF scan applies only to a journey whose area is CARRIER_HANDOFF, and a POINT_DEPOSITED or COLLECTED scan only to a pickup journey (destinationKind PICKUP_POINT); anything else is stored with applied=false and answers ErrIllegalTransition (shipping-and-tracking ADR 0015/0016)", error: ErrIllegalTransition}
           - {rule: "the stored ETA window is empty or has etaStart < etaEnd and a non-zero etaAssignedAt; an assignment not strictly newer than the stored one is refused (ErrEtaStale) and a terminal journey refuses AssignEta (ErrJourneyClosed)", error: ErrEtaStale}
           - {rule: "pointFlagReason and pointFlaggedAt are null together and the reason is NOT_HOME or ACCESS_PROBLEM; a flag not strictly newer than the stored one is refused (ErrPointFlagStale) and a terminal journey refuses FlagDeliveryPoint (ErrJourneyClosed)", error: ErrPointFlagStale}
-        commands: [StartJourney, RecordScan, AssignEta, FlagDeliveryPoint, RaiseException, ReturnToSender, DeclareLost]
-        events: [PackageScanned, PackageHandedOver, PackageDelivered, PackageExceptionRaised, PackageReturned, PackageLost, PackageEtaWindowAssigned, PackageDeliveryPointFlagged]
+        commands: [StartJourney, RecordScan, AssignEta, FlagDeliveryPoint, RaiseException, ReturnToSender, DeclareLost, RecordCarrierEvent]
+        events: [PackageScanned, PackageHandedOver, PackageDelivered, PackageExceptionRaised, PackageReturned, PackageLost, PackageEtaWindowAssigned, PackageDeliveryPointFlagged, PackageHandedToCarrier, PackageReadyForCollection, PackageCollected]
         throughput_estimate: "very high (every scan)"
         size_estimate: "one per package + scans"
     read_models:
       - {name: CatalogDimensionsView, source: "offer-availability CatalogItemCreated"}
+      - {name: AreaModesView, source: "node-topology ServiceAreaAssigned (shipping-and-tracking ADR 0015): tolerant local copy - deliveryMode and carriers are additive v1 fields whose absence means NETWORK_ROUTE with no options, so a pre-RN-0010 replay keeps the old meaning; upserted only when assignmentVersion beats the stored row"}
+      - {name: PickupPointView, source: "node-topology NodeRegistered (shipping-and-tracking ADR 0016): only nodeType, servingStationNodeId and postalCode are read; a non-PICKUP_POINT node is acknowledged without an effect"}
       - {name: DeliveryAnalytics, source: "analytical read side (shipping-and-tracking ADR 0012, the pilot): cmd/st-projector, the only writer of a SEPARATE analytical database, projects this context's OWN integration topic only (retailnetwork.shipping-and-tracking.events; the analytics topic is not subscribed while nothing is published on it), deduped in the projection transaction; cmd/st-reports serves the read-only /reports routes on :8092"}
     policies:
       - {name: HandoverOnFirstScan, rule: "the first PICKUP_DEPARTURE scan, made from a LoadDeparted whose departureKind is PICKUP, moves LABELLED to HANDED_OVER; its origin node and departedAt are the handover node and instant used by node-performance. A LoadDeparted with no departureKind counts as a pickup only while the journey is still LABELLED"}
@@ -1681,10 +1720,14 @@ contexts:
       - {name: ShipToRetention, rule: "a periodic job (PurgeShipTo) deletes a ship-to snapshot 30 days after its journey closed: DELIVERED, RETURNED or LOST, or VOIDED when the label was voided before handover. A journey still open keeps its snapshot"}
       - {name: EtaWindowOnJourney, rule: "the use case ApplyEtaWindows (same shape as ApplyScans: inbox claim, then per tracking number) consumes StopEtaWindowAssigned and stores etaStart/etaEnd/etaAssignedAt on each journey of the stop via AssignEta; the stopKey is received and dropped (this context keeps no address-derived value of a stop). Each journey then publishes PackageEtaWindowAssigned with its own orderId. EtaCurrent() is the one currency rule, shared with customer-ordering: the window shows only while the state is OUT_FOR_DELIVERY, etaAssignedAt is non-zero and not before lastScanAt, so a newer scan, a failed attempt (back to AT_STATION) or any terminal state hides it; yesterday's window never survives a newer OUT_FOR_DELIVERY scan. The window is relayed as received, never clipped to the promised window (shipping-and-tracking ADR 0013)"}
       - {name: DeliveryPointFlagRelay, rule: "FlagDeliveryPoint consumes DeliveryPointFlagged, drops the stopKey and the failure count (no address-derived value of a stop is kept), stores pointFlagReason and pointFlaggedAt on each journey of the stop, and publishes PackageDeliveryPointFlagged per journey with that journey's own orderId, so customer-ordering can show the advisory per order. Not a scan: the state never moves. A flag for an unknown or terminal journey is counted and acknowledged. There is no cleared event: the advisory ends when the package ends, which the consumer decides (shipping-and-tracking ADR 0014)"}
+      - {name: CarrierEventAcl, rule: "RN-0010 as built (shipping-and-tracking ADR 0015): carrier tracking reaches this context through POST /carrier-events, an inbound translation layer: each report becomes one scan with scanId '<carrierId>:<carrierEventId>' (a re-sent report answers 409 duplicate-scan). PICKED_UP is the handoff at the journey's handoff node, AT_STATION to WITH_CARRIER (a journey already WITH_CARRIER is a no-op answered 200, and raises PackageHandedToCarrier once per journey, carrying the deterministic carrier choice computed at the station); OUT_FOR_DELIVERY, DELIVERED and DELIVERY_FAILED become their scans; IN_TRANSIT is accepted and counted without a scan. Unauthenticated by the standing fleet decision, exactly like the scans route; no carrier writes to a network topic and no network service calls a carrier synchronously"}
+      - {name: CollectionAtPoint, rule: "RN-0011 as built (shipping-and-tracking ADR 0016): a pickup journey (destinationKind PICKUP_POINT) is deposited by the wave at its point, a POINT_DEPOSITED scan moving OUT_FOR_DELIVERY to READY_FOR_COLLECTION (PackageReadyForCollection carries pickupPointId, readyForCollectionAt and holdUntil), and collected by the shopper, a COLLECTED scan moving READY_FOR_COLLECTION to COLLECTED, terminal (PackageCollected; proofCode optional). A package uncollected by holdUntil is returned by the sweep through ReturnToSender with reason UNCOLLECTED, the pickup hold expiry; the station-initiated return omits the reason. The promise judgement keeps deliverByLatest: collection ends the package, the window does not move"}
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /labels (in-org)", routes: ["POST /labels"], message: "IssueLabel", relationship: Customer/Supplier}
       # caller inferred: the spec names no caller for either route; both are ground-operations actions (a scan is recorded at a scanner, a label is voided before handover); no sibling service has a client for them
       - {from: "sort-centre and station operators (human/scanner)", type: cmd, channel: "REST POST /labels/{labelRef}:void, POST /journeys/{trackingNumber}/scans", routes: ["POST /labels/{labelRef}:void", "POST /journeys/{trackingNumber}/scans"], message: "VoidLabel, RecordScan", relationship: UI}
+      - {from: carrier, type: cmd, channel: "REST POST /carrier-events (the carrier webhook of CARRIER_HANDOFF areas, an inbound translation layer, RN-0010)", routes: ["POST /carrier-events"], message: "RecordCarrierEvent", relationship: OHS}
+      - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events (area modes and pickup points, ST_AREAS_CONSUMER_GROUP)", message: "NodeRegistered, NodeActivated, NodeSuspended, NodeRetired, ServiceAreaAssigned", relationship: Conformist}
       - {from: shopper / customer-ordering, type: qry, channel: "REST GET /journeys/{trackingNumber}", routes: ["GET /journeys/{trackingNumber}"], message: "GetJourney", relationship: OHS}
       - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: "VendorShipmentConfirmed", relationship: Customer/Supplier}
       - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "LoadDeparted, LoadArrived", relationship: Conformist}
@@ -1697,6 +1740,7 @@ contexts:
       - "POST /labels/{labelRef}:void"
       - "GET /journeys/{trackingNumber}"
       - "POST /journeys/{trackingNumber}/scans"
+      - "POST /carrier-events"
       - "GET /reports/package-touches?from=&to="
       - "GET /reports/delivery-outcomes?from=&to="
       - "GET /reports/freshness"
@@ -1711,6 +1755,9 @@ contexts:
       - {event: PackageLost, entity: journey, data: [trackingNumber, orderId, declaredAt], consumers: [delivery-promise, customer-ordering]}
       - {event: PackageEtaWindowAssigned, entity: journey, data: [trackingNumber, assignmentId, orderId, etaStart, etaEnd, assignedAt], consumers: [customer-ordering]}
       - {event: PackageDeliveryPointFlagged, entity: journey, data: [trackingNumber, assignmentId, orderId, reason, flaggedAt], consumers: [customer-ordering]}
+      - {event: PackageHandedToCarrier, entity: journey, data: [trackingNumber, assignmentId, orderId, carrierId, handoffNodeId, destinationPostalPrefix, handedAt], consumers: [delivery-promise]}
+      - {event: PackageReadyForCollection, entity: journey, data: [trackingNumber, assignmentId, orderId, pickupPointId, readyForCollectionAt, holdUntil], consumers: [delivery-promise]}
+      - {event: PackageCollected, entity: journey, data: [trackingNumber, assignmentId, orderId, pickupPointId, collectedAt, "proofCode (optional)"], consumers: []}
     reasons:
       - name: PackageExceptionReason
         fields: [PackageExceptionRaised.reason]
@@ -1718,6 +1765,11 @@ contexts:
         values:
           - {value: NO_SCAN, meaning: "No applied scan inside the silence window of the journey's leg (ExceptionOnSilence); raised once per silence."}
     consumes:
+      - {event: NodeRegistered, from: node-topology}
+      - {event: NodeActivated, from: node-topology}
+      - {event: NodeSuspended, from: node-topology}
+      - {event: NodeRetired, from: node-topology}
+      - {event: ServiceAreaAssigned, from: node-topology}
       - {event: VendorShipmentConfirmed, from: vendor-connectivity}
       - {event: LoadDeparted, from: linehaul-transportation}
       - {event: LoadArrived, from: linehaul-transportation}
@@ -1739,6 +1791,8 @@ contexts:
       - {term: Ship-To Snapshot, definition: "The encrypted copy of the ship-to address kept to print a label; never published and purged 30 days after the journey closes.", code: "label.ShipToSnapshot"}
       - {term: Day-of ETA Window, definition: "The at-most-two-hours delivery window consumed from last-mile-delivery at route start and stored on the journey (etaStart, etaEnd, etaAssignedAt). Not a scan: it never moves the state, and it shows on the journey view only while EtaCurrent holds (OUT_FOR_DELIVERY, assigned at or after the last applied scan).", code: "journey.PackageJourney"}
       - {term: Delivery-Point Flag, definition: "The pointFlagReason and pointFlaggedAt stored on each journey of a flagged delivery point (consumed from last-mile-delivery without the stop key) and republished per package by orderId. Not a scan; there is no cleared event, so it ends when the package ends.", code: "journey.PackageJourney"}
+      - {term: Carrier Event, definition: "A carrier's report on a package it carries, received on POST /carrier-events through an inbound translation layer and applied as a scan; statuses PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED and DELIVERY_FAILED. No carrier writes to a network topic.", code: "journey.CarrierEvent"}
+      - {term: Collection, definition: "The shopper picking the package up at a pickup point: the journey becomes READY_FOR_COLLECTION when the wave deposits it and COLLECTED at pickup; an uncollected package returns to sender at its holdUntil.", code: "journey.PackageJourney"}
 
   # =========================================================================
   - id: node-performance
@@ -2077,6 +2131,7 @@ external:
   - {id: shopper, kind: person (synthetic) via storefront / e2e-tests}
   - {id: network-ops planner, kind: person}
   - {id: delivery service partner, kind: external organisation (driver app)}
+  - {id: carrier, kind: external organisation (delivery for CARRIER_HANDOFF service areas, RN-0010)}
   - {id: sort-centre and station operators, kind: person / scanner}
 
 # ---------------------------------------------------------------------------

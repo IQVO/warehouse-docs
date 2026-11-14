@@ -103,6 +103,7 @@ flowchart TB
     NT ==>|"CF 7e"| LH
     NT ==>|"CF 2e"| LM
     NT ==>|"? + C/S + CF 5e +REST"| VC
+    NT ==>|"CF 5e"| ST
     VC ==>|"C/S 1e"| ST
     LH ==>|"CF 2e"| ST
     LH ==>|"C/S 1e"| LM
@@ -214,6 +215,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `node-topology` | `offer-availability` | CF | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | - |
 | `node-topology` | `order-sourcing` | ? + CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneCostDeclared`, `LaneClosed`, `ServiceAreaAssigned`, `RegionDefined` | - |
 | `node-topology` | `seller-inbound` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | - |
+| `node-topology` | `shipping-and-tracking` | CF | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `ServiceAreaAssigned` | - |
 | `node-topology` | `vendor-connectivity` | ? + C/S + CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | cmd RegisterNode, DeclareOperationalProfile (`REST POST /nodes, PUT /nodes/{nodeId}/operational-profile`) |
 | `offer-availability` | `delivery-promise` | CF | `CatalogItemCreated`, `CatalogItemDiscontinued`, `ListingCreated`, `ListingAvailabilityChanged`, `ListingSuppressed`, `ListingRestored` | - |
 | `offer-availability` | `node-performance` | CF | `InventoryFeedApplied` | - |
@@ -230,7 +232,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `seller-inbound` | `offer-availability` | CF | `SellerSuspended`, `SellerReinstated`, `InboundShipmentReceived` | - |
 | `seller-inbound` | `vendor-connectivity` | C/S | `InboundShipmentLabelled`, `InboundShipmentShipped`, `InboundShipmentReceived` | - |
 | `shipping-and-tracking` | `customer-ordering` | ? + CF | `LabelIssued`, `LabelVoided`, `PackageScanned`, `PackageDelivered`, `PackageExceptionRaised`, `PackageReturned`, `PackageLost`, `PackageEtaWindowAssigned`, `PackageDeliveryPointFlagged` | - |
-| `shipping-and-tracking` | `delivery-promise` | ? + CF | `PackageDelivered`, `PackageExceptionRaised`, `PackageReturned`, `PackageLost` | - |
+| `shipping-and-tracking` | `delivery-promise` | ? + CF | `PackageDelivered`, `PackageExceptionRaised`, `PackageReturned`, `PackageLost`, `PackageHandedToCarrier`, `PackageReadyForCollection` | - |
 | `shipping-and-tracking` | `last-mile-delivery` | ? | `LabelIssued` | - |
 | `shipping-and-tracking` | `linehaul-transportation` | ? + CF | `LabelIssued`, `LabelVoided` | - |
 | `shipping-and-tracking` | `node-performance` | CF | `PackageHandedOver` | - |

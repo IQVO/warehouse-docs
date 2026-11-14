@@ -29,12 +29,15 @@ are the proposed Go package and type names. Each context's own
 | **Capacity Band** | `delivery-promise` | AMPLE, TIGHT or SCARCE: how full the promise book behind an offer's window is at quote time (under 60%, 60% to under 85%, 85% and over of its share). A signal, never a price. | `shared.CapacityBand` |
 | **Capacity Hold** | `delivery-promise` | A provisional reservation on a promise book released if the order is not placed in time. | `book.Capacity.Provisional` |
 | **Carrier** | `order-sourcing` | The QUEUED assignment whose release is due and which carries a consolidation merge: one purchase order, one label and one tracking number carry its id. | `assignment.Assignment.Members` |
+| **Carrier Event** | `shipping-and-tracking` | A carrier's report on a package it carries, received on POST /carrier-events through an inbound translation layer and applied as a scan; statuses PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED and DELIVERY_FAILED. No carrier writes to a network topic. | `journey.CarrierEvent` |
+| **Carrier Option** | `node-topology` | A carrier declared on a CARRIER_HANDOFF service area: carrier id, handoff node, cost per package and transit minutes. | `servicearea.CarrierOption` |
 | **Carton** | `seller-inbound` | One physical outer carton of a shipment, identified by an SSCC and holding the contents it declares. | `inboundshipment.Carton` |
 | **Case Pack** | `seller-inbound` | The quantity of eaches in one case of an item (unitsPerPack). Fixed by the case's GTIN; a different quantity needs a different GTIN. | `catalog.PackLevelDef.UnitsPerPack` |
 | **Catalog Item** | `offer-availability` | The network's own entry for a product, independent of who ships it. | `catalog.Item` |
 | **Checkout** | `customer-ordering` | The act of turning a cart into a customer order, promising every group. | `order.PlaceOrder` |
 | **Chosen Delivery Day** | `customer-ordering` | The local calendar date a shopper picked for a CONSOLIDATED group, stored on the group at placement. | `order.GroupPromise.ChosenDeliveryDay` |
 | **Chosen Delivery Day** | `delivery-promise` | The local calendar date of the destination station the shopper wants a CONSOLIDATED order delivered on; a day before the fastest window is moved up to it. | `search.Input.ConsolidatedDay` |
+| **Collection** | `shipping-and-tracking` | The shopper picking the package up at a pickup point: the journey becomes READY_FOR_COLLECTION when the wave deposits it and COLLECTED at pickup; an uncollected package returns to sender at its holdUntil. | `journey.PackageJourney` |
 | **Confidence** | `delivery-promise` | The observed share of a segment's judged promises that were within the quote's buffer; present only with enough judgements, absence means unknown. | `search.Calibration.Confidence` |
 | **Consolidated Tier** | `delivery-promise` | The opt-in fifth tier: a delivery on a day the shopper chooses, at or after the fastest feasible window, so the network can merge the order with others. Quoted only when requested. | `shared.TierConsolidated` |
 | **Consolidation Eligible** | `delivery-promise` | True when the chosen day leaves the network at least one local day after the fastest window to merge the order with others, false when the day is that window itself; it never says another order exists. | `search.Candidate.ConsolidationEligible` |
@@ -48,6 +51,7 @@ are the proposed Go package and type names. Each context's own
 | **Default Outbound Lane** | `linehaul-transportation` | The lane a pickup departure uses, chosen by linehaul-transportation among the node's open ground lanes (sort centre first, then shortest nominal transit, then lowest lane id); node-topology declares none. | `schedule.DefaultOutboundLane` |
 | **Deliver-By Window** | `delivery-promise` | deliverByEarliest..deliverByLatest shown to the customer. | `promise.PromiseTerms` |
 | **Delivery Attempt** | `last-mile-delivery` | One try to hand a package over: DELIVERED or FAILED with a reason, and an optional outcomeDetail category the driver client reports (ADR 0014). | `route.Attempt` |
+| **Delivery Mode** | `node-topology` | How a service area is served: NETWORK_ROUTE by the network's own routes, or CARRIER_HANDOFF by a declared carrier that picks up at the handoff node. The carrier operates a delivery mode, never a node. | `servicearea.DeliveryMode` |
 | **Delivery Offer** | `delivery-promise` | A quoted delivery window for an item, quantity, destination and tier, valid until it expires. | `offer.DeliveryOffer` |
 | **Delivery Point Profile** | `last-mile-delivery` | The learning record of one delivery point (an opaque stop key, never an address): outcome tallies and counted-failure strikes. Two counted failures inside 60 days flag the point; the flag changes no route, no ETA and no promise. | `deliverypoint.DeliveryPointProfile` |
 | **Delivery Service Partner (DSP)** | `last-mile-delivery` | An independent delivery business working for a station. | `partner.DeliveryServicePartner` |
@@ -89,8 +93,8 @@ are the proposed Go package and type names. Each context's own
 | **Middle Mile** | `linehaul-transportation` | Transport between nodes: vendor node to sortation centre, sortation centre to delivery station, air. | `(context)` |
 | **Mixed Carton** | `seller-inbound` | A carton holding more than one item. It has no pack GTIN: it is a logistic unit identified by its SSCC and carton manifest only. | `inboundshipment.Carton (kind MIXED)` |
 | **Node** | `node-topology` | One physical building of the network, of exactly one node type. | `node.Node` |
-| **Node Operator** | `node-topology` | Who runs the building: NETWORK or a VENDOR. | `node.Operator` |
-| **Node Type** | `node-topology` | FULFILLMENT_CENTER, INBOUND_CROSS_DOCK, RETURNS_CENTER, SORTATION_CENTER, DELIVERY_STATION or AIR_HUB. | `node.Type` |
+| **Node Operator** | `node-topology` | Who runs the building: NETWORK, a VENDOR, or a PARTNER (a pickup-point operator, RN-0011). | `node.Operator` |
+| **Node Type** | `node-topology` | FULFILLMENT_CENTER, INBOUND_CROSS_DOCK, RETURNS_CENTER, SORTATION_CENTER, DELIVERY_STATION, AIR_HUB or PICKUP_POINT. | `node.Type` |
 | **On-Time Handover Rate** | `node-performance` | Share of packages handed over before requiredShipBy. | `scorecard.Metrics.OnTimeHandoverRate` |
 | **Operational Profile** | `node-topology` | The node's declared operating hours, cutoffs, handling time, throughput cap and time zone, versioned by profileRevision. | `node.OperationalProfile` |
 | **Owner / Seller of Record** | `seller-inbound` | Whose stock it is. On the network ownerRef equals the sellerId; stock, listings and reservations are segregated by it. | `seller.ID (shared.ValidOwnerRef)` |
@@ -102,6 +106,7 @@ are the proposed Go package and type names. Each context's own
 | **Packing Option** | `seller-inbound` | INDIVIDUAL (eaches packed freely) or CASE_PACKED (cartons are case packs of a declared CASE level). | `inboundplan.PackingOption` |
 | **Path Lock** | `order-sourcing` | The point after which an assignment never changes node: the vendor's acceptance. | `assignment.Lock` |
 | **Pickup Departure** | `linehaul-transportation` | The departure that collects packages at a vendor node at one of its declared cutoffs. | `departure.KindPickup` |
+| **Pickup Point** | `node-topology` | A PICKUP_POINT node (a staffed point or a locker) the shopper collects a package from: one stop of its serving delivery station's route, a checkout destination with no address, never a lane endpoint. | `node.Type` |
 | **Predicted Late** | `delivery-promise` | The at-risk reason of a confirmed promise whose witness-path departure is past its expected arrival with no arrival seen. | `promise.ReasonPredictedLate` |
 | **Promise** | `delivery-promise` | The network's commitment of a delivery window for one shipment group. | `promise.Promise` |
 | **Promise Basis** | `delivery-promise` | SCHEDULED (from real departures and waves), MEASURED (a leg stretched by its measured P-serviceLevel transit, ADR 0014) or NOMINAL (STANDARD tier from nominal lane times). | `promise.Basis` |
@@ -117,8 +122,10 @@ are the proposed Go package and type names. Each context's own
 | **Scan** | `shipping-and-tracking` | One observation of a package at a node. | `journey.Scan` |
 | **Scorecard** | `node-performance` | A node's measured performance over a rolling window, with a grade. | `scorecard.NodeScorecard` |
 | **Seller** | `seller-inbound` | An organisation that sends its own stock to the network. Distinct from a Vendor, which operates fulfillment nodes. | `seller.Account` |
+| **Service Area** | `node-topology` | The postal prefixes a delivery station serves, versioned per assignment, and how each prefix is delivered. | `servicearea.ServiceArea` |
 | **Service Area** | `node-topology` | The postal prefixes one delivery station serves. | `servicearea.ServiceArea` |
 | **Service Tier** | `delivery-promise` | SAME_DAY, NEXT_DAY, TWO_DAY, STANDARD or the opt-in CONSOLIDATED. | `promise.Tier` |
+| **Serving Station** | `node-topology` | The delivery station that serves a pickup point; declared on the node and published on NodeRegistered. | `node.ServingStationRef` |
 | **Ship-By** | `delivery-promise` | The pickup cutoff at the witness node the package must be ready for. | `promise.PromiseTerms.ShipBy` |
 | **Ship-To** | `customer-ordering` | The delivery address; synthetic PII held only here. | `order.ShipTo` |
 | **Ship-To Snapshot** | `shipping-and-tracking` | The encrypted copy of the ship-to address kept to print a label; never published and purged 30 days after the journey closes. | `label.ShipToSnapshot` |
@@ -150,6 +157,7 @@ are the proposed Go package and type names. Each context's own
 | `SORTATION_CENTER` | NETWORK | SORT | Sorts packages by final destination and consolidates them onto outbound loads. |
 | `DELIVERY_STATION` | NETWORK | LAST_MILE | Receives sorted packages and dispatches them on delivery routes inside its service area. |
 | `AIR_HUB` | NETWORK | SORT, AIR | Gateway between the ground network and air lanes. |
+| `PICKUP_POINT` | NETWORK, PARTNER | COLLECTION | A pickup point or locker the shopper collects a package from. One route stop of its serving delivery station, a checkout destination with no address, and never a lane endpoint. |
 
 ## Service tiers
 

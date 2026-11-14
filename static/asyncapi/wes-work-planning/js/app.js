@@ -654,7 +654,7 @@
                               },
                               "from_bin": {
                                 "type": "string",
-                                "description": "Source bin: caller-given at enqueue, or derived at release from the local slot-plan copy (the SKU's forward-pick face, ADR-0048). Absent when neither exists — the unit then completes exactly as before.",
+                                "description": "Source bin: caller-given at enqueue, or derived at enqueue from the local slot-plan copy (the SKU's forward-pick face, ADR-0048). Absent when neither exists — the unit then completes exactly as before.",
                                 "example": "BIN-A1",
                                 "x-parser-schema-id": "<anonymous-schema-63>"
                               }

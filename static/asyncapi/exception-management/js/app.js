@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **exception-management** bounded context (WES\nsubdomain): the Problem Solve lifecycle (ADR 0001, ADR 0002). Every case\nis opened by a fact another context published; this service owns the\ntriage, assignment, SLA and resolution of that case, never the producer's\nown state.\n\n**Published.** The `ExceptionCase` aggregate raises six events and the\n`ExceptionPolicy` aggregate one, all published to\n`warehouse.exception-management.events` through a **transactional\noutbox**: the aggregate row and its already-encoded events are written in\nONE database transaction and a relay drains them to Kafka (at-least-once;\nthe CloudEvents `id` is stored with the outbox row, so a retry republishes\nthe same `id`). Kafka key = case id (source type for the policy event), so\none case's history stays ordered on one partition.\n\n**Consumed (ADR 0003, 0006, 0010, 0011).** Exception facts from ten sibling\ncontexts: fulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,\n`WeightDiscrepancyDetected`), wes-work-planning\n(`BacklogThresholdBreached`), network-fulfillment\n(`AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled`),\norder-management (`OrderRepromised`, correlation for auto-resolve only),\nreturns-processing (`UnexpectedReturnReceived`), inbound-receiving\n(`CartonDiscrepancyRaised`, routed by `kind`, ADR 0006),\ninventory-storage (`DiscrepancyDetected`, `ItemUnlocated`),\nyard-management (`VisitRejected`, `SealExceptionRaised`,\n`TrailerDwellExceeded`, `YardCheckClosed` — one case per\ndiscrepancy, ADR 0010), dock-scheduling\n(`DockAppointmentNoShow`, ADR 0010) and outbound-shipping\n(`PackageMissedLoad`, ADR 0011). Each consumed message opens or\ntouches exactly one open case per dedup key (source type, source subject,\nsite); the source payload is frozen on the case, never re-fetched. The\nconsumed messages below are the producers' own contracts, restated here\nand never imported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\n`specversion`, `id`, `source` (`/warehouse/exception-management`), `type`,\n`subject` (the case id; the source type for the policy event), `time`,\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:exception-management:events:<EventName>:v1`) are all\nrequired. Kafka key = the subject. Type =\n`com.warehouse.wes.exception-management.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
+    "description": "Event catalog for the **exception-management** bounded context (WES\nsubdomain): the Problem Solve lifecycle (ADR 0001, ADR 0002). Every case\nis opened by a fact another context published; this service owns the\ntriage, assignment, SLA and resolution of that case, never the producer's\nown state.\n\n**Published.** The `ExceptionCase` aggregate raises six events and the\n`ExceptionPolicy` aggregate one, all published to\n`warehouse.exception-management.events` through a **transactional\noutbox**: the aggregate row and its already-encoded events are written in\nONE database transaction and a relay drains them to Kafka (at-least-once;\nthe CloudEvents `id` is stored with the outbox row, so a retry republishes\nthe same `id`). Kafka key = case id (source type for the policy event), so\none case's history stays ordered on one partition.\n\n**Consumed (ADR 0003, 0006, 0010, 0011, 0012).** Exception facts from ten\nsibling contexts: fulfillment-execution (`TaskCPTMissed`, `PackageDiverted`,\n`WeightDiscrepancyDetected`), wes-work-planning\n(`BacklogThresholdBreached`), network-fulfillment\n(`AcknowledgementDeadlineAtRisk`, `OrphanedHoldCancelled`),\norder-management (`OrderRepromised`, correlation for auto-resolve only),\nreturns-processing (`UnexpectedReturnReceived`), inbound-receiving\n(`CartonDiscrepancyRaised`, routed by `kind`, ADR 0006),\ninventory-storage (`DiscrepancyDetected`, `ItemUnlocated`, and — under a\nsecond consumer group, ADR 0012 — `StockHeld`, `StockReleased`,\n`StockDispositioned`: one case per held unit, auto-resolved when the\nhold ends),\nyard-management (`VisitRejected`, `SealExceptionRaised`,\n`TrailerDwellExceeded`, `YardCheckClosed` — one case per\ndiscrepancy, ADR 0010), dock-scheduling\n(`DockAppointmentNoShow`, ADR 0010) and outbound-shipping\n(`PackageMissedLoad`, ADR 0011). Each consumed message opens or\ntouches exactly one open case per dedup key (source type, source subject,\nsite); the source payload is frozen on the case, never re-fetched. The\nconsumed messages below are the producers' own contracts, restated here\nand never imported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\n`specversion`, `id`, `source` (`/warehouse/exception-management`), `type`,\n`subject` (the case id; the source type for the policy event), `time`,\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:exception-management:events:<EventName>:v1`) are all\nrequired. Kafka key = the subject. Type =\n`com.warehouse.wes.exception-management.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
   },
   "servers": {
     "production": {
@@ -587,7 +587,7 @@
               "name": "ExceptionAutoResolved",
               "title": "Exception auto-resolved",
               "summary": "A declarative policy rule closed the case on a correlated fact.",
-              "description": "`type` = `com.warehouse.wes.exception-management.exceptioncase.ExceptionAutoResolved`;\nsubject and key = the case id. `rule_id` names the policy's\nauto-resolve rule that fired; it is derived, `<governed source\ntype>-><correlated type>`; `correlated_type` and\n`correlated_event_id` are the full CloudEvents type and id of the\ncorrelated fact that satisfied the rule (for example an\n`OrderRepromised` for the same work unit within the window).\n",
+              "description": "`type` = `com.warehouse.wes.exception-management.exceptioncase.ExceptionAutoResolved`;\nsubject and key = the case id. `rule_id` names the policy's\nauto-resolve rule that fired; it is derived, `<governed source\ntype>-><correlated type>`; `correlated_type` and\n`correlated_event_id` are the full CloudEvents type and id of the\ncorrelated fact that satisfied the rule (for example an\n`OrderRepromised` for the same work unit within the window).\n`note` (ADR 0012) is the closing fact's outcome when it carries one\n(a held-stock disposition or release); null when it does not.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -629,10 +629,16 @@
                             "description": "The CloudEvents id of the correlated fact.",
                             "x-parser-schema-id": "<anonymous-schema-52>"
                           },
+                          "note": {
+                            "type": "string",
+                            "nullable": true,
+                            "description": "The closing fact's outcome when it carries one (ADR 0012); null when it does not.",
+                            "x-parser-schema-id": "<anonymous-schema-53>"
+                          },
                           "at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-53>"
+                            "x-parser-schema-id": "<anonymous-schema-54>"
                           }
                         },
                         "x-parser-schema-id": "<anonymous-schema-48>"
@@ -661,7 +667,30 @@
                       "rule_id": "com.warehouse.wes.fulfillment-execution.task.TaskCPTMissed->com.warehouse.wes.order-management.order.OrderRepromised",
                       "correlated_type": "com.warehouse.wes.order-management.order.OrderRepromised",
                       "correlated_event_id": "1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d",
+                      "note": null,
                       "at": "2026-10-21T09:20:00Z"
+                    }
+                  }
+                },
+                {
+                  "name": "heldStockDispositioned",
+                  "summary": "ADR 0012 — a RETURN_TO_VENDOR disposition closed the held-stock case.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "5c4b3a29-1e2f-4a89-b7c6-d5e4f3a2b1c0",
+                    "source": "/warehouse/exception-management",
+                    "type": "com.warehouse.wes.exception-management.exceptioncase.ExceptionAutoResolved",
+                    "subject": "case-2e3f4a5b-6c7d-4899-a0bc-def012345679",
+                    "time": "2026-11-12T10:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:exception-management:events:ExceptionAutoResolved:v1",
+                    "data": {
+                      "case_id": "case-2e3f4a5b-6c7d-4899-a0bc-def012345679",
+                      "rule_id": "com.warehouse.wms.inventory-storage.stock.StockHeld->com.warehouse.wms.inventory-storage.stock.StockDispositioned",
+                      "correlated_type": "com.warehouse.wms.inventory-storage.stock.StockDispositioned",
+                      "correlated_event_id": "0b3a8d96-4c79-4e5a-9f60-2e410a5c3d78",
+                      "note": "disposition RETURN_TO_VENDOR",
+                      "at": "2026-11-12T10:30:00Z"
                     }
                   }
                 }
@@ -699,13 +728,13 @@
                           "source_type": {
                             "type": "string",
                             "description": "The full CloudEvents type of the governed source fact.",
-                            "x-parser-schema-id": "<anonymous-schema-56>"
+                            "x-parser-schema-id": "<anonymous-schema-57>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "Append-only: 1 for the first declaration, +1 per accepted change.",
-                            "x-parser-schema-id": "<anonymous-schema-57>"
+                            "x-parser-schema-id": "<anonymous-schema-58>"
                           },
                           "severity": {
                             "type": "string",
@@ -715,17 +744,17 @@
                               "HIGH",
                               "CRITICAL"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-58>"
+                            "x-parser-schema-id": "<anonymous-schema-59>"
                           },
                           "queue": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-59>"
+                            "x-parser-schema-id": "<anonymous-schema-60>"
                           },
                           "sla_minutes": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "The SLA budget of cases opened under this policy.",
-                            "x-parser-schema-id": "<anonymous-schema-60>"
+                            "x-parser-schema-id": "<anonymous-schema-61>"
                           },
                           "auto_resolve": {
                             "type": "object",
@@ -741,25 +770,25 @@
                                   "on_type": {
                                     "type": "string",
                                     "description": "The full CloudEvents type of the correlated fact that closes the case (e.g. OrderRepromised).",
-                                    "x-parser-schema-id": "<anonymous-schema-62>"
+                                    "x-parser-schema-id": "<anonymous-schema-63>"
                                   },
                                   "within_minutes": {
                                     "type": "integer",
                                     "minimum": 1,
                                     "description": "The correlated fact counts only within this many minutes of the case's last occurrence.",
-                                    "x-parser-schema-id": "<anonymous-schema-63>"
+                                    "x-parser-schema-id": "<anonymous-schema-64>"
                                   }
                                 },
                                 "x-parser-schema-id": "AutoResolveRule"
                               }
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-61>"
+                            "x-parser-schema-id": "<anonymous-schema-62>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-55>"
+                        "x-parser-schema-id": "<anonymous-schema-56>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-54>"
+                    "x-parser-schema-id": "<anonymous-schema-55>"
                   }
                 ],
                 "x-parser-schema-id": "ExceptionPolicyDeclaredEvent"
@@ -1118,12 +1147,12 @@
                           "task_id": {
                             "type": "string",
                             "description": "The task still open past its CPT.",
-                            "x-parser-schema-id": "<anonymous-schema-66>"
+                            "x-parser-schema-id": "<anonymous-schema-67>"
                           },
                           "order_ref": {
                             "type": "string",
                             "description": "The work unit id `{order_id}-line-{line_no}`.",
-                            "x-parser-schema-id": "<anonymous-schema-67>"
+                            "x-parser-schema-id": "<anonymous-schema-68>"
                           },
                           "task_type": {
                             "type": "string",
@@ -1136,19 +1165,19 @@
                               "ARRIVAL"
                             ],
                             "description": "Omitted when unknown.",
-                            "x-parser-schema-id": "<anonymous-schema-68>"
+                            "x-parser-schema-id": "<anonymous-schema-69>"
                           },
                           "cpt": {
                             "type": "string",
                             "format": "date-time",
                             "description": "The missed CPT deadline.",
-                            "x-parser-schema-id": "<anonymous-schema-69>"
+                            "x-parser-schema-id": "<anonymous-schema-70>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-65>"
+                        "x-parser-schema-id": "<anonymous-schema-66>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-64>"
+                    "x-parser-schema-id": "<anonymous-schema-65>"
                   }
                 ],
                 "x-parser-schema-id": "TaskCPTMissedEvent"
@@ -1201,13 +1230,13 @@
                         "properties": {
                           "package_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-72>"
+                            "x-parser-schema-id": "<anonymous-schema-73>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-71>"
+                        "x-parser-schema-id": "<anonymous-schema-72>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-70>"
+                    "x-parser-schema-id": "<anonymous-schema-71>"
                   }
                 ],
                 "x-parser-schema-id": "PackageDivertedEvent"
@@ -1259,23 +1288,23 @@
                         "properties": {
                           "package_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-75>"
+                            "x-parser-schema-id": "<anonymous-schema-76>"
                           },
                           "expected_g": {
                             "type": "integer",
                             "format": "int64",
-                            "x-parser-schema-id": "<anonymous-schema-76>"
+                            "x-parser-schema-id": "<anonymous-schema-77>"
                           },
                           "actual_g": {
                             "type": "integer",
                             "format": "int64",
-                            "x-parser-schema-id": "<anonymous-schema-77>"
+                            "x-parser-schema-id": "<anonymous-schema-78>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-74>"
+                        "x-parser-schema-id": "<anonymous-schema-75>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-73>"
+                    "x-parser-schema-id": "<anonymous-schema-74>"
                   }
                 ],
                 "x-parser-schema-id": "WeightDiscrepancyDetectedEvent"
@@ -1343,13 +1372,13 @@
                       "path_id": {
                         "type": "string",
                         "description": "The process path whose backlog crossed its alarm threshold.",
-                        "x-parser-schema-id": "<anonymous-schema-80>"
+                        "x-parser-schema-id": "<anonymous-schema-81>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-79>"
+                    "x-parser-schema-id": "<anonymous-schema-80>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-78>"
+                "x-parser-schema-id": "<anonymous-schema-79>"
               }
             ],
             "x-parser-schema-id": "BacklogThresholdBreachedEvent"
@@ -1417,27 +1446,27 @@
                         "properties": {
                           "networkRef": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-83>"
+                            "x-parser-schema-id": "<anonymous-schema-84>"
                           },
                           "siteId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-84>"
+                            "x-parser-schema-id": "<anonymous-schema-85>"
                           },
                           "acknowledgeBy": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-85>"
+                            "x-parser-schema-id": "<anonymous-schema-86>"
                           },
                           "at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-86>"
+                            "x-parser-schema-id": "<anonymous-schema-87>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-82>"
+                        "x-parser-schema-id": "<anonymous-schema-83>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-81>"
+                    "x-parser-schema-id": "<anonymous-schema-82>"
                   }
                 ],
                 "x-parser-schema-id": "AcknowledgementDeadlineAtRiskEvent"
@@ -1495,20 +1524,20 @@
                         "properties": {
                           "networkRef": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-89>"
+                            "x-parser-schema-id": "<anonymous-schema-90>"
                           },
                           "siteId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-90>"
+                            "x-parser-schema-id": "<anonymous-schema-91>"
                           },
                           "localOrderId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-91>"
+                            "x-parser-schema-id": "<anonymous-schema-92>"
                           },
                           "acknowledgeBy": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-92>"
+                            "x-parser-schema-id": "<anonymous-schema-93>"
                           },
                           "answer": {
                             "type": "string",
@@ -1516,18 +1545,18 @@
                               "CANCELLED",
                               "NOT_FOUND"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-93>"
+                            "x-parser-schema-id": "<anonymous-schema-94>"
                           },
                           "at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-94>"
+                            "x-parser-schema-id": "<anonymous-schema-95>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-88>"
+                        "x-parser-schema-id": "<anonymous-schema-89>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-87>"
+                    "x-parser-schema-id": "<anonymous-schema-88>"
                   }
                 ],
                 "x-parser-schema-id": "OrphanedHoldCancelledEvent"
@@ -1600,25 +1629,25 @@
                     "properties": {
                       "order_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-97>"
+                        "x-parser-schema-id": "<anonymous-schema-98>"
                       },
                       "cpt_id_old": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-98>"
+                        "x-parser-schema-id": "<anonymous-schema-99>"
                       },
                       "cpt_id_new": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-99>"
+                        "x-parser-schema-id": "<anonymous-schema-100>"
                       },
                       "reason": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-100>"
+                        "x-parser-schema-id": "<anonymous-schema-101>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-96>"
+                    "x-parser-schema-id": "<anonymous-schema-97>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-95>"
+                "x-parser-schema-id": "<anonymous-schema-96>"
               }
             ],
             "x-parser-schema-id": "OrderRepromisedEvent"
@@ -1689,36 +1718,36 @@
                     "properties": {
                       "receipt_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-103>"
+                        "x-parser-schema-id": "<anonymous-schema-104>"
                       },
                       "line_no": {
                         "type": "integer",
                         "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-104>"
+                        "x-parser-schema-id": "<anonymous-schema-105>"
                       },
                       "sku": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-105>"
+                        "x-parser-schema-id": "<anonymous-schema-106>"
                       },
                       "quantity": {
                         "type": "integer",
                         "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-106>"
+                        "x-parser-schema-id": "<anonymous-schema-107>"
                       },
                       "site_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-107>"
+                        "x-parser-schema-id": "<anonymous-schema-108>"
                       },
                       "received_at": {
                         "type": "string",
                         "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-108>"
+                        "x-parser-schema-id": "<anonymous-schema-109>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-102>"
+                    "x-parser-schema-id": "<anonymous-schema-103>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-101>"
+                "x-parser-schema-id": "<anonymous-schema-102>"
               }
             ],
             "x-parser-schema-id": "UnexpectedReturnReceivedEvent"
@@ -1788,36 +1817,36 @@
                     "properties": {
                       "receipt_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-111>"
+                        "x-parser-schema-id": "<anonymous-schema-112>"
                       },
                       "sscc": {
                         "type": "string",
                         "description": "The carton's SSCC-18; absent when the discrepancy is not about one carton.",
-                        "x-parser-schema-id": "<anonymous-schema-112>"
+                        "x-parser-schema-id": "<anonymous-schema-113>"
                       },
                       "kind": {
                         "type": "string",
                         "description": "Open string; unknown kinds route to problem-solve.",
-                        "x-parser-schema-id": "<anonymous-schema-113>"
+                        "x-parser-schema-id": "<anonymous-schema-114>"
                       },
                       "expected": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-114>"
+                        "x-parser-schema-id": "<anonymous-schema-115>"
                       },
                       "actual": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-115>"
+                        "x-parser-schema-id": "<anonymous-schema-116>"
                       },
                       "at": {
                         "type": "string",
                         "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-116>"
+                        "x-parser-schema-id": "<anonymous-schema-117>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-110>"
+                    "x-parser-schema-id": "<anonymous-schema-111>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-109>"
+                "x-parser-schema-id": "<anonymous-schema-110>"
               }
             ],
             "x-parser-schema-id": "CartonDiscrepancyRaisedEvent"
@@ -1890,41 +1919,41 @@
                         "properties": {
                           "visit_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-119>"
+                            "x-parser-schema-id": "<anonymous-schema-120>"
                           },
                           "site_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-120>"
+                            "x-parser-schema-id": "<anonymous-schema-121>"
                           },
                           "carrier_scac": {
                             "type": [
                               "string",
                               "null"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-121>"
+                            "x-parser-schema-id": "<anonymous-schema-122>"
                           },
                           "appointment_id": {
                             "type": [
                               "string",
                               "null"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-122>"
+                            "x-parser-schema-id": "<anonymous-schema-123>"
                           },
                           "reason": {
                             "type": "string",
                             "description": "APPOINTMENT_REQUIRED, UNKNOWN_APPOINTMENT, SEAL_MISMATCH, TRAILER_ALREADY_ON_SITE or SITE_REQUEST; kept in the frozen payload, not routed on.",
-                            "x-parser-schema-id": "<anonymous-schema-123>"
+                            "x-parser-schema-id": "<anonymous-schema-124>"
                           },
                           "rejected_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-124>"
+                            "x-parser-schema-id": "<anonymous-schema-125>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-118>"
+                        "x-parser-schema-id": "<anonymous-schema-119>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-117>"
+                    "x-parser-schema-id": "<anonymous-schema-118>"
                   }
                 ],
                 "x-parser-schema-id": "VisitRejectedEvent"
@@ -1981,43 +2010,43 @@
                         "properties": {
                           "trailer_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-127>"
+                            "x-parser-schema-id": "<anonymous-schema-128>"
                           },
                           "site_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-128>"
+                            "x-parser-schema-id": "<anonymous-schema-129>"
                           },
                           "appointment_id": {
                             "type": [
                               "string",
                               "null"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-129>"
+                            "x-parser-schema-id": "<anonymous-schema-130>"
                           },
                           "expected_seal_number": {
                             "type": [
                               "string",
                               "null"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-130>"
+                            "x-parser-schema-id": "<anonymous-schema-131>"
                           },
                           "found_seal_number": {
                             "type": [
                               "string",
                               "null"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-131>"
+                            "x-parser-schema-id": "<anonymous-schema-132>"
                           },
                           "raised_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-132>"
+                            "x-parser-schema-id": "<anonymous-schema-133>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-126>"
+                        "x-parser-schema-id": "<anonymous-schema-127>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-125>"
+                    "x-parser-schema-id": "<anonymous-schema-126>"
                   }
                 ],
                 "x-parser-schema-id": "SealExceptionRaisedEvent"
@@ -2075,39 +2104,39 @@
                         "properties": {
                           "trailer_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-135>"
+                            "x-parser-schema-id": "<anonymous-schema-136>"
                           },
                           "site_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-136>"
+                            "x-parser-schema-id": "<anonymous-schema-137>"
                           },
                           "kind": {
                             "type": "string",
                             "description": "The trailer kind whose threshold was crossed (DRY_VAN, REEFER, FLATBED, CONTAINER).",
-                            "x-parser-schema-id": "<anonymous-schema-137>"
+                            "x-parser-schema-id": "<anonymous-schema-138>"
                           },
                           "dwell_minutes": {
                             "type": "integer",
                             "minimum": 0,
-                            "x-parser-schema-id": "<anonymous-schema-138>"
+                            "x-parser-schema-id": "<anonymous-schema-139>"
                           },
                           "threshold_minutes": {
                             "type": "integer",
                             "minimum": 0,
-                            "x-parser-schema-id": "<anonymous-schema-139>"
+                            "x-parser-schema-id": "<anonymous-schema-140>"
                           },
                           "location_code": {
                             "type": [
                               "string",
                               "null"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-140>"
+                            "x-parser-schema-id": "<anonymous-schema-141>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-134>"
+                        "x-parser-schema-id": "<anonymous-schema-135>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-133>"
+                    "x-parser-schema-id": "<anonymous-schema-134>"
                   }
                 ],
                 "x-parser-schema-id": "TrailerDwellExceededEvent"
@@ -2165,16 +2194,16 @@
                         "properties": {
                           "yard_check_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-143>"
+                            "x-parser-schema-id": "<anonymous-schema-144>"
                           },
                           "site_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-144>"
+                            "x-parser-schema-id": "<anonymous-schema-145>"
                           },
                           "closed_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-145>"
+                            "x-parser-schema-id": "<anonymous-schema-146>"
                           },
                           "discrepancies": {
                             "type": "array",
@@ -2189,36 +2218,36 @@
                                 "kind": {
                                   "type": "string",
                                   "description": "MISSING, UNEXPECTED or WRONG_LOCATION today; any non-blank string is accepted.",
-                                  "x-parser-schema-id": "<anonymous-schema-148>"
+                                  "x-parser-schema-id": "<anonymous-schema-149>"
                                 },
                                 "location_code": {
                                   "type": "string",
-                                  "x-parser-schema-id": "<anonymous-schema-149>"
+                                  "x-parser-schema-id": "<anonymous-schema-150>"
                                 },
                                 "trailer_id": {
                                   "type": [
                                     "string",
                                     "null"
                                   ],
-                                  "x-parser-schema-id": "<anonymous-schema-150>"
+                                  "x-parser-schema-id": "<anonymous-schema-151>"
                                 },
                                 "unit_number": {
                                   "type": [
                                     "string",
                                     "null"
                                   ],
-                                  "x-parser-schema-id": "<anonymous-schema-151>"
+                                  "x-parser-schema-id": "<anonymous-schema-152>"
                                 }
                               },
-                              "x-parser-schema-id": "<anonymous-schema-147>"
+                              "x-parser-schema-id": "<anonymous-schema-148>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-146>"
+                            "x-parser-schema-id": "<anonymous-schema-147>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-142>"
+                        "x-parser-schema-id": "<anonymous-schema-143>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-141>"
+                    "x-parser-schema-id": "<anonymous-schema-142>"
                   }
                 ],
                 "x-parser-schema-id": "YardCheckClosedEvent"
@@ -2300,15 +2329,15 @@
                     "properties": {
                       "appointment_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-154>"
+                        "x-parser-schema-id": "<anonymous-schema-155>"
                       },
                       "site_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-155>"
+                        "x-parser-schema-id": "<anonymous-schema-156>"
                       },
                       "door_code": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-156>"
+                        "x-parser-schema-id": "<anonymous-schema-157>"
                       },
                       "direction": {
                         "type": "string",
@@ -2316,30 +2345,30 @@
                           "INBOUND",
                           "OUTBOUND"
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-157>"
+                        "x-parser-schema-id": "<anonymous-schema-158>"
                       },
                       "carrier_scac": {
                         "type": [
                           "string",
                           "null"
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-158>"
+                        "x-parser-schema-id": "<anonymous-schema-159>"
                       },
                       "window_end": {
                         "type": "string",
                         "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-159>"
+                        "x-parser-schema-id": "<anonymous-schema-160>"
                       },
                       "version": {
                         "type": "integer",
                         "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-160>"
+                        "x-parser-schema-id": "<anonymous-schema-161>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-153>"
+                    "x-parser-schema-id": "<anonymous-schema-154>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-152>"
+                "x-parser-schema-id": "<anonymous-schema-153>"
               }
             ],
             "x-parser-schema-id": "DockAppointmentNoShowEvent"
@@ -2373,11 +2402,11 @@
       }
     },
     "warehouse.inventory.events": {
-      "description": "inventory-storage's integration topic. This service consumes\n`DiscrepancyDetected` and `ItemUnlocated` under a stable consumer group\nread from env `INVENTORY_EXCEPTIONS_CONSUMER_GROUP`. Both types arrive\nhere only after the producer's promotion PR (they are analytics-only\ntoday); the contracts below are pinned consumer-first. Every other type\nis ignored.\n",
+      "description": "inventory-storage's integration topic. This service reads it under TWO\nstable consumer groups. `INVENTORY_EXCEPTIONS_CONSUMER_GROUP` consumes\n`DiscrepancyDetected` and `ItemUnlocated` (both arrive here only after\nthe producer's promotion PR; the contracts below are pinned\nconsumer-first). `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (ADR 0012)\nconsumes the held-stock facts `StockHeld`, `StockReleased` and\n`StockDispositioned`: every held unit gets exactly one open case,\nauto-resolved when the hold ends. Every other type on the topic is\nignored by both groups.\n",
       "publish": {
         "operationId": "consumeInventoryEvents",
-        "summary": "Consume count discrepancies and unlocated stock.",
-        "description": "A short count (`DiscrepancyDetected`) and the stock it could not find\n(`ItemUnlocated`) each open or touch their own case. The CloudEvents\n`id` claim and the effect commit in one transaction.\n",
+        "summary": "Consume count discrepancies, unlocated stock and held-stock facts.",
+        "description": "A short count (`DiscrepancyDetected`) and the stock it could not find\n(`ItemUnlocated`) each open or touch their own case. A `StockHeld`\nfact opens ONE case per held unit id (a re-emitted hold touches it);\na closing disposition (`RELEASE`, `RETURN_TO_VENDOR`, `SCRAP`) or a\nrelease auto-resolves it with the outcome in the resolution note,\nwhile a `REWORK` disposition keeps the unit held and the case open\n(the arrival is recorded as an occurrence). The CloudEvents `id`\nclaim and the effect commit in one transaction.\n",
         "tags": [
           {
             "name": "consumed"
@@ -2413,25 +2442,25 @@
                           "bin_id": {
                             "type": "string",
                             "description": "The bin whose count did not match system records.",
-                            "x-parser-schema-id": "<anonymous-schema-163>"
+                            "x-parser-schema-id": "<anonymous-schema-164>"
                           },
                           "counted": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Quantity physically counted in the bin.",
-                            "x-parser-schema-id": "<anonymous-schema-164>"
+                            "x-parser-schema-id": "<anonymous-schema-165>"
                           },
                           "system": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "Quantity the system believed was in the bin.",
-                            "x-parser-schema-id": "<anonymous-schema-165>"
+                            "x-parser-schema-id": "<anonymous-schema-166>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-162>"
+                        "x-parser-schema-id": "<anonymous-schema-163>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-161>"
+                    "x-parser-schema-id": "<anonymous-schema-162>"
                   }
                 ],
                 "x-parser-schema-id": "DiscrepancyDetectedEvent"
@@ -2487,28 +2516,28 @@
                           "stock_unit_id": {
                             "type": "string",
                             "description": "The StockUnit flagged Unlocated.",
-                            "x-parser-schema-id": "<anonymous-schema-168>"
+                            "x-parser-schema-id": "<anonymous-schema-169>"
                           },
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-169>"
+                            "x-parser-schema-id": "<anonymous-schema-170>"
                           },
                           "bin_id": {
                             "type": "string",
                             "description": "The bin the stock was believed to be in.",
-                            "x-parser-schema-id": "<anonymous-schema-170>"
+                            "x-parser-schema-id": "<anonymous-schema-171>"
                           },
                           "quantity": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "Quantity that could not be accounted for.",
-                            "x-parser-schema-id": "<anonymous-schema-171>"
+                            "x-parser-schema-id": "<anonymous-schema-172>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-167>"
+                        "x-parser-schema-id": "<anonymous-schema-168>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-166>"
+                    "x-parser-schema-id": "<anonymous-schema-167>"
                   }
                 ],
                 "x-parser-schema-id": "ItemUnlocatedEvent"
@@ -2531,6 +2560,361 @@
                       "sku": "SKU-1001",
                       "bin_id": "A-12-3",
                       "quantity": 3
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "StockHeld",
+              "title": "StockHeld (consumed, inventory-storage)",
+              "summary": "A unit of stock was booked HELD; no usable quantity until dispositioned.",
+              "description": "Consumed under `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (ADR 0012; the\nproducer's own contract is inventory-storage ADR 0052). `type` =\n`com.warehouse.wms.inventory-storage.stock.StockHeld`, source\n`/warehouse/inventory-storage`, dataschema\n`urn:warehouse:inventory-storage:events:StockHeld:v1`. Subject =\nKafka key = the held unit id. ONE case opens per held unit id: the\npayload (sku, quantity, hold reason, receipt/ASN/line source) is\nfrozen on it; a re-emitted hold touches the same case.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "held_unit_id",
+                          "sku",
+                          "quantity",
+                          "reason",
+                          "receipt_id",
+                          "asn_number",
+                          "line_no",
+                          "held_at"
+                        ],
+                        "properties": {
+                          "held_unit_id": {
+                            "type": "string",
+                            "description": "The held unit id (the subject).",
+                            "x-parser-schema-id": "<anonymous-schema-175>"
+                          },
+                          "sku": {
+                            "type": "string",
+                            "description": "The SKU held.",
+                            "x-parser-schema-id": "<anonymous-schema-176>"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Eaches held.",
+                            "x-parser-schema-id": "<anonymous-schema-177>"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "DAMAGED",
+                              "QC_PENDING",
+                              "SUSPECT",
+                              "OTHER"
+                            ],
+                            "description": "Why it is held.",
+                            "x-parser-schema-id": "<anonymous-schema-178>"
+                          },
+                          "receipt_id": {
+                            "type": "string",
+                            "description": "The inbound receipt the quantity came from.",
+                            "x-parser-schema-id": "<anonymous-schema-179>"
+                          },
+                          "asn_number": {
+                            "type": "string",
+                            "description": "The ASN of the receipt.",
+                            "x-parser-schema-id": "<anonymous-schema-180>"
+                          },
+                          "line_no": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "The receipt line.",
+                            "x-parser-schema-id": "<anonymous-schema-181>"
+                          },
+                          "owner_ref": {
+                            "type": "string",
+                            "description": "Owner of the stock. Omitted for fleet-owned stock.",
+                            "x-parser-schema-id": "<anonymous-schema-182>"
+                          },
+                          "sscc": {
+                            "type": "string",
+                            "description": "The carton SSCC of the line. Omitted when it had none.",
+                            "x-parser-schema-id": "<anonymous-schema-183>"
+                          },
+                          "held_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "When the unit was held.",
+                            "x-parser-schema-id": "<anonymous-schema-184>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-174>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-173>"
+                  }
+                ],
+                "x-parser-schema-id": "StockHeldEvent"
+              },
+              "examples": [
+                {
+                  "name": "damagedLineHeld",
+                  "summary": "Four damaged units of SKU-9 booked as a held unit off receipt rcpt-77 line 2.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "8f1e6b94-2a57-4c38-9d47-0c2f8e3a1b56",
+                    "source": "/warehouse/inventory-storage",
+                    "type": "com.warehouse.wms.inventory-storage.stock.StockHeld",
+                    "subject": "hu-4471",
+                    "time": "2026-11-12T09:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inventory-storage:events:StockHeld:v1",
+                    "data": {
+                      "held_unit_id": "hu-4471",
+                      "sku": "SKU-9",
+                      "quantity": 4,
+                      "reason": "DAMAGED",
+                      "receipt_id": "rcpt-77",
+                      "asn_number": "ASN-88",
+                      "line_no": 2,
+                      "held_at": "2026-11-12T09:00:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "StockReleased",
+              "title": "StockReleased (consumed, inventory-storage)",
+              "summary": "A held unit was released; the quantity re-enters stock as a fresh staged receipt.",
+              "description": "Consumed under `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (ADR 0012).\nThe producer raises it ONLY on a `RELEASE` disposition, in addition\nto `StockDispositioned` (inventory-storage ADR 0052), so in practice\nit arrives as the second fact of a pair whose first fact already\nclosed the case; handling it as a close in its own right covers\neither arrival order. It auto-resolves the held unit's case with a\nreleased note. `type` =\n`com.warehouse.wms.inventory-storage.stock.StockReleased`, subject =\nKafka key = the held unit id.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "held_unit_id",
+                          "sku",
+                          "quantity",
+                          "receipt_id",
+                          "asn_number",
+                          "line_no",
+                          "released_at"
+                        ],
+                        "properties": {
+                          "held_unit_id": {
+                            "type": "string",
+                            "description": "The held unit id (the subject).",
+                            "x-parser-schema-id": "<anonymous-schema-187>"
+                          },
+                          "sku": {
+                            "type": "string",
+                            "description": "The SKU held.",
+                            "x-parser-schema-id": "<anonymous-schema-188>"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Eaches released.",
+                            "x-parser-schema-id": "<anonymous-schema-189>"
+                          },
+                          "receipt_id": {
+                            "type": "string",
+                            "description": "The inbound receipt the quantity came from.",
+                            "x-parser-schema-id": "<anonymous-schema-190>"
+                          },
+                          "asn_number": {
+                            "type": "string",
+                            "description": "The ASN of the receipt.",
+                            "x-parser-schema-id": "<anonymous-schema-191>"
+                          },
+                          "line_no": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "The receipt line.",
+                            "x-parser-schema-id": "<anonymous-schema-192>"
+                          },
+                          "released_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "When the unit was released.",
+                            "x-parser-schema-id": "<anonymous-schema-193>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-186>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-185>"
+                  }
+                ],
+                "x-parser-schema-id": "StockReleasedEvent"
+              },
+              "examples": [
+                {
+                  "name": "releasedBackToStock",
+                  "summary": "The held unit was released; the case auto-resolves.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "9a2f7c85-3b68-4d49-8e5f-1d309f4b2c67",
+                    "source": "/warehouse/inventory-storage",
+                    "type": "com.warehouse.wms.inventory-storage.stock.StockReleased",
+                    "subject": "hu-4471",
+                    "time": "2026-11-12T10:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inventory-storage:events:StockReleased:v1",
+                    "data": {
+                      "held_unit_id": "hu-4471",
+                      "sku": "SKU-9",
+                      "quantity": 4,
+                      "receipt_id": "rcpt-77",
+                      "asn_number": "ASN-88",
+                      "line_no": 2,
+                      "released_at": "2026-11-12T10:00:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "StockDispositioned",
+              "title": "StockDispositioned (consumed, inventory-storage)",
+              "summary": "A disposition was decided for a held unit.",
+              "description": "Consumed under `HELD_STOCK_EXCEPTIONS_CONSUMER_GROUP` (ADR 0012).\nRaised for all four dispositions (inventory-storage ADR 0052):\n`RELEASE`, `RETURN_TO_VENDOR` and `SCRAP` end the hold, so the case\nauto-resolves with the disposition in the resolution note; `REWORK`\nKEEPS the unit held, so the case stays open and the arrival is\nrecorded as an occurrence. `type` =\n`com.warehouse.wms.inventory-storage.stock.StockDispositioned`,\nsubject = Kafka key = the held unit id.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.exception-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "held_unit_id",
+                          "sku",
+                          "quantity",
+                          "disposition",
+                          "reason",
+                          "receipt_id",
+                          "asn_number",
+                          "line_no",
+                          "decided_at"
+                        ],
+                        "properties": {
+                          "held_unit_id": {
+                            "type": "string",
+                            "description": "The held unit id (the subject).",
+                            "x-parser-schema-id": "<anonymous-schema-196>"
+                          },
+                          "sku": {
+                            "type": "string",
+                            "description": "The SKU held.",
+                            "x-parser-schema-id": "<anonymous-schema-197>"
+                          },
+                          "quantity": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "Eaches dispositioned.",
+                            "x-parser-schema-id": "<anonymous-schema-198>"
+                          },
+                          "disposition": {
+                            "type": "string",
+                            "enum": [
+                              "RELEASE",
+                              "RETURN_TO_VENDOR",
+                              "SCRAP",
+                              "REWORK"
+                            ],
+                            "description": "The decision.",
+                            "x-parser-schema-id": "<anonymous-schema-199>"
+                          },
+                          "reason": {
+                            "type": "string",
+                            "enum": [
+                              "DAMAGED",
+                              "QC_PENDING",
+                              "SUSPECT",
+                              "OTHER"
+                            ],
+                            "description": "The hold reason after the decision.",
+                            "x-parser-schema-id": "<anonymous-schema-200>"
+                          },
+                          "receipt_id": {
+                            "type": "string",
+                            "description": "The inbound receipt the quantity came from.",
+                            "x-parser-schema-id": "<anonymous-schema-201>"
+                          },
+                          "asn_number": {
+                            "type": "string",
+                            "description": "The ASN of the receipt.",
+                            "x-parser-schema-id": "<anonymous-schema-202>"
+                          },
+                          "line_no": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "description": "The receipt line.",
+                            "x-parser-schema-id": "<anonymous-schema-203>"
+                          },
+                          "decided_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "When it was decided.",
+                            "x-parser-schema-id": "<anonymous-schema-204>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-195>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-194>"
+                  }
+                ],
+                "x-parser-schema-id": "StockDispositionedEvent"
+              },
+              "examples": [
+                {
+                  "name": "returnedToVendor",
+                  "summary": "The damaged units go back to the vendor; the case auto-resolves.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "0b3a8d96-4c79-4e5a-9f60-2e410a5c3d78",
+                    "source": "/warehouse/inventory-storage",
+                    "type": "com.warehouse.wms.inventory-storage.stock.StockDispositioned",
+                    "subject": "hu-4471",
+                    "time": "2026-11-12T10:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inventory-storage:events:StockDispositioned:v1",
+                    "data": {
+                      "held_unit_id": "hu-4471",
+                      "sku": "SKU-9",
+                      "quantity": 4,
+                      "disposition": "RETURN_TO_VENDOR",
+                      "reason": "DAMAGED",
+                      "receipt_id": "rcpt-77",
+                      "asn_number": "ASN-88",
+                      "line_no": 2,
+                      "decided_at": "2026-11-12T10:30:00Z"
                     }
                   }
                 }
@@ -2582,44 +2966,44 @@
                       "package_id": {
                         "type": "string",
                         "description": "The missed package; the dedup subject.",
-                        "x-parser-schema-id": "<anonymous-schema-174>"
+                        "x-parser-schema-id": "<anonymous-schema-207>"
                       },
                       "load_id": {
                         "type": "string",
                         "description": "The load the package missed.",
-                        "x-parser-schema-id": "<anonymous-schema-175>"
+                        "x-parser-schema-id": "<anonymous-schema-208>"
                       },
                       "site_id": {
                         "type": "string",
                         "description": "The site part of the dedup key.",
-                        "x-parser-schema-id": "<anonymous-schema-176>"
+                        "x-parser-schema-id": "<anonymous-schema-209>"
                       },
                       "source_order_id": {
                         "type": "string",
                         "description": "Omitted when the manifest carried none.",
-                        "x-parser-schema-id": "<anonymous-schema-177>"
+                        "x-parser-schema-id": "<anonymous-schema-210>"
                       },
                       "cutoff": {
                         "type": "string",
                         "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-178>"
+                        "x-parser-schema-id": "<anonymous-schema-211>"
                       },
                       "detected_at": {
                         "type": "string",
                         "format": "date-time",
-                        "x-parser-schema-id": "<anonymous-schema-179>"
+                        "x-parser-schema-id": "<anonymous-schema-212>"
                       },
                       "version": {
                         "type": "integer",
                         "minimum": 1,
                         "description": "The aggregate version after the change; not part of the dedup key.",
-                        "x-parser-schema-id": "<anonymous-schema-180>"
+                        "x-parser-schema-id": "<anonymous-schema-213>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-173>"
+                    "x-parser-schema-id": "<anonymous-schema-206>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-172>"
+                "x-parser-schema-id": "<anonymous-schema-205>"
               }
             ],
             "x-parser-schema-id": "PackageMissedLoadEvent"
@@ -2679,6 +3063,9 @@
       "PackageMissedLoad": "$ref:$.channels.warehouse.outbound-shipping.events.publish.message",
       "DiscrepancyDetected": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0]",
       "ItemUnlocated": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1]",
+      "StockHeld": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[2]",
+      "StockReleased": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[3]",
+      "StockDispositioned": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[4]",
       "ExceptionOpenedAnalytics": "$ref:$.channels.warehouse.exception-management.analytics.subscribe.message.oneOf[0]",
       "ExceptionTriagedAnalytics": "$ref:$.channels.warehouse.exception-management.analytics.subscribe.message.oneOf[1]",
       "ExceptionAssignedAnalytics": "$ref:$.channels.warehouse.exception-management.analytics.subscribe.message.oneOf[2]",
@@ -2713,7 +3100,10 @@
       "DockAppointmentNoShowEvent": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.payload",
       "PackageMissedLoadEvent": "$ref:$.channels.warehouse.outbound-shipping.events.publish.message.payload",
       "DiscrepancyDetectedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[0].payload",
-      "ItemUnlocatedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1].payload"
+      "ItemUnlocatedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[1].payload",
+      "StockHeldEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[2].payload",
+      "StockReleasedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[3].payload",
+      "StockDispositionedEvent": "$ref:$.channels.warehouse.inventory.events.publish.message.oneOf[4].payload"
     }
   },
   "x-parser-spec-parsed": true,
