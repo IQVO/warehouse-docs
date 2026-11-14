@@ -241,6 +241,7 @@ const sidebars: SidebarsConfig = {
         'architecture/a2a-agents',
         'architecture/agentic-standard',
         'architecture/agent-catalogue',
+        'architecture/consumer-contract-testing',
       ],
     },
   ],
