@@ -1,865 +1,761 @@
 {
+  "event_derivation": "subscriptions derived from non-test topic literals in each consumer's cmd/ and internal/ (reader config truth), NOT from asyncapi operation semantics; producers by topic-name ownership",
   "events": [
     {
       "consumer": "dock-scheduling",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "facility-layout",
-      "self_pub": false,
-      "topic": "warehouse.facility.events"
+      "topics": [
+        "warehouse.facility.events"
+      ]
     },
     {
       "consumer": "dock-scheduling",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "inbound-receiving",
-      "self_pub": false,
-      "topic": "warehouse.inbound-receiving.events"
+      "topics": [
+        "warehouse.inbound-receiving.events"
+      ]
     },
     {
       "consumer": "dock-scheduling",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
-      "producer": "network-fulfillment",
-      "self_pub": false,
-      "topic": "warehouse.inbound-receiving.events"
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
     },
     {
       "consumer": "dock-scheduling",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "network-fulfillment",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
-    },
-    {
-      "consumer": "dock-scheduling",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
-    },
-    {
-      "consumer": "dock-scheduling",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "workforce-management",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
-    },
-    {
-      "consumer": "dock-scheduling",
-      "evidence": "apis/asyncapi.yaml (subscribe; producer inferred from topic name)",
-      "inferred": true,
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "yard-management",
-      "self_pub": false,
-      "topic": "warehouse.yard-management.events"
+      "topics": [
+        "warehouse.yard-management.events"
+      ]
     },
     {
       "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "dock-scheduling",
-      "self_pub": false,
-      "topic": "warehouse.dock-scheduling.events"
+      "topics": [
+        "warehouse.dock-scheduling.events"
+      ]
     },
     {
       "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "fulfillment-execution",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
     },
     {
       "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "labor-performance",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
-    },
-    {
-      "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
-    },
-    {
-      "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "inbound-receiving",
-      "self_pub": false,
-      "topic": "warehouse.inbound-receiving.events"
+      "topics": [
+        "warehouse.inbound-receiving.events"
+      ]
     },
     {
       "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "network-fulfillment",
-      "self_pub": false,
-      "topic": "warehouse.inbound-receiving.events"
-    },
-    {
-      "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "inventory-storage",
-      "self_pub": false,
-      "topic": "warehouse.inventory.events"
+      "topics": [
+        "warehouse.inventory.events"
+      ]
     },
     {
       "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "network-fulfillment",
-      "self_pub": false,
-      "topic": "warehouse.network-fulfillment.events"
+      "topics": [
+        "warehouse.network-fulfillment.events"
+      ]
     },
     {
       "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.order-management.events"
+      "topics": [
+        "warehouse.order-management.events"
+      ]
     },
     {
       "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "network-fulfillment",
-      "self_pub": false,
-      "topic": "warehouse.outbound-shipping.events"
-    },
-    {
-      "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.outbound-shipping.events"
-    },
-    {
-      "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "outbound-shipping",
-      "self_pub": false,
-      "topic": "warehouse.outbound-shipping.events"
+      "topics": [
+        "warehouse.outbound-shipping.events"
+      ]
     },
     {
       "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "returns-processing",
-      "self_pub": false,
-      "topic": "warehouse.returns-processing.events"
+      "topics": [
+        "warehouse.returns-processing.events"
+      ]
     },
     {
       "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "network-fulfillment",
-      "self_pub": false,
-      "topic": "warehouse.work-planning.events"
-    },
-    {
-      "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.work-planning.events"
-    },
-    {
-      "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "wes-work-planning",
-      "self_pub": false,
-      "topic": "warehouse.work-planning.events"
+      "topics": [
+        "warehouse.work-planning.events"
+      ]
     },
     {
       "consumer": "exception-management",
-      "evidence": "apis/asyncapi.yaml (subscribe; producer inferred from topic name)",
-      "inferred": true,
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "yard-management",
-      "self_pub": false,
-      "topic": "warehouse.yard-management.events"
+      "topics": [
+        "warehouse.yard-management.events"
+      ]
     },
     {
       "consumer": "fulfillment-execution",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
-      "producer": "network-fulfillment",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
     },
     {
       "consumer": "fulfillment-execution",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
-    },
-    {
-      "consumer": "fulfillment-execution",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "workforce-management",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
-    },
-    {
-      "consumer": "fulfillment-execution",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
-    },
-    {
-      "consumer": "fulfillment-execution",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "product-master",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
+      "topics": [
+        "warehouse.product-master.events"
+      ]
     },
     {
       "consumer": "fulfillment-execution",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "task-interleaving",
-      "self_pub": false,
-      "topic": "warehouse.task-interleaving.events"
+      "topics": [
+        "warehouse.task-interleaving.events"
+      ]
     },
     {
       "consumer": "fulfillment-execution",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "network-fulfillment",
-      "self_pub": false,
-      "topic": "warehouse.work-planning.events"
-    },
-    {
-      "consumer": "fulfillment-execution",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.work-planning.events"
-    },
-    {
-      "consumer": "fulfillment-execution",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "wes-work-planning",
-      "self_pub": false,
-      "topic": "warehouse.work-planning.events"
+      "topics": [
+        "warehouse.work-planning.events"
+      ]
     },
     {
       "consumer": "inbound-receiving",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "dock-scheduling",
-      "self_pub": false,
-      "topic": "warehouse.dock-scheduling.events"
+      "topics": [
+        "warehouse.dock-scheduling.events"
+      ]
     },
     {
       "consumer": "inbound-receiving",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "facility-layout",
-      "self_pub": false,
-      "topic": "warehouse.facility.events"
+      "topics": [
+        "warehouse.facility.events"
+      ]
     },
     {
       "consumer": "inbound-receiving",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "inventory-storage",
-      "self_pub": false,
-      "topic": "warehouse.inventory.events"
+      "topics": [
+        "warehouse.inventory.events"
+      ]
     },
     {
       "consumer": "inbound-receiving",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
-    },
-    {
-      "consumer": "inbound-receiving",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "product-master",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
+      "topics": [
+        "warehouse.product-master.events"
+      ]
     },
     {
       "consumer": "inbound-receiving",
-      "evidence": "apis/asyncapi.yaml (subscribe; producer inferred from topic name)",
-      "inferred": true,
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "yard-management",
-      "self_pub": false,
-      "topic": "warehouse.yard-management.events"
+      "topics": [
+        "warehouse.yard-management.events"
+      ]
     },
     {
       "consumer": "inventory-storage",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "facility-layout",
-      "self_pub": false,
-      "topic": "warehouse.facility.events"
+      "topics": [
+        "warehouse.facility.events"
+      ]
     },
     {
       "consumer": "inventory-storage",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "fulfillment-execution",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
     },
     {
       "consumer": "inventory-storage",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "labor-performance",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
-    },
-    {
-      "consumer": "inventory-storage",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
-    },
-    {
-      "consumer": "inventory-storage",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "inbound-receiving",
-      "self_pub": false,
-      "topic": "warehouse.inbound-receiving.events"
+      "topics": [
+        "warehouse.inbound-receiving.events"
+      ]
     },
     {
       "consumer": "inventory-storage",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
-      "producer": "network-fulfillment",
-      "self_pub": false,
-      "topic": "warehouse.inbound-receiving.events"
+      "producer": "network-inventory-planning",
+      "topics": [
+        "warehouse.network-inventory-planning.events"
+      ]
     },
     {
       "consumer": "inventory-storage",
-      "evidence": "analytics-twin self-consumption (topic owner = consumer)",
-      "kind": "event-self",
-      "producer": "inventory-storage",
-      "self_pub": false,
-      "topic": "warehouse.network-inventory-planning.events"
-    },
-    {
-      "consumer": "inventory-storage",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
-    },
-    {
-      "consumer": "inventory-storage",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "product-master",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
+      "topics": [
+        "warehouse.product-master.events"
+      ]
     },
     {
       "consumer": "inventory-storage",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "returns-processing",
-      "self_pub": false,
-      "topic": "warehouse.returns-processing.events"
+      "topics": [
+        "warehouse.returns-processing.events"
+      ]
     },
     {
       "consumer": "inventory-storage",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "slotting-optimization",
-      "self_pub": false,
-      "topic": "warehouse.slotting-optimization.events"
+      "topics": [
+        "warehouse.slotting-optimization.events"
+      ]
     },
     {
       "consumer": "labor-performance",
-      "evidence": "apis/asyncapi.yaml (subscribe/publish self-loop)",
-      "kind": "event-self",
-      "producer": "labor-performance",
-      "self_pub": true,
-      "topic": "warehouse.labor-performance.analytics"
-    },
-    {
-      "consumer": "labor-performance",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
-      "producer": "workforce-management",
-      "self_pub": false,
-      "topic": "warehouse.labor-performance.events"
+      "producer": "fulfillment-execution",
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "network-fulfillment",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inbound-receiving",
+      "topics": [
+        "warehouse.inbound-receiving.events"
+      ]
+    },
+    {
+      "consumer": "network-fulfillment",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "outbound-shipping",
+      "topics": [
+        "warehouse.outbound-shipping.events"
+      ]
+    },
+    {
+      "consumer": "network-fulfillment",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
+    },
+    {
+      "consumer": "network-fulfillment",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "wes-work-planning",
+      "topics": [
+        "warehouse.work-planning.events"
+      ]
+    },
+    {
+      "consumer": "network-inventory-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "facility-layout",
+      "topics": [
+        "warehouse.facility.events"
+      ]
+    },
+    {
+      "consumer": "network-inventory-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "fulfillment-execution",
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "network-inventory-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inventory-storage",
+      "topics": [
+        "warehouse.inventory.events"
+      ]
+    },
+    {
+      "consumer": "network-inventory-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "order-management",
+      "topics": [
+        "warehouse.order-management.events"
+      ]
+    },
+    {
+      "consumer": "network-inventory-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "product-master",
+      "topics": [
+        "warehouse.product-master.events"
+      ]
+    },
+    {
+      "consumer": "network-inventory-planning",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "warehouse-planning",
+      "topics": [
+        "warehouse.warehouse-planning.events"
+      ]
     },
     {
       "consumer": "order-management",
-      "evidence": "apis/asyncapi.yaml (subscribe/publish self-loop)",
-      "kind": "event-self",
-      "producer": "order-management",
-      "self_pub": true,
-      "topic": "warehouse.order-management.analytics"
-    },
-    {
-      "consumer": "outbound-shipping",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "dock-scheduling",
-      "self_pub": false,
-      "topic": "warehouse.dock-scheduling.events"
-    },
-    {
-      "consumer": "outbound-shipping",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "facility-layout",
-      "self_pub": false,
-      "topic": "warehouse.facility.events"
-    },
-    {
-      "consumer": "outbound-shipping",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "fulfillment-execution",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
     },
     {
-      "consumer": "outbound-shipping",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "consumer": "order-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
-      "producer": "labor-performance",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
+      "producer": "outbound-shipping",
+      "topics": [
+        "warehouse.outbound-shipping.events"
+      ]
     },
     {
-      "consumer": "outbound-shipping",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "consumer": "order-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
     },
     {
-      "consumer": "outbound-shipping",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "consumer": "order-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
-      "producer": "network-fulfillment",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
+      "producer": "product-master",
+      "topics": [
+        "warehouse.product-master.events"
+      ]
     },
     {
-      "consumer": "outbound-shipping",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "consumer": "order-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
+      "producer": "warehouse-planning",
+      "topics": [
+        "warehouse.warehouse-planning.events"
+      ]
     },
     {
-      "consumer": "outbound-shipping",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "consumer": "order-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
-      "producer": "workforce-management",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
+      "producer": "wes-work-planning",
+      "topics": [
+        "warehouse.work-planning.events"
+      ]
     },
     {
       "consumer": "outbound-shipping",
-      "evidence": "apis/asyncapi.yaml (subscribe; producer inferred from topic name)",
-      "inferred": true,
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "dock-scheduling",
+      "topics": [
+        "warehouse.dock-scheduling.events"
+      ]
+    },
+    {
+      "consumer": "outbound-shipping",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "facility-layout",
+      "topics": [
+        "warehouse.facility.events"
+      ]
+    },
+    {
+      "consumer": "outbound-shipping",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "fulfillment-execution",
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
+    },
+    {
+      "consumer": "outbound-shipping",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
+    },
+    {
+      "consumer": "outbound-shipping",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "yard-management",
-      "self_pub": false,
-      "topic": "warehouse.yard-management.events"
+      "topics": [
+        "warehouse.yard-management.events"
+      ]
     },
     {
       "consumer": "pick-face-replenishment",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "facility-layout",
-      "self_pub": false,
-      "topic": "warehouse.facility.events"
+      "topics": [
+        "warehouse.facility.events"
+      ]
     },
     {
       "consumer": "pick-face-replenishment",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "inventory-storage",
-      "self_pub": false,
-      "topic": "warehouse.inventory.events"
+      "topics": [
+        "warehouse.inventory.events"
+      ]
     },
     {
       "consumer": "pick-face-replenishment",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
-    },
-    {
-      "consumer": "pick-face-replenishment",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "product-master",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
+      "topics": [
+        "warehouse.product-master.events"
+      ]
     },
     {
       "consumer": "pick-face-replenishment",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "slotting-optimization",
-      "self_pub": false,
-      "topic": "warehouse.slotting-optimization.events"
-    },
-    {
-      "consumer": "process-path-management",
-      "evidence": "apis/asyncapi.yaml (subscribe/publish self-loop)",
-      "kind": "event-self",
-      "producer": "process-path-management",
-      "self_pub": true,
-      "topic": "warehouse.process-path-management.analytics"
-    },
-    {
-      "consumer": "process-path-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "network-fulfillment",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
-    },
-    {
-      "consumer": "process-path-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
-    },
-    {
-      "consumer": "process-path-management",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "workforce-management",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
+      "topics": [
+        "warehouse.slotting-optimization.events"
+      ]
     },
     {
       "consumer": "returns-processing",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "fulfillment-execution",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
     },
     {
       "consumer": "returns-processing",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "labor-performance",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
-    },
-    {
-      "consumer": "returns-processing",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
+      "topics": [
+        "warehouse.order-management.events"
+      ]
     },
     {
       "consumer": "returns-processing",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.order-management.events"
-    },
-    {
-      "consumer": "returns-processing",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
-    },
-    {
-      "consumer": "returns-processing",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "product-master",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
+      "topics": [
+        "warehouse.product-master.events"
+      ]
     },
     {
       "consumer": "slotting-optimization",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "facility-layout",
-      "self_pub": false,
-      "topic": "warehouse.facility.events"
+      "topics": [
+        "warehouse.facility.events"
+      ]
     },
     {
       "consumer": "slotting-optimization",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "inventory-storage",
-      "self_pub": false,
-      "topic": "warehouse.inventory.events"
+      "topics": [
+        "warehouse.inventory.events"
+      ]
     },
     {
       "consumer": "slotting-optimization",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.order-management.events"
+      "topics": [
+        "warehouse.order-management.events"
+      ]
     },
     {
       "consumer": "slotting-optimization",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
-    },
-    {
-      "consumer": "slotting-optimization",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "product-master",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
+      "topics": [
+        "warehouse.product-master.events"
+      ]
     },
     {
       "consumer": "task-interleaving",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "facility-layout",
-      "self_pub": false,
-      "topic": "warehouse.facility.events"
+      "topics": [
+        "warehouse.facility.events"
+      ]
     },
     {
       "consumer": "task-interleaving",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "fulfillment-execution",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
-    },
-    {
-      "consumer": "task-interleaving",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "labor-performance",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
-    },
-    {
-      "consumer": "task-interleaving",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
     },
     {
       "consumer": "warehouse-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "dock-scheduling",
-      "self_pub": false,
-      "topic": "warehouse.dock-scheduling.events"
+      "topics": [
+        "warehouse.dock-scheduling.events"
+      ]
     },
     {
       "consumer": "warehouse-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "facility-layout",
-      "self_pub": false,
-      "topic": "warehouse.facility.events"
+      "topics": [
+        "warehouse.facility.events"
+      ]
     },
     {
       "consumer": "warehouse-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "fulfillment-execution",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
     },
     {
       "consumer": "warehouse-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "labor-performance",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
-    },
-    {
-      "consumer": "warehouse-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
+      "topics": [
+        "warehouse.order-management.events"
+      ]
     },
     {
       "consumer": "warehouse-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.order-management.events"
-    },
-    {
-      "consumer": "warehouse-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "workforce-management",
-      "self_pub": false,
-      "topic": "warehouse.workforce.events"
+      "topics": [
+        "warehouse.workforce.events"
+      ]
     },
     {
       "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "fulfillment-execution",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
+      "topics": [
+        "warehouse.fulfillment.events"
+      ]
     },
     {
       "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "labor-performance",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
-    },
-    {
-      "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.fulfillment.events"
-    },
-    {
-      "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "inventory-storage",
-      "self_pub": false,
-      "topic": "warehouse.inventory.events"
+      "topics": [
+        "warehouse.inventory.events"
+      ]
     },
     {
       "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe; producer inferred from topic name)",
-      "inferred": true,
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
-      "producer": "inventory-storage",
-      "self_pub": false,
-      "topic": "warehouse.network-inventory-planning.events"
+      "producer": "network-inventory-planning",
+      "topics": [
+        "warehouse.network-inventory-planning.events"
+      ]
     },
     {
       "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.order-management.events"
+      "topics": [
+        "warehouse.order-management.events"
+      ]
     },
     {
       "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "pick-face-replenishment",
-      "self_pub": false,
-      "topic": "warehouse.pick-face-replenishment.events"
+      "topics": [
+        "warehouse.pick-face-replenishment.events"
+      ]
     },
     {
       "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
-      "producer": "network-fulfillment",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
     },
     {
       "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
-    },
-    {
-      "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "workforce-management",
-      "self_pub": false,
-      "topic": "warehouse.process-path-management.events"
-    },
-    {
-      "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
-      "kind": "event",
-      "producer": "order-management",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
-    },
-    {
-      "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "product-master",
-      "self_pub": false,
-      "topic": "warehouse.product-master.events"
+      "topics": [
+        "warehouse.product-master.events"
+      ]
     },
     {
       "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "slotting-optimization",
-      "self_pub": false,
-      "topic": "warehouse.slotting-optimization.events"
+      "topics": [
+        "warehouse.slotting-optimization.events"
+      ]
     },
     {
       "consumer": "wes-work-planning",
-      "evidence": "apis/asyncapi.yaml (subscribe)",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
       "kind": "event",
       "producer": "workforce-management",
-      "self_pub": false,
-      "topic": "warehouse.workforce.events"
+      "topics": [
+        "warehouse.workforce.events"
+      ]
+    },
+    {
+      "consumer": "workforce-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "labor-performance",
+      "topics": [
+        "warehouse.labor-performance.events"
+      ]
+    },
+    {
+      "consumer": "workforce-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "process-path-management",
+      "topics": [
+        "warehouse.process-path-management.events"
+      ]
+    },
+    {
+      "consumer": "yard-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "dock-scheduling",
+      "topics": [
+        "warehouse.dock-scheduling.events"
+      ]
+    },
+    {
+      "consumer": "yard-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "facility-layout",
+      "topics": [
+        "warehouse.facility.events"
+      ]
+    },
+    {
+      "consumer": "yard-management",
+      "evidence": "code reference (non-test topic literal in cmd/ or internal/)",
+      "kind": "event",
+      "producer": "inbound-receiving",
+      "topics": [
+        "warehouse.inbound-receiving.events"
+      ]
     }
   ],
   "external": [

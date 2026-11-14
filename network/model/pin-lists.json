@@ -23,12 +23,10 @@
       "inventory-storage"
     ],
     "events": [
-      "network-fulfillment",
-      "order-management",
+      "process-path-management",
       "product-master",
       "task-interleaving",
-      "wes-work-planning",
-      "workforce-management"
+      "wes-work-planning"
     ],
     "reports": [
       "fulfillment-execution"
@@ -42,10 +40,7 @@
       "facility-layout",
       "fulfillment-execution",
       "inbound-receiving",
-      "inventory-storage (self-topic)",
-      "labor-performance",
-      "network-fulfillment",
-      "order-management",
+      "network-inventory-planning",
       "product-master",
       "returns-processing",
       "slotting-optimization"
@@ -61,7 +56,12 @@
       "order-management",
       "product-master"
     ],
-    "events": [],
+    "events": [
+      "inbound-receiving",
+      "outbound-shipping",
+      "process-path-management",
+      "wes-work-planning"
+    ],
     "reports": [
       "network-fulfillment"
     ]
@@ -71,7 +71,12 @@
       "inventory-storage"
     ],
     "events": [
-      "order-management (self-topic)"
+      "fulfillment-execution",
+      "outbound-shipping",
+      "process-path-management",
+      "product-master",
+      "warehouse-planning",
+      "wes-work-planning"
     ],
     "reports": []
   },
@@ -134,10 +139,10 @@
     "events": [
       "fulfillment-execution",
       "inventory-storage",
-      "labor-performance",
-      "network-fulfillment",
+      "network-inventory-planning",
       "order-management",
       "pick-face-replenishment",
+      "process-path-management",
       "product-master",
       "slotting-optimization",
       "workforce-management"
@@ -151,7 +156,10 @@
       "fulfillment-execution",
       "labor-performance"
     ],
-    "events": [],
+    "events": [
+      "labor-performance",
+      "process-path-management"
+    ],
     "reports": [
       "workforce-management"
     ]
@@ -165,12 +173,7 @@
   },
   "process-path-management": {
     "rest": [],
-    "events": [
-      "network-fulfillment",
-      "order-management",
-      "process-path-management (self-topic)",
-      "workforce-management"
-    ],
+    "events": [],
     "reports": [
       "process-path-management"
     ]
@@ -180,9 +183,7 @@
     "events": [
       "facility-layout",
       "inbound-receiving",
-      "network-fulfillment",
-      "order-management",
-      "workforce-management",
+      "process-path-management",
       "yard-management"
     ],
     "reports": []
@@ -194,7 +195,6 @@
       "fulfillment-execution",
       "inbound-receiving",
       "inventory-storage",
-      "labor-performance",
       "network-fulfillment",
       "order-management",
       "outbound-shipping",
@@ -210,7 +210,6 @@
       "dock-scheduling",
       "facility-layout",
       "inventory-storage",
-      "order-management",
       "product-master",
       "yard-management"
     ],
@@ -219,8 +218,7 @@
   "labor-performance": {
     "rest": [],
     "events": [
-      "labor-performance (self-topic)",
-      "workforce-management"
+      "fulfillment-execution"
     ],
     "reports": []
   },
@@ -230,10 +228,7 @@
       "dock-scheduling",
       "facility-layout",
       "fulfillment-execution",
-      "labor-performance",
-      "network-fulfillment",
-      "order-management",
-      "workforce-management",
+      "process-path-management",
       "yard-management"
     ],
     "reports": []
@@ -243,7 +238,6 @@
     "events": [
       "facility-layout",
       "inventory-storage",
-      "order-management",
       "product-master",
       "slotting-optimization"
     ],
@@ -253,7 +247,6 @@
     "rest": [],
     "events": [
       "fulfillment-execution",
-      "labor-performance",
       "order-management",
       "product-master"
     ],
@@ -273,9 +266,7 @@
     "rest": [],
     "events": [
       "facility-layout",
-      "fulfillment-execution",
-      "labor-performance",
-      "order-management"
+      "fulfillment-execution"
     ],
     "reports": []
   },
@@ -285,7 +276,6 @@
       "dock-scheduling",
       "facility-layout",
       "fulfillment-execution",
-      "labor-performance",
       "order-management",
       "workforce-management"
     ],
