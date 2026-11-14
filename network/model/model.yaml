@@ -1391,19 +1391,20 @@ contexts:
     read_models:
       - {name: NodeProfileView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
       - {name: LaneView, source: "node-topology LaneOpened, LaneClosed"}
-      - {name: ExpectedVolumeView, source: "order-sourcing FulfillmentReleasedToNode, FulfillmentReassigned, FulfillmentLocked, FulfillmentCancelled; shipping-and-tracking LabelIssued. A FulfillmentLocked that carries consolidatedInto (a follower of a merge) writes no row"}
+      - {name: ExpectedVolumeView, source: "order-sourcing FulfillmentReleasedToNode, FulfillmentReassigned, FulfillmentLocked, FulfillmentCancelled; shipping-and-tracking LabelIssued. A FulfillmentLocked that carries consolidatedInto (a follower of a merge) writes no row. FulfillmentReassigned and FulfillmentCancelled update the row only (nothing is released); FulfillmentReassigned reads only assignmentId and toNodeId, so no assignmentVersion check exists and the last delivered event wins"}
     policies:
-      - {name: PickupFromCutoffs, rule: "on NodeOperationalProfileDeclared (re)generate PICKUP departures for every cutoff of the horizon; on NodeSuspended/NodeRetired cancel future pickups"}
-      - {name: BookOnLock, rule: "on FulfillmentLocked book one package on the pickup departure; on FulfillmentCancelled or reassignment release it. A lock that carries consolidatedInto books nothing (FollowerLockBooksNothing)"}
+      - {name: PickupFromCutoffs, rule: "on NodeOperationalProfileDeclared (re)generate PICKUP departures for every cutoff of the horizon; on NodeSuspended/NodeRetired cancel future pickups. A pickup's departsAt equals its cutoffAt (the truck leaves at the cutoff) and arrivesAt is the cutoff plus the lane's nominalTransitMinutes (ADR 0002 A7)"}
+      - {name: BookOnLock, rule: "on FulfillmentLocked book one package on the pickup departure, once per assignment; when the departure cannot take it (DEPARTURE_UNKNOWN, DEPARTURE_CANCELLED, DEPARTURE_CLOSED, DEPARTURE_FULL) book the next SCHEDULED pickup of the same origin and publish BookingMoved, or BookingFailed when none can (ADR 0002 A14). FulfillmentCancelled and FulfillmentReassigned only update ExpectedVolumeView and release nothing: they happen before LOCKED and the release branch was removed (gap G15; ADR 0002 A16, A28). ReleaseCapacity is used only by the rebooking inside CancelDeparture (A15). A lock that carries consolidatedInto books nothing (FollowerLockBooksNothing)"}
+      - {name: DriveDepartureFromLoad, rule: "CloseLoad runs CloseDeparture on its SCHEDULED departure, DispatchLoad runs RecordDeparture (the departure must be CLOSED) and ReceiveLoad runs RecordArrival, each in the load's own transaction; CloseDeparture, RecordDeparture and RecordArrival have no REST route, consumer or clock of their own and no actor other than the load command (ADR 0002 A21)"}
       - {name: FollowerLockBooksNothing, rule: "order-sourcing publishes one FulfillmentLocked per member of a merge; a follower's lock carries the optional consolidatedInto (the carrier's assignment id) and every merged member carries mergedAssignmentIds. HandleLocked decodes consolidatedInto tolerantly; when it is set the CloudEvents id is claimed in the inbox (same transaction as every consumer) and nothing else happens: no ExpectedVolume row, no booking, no DepartureCapacityChanged, BookingMoved or BookingFailed, and a redelivery stops at the inbox claim. The carrier's lock books ONE package like an unmerged assignment, and rebooking, BookingMoved and BookingFailed are raised for the carrier id only (order-sourcing fans BookingMoved out to the followers on its side). mergedAssignmentIds is ignored: consolidatedInto alone decides. Absence means unmerged, and no order between the follower's and the carrier's lock is assumed. A follower dissolved from its merge before the lock is re-queued and books as any other assignment later. One merged package therefore occupies one package of pickup capacity (linehaul-transportation ADR 0014)"}
       - {name: HorizonRoll, rule: "nightly GenerateDepartures keeps a 14-day horizon"}
       - {name: NodeTypeSnapshot, rule: "a departure stores the node types of its origin and destination when it is scheduled, and OpenLoad copies departureKind, both node types and the capacity onto the load. LoadDeparted therefore carries departureKind and nodeType = the type of the origin node, and LoadArrived carries departureKind and nodeType = the type of the destination node, with no lookup. The wire field is nodeType, not destinationNodeType; shipping-and-tracking uses it to tell a pickup departure from a linehaul one and a delivery station from a sort centre"}
       - {name: DefaultOutboundLane, rule: "node-topology declares no default outbound lane, so the pickup's lane is the node's OPEN GROUND lane that ranks first by destination type (SORTATION_CENTER before any other known type, before an unknown one), then lowest nominalTransitMinutes, then lowest laneId. With no such lane no pickup is planned until a lane opens"}
       - {name: PickupCapacity, rule: "a pickup departure's capacityPackages = capacityOrders x packagesPerOrder. capacityOrders = max(1, min(CutoffSlot.maxOrders if set, throughputCap over the window)), where the window runs from the node's previous cutoff of the same day (its opening time for the first) to this cutoff, at least 60 minutes: a HOUR cap gives value x minutes / 60 and a DAY cap value x minutes / operating minutes of the day, rounded down. packagesPerOrder is linehaul-transportation's own setting (default 1, 1..1000), because node-topology declares none"}
     inbound:
-      # caller inferred for POST /lane-schedules/{laneId}:retire only (sibling of DefineLaneSchedule); change-capacity is named a planner command in the spec
-      - {from: network-ops planner, type: cmd, channel: "REST POST /lane-schedules, POST /lane-schedules/{laneId}:retire, POST /departures/{departureId}:cancel, POST /departures/{departureId}:change-capacity", routes: ["POST /lane-schedules", "POST /lane-schedules/{laneId}:retire", "POST /departures/{departureId}:cancel", "POST /departures/{departureId}:change-capacity"], message: "DefineLaneSchedule, RetireLaneSchedule, CancelDeparture, ChangeDepartureCapacity", relationship: UI}
-      - {from: "sort-centre and station operators (human/scanner)", type: cmd, channel: "REST POST /loads, POST /loads/{loadId}/packages, POST /loads/{loadId}:close, POST /loads/{loadId}:dispatch, POST /loads/{loadId}:receive", routes: ["POST /loads", "POST /loads/{loadId}/packages", "POST /loads/{loadId}:close", "POST /loads/{loadId}:dispatch", "POST /loads/{loadId}:receive"], message: "OpenLoad, AddPackage, CloseLoad, DispatchLoad, ReceiveLoad", relationship: UI}
+      # caller inferred for POST /lane-schedules/{laneId}/retirements only (sibling of DefineLaneSchedule); the capacity change is named a planner command in the spec
+      - {from: network-ops planner, type: cmd, channel: "REST POST /lane-schedules, POST /lane-schedules/{laneId}/retirements, POST /departures/{departureId}/cancellations, PUT /departures/{departureId}/capacity", routes: ["POST /lane-schedules", "POST /lane-schedules/{laneId}/retirements", "POST /departures/{departureId}/cancellations", "PUT /departures/{departureId}/capacity"], message: "DefineLaneSchedule, RetireLaneSchedule, CancelDeparture, ChangeDepartureCapacity", relationship: UI}
+      - {from: "sort-centre and station operators (human/scanner)", type: cmd, channel: "REST POST /loads, POST /loads/{loadId}/packages, POST /loads/{loadId}/closures, POST /loads/{loadId}/dispatches, POST /loads/{loadId}/receipts", routes: ["POST /loads", "POST /loads/{loadId}/packages", "POST /loads/{loadId}/closures", "POST /loads/{loadId}/dispatches", "POST /loads/{loadId}/receipts"], message: "OpenLoad, AddPackage, CloseLoad, DispatchLoad, ReceiveLoad", relationship: UI}
       # caller inferred for GET /departures/{departureId} only (sibling of the any-context list read)
       - {from: any context, type: qry, channel: "REST GET /departures?origin=&destination=&from=&to=, GET /departures/{departureId}", routes: ["GET /departures", "GET /departures/{departureId}"], message: "ListDepartures, GetDeparture", relationship: OHS}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired, LaneOpened, LaneClosed", relationship: Conformist}
@@ -1411,16 +1412,16 @@ contexts:
       - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "LabelIssued", relationship: Conformist}
     rest:
       - "POST /lane-schedules"
-      - "POST /lane-schedules/{laneId}:retire"
+      - "POST /lane-schedules/{laneId}/retirements"
       - "GET /departures?origin=&destination=&from=&to="
       - "GET /departures/{departureId}"
-      - "POST /departures/{departureId}:cancel"
+      - "POST /departures/{departureId}/cancellations"
       - "POST /loads"
       - "POST /loads/{loadId}/packages"
-      - "POST /loads/{loadId}:close"
-      - "POST /loads/{loadId}:dispatch"
-      - "POST /loads/{loadId}:receive"
-      - "POST /departures/{departureId}:change-capacity"
+      - "POST /loads/{loadId}/closures"
+      - "POST /loads/{loadId}/dispatches"
+      - "POST /loads/{loadId}/receipts"
+      - "PUT /departures/{departureId}/capacity"
     publishes:
       - {event: DepartureScheduled, entity: departure, data: [departureId, laneId, kind, originNodeId, destinationNodeId, cutoffAt, departsAt, arrivesAt, capacityPackages], consumers: [delivery-promise, order-sourcing]}
       - {event: DepartureCapacityChanged, entity: departure, data: [departureId, capacityPackages, bookedPackages, remainingPackages], consumers: [delivery-promise, order-sourcing]}
