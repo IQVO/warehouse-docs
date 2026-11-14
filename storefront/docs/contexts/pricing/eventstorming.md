@@ -39,8 +39,8 @@ flowchart LR
     M["Storefront<br/>merchandiser"]:::actor
     C0["SetListPrice<br/>POST /item-prices"]:::command
     C1["ScheduleSale<br/>POST .../sales"]:::command
-    C2["CancelSale<br/>POST .../sales/saleId:cancel"]:::command
-    C3["WithdrawPrice<br/>POST .../item-prices/catalogItemId:withdraw"]:::command
+    C2["CancelSale<br/>POST .../sales/saleId/cancellations"]:::command
+    C3["WithdrawPrice<br/>POST .../item-prices/catalogItemId/withdrawals"]:::command
     RM0["CatalogItemView"]:::readmodel
     G1["ItemPrice"]:::aggregate
     E1["ItemPriceChanged<br/>also after CancelSale"]:::event

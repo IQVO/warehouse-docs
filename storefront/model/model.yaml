@@ -147,13 +147,15 @@ contexts:
           - {rule: "every amount >= 0", error: ErrNegativeAmount}
           - {rule: "all prices of an item use the configured currency", error: ErrCurrencyMismatch}
           - {rule: "a sale price is below the list price", error: ErrSaleNotBelowList}
-          - {rule: "sale windows of one item never overlap", error: ErrOverlappingSaleWindow}
+          - {rule: "sale windows of one item never overlap (409 overlapping-sale-window)", error: ErrOverlappingSaleWindow}
           - {rule: "the item exists in the local CatalogItemView and is not DISCONTINUED", error: ErrUnknownCatalogItem}
+          - {rule: "WITHDRAWN is final (ADR 0002 A3): a withdrawn price accepts no list-price change, sale, cancellation or second withdraw (409 illegal-transition, no event); a new price needs a new catalogue item"}
+          - {rule: "bounds: an item holds at most 50 live sale windows, a window ends after it starts and in the future; every amount is at most MaxMinor (1000000000 minor units); beyond a bound the request is 422 validation-failed"}
         commands: [SetListPrice, ScheduleSale, CancelSale, WithdrawPrice]
         events: [ItemPriceChanged, ItemPriceWithdrawn]
         throughput_estimate: "low: merchandising writes; bursts on sale boundaries"
         size_estimate: "one row per ACTIVE catalogue item; ~10^6"
-        notes: "WithdrawPrice is reachable: POST /item-prices/{catalogItemId}:withdraw (merchandising UI, cmd channel) and by the WithdrawOnDiscontinue policy. CancelSale raises no event of its own: cancelling a live sale changes the effective price, and the window-boundary policy emits ItemPriceChanged for it (idempotent per item and boundary), so a separate event would duplicate the fact."
+        notes: "WithdrawPrice is reachable: POST /item-prices/{catalogItemId}/withdrawals (merchandising UI, cmd channel) and by the WithdrawOnDiscontinue policy, which only withdraws an ACTIVE price; a second withdraw over REST is 409 illegal-transition. CancelSale raises no event of its own: cancelling a live sale changes the effective price, and the window-boundary policy emits ItemPriceChanged for it (idempotent per item and boundary), so a separate event would duplicate the fact."
       - name: DeliveryChargeSchedule
         root_id: scheduleId
         description: "The delivery charge per service tier (SAME_DAY, NEXT_DAY, TWO_DAY, STANDARD), with an optional free-over threshold per tier. Exactly one schedule is current; versions strictly increase."
@@ -179,7 +181,7 @@ contexts:
         value_objects:
           - "TaxBand{postalPrefixFrom, postalPrefixTo, rateBasisPoints}"
         invariants:
-          - {rule: "bands never overlap", error: ErrOverlappingTaxBand}
+          - {rule: "bands never overlap; a table holds 1 to 500 bands (beyond that 422 validation-failed)", error: ErrOverlappingTaxBand}
           - {rule: "a rate is within the configured range", error: ErrRateOutOfRange}
         commands: [PublishTaxTable]
         events: [TaxTableChanged]
@@ -197,7 +199,9 @@ contexts:
           - "QuoteGroup{groupNo, tier, deliveryCharge}"
         invariants:
           - {rule: "every line names an ACTIVE price", error: ErrItemNotPriced}
-          - {rule: "a quote has at least one line", error: ErrEmptyQuote}
+          - {rule: "a quote has at least one line, at most 100 lines and 50 groups, quantity 1 to 1000 per line (beyond a bound: 422 validation-failed)", error: ErrEmptyQuote}
+          - {rule: "a CURRENT delivery charge schedule exists (422 no-charge-schedule; until one is published every checkout fails)", error: ErrNoChargeSchedule}
+          - {rule: "a CURRENT tax table exists (422 no-tax-table; until one is published every checkout fails)", error: ErrNoTaxTable}
           - {rule: "all amounts use the configured currency", error: ErrCurrencyMismatch}
         commands: [IssuePriceQuote, ExpireQuote]
         events: [PriceQuoteIssued]
@@ -219,10 +223,10 @@ contexts:
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated, CatalogItemDiscontinued", relationship: Conformist}
     rest:
       - "POST /item-prices"
-      - "POST /item-prices/{catalogItemId}:set-list-price"
-      - "POST /item-prices/{catalogItemId}:withdraw"
+      - "PUT /item-prices/{catalogItemId}/list-price"
+      - "POST /item-prices/{catalogItemId}/withdrawals"
       - "POST /item-prices/{catalogItemId}/sales"
-      - "POST /item-prices/{catalogItemId}/sales/{saleId}:cancel"
+      - "POST /item-prices/{catalogItemId}/sales/{saleId}/cancellations"
       - "GET /item-prices"
       - "GET /item-prices/{catalogItemId}"
       - "POST /delivery-charge-schedules"
