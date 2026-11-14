@@ -88,7 +88,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'WMS/WES Integration',
       link: {type: 'doc', id: 'integration/index'},
-      items: ['integration/wms-wes-integration', 'integration/vendor-api', 'integration/stock-to-promise', 'integration/fleet-changes'],
+      items: ['integration/wms-wes-integration', 'integration/vendor-api', 'integration/stock-to-promise', 'integration/fleet-changes', 'integration/contract-gaps'],
     },
   ],
   contextsSidebar: ['contexts/index', ...contextCategories],

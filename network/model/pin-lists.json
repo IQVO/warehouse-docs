@@ -1,0 +1,294 @@
+{
+  "checkout": {
+    "rest": [
+      "customer-ordering",
+      "customer-payments",
+      "delivery-promise",
+      "pricing",
+      "shopping-cart"
+    ],
+    "events": [],
+    "reports": []
+  },
+  "customer-ordering": {
+    "rest": [
+      "delivery-promise"
+    ],
+    "events": [],
+    "reports": []
+  },
+  "fulfillment-execution": {
+    "rest": [
+      "facility-layout",
+      "inventory-storage"
+    ],
+    "events": [
+      "network-fulfillment",
+      "order-management",
+      "product-master",
+      "task-interleaving",
+      "wes-work-planning",
+      "workforce-management"
+    ],
+    "reports": [
+      "fulfillment-execution"
+    ]
+  },
+  "inventory-storage": {
+    "rest": [
+      "facility-layout"
+    ],
+    "events": [
+      "facility-layout",
+      "fulfillment-execution",
+      "inbound-receiving",
+      "inventory-storage (self-topic)",
+      "labor-performance",
+      "network-fulfillment",
+      "order-management",
+      "product-master",
+      "returns-processing",
+      "slotting-optimization"
+    ],
+    "reports": [
+      "inventory-storage"
+    ]
+  },
+  "network-fulfillment": {
+    "rest": [
+      "inbound-receiving",
+      "inventory-storage",
+      "order-management",
+      "product-master"
+    ],
+    "events": [],
+    "reports": [
+      "network-fulfillment"
+    ]
+  },
+  "order-management": {
+    "rest": [
+      "inventory-storage"
+    ],
+    "events": [
+      "order-management (self-topic)"
+    ],
+    "reports": []
+  },
+  "product-discovery": {
+    "rest": [
+      "offer-availability",
+      "pricing",
+      "product-content"
+    ],
+    "events": [],
+    "reports": []
+  },
+  "shipping-and-tracking": {
+    "rest": [
+      "customer-ordering"
+    ],
+    "events": [],
+    "reports": []
+  },
+  "shopping-cart": {
+    "rest": [
+      "delivery-promise"
+    ],
+    "events": [],
+    "reports": []
+  },
+  "storefront-bff": {
+    "rest": [
+      "checkout",
+      "customer-ordering",
+      "delivery-promise",
+      "pricing",
+      "product-discovery",
+      "shopping-cart"
+    ],
+    "events": [],
+    "reports": []
+  },
+  "vendor-connectivity": {
+    "rest": [
+      "node-performance",
+      "node-topology",
+      "offer-availability",
+      "shipping-and-tracking"
+    ],
+    "events": [],
+    "reports": []
+  },
+  "warehouse-ops-agent": {
+    "rest": [
+      "workforce-management"
+    ],
+    "events": [],
+    "reports": []
+  },
+  "wes-work-planning": {
+    "rest": [
+      "facility-layout"
+    ],
+    "events": [
+      "fulfillment-execution",
+      "inventory-storage",
+      "labor-performance",
+      "network-fulfillment",
+      "order-management",
+      "pick-face-replenishment",
+      "product-master",
+      "slotting-optimization",
+      "workforce-management"
+    ],
+    "reports": [
+      "wes-work-planning"
+    ]
+  },
+  "workforce-management": {
+    "rest": [
+      "fulfillment-execution",
+      "labor-performance"
+    ],
+    "events": [],
+    "reports": [
+      "workforce-management"
+    ]
+  },
+  "facility-layout": {
+    "rest": [],
+    "events": [],
+    "reports": [
+      "facility-layout"
+    ]
+  },
+  "process-path-management": {
+    "rest": [],
+    "events": [
+      "network-fulfillment",
+      "order-management",
+      "process-path-management (self-topic)",
+      "workforce-management"
+    ],
+    "reports": [
+      "process-path-management"
+    ]
+  },
+  "dock-scheduling": {
+    "rest": [],
+    "events": [
+      "facility-layout",
+      "inbound-receiving",
+      "network-fulfillment",
+      "order-management",
+      "workforce-management",
+      "yard-management"
+    ],
+    "reports": []
+  },
+  "exception-management": {
+    "rest": [],
+    "events": [
+      "dock-scheduling",
+      "fulfillment-execution",
+      "inbound-receiving",
+      "inventory-storage",
+      "labor-performance",
+      "network-fulfillment",
+      "order-management",
+      "outbound-shipping",
+      "returns-processing",
+      "wes-work-planning",
+      "yard-management"
+    ],
+    "reports": []
+  },
+  "inbound-receiving": {
+    "rest": [],
+    "events": [
+      "dock-scheduling",
+      "facility-layout",
+      "inventory-storage",
+      "order-management",
+      "product-master",
+      "yard-management"
+    ],
+    "reports": []
+  },
+  "labor-performance": {
+    "rest": [],
+    "events": [
+      "labor-performance (self-topic)",
+      "workforce-management"
+    ],
+    "reports": []
+  },
+  "outbound-shipping": {
+    "rest": [],
+    "events": [
+      "dock-scheduling",
+      "facility-layout",
+      "fulfillment-execution",
+      "labor-performance",
+      "network-fulfillment",
+      "order-management",
+      "workforce-management",
+      "yard-management"
+    ],
+    "reports": []
+  },
+  "pick-face-replenishment": {
+    "rest": [],
+    "events": [
+      "facility-layout",
+      "inventory-storage",
+      "order-management",
+      "product-master",
+      "slotting-optimization"
+    ],
+    "reports": []
+  },
+  "returns-processing": {
+    "rest": [],
+    "events": [
+      "fulfillment-execution",
+      "labor-performance",
+      "order-management",
+      "product-master"
+    ],
+    "reports": []
+  },
+  "slotting-optimization": {
+    "rest": [],
+    "events": [
+      "facility-layout",
+      "inventory-storage",
+      "order-management",
+      "product-master"
+    ],
+    "reports": []
+  },
+  "task-interleaving": {
+    "rest": [],
+    "events": [
+      "facility-layout",
+      "fulfillment-execution",
+      "labor-performance",
+      "order-management"
+    ],
+    "reports": []
+  },
+  "warehouse-planning": {
+    "rest": [],
+    "events": [
+      "dock-scheduling",
+      "facility-layout",
+      "fulfillment-execution",
+      "labor-performance",
+      "order-management",
+      "workforce-management"
+    ],
+    "reports": []
+  }
+}
