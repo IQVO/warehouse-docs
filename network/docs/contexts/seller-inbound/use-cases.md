@@ -50,7 +50,7 @@ informational scorecard from this service's own facts and changes nothing.
 
 - **Actor / trigger:** a seller or its portal. REST `POST /sellers`.
 - **Flow:** validate `sellerId` (an `ownerRef`: at most 64 characters of
-  letters, digits, `.`, `_`, `-`) and `name`; save `ACTIVE`; write
+  letters, digits, `.`, `_`, `-`; a `:` is refused, unlike the opaque plan, shipment and node ids) and `name`; save `ACTIVE`; write
   `SellerOnboarded` to the outbox.
 - **Errors:** `ErrSellerExists`, `ErrValidation`.
 - **Events:** `SellerOnboarded`.
@@ -58,12 +58,16 @@ informational scorecard from this service's own facts and changes nothing.
 ## SuspendSeller / ReinstateSeller
 
 - **Actor:** network partner manager. REST `POST /sellers/{sellerId}/suspensions`
-  and `:reinstate`.
+  and `POST /sellers/{sellerId}/reinstatements`.
 - **Flow:** `ACTIVE` ↔ `SUSPENDED`. A suspended seller's later `CreateInboundPlan`,
   `ConfirmInboundPlan`, `CreateInboundShipment`, `AddCarton`, `LabelShipment` and
   `ShipInboundShipment` are refused. Shipments already `SHIPPED` still close.
-- **Errors:** `ErrNotFound`, `ErrIllegalTransition`.
-- **Events:** `SellerSuspended`, `SellerReinstated`.
+- **Repeat:** suspending a `SUSPENDED` seller, or reinstating an `ACTIVE` one,
+  is a no-op: `200` with the account unchanged and no event (service ADR 0002
+  A3). It is not an `ErrIllegalTransition`. The seller account is the only
+  aggregate that is idempotent by state; every other command is strict.
+- **Errors:** `ErrNotFound`.
+- **Events:** `SellerSuspended`, `SellerReinstated` (a repeat raises none).
 
 ## CreateInboundPlan
 
@@ -73,15 +77,20 @@ informational scorecard from this service's own facts and changes nothing.
 - **Flow:** validate each line (1 to 500 lines, one per catalogue item; whether
   the item is live is not checked, since no `CatalogItemCreated` or
   `CatalogItemDiscontinued` is consumed; GTIN of 8, 12, 13 or 14 digits with a valid check digit, normalised to
-  14 digits, `qtyEaches > 0`); if `CASE_PACKED`, each line's item must have an
-  active CASE level. Save `DRAFT`.
+  14 digits, `qtyEaches > 0`). Save `DRAFT`. The plan is not checked against
+  `CatalogPackagingView`: whether a `CASE_PACKED` item has an active CASE
+  level is enforced on `AddCarton`, not here (service use-cases page,
+  `CreateInboundPlan`).
 - **Errors:** `ErrSellerSuspended`, `ErrNodeCannotReceive`, `ErrValidation`.
 - **Events:** none (`DRAFT` is private to the seller).
 
 ## ConfirmInboundPlan / CancelInboundPlan
 
-- **REST:** `POST /inbound-plans/{planId}/confirmations`, `:cancel`.
+- **REST:** `POST /inbound-plans/{planId}/confirmations` and
+  `POST /inbound-plans/{planId}/cancellations`.
 - **Flow:** `DRAFT → CONFIRMED` re-checks seller and node; `DRAFT → CANCELLED`.
+  `CONFIRMED` and `CANCELLED` are terminal: a second confirm or cancel is
+  `ErrIllegalTransition` (service ADR 0002 A3).
 - **Errors:** `ErrSellerSuspended`, `ErrNodeCannotReceive`, `ErrIllegalTransition`.
 - **Events:** `InboundPlanConfirmed` (confirm only).
 
@@ -99,8 +108,9 @@ informational scorecard from this service's own facts and changes nothing.
 - **Flow:**
   1. Validate contents (GTINs, `qtyEaches > 0`, optional `lot` up to 20
      characters and `expiry` date).
-  2. `HOMOGENEOUS_CASE`: one item, `gtin` is the CASE-level GTIN, `qtyEaches`
-     equals the `unitsPerPack` of the item's active CASE level
+  2. `HOMOGENEOUS_CASE` (every carton of a `CASE_PACKED` plan): one item, `gtin`
+     is the CASE-level GTIN, `qtyEaches` equals the `unitsPerPack` of the item's
+     active CASE level, checked here and not at plan creation
      (`ErrCaseQtyMismatchesGtin`); the carton holds exactly one item, one GTIN
      and one quantity (`ErrCasePackNotUniform`). `MIXED`: contents are
      each-level GTINs and the carton gets no pack GTIN.
@@ -118,10 +128,14 @@ informational scorecard from this service's own facts and changes nothing.
 ## LabelShipment
 
 - **REST:** `POST /inbound-shipments/{shipmentId}/labels`.
-- **Flow:** `DRAFT → LABELLED`. Checks that the eaches per item and GTIN over
-  this shipment's cartons equal the confirmed plan's lines, every line exactly
-  and no extra item (service ADR 0002 A10). After this, `GET .../labels` returns one printable
-  label per carton.
+- **Flow:** `DRAFT → LABELLED`. A plan may be filled by several shipments over
+  time. When this is the plan's only shipment, the eaches per item and GTIN over
+  its cartons must equal the confirmed plan's lines, every line exactly
+  (`Shipment.Label` with `SingleShipment`). When the plan has several shipments
+  no exact match is required at labelling: `AddCarton` has already kept every
+  item on the plan and the total over this shipment and the plan's other
+  shipments within each plan line (service use-cases page). After this,
+  `GET .../labels` returns one printable label per carton.
 - **Errors:** `ErrCartonContentsMismatchPlan`, `ErrSellerSuspended`, `ErrIllegalTransition`.
 - **Events:** `InboundShipmentLabelled` (the carton manifest, with contents, weights and sizes).
 

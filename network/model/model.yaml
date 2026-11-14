@@ -1953,6 +1953,7 @@ contexts:
         invariants:
           - {rule: "sellerId is unique", error: ErrSellerExists}
           - {rule: "a suspended seller creates no plan, shipment or carton and ships nothing", error: ErrSellerSuspended}
+          - {rule: "suspending a SUSPENDED seller or reinstating an ACTIVE one is a no-op: 200 with the account unchanged and no event, not an ErrIllegalTransition (ADR 0002 A3); every other command is strict, a transition the state forbids is 409 illegal-transition", error: ErrIllegalTransition}
         commands: [OnboardSeller, SuspendSeller, ReinstateSeller]
         events: [SellerOnboarded, SellerSuspended, SellerReinstated]
         throughput_estimate: "rare"
@@ -2002,7 +2003,7 @@ contexts:
           - {rule: "carton dimensions are within the destination node's maxCartonDimsMm", error: ErrCartonOversize}
           - {rule: "an SSCC is unique network-wide", error: ErrSsccNotUnique}
           - {rule: "an SSCC has 18 digits and a valid mod-10 check digit", error: ErrInvalidSscc}
-          - {rule: "at labelling, the eaches per item and GTIN over the cartons of this shipment equal the confirmed plan's lines (every line exactly, no extra item)", error: ErrCartonContentsMismatchPlan}
+          - {rule: "a carton adds only items that are on the plan, and the eaches per item over this shipment and the plan's other shipments never exceed the plan line (checked on AddCarton); at labelling, only when the plan has a single shipment, the eaches per item and GTIN over its cartons equal the confirmed plan's lines exactly (Shipment.Label, SingleShipment); with several shipments no exact match is required (seller-inbound use-cases and code; ADR 0002 A10 words it as every line exactly)", error: ErrCartonContentsMismatchPlan}
           - {rule: "the destination node is ACTIVE with the INBOUND capability when the shipment is created and when it ships", error: ErrNodeCannotReceive}
           - {rule: "the seller is ACTIVE when the shipment is created, labelled and shipped", error: ErrSellerSuspended}
           - {rule: "no ship without a label for every carton", error: ErrShipmentNotLabelled}
@@ -2016,6 +2017,7 @@ contexts:
       - {name: CatalogPackagingView, source: "offer-availability CatalogItemPackagingDeclared, CatalogItemPackLevelRetired"}
       - {name: SellerScorecard, source: "own facts only (no consumer, no event): one row per closed shipment and one per InboundDiscrepancyRecorded or SellerComplianceViolationRecorded, written in the receipt's unit of work (seller-inbound ADR 0005)"}
     policies:
+      - {name: CaseLevelAtAddCarton, rule: "CreateInboundPlan does not read CatalogPackagingView: whether a CASE_PACKED item has an active CASE level is enforced on AddCarton (ErrCaseQtyMismatchesGtin), not when the plan is created"}
       - {name: SsccIssuance, rule: "a carton added with an sscc is accepted only if valid and unique network-wide; a carton added without one gets an SSCC issued from the network's GS1 company prefix; either way a Label is returned"}
       - {name: NodeMustBeAbleToReceive, rule: "the destination node, its INBOUND capability, acceptsPallets and carton limits are read from NodeInboundView; a node that is not ACTIVE receives nothing; a node whose profile declares no inbound limits is treated as accepting cartons with limits unchecked"}
       - {name: OwnerSegregation, rule: "every carton of a plan is owned by the plan's seller (ownerRef = sellerId); ownership travels on InboundShipmentShipped and the Vendor API and is never merged with another owner's"}
@@ -2025,9 +2027,9 @@ contexts:
       - {name: RecordDiscrepancies, rule: "a MISSING, UNEXPECTED or DAMAGED carton, or a received quantity different from the manifest, raises InboundDiscrepancyRecorded; each complianceCode on the receipt raises SellerComplianceViolationRecorded; the manifest is never edited"}
     inbound:
       - {from: seller / seller portal, type: cmd, channel: "REST POST /sellers", routes: ["POST /sellers"], message: OnboardSeller, relationship: OHS}
-      - {from: network partner managers (human), type: cmd, channel: "REST POST /sellers/{sellerId}:suspend, POST /sellers/{sellerId}:reinstate", routes: ["POST /sellers/{sellerId}:suspend", "POST /sellers/{sellerId}:reinstate"], message: "SuspendSeller, ReinstateSeller", relationship: UI}
-      - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans, POST /inbound-plans/{planId}:confirm, POST /inbound-plans/{planId}:cancel", routes: ["POST /inbound-plans", "POST /inbound-plans/{planId}:confirm", "POST /inbound-plans/{planId}:cancel"], message: "CreateInboundPlan, ConfirmInboundPlan, CancelInboundPlan", relationship: OHS}
-      - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans/{planId}/shipments, POST /inbound-shipments/{shipmentId}/cartons, POST /inbound-shipments/{shipmentId}:label, POST /inbound-shipments/{shipmentId}:ship", routes: ["POST /inbound-plans/{planId}/shipments", "POST /inbound-shipments/{shipmentId}/cartons", "POST /inbound-shipments/{shipmentId}:label", "POST /inbound-shipments/{shipmentId}:ship"], message: "CreateInboundShipment, AddCarton, LabelShipment, ShipInboundShipment", relationship: OHS}
+      - {from: network partner managers (human), type: cmd, channel: "REST POST /sellers/{sellerId}/suspensions, POST /sellers/{sellerId}/reinstatements", routes: ["POST /sellers/{sellerId}/suspensions", "POST /sellers/{sellerId}/reinstatements"], message: "SuspendSeller, ReinstateSeller", relationship: UI}
+      - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans, POST /inbound-plans/{planId}/confirmations, POST /inbound-plans/{planId}/cancellations", routes: ["POST /inbound-plans", "POST /inbound-plans/{planId}/confirmations", "POST /inbound-plans/{planId}/cancellations"], message: "CreateInboundPlan, ConfirmInboundPlan, CancelInboundPlan", relationship: OHS}
+      - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans/{planId}/shipments, POST /inbound-shipments/{shipmentId}/cartons, POST /inbound-shipments/{shipmentId}/labels, POST /inbound-shipments/{shipmentId}/dispatches", routes: ["POST /inbound-plans/{planId}/shipments", "POST /inbound-shipments/{shipmentId}/cartons", "POST /inbound-shipments/{shipmentId}/labels", "POST /inbound-shipments/{shipmentId}/dispatches"], message: "CreateInboundShipment, AddCarton, LabelShipment, ShipInboundShipment", relationship: OHS}
       - {from: seller / seller portal, type: qry, channel: "REST GET /inbound-plans/{planId}, GET /inbound-shipments/{shipmentId}, GET /inbound-shipments/{shipmentId}/labels", routes: ["GET /inbound-plans/{planId}", "GET /inbound-shipments/{shipmentId}", "GET /inbound-shipments/{shipmentId}/labels"], message: "GetInboundPlan, GetInboundShipment, GetLabels", relationship: OHS}
       - {from: "seller / seller portal, network partner managers (human)", type: qry, channel: "REST GET /sellers/{sellerId}/scorecard?window=", routes: ["GET /sellers/{sellerId}/scorecard"], message: "GetSellerScorecard (informational, seller-inbound ADR 0005)", relationship: OHS}
       - {from: seller / network partner manager, type: cmd, channel: "REST POST /placement-plans (compute), GET /placement-plans, GET /placement-plans/{planId}, POST /placement-plans/{planId}/acceptances", routes: ["POST /placement-plans", "GET /placement-plans", "GET /placement-plans/{planId}", "POST /placement-plans/{planId}/acceptances"], message: "ComputePlacementPlan, ListPlacementPlans, GetPlacementPlan, AcceptPlacementPlan", relationship: OHS}
@@ -2037,18 +2039,18 @@ contexts:
       - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentReleasedToNode, FulfillmentCancelled", relationship: Conformist}
     rest:
       - "POST /sellers"
-      - "POST /sellers/{sellerId}:suspend"
-      - "POST /sellers/{sellerId}:reinstate"
+      - "POST /sellers/{sellerId}/suspensions"
+      - "POST /sellers/{sellerId}/reinstatements"
       - "GET /sellers/{sellerId}/scorecard?window="
       - "POST /inbound-plans"
       - "GET /inbound-plans/{planId}"
-      - "POST /inbound-plans/{planId}:confirm"
-      - "POST /inbound-plans/{planId}:cancel"
+      - "POST /inbound-plans/{planId}/confirmations"
+      - "POST /inbound-plans/{planId}/cancellations"
       - "POST /inbound-plans/{planId}/shipments"
       - "POST /inbound-shipments/{shipmentId}/cartons"
-      - "POST /inbound-shipments/{shipmentId}:label"
+      - "POST /inbound-shipments/{shipmentId}/labels"
       - "GET /inbound-shipments/{shipmentId}/labels"
-      - "POST /inbound-shipments/{shipmentId}:ship"
+      - "POST /inbound-shipments/{shipmentId}/dispatches"
       - "GET /inbound-shipments/{shipmentId}"
       - "POST /placement-plans"
       - "GET /placement-plans"
