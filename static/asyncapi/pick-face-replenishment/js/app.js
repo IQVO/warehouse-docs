@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **pick-face-replenishment** bounded context (WMS\nsubdomain): min/max replenishment of forward pick faces from reserve bins\n(ADR 0001, ADR 0002).\n\n**Published.** The `ReplenishmentRequest` aggregate raises three events,\npublished to `warehouse.pick-face-replenishment.events` through a\n**transactional outbox**: the request row and its already-encoded events are\nwritten in ONE database transaction and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is stored with the outbox row, so a retry\nrepublishes the same `id`). `ReplenishmentRequested` is what wes-work-planning\nturns into `REPLENISH` work; `ReplenishmentCompleted` and\n`ReplenishmentCancelled` close the request. The same three types are mirrored\non `warehouse.pick-face-replenishment.analytics` (dataschema\n`urn:warehouse:pick-face-replenishment:analytics:<EventName>:v1`), together\nwith `ReplenishmentPolicyDeclared`, which is analytics-only.\n\n**Consumed (ADR 0003).** `BinStockLevelChanged` (pending producer change P1)\nand `StockRelocated` from inventory-storage, `SlotPlanApproved` from\nslotting-optimization, and `ZoneRegistered`, `LocationSlotRegistered` and\n`LocationSlotDecommissioned` from facility-layout. Each feeds a durable local\ncopy or closes a request (modes `INVENTORY_MODE`, `SLOTTING_MODE`,\n`LAYOUT_MODE`, `PACK_LEVEL_MODE`: default and only accepted value `kafka`,\n`permissive` is rejected at boot; consumer groups are required, from\n`INVENTORY_CONSUMER_GROUP`, `SLOTTING_CONSUMER_GROUP`,\n`LAYOUT_CONSUMER_GROUP`, `PACK_LEVEL_CONSUMER_GROUP`). A message that fails\ndeterministically, or after the bounded retries, is published to\n`<topic>.dlq` with `x-dlq-*` headers. `ProductPackLevelDeclared` and\n`ProductPackLevelRetired` from product-master are consumed as well. The consumed messages below are the producers' own\ncontracts, decoded independently here and never imported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the outbox\nrow; consumers may extract them, and must not require them.\n`specversion`, `id`, `source` (`/warehouse/pick-face-replenishment`), `type`,\n`subject` (the request id; `<site_id>/<sku>` for the policy event), `time`,\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:pick-face-replenishment:<events|analytics>:<EventName>:v1`)\nare all required. Kafka key = the subject. Type =\n`com.warehouse.wms.pick-face-replenishment.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
+    "description": "Event catalog for the **pick-face-replenishment** bounded context (WMS\nsubdomain): min/max replenishment of forward pick faces from reserve bins\n(ADR 0001, ADR 0002).\n\n**Published.** The `ReplenishmentRequest` aggregate raises three events,\npublished to `warehouse.pick-face-replenishment.events` through a\n**transactional outbox**: the request row and its already-encoded events are\nwritten in ONE database transaction and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is stored with the outbox row, so a retry\nrepublishes the same `id`). `ReplenishmentRequested` is what wes-work-planning\nturns into `REPLENISH` work; `ReplenishmentCompleted` and\n`ReplenishmentCancelled` close the request. The same three types are mirrored\non `warehouse.pick-face-replenishment.analytics` (dataschema\n`urn:warehouse:pick-face-replenishment:analytics:<EventName>:v1`), together\nwith `ReplenishmentPolicyDeclared`, which is analytics-only.\n\n**Consumed (ADR 0003).** `BinStockLevelChanged` (producer change P1, built in\ninventory-storage) and `StockRelocated` from inventory-storage, `SlotPlanApproved` from\nslotting-optimization, and `ZoneRegistered`, `LocationSlotRegistered` and\n`LocationSlotDecommissioned` from facility-layout. Each feeds a durable local\ncopy or closes a request (modes `INVENTORY_MODE`, `SLOTTING_MODE`,\n`LAYOUT_MODE`, `PACK_LEVEL_MODE`: default and only accepted value `kafka`,\n`permissive` is rejected at boot; consumer groups are required, from\n`INVENTORY_CONSUMER_GROUP`, `SLOTTING_CONSUMER_GROUP`,\n`LAYOUT_CONSUMER_GROUP`, `PACK_LEVEL_CONSUMER_GROUP`). A message that fails\ndeterministically, or after the bounded retries, is published to\n`<topic>.dlq` with `x-dlq-*` headers. `ProductPackLevelDeclared` and\n`ProductPackLevelRetired` from product-master are consumed as well. The consumed messages below are the producers' own\ncontracts, decoded independently here and never imported.\n\n**Envelope (mandatory).** CloudEvents 1.0, structured content mode, Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the outbox\nrow; consumers may extract them, and must not require them.\n`specversion`, `id`, `source` (`/warehouse/pick-face-replenishment`), `type`,\n`subject` (the request id; `<site_id>/<sku>` for the policy event), `time`,\n`datacontenttype` (`application/json`) and `dataschema`\n(`urn:warehouse:pick-face-replenishment:<events|analytics>:<EventName>:v1`)\nare all required. Kafka key = the subject. Type =\n`com.warehouse.wms.pick-face-replenishment.<entity>.<EventName>`. A breaking\npayload change is a new `.v2` type, never a mutation.\n"
   },
   "servers": {
     "production": {
@@ -672,7 +672,7 @@
               "name": "ProductPackLevelDeclared",
               "title": "product-master ProductPackLevelDeclared (consumed)",
               "summary": "A pack level (EACH, INNER, CASE or PALLET) of a SKU was declared, or one of its mutable attributes changed.",
-              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelDeclared`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductPackLevelDeclared:v1`; subject and\nkey = the SKU. Produced by product-master; consumed into the local\npackaging view (pack level -> eaches factor for case-level scans).\nNOTE: the consumer decodes camelCase keys (`unitsPerPack`, `effectiveFrom`),\nwhile product-master's encoder writes snake_case (`units_per_pack`,\n`effective_from`); see the PR notes.\n",
+              "description": "`type` = `com.warehouse.wms.product-master.product.ProductPackLevelDeclared`,\nsource `/warehouse/product-master`, dataschema\n`urn:warehouse:product-master:events:ProductPackLevelDeclared:v1`; subject and\nkey = the SKU. Produced by product-master; consumed into the local\npackaging view (pack level -> eaches factor for case-level scans).\nThe keys are snake_case, exactly as product-master's encoder writes them\n(`units_per_pack`, `effective_from`, `effective_to`).\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -691,8 +691,8 @@
                           "sku",
                           "level",
                           "gtin",
-                          "unitsPerPack",
-                          "effectiveFrom",
+                          "units_per_pack",
+                          "effective_from",
                           "version"
                         ],
                         "properties": {
@@ -727,11 +727,11 @@
                             "description": "Absent for EACH.",
                             "x-parser-schema-id": "<anonymous-schema-53>"
                           },
-                          "unitsPerPack": {
+                          "units_per_pack": {
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 1000000,
-                            "description": "Direct factor to eaches; 1 for EACH. The consumer decodes this camelCase key (see the product-master note in the message).",
+                            "description": "Direct factor to eaches; 1 for EACH.",
                             "x-parser-schema-id": "<anonymous-schema-54>"
                           },
                           "is_orderable": {
@@ -742,10 +742,9 @@
                             "type": "boolean",
                             "x-parser-schema-id": "<anonymous-schema-56>"
                           },
-                          "effectiveFrom": {
+                          "effective_from": {
                             "type": "string",
                             "format": "date-time",
-                            "description": "camelCase key as decoded by the consumer.",
                             "x-parser-schema-id": "<anonymous-schema-57>"
                           },
                           "version": {
@@ -786,7 +785,7 @@
                           "sku",
                           "level",
                           "gtin",
-                          "effectiveTo",
+                          "effective_to",
                           "version"
                         ],
                         "properties": {
@@ -809,10 +808,9 @@
                             "pattern": "^[0-9]{14}$",
                             "x-parser-schema-id": "<anonymous-schema-63>"
                           },
-                          "effectiveTo": {
+                          "effective_to": {
                             "type": "string",
                             "format": "date-time",
-                            "description": "camelCase key as decoded by the consumer.",
                             "x-parser-schema-id": "<anonymous-schema-64>"
                           },
                           "reason": {
@@ -858,7 +856,7 @@
               "name": "BinStockLevelChanged",
               "title": "BinStockLevelChanged (consumed, inventory-storage)",
               "summary": "The absolute on-hand and reserved level of one SKU in one bin changed.",
-              "description": "PENDING PRODUCER CHANGE P1: inventory-storage does not publish this type\nyet; this contract is pinned consumer-first and the producer will match it.\n`type` = `com.warehouse.wms.inventory-storage.stock.BinStockLevelChanged`,\nsource `/warehouse/inventory-storage`, dataschema\n`urn:warehouse:inventory-storage:events:BinStockLevelChanged:v1`. Subject\nand Kafka key = `<bin>:<sku>`. `on_hand` and `reserved` are ABSOLUTE\nlevels after the change, not deltas; `reserved` is the units of this bin\nbound by active reservations. Keep the highest `version` per bin and SKU\nand ignore lower ones. The consumer reads only `site_code`, `bin`, `sku`,\n`on_hand`, `reserved` and `version`; `reason` is not read.\n",
+              "description": "Producer change P1 is built: inventory-storage publishes this type (its\nADR 0040). The contract was pinned here consumer-first.\n`type` = `com.warehouse.wms.inventory-storage.stock.BinStockLevelChanged`,\nsource `/warehouse/inventory-storage`, dataschema\n`urn:warehouse:inventory-storage:events:BinStockLevelChanged:v1`. Subject\nand Kafka key = `<bin>:<sku>`. `on_hand` and `reserved` are ABSOLUTE\nlevels after the change, not deltas; `reserved` is the units of this bin\nbound by active reservations. Keep the highest `version` per bin and SKU\nand ignore lower ones. The consumer reads only `site_code`, `bin`, `sku`,\n`on_hand`, `reserved` and `version`; `reason` is not read.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -964,7 +962,7 @@
               "name": "StockRelocated",
               "title": "StockRelocated (consumed, inventory-storage)",
               "summary": "A quantity of one SKU moved from one bin to another bin of the same site.",
-              "description": "`type` = `com.warehouse.wms.inventory-storage.stock.StockRelocated`,\ndataschema `urn:warehouse:inventory-storage:events:StockRelocated:v1`.\nSubject and Kafka key = `relocation_id`. Restated from inventory-storage's\ncontract (its ADR 0039), never imported. Act only when `reason` is\n`REPLENISHMENT`, a value inventory-storage adds with producer change P4\n(today it publishes `SLOTTING`, `CONSOLIDATION` and `MANUAL`); ignore every\nother reason.\n",
+              "description": "`type` = `com.warehouse.wms.inventory-storage.stock.StockRelocated`,\ndataschema `urn:warehouse:inventory-storage:events:StockRelocated:v1`.\nSubject and Kafka key = `relocation_id`. Restated from inventory-storage's\ncontract (its ADR 0039), never imported. Act only when `reason` is\n`REPLENISHMENT`, a value inventory-storage added with producer change P4\n(its ADR 0041; it also publishes `SLOTTING`, `CONSOLIDATION` and `MANUAL`);\nignore every other reason.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
