@@ -25,9 +25,11 @@ proposed hexagonal pieces:
 | `relay to Kafka` | the outbox relay in `internal/adapters/outbound/kafka`, publishing to topic `retailnetwork.last-mile-delivery.events`; drawn as one participant to keep each diagram at six participants |
 
 Every save checks the row `version` it loaded (optimistic concurrency). A
-mismatch rolls the transaction back and returns 409 `stale-version`, or, in
-a consumer, retries. Every REST command first looks up its
-`Idempotency-Key` in `idempotency_keys`. Event names are broken over two
+mismatch rolls the transaction back and returns 409 `concurrent-update`, or, in
+a consumer, retries. Every REST `POST` first looks up its `Idempotency-Key`
+in `idempotency_keys`: the key is global, a 2xx and a 4xx answer are stored,
+and the same key with another request is 409 `idempotency-key-reused`
+(last-mile-delivery ADR 0010; the use-cases page has the details). Event names are broken over two
 lines inside the diagrams to keep them narrow. REST path parameters are
 written without braces.
 
@@ -47,6 +49,10 @@ sequenceDiagram
     alt key stored
         UC-->>HTTP: stored reply
     else new key
+        UC->>REPO: station in<br/>StationView?
+        alt unknown or not a station
+            UC-->>HTTP: 422 unknown-<br/>station
+        else known station
         UC->>AGG: ScheduleWave
         alt times out of order
             AGG-->>UC: ErrInvalid<br/>WaveTimes
@@ -58,6 +64,7 @@ sequenceDiagram
             UC->>REPO: store key,<br/>commit
             UC-->>HTTP: 201 wave
         end
+        end
     end
     K->>OB: relay claims rows
     K->>K: publish to Kafka,<br/>key waveId
@@ -67,8 +74,9 @@ sequenceDiagram
 Derived from: model.yaml → `contexts[last-mile-delivery].aggregates[DeliveryWave]`,
 `.rest`, `.publishes[DeliveryWaveScheduled]`, `conventions.integration_rules`.
 
-Omitted: a station check against `StationView`, which the model does not
-require.
+The station check against `StationView` is a precondition of the use case
+(ADR 0002 A1), not an invariant of the aggregate. After the commit the
+packages waiting at the station are inducted into the new wave (A19).
 
 ## 2. InductPackage (InductOnArrival)
 
@@ -142,11 +150,11 @@ sequenceDiagram
         else found
             UC->>AGG: CloseInduction
             alt not OPEN
-                UC-->>HTTP: 409 invalid-state
+                UC-->>HTTP: 409 illegal-transition
             else OPEN
                 UC->>REPO: save,<br/>version check
                 alt version changed
-                    UC-->>HTTP: 409 stale-version
+                    UC-->>HTTP: 409 concurrent-update
                 else saved
                     UC-->>HTTP: 200 INDUCTION_<br/>CLOSED
                 end
@@ -179,11 +187,11 @@ sequenceDiagram
         else found
             UC->>AGG: DispatchWave
             alt not INDUCTION_CLOSED
-                UC-->>HTTP: 409 invalid-state
+                UC-->>HTTP: 409 illegal-transition
             else ok
                 UC->>REPO: save,<br/>version check
                 alt version changed
-                    UC-->>HTTP: 409 stale-version
+                    UC-->>HTTP: 409 concurrent-update
                 else saved
                     UC-->>HTTP: 200 DISPATCHED
                 end
@@ -201,27 +209,22 @@ Derived from: model.yaml → `contexts[last-mile-delivery].aggregates[DeliveryWa
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
-    participant T as trigger<br/>not modelled
+    participant T as CompleteRoute or<br/>DispatchWave
     participant UC as CompleteWave
     participant REPO as WaveRepo
     participant AGG as DeliveryWave
-    T->>UC: CompleteWave
+    T->>UC: last route COMPLETED,<br/>or no route at dispatch
     UC->>REPO: get waveId
     UC->>AGG: CompleteWave
-    alt not DISPATCHED
-        UC-->>T: invalid-state
-    else ok
-        UC->>REPO: save,<br/>version check
-        alt version changed
-            UC-->>T: stale-version
-        else saved
-            UC-->>T: COMPLETED
-        end
-    end
+    AGG-->>UC: COMPLETED
+    UC->>REPO: save, version check,<br/>same transaction as the trigger
 ```
 
-Derived from: model.yaml → `contexts[last-mile-delivery].aggregates[DeliveryWave].transitions`
-(`DISPATCHED` → `COMPLETED`). The model gives no route, policy or event.
+Derived from: ADR 0002 A9 and `contexts[last-mile-delivery].aggregates[DeliveryWave].transitions`
+(`DISPATCHED` → `COMPLETED`). There is no REST route and no caller: the wave
+completes in the transaction in which its last route completes, or at once
+when it is dispatched with no route (the dispatch response may then show
+`COMPLETED`). No event.
 
 ## 6. CancelWave
 
@@ -229,30 +232,45 @@ Derived from: model.yaml → `contexts[last-mile-delivery].aggregates[DeliveryWa
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
-    participant T as trigger<br/>not modelled
+    participant HTTP as http
     participant UC as CancelWave
     participant REPO as WaveRepo
     participant AGG as DeliveryWave
     participant OB as outbox
     participant K as relay to Kafka
-    T->>UC: CancelWave,<br/>reason
-    UC->>REPO: get waveId
-    UC->>AGG: CancelWave
-    alt not OPEN
-        UC-->>T: invalid-state
-    else OPEN
-        UC->>REPO: begin tx, save,<br/>version check
-        UC->>OB: DeliveryWave<br/>Cancelled
-        UC->>REPO: commit
-        UC-->>T: CANCELLED
+    HTTP->>UC: POST /waves/waveId/<br/>cancellations<br/>Idempotency-Key, reason
+    alt key stored
+        UC-->>HTTP: stored reply
+    else new key
+        UC->>REPO: get waveId
+        alt not found
+            UC-->>HTTP: 404 not-found
+        else found
+            UC->>AGG: CancelWave
+            alt reason empty or too long
+                UC-->>HTTP: 422 validation-failed
+            else not OPEN, also CANCELLED
+                UC-->>HTTP: 409 illegal-transition
+            else OPEN
+                UC->>REPO: begin tx, re-induct each<br/>package onto the next wave
+                UC->>REPO: save, version check
+                UC->>OB: DeliveryWave<br/>Cancelled
+                UC->>REPO: store key, commit
+                UC-->>HTTP: 200 CANCELLED
+            end
+        end
     end
     OB->>K: relay publishes,<br/>key waveId
 ```
 
-Derived from: model.yaml → `contexts[last-mile-delivery].aggregates[DeliveryWave].transitions`,
+Derived from: ADR 0002 A10, A22, `contexts[last-mile-delivery].aggregates[DeliveryWave].transitions`,
 `.publishes[DeliveryWaveCancelled]`.
 
-Omitted: what happens to packages already inducted; the model does not say.
+A package with no eligible wave is unplaced and raises
+`PackageInductionDeferred`. A second cancel of a `CANCELLED` wave is 409
+`illegal-transition`: the wave stays `CANCELLED` and no second
+`DeliveryWaveCancelled` is raised. A version conflict is 409
+`concurrent-update` (omitted from the diagram).
 
 ## 7. PlanRoute
 
@@ -275,7 +293,11 @@ sequenceDiagram
             UC-->>HTTP: 404 not-found
         else found
             UC->>AGG: PlanRoute
-            alt over van capacity
+            alt wave not INDUCTION_CLOSED
+                UC-->>HTTP: 409 illegal-<br/>transition
+            else partner or package rule broken
+                UC-->>HTTP: 409 partner-inactive,<br/>partner-station-mismatch,<br/>package-not-inducted,<br/>package-already-routed,<br/>stop-key-mismatch
+            else over van capacity
                 AGG-->>UC: ErrRoute<br/>OverCapacity
                 UC-->>HTTP: 409 route-<br/>over-capacity
             else ok
@@ -293,7 +315,7 @@ Derived from: model.yaml → `contexts[last-mile-delivery].aggregates[Route]`,
 `.aggregates[DeliveryServicePartner].invariants`, `.publishes[RoutePlanned]`.
 
 The partner and the wave are read, not changed, and are not part of the
-transaction.
+transaction. The preconditions are those of ADR 0002 A12.
 
 ## 8. StartRoute
 
@@ -307,7 +329,7 @@ sequenceDiagram
     participant AGG as Route
     participant OB as outbox
     participant K as relay to Kafka
-    HTTP->>UC: POST /routes/<br/>routeId:start
+    HTTP->>UC: POST /routes/<br/>routeId/starts
     alt key stored
         UC-->>HTTP: stored reply
     else new key
@@ -317,7 +339,7 @@ sequenceDiagram
         else found
             UC->>AGG: StartRoute
             alt not PLANNED
-                UC-->>HTTP: 409 invalid-state
+                UC-->>HTTP: 409 illegal-transition
             else ok
                 UC->>REPO: begin tx, save,<br/>version check
                 loop each trackingNumber
@@ -325,7 +347,7 @@ sequenceDiagram
                 end
                 alt version changed
                     UC->>REPO: rollback
-                    UC-->>HTTP: 409 stale-version
+                    UC-->>HTTP: 409 concurrent-update
                 else saved
                     UC->>REPO: commit
                     UC-->>HTTP: 200 OUT_FOR_<br/>DELIVERY
@@ -337,7 +359,8 @@ sequenceDiagram
 ```
 
 Derived from: model.yaml → `contexts[last-mile-delivery].aggregates[Route].transitions`,
-`.publishes[PackageOutForDelivery]`.
+`.publishes[PackageOutForDelivery]`. The route's wave must be `DISPATCHED`
+(ADR 0002 A14), else 409 `illegal-transition`.
 
 ## 9. RecordAttempt
 
@@ -357,12 +380,17 @@ sequenceDiagram
     else new key
         UC->>REPO: get routeId
         UC->>AGG: RecordAttempt
-        alt not OUT_FOR_DELIVERY
+        alt package not on the route
+            AGG-->>UC: ErrPackage<br/>NotOnRoute
+            UC-->>HTTP: 404 package-<br/>not-on-route
+        else not OUT_FOR_DELIVERY
             AGG-->>UC: ErrRoute<br/>NotStarted
             UC-->>HTTP: 409 route-<br/>not-started
         else already DELIVERED
             AGG-->>UC: ErrAlready<br/>Delivered
             UC-->>HTTP: 409 already-<br/>delivered
+        else already FAILED
+            UC-->>HTTP: 409 attempt-already-<br/>recorded
         else recorded
             UC->>REPO: begin tx, save,<br/>version check
             UC->>OB: Delivery<br/>Attempted
@@ -379,9 +407,11 @@ sequenceDiagram
 Derived from: model.yaml → `contexts[last-mile-delivery].aggregates[Route].invariants`,
 `.policies[RetryNextWave]`, `.publishes[DeliveryAttempted]`.
 
-Omitted: 404 for an unknown route or a tracking number not on the route,
-and the `stale-version` branch (as in diagram 8). The third failure (return
-to sender) has no step because the model has no message for it.
+Omitted: 404 `not-found` for an unknown route and the `concurrent-update`
+branch (as in diagram 8). When the attempt is the last outstanding package the
+route completes in the same unit of work (diagram 10). The third failure
+raises `PackageReturnInitiated` and the package is not re-inducted (ADR 0002
+A18).
 
 ## 10. CompleteRoute
 
@@ -389,27 +419,26 @@ to sender) has no step because the model has no message for it.
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
-    participant T as trigger<br/>not modelled
+    participant T as RecordAttempt<br/>(last package)
     participant UC as CompleteRoute
     participant REPO as RouteRepo
     participant AGG as Route
-    T->>UC: CompleteRoute
-    UC->>REPO: get routeId
+    T->>UC: CompleteRouteOnLastAttempt
     UC->>AGG: CompleteRoute
-    alt not OUT_FOR_DELIVERY
-        UC-->>T: invalid-state
-    else ok
-        UC->>REPO: save,<br/>version check
-        alt version changed
-            UC-->>T: stale-version
-        else saved
-            UC-->>T: COMPLETED
-        end
+    alt a package has no attempt
+        AGG-->>UC: ErrRoute<br/>Incomplete
+    else all packages attempted
+        UC->>REPO: second save in the<br/>same unit of work
+        UC-->>T: COMPLETED
     end
 ```
 
-Derived from: model.yaml → `contexts[last-mile-delivery].aggregates[Route].transitions`.
-The model gives no route, policy or event.
+Derived from: ADR 0002 A16 and `contexts[last-mile-delivery].aggregates[Route].transitions`.
+There is no REST route and no caller: the route completes right after the
+attempt that records its last outstanding package (policy
+`CompleteRouteOnLastAttempt`), and the wave completes when its last route does
+(diagram 5). The domain refuses it with `ErrRouteIncomplete` (409
+`route-incomplete`) while a package has no attempt. No event.
 
 ## 11. ContractPartner
 
@@ -425,6 +454,10 @@ sequenceDiagram
     alt key stored
         UC-->>HTTP: stored reply
     else new key
+        UC->>REPO: station in<br/>StationView?
+        alt unknown or not a station
+            UC-->>HTTP: 422 unknown-<br/>station
+        else known station
         UC->>AGG: ContractPartner
         alt vanCapacity not above 0
             AGG-->>UC: ErrInvalid<br/>VanCapacity
@@ -432,6 +465,7 @@ sequenceDiagram
         else ok
             UC->>REPO: insert ACTIVE,<br/>store key
             UC-->>HTTP: 201 partner
+        end
         end
     end
 ```

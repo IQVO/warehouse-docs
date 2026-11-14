@@ -61,6 +61,7 @@ Omitted: nothing in the model. The creation edge (`ScheduleWave`) and the
 | `inductCutoffAt < windowStart < windowEnd` | `ErrInvalidWaveTimes` |
 | assigned stops `<=` stops | `ErrWaveFull` |
 | no package joins after induction closes | `ErrInductionClosed` |
+| a wave is scheduled only for a known `DELIVERY_STATION` (use case, ADR 0002 A1) | `ErrUnknownStation` |
 
 ### 5. Corrective Policies
 
@@ -73,9 +74,9 @@ Omitted: nothing in the model. The creation edge (`ScheduleWave`) and the
   `order-sourcing` updates `NetworkGraphView`, on `DeliveryWaveScheduled` and
   `DeliveryWaveCapacityChanged`. A wave with no remaining stops stops being
   offered as a witness or candidate wave.
-- **No reaction to `DeliveryWaveCancelled`**: it is analytics only in the
-  model (see the open questions on the
-  [Bounded Context Canvas](/network/contexts/last-mile-delivery/bounded-context-canvas)).
+- **`DeliveryWaveCancelled`** goes to the integration stream and is consumed
+  by `delivery-promise` and `order-sourcing` (ADR 0002 A22; last-mile-delivery
+  ADR 0003 addendum).
 
 ### 6. Handled Commands
 
@@ -85,8 +86,8 @@ Omitted: nothing in the model. The creation edge (`ScheduleWave`) and the
 | `InductPackage` | `OPEN` (assigned stops +) | policies `InductOnArrival` and `RetryNextWave` |
 | `CloseInduction` | `OPEN` → `INDUCTION_CLOSED` | Station planner, REST `POST /waves/{waveId}/induction-closures` |
 | `DispatchWave` | `INDUCTION_CLOSED` → `DISPATCHED` | Station planner, REST `POST /waves/{waveId}/dispatches` |
-| `CompleteWave` | `DISPATCHED` → `COMPLETED` | no trigger in the model |
-| `CancelWave` | `OPEN` → `CANCELLED` | no trigger in the model |
+| `CompleteWave` | `DISPATCHED` → `COMPLETED` | automatic: the last route of the wave completes, or a dispatch with no route (ADR 0002 A9); no REST route |
+| `CancelWave` | `OPEN` → `CANCELLED` | Station planner, REST `POST /waves/{waveId}/cancellations` |
 
 ### 7. Created Events
 
@@ -96,8 +97,9 @@ Omitted: nothing in the model. The creation edge (`ScheduleWave`) and the
 | `DeliveryWaveCapacityChanged` | assigned stops change (`InductPackage`) | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCapacityChanged` |
 | `DeliveryWaveCancelled` | `CancelWave` is saved | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCancelled` |
 
-`CloseInduction`, `DispatchWave` and `CompleteWave` raise no event in the
-model.
+`CloseInduction`, `DispatchWave` and `CompleteWave` raise no event of their
+own. `CancelWave` also re-inducts the packages of the cancelled wave (ADR 0002
+A10).
 
 ### 8. Throughput
 
@@ -188,7 +190,7 @@ planned routes.
 | `PlanRoute` | creates `PLANNED` | Station planner, REST `POST /routes` |
 | `StartRoute` | `PLANNED` → `OUT_FOR_DELIVERY` | DSP driver app, REST `POST /routes/{routeId}/starts` |
 | `RecordAttempt` | `OUT_FOR_DELIVERY` (stop outcome set) | DSP driver app, REST `POST /routes/{routeId}/attempts` |
-| `CompleteRoute` | `OUT_FOR_DELIVERY` → `COMPLETED` | no trigger in the model |
+| `CompleteRoute` | `OUT_FOR_DELIVERY` → `COMPLETED` | automatic: the attempt that records the last outstanding package (ADR 0002 A16); no REST route |
 
 ### 7. Created Events
 

@@ -1498,6 +1498,7 @@ contexts:
           - {rule: "inductCutoffAt < windowStart < windowEnd", error: ErrInvalidWaveTimes}
           - {rule: "assigned stops <= stops, where assigned stops counts the distinct stopKeys among the wave's inductions", error: ErrWaveFull}
           - {rule: "no package joins after induction closes", error: ErrInductionClosed}
+          - {rule: "a wave is scheduled only for a known DELIVERY_STATION of StationView; checked by the use case, not by the aggregate (ADR 0002 A1)", error: ErrUnknownStation}
         commands: [ScheduleWave, InductPackage, CloseInduction, DispatchWave, CompleteWave, CancelWave]
         events: [DeliveryWaveScheduled, DeliveryWaveCapacityChanged, DeliveryWaveCancelled]
         throughput_estimate: "medium"
@@ -1513,6 +1514,9 @@ contexts:
           - {rule: "an attempt is recorded only on an OUT_FOR_DELIVERY route", error: ErrRouteNotStarted}
           - {rule: "a package is delivered at most once", error: ErrAlreadyDelivered}
           - {rule: "the packages of one stop share one stopKey", error: ErrStopKeyMismatch}
+          - {rule: "an attempt names a package that is on the route (404 package-not-on-route) and is recorded once per package per route: a second after DELIVERED is ErrAlreadyDelivered, after FAILED ErrAttemptAlreadyRecorded", error: ErrPackageNotOnRoute}
+          - {rule: "PlanRoute needs the wave INDUCTION_CLOSED (ErrIllegalTransition), an ACTIVE partner of the wave's station (ErrPartnerInactive, ErrPartnerStationMismatch) and packages inducted in the wave and on no other route (ErrPackageNotInducted, ErrPackageAlreadyRouted); StartRoute needs the wave DISPATCHED (ADR 0002 A12, A14)", error: ErrIllegalTransition}
+          - {rule: "a route completes only when every package has an attempt", error: ErrRouteIncomplete}
           - {rule: "outcomeDetail, when reported, pairs with the outcome: FAILED carries NOT_HOME, ACCESS_PROBLEM or OTHER, DELIVERED carries SAFE_PLACE_USED; empty means not reported (a legacy client) and never replaces failureReason", error: ErrValidation}
         commands: [PlanRoute, StartRoute, RecordAttempt, CompleteRoute]
         events: [RoutePlanned, PackageOutForDelivery, StopEtaWindowAssigned, DeliveryAttempted]
@@ -1543,13 +1547,17 @@ contexts:
         throughput_estimate: "one Observe per attempt"
         size_estimate: "one small row per distinct delivery point"
     read_models:
-      - {name: StationView, source: "node-topology NodeRegistered, ServiceAreaAssigned"}
+      - {name: StationView, source: "node-topology NodeRegistered (DELIVERY_STATION only; the first write per nodeId is kept, ON CONFLICT DO NOTHING, ADR 0003), ServiceAreaAssigned (applied only when assignmentVersion is higher than the stored one; carries deliveryMode, absent means NETWORK_ROUTE, ADR 0015)"}
       - {name: InboundPackagesView, source: "linehaul-transportation LoadArrived"}
-      - {name: PackageStopView, source: "shipping-and-tracking LabelIssued (trackingNumber, stopKey, destinationPostalPrefix, assignmentId)"}
+      - {name: PackageStopView, source: "shipping-and-tracking LabelIssued (trackingNumber, stopKey, destinationPostalPrefix, assignmentId); the first write per trackingNumber is kept (ON CONFLICT DO NOTHING, ADR 0003); a label without stopKey is ignored"}
       - {name: LastMileAnalytics, source: "analytical read side (last-mile-delivery ADR 0012): cmd/lm-projector, the only writer of a SEPARATE analytical database, projects this context's OWN topics only (retailnetwork.last-mile-delivery.events and .analytics, RoutePlanned included) in one consumer group, deduped in the projection transaction; cmd/lm-reports serves the read-only /reports routes on :8092. ADR 0013 adds the stop_eta_windows fact (one row per package of a StopEtaWindowAssigned, migration 0002) and the GET /reports/eta-window report: per UTC day of the DELIVERED attempt and per station, deliveriesWithEta, deliveriesInsideEta, deliveriesBeforeEta, deliveriesAfterEta and etaHitRate = inside / withEta (null when no delivery had an ETA); only the attempt that DELIVERED counts, and a delivered package whose ETA row was never projected is not in the denominator. DeliveryPointFlagged is acknowledged without a fact"}
     policies:
       - {name: InductOnArrival, rule: "on LoadArrived at a delivery station induct every package into the earliest eligible wave"}
       - {name: RetryNextWave, rule: "a FAILED attempt re-inducts the package into the next wave; three failures return it to sender"}
+      - {name: CompleteRouteOnLastAttempt, rule: "a route completes (OUT_FOR_DELIVERY to COMPLETED) in the same unit of work as the attempt that records its last outstanding package, so CompleteRoute has no REST route and no caller; a route whose driver never records every package stays OUT_FOR_DELIVERY (ADR 0002 A16)"}
+      - {name: CompleteWaveWithLastRoute, rule: "a DISPATCHED wave completes in the transaction in which its last route completes; a wave dispatched with no route completes at once, so the dispatch response may show COMPLETED. CompleteWave has no REST route and no caller (ADR 0002 A9)"}
+      - {name: ReinduceOnCancel, rule: "CancelWave (OPEN to CANCELLED, a reason of 1 to 200 characters, REST POST /waves/{waveId}/cancellations) re-inducts every package of the wave onto the next eligible wave in the same transaction; one with no eligible wave is unplaced and raises PackageInductionDeferred. A second cancel of a CANCELLED wave is 409 illegal-transition: the wave stays CANCELLED and no second DeliveryWaveCancelled is raised (ADR 0002 A10)"}
+      - {name: IdempotentPosts, rule: "every POST takes an Idempotency-Key (1 to 128 printable ASCII; missing 400 idempotency-key-required, malformed 400 idempotency-key-invalid). The key is global (looked up by key alone); the fingerprint is method + path + SHA-256 of the body; the same key and fingerprint replays the stored 2xx or 4xx answer with Idempotency-Replayed: true, the same key with another fingerprint is 409 idempotency-key-reused; a 5xx is never stored; 24 h (ADR 0010, which supersedes ADR 0002 A21)"}
       - {name: GroupByStopKey, rule: "packages are grouped into stops by the stopKey of LabelIssued, never by an address. Wave capacity counts stops: assignedStops is the number of distinct stopKeys among the wave's inductions, so a package for a stop already in the wave adds no stop and raises no DeliveryWaveCapacityChanged. A package with no label data is its own stop (key pkg: followed by the tracking number)"}
       - {name: NoAddressAtLastMile, rule: "last-mile-delivery never receives an address: it holds a stopKey and a postal prefix only, and no address route exists (shipping-and-tracking policy NoAddressRoute). How the driver learns the address is not decided"}
       - {name: EtaWindowAtRouteStart, rule: "StartRoute raises one StopEtaWindowAssigned per stop, after every PackageOutForDelivery, in the same transaction and under the same Kafka key (the routeId): the stops are spread linearly over what is left of the wave's delivery window (from max(now, windowStart) to windowEnd), each stop a window of at most two hours truncated to the minute; when less than 30 minutes of the wave window is left at the start instant no event is raised (counted skipped, reason window_elapsed) and the route starts normally. The CloudEvents time is the route start instant; an ETA is never retracted, never re-raised for the same start, and a re-inducted package gets a new one from its next StartRoute. Nothing is persisted on the route and GET /routes/{routeId} shows no window: the events and the analytics read side are the record (last-mile-delivery ADR 0013)"}
@@ -1557,11 +1565,11 @@ contexts:
       - {name: CarrierAreaRefusal, rule: "a ServiceAreaAssigned whose deliveryMode is CARRIER_HANDOFF is not wave territory (RN-0010): StationView marks the prefix carrier-served, InductPackage refuses a package whose destination prefix is carrier-served (no wave, no stop capacity), and the package leaves at the handoff node through shipping-and-tracking's HandToCarrier"}
       - {name: PointIsOneStop, rule: "a pickup point is one stop of a station route with its own stop identity, the pickupPointId, never an address key (RN-0011): many packages for one point take one unit of stop capacity"}
     inbound:
-      # caller inferred for close-induction, cancel, POST /partners and :deactivate (ADR 0003 names only the station planner and the driver app as UI callers; sibling of the wave and route commands)
-      - {from: "station planner (human)", type: cmd, channel: "REST POST /waves, POST /waves/{waveId}:close-induction, POST /waves/{waveId}:dispatch, POST /waves/{waveId}:cancel, POST /routes, POST /partners, POST /partners/{dspId}:deactivate", routes: ["POST /waves", "POST /waves/{waveId}:close-induction", "POST /waves/{waveId}:dispatch", "POST /waves/{waveId}:cancel", "POST /routes", "POST /partners", "POST /partners/{dspId}:deactivate"], message: "ScheduleWave, CloseInduction, DispatchWave, CancelWave, PlanRoute, ContractPartner, DeactivatePartner", relationship: UI}
+      # caller inferred for close-induction, cancel, POST /partners and deactivations (ADR 0003 names only the station planner and the driver app as UI callers; sibling of the wave and route commands)
+      - {from: "station planner (human)", type: cmd, channel: "REST POST /waves, POST /waves/{waveId}/induction-closures, POST /waves/{waveId}/dispatches, POST /waves/{waveId}/cancellations, POST /routes, POST /partners, POST /partners/{dspId}/deactivations", routes: ["POST /waves", "POST /waves/{waveId}/induction-closures", "POST /waves/{waveId}/dispatches", "POST /waves/{waveId}/cancellations", "POST /routes", "POST /partners", "POST /partners/{dspId}/deactivations"], message: "ScheduleWave, CloseInduction, DispatchWave, CancelWave, PlanRoute, ContractPartner, DeactivatePartner", relationship: UI}
       # caller inferred for GET /waves; the spec says the planner builds PlanRoute from the stops list
       - {from: "station planner (human)", type: qry, channel: "REST GET /waves, GET /waves/{waveId}/stops", routes: ["GET /waves", "GET /waves/{waveId}/stops"], message: "ListWaves, GetWaveStops", relationship: UI}
-      - {from: delivery service partner driver app, type: cmd, channel: "REST POST /routes/{routeId}:start, POST /routes/{routeId}/attempts", routes: ["POST /routes/{routeId}:start", "POST /routes/{routeId}/attempts"], message: "StartRoute, RecordAttempt", relationship: UI}
+      - {from: delivery service partner driver app, type: cmd, channel: "REST POST /routes/{routeId}/starts, POST /routes/{routeId}/attempts", routes: ["POST /routes/{routeId}/starts", "POST /routes/{routeId}/attempts"], message: "StartRoute, RecordAttempt", relationship: UI}
       # caller inferred: the spec names no caller; the driver app records the attempts the route read returns
       - {from: delivery service partner driver app, type: qry, channel: "REST GET /routes/{routeId}", routes: ["GET /routes/{routeId}"], message: "GetRoute", relationship: UI}
       - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "LoadArrived", relationship: Customer/Supplier}
@@ -1571,16 +1579,16 @@ contexts:
     rest:
       - "POST /waves"
       - "GET /waves?stationNodeId=&serviceDate="
-      - "POST /waves/{waveId}:close-induction"
-      - "POST /waves/{waveId}:dispatch"
+      - "POST /waves/{waveId}/induction-closures"
+      - "POST /waves/{waveId}/dispatches"
       - "POST /routes"
-      - "POST /routes/{routeId}:start"
+      - "POST /routes/{routeId}/starts"
       - "POST /routes/{routeId}/attempts"
       - "POST /partners"
       - "GET /waves/{waveId}/stops"
-      - "POST /waves/{waveId}:cancel"
+      - "POST /waves/{waveId}/cancellations"
       - "GET /routes/{routeId}"
-      - "POST /partners/{dspId}:deactivate"
+      - "POST /partners/{dspId}/deactivations"
       - "GET /reports/route-efficiency?from=&to="
       - "GET /reports/attempt-outcomes?from=&to="
       - "GET /reports/eta-window?from=&to="
