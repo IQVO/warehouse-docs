@@ -82,15 +82,15 @@ Topic `retailnetwork.node-topology.events`.
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
-| `NodeRegistered` | `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `last-mile-delivery`, `node-performance`, `vendor-connectivity`, `seller-inbound` |
+| `NodeRegistered` | `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `last-mile-delivery`, `node-performance`, `vendor-connectivity`, `seller-inbound`, `shipping-and-tracking` |
 | `NodeOperationalProfileDeclared` | `com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared` | `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `node-performance`, `vendor-connectivity`, `seller-inbound` |
-| `NodeActivated` | `com.retailnetwork.logistics.node-topology.node.NodeActivated` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound` |
-| `NodeSuspended` | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound` |
-| `NodeRetired` | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound` |
+| `NodeActivated` | `com.retailnetwork.logistics.node-topology.node.NodeActivated` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound`, `shipping-and-tracking` |
+| `NodeSuspended` | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound`, `shipping-and-tracking` |
+| `NodeRetired` | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound`, `shipping-and-tracking` |
 | `LaneOpened` | `com.retailnetwork.logistics.node-topology.lane.LaneOpened` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
 | `LaneCostDeclared` | `com.retailnetwork.logistics.node-topology.lane.LaneCostDeclared` | `order-sourcing` |
 | `LaneClosed` | `com.retailnetwork.logistics.node-topology.lane.LaneClosed` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
-| `ServiceAreaAssigned` | `com.retailnetwork.logistics.node-topology.servicearea.ServiceAreaAssigned` | `delivery-promise`, `order-sourcing`, `last-mile-delivery` |
+| `ServiceAreaAssigned` | `com.retailnetwork.logistics.node-topology.servicearea.ServiceAreaAssigned` | `delivery-promise`, `order-sourcing`, `last-mile-delivery`, `shipping-and-tracking` |
 | `RegionDefined` | `com.retailnetwork.logistics.node-topology.region.RegionDefined` | `delivery-promise`, `order-sourcing` |
 
 ### `offer-availability`
@@ -228,6 +228,9 @@ Topic `retailnetwork.shipping-and-tracking.events`.
 | `PackageLost` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | `delivery-promise`, `customer-ordering` |
 | `PackageEtaWindowAssigned` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageEtaWindowAssigned` | `customer-ordering` |
 | `PackageDeliveryPointFlagged` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDeliveryPointFlagged` | `customer-ordering` |
+| `PackageHandedToCarrier` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageHandedToCarrier` | `delivery-promise` |
+| `PackageReadyForCollection` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReadyForCollection` | `delivery-promise` |
+| `PackageCollected` | `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageCollected` | - |
 
 ### `node-performance`
 

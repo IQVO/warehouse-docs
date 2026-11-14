@@ -2373,6 +2373,197 @@
           ]
         }
       }
+    },
+    "warehouse.outbound-shipping.events": {
+      "description": "outbound-shipping's integration topic, CONSUMED by this service, not\npublished (the event path of ADR 0014's 2026-11-06 addendum:\n`TypeShipmentConfirmed` in\n`internal/adapters/inbound/kafka/shipment_confirmed_consumer.go`).\nThe consumer joins each `ShipmentConfirmed.orders[].order_id` on\n`NetworkOrder.localOrderId` — the persisted mapping ADR 0014 named as\nthe missing correlation — and confirms the mapped network orders\nthrough the ONE `ConfirmNetworkOrderShipment` use case the manual\n`POST /network-orders/{networkRef}/shipment-confirmation` also uses\n(kept one release as the operator fallback, D6). Delivery is\nat-least-once under the stable group `OUTBOUND_SHIPPING_CONSUMER_GROUP`\n(default `network-fulfillment-outbound-shipping`), reading from the\nfirst offset when the group is new; dedupe is the use case's\n(load_id, order_id) confirmation key, which subsumes the CloudEvents\nid — a redelivered or re-published ShipmentConfirmed confirms\nnothing new, and the manual endpoint racing the event double-submits\nnothing. An `order_id` no NetworkOrder carries (a local order raised\nfrom customer demand sharing the load) is skipped and logged. Unknown\ntypes are skipped. A message that is not a valid CloudEvent, or whose\ndata breaks outbound-shipping's contract, is dead-lettered to\n`warehouse.outbound-shipping.events.dlq` (headers `x-dlq-source-topic`,\n`x-dlq-error`, `x-dlq-failed-at`) and committed past. The Kafka key\nis the load id (used when the payload carries no `load_id`).\n",
+      "subscribe": {
+        "operationId": "consumeOutboundShippingEvents",
+        "summary": "Confirm network orders from the fleet's shipment facts (ADR 0014 addendum).",
+        "message": {
+          "oneOf": [
+            {
+              "name": "ShipmentConfirmed",
+              "title": "Shipment confirmed (consumed from outbound-shipping)",
+              "summary": "The trailer left with a closed load; the shipment is a fact.",
+              "description": "CONSUMED, not produced. Pinned by outbound-shipping's merged\n`apis/asyncapi.yaml` (IQVO/outbound-shipping PR #2):\n`source=/warehouse/outbound-shipping`, type\n`com.warehouse.wms.outbound-shipping.outboundload.ShipmentConfirmed`,\nsubject and Kafka key = the load id, dataschema\n`urn:warehouse:outbound-shipping:events:ShipmentConfirmed:v1`.\n`orders[].order_id` is order-management's `OrderId` — the join key\non `NetworkOrder.localOrderId` (ADR 0014 addendum). A per-order\n`package_count` is an additive producer change that has NOT landed;\nthis consumer's decode tolerates it and reports the real count the\nday it ships, keeping ADR 0026's single-package placeholder until\nthen.\n",
+              "contentType": "application/cloudevents+json",
+              "payload": {
+                "allOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "specversion",
+                      "id",
+                      "source",
+                      "type",
+                      "subject",
+                      "time",
+                      "datacontenttype",
+                      "dataschema",
+                      "data"
+                    ],
+                    "properties": {
+                      "specversion": {
+                        "type": "string",
+                        "const": "1.0",
+                        "x-parser-schema-id": "<anonymous-schema-207>"
+                      },
+                      "id": {
+                        "type": "string",
+                        "description": "UUID minted once per occurrence and persisted with the outbox row; consumers dedupe on it.",
+                        "x-parser-schema-id": "<anonymous-schema-208>"
+                      },
+                      "source": {
+                        "type": "string",
+                        "const": "/warehouse/outbound-shipping",
+                        "x-parser-schema-id": "<anonymous-schema-209>"
+                      },
+                      "type": {
+                        "type": "string",
+                        "description": "com.warehouse.wms.outbound-shipping.<entity>.<EventName>.",
+                        "x-parser-schema-id": "<anonymous-schema-210>"
+                      },
+                      "subject": {
+                        "type": "string",
+                        "description": "Aggregate root id; also the Kafka partition key.",
+                        "x-parser-schema-id": "<anonymous-schema-211>"
+                      },
+                      "time": {
+                        "type": "string",
+                        "format": "date-time",
+                        "x-parser-schema-id": "<anonymous-schema-212>"
+                      },
+                      "datacontenttype": {
+                        "type": "string",
+                        "const": "application/json",
+                        "x-parser-schema-id": "<anonymous-schema-213>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "description": "urn:warehouse:outbound-shipping:<events|analytics>:<EventName>:v1.",
+                        "x-parser-schema-id": "<anonymous-schema-214>"
+                      }
+                    },
+                    "x-parser-schema-id": "CloudEventEnvelope"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "type": "string",
+                        "const": "com.warehouse.wms.outbound-shipping.outboundload.ShipmentConfirmed",
+                        "x-parser-schema-id": "<anonymous-schema-216>"
+                      },
+                      "subject": {
+                        "type": "string",
+                        "description": "The load id.",
+                        "x-parser-schema-id": "<anonymous-schema-217>"
+                      },
+                      "time": {
+                        "type": "string",
+                        "format": "date-time",
+                        "x-parser-schema-id": "<anonymous-schema-218>"
+                      },
+                      "datacontenttype": {
+                        "type": "string",
+                        "enum": [
+                          "application/json"
+                        ],
+                        "x-parser-schema-id": "<anonymous-schema-219>"
+                      },
+                      "dataschema": {
+                        "type": "string",
+                        "const": "urn:warehouse:outbound-shipping:events:ShipmentConfirmed:v1",
+                        "x-parser-schema-id": "<anonymous-schema-220>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Pinned per outbound-shipping's merged contract; every field\nbelow is required there. `orders[].package_count` is NOT in\nthe contract yet (additive, pending) — listed here as the\noptional field this consumer already tolerates.\n",
+                        "required": [
+                          "load_id",
+                          "site_id",
+                          "cpt_id",
+                          "carrier",
+                          "trailer_id",
+                          "seal_number",
+                          "departed_at",
+                          "orders",
+                          "version"
+                        ],
+                        "properties": {
+                          "load_id": {
+                            "type": "string",
+                            "description": "The shipment reference of the idempotency key; falls back to the Kafka key when empty — an event naming neither is dead-lettered.",
+                            "x-parser-schema-id": "<anonymous-schema-222>"
+                          },
+                          "site_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-223>"
+                          },
+                          "cpt_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-224>"
+                          },
+                          "carrier": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-225>"
+                          },
+                          "trailer_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-226>"
+                          },
+                          "seal_number": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-227>"
+                          },
+                          "departed_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-228>"
+                          },
+                          "orders": {
+                            "type": "array",
+                            "description": "Distinct source_order_id (order-management OrderId) of the shipped packages; a package manifested without one is excluded by the producer.",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "order_id"
+                              ],
+                              "properties": {
+                                "order_id": {
+                                  "type": "string",
+                                  "description": "The join key on NetworkOrder.localOrderId; no match means a customer-demand order — skipped and logged.",
+                                  "x-parser-schema-id": "<anonymous-schema-231>"
+                                },
+                                "package_count": {
+                                  "type": "integer",
+                                  "minimum": 1,
+                                  "description": "ADDITIVE, NOT in the merged contract yet. The real per-order package count; until it lands the network is told 1 (ADR 0026, gap recorded in ADR 0014's addendum).",
+                                  "x-parser-schema-id": "<anonymous-schema-232>"
+                                }
+                              },
+                              "x-parser-schema-id": "<anonymous-schema-230>"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-229>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-233>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-221>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-215>"
+                  }
+                ],
+                "x-parser-schema-id": "ShipmentConfirmedEvent"
+              }
+            }
+          ]
+        }
+      }
     }
   },
   "components": {
@@ -2398,7 +2589,8 @@
       "PathCapacityChanged": "$ref:$.channels.warehouse.work-planning.events.subscribe.message",
       "ReceiptCartonReceived": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[0]",
       "CartonDiscrepancyRaised": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[1]",
-      "ReceiptClosed": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[2]"
+      "ReceiptClosed": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[2]",
+      "ShipmentConfirmed": "$ref:$.channels.warehouse.outbound-shipping.events.subscribe.message.oneOf[0]"
     },
     "schemas": {
       "KafkaHeaders": "$ref:$.channels.warehouse.network-fulfillment.events.subscribe.message.oneOf[0].headers",
@@ -2431,7 +2623,9 @@
       "PathCapacityChangedEvent": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.payload",
       "ReceiptCartonReceivedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[0].payload",
       "CartonDiscrepancyRaisedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[1].payload",
-      "ReceiptClosedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[2].payload"
+      "ReceiptClosedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[2].payload",
+      "CloudEventEnvelope": "$ref:$.channels.warehouse.outbound-shipping.events.subscribe.message.oneOf[0].payload.allOf[0]",
+      "ShipmentConfirmedEvent": "$ref:$.channels.warehouse.outbound-shipping.events.subscribe.message.oneOf[0].payload"
     }
   },
   "x-parser-spec-parsed": true,
