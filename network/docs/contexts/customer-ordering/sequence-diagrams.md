@@ -324,7 +324,7 @@ sequenceDiagram
         alt ErrIllegalTransition, group CANCELLED, LOST or RETURNED
             A-->>UC: error, recorded and skipped
         else ok
-            A-->>UC: group DELIVERED once every package is; order PARTIALLY_DELIVERED or DELIVERED
+            A-->>UC: group DELIVERED once every package is, then order PARTIALLY_DELIVERED or DELIVERED
         end
         UC->>DB: BEGIN, update where version matches
         alt version changed
