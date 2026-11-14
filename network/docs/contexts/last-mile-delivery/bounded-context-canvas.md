@@ -226,6 +226,10 @@ stop capacity), **Induction**, **Route**, **Delivery Service Partner (DSP)**,
   no offline or batch attempt upload.
 - Every consumer is idempotent on the CloudEvents `id`, and every published
   event leaves through a transactional outbox (model `integration_rules`).
+- A package whose destination postal prefix is a `CARRIER_HANDOFF` service area
+  is never inducted into a wave: it takes no stop capacity and raises no
+  event, and the counter `last_mile_delivery.carrier_area.skipped` counts it
+  (last-mile-delivery ADR 0015).
 
 ## Verification Metrics
 
