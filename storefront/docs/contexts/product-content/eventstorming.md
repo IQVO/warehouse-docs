@@ -40,9 +40,9 @@ flowchart LR
     C1["CreateProductContent<br/>POST /product-contents"]:::command
     RM["CatalogItemView<br/>item known, not<br/>discontinued?"]:::readmodel
     G1["ProductContent<br/>DRAFT"]:::aggregate
-    C1b["ReviseDraft<br/>POST /revisions<br/>(state picks)"]:::command
-    C1c["DiscardDraft<br/>DELETE /draft<br/>no event"]:::command
-    C2["PublishContent<br/>POST /publications<br/>DRAFT or PUBLISHED"]:::command
+    C1b["ReviseDraft<br/>POST /product-contents/catalogItemId/revisions<br/>(state picks)"]:::command
+    C1c["DiscardDraft<br/>DELETE /product-contents/catalogItemId/draft<br/>no event"]:::command
+    C2["PublishContent<br/>POST /product-contents/catalogItemId/publications<br/>DRAFT or PUBLISHED"]:::command
     P1["Publish gate<br/>description, one PRIMARY<br/>medium, category"]:::policy
     E1["ProductContentPublished<br/>revision bumped"]:::event
     PD["product-discovery<br/>ProductView"]:::external

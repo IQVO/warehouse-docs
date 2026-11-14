@@ -59,7 +59,7 @@ sequenceDiagram
     autonumber
     actor CM as Content manager
     participant PC as product-content
-    CM->>PC: cmd: PublishContent<br/>POST /publications
+    CM->>PC: cmd: PublishContent<br/>POST /product-contents/catalogItemId/publications
     alt no description, or not exactly one PRIMARY medium, or no category
         PC-->>CM: cmd: reply 422<br/>incomplete-content
     else primary category not in the current tree

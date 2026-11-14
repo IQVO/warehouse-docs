@@ -75,7 +75,7 @@ sequenceDiagram
     participant CO as customer-ordering
     participant K as Kafka
     participant SC as shopping-cart
-    BFF->>CK: cmd: ConfirmSession<br/>POST /confirmations, token
+    BFF->>CK: cmd: ConfirmSession<br/>POST /checkout-sessions/sessionId/confirmations, token
     Note over CK: ErrPriceQuoteExpired<br/>OPEN to AUTHORIZING
     CK->>CP: cmd: AuthorizePayment<br/>key sessionId:auth:authAttempt,<br/>allocations per group
     CP-->>CK: cmd: reply authorizationId, total

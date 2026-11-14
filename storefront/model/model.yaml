@@ -390,7 +390,7 @@ contexts:
     aggregates: []
     read_models:
       - {name: ProductView, source: "offer-availability CatalogItemCreated, CatalogItemDiscontinued, ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored; product-content ProductContentPublished, ProductContentRetired; pricing ItemPriceChanged, ItemPriceWithdrawn. Per-source monotonic guards: listing asOf, content revision, price version. Stores categoryId only (categoryPath joined from CategoryView at query time). Each bootstrap snapshot row carries updatedAt, seeded into the per-key guard so replayed events older than the snapshot are dropped."}
-      - {name: ListingItemMap, source: "offer-availability ListingCreated (listingId -> catalogItemId)", note: "read-side lookup: ListingSuppressed and ListingRestored carry only listingId, so the projector resolves the item through this map"}
+      - {name: ListingItemMap, source: "offer-availability ListingCreated (listingId -> catalogItemId)", note: "read-side lookup: ListingSuppressed and ListingRestored carry only listingId, so the projector resolves the item through this map. A suppress or restore for a listing the map does not know (the create was lost or predates retention) is acknowledged and logged as skipped, not retried or dead-lettered; the bootstrap rebuild repairs the listing (service ADR 0002 A1)"}
       - {name: CategoryView, source: "product-content CategoryTreePublished plus purchasable counts derived from ProductView"}
     policies:
       - {name: PurchasableRule, rule: "purchasable = item ACTIVE in the item master, content PUBLISHED, price ACTIVE, and at least one LIVE listing with quantity > 0"}
@@ -402,7 +402,7 @@ contexts:
       - {from: product-content, type: evt, channel: "Kafka retailnetwork.product-content.events", message: "ProductContentPublished, ProductContentRetired, CategoryTreePublished", relationship: Conformist}
       - {from: pricing, type: evt, channel: "Kafka retailnetwork.pricing.events", message: "ItemPriceChanged, ItemPriceWithdrawn", relationship: Conformist}
     rest:
-      - "GET /products?q=&categoryId=&inStock=&priceMin=&priceMax=&sort=&after=&limit="
+      - "GET /products?q=&categoryId=&inStock=&priceMin=&priceMax=&sort=&cursor=&limit="
       - "GET /products/{catalogItemId}"
       - "GET /categories"
     publishes: []

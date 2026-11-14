@@ -53,33 +53,54 @@ has none.
   user request.
 
 Error responses use `application/problem+json` (RFC 9457) with `type`
-`/problems/<slug>`. This read-only surface uses `not-found` (404) and
-`validation-failed` (422) only — the model names no `Err` for this context
-(see the [Aggregate Design Canvas](/storefront/contexts/product-discovery/aggregate-design-canvas)).
+`/problems/<slug>`. The model names no `Err` for this context (see the
+[Aggregate Design Canvas](/storefront/contexts/product-discovery/aggregate-design-canvas)); the
+read-only REST surface answers these problems:
+
+| Status | Slug | When |
+| --- | --- | --- |
+| 400 | `invalid-limit` | `limit` empty, repeated, not an integer or outside 1..500 |
+| 400 | `invalid-cursor` | `cursor` repeated, or not a cursor of this search (another sort or matching mode) |
+| 400 | `unknown-query-parameter` | a query parameter `GET /products` does not declare, for example the retired `after` |
+| 400 | `malformed-request` | a NUL character in the query string, on any route |
+| 404 | `not-found` | no such product, a stub row, or an id longer than 128 characters |
+| 404 | `resource-not-found` | a NUL character in the request path, on any route |
+| 422 | `validation-failed` | a filter out of range or of the wrong type: `q` longer than 200 characters, an unknown `sort`, a non-boolean `inStock`, a non-integer, negative or inverted price bound |
+| 500 | `internal-error` | anything else; the detail never carries the internal message |
 
 ## SearchProducts
 
 - **Actor / trigger:** the shopper, via `storefront-bff` (experience
   layer).
 - **Inbound adapter:** REST `GET /products` with `q`, `categoryId`,
-  `inStock`, `priceMin`, `priceMax`, `sort`, `after`, `limit` (1..100).
+  `inStock`, `priceMin`, `priceMax`, `sort`, `cursor`, `limit` (1..500,
+  default 100). Any other query parameter is refused as
+  `unknown-query-parameter`: the retired `after` fails loudly.
 - **Preconditions:** none (the projections are always readable; an empty
   index answers empty).
 - **Main flow:**
-  1. Validate the parameters (422 `validation-failed` on a bad `sort`, a
-     negative price bound or a `limit` outside 1..100).
+  1. Validate the parameters: 400 `invalid-limit` for a `limit` outside
+     1..500 (or empty, repeated, not an integer), 400 `invalid-cursor` for a
+     bad or foreign `cursor`, 400 `unknown-query-parameter` for an undeclared
+     parameter; 422 `validation-failed` on a bad `sort`, a negative or
+     inverted price bound, a non-boolean `inStock` or a `q` over 200
+     characters.
   2. Run the query through the `SearchPort`: full-text search over the
      `tsvector` (weights title A, category names A, attributes B,
      description C — business decision 2), filters ANDed (`categoryId`,
-     `inStock`, price band), keyset pagination on `after`.
+     `inStock`, price band), keyset pagination on the opaque `cursor`.
   3. When full-text search returns too little, retry with `pg_trgm`
      similarity (the typo fallback; the trigger is this pack's reading).
   4. Compute the facets (category, price band, in-stock) over the same
      filtered rows.
   5. For a product-type query, add `categorySuggestions` (business
      decision 3; detection rule not modelled).
-  6. Answer `200` with `hits`, `facets`, `categorySuggestions`, `next`.
-- **Errors:** 422 `validation-failed` only.
+  6. Answer `200` with `items`, `facets`, `categorySuggestions`,
+     `nextCursor` (absent on the last page); pass it back unchanged as
+     `cursor`, with the same filters and sort.
+- **Errors:** 400 `invalid-limit` / `invalid-cursor` /
+  `unknown-query-parameter` / `malformed-request`; 422 `validation-failed`
+  (table above).
 - **Idempotency:** a pure read; no key needed.
 - **Risk:** ranking quality is fixed by decision 2 — no learning loop,
   and no analytics event exists to build one on (see the
@@ -99,7 +120,8 @@ Error responses use `application/problem+json` (RFC 9457) with `type`
      `purchasable`. An unpurchasable item is still returned: the page
      renders it as currently unavailable (`UnavailableNotBuyable`, gap S6);
      buying out-of-stock is impossible in this network.
-- **Errors:** 404 `not-found`.
+- **Errors:** 404 `not-found` (no such product, a stub row, an id over 128
+  characters); 400 `malformed-request` for a NUL in the query string.
 - **Idempotency:** a pure read.
 - **Risk:** the row can lag its sources by one consumer window (the
   freshness metric on the canvas); a just-withdrawn price can still show
@@ -161,9 +183,13 @@ Error responses use `application/problem+json` (RFC 9457) with `type`
   stale event.
 - **Idempotency:** the inbox plus the guards (above).
 - **Risk:** `ListingSuppressed`/`ListingRestored` carry only `listingId`,
-  so the fold depends on the stored `ListingCreated` mapping; a suppress
-  arriving before its create is a cross-key race the model does not
-  address (hotspot H1). Bullets, media and the list price are rendered by
+  so the fold depends on the stored `ListingCreated` mapping (hotspot H1). A
+  suppress or restore for a listing the mapping does not know (arriving
+  before its create, or the create predates retention) is acknowledged and
+  logged as skipped (WARN): not retried and not dead-lettered; the
+  bootstrap rebuild repairs the listing (service ADR 0002 A1). On a healthy
+  topic this cannot happen, because both events share the listing key with
+  `ListingCreated`. Bullets, media and the list price are rendered by
   the page but not declared in `consumes` (hotspot H2).
 
 ## RebuildProjections (ops)
