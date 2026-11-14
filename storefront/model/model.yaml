@@ -566,6 +566,7 @@ contexts:
           - [OPEN, AUTHORIZING, ConfirmSession]
           - [AUTHORIZING, PLACING, RecordAuthorization]
           - [AUTHORIZING, DECLINED, RecordDecline]
+          - [AUTHORIZING, DECLINED, RecordAuthorization]
           - [DECLINED, AUTHORIZING, ConfirmSession]
           - [PLACING, PLACING, RecordPlacementInDoubt]
           - [PLACING, COMPLETED, RecordPlaced]
@@ -580,16 +581,17 @@ contexts:
           - "StoredPlacement{requestBody, requestHash, placingSince}: the PII-free placement request replayed byte for byte; placingSince drives the 20 h alert; purged 24 h after a terminal state"
         invariants:
           - {rule: "the cart's checkout readiness holds at session open", error: ErrCartNotCheckoutReady}
-          - {rule: "the price quote is unexpired at confirm", error: ErrPriceQuoteExpired}
+          - {rule: "the price quote is unexpired at confirm (422 price-quote-expired; open a new session)", error: ErrPriceQuoteExpired}
           - {rule: "no transition out of COMPLETED, EXPIRED, FAILED or REQUOTE_REQUIRED (DECLINED is not closed: it retries with another token or expires)", error: ErrSessionClosed}
-          - {rule: "every selected offer is still quotable at the pre-authorize GetDeliveryOffer check; no state change, the BFF refreshes the cart quote (422 offer-not-quotable; REQUOTE_REQUIRED stays a PLACING-time 409 only)", error: ErrOfferNotQuotable}
-          - {rule: "the authorized amount equals the quote total", error: ErrAuthorizationMismatch}
+          - {rule: "every selected offer is still QUOTED and expires more than 2 minutes from now at the GetDeliveryOffer check at OpenSession; no session is created, no state changes, the BFF refreshes the cart quote (422 offer-not-quotable). The check is not repeated at confirm: an offer that expires between open and confirm comes back from customer-ordering as a PLACING-time 409 requote, the only way to REQUOTE_REQUIRED", error: ErrOfferNotQuotable}
+          - {rule: "the authorized amount and currency equal the quote's; otherwise the session goes back to DECLINED (reason authorization-mismatch) with the void owed and the call answers 409 authorization-mismatch", error: ErrAuthorizationMismatch}
+          - {rule: "a new confirm is refused while a void is still owed (409 void-pending), because customer-payments allows one active authorization per session", error: ErrVoidPending}
           - {rule: "no void and no new attempt while the place-order outcome is unknown (the semantic lock [15])", error: ErrPlacementInDoubt}
         commands: [OpenSession, ConfirmSession, RecordAuthorization, RecordDecline, RecordPlacementInDoubt, RecordPlaced, RecordRequoteRequired, RecordFailure, ExpireSession]
         events: [CheckoutCompleted, CheckoutOpened, CheckoutDeclined, CheckoutRequoteRequired, CheckoutFailed, CheckoutSessionExpired, CheckoutPlacementInDoubt]
         throughput_estimate: "medium: one session per purchase attempt"
         size_estimate: "one row per session; placement request retained for the idempotency window"
-        notes: "AuthorizePayment is called with the key <sessionId>:auth:<authAttempt>; authAttempt starts at 1 and is incremented on each DECLINED to AUTHORIZING, so a retry with another token is a new attempt while a stuck call replays the same key. voidOwed is set together with the decision to void (definitive 409, 422, ErrAuthorizationMismatch) so no void is lost. RecordPlacementInDoubt raises CheckoutPlacementInDoubt and ExpireSession raises CheckoutSessionExpired (both analytics-only)."
+        notes: "AuthorizePayment is called with the key <sessionId>:auth:<authAttempt>; authAttempt starts at 0 and is incremented on each DECLINED to AUTHORIZING, so a retry with another token is a new attempt while a stuck call replays the same key. voidOwed is set together with the decision to void (definitive 409, 422, ErrAuthorizationMismatch, which also returns the session to DECLINED and blocks a new confirm with 409 void-pending until the void succeeds) so no void is lost. RecordPlacementInDoubt raises CheckoutPlacementInDoubt on the first unknown outcome only (later passes of ResolveInDoubtPlacements raise nothing; the event carries placingSince) and ExpireSession raises CheckoutSessionExpired (both analytics-only)."
     read_models: []
     policies:
       - {name: ResolveInDoubtPlacements, rule: "re-send the stored placement body with the same Idempotency-Key (customer-ordering replays the first response) with backoff until a definitive answer; alert at 20 h (from placingSince); give up and void at 22 h; customer-payments VoidUnboundAuthorizations is the 24 h backstop"}
@@ -597,12 +599,12 @@ contexts:
       - {name: RetryOwedVoids, rule: "every minute, until success, void the authorization named by voidOwed (covers ErrAuthorizationMismatch voids and every definitive-rejection void); Void is idempotent"}
       - {name: ExpireOnQuoteExpiry, rule: "an OPEN or DECLINED session expires with its price quote (ExpireSession, raises CheckoutSessionExpired)"}
     inbound:
-      - {from: "storefront-bff (experience layer)", type: cmd, channel: "REST POST /checkout-sessions, POST /checkout-sessions/{sessionId}:confirm", message: "OpenSession, ConfirmSession", relationship: UI}
+      - {from: "storefront-bff (experience layer)", type: cmd, channel: "REST POST /checkout-sessions, POST /checkout-sessions/{sessionId}/confirmations", message: "OpenSession, ConfirmSession", relationship: UI}
       - {from: "storefront-bff (experience layer)", type: qry, channel: "REST GET /checkout-sessions/{sessionId}", message: GetSession, relationship: UI}
     rest:
       - "POST /checkout-sessions"
       - "GET /checkout-sessions/{sessionId}"
-      - "POST /checkout-sessions/{sessionId}:confirm"
+      - "POST /checkout-sessions/{sessionId}/confirmations"
     publishes:
       - {event: CheckoutCompleted, entity: checkoutsession, data: [sessionId, orderId, shopperId, cartId, authorizationId, currency, totalMinor, "groups(groupNo, tier, amountMinor)", completedAt], consumers: [shopping-cart, customer-payments]}
       - {event: CheckoutOpened, entity: checkoutsession, data: [sessionId, cartId, shopperId, totalMinor, openedAt], consumers: ["analytics only"]}
@@ -614,7 +616,7 @@ contexts:
     consumes: []
     sync_calls:
       - {to: shopping-cart, type: qry, message: GetCart, channel: "REST GET /carts/{cartId}"}
-      - {to: delivery-promise, type: qry, message: GetDeliveryOffer, channel: "REST GET /delivery-offers/{offerId}", note: "pre-authorize check that every selected offer is still QUOTED, with margin; a failure is ErrOfferNotQuotable (422 offer-not-quotable), no state change"}
+      - {to: delivery-promise, type: qry, message: GetDeliveryOffer, channel: "REST GET /delivery-offers/{offerId}", note: "check at OpenSession (not repeated at confirm) that every selected offer is still QUOTED and expires more than 2 minutes from now; a failure is ErrOfferNotQuotable (422 offer-not-quotable), no session, no state change"}
       - {to: pricing, type: cmd, message: IssuePriceQuote, channel: "REST POST /price-quotes"}
       - {to: customer-payments, type: cmd, message: AuthorizePayment, channel: "REST POST /payment-authorizations", note: "Idempotency-Key <sessionId>:auth:<authAttempt>, allocations per group"}
       - {to: customer-payments, type: cmd, message: VoidAuthorization, channel: "REST POST /payment-authorizations/{authorizationId}/voids", note: "Idempotency-Key <sessionId>:void; only after a definitive rejection; recorded as voidOwed and retried by RetryOwedVoids"}
