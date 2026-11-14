@@ -241,7 +241,7 @@ flowchart TB
     E11["PromiseRevised"]:::event
     C6["ApplyRevisedPromise"]:::command
     A1["FulfillmentAssignment<br/>back to QUEUED"]:::aggregate
-    H5["Hotspot: no event<br/>for this transition"]:::hotspot
+    H5["H5 resolved: always raises<br/>FulfillmentConstraintRevised"]:::hotspot
     H9["Hotspot: revision of a<br/>QUEUED, RELEASED or<br/>LOCKED assignment"]:::hotspot
     CO["customer-ordering"]:::external
     E12["CustomerOrderCancelled"]:::event
@@ -310,7 +310,7 @@ Derived from: model.yaml → `contexts[order-sourcing].consumes`
 | H2 No `releaseAt` when no candidate is left | 2 | `policies[VirtualQueue]` derives `releaseAt` from the best candidate; `QUEUED → UNSOURCEABLE` happens only by `ReleaseToNode` |
 | H3 Cross-region as penalty vs rule | 1 | `business_decisions[4]` ("only when it is the only way") against `policies[AssignmentCost]` (`crossRegionPenalty`) |
 | H4 Acceptance after cancellation (known residual, G12) | 4 | `CancelAssignment` from `RELEASED` against `vendor-connectivity` `ErrCancelAfterAcknowledgement` (cancel only while `ISSUED`); an acceptance that arrives after the cancel is only logged (`policies[AcceptanceAfterCancelOnlyLogged]`) |
-| H5 `ApplyRevisedPromise` raises no event | 4 | `aggregates[FulfillmentAssignment].events` has none for `UNSOURCEABLE → QUEUED` |
+| H5 `ApplyRevisedPromise` raises `FulfillmentConstraintRevised` (resolved, ADR 0002 A9) | 4 | `aggregates[FulfillmentAssignment].events` lists `FulfillmentConstraintRevised`; it is raised in every non-terminal state, analytics only |
 | H6 `UNSOURCEABLE` can be cancelled (resolved) | 4 | `transitions` now has `UNSOURCEABLE → CANCELLED`, so `customer-ordering` `CancelOnUnfulfillable` has a target |
 | H7 Exclusion per promise revision without `revisionNo` | 3 | `invariants` (`ErrNodeExcluded`, "same promise revision") against `value_objects` (`PromiseConstraint` has no revision) |
 | H8 Multi-package delivery | 5 | `FulfillmentShipped.trackingNumbers` (several) against `PackageDelivered` (one `trackingNumber`) |

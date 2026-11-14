@@ -62,7 +62,7 @@ consumer action is what the adapter does.
 | `ErrReleaseInFlight` | 409 | `release-in-flight` | state |
 | `ErrStaleAssignmentVersion` | 409 | `stale-assignment-version` | stale |
 | `ErrCancelAfterLock` | 409 | `cancel-after-lock` | state |
-| unknown `assignmentId` (no `Err...` in the model) | 404 | `assignment-not-found` | not found |
+| unknown `assignmentId` (`ErrNotFound`, a port error) | 404 | `not-found` | not found |
 
 Kafka consumers retry `ErrStaleAssignmentVersion` from a fresh load. A domain
 error that a retry cannot fix (for example `ErrCancelAfterLock`) is logged,
@@ -117,8 +117,9 @@ retried forever.
   | `ErrNodeExcluded` | the chosen candidate is an excluded node (guard) | 409 | `node-excluded` |
   | `ErrCandidateBreaksPromise` | the chosen candidate's `eta` is past `deliverByLatest` (guard) | 422 | `candidate-breaks-promise` |
   | `ErrStaleAssignmentVersion` | the row changed since the load | 409 | `stale-assignment-version` |
-  | (no `Err...` in the model) | state `UNSOURCEABLE`, `CANCELLED`, `SHIPPED`, `DELIVERED` | 409 | not named (open question) |
-  | not found | unknown `assignmentId` | 404 | `assignment-not-found` |
+  | `ErrIllegalTransition` | state `UNSOURCEABLE` or `CANCELLED` (ADR 0002 A5) | 409 | `illegal-transition` |
+  | `ErrAssignmentLocked` | state `SHIPPED` or `DELIVERED` (as `LOCKED`) | 409 | `assignment-locked` |
+  | not found (`ErrNotFound`) | unknown `assignmentId` | 404 | `not-found` |
 
 - **Events:** `FulfillmentReassigned` when the node changes; none otherwise.
 - **Idempotency:** a re-run on unchanged read models picks the same
@@ -280,18 +281,29 @@ retried forever.
   (its answer to `FulfillmentUnsourceable`).
 - **Inbound adapter:** Kafka consumer of
   `com.retailnetwork.commerce.delivery-promise.promise.PromiseRevised`.
-- **Preconditions:** the assignment of `promiseId` is `UNSOURCEABLE`, or a `RELEASED` member of a merge whose new window excludes the merged `eta`.
+- **Preconditions:** the assignment of `promiseId` is in any non-terminal state (`QUEUED`, `RELEASED`, `LOCKED`, `SHIPPED`, `UNSOURCEABLE`) and the event's `revisionNo` is higher than the applied one; otherwise the event is ignored (order-sourcing ADR 0002 A9, gap G13).
 - **Main flow:**
   1. Inbox check; load the assignment by `promiseId`.
-  2. Update `PromiseConstraint.deliverByLatest` (a revision never moves it
+  2. Replace `PromiseConstraint.deliverByLatest` (a revision never moves it
      earlier, `delivery-promise`'s `ErrRevisionMovesEarlier`) and
-     `witnessNodeId` from the event's `nodeId`.
-  3. Search and rank candidates; set `releaseAt`; state `QUEUED`.
+     `witnessNodeId` from the event's `nodeId` when present; reset the node
+     exclusions (they are scoped to the revision).
+  3. In `UNSOURCEABLE`: search and rank candidates under the new constraint;
+     if one exists set `releaseAt` and state `QUEUED`, otherwise stay
+     `UNSOURCEABLE` silently (no second `FulfillmentUnsourceable`; `delivery-promise`
+     answers with `PromiseUnkeepable`). In `QUEUED`: re-search; a changed node
+     raises `FulfillmentReassigned` (reason `PROMISE_REVISED`), an empty set is
+     `UNSOURCEABLE` (`FulfillmentUnsourceable`, reason `NO_CANDIDATE`). In `RELEASED`, `LOCKED` and `SHIPPED` only the constraint
+     changes: the node is already committed.
   4. Save with version check and inbox row.
 - **Errors:** `ErrStaleAssignmentVersion` → 409 `stale-assignment-version`
-  (retry). For an assignment in any other state the model defines no
-  transition; the event is recorded and ignored (open question).
-- **Events:** none in the model (open question).
+  (retry). A revision not above the applied `revisionNo` (`ErrStaleRevision`) is
+  ignored; the inbox row is still written. A terminal assignment (`DELIVERED`,
+  `CANCELLED`) is `ErrIllegalTransition`.
+- **Events:** `FulfillmentConstraintRevised` (`assignmentId`, `revisionNo`,
+  `deliverByLatest`, analytics only) is ALWAYS raised when a revision applies, in every
+  state (ADR 0002 A9); `FulfillmentReassigned` follows when a `QUEUED` assignment changes node, and
+  `FulfillmentUnsourceable` when a `QUEUED` assignment loses its last candidate.
 - **Idempotency:** inbox; applied from `UNSOURCEABLE`, and for a merged `RELEASED` member through `Requeue`: when the revised window (after the new latest, or before the new earliest when known) excludes the merged `eta`, the release is withdrawn (`FulfillmentReleaseWithdrawn`), every member's pending release gets outcome `WITHDRAWN`, every member returns to `QUEUED` and is re-searched with no node exclusion (`FulfillmentReassigned` with `CONSOLIDATION_WITHDRAWN` if its node changed), and `AssignmentsDeconsolidated` is raised. A stale revision stays ignored.
 
 ## PublishSourcingPolicy

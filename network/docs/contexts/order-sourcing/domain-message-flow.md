@@ -120,7 +120,7 @@ at `STANDARD`, `delivery-promise` sends no `PromiseRevised`; it reports
 `UNSOURCEABLE` assignment (open question on the
 [canvas](/network/contexts/order-sourcing/bounded-context-canvas)). Whether the
 revision clears the exclusions of A and B is not stated in the model.
-`ApplyRevisedPromise` raises no event in the model.
+`ApplyRevisedPromise` always raises `FulfillmentConstraintRevised` (analytics only, ADR 0002 A9), and applies in every non-terminal state.
 
 ## 3. Shipped and delivered
 

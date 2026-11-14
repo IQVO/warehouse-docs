@@ -962,6 +962,12 @@ contexts:
           - [RELEASED, CANCELLED, CancelAssignment]
           - [UNSOURCEABLE, CANCELLED, CancelAssignment]
           - [UNSOURCEABLE, QUEUED, ApplyRevisedPromise]
+          # as built (order-sourcing ADR 0002 A9, gap G13): in every non-terminal state a revision with a higher revisionNo replaces the constraint; only QUEUED and UNSOURCEABLE re-search
+          - [QUEUED, QUEUED, ApplyRevisedPromise]
+          - [RELEASED, RELEASED, ApplyRevisedPromise]
+          - [LOCKED, LOCKED, ApplyRevisedPromise]
+          - [SHIPPED, SHIPPED, ApplyRevisedPromise]
+          - [UNSOURCEABLE, UNSOURCEABLE, ApplyRevisedPromise]
           - [LOCKED, LOCKED, RefuseCancel]
           - [SHIPPED, SHIPPED, RefuseCancel]
           - [DELIVERED, DELIVERED, RefuseCancel]
@@ -981,7 +987,7 @@ contexts:
           - {rule: "cancel only before LOCKED: a cancel request on a LOCKED, SHIPPED or DELIVERED assignment is refused, the assignment keeps its state and raises FulfillmentCancelRefused (reason CANCEL_AFTER_LOCK) instead of FulfillmentCancelled", error: ErrCancelAfterLock}
           - {rule: "a member of a live merge (carrier or follower, state RELEASED, not yet LOCKED) is not cancelled: the cancel is refused through RefuseCancel with reason CANCEL_WHILE_MERGED, the state does not change, nothing is withdrawn and the merge stays intact; the cancel can be retried after the carrier's lock (then CANCEL_AFTER_LOCK) or after the merge is dissolved (then the group is QUEUED again and cancels). A cancel of a QUEUED group or of an unmerged RELEASED group is unchanged", error: ErrCancelWhileMerged}
         commands: [QueueAssignment, ReoptimiseAssignment, ReleaseToNode, ReleaseConsolidated, ReleaseAsFollower, HandleNodeRefusal, LockAssignment, MarkShipped, MarkDelivered, CancelAssignment, RefuseCancel, ApplyRevisedPromise, Requeue]
-        events: [FulfillmentQueued, FulfillmentReleasedToNode, FulfillmentReleaseWithdrawn, FulfillmentReassigned, FulfillmentLocked, FulfillmentShipped, FulfillmentDelivered, FulfillmentUnsourceable, FulfillmentCancelled, FulfillmentCancelRefused, FulfillmentSourcingDecided, AssignmentsConsolidated, AssignmentsDeconsolidated]
+        events: [FulfillmentQueued, FulfillmentReleasedToNode, FulfillmentReleaseWithdrawn, FulfillmentReassigned, FulfillmentLocked, FulfillmentShipped, FulfillmentDelivered, FulfillmentUnsourceable, FulfillmentCancelled, FulfillmentCancelRefused, FulfillmentConstraintRevised, FulfillmentSourcingDecided, AssignmentsConsolidated, AssignmentsDeconsolidated]
         notes: "Known residual (G12): an acceptance that reaches order-sourcing after it cancelled a RELEASED assignment is only recorded and logged (policy AcceptanceAfterCancelOnlyLogged); the vendor may still ship a cancelled group."
         throughput_estimate: "medium-high; re-optimisation sweeps touch QUEUED rows only"
         size_estimate: "one row per shipment group + releases"

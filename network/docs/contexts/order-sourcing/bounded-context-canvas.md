@@ -260,7 +260,7 @@ value objects **Promise Constraint**, **Candidate**, **Release record**,
    `deliverByLatest`, the assignment becomes `UNSOURCEABLE` and
    `FulfillmentUnsourceable` asks `delivery-promise` to re-promise
    (`RepromiseOnRisk`). A revised promise re-queues the group
-   (`ApplyRevisedPromise`).
+   (`ApplyRevisedPromise`, which applies in every non-terminal state).
 5. **In-region first, as a bounded trade.** Cross-region is a cost, never a
    filter: the effective cost adds the policy's cross-region surcharge, and an
    in-region candidate within the cheapest effective cost plus
@@ -321,9 +321,10 @@ value objects **Promise Constraint**, **Candidate**, **Release record**,
 These are gaps in `model.yaml` found while deriving this pack. They are not
 resolved here.
 
-- **`ApplyRevisedPromise` raises no event.** The model lists no event for
-  `UNSOURCEABLE → QUEUED`. Re-raising `FulfillmentQueued` is one option; a new
-  event is another.
+- **`ApplyRevisedPromise` raises `FulfillmentConstraintRevised` (resolved).** It
+  applies in every non-terminal state when `revisionNo` is higher than the applied
+  one, and always raises the analytics-only `FulfillmentConstraintRevised`
+  (ADR 0002 A9, gap G13).
 - **Exclusions per promise revision, without a revision number.**
   `ErrNodeExcluded` is scoped to "the same promise revision", but
   `PromiseConstraint` carries no `revisionNo`, and the model does not say
