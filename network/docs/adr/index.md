@@ -31,6 +31,7 @@ accepts it.
 | [0009](/network/adr/0009-seller-inbound-and-case-packed-shipments) | Seller inbound and case-packed shipments: SSCC cartons, owner-segregated stock, eaches as the ledger unit | Proposed |
 | [0010](./0010-carrier-handoff-delivery.md) | Carrier handoff delivery for low-density service areas (amends 0004) | Accepted |
 | [0011](./0011-pickup-points.md) | Pickup points and lockers (extends 0004) | Accepted |
+| [0012](./0012-customer-returns-is-a-bounded-context.md) | Customer returns is a bounded context | Accepted (2026-11-14) |
 
 ## Service ADRs (one sequence per context repository)
 
