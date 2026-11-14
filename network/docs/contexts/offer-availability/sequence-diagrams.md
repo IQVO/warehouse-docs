@@ -83,7 +83,7 @@ sequenceDiagram
     participant DB as Repo + Outbox
     participant Relay
     participant Kafka
-    HTTP->>UC: POST /catalog-items/<br/>id:discontinue
+    HTTP->>UC: POST /catalog-items/<br/>id/discontinuations
     UC->>DB: FindByID(id)
     alt not found
         DB-->>UC: none
@@ -94,28 +94,32 @@ sequenceDiagram
     else ACTIVE
         DB-->>UC: item, version n
         UC->>AG: Discontinue()
+        UC->>DB: every listing of the item not yet<br/>SUPPRESSED(DISCONTINUED): Suppress(DISCONTINUED)
         rect rgb(241, 243, 245)
             UC->>DB: Update(item, version n)
             alt version changed meanwhile
                 DB-->>UC: version conflict
-                UC-->>HTTP: 409<br/>concurrent-<br/>modification
+                UC-->>HTTP: 409<br/>concurrent-<br/>update
             else version n matches
-                UC->>DB: outbox Append<br/>CatalogItem-<br/>Discontinued
+                UC->>DB: outbox Append<br/>CatalogItem-<br/>Discontinued and<br/>ListingSuppressed x n
                 UC-->>HTTP: 200 item
             end
         end
     end
     Relay->>DB: claim unpublished<br/>outbox rows
     Relay->>Kafka: catalogitem.<br/>CatalogItem-<br/>Discontinued
+    Relay->>Kafka: listing.<br/>ListingSuppressed x n
     Relay->>DB: mark published
 ```
 
 Derived from: `model.yaml → contexts[offer-availability].aggregates[CatalogItem].transitions`,
-`.events`, `.rest`.
+`.events`, `.rest`, `.policies[SuppressOnItemDiscontinued]`.
 
 Omitted: the `Idempotency-Key` replay branch (as in diagram 1). The
-`404` and the `409 concurrent-modification` have no `Err...` identifier in
-the model; they are proposed HTTP behaviour.
+`404` is the port error `ErrNotFound` and the `409 concurrent-update` is
+`ErrConcurrentUpdate` (one automatic retry first): both are shared problem
+types, not model `Err...` names (ADR 0002 A18). Discontinuing suppresses the
+item's listings in the same transaction (ADR 0002 A4).
 
 ## 3. CreateListing
 
@@ -175,11 +179,16 @@ sequenceDiagram
         UC-->>HTTP: stored answer
     else new key
         UC->>DB: Find-<br/>Feed(feedId)
-        alt feed APPLIED
+        alt feed APPLIED or SUPERSEDED
             UC-->>HTTP: 409<br/>feed-<br/>already-applied
-        else unknown feed
-            UC->>AG: Receive(header, lines)
+        else unknown or FAILED feed
+            UC->>AG: Receive(header, lines)<br/>a FAILED feedId is resubmitted
             UC->>DB: listings of nodeId,<br/>with versions
+            alt asOf older than the last APPLIED feed of the node
+                UC->>AG: MarkSuperseded()
+                UC->>DB: Save(feed SUPERSEDED)
+                UC-->>HTTP: 201 feed SUPERSEDED, no event
+            end
             loop each line
                 Note over UC: listing on nodeId, else<br/>ErrListingNotOnNode
                 Note over UC: ApplyAvailability,<br/>see diagram 5
@@ -219,10 +228,12 @@ Derived from: `model.yaml → contexts[offer-availability].aggregates[InventoryF
 `.policies[FullFeedZeroing]`, `.publishes`, `.rest`;
 `contexts[vendor-connectivity].sync_calls`.
 
-Omitted: the case of a `FAILED` `feedId` sent again (proposed: replay the
-stored `422`). `ListingAvailabilityChanged` is written once per changed
+Omitted: the case of a `FAILED` `feedId` sent again: the feed is resubmitted
+(`FAILED → RECEIVED`, same `nodeId`) and applied afresh, not replayed as the
+stored `422` (ADR 0002 A11). `ListingAvailabilityChanged` is written once per changed
 listing; stale lines write nothing. The `RECEIVED` state exists only
-inside the apply: the feed row is first written as `APPLIED` or `FAILED`.
+inside the apply: the feed row is first written as `APPLIED`, `FAILED` or
+`SUPERSEDED`.
 
 
 ## 5. ApplyAvailability

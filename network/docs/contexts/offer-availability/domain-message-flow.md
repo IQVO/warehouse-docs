@@ -121,10 +121,10 @@ Derived from: `model.yaml → contexts[offer-availability].aggregates[InventoryF
 
 Omitted: what `vendor-connectivity` does with a `409` on a feed it already
 applied (its `ErrSubmissionAlreadyProcessed` guards its own side). The
-problem `type` slugs and status codes are this context's proposed contract
-([Use Cases](/network/contexts/offer-availability/use-cases)). Whether a feed
-whose lines are all stale should end `APPLIED` is a model gap; this flow
-follows the invariant "is ignored".
+problem `type` slugs and status codes follow the service's `apis/openapi.yaml`
+([Use Cases](/network/contexts/offer-availability/use-cases)). A feed older
+than the node's last applied feed ends `SUPERSEDED` and a `FAILED` feedId may
+be sent again (ADR 0002 A11).
 
 ## 3. A node is suspended, then activated again
 

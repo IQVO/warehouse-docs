@@ -50,7 +50,7 @@ flowchart LR
         direction TB
         purpose["<b>Purpose</b><br/>Know what the network can<br/>sell and from which node:<br/>catalogue item, one listing<br/>per item and node, and the<br/>quantity each node claims,<br/>with the vendor's basis."]:::card
         roles["<b>Domain roles</b><br/>- Specification<br/>- Analysis - availability"]:::card
-        rules["<b>Business decisions</b><br/>- Sellable only while<br/>the node is ACTIVE<br/>- An older feed for the<br/>node is ignored<br/>- A full feed zeroes the<br/>listings it omits<br/>- The vendor's basis is<br/>kept, never re-derived"]:::card
+        rules["<b>Business decisions</b><br/>- Sellable only while<br/>the node is ACTIVE<br/>- An older feed for the<br/>node ends SUPERSEDED<br/>- A full feed zeroes the<br/>listings it omits<br/>- The vendor's basis is<br/>kept, never re-derived"]:::card
         purpose ~~~ roles ~~~ rules
     end
     in0 -->|"cmd - REST in-org<br/>ApplyInventoryFeed"| BC
@@ -187,8 +187,8 @@ Feed**, `asOf`.
 
 1. **A listing is sellable only while its node is `ACTIVE`.** Enforced by
    `ErrNodeNotSellable` and the `SuppressOnNodeUnavailable` policy.
-2. **A feed older than the last applied feed for that node is ignored.**
-   Per listing, an update with `asOf` not after the current `asOf` is
+2. **A feed older than the last applied feed for that node is not applied:
+   it ends `SUPERSEDED`** (nothing applied, no event, ADR 0002 A11). Per listing, an update with `asOf` not after the current `asOf` is
    ignored (`ErrStaleAvailability`).
 3. **A full feed zeroes every listing of that node it omits**
    (`FullFeedZeroing`).
@@ -231,10 +231,9 @@ All proposed; nothing is measured yet.
 
 ## Open Questions
 
-- **Node-level staleness.** The decision "a feed older than the last
-  applied feed for that node is ignored" has no invariant, no `Err...`
-  identifier and no feed state; only the per-listing `ErrStaleAvailability`
-  exists.
+- **Node-level staleness (resolved).** A feed older than the last applied
+  feed for that node ends `SUPERSEDED` (ADR 0002 A11); the per-listing
+  `ErrStaleAvailability` skips a stale line.
 - **What a zeroed listing carries.** `FullFeedZeroing` sets
   `availableQty=0`, but the model does not say which `basis` and `asOf` the
   zeroed `Availability` gets.

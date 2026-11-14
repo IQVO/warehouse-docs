@@ -64,24 +64,32 @@ are not use cases: they read the repositories directly.
 - **Actor / trigger**: network merchandising.
 - **Inbound adapter**: REST `POST /catalog-items/{catalogItemId}/discontinuations`,
   header `Idempotency-Key`.
-- **Preconditions**: the item exists and is `ACTIVE`.
+- **Preconditions**: the item exists. A `DISCONTINUED` item is not an error:
+  see Idempotency.
 - **Main flow**:
   1. Load the item by `catalogItemId`.
   2. Transition `ACTIVE` → `DISCONTINUED`.
-  3. In one transaction, with a `version` check: update the item and
-     insert the `CatalogItemDiscontinued` outbox row.
-  4. Reply `200` with the item.
+  3. In the same transaction (policy `SuppressOnItemDiscontinued`, ADR 0002
+     A4): every listing of the item that is not already
+     `SUPPRESSED(DISCONTINUED)` is suppressed with reason `DISCONTINUED`, one
+     `ListingSuppressed` each. A listing suppressed for `NODE_NOT_SELLABLE`
+     changes reason and raises the event again, so a later `NodeActivated`
+     can never restore it.
+  4. Still in that transaction, with a `version` check: update the item and
+     insert the `CatalogItemDiscontinued` and `ListingSuppressed` outbox rows.
+  5. Reply `200` with the item.
 - **Errors**:
 
 | Error | HTTP | Problem `type` |
 | --- | --- | --- |
-| unknown `catalogItemId` (no `Err...` in the model) | 404 | `not-found` |
-| `version` mismatch (proposed optimistic concurrency) | 409 | `concurrent-modification` |
+| unknown `catalogItemId` (`ErrNotFound`, a port error) | 404 | `not-found` |
+| `version` mismatch (`ErrConcurrentUpdate`, after one automatic retry) | 409 | `concurrent-update` |
 
-- **Events emitted**: `CatalogItemDiscontinued`.
-- **Idempotency**: proposed: discontinuing a `DISCONTINUED` item returns
-  it unchanged and emits nothing; a repeated `Idempotency-Key` replays the
-  first answer. The model names no error for this case.
+- **Events emitted**: `CatalogItemDiscontinued`, and `ListingSuppressed`
+  (reason `DISCONTINUED`) per suppressed listing.
+- **Idempotency**: discontinuing a `DISCONTINUED` item answers `200` with the
+  item unchanged and emits nothing (ADR 0002 A3; `ErrIllegalTransition` is not
+  used for it); a repeated `Idempotency-Key` replays the first answer.
 
 ## CreateListing
 
@@ -91,9 +99,11 @@ are not use cases: they read the repositories directly.
 - **Main flow**:
   1. Read `catalogItemId`, `nodeId`.
   2. Read the node's status from `NodeStatusView`.
-  3. Build `listing.Listing` with a new `listingId`: `LIVE` if the node is
-     `ACTIVE`, otherwise `SUPPRESSED` (proposed reading of
-     `ErrNodeNotSellable`; the model gives no initial state).
+  3. Build `listing.Listing` with a new `listingId`: `LIVE` only if the node is
+     `ACTIVE` in `NodeStatusView`; otherwise (and for a node the view does not
+     know yet) `SUPPRESSED` with reason `NODE_NOT_SELLABLE`. A listing created
+     for a `DISCONTINUED` item starts `SUPPRESSED(DISCONTINUED)`, which wins
+     (ADR 0002 A4, A5). An unknown `catalogItemId` is 404 `not-found`.
   4. In one transaction: insert the listing (unique key on
      `catalog_item_id, node_id`) and the `ListingCreated` outbox row.
   5. Reply `201` with the listing.
@@ -119,48 +129,55 @@ gap is listed on the [canvas](/network/contexts/offer-availability/bounded-conte
   the vendor, rate limits and the vendor-owns-node check.
 - **Inbound adapter**: REST `POST /inventory-feeds` (in-org), header
   `Idempotency-Key`.
-- **Preconditions**: no `APPLIED` feed with this `feedId`.
+- **Preconditions**: no `APPLIED` or `SUPERSEDED` feed with this `feedId`
+  (a `FAILED` one may be sent again).
 - **Main flow**:
   1. Read `feedId`, `nodeId`, `fullUpdate`, `asOf` and the lines
-     (`listingId`, `availableQty`, `basis`). The line shape and the
-     feed-level `asOf` are proposed; the model does not define them.
-  2. Load the feed by `feedId`. If it is `APPLIED`, refuse with
-     `ErrFeedAlreadyApplied`.
+     (`listingId`, `availableQty`, `basis`). A feed has at most 10000 lines,
+     one per listing; `asOf` is feed-level (ADR 0002 A12).
+  2. Load the feed by `feedId`. If it is `APPLIED` or `SUPERSEDED`, refuse with
+     `ErrFeedAlreadyApplied`. If it is `FAILED`, it is resubmitted
+     (`FAILED → RECEIVED`) and must keep its `nodeId` (else `ErrValidation`).
   3. Record the feed `RECEIVED`.
-  4. Load the listings the lines name and, for a full feed, every listing
+  4. If the feed's `asOf` is strictly older than the `asOf` of the last
+     `APPLIED` feed of that node, the feed ends `SUPERSEDED`: nothing is
+     applied and no event is raised; reply `201` with the feed.
+  5. Load the listings the lines name and, for a full feed, every listing
      of `nodeId`.
-  5. For each line: the listing must belong to `nodeId`
+  6. For each line: the listing must belong to `nodeId`
      (`ErrListingNotOnNode`). Call `ApplyAvailability` with
      (`availableQty`, `basis`, `asOf`, `feedId`). A negative quantity
      fails the feed (`ErrNegativeAvailability`). A stale line
-     (`ErrStaleAvailability`) is ignored and the apply continues.
-  6. If `fullUpdate`: policy `FullFeedZeroing` calls `ApplyAvailability`
+     (`ErrStaleAvailability`) is ignored, counted and the apply continues.
+  7. If `fullUpdate`: policy `FullFeedZeroing` calls `ApplyAvailability`
      with `availableQty=0` on every listing of the node the feed omits.
-  7. On any failing invariant: set the feed `FAILED`, change no listing,
-     commit the feed row only, reply `422`.
-  8. Otherwise set the feed `APPLIED` and commit, in one transaction: the
+  8. On any failing invariant: set the feed `FAILED` (its row and
+     `failureCode` are kept), change no listing, raise no event, reply `422`
+     with `instance` `/inventory-feeds/{feedId}`.
+  9. Otherwise set the feed `APPLIED` and commit, in one transaction: the
      feed, every changed listing (each with its `version` check), one
      `ListingAvailabilityChanged` outbox row per changed listing, and one
      `InventoryFeedApplied` row.
-  9. Reply `201` with the feed.
+  10. Reply `201` with the feed.
 - **Errors**:
 
 | Error | HTTP | Problem `type` |
 | --- | --- | --- |
 | `ErrListingNotOnNode` | 422 | `listing-not-on-node` |
 | `ErrNegativeAvailability` | 422 | `negative-availability` |
-| `ErrFeedAlreadyApplied` | 409 | `feed-already-applied` |
-| `ErrStaleAvailability` | 409 | `stale-availability` (reserved: the model says a stale update is ignored, so this route does not return it; the line is skipped) |
-| listing `version` mismatch (proposed) | — | not returned: the use case re-runs the apply from step 4 |
+| `ErrFeedAlreadyApplied` (an `APPLIED` or `SUPERSEDED` `feedId`) | 409 | `feed-already-applied` |
+| `ErrConcurrentUpdate` (after one automatic retry) | 409 | `concurrent-update` |
+| `ErrStaleAvailability` | 409 | `stale-availability` (reserved: a stale update is ignored, so this route does not return it; the line is skipped) |
+| listing `version` mismatch | — | not returned: the use case re-runs the apply from step 5 |
 
 - **Events emitted**: `ListingAvailabilityChanged` (per changed listing,
-  zeroed ones included), `InventoryFeedApplied` (once). A `FAILED` feed
-  emits nothing.
+  zeroed ones included), `InventoryFeedApplied` (once). A `FAILED` or
+  `SUPERSEDED` feed emits nothing.
 - **Idempotency**: two layers. A repeated `Idempotency-Key` replays the
-  stored answer. A different key with an `APPLIED` `feedId` gets
-  `ErrFeedAlreadyApplied`. The model does not say whether a `FAILED`
-  `feedId` may be re-sent; proposed: the stored `422` is replayed and a
-  corrected feed uses a new `feedId`.
+  stored answer. A different key with an `APPLIED` or `SUPERSEDED` `feedId`
+  gets `ErrFeedAlreadyApplied`. A `FAILED` `feedId` may be sent again (ADR 0002
+  A11, `apis/openapi.yaml`): the feed is applied afresh, it is not a replay of
+  the stored `422`, and a corrected feed need not use a new `feedId`.
 
 ## ApplyAvailability
 

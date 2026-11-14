@@ -63,7 +63,7 @@ context never talks to the fleet. See
 - **A listing is sellable only while its node is `ACTIVE`.** When a node is
   suspended or retired, every listing of the node is suppressed; when it is
   activated again, the listings suppressed for that reason are restored.
-- **A feed older than the last applied feed for that node is ignored.**
+- **A feed older than the last applied feed for that node is not applied: it ends `SUPERSEDED`** (ADR 0002 A11).
   Availability is monotonic in `asOf` per listing.
 - **A full feed is the complete truth for its node.** Every listing of the
   node it omits is set to zero.

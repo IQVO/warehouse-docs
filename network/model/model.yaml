@@ -338,7 +338,7 @@ contexts:
     business_decisions:
       - A listing is sellable only while its node is ACTIVE and its owner is not a suspended seller (offer-availability ADR 0013).
       - Received seller stock becomes the seller's listing on the receiving node at availability 0 / UNKNOWN; only the vendor's inventory feed sets availability (offer-availability ADR 0014).
-      - A feed older than the last applied feed for that node is ignored.
+      - "A feed older than the last applied feed for that node is not applied: it ends SUPERSEDED (nothing applied, no event, offer-availability ADR 0002 A11); a line older than its listing's current asOf is skipped and counted as stale."
       - A full feed zeroes every listing of that node it omits.
       - The basis the vendor declares (PHYSICAL or THROUGHPUT_CONSTRAINED) is kept with the number, never re-derived.
     aggregates:
@@ -383,13 +383,17 @@ contexts:
       - name: InventoryFeed
         root_id: feedId
         description: "One vendor inventory submission for one node, full or partial, applied atomically."
-        states: [RECEIVED, APPLIED, FAILED]
+        # as built (offer-availability ADR 0002 A11, gap G23): the feed is one transaction, saved RECEIVED, then APPLIED, FAILED or SUPERSEDED
+        # (feed asOf strictly older than the last APPLIED feed of the node: nothing applied, no event); a FAILED feedId may be sent again
+        states: [RECEIVED, APPLIED, FAILED, SUPERSEDED]
         transitions:
           - [RECEIVED, APPLIED, ApplyInventoryFeed]
           - [RECEIVED, FAILED, ApplyInventoryFeed]
+          - [RECEIVED, SUPERSEDED, ApplyInventoryFeed]
+          - [FAILED, RECEIVED, ApplyInventoryFeed]
         invariants:
           - {rule: "every line names a listing of the feed's node", error: ErrListingNotOnNode}
-          - {rule: "a feed is applied at most once", error: ErrFeedAlreadyApplied}
+          - {rule: "a feed is applied at most once: an APPLIED or SUPERSEDED feedId is refused with HTTP 409 feed-already-applied; a FAILED feedId MAY be sent again (FAILED -> RECEIVED) and must keep its nodeId (offer-availability ADR 0002 A11, apis/openapi.yaml)", error: ErrFeedAlreadyApplied}
         commands: [ApplyInventoryFeed]
         events: [InventoryFeedApplied]
         throughput_estimate: "medium: per vendor node every few minutes"
@@ -401,13 +405,14 @@ contexts:
       - {name: SuppressOnNodeUnavailable, rule: "on NodeSuspended or NodeRetired suppress every listing of the node; on NodeActivated reconcile every listing of the node: it becomes LIVE only when no other cause holds, and a listing whose owner is SUSPENDED switches to OWNER_SUSPENDED instead (offer-availability ADR 0013)"}
       - {name: SuppressOnOwnerSuspended, rule: "on SellerSuspended suppress every LIVE listing with ownerRef = sellerId with reason OWNER_SUSPENDED (one ListingSuppressed each, in the transaction of the view update); a listing already suppressed for a higher cause keeps its reason, and the owner's view row stops a later restore of that cause; on SellerReinstated reconcile every OWNER_SUSPENDED listing of the owner: ListingRestored when no cause remains, otherwise one ListingSuppressed with the remaining highest cause (offer-availability ADR 0013, gap G48)"}
       - {name: ListingReconcile, rule: "Listing.Reconcile reads the listing's three causes (node ACTIVE in NodeStatusView, item discontinued, owner SUSPENDED in SellerStatusView) and moves the listing to the highest active cause: LIVE when none holds (ListingRestored), otherwise SUPPRESSED with that reason (one ListingSuppressed when the reason changes); DISCONTINUED stays final"}
+      - {name: SuppressOnItemDiscontinued, rule: "DiscontinueItem suppresses the item's listings (offer-availability ADR 0002 A4, gap G24; the model was silent): in the SAME transaction every listing of the item that is not already SUPPRESSED(DISCONTINUED) is suppressed with reason DISCONTINUED, one ListingSuppressed each; a listing suppressed for NODE_NOT_SELLABLE changes reason and raises the event again so that a later NodeActivated can never restore it; DISCONTINUED is final. A listing created for a DISCONTINUED item starts SUPPRESSED(DISCONTINUED); creating a listing for an unknown catalogItemId is 404 not-found. Discontinuing a DISCONTINUED item answers 200 with the item unchanged and raises nothing (A3)"}
       - {name: ListingsFromReceivedStock, rule: "on InboundShipmentReceived, for each received line with qtyEaches > 0 resolve the item (the line's catalogItemId, else the own GTIN/packaging index, retired levels included) and, when no listing of (catalogItemId, nodeId, ownerRef = sellerId) exists, create one as the system actor: ListingCreated with ownerRef, availability 0 basis UNKNOWN, then ListingSuppressed for the highest cause when the node is not sellable, the item is discontinued or the owner is SUSPENDED. An existing listing is a no-op; availability still comes only from the vendor feed; an unresolvable GTIN, an unknown item or an event without received is skipped and counted, never an error; one transaction per event, inbox-idempotent (offer-availability ADR 0014, gap G51)"}
       - {name: FullFeedZeroing, rule: "a full feed sets availableQty=0 on every listing of the node it omits"}
       - {name: OwnerSuspendedOnCreate, rule: "CreateListing (REST or ListingsFromReceivedStock) for an owner SUSPENDED in SellerStatusView raises ListingCreated then ListingSuppressed(OWNER_SUSPENDED) at version 1, unless a higher cause applies, which wins"}
       - {name: SegregatedByOwner, rule: "availability is per listing and a listing has one owner: quantities of different owners are never summed, merged or moved between listings; commingling stock by GTIN is not designed"}
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /inventory-feeds (in-org)", routes: ["POST /inventory-feeds"], message: "ApplyInventoryFeed", relationship: Customer/Supplier}
-      - {from: "network merchandising (human)", type: cmd, channel: "REST POST /catalog-items, POST /catalog-items/{catalogItemId}:discontinue, PUT /catalog-items/{catalogItemId}/packaging/{level}, POST /catalog-items/{catalogItemId}/packaging/{level}:retire, POST /listings", routes: ["POST /catalog-items", "POST /catalog-items/{catalogItemId}:discontinue", "PUT /catalog-items/{catalogItemId}/packaging/{level}", "POST /catalog-items/{catalogItemId}/packaging/{level}:retire", "POST /listings"], message: "CreateCatalogItem, DiscontinueItem, DeclarePackaging, RetirePackLevel, CreateListing", relationship: UI}
+      - {from: "network merchandising (human)", type: cmd, channel: "REST POST /catalog-items, POST /catalog-items/{catalogItemId}/discontinuations, PUT /catalog-items/{catalogItemId}/packaging/{level}, POST /catalog-items/{catalogItemId}/packaging/{level}/retirements, POST /listings", routes: ["POST /catalog-items", "POST /catalog-items/{catalogItemId}/discontinuations", "PUT /catalog-items/{catalogItemId}/packaging/{level}", "POST /catalog-items/{catalogItemId}/packaging/{level}/retirements", "POST /listings"], message: "CreateCatalogItem, DiscontinueItem, DeclarePackaging, RetirePackLevel, CreateListing", relationship: UI}
       # caller inferred: ADR 0003 names no caller for these plain reads (merchandising; vendor-connectivity has no client for them). There is no separate packaging read: the packaging hierarchy is part of GET /catalog/{catalogItemId} (as built)
       - {from: "network merchandising (human)", type: qry, channel: "REST GET /listings, GET /inventory-feeds/{feedId}", routes: ["GET /listings", "GET /inventory-feeds/{feedId}"], message: "ListListings, GetInventoryFeed", relationship: UI}
       - {from: shopper / storefront, type: qry, channel: "REST GET /catalog, GET /catalog/{catalogItemId}", routes: ["GET /catalog", "GET /catalog/{catalogItemId}"], message: "BrowseCatalog", relationship: OHS}
@@ -415,9 +420,9 @@ contexts:
       - {from: seller-inbound, type: evt, channel: "Kafka retailnetwork.seller-inbound.events", message: "SellerSuspended, SellerReinstated, InboundShipmentReceived", relationship: Conformist}
     rest:
       - "POST /catalog-items"
-      - "POST /catalog-items/{catalogItemId}:discontinue"
+      - "POST /catalog-items/{catalogItemId}/discontinuations"
       - "PUT /catalog-items/{catalogItemId}/packaging/{level}"
-      - "POST /catalog-items/{catalogItemId}/packaging/{level}:retire"
+      - "POST /catalog-items/{catalogItemId}/packaging/{level}/retirements"
       - "GET /catalog"
       - "GET /catalog/{catalogItemId}"
       - "POST /listings"

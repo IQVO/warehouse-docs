@@ -71,7 +71,7 @@ erDiagram
         TEXT node_id
         BOOLEAN full_update
         TIMESTAMPTZ as_of "proposed feed-level asOf"
-        TEXT state "CHECK RECEIVED, APPLIED, FAILED"
+        TEXT state "CHECK RECEIVED, APPLIED, FAILED, SUPERSEDED"
         INTEGER line_count
         TIMESTAMPTZ applied_at "nullable"
         TEXT failure_code "nullable, the Err name"
