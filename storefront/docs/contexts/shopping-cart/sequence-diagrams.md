@@ -309,11 +309,15 @@ sequenceDiagram
     else new key
         H->>UC: Execute(sourceCartId, targetCartId)
         UC->>DB: load both carts and versions
-        alt target not OPEN, or not the same<br/>shopper, or the cart itself
+        alt source not OPEN
+            UC-->>H: 409 cart-closed<br/>ErrCartClosed
+        else target not OPEN, has no shopper, source has<br/>another shopper, or the cart itself
             UC-->>H: 422 merge-target<br/>ErrMergeTarget
-        else both OPEN, same shopper
+        else merged lines would exceed 100
+            UC-->>H: 422 too-many-lines<br/>ErrTooManyLines, neither cart changes
+        else source is a guest cart or the same shopper's
             UC->>A: MergeInto(target, now)
-            UC->>T: take the lines, merge quantities<br/>clear target quote and selections
+            UC->>T: take the lines, merge quantities (clamped at 99)<br/>clear target quote and selections
             A-->>UC: source MERGED, target updated
             UC->>DB: BEGIN, update both where<br/>versions match
             UC->>DB: store key response, COMMIT
@@ -328,7 +332,10 @@ Derived from: `model.yaml → contexts[shopping-cart].aggregates[Cart].commands[
 
 Omitted: the version-conflict retry and the relay. The typical caller is
 the sign-in moment (D4): the BFF merges the guest cart into the shopper's
-open cart. Both writes share one transaction; `MERGED` is terminal
+open cart. The target must be another `OPEN` cart that **has** a shopper; the
+source may be a guest cart (no shopper) or a cart of the same shopper. Merged
+quantities clamp at 99 and the merged line list must fit 100 lines
+(`ErrTooManyLines`, `422 too-many-lines`; neither cart changes). Both writes share one transaction; `MERGED` is terminal
 (`ErrCartClosed` afterwards).
 
 ## 8. AbandonInactive (scheduler)

@@ -471,12 +471,12 @@ contexts:
         invariants:
           - {rule: "one line per item; adding an existing item merges quantities (the merge is the behaviour, nothing is ever rejected)"}
           - {rule: "quantity in 1..99", error: ErrQuantityOutOfRange}
-          - {rule: "at most 100 lines (customer-ordering A15)", error: ErrTooManyLines}
+          - {rule: "at most 100 lines (customer-ordering A15); also checked when a merge would add a line to a full target (422 too-many-lines, neither cart changes)", error: ErrTooManyLines}
           - {rule: "the item is purchasable in the local views", error: ErrItemNotPurchasable}
           - {rule: "a delivery quote needs a destination postal prefix", error: ErrNoDestination}
           - {rule: "a selection names an offer of the current quote; any line or destination change clears quote and selections", error: ErrStaleDeliverySelection}
           - {rule: "no change to a CHECKED_OUT, ABANDONED or MERGED cart", error: ErrCartClosed}
-          - {rule: "a merge target is an OPEN cart of the same shopper, never the cart itself", error: ErrMergeTarget}
+          - {rule: "a merge target is another OPEN cart that has a shopper, never the cart itself; the source is a guest cart (no shopper) or belongs to the same shopper as the target (422 merge-target); merged quantities clamp at 99 and the merged line list must fit 100 lines (422 too-many-lines)", error: ErrMergeTarget}
         commands: [CreateCart, AddLine, SetLineQuantity, RemoveLine, SetDestination, QuoteDelivery, SelectDelivery, AcceptRequotedOffers, MergeInto, AbandonInactive, CloseOnCheckoutCompleted]
         events: [CartLineAdded, CartDeliveryQuoted, CartAbandoned, CartCheckedOut]
         throughput_estimate: "medium-high: every add-to-cart"
@@ -502,13 +502,13 @@ contexts:
       - "GET /carts/{cartId}"
       - "GET /carts?shopperId=&state="
       - "POST /carts/{cartId}/lines"
-      - "POST /carts/{cartId}/lines/{catalogItemId}:set-quantity"
-      - "POST /carts/{cartId}/lines/{catalogItemId}:remove"
-      - "POST /carts/{cartId}:set-destination"
-      - "POST /carts/{cartId}:quote-delivery"
-      - "POST /carts/{cartId}:select-delivery"
-      - "POST /carts/{cartId}/delivery/requoted"
-      - "POST /carts/{cartId}:merge-into"
+      - "PUT /carts/{cartId}/lines/{catalogItemId}"
+      - "DELETE /carts/{cartId}/lines/{catalogItemId}"
+      - "PUT /carts/{cartId}/destination"
+      - "POST /carts/{cartId}/delivery-quotes"
+      - "PUT /carts/{cartId}/delivery-selection"
+      - "POST /carts/{cartId}/delivery-requote-acceptances"
+      - "POST /carts/{cartId}/merges"
     publishes:
       - {event: CartLineAdded, entity: cart, data: [cartId, catalogItemId, quantity, at], consumers: ["analytics only"]}
       - {event: CartDeliveryQuoted, entity: cart, data: [cartId, destinationPostalPrefix, groupCount, at], consumers: ["analytics only"]}
