@@ -1604,6 +1604,7 @@ contexts:
         about: "The result of one delivery attempt of one package. A FAILED attempt carries a failureReason of free text, which is not listed here; the optional category is the DeliveryAttemptOutcomeDetail vocabulary below."
         values:
           - {value: DELIVERED, meaning: "The package was handed over."}
+          - {value: COLLECTED, meaning: "The package was collected (e.g. picked up at the courier by the recipient)." }
           - {value: FAILED, meaning: "The package was not handed over; failureReason is required."}
         consumers:
           - {context: shipping-and-tracking, uses: [DELIVERED, FAILED], rule: "DELIVERED becomes a DELIVERED scan; any other outcome becomes a DELIVERY_FAILED scan."}
