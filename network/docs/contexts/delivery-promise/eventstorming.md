@@ -84,13 +84,13 @@ flowchart TB
     LM["last-mile-delivery"]:::external
     NP["node-performance"]:::external
     E5["DepartureScheduled<br/>DepartureCapacityChanged<br/>DepartureCancelled"]:::event
-    E6["DeliveryWaveScheduled<br/>DeliveryWaveCapacityChanged"]:::event
+    E6["DeliveryWaveScheduled<br/>DeliveryWaveCapacityChanged<br/>DeliveryWaveCancelled"]:::event
     E7["NodeScorecardUpdated"]:::event
     P1["Policy: project into a view,<br/>inbox on CloudEvents id,<br/>monotonic guard"]:::policy
     R5["DepartureView"]:::readmodel
     R6["DeliveryWaveView"]:::readmodel
     R7["ScorecardView"]:::readmodel
-    H1["Hotspot H1: DeliveryWaveCancelled<br/>is analytics-only, a cancelled<br/>wave stays in DeliveryWaveView"]:::hotspot
+    H1["H1 resolved: DeliveryWaveCancelled is consumed,<br/>the wave is marked cancelled in DeliveryWaveView<br/>and its promises are flagged WAVE_CANCELLED"]:::hotspot
     LH --> E5
     LM --> E6
     NP --> E7
@@ -104,9 +104,9 @@ flowchart TB
 ```
 
 Derived from: `model.yaml → contexts[delivery-promise].read_models`, `.consumes`;
-`conventions.integration_rules`; H1 from
-`contexts[last-mile-delivery].publishes[DeliveryWaveCancelled].consumers`
-(`analytics only`).
+`conventions.integration_rules`; H1 (resolved) from
+`contexts[last-mile-delivery].publishes[DeliveryWaveCancelled].consumers`,
+which lists this context, and `contexts[delivery-promise].policies[RepromiseOnRisk]`.
 
 Omitted: `DepartureCancelled`'s second effect, the re-promise (board 5). Board
 1 is split in two, and boards 2 to 6 are drawn top to bottom, to stay within
@@ -231,7 +231,7 @@ flowchart TB
     E3["PromiseReleased"]:::event
     C4["ReleaseCapacity"]:::command
     C5["CloseBook"]:::command
-    H6["Hotspot H6: order placed after<br/>the hold expired, no recovery"]:::hotspot
+    H6["Hotspot H6: order placed after<br/>the hold expired, the group is<br/>skipped, the sweeper releases it"]:::hotspot
     CO --> E0
     E0 --> P0
     P0 --> C1
@@ -251,9 +251,11 @@ flowchart TB
 
 Derived from: `model.yaml → contexts[delivery-promise].aggregates[Promise].transitions`
 (`PROVISIONAL → CONFIRMED`, `PROVISIONAL → RELEASED`),
-`.aggregates[PromiseBook].commands`, `.consumes[CustomerOrderPlaced]`; H6 from
-`.aggregates[Promise].invariants` (`ErrPromiseHoldExpired`) with confirmation
-arriving asynchronously by event and no recovery policy in the model.
+`.aggregates[PromiseBook].commands`, `.consumes[CustomerOrderPlaced]`,
+`.policies[ConfirmOnOrderPlaced]`; H6 from
+`.aggregates[Promise].invariants` (`ErrPromiseHoldExpired`): the consumer logs a
+lapsed group and skips it (never retried), confirms the other groups, and the
+`ReleaseExpiredHolds` clock job releases the lapsed promise.
 
 Omitted: nothing about the trigger. A clock job closes every `OPEN` book at its
 `cutoffAt` (`policies[CloseBooksAtCutoff]`); holds are already refused from the
@@ -342,7 +344,7 @@ flowchart TB
     G2["Promise<br/>CANCELLED"]:::aggregate
     E4["PromiseCancelled"]:::event
     H8["Hotspot H8: what FulfillmentLocked<br/>is for, how a package finds its promise"]:::hotspot
-    H9["Hotspot H9: a lost package's<br/>promise is never judged"]:::hotspot
+    H9["H9 resolved: a lost or returned package's<br/>promise is judged BROKEN (LOST, RETURNED)"]:::hotspot
     OS --> E0
     ST --> E1
     E1 --> P1
@@ -364,9 +366,9 @@ Derived from: `model.yaml → contexts[delivery-promise].policies[JudgeOnDeliver
 `.publishes[PromiseKept, PromiseBroken, PromiseCancelled]`, `.consumes`; H8 from
 `.consumes[FulfillmentLocked]` with no policy or read model using it, and
 `contexts[shipping-and-tracking].publishes[PackageDelivered].data` (no
-`promiseId`, no `groupNo`); H9 from
-`contexts[shipping-and-tracking].publishes[PackageLost, PackageReturned].consumers`
-(`analytics only`).
+`promiseId`, no `groupNo`); H9 (resolved) from
+`contexts[shipping-and-tracking].publishes[PackageLost, PackageReturned].consumers`,
+which list this context, and `policies[JudgeOnDelivery, SharedTrackingJudgement]`.
 
 Omitted: the capacity release on cancellation (`ReleaseCapacity`, board 4). The
 cancellation policy sticky is this pack's reading: the model consumes
@@ -377,12 +379,12 @@ them.
 
 | Id | Hotspot | Where it comes from in the model | Board |
 | --- | --- | --- | --- |
-| H1 | A cancelled delivery wave is invisible to this context | `DeliveryWaveCancelled` consumers: analytics only | 1 |
+| H1 | Resolved: a cancelled delivery wave is consumed (`DeliveryWaveCancelled`): the wave is marked cancelled in `DeliveryWaveView` and every active promise whose witness wave it is is flagged `AT_RISK` with reason `WAVE_CANCELLED` | `DeliveryWaveCancelled` consumers list this context; `policies[RepromiseOnRisk]` | 1 |
 | H2 | An offer is per item; a promise covers a multi-line group with one `offerId` | `DeliveryOffer.description` vs `ShipmentGroup`, `PromiseMade.data` | 2 |
 | H3 | `TierOrderDeadline` has no owner, route or event | `policies[TierOrderDeadline]` | 2 |
 | H4 | The hot path is only as fresh as its slowest topic | `conventions.integration_rules` | 2 |
 | H5 | Resolved (G9): the first hold opens the book (`OpenBook`), `share` has a formula, a clock job closes the book at `cutoffAt` | `aggregates[PromiseBook]`, `policies[LazyBookOpening, BookShare, CloseBooksAtCutoff]` | 3 |
-| H6 | A `CustomerOrderPlaced` that arrives after hold expiry | `ErrPromiseHoldExpired`, asynchronous `ConfirmPromise` | 4 |
+| H6 | A `CustomerOrderPlaced` that arrives after hold expiry: the lapsed group is skipped with a warning log (never retried), the other groups are confirmed and the `ReleaseExpiredHolds` sweeper releases the lapsed promise; `customer-ordering` still never learns that the placed order has no held promise | `ErrPromiseHoldExpired`, `policies[ConfirmOnOrderPlaced]` | 4 |
 | H7 | Capacity on revision is unspecified | `aggregates[PromiseBook].commands`, `policies[RepromiseOnRisk]` | 5 |
 | H8 | `FulfillmentLocked` has no stated use; packages carry no `promiseId` | `consumes[FulfillmentLocked]`, `PackageDelivered.data` | 6 |
-| H9 | A lost or returned package's promise is never judged | `PackageLost`, `PackageReturned` consumers | 6 |
+| H9 | Resolved: a lost or returned package's promise is judged `BROKEN` (cause `LOST` or `RETURNED`) for every promise that shares the tracking number (ADR 0025) | `PackageLost`, `PackageReturned` consumers list this context; `policies[JudgeOnDelivery, SharedTrackingJudgement]` | 6 |
