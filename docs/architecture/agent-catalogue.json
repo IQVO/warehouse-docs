@@ -23,23 +23,23 @@
             "name": "get_order",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_order_tracking",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_ship_to",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -105,6 +105,12 @@
     "delivery-promise": {
       "mcp": {
         "tools": [
+          {
+            "name": "estimate_delivery",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L1"
+          },
           {
             "name": "get_current_policy",
             "readOnly": true,
@@ -284,6 +290,12 @@
             "readOnly": true,
             "destructive": false,
             "authority": null
+          },
+          {
+            "name": "get_work_batch",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
           }
         ],
         "resources": 1,
@@ -391,6 +403,12 @@
           },
           {
             "name": "get_relocation",
+            "readOnly": true,
+            "destructive": false,
+            "authority": null
+          },
+          {
+            "name": "list_held_stock",
             "readOnly": true,
             "destructive": false,
             "authority": null
@@ -681,29 +699,29 @@
             "name": "browse_catalog",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_catalog_item",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_inventory_feed",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_listings",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -727,17 +745,17 @@
             "name": "get_order",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_promise_health",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -841,7 +859,24 @@
       }
     },
     "pricing": {
-      "mcp": null,
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_item_price",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L1"
+          },
+          {
+            "name": "get_price_quote",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L1"
+          }
+        ],
+        "resources": 1,
+        "prompts": 1
+      },
       "a2a": {
         "skills": [
           {
@@ -861,26 +896,32 @@
       "mcp": {
         "tools": [
           {
+            "name": "get_catalogue_growth_report",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L1"
+          },
+          {
             "name": "get_cpt_schedule",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_process_path",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_process_paths",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -898,7 +939,24 @@
       }
     },
     "product-content": {
-      "mcp": null,
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_product_content",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L1"
+          },
+          {
+            "name": "list_categories",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L1"
+          }
+        ],
+        "resources": 1,
+        "prompts": 1
+      },
       "a2a": {
         "skills": [
           {
@@ -915,7 +973,24 @@
       }
     },
     "product-discovery": {
-      "mcp": null,
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_product",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L1"
+          },
+          {
+            "name": "search_products",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L1"
+          }
+        ],
+        "resources": 1,
+        "prompts": 1
+      },
       "a2a": {
         "skills": [
           {
@@ -1008,23 +1083,23 @@
             "name": "get_disposition_policy",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_return",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_returns_by_order",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -1048,29 +1123,41 @@
             "name": "get_inbound_plan",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_inbound_shipment",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
+          },
+          {
+            "name": "get_placement_plan",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L1"
           },
           {
             "name": "get_seller_scorecard",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_shipment_labels",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
+          },
+          {
+            "name": "list_placement_plans",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -1111,7 +1198,24 @@
       }
     },
     "shopping-cart": {
-      "mcp": null,
+      "mcp": {
+        "tools": [
+          {
+            "name": "get_cart",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L1"
+          },
+          {
+            "name": "list_shopper_carts",
+            "readOnly": true,
+            "destructive": false,
+            "authority": "L1"
+          }
+        ],
+        "resources": 1,
+        "prompts": 1
+      },
       "a2a": {
         "skills": [
           {
@@ -1134,29 +1238,29 @@
             "name": "get_forward_slots",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_sku_velocity",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_slot_plan",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_slot_plans",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
@@ -1180,29 +1284,29 @@
             "name": "get_hint",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_site_policy",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "get_station",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           },
           {
             "name": "list_hints",
             "readOnly": true,
             "destructive": false,
-            "authority": null
+            "authority": "L1"
           }
         ],
-        "resources": 0,
-        "prompts": 0
+        "resources": 1,
+        "prompts": 1
       },
       "a2a": {
         "skills": [
