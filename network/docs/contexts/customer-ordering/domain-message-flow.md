@@ -151,20 +151,20 @@ sequenceDiagram
     participant K as Kafka
     participant DP as delivery-promise
     participant OS as order-sourcing
-    SH->>CO: cmd: CancelOrder POST<br/>/orders/orderId:cancel
-    alt no group is locked
+    SH->>CO: cmd: CancelOrder POST<br/>/orders/orderId/cancellations
+    alt some group is unlocked
         CO->>K: evt: customerorder.<br/>CustomerOrderCancelled
-        CO-->>SH: cmd: reply 200<br/>CANCELLED
+        CO-->>SH: cmd: reply 200<br/>groups CANCELLATION_REQUESTED
         K->>DP: evt: customerorder.<br/>CustomerOrderCancelled
         Note over DP: CancelPromise
         K->>OS: evt: customerorder.<br/>CustomerOrderCancelled
-        Note over OS: CancelAssignment
-    else a group is locked
+        Note over OS: CancelAssignment, answers<br/>FulfillmentCancelled or<br/>FulfillmentCancelRefused
+    else every group locked, shipped or delivered
         CO-->>SH: cmd: reply 409<br/>ErrCancelAfterLock
     end
 ```
 
-Then the policy-driven variant, when a group cannot be sourced:
+Then the policy-driven variant, when delivery-promise cannot keep a group's promise:
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
@@ -176,26 +176,29 @@ sequenceDiagram
     participant K as Kafka
     OS->>CO: evt: assignment.<br/>FulfillmentUnsourceable
     OS->>DP: evt: assignment.<br/>FulfillmentUnsourceable
+    Note over CO: records the reason on the<br/>tracking view only
     alt re-promised
         DP->>CO: evt: promise.<br/>PromiseRevised
         Note over CO: UpdateGroupPromise
     else nothing feasible
-        Note over CO: CancelOnUnfulfillable,<br/>no model event for this
+        DP->>CO: evt: promise.<br/>PromiseUnkeepable
+        Note over CO: CancelOnUnfulfillable,<br/>CancelUnkeepableGroup
         CO->>K: evt: customerorder.<br/>CustomerOrderCancelled
     end
 ```
 
 Derived from: `model.yaml → contexts[customer-ordering].inbound` (`POST /orders/{orderId}/cancellations`), `.aggregates[CustomerOrder].invariants`
-(`ErrCancelAfterLock`), `.policies[CancelOnUnfulfillable]`,
+(`ErrCancelAfterLock`), `.policies[CancelIsARequest]`, `.policies[CancelOnUnfulfillable]`,
 `.publishes[CustomerOrderCancelled]`; `contexts[delivery-promise].policies[RepromiseOnRisk]`;
 `contexts[order-sourcing].consumes`.
 
 Omitted: Kafka between `order-sourcing` and the two consumers of
 `FulfillmentUnsourceable`. `order-sourcing` re-queues the group on
 `PromiseRevised` (`ApplyRevisedPromise`). A cancel is a request: this context
-publishes `CustomerOrderCancelled`, and `order-sourcing` decides per group,
-answering `FulfillmentCancelled` (the group becomes `CANCELLED`) or
+moves every unlocked group to `CANCELLATION_REQUESTED` and
+publishes `CustomerOrderCancelled` for them, and `order-sourcing` decides per
+group, answering `FulfillmentCancelled` (the group becomes `CANCELLED`) or
 `FulfillmentCancelRefused` (the group returns to `LOCKED`). The `409
 ErrCancelAfterLock` above is therefore advisory. `order-sourcing` can cancel an
-`UNSOURCEABLE` assignment. "No revised promise is feasible" still has no event
-in this page's model reading.
+`UNSOURCEABLE` assignment. Only `PromiseUnkeepable` triggers the policy; a
+`PROMISED` group is cancelled at once, any other group state skips the event.

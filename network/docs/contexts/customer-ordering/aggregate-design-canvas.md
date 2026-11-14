@@ -45,17 +45,34 @@ under their event field names and record the omission as a model gap.
 
 ### 3. State Transitions
 
+The order status is not set by a command: it is DERIVED from the states of the
+groups that are not `CANCELLED` after every command (ADR 0002 A1, A23). Group
+states: `PROMISED` (no node locked), `LOCKED`, `SHIPPED`, `DELIVERED`, `LOST`,
+`RETURNED`, `CANCELLATION_REQUESTED`, `CANCELLED`.
+
 ```mermaid
 stateDiagram-v2
     [*] --> PLACED: PlaceOrder
     PLACED --> IN_FULFILLMENT: MarkInFulfillment
+    PLACED --> PARTIALLY_SHIPPED: MarkGroupShipped
+    PLACED --> SHIPPED: MarkGroupShipped
     IN_FULFILLMENT --> PARTIALLY_SHIPPED: MarkGroupShipped
     IN_FULFILLMENT --> SHIPPED: MarkGroupShipped
     PARTIALLY_SHIPPED --> SHIPPED: MarkGroupShipped
+    PLACED --> PARTIALLY_DELIVERED: MarkGroupDelivered
+    IN_FULFILLMENT --> PARTIALLY_DELIVERED: MarkGroupDelivered
+    PARTIALLY_SHIPPED --> PARTIALLY_DELIVERED: MarkGroupDelivered
+    SHIPPED --> PARTIALLY_DELIVERED: MarkGroupDelivered
     SHIPPED --> DELIVERED: MarkGroupDelivered
-    PLACED --> CANCELLED: CancelOrder
-    IN_FULFILLMENT --> CANCELLED: CancelOrder
+    PARTIALLY_SHIPPED --> DELIVERED: MarkGroupDelivered
+    PARTIALLY_DELIVERED --> DELIVERED: MarkGroupDelivered
+    SHIPPED --> LOST: MarkGroupLost
+    SHIPPED --> RETURNED: MarkGroupReturned
+    SHIPPED --> PARTIALLY_DELIVERED: MarkGroupLost or MarkGroupReturned
+    PLACED --> CANCELLED: ConfirmGroupCancelled or CancelUnkeepableGroup
     DELIVERED --> [*]
+    LOST --> [*]
+    RETURNED --> [*]
     CANCELLED --> [*]
     note right of IN_FULFILLMENT
         UpdateGroupPromise changes a group window, never the status
@@ -63,24 +80,47 @@ stateDiagram-v2
 ```
 
 Derived from: `model.yaml → contexts[customer-ordering].aggregates[CustomerOrder].states`,
-`.transitions`, `.commands`.
+`.transitions`, `.commands`, `.policies[OrderStatusDerivedFromGroups]`.
 
-The entry arrow `[*] --> PLACED` is the creating command `PlaceOrder`; the
-model lists transitions between states only. Omitted: the no-op cases where
-a command leaves the status unchanged. Examples are `MarkInFulfillment` for a
-second group while already `IN_FULFILLMENT`, and `MarkGroupDelivered` for one
-group while others are still on their way. `IN_FULFILLMENT → SHIPPED` applies
-when the shipped group is the last one not yet shipped. `→ PARTIALLY_SHIPPED`
-applies otherwise.
+The entry arrow `[*] --> PLACED` is the creating command `PlaceOrder`. Omitted:
+the no-op cases where a command leaves the status unchanged, and any
+transition whose source differs only by which groups are still open (the
+derivation table below is the complete rule). `CancelOrder` itself is not an
+arrow: it only moves every `PROMISED` group to `CANCELLATION_REQUESTED`, so the
+order status does not change until `order-sourcing` answers
+(`FulfillmentCancelled` makes the group `CANCELLED`; `FulfillmentCancelRefused`
+returns it to `LOCKED`).
 
-Two consequences of the model as written, both listed as open questions on
-the [canvas](/network/contexts/customer-ordering/bounded-context-canvas):
+Derivation, read top to bottom over the groups that are not `CANCELLED`, first
+match wins:
 
-- If `MarkInFulfillment` runs on the first `FulfillmentLocked`, every order in
-  `IN_FULFILLMENT` has a locked group. `IN_FULFILLMENT → CANCELLED` then
-  always fails `ErrCancelAfterLock`.
-- There is no transition out of `PARTIALLY_SHIPPED` for a delivery, so a
-  group delivered before its sibling ships changes no status.
+| Remaining groups | Order status |
+| --- | --- |
+| none | `CANCELLED` |
+| every group closed (`DELIVERED`, `LOST`, `RETURNED`), all `DELIVERED` | `DELIVERED` |
+| every group closed, some `DELIVERED` | `PARTIALLY_DELIVERED` |
+| every group closed, none delivered, some `LOST` | `LOST` |
+| every group closed, none delivered, none lost | `RETURNED` |
+| (some group still open) some `DELIVERED` | `PARTIALLY_DELIVERED` |
+| every group `SHIPPED`, `LOST` or `RETURNED` | `SHIPPED` |
+| some group `SHIPPED`, `LOST` or `RETURNED` | `PARTIALLY_SHIPPED` |
+| some `LOCKED` | `IN_FULFILLMENT` |
+| otherwise | `PLACED` |
+
+A derived status that ranks below the current one is refused with
+`ErrStatusRegression`. A `LOST` or `RETURNED` group did ship, so beside open
+groups it counts as shipped progress. A group can only be cancelled while
+unlocked, so an order with a locked, shipped or delivered group is never
+`CANCELLED` and `PLACED → CANCELLED` is the only reachable cancellation (ADR
+0002).
+
+Consequences of the as-built rules:
+
+- `MarkGroupShipped` accepts a group that is still `PROMISED`, so a shipment on
+  a `PLACED` order is valid (the lock event may arrive late), and a vendor
+  that ships wins over a pending cancel request.
+- A delivery on a `PARTIALLY_SHIPPED` order is recorded and moves the order to
+  `PARTIALLY_DELIVERED`.
 
 ### 4. Enforced Invariants
 
@@ -88,8 +128,9 @@ the [canvas](/network/contexts/customer-ordering/bounded-context-canvas):
 | --- | --- |
 | Every line is in exactly one group, and every group has a promise | `PlaceOrder` → `ErrLineWithoutPromise` |
 | The promise's destination postal prefix matches the ship-to | `PlaceOrder` → `ErrPromiseDestinationMismatch` |
-| Cancel only while no group is locked | `CancelOrder` → `ErrCancelAfterLock` |
-| Status moves forward only | `MarkInFulfillment`, `MarkGroupShipped`, `MarkGroupDelivered`, `CancelOrder` → `ErrStatusRegression` |
+| The checkout's shopper is registered | `PlaceOrder` use case → `ErrValidation` (422 `validation-failed`) |
+| Cancel only while a group is unlocked (advisory; `order-sourcing` decides) | `CancelOrder` → `ErrCancelAfterLock` |
+| Status moves forward only | `MarkInFulfillment`, `MarkGroupShipped`, `CancelOrder`, `ConfirmGroupCancelled` → `ErrStatusRegression` (the consumer records the event and skips it) |
 | `chosenDeliveryDay` and `consolidationEligible` only on a `CONSOLIDATED` group, the day a valid calendar date; `consolidationKey` empty or 64 lower-case hex | `PlaceOrder` → `ErrValidation` (on restore, `ErrInvalidSnapshot`) |
 
 Derived from: `model.yaml → contexts[customer-ordering].aggregates[CustomerOrder].invariants`.
@@ -108,7 +149,8 @@ aggregate exists; see [Use Cases](/network/contexts/customer-ordering/use-cases)
 | `ConsolidationKeyDerivation` | this context | `PlaceOrder` derives the key after the address is resolved, with a secret from the environment (at least 16 bytes); with no secret nothing is derived and the order never merges. | The key is stored on the order and published on `CustomerOrderPlaced`; never exposed on REST. |
 | `ConsolidatedChoiceStored` | this context | A `CONSOLIDATED` offer id at checkout becomes a group that keeps the tier, the chosen local day and `consolidationEligible`. A re-quote asks for the default tiers, so it never offers `CONSOLIDATED` again. | `GroupPromise` fields above; optional fields on `POST /checkout` 201, `GET /orders/{orderId}` and `GET /orders`. |
 | `SharedTrackingNumbers` | this context | A tracking number belongs to a SET of groups; one package event closes every group that shares it (`MarkGroupDelivered`, `MarkGroupLost`, `MarkGroupReturned`). | A group that has not shipped yet is replayed from `FulfillmentShipped`; nothing removes a link. |
-| `CancelOnUnfulfillable` | this context | When a group is unsourceable and no revised promise is feasible, cancel the group and the order if nothing remains. | `CancelOrder` for that group; `CustomerOrderCancelled` with its `groupNos`. The model gives no signal for "no revised promise is feasible" (open question). |
+| `CancelIsARequest` | this context | `CancelOrder` moves every `PROMISED` group to `CANCELLATION_REQUESTED` and publishes `CustomerOrderCancelled` for those groups only; `order-sourcing` answers with `FulfillmentCancelled` (group `CANCELLED`) or `FulfillmentCancelRefused` (group back to `LOCKED`, the vendor ships). | The order status does not change on the request; it becomes `CANCELLED` when no group remains outside `CANCELLED`. |
+| `CancelOnUnfulfillable` | this context | On `delivery-promise`'s `PromiseUnkeepable` for a `PROMISED` group, cancel that group at once (`CancelUnkeepableGroup`) and the order if nothing remains (ADR 0002 A5, G10). Not triggered by `FulfillmentUnsourceable`. | `CustomerOrderCancelled` with its `groupNos` and reason `PROMISE_UNKEEPABLE: <reason>`. |
 | `ReleaseExpiredHolds` | `delivery-promise` | A `PROVISIONAL` promise not confirmed before `holdExpiresAt` is `RELEASED`. | Cleans up the promises of a checkout that failed after some `MakePromise` calls succeeded. This context sends nothing. |
 | `ConfirmPromise` on `CustomerOrderPlaced` | `delivery-promise` | The provisional promise of each group becomes `CONFIRMED`. | None; the order is already `PLACED`. |
 | `RepromiseOnRisk` | `delivery-promise` | On `FulfillmentUnsourceable` and other risks, recompute and `RevisePromise`. | `PromiseRevised` → `UpdateGroupPromise` (later window, same status). |
@@ -120,10 +162,13 @@ aggregate exists; see [Use Cases](/network/contexts/customer-ordering/use-cases)
 | Command | Trigger | Transition |
 | --- | --- | --- |
 | `PlaceOrder` | Shopper, REST `POST /checkout` | `[*] → PLACED` |
-| `MarkInFulfillment` | Kafka `FulfillmentLocked` (`order-sourcing`) | `PLACED → IN_FULFILLMENT` (a later group: no status change) |
-| `MarkGroupShipped` | Kafka `FulfillmentShipped` (`order-sourcing`) | `IN_FULFILLMENT → PARTIALLY_SHIPPED` or `→ SHIPPED`; `PARTIALLY_SHIPPED → SHIPPED` |
-| `MarkGroupDelivered` | Kafka `PackageDelivered` (`shipping-and-tracking`) | `SHIPPED → DELIVERED` once every group is delivered |
-| `CancelOrder` | Shopper, REST `POST /orders/{orderId}/cancellations`; or the `CancelOnUnfulfillable` policy on `FulfillmentUnsourceable` | `PLACED → CANCELLED`, `IN_FULFILLMENT → CANCELLED` |
+| `MarkInFulfillment` | Kafka `FulfillmentLocked` (`order-sourcing`) | group `PROMISED → LOCKED`; `PLACED → IN_FULFILLMENT` (a later group: no status change) |
+| `MarkGroupShipped` | Kafka `FulfillmentShipped` (`order-sourcing`) | group `PROMISED`, `LOCKED` or `CANCELLATION_REQUESTED → SHIPPED`; order `PARTIALLY_SHIPPED` or `SHIPPED` |
+| `MarkGroupDelivered` | Kafka `PackageDelivered` (`shipping-and-tracking`) | group `SHIPPED → DELIVERED`; order `PARTIALLY_DELIVERED`, then `DELIVERED` once every counted group is |
+| `MarkGroupLost`, `MarkGroupReturned` | Kafka `PackageLost`, `PackageReturned` (`shipping-and-tracking`) | group `SHIPPED → LOST` or `RETURNED` (terminal); order re-derived (`LOST`, `RETURNED`, `PARTIALLY_DELIVERED`) |
+| `CancelOrder` | Shopper, REST `POST /orders/{orderId}/cancellations` | every `PROMISED` group `→ CANCELLATION_REQUESTED`; no order status change |
+| `CancelUnkeepableGroup` | Kafka `PromiseUnkeepable` (`delivery-promise`), policy `CancelOnUnfulfillable` | group `PROMISED → CANCELLED`; `PLACED → CANCELLED` when no group remains |
+| `ConfirmGroupCancelled`, `RefuseGroupCancellation` | Kafka `FulfillmentCancelled`, `FulfillmentCancelRefused` (`order-sourcing`) | group `→ CANCELLED`; or `CANCELLATION_REQUESTED → LOCKED` |
 | `UpdateGroupPromise` | Kafka `PromiseRevised` (`delivery-promise`) | none (the group's window changes) |
 
 Derived from: `model.yaml → contexts[customer-ordering].aggregates[CustomerOrder].commands`,
@@ -135,9 +180,10 @@ reading. The model lists the events and the commands but does not pair them.
 | Event | Raised when | Full CloudEvents type |
 | --- | --- | --- |
 | `CustomerOrderPlaced` | `PlaceOrder` is saved (status `PLACED`) | `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderPlaced` |
-| `CustomerOrderCancelled` | `CancelOrder` is saved | `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderCancelled` |
+| `CustomerOrderCancelled` | `CancelOrder` (the groups moved to `CANCELLATION_REQUESTED`) or `CancelUnkeepableGroup` (the one cancelled group) is saved | `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderCancelled` |
 
-`MarkInFulfillment`, `MarkGroupShipped`, `MarkGroupDelivered` and
+`MarkInFulfillment`, `MarkGroupShipped`, `MarkGroupDelivered`, `MarkGroupLost`,
+`MarkGroupReturned`, `ConfirmGroupCancelled`, `RefuseGroupCancellation` and
 `UpdateGroupPromise` raise no integration event: the facts they record were
 published by their owners first. Both events leave through the transactional
 outbox in the same transaction as the save.
@@ -170,8 +216,8 @@ record.
 ### 2. Description
 
 A synthetic customer account with saved addresses. Its address entries have
-the shape of `ShipTo`. Checkout names the `shopperId`, and
-`CustomerOrderPlaced` carries it.
+the shape of `ShipTo`. Checkout names the `shopperId` and refuses an unknown
+one (422 `validation-failed`, ADR 0002 A9); `CustomerOrderPlaced` carries it.
 
 ### 3. State Transitions
 
@@ -225,5 +271,5 @@ None (`events: []`). No other context needs to know a shopper exists:
 | `OrderTrackingView` | `shipping-and-tracking` `LabelIssued`, `PackageScanned`, `PackageDelivered`, `PackageExceptionRaised`; `order-sourcing` `FulfillmentLocked`, `FulfillmentShipped`; `delivery-promise` `PromiseAtRisk`, `PromiseRevised`, `PromiseKept`, `PromiseBroken` | `GET /orders/{orderId}/tracking` (`GetTracking`) | It protects no invariant and takes no command. It is a projection of facts other contexts own. It can be dropped and rebuilt by replaying the three topics. `LabelIssued` and `PackageScanned` carry no `orderId`; the projector links them through `assignmentId` (from `FulfillmentLocked`) and `trackingNumber` (from `FulfillmentShipped` or `LabelIssued`). |
 
 Derived from: `model.yaml → contexts[customer-ordering].read_models`.
-`FulfillmentUnsourceable` is consumed but is not a listed source of the view.
-It drives `CancelOnUnfulfillable` only.
+`FulfillmentUnsourceable` is consumed and recorded on the view only (its
+reason); it cancels nothing. `PromiseUnkeepable` drives `CancelOnUnfulfillable`.

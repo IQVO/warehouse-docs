@@ -231,7 +231,9 @@ replay. `schema_migrations` is the migration tool's bookkeeping.
 - `customer_orders.shopper_id` → `shoppers.shopper_id` is a reference **by
   value**. `CustomerOrder` and `Shopper` are separate aggregates with separate
   transactions. An FK would couple their lifecycles and lock both rows on
-  checkout. The model names no check that the shopper exists.
+  checkout. Checkout does check that the shopper exists (the use case reads
+  the shopper before calling `delivery-promise`; an unknown id is 422
+  `validation-failed`, ADR 0002 A9), but only as a read, not as a constraint.
 - `order_groups.promise_id`, `order_groups.assignment_id`,
   `order_groups.witness_node_id`, `order_lines.catalog_item_id` and every
   `tracking_number` point into **other contexts' databases**

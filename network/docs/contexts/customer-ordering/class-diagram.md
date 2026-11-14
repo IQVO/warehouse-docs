@@ -38,9 +38,14 @@ classDiagram
         +PlaceOrder(shopperId, shipTo, lines, groups, at)$ CustomerOrder
         +MarkInFulfillment(groupNo, assignmentId, lockedAt) error
         +MarkGroupShipped(groupNo, trackingNumbers, shippedAt) error
-        +MarkGroupDelivered(groupNo, deliveredAt) error
-        +CancelOrder(groupNos, reason, cancelledAt) error
-        +UpdateGroupPromise(groupNo, window, shipBy, revisionNo) error
+        +MarkGroupDelivered(groupNo, trackingNumber, deliveredAt) error
+        +MarkGroupLost(groupNo, trackingNumber, declaredAt) error
+        +MarkGroupReturned(groupNo, trackingNumber, returnedAt) error
+        +CancelOrder(reason, now) Event[]
+        +CancelUnkeepableGroup(groupNo, reason, now) Event[]
+        +ConfirmGroupCancelled(groupNo, at) error
+        +RefuseGroupCancellation(groupNo, reason, at) error
+        +UpdateGroupPromise(promiseId, revisionNo, window, shipBy) error
         +DestinationPostalPrefix() string
     }
     class OrderStatus {
@@ -49,7 +54,21 @@ classDiagram
         IN_FULFILLMENT
         PARTIALLY_SHIPPED
         SHIPPED
+        PARTIALLY_DELIVERED
         DELIVERED
+        LOST
+        RETURNED
+        CANCELLED
+    }
+    class GroupStatus {
+        <<Enumeration>>
+        PROMISED
+        LOCKED
+        SHIPPED
+        DELIVERED
+        LOST
+        RETURNED
+        CANCELLATION_REQUESTED
         CANCELLED
     }
     class ShipTo {
@@ -72,6 +91,7 @@ classDiagram
     class GroupPromise {
         <<ValueObject>>
         -groupNo int
+        -status GroupStatus
         -promiseId string
         -deliverByEarliest time.Time
         -deliverByLatest time.Time
@@ -98,11 +118,12 @@ classDiagram
         +Insert(ctx, o) error
         +Update(ctx, o, expectedVersion) error
     }
-    CustomerOrder --> OrderStatus : status
+    CustomerOrder --> OrderStatus : status, derived from the groups
     CustomerOrder *-- "1" ShipTo : shipTo, PII
     CustomerOrder *-- "1..*" OrderLine : lines
     CustomerOrder *-- "1..*" GroupPromise : groups
     GroupPromise --> Tier
+    GroupPromise --> GroupStatus
     CustomerOrderRepository ..> CustomerOrder : persists
 ```
 
@@ -198,8 +219,8 @@ classDiagram
     }
     class CancelOnUnfulfillable {
         <<Policy>>
-        unsourceable and no revised promise
-        then cancel the group
+        PromiseUnkeepable for a group
+        no node locked: cancel the group
     }
     class PromiseGateway {
         <<interface>>

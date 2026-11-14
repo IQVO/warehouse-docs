@@ -775,10 +775,11 @@ contexts:
     roles: [Execution (checkout), Gateway (storefront)]
     business_decisions:
       - No order is placed unless every line belongs to exactly one confirmed-able promise.
+      - "A checkout names a shopper that must be registered: an unknown shopperId is refused with 422 validation-failed before delivery-promise is called (customer-ordering ADR 0002 A9). The same 422 answers a shipToAddressId that is not a saved address of that shopper (A25)."
       - "Checkout takes exactly one of an inline shipTo and a saved shipToAddressId (the address is copied into the order). When a selected offer is no longer quotable, nothing is placed: the response is 409 offer-not-quotable carrying requotedOffers (one per feasible tier of each failed group) for the shopper to re-confirm."
       - "POST /checkout and the other state-changing routes are idempotent on (route, Idempotency-Key) inside a 24-hour window; a replay with the same body returns the stored response, which is how an in-doubt placement is settled."
       - The ship-to address never leaves this context except to shipping-and-tracking for a label.
-      - A customer may cancel until every shipment group is locked; after that, cancellation is a return.
+      - A customer may cancel the shipment groups no node has locked yet; once every group is locked, shipped or delivered, cancellation is a return (ErrCancelAfterLock, advisory).
       - A cancel is a request: order-sourcing decides for each group, and its answer (FulfillmentCancelled or FulfillmentCancelRefused) is what this context shows.
       - The shopper's choice of a CONSOLIDATED delivery day needs no checkout field: the choice is the offerId of the group. The group stores the tier, the chosen local delivery day and delivery-promise's consolidationEligible answer, and the placed order carries them (customer-ordering ADR 0013).
       - Only this context owns both the shopper and the ship-to, so it derives an opaque consolidation key that lets order-sourcing merge the groups of one shopper and one address without ever seeing the address (customer-ordering ADR 0012).
@@ -787,15 +788,30 @@ contexts:
       - name: CustomerOrder
         root_id: orderId
         description: "A shopper's order: lines, ship-to (PII), the promise per shipment group and the customer-facing status."
-        states: [PLACED, IN_FULFILLMENT, PARTIALLY_SHIPPED, SHIPPED, DELIVERED, CANCELLED]
+        # as built (customer-ordering ADR 0002 A1, A3, A19, A23): the order status is DERIVED from the group states after every command
+        # (groups: PROMISED, LOCKED, SHIPPED, DELIVERED, LOST, RETURNED, CANCELLATION_REQUESTED, CANCELLED), never set directly;
+        # a derived status that ranks below the current one is refused with ErrStatusRegression
+        states: [PLACED, IN_FULFILLMENT, PARTIALLY_SHIPPED, SHIPPED, PARTIALLY_DELIVERED, DELIVERED, LOST, RETURNED, CANCELLED]
         transitions:
           - [PLACED, IN_FULFILLMENT, MarkInFulfillment]
+          - [PLACED, PARTIALLY_SHIPPED, MarkGroupShipped]
+          - [PLACED, SHIPPED, MarkGroupShipped]
           - [IN_FULFILLMENT, PARTIALLY_SHIPPED, MarkGroupShipped]
           - [IN_FULFILLMENT, SHIPPED, MarkGroupShipped]
           - [PARTIALLY_SHIPPED, SHIPPED, MarkGroupShipped]
+          - [PLACED, PARTIALLY_DELIVERED, MarkGroupDelivered]
+          - [IN_FULFILLMENT, PARTIALLY_DELIVERED, MarkGroupDelivered]
+          - [PARTIALLY_SHIPPED, PARTIALLY_DELIVERED, MarkGroupDelivered]
+          - [SHIPPED, PARTIALLY_DELIVERED, MarkGroupDelivered]
           - [SHIPPED, DELIVERED, MarkGroupDelivered]
-          - [PLACED, CANCELLED, CancelOrder]
-          - [IN_FULFILLMENT, CANCELLED, CancelOrder]
+          - [PARTIALLY_SHIPPED, DELIVERED, MarkGroupDelivered]
+          - [PARTIALLY_DELIVERED, DELIVERED, MarkGroupDelivered]
+          - [SHIPPED, PARTIALLY_DELIVERED, MarkGroupLost]
+          - [SHIPPED, LOST, MarkGroupLost]
+          - [SHIPPED, RETURNED, MarkGroupReturned]
+          - [SHIPPED, PARTIALLY_DELIVERED, MarkGroupReturned]
+          - [PLACED, CANCELLED, ConfirmGroupCancelled]
+          - [PLACED, CANCELLED, CancelUnkeepableGroup]
         value_objects:
           - "ShipTo{name, line1, line2, city, region, postalCode, countryCode, phone} (PII, synthetic)"
           - "OrderLine{lineNo, catalogItemId, quantity}"
@@ -805,10 +821,11 @@ contexts:
           - {rule: "every line is in exactly one group, and every group has a promise", error: ErrLineWithoutPromise}
           - {rule: "the promise's destination postal prefix matches the ship-to", error: ErrPromiseDestinationMismatch}
           - {rule: "cancel only while some group is unlocked; advisory, because order-sourcing decides and its FulfillmentCancelRefused wins. A request when every group is locked, shipped or delivered is answered with ErrCancelAfterLock", error: ErrCancelAfterLock}
-          - {rule: "status moves forward only", error: ErrStatusRegression}
+          - {rule: "status moves forward only: the order status is derived from the group states and a derived status that ranks below the current one is refused (a consumer records the event and skips it, it never fails the message)", error: ErrStatusRegression}
+          - {rule: "the shopper named by a checkout is registered (checked by the PlaceOrder use case before delivery-promise is called; customer-ordering ADR 0002 A9); HTTP 422 validation-failed", error: ErrValidation}
           - {rule: "chosenDeliveryDay and consolidationEligible are allowed only on a CONSOLIDATED group, and the day must be a valid calendar date (ErrValidation on Place, ErrInvalidSnapshot on Restore)", error: ErrValidation}
           - {rule: "consolidationKey is empty or 64 lower-case hex characters (ErrValidation on Place, ErrInvalidSnapshot on Restore)", error: ErrValidation}
-        commands: [PlaceOrder, MarkInFulfillment, MarkGroupShipped, MarkGroupDelivered, CancelOrder, ConfirmGroupCancelled, RefuseGroupCancellation, UpdateGroupPromise]
+        commands: [PlaceOrder, MarkInFulfillment, MarkGroupShipped, MarkGroupDelivered, MarkGroupLost, MarkGroupReturned, CancelOrder, CancelUnkeepableGroup, ConfirmGroupCancelled, RefuseGroupCancellation, UpdateGroupPromise]
         events: [CustomerOrderPlaced, CustomerOrderCancelled]
         throughput_estimate: "medium"
         size_estimate: "one row per order + lines"
@@ -831,11 +848,13 @@ contexts:
       - {name: ConsolidationKeyDerivation, rule: "PlaceOrder computes the key after resolveAddress through the ConsolidationKeyer port (an HMAC adapter) with the secret from the environment (at least 16 bytes); with no secret configured no key is computed, the event omits the field and the order never merges. Rotating the secret only stops merges between orders keyed under different secrets. The key is not in REST, MCP or A2A, and the placed event still carries no address field. A new normalisation rule is a new derivation version, never an edit of the old one (customer-ordering ADR 0012)"}
       - {name: ConsolidatedChoiceStored, rule: "the Tier enum accepts CONSOLIDATED (aggregate, constraint and OpenAPI); PlaceOrder copies tier, window and consolidationEligible from the made promise and derives chosenDeliveryDay with the time zone database in the use case (the domain only checks the SHAPE of a zone). GroupPromise on POST /checkout 201, GET /orders/{orderId} and GET /orders gains the two optional fields, omitted when unknown. A re-quote after an expired offer asks for the default tiers, so the 409 offer-not-quotable answer never offers CONSOLIDATED (an accepted limitation). Nothing here asks delivery-promise for the tier: it stays invisible until a caller opts in (customer-ordering ADR 0013)"}
       - {name: SharedTrackingNumbers, rule: "AttachTrackingNumbers and the assignment link only ADD a link row, never overwrite or remove one; tracking_packages.order_id and group_no keep meaning the first group that named the package. ApplyPackageDelivered, ApplyPackageLost and ApplyPackageReturned record the package fact once, then run MarkGroupDelivered, MarkGroupLost or MarkGroupReturned for EVERY group of GroupsOfTracking plus the group the event itself resolves, each in its own mutate inside the event's unit of work. A group that has not shipped yet is not in the set and is replayed by reconcile when its own FulfillmentShipped arrives. The tracking view of a follower order shows the shared package under the follower's group; the package's assignmentId stays the carrier's (customer-ordering ADR 0012)"}
-      - {name: CancelOnUnfulfillable, rule: "when a group is unsourceable and no revised promise is feasible, cancel the group and the order if nothing remains"}
-      - {name: CancelIsARequest, rule: "CancelOrder moves every unlocked group to a cancellation-requested state and publishes CustomerOrderCancelled for exactly those groups; locked, shipped and delivered groups are untouched. FulfillmentCancelled (ConfirmGroupCancelled) makes the group CANCELLED, and the order becomes CANCELLED when no group remains outside CANCELLED. FulfillmentCancelRefused (RefuseGroupCancellation) returns the group to LOCKED with the refusal reason, because the vendor ships and the shopper's path is then a return"}
+      - {name: CancelOnUnfulfillable, rule: "triggered by delivery-promise's PromiseUnkeepable{promiseId, orderId, groupNo, reason}, not by FulfillmentUnsourceable (customer-ordering ADR 0002 A5, gap G10): a PROMISED group goes straight to CANCELLED (command CancelUnkeepableGroup) and CustomerOrderCancelled{groupNos:[groupNo], reason 'PROMISE_UNKEEPABLE: <reason>'} is published; the order becomes CANCELLED when no group remains outside CANCELLED. In any other group state the event is recorded and skipped. FulfillmentUnsourceable only records its reason on the tracking view (OrderTrackingView) and cancels nothing"}
+      - {name: CancelIsARequest, rule: "CancelOrder moves every unlocked group (PROMISED) to CANCELLATION_REQUESTED and publishes CustomerOrderCancelled for exactly those groups; locked, shipped and delivered groups are untouched, so the order status does not change on the request. FulfillmentCancelled (ConfirmGroupCancelled) makes the group CANCELLED, and the order becomes CANCELLED when no group remains outside CANCELLED. FulfillmentCancelRefused (RefuseGroupCancellation) returns the group to LOCKED with the refusal reason, because the vendor ships and the shopper's path is then a return. A repeat request (every group already CANCELLATION_REQUESTED or CANCELLED) changes and publishes nothing; a DELIVERED, LOST or RETURNED order is refused with ErrStatusRegression (customer-ordering ADR 0002 A3, A4, A23)"}
+      - {name: OrderStatusDerivedFromGroups, rule: "the order status is never set directly: after every command it is derived from the groups that are not CANCELLED, first match wins: none left CANCELLED; every counted group closed (DELIVERED, LOST or RETURNED) DELIVERED when all delivered, else PARTIALLY_DELIVERED when some were, else LOST when any is lost, else RETURNED; some group DELIVERED PARTIALLY_DELIVERED; every group SHIPPED, LOST or RETURNED SHIPPED; some SHIPPED, LOST or RETURNED PARTIALLY_SHIPPED; some LOCKED IN_FULFILLMENT; otherwise PLACED. A LOST or RETURNED group did ship, so beside open groups it counts as shipped progress. Group states: PROMISED (not locked), LOCKED, SHIPPED, DELIVERED, LOST, RETURNED, CANCELLATION_REQUESTED, CANCELLED (customer-ordering ADR 0002 A1, A19, A23, REST OrderStatus and GroupStatus)"}
+      - {name: ShipmentWinsOverUnlockedAndCancelRequested, rule: "FulfillmentShipped moves a group from PROMISED, LOCKED or CANCELLATION_REQUESTED to SHIPPED: a shipment on a PLACED order is accepted even when the lock event has not been seen (cross-topic reordering), and a vendor that ships wins over a pending cancel request. SHIPPED again is a no-op; DELIVERED, LOST and RETURNED are a status regression and CANCELLED is illegal, both recorded and skipped by the consumer, never retried (customer-ordering internal/domain/customerorder MarkGroupShipped; ADR 0002 A7, A21)"}
     inbound:
       - {from: shopper / storefront, type: cmd, channel: "REST POST /checkout", routes: ["POST /checkout"], message: "PlaceOrder", relationship: OHS}
-      - {from: shopper / storefront, type: cmd, channel: "REST POST /orders/{orderId}:cancel", routes: ["POST /orders/{orderId}:cancel"], message: "CancelOrder", relationship: OHS}
+      - {from: shopper / storefront, type: cmd, channel: "REST POST /orders/{orderId}/cancellations", routes: ["POST /orders/{orderId}/cancellations"], message: "CancelOrder", relationship: OHS}
       - {from: shopper / storefront, type: cmd, channel: "REST POST /shoppers", routes: ["POST /shoppers"], message: "RegisterShopper", relationship: OHS}
       - {from: shopper / storefront, type: cmd, channel: "REST POST /shoppers/{shopperId}/addresses", routes: ["POST /shoppers/{shopperId}/addresses"], message: "AddShopperAddress", relationship: OHS}
       - {from: shopper / storefront, type: qry, channel: "REST GET /shoppers/{shopperId}, GET /shoppers?email=", routes: ["GET /shoppers/{shopperId}", "GET /shoppers?email="], message: "GetShopper, FindShopperByEmail", relationship: OHS}
@@ -849,7 +868,7 @@ contexts:
       - "POST /checkout"
       - "GET /orders/{orderId}"
       - "GET /orders/{orderId}/tracking"
-      - "POST /orders/{orderId}:cancel"
+      - "POST /orders/{orderId}/cancellations"
       - "GET /orders/{orderId}/ship-to"
       - "POST /shoppers"
       - "POST /shoppers/{shopperId}/addresses"

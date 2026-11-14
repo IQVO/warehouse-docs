@@ -90,15 +90,15 @@ second event from `delivery-promise`, and `PromiseMade` and
 | Topic | `retailnetwork.customer-ordering.events` |
 | Subject / key | `orderId` |
 | Dataschema | `urn:retailnetwork:customer-ordering:events:CustomerOrderCancelled:v1` |
-| Producing command / use case | `CancelOrder`: from the shopper (REST `POST /orders/{orderId}/cancellations`) or from the `CancelOnUnfulfillable` policy |
+| Producing command / use case | `CancelOrder`: from the shopper (REST `POST /orders/{orderId}/cancellations`), or `CancelUnkeepableGroup` from the `CancelOnUnfulfillable` policy on `PromiseUnkeepable` |
 | Consumers | `order-sourcing` (`CancelAssignment` for each listed group), `delivery-promise` (`CancelPromise` for each listed group) |
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `orderId` | string | The customer order. |
-| `reason` | string | Why it was cancelled: the shopper's request, or an unfulfillable group. The model defines no code list (open question). |
+| `reason` | string | Why it was cancelled: the shopper's request text, or `PROMISE_UNKEEPABLE: <reason>` for a group cancelled by the policy. The model defines no code list. |
 | `cancelledAt` | timestamp | When the cancellation was recorded. |
-| `groupNos` | integer[] | The shipment groups cancelled. A customer cancellation lists every group. |
+| `groupNos` | integer[] | The shipment groups concerned: for a shopper request exactly the groups that were still unlocked (now `CANCELLATION_REQUESTED`), for the policy the one cancelled group. |
 
 ## Consumed
 
@@ -113,8 +113,10 @@ never on a suffix. Proposed consumer groups: `customer-ordering.order-sourcing`,
 | Event | Full type | Fields used | What this context does |
 | --- | --- | --- | --- |
 | `FulfillmentLocked` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | `assignmentId`, `orderId`, `groupNo`, `nodeId`, `lockedAt` | `MarkInFulfillment`: records the group as locked (which ends customer cancellation, `ErrCancelAfterLock`) and moves `PLACED → IN_FULFILLMENT`. Links `assignmentId` to the group. Updates `OrderTrackingView`. |
-| `FulfillmentShipped` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | `assignmentId`, `orderId`, `groupNo`, `trackingNumbers`, `shippedAt` | `MarkGroupShipped`: `PARTIALLY_SHIPPED` or `SHIPPED`. Records the group's tracking numbers. Updates `OrderTrackingView`. |
-| `FulfillmentUnsourceable` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentUnsourceable` | `orderId`, `groupNo`, `promiseId`, `reason` | `CancelOnUnfulfillable`: notes the group as waiting for a re-promise. `delivery-promise` consumes the same event and re-promises. If no revised promise is feasible, the policy cancels the group (`CancelOrder`). The model has no event for "not feasible" (open question). |
+| `FulfillmentShipped` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | `assignmentId`, `orderId`, `groupNo`, `trackingNumbers`, `shippedAt` | `MarkGroupShipped`: the group becomes `SHIPPED` from `PROMISED`, `LOCKED` or `CANCELLATION_REQUESTED` (a shipment on a `PLACED` order is accepted and wins over a pending cancel request); the order is `PARTIALLY_SHIPPED` or `SHIPPED`. Records the group's tracking numbers. Updates `OrderTrackingView`. |
+| `FulfillmentUnsourceable` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentUnsourceable` | `orderId`, `groupNo`, `promiseId`, `reason` | Records the reason in `OrderTrackingView` only. It cancels nothing: `delivery-promise` consumes the same event and re-promises, and only its `PromiseUnkeepable` triggers `CancelOnUnfulfillable`. |
+| `FulfillmentCancelled` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | `orderId`, `groupNo` | `ConfirmGroupCancelled`: the group becomes `CANCELLED`; the order is `CANCELLED` when no group remains outside `CANCELLED`. |
+| `FulfillmentCancelRefused` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelRefused` | `orderId`, `groupNo`, `reason` | `RefuseGroupCancellation`: the group returns from `CANCELLATION_REQUESTED` to `LOCKED` with the refusal reason; the vendor ships. |
 
 ### From delivery-promise (`retailnetwork.delivery-promise.events`, Customer/Supplier)
 
@@ -124,6 +126,7 @@ never on a suffix. Proposed consumer groups: `customer-ordering.order-sourcing`,
 | `PromiseRevised` | `com.retailnetwork.commerce.delivery-promise.promise.PromiseRevised` | `promiseId`, `orderId`, `revisionNo`, `deliverByEarliest`, `deliverByLatest`, `shipBy`, `reason` | `UpdateGroupPromise`: replaces the group's window (found by `promiseId`); a `revisionNo` not above the last applied is skipped. Updates `OrderTrackingView`. |
 | `PromiseKept` | `com.retailnetwork.commerce.delivery-promise.promise.PromiseKept` | `promiseId`, `orderId`, `deliveredAt`, `deliverByLatest` | Shows the verdict in `OrderTrackingView`. No command. |
 | `PromiseBroken` | `com.retailnetwork.commerce.delivery-promise.promise.PromiseBroken` | `promiseId`, `orderId`, `deliveredAt`, `deliverByLatest`, `lateByMinutes`, `cause` | Shows the verdict in `OrderTrackingView`. No command. |
+| `PromiseUnkeepable` | `com.retailnetwork.commerce.delivery-promise.promise.PromiseUnkeepable` | `promiseId`, `orderId`, `groupNo`, `reason` | `CancelOnUnfulfillable` (`CancelUnkeepableGroup`): a `PROMISED` group goes straight to `CANCELLED` and `CustomerOrderCancelled` is published; in any other group state the event is recorded and skipped. |
 
 ### From shipping-and-tracking (`retailnetwork.shipping-and-tracking.events`, Conformist)
 

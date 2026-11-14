@@ -50,7 +50,7 @@ flowchart LR
     end
     subgraph BC["customer-ordering - Generic subdomain - commerce tier"]
         direction TB
-        card["<b>Purpose</b><br/>Turn a cart into a customer order:<br/>promise every shipment group at<br/>checkout, record the order with<br/>shopper and ship-to (synthetic PII,<br/>held only here), show status and<br/>tracking, handle cancellation.<br/><br/><b>Domain roles</b><br/>- Execution (checkout)<br/>- Gateway (storefront)<br/><br/><b>Business decisions it enforces</b><br/>- No order unless every line is in<br/>exactly one group with a promise<br/>- Ship-to leaves only to<br/>shipping-and-tracking, for a label<br/>- Cancel only while no group<br/>is locked"]:::card
+        card["<b>Purpose</b><br/>Turn a cart into a customer order:<br/>promise every shipment group at<br/>checkout, record the order with<br/>shopper and ship-to (synthetic PII,<br/>held only here), show status and<br/>tracking, handle cancellation.<br/><br/><b>Domain roles</b><br/>- Execution (checkout)<br/>- Gateway (storefront)<br/><br/><b>Business decisions it enforces</b><br/>- No order unless every line is in<br/>exactly one group with a promise<br/>- Ship-to leaves only to<br/>shipping-and-tracking, for a label<br/>- Cancel only groups<br/>no node has locked"]:::card
     end
     in0 -->|"cmd - REST<br/>PlaceOrder, CancelOrder,<br/>RegisterShopper"| BC
     in0 -.->|"qry - REST<br/>GetOrder, GetTracking"| BC
@@ -123,7 +123,7 @@ To turn a shopper's cart into a customer order. The context:
   so `order-sourcing` does not have to correlate two streams;
 - shows status and tracking, built from fulfilment, promise and package
   events;
-- handles customer cancellation while no group is locked.
+- handles customer cancellation as a request for the groups no node has locked yet.
 
 ## Strategic Classification
 
@@ -202,15 +202,18 @@ cancellation).
    `shipping-and-tracking`, for a label, through
    `GET /orders/{orderId}/ship-to`. Published events carry
    `destinationPostalPrefix` only.
-4. **Cancel only while no group is locked** (`ErrCancelAfterLock`). After the
+4. **Cancel only while some group is unlocked** (`ErrCancelAfterLock`). After the
    lock, cancellation is a return. The check is advisory: a cancel is a request
-   and `order-sourcing` decides (`FulfillmentCancelled`, or
-   `FulfillmentCancelRefused` after the lock).
-5. **Status moves forward only** (`ErrStatusRegression`). A late or
-   duplicated upstream event never moves the order back.
-6. **An unfulfillable group is cancelled, not kept open.** When a group is
-   unsourceable and no revised promise is feasible, cancel the group, and the
-   order if nothing remains (`CancelOnUnfulfillable`).
+   (every unlocked group becomes `CANCELLATION_REQUESTED`) and `order-sourcing`
+   decides (`FulfillmentCancelled`, or `FulfillmentCancelRefused` after the
+   lock).
+5. **Status moves forward only** (`ErrStatusRegression`). The order status is
+   derived from the group states, and a late or duplicated upstream event never
+   moves the order back: the consumer records the event and skips it.
+6. **An unfulfillable group is cancelled, not kept open.** When
+   `delivery-promise` publishes `PromiseUnkeepable` for a group no node has
+   locked, cancel that group at once, and the order if nothing remains
+   (`CancelOnUnfulfillable`). `FulfillmentUnsourceable` alone cancels nothing.
 
 ## Assumptions
 
@@ -246,29 +249,23 @@ cancellation).
 
 ## Open Questions
 
-- **Which event drives which command?** The model lists the consumed events
-  and the commands, but not the mapping. These pages use: `FulfillmentLocked`
-  → `MarkInFulfillment`, `FulfillmentShipped` → `MarkGroupShipped`,
-  `PackageDelivered` → `MarkGroupDelivered`, `PromiseRevised` →
-  `UpdateGroupPromise`, `FulfillmentUnsourceable` → `CancelOnUnfulfillable`.
-  Every consumed event except `FulfillmentUnsourceable` also feeds
-  `OrderTrackingView`, as the model's `read_models` lists.
-- **Cancel wording.** `business_decisions` says a customer may cancel "until
-  every shipment group is locked". The invariant says "cancel only while no
-  group is locked" (`ErrCancelAfterLock`). These pages follow the invariant.
-  If `IN_FULFILLMENT` starts at the first lock, then the transition
-  `IN_FULFILLMENT → CANCELLED` (`CancelOrder`) can never pass that invariant.
-- **When is a re-promise "not feasible"?** `CancelOnUnfulfillable` needs that
-  signal. `delivery-promise` reports a failed re-promise only as
-  `PromiseBroken` at judgement time, and judgement needs a delivery that never
-  happens for an unsourceable group.
-- **Group-level state.** `CustomerOrderCancelled` carries `groupNos`, and the
-  status splits `PARTIALLY_SHIPPED` from `SHIPPED`. The `GroupPromise` value
-  object has no field for a group's lock, shipment, delivery or cancellation.
-  Its fields also do not include `tier`, `witnessNodeId` or `shipBy`, which
-  `CustomerOrderPlaced` carries.
-- **A group delivered while another is still unshipped.** There is no
-  `PARTIALLY_SHIPPED → DELIVERED` transition and no partially-delivered state.
+- **Which event drives which command?** These pages use (ADR 0002 and the
+  consumers in the service): `FulfillmentLocked` → `MarkInFulfillment`,
+  `FulfillmentShipped` → `MarkGroupShipped`, `PackageDelivered` →
+  `MarkGroupDelivered`, `PackageLost` / `PackageReturned` → `MarkGroupLost` /
+  `MarkGroupReturned`, `FulfillmentCancelled` / `FulfillmentCancelRefused` →
+  `ConfirmGroupCancelled` / `RefuseGroupCancellation`, `PromiseRevised` →
+  `UpdateGroupPromise`, `PromiseUnkeepable` → `CancelOnUnfulfillable`.
+  `FulfillmentUnsourceable` only records its reason on `OrderTrackingView`.
+- **Cancel wording (resolved).** `business_decisions` says a customer may
+  cancel "until every shipment group is locked"; the invariant, ADR 0002 A3 and
+  the service act on the groups that are still unlocked, and an order with
+  none left is refused with `ErrCancelAfterLock`. `IN_FULFILLMENT → CANCELLED`
+  is unreachable (ADR 0002).
+- **Group-level state (resolved).** `GroupPromise` also carries the group
+  status, `tier`, `witnessNodeId`, `shipBy` and the lock, shipment, delivery
+  and cancellation facts (ADR 0002 A2); the model's value-object list names
+  only the promise fields.
 - **Cancel racing the lock.** A cancel accepted before `FulfillmentLocked`
   arrives can meet a lock `order-sourcing` already made; its
   `CancelAssignment` then fails, and the model has no compensation.

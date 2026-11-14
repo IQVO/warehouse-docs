@@ -27,11 +27,13 @@ Reads are not use cases here: `GET /orders/{orderId}` (`GetOrder`),
 | --- | --- | --- | --- |
 | `PlaceOrder` | Shopper | REST `POST /checkout` | `CustomerOrderPlaced` |
 | `CancelOrder` | Shopper | REST `POST /orders/{orderId}/cancellations` | `CustomerOrderCancelled` |
-| `CancelOrder` (policy) | `CancelOnUnfulfillable` | Kafka consumer, `FulfillmentUnsourceable` | `CustomerOrderCancelled` |
+| `CancelUnkeepableGroup` (policy `CancelOnUnfulfillable`) | `delivery-promise` | Kafka consumer, `PromiseUnkeepable` | `CustomerOrderCancelled` |
 | `RegisterShopper` | Storefront (assumed; no `inbound` row) | REST `POST /shoppers` | none |
 | `MarkInFulfillment` | `order-sourcing` | Kafka consumer, `FulfillmentLocked` | none |
 | `MarkGroupShipped` | `order-sourcing` | Kafka consumer, `FulfillmentShipped` | none |
 | `MarkGroupDelivered` | `shipping-and-tracking` | Kafka consumer, `PackageDelivered` | none |
+| `MarkGroupLost`, `MarkGroupReturned` | `shipping-and-tracking` | Kafka consumer, `PackageLost`, `PackageReturned` | none |
+| `ConfirmGroupCancelled`, `RefuseGroupCancellation` | `order-sourcing` | Kafka consumer, `FulfillmentCancelled`, `FulfillmentCancelRefused` | none |
 | `UpdateGroupPromise` | `delivery-promise` | Kafka consumer, `PromiseRevised` | none |
 
 The pairing of consumed events with commands is this pack's reading. The
@@ -62,13 +64,15 @@ Error responses use `application/problem+json` (RFC 9457) with `type`
   `catalogItemId`, `quantity`), `groups[]` (`groupNo`, `offerId`, `lineNos[]`):
   the shipment groups and offers the shopper saw when the storefront quoted
   `delivery-promise`.
-- **Preconditions:** none on stored state. The model names no error for an
-  unknown `shopperId`, so checkout does not check it (model gap).
+- **Preconditions:** the `shopperId` names a registered shopper. Checkout does
+  check it, before `delivery-promise` is called: an unknown shopper is 422
+  `validation-failed` (ADR 0002 A9; `ErrValidation`).
 - **Main flow:**
   1. Look up the `Idempotency-Key`. On a hit with the same request body,
      return the stored response.
   2. Check that every line is in exactly one group
-     (`ErrLineWithoutPromise`), before any call.
+     (`ErrLineWithoutPromise`), and that the `shopperId` is a registered
+     shopper (422 `validation-failed` when it is not), before any call.
   3. For each group, call `delivery-promise` `MakePromise`
      (`POST /promises`, with the `offerId`). Send an `Idempotency-Key` derived
      from the `offerId`, so a retried checkout gets back the same provisional
@@ -91,6 +95,7 @@ Error responses use `application/problem+json` (RFC 9457) with `type`
 | Error | HTTP | Problem `type` slug | Note |
 | --- | --- | --- | --- |
 | `ErrLineWithoutPromise` | 422 | `line-without-promise` | A line in no group or two groups, or a group without a promise. |
+| `ErrValidation` (unknown shopper) | 422 | `validation-failed` | `shopperId` is not a registered shopper, or a `shipToAddressId` is not a saved address of that shopper (ADR 0002 A9, A25). Refused before `delivery-promise` is called. |
 | `ErrPromiseDestinationMismatch` | 422 | `promise-destination-mismatch` | An offer quoted for another postal prefix. |
 | `ErrOfferNotQuotable` (from `delivery-promise`) | 409 | `offer-not-quotable` | Body carries the re-quoted offers (`CheckoutPromising`). |
 | `ErrPromiseCapacityExhausted` (from `delivery-promise`) | 409 | `promise-capacity-exhausted` | The node cutoff filled since the quote. |
@@ -112,60 +117,72 @@ Error responses use `application/problem+json` (RFC 9457) with `type`
 - **Actor / trigger:** the shopper.
 - **Inbound adapter:** REST `POST /orders/{orderId}/cancellations`, header
   `Idempotency-Key` required; body `reason`.
-- **Preconditions:** the order exists; no group is locked.
+- **Preconditions:** the order exists; at least one group is unlocked
+  (`PROMISED`) or the request is a repeat.
 - **Main flow:**
   1. Look up the `Idempotency-Key`; replay the stored response on a hit.
-  2. Load `CustomerOrder` with its `version` (404 if absent).
-  3. If it is already `CANCELLED`, answer `200` with it unchanged and publish
-     nothing.
-  4. `CustomerOrder.CancelOrder(groupNos = every group, reason)`: it checks
-     `ErrCancelAfterLock` and `ErrStatusRegression`. Status `CANCELLED`.
-  5. In one transaction, save (version checked) and write
+  2. Load `CustomerOrder` with its `version` (404 `not-found` if absent).
+  3. `CustomerOrder.CancelOrder(reason, now)` is a REQUEST (ADR 0002 A3): every
+     `PROMISED` group moves to `CANCELLATION_REQUESTED`; locked, shipped and
+     delivered groups are untouched, so the order keeps its derived status.
+     When every group is already `CANCELLATION_REQUESTED` or `CANCELLED`
+     (a repeat) it answers `200` with the order unchanged and publishes
+     nothing. A `DELIVERED`, `LOST` or `RETURNED` order is `ErrStatusRegression`;
+     an order whose groups are all locked, shipped or delivered is
+     `ErrCancelAfterLock`.
+  4. In one transaction, save (version checked) and write
      `CustomerOrderCancelled` to the outbox.
-  6. Answer `200` with the order.
+  5. Answer `200` with the order. The group is not `CANCELLED` yet:
+     `order-sourcing` answers with `FulfillmentCancelled` (`ConfirmGroupCancelled`,
+     the group becomes `CANCELLED`, and the order `CANCELLED` once no group
+     remains outside `CANCELLED`) or `FulfillmentCancelRefused`
+     (`RefuseGroupCancellation`, back to `LOCKED`).
 - **Errors:**
 
 | Error | HTTP | Problem `type` slug | Note |
 | --- | --- | --- | --- |
-| order not found | 404 | `order-not-found` | Repository miss; the model names no `Err` for it. |
-| `ErrCancelAfterLock` | 409 | `cancel-after-lock` | A group is locked; cancellation is now a return. |
-| `ErrStatusRegression` | 409 | `status-regression` | The order is past the point a cancel can reach. |
-| version conflict | 409 | `stale-order` | Retried once inside the use case before it is returned. |
+| order not found (`ErrNotFound`) | 404 | `not-found` | Repository miss; one of the four shared problem types. |
+| `ErrCancelAfterLock` | 409 | `cancel-after-lock` | No group is unlocked; cancellation is now a return. |
+| `ErrStatusRegression` | 409 | `status-regression` | The order is `DELIVERED`, `LOST` or `RETURNED`. |
+| version conflict (`ErrConcurrentUpdate`) | 409 | `concurrent-update` | The use case runs twice (two attempts) before the conflict is returned. |
 
-- **Events emitted:** `CustomerOrderCancelled` (`groupNos` = every group).
-- **Idempotency:** `Idempotency-Key`, and a cancel of a `CANCELLED` order is
-  a no-op.
+- **Events emitted:** `CustomerOrderCancelled` (`groupNos` = exactly the groups
+  moved to `CANCELLATION_REQUESTED`).
+- **Idempotency:** `Idempotency-Key`, and a repeat request is a no-op.
 - **Race:** a lock that `order-sourcing` has made but this context has not
   consumed yet is invisible here. The request is accepted, and `order-sourcing`
   answers `FulfillmentCancelRefused` (`CANCEL_AFTER_LOCK`); the group returns to
   `LOCKED` (command `RefuseGroupCancellation`) and the vendor ships. A cancel
   is only a request: `FulfillmentCancelled` (`ConfirmGroupCancelled`) is what
   makes a group `CANCELLED`, and this context's `ErrCancelAfterLock` is
-  advisory.
+  advisory. A shipment also wins over a pending request: `FulfillmentShipped`
+  moves a `CANCELLATION_REQUESTED` group to `SHIPPED`.
 
-## CancelOrder (policy CancelOnUnfulfillable)
+## CancelUnkeepableGroup (policy CancelOnUnfulfillable)
 
 - **Actor / trigger:** the `CancelOnUnfulfillable` policy, after
-  `FulfillmentUnsourceable` for a group.
-- **Inbound adapter:** Kafka consumer on `retailnetwork.order-sourcing.events`,
-  type `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentUnsourceable`.
-- **Preconditions:** the group is unsourceable and no revised promise is
-  feasible. The model has **no event** that says the second part (hotspot
-  H6). A `PromiseRevised` for the group's `promiseId` means it was re-promised,
-  and the policy stands down.
+  `delivery-promise` publishes `PromiseUnkeepable` for a group (ADR 0002 A5,
+  gap G10). It is **not** triggered by `FulfillmentUnsourceable`: that event
+  only records its reason on the tracking view and cancels nothing.
+- **Inbound adapter:** Kafka consumer on `retailnetwork.delivery-promise.events`,
+  type `com.retailnetwork.commerce.delivery-promise.promise.PromiseUnkeepable`
+  (`promiseId`, `orderId`, `groupNo`, `reason`).
+- **Preconditions:** the group is `PROMISED` (no node locked).
 - **Main flow:**
   1. Inbox check on the CloudEvents `id`.
-  2. Note the group as waiting for a re-promise (`OrderTrackingView`).
-  3. When the not-feasible condition holds: `CancelOrder(groupNos = [that
-     group], reason)`. If no other group remains, the status becomes
-     `CANCELLED`.
-  4. Save, outbox `CustomerOrderCancelled`, inbox row, one transaction.
+  2. Load the order by `orderId`, with its `version`.
+  3. `CancelUnkeepableGroup(groupNo, reason, now)`: the `PROMISED` group goes
+     straight to `CANCELLED` (no request step, `order-sourcing` moves its
+     `UNSOURCEABLE` assignment to `CANCELLED` on the event). When no group
+     remains outside `CANCELLED` the order becomes `CANCELLED`.
+  4. Save, outbox `CustomerOrderCancelled` with the one `groupNo` and reason
+     `PROMISE_UNKEEPABLE: <reason>`, inbox row, one transaction.
 - **Errors:**
 
 | Error | HTTP | Problem `type` slug | Note |
 | --- | --- | --- | --- |
-| `ErrCancelAfterLock` | — (consumer) | — | Another group of the order is locked. The model does not say whether the unsourceable group may still be cancelled alone (hotspot H7). Recorded and skipped. |
-| `ErrStatusRegression` | — (consumer) | — | The order is already `CANCELLED`; recorded and skipped. |
+| `ErrIllegalTransition` | — (consumer) | — | The group is not `PROMISED` (locked, shipped, requested or already cancelled). Recorded and skipped. |
+| `ErrNotFound` / unknown group | — (consumer) | — | Recorded and skipped. |
 
 - **Events emitted:** `CustomerOrderCancelled` with the one `groupNo`.
 - **Idempotency:** inbox on the CloudEvents `id`.
@@ -203,16 +220,19 @@ Error responses use `application/problem+json` (RFC 9457) with `type`
 - **Main flow:**
   1. Inbox check on the CloudEvents `id`; a duplicate is acknowledged.
   2. Load the order by `orderId`, with its `version`.
-  3. `MarkInFulfillment(groupNo, assignmentId, lockedAt)`: records the group
-     as locked; `PLACED → IN_FULFILLMENT` for the first lock, no status change
-     for later ones.
+  3. `MarkInFulfillment(groupNo, assignmentId, lockedAt)`: `PROMISED` →
+     `LOCKED` for that group; the order status is then re-derived
+     (`PLACED → IN_FULFILLMENT` for the first lock, no status change for later
+     ones). A lock for a `CANCELLATION_REQUESTED` group is recorded but leaves
+     the state: `order-sourcing`'s answer decides.
   4. Save (version checked) and insert the inbox row in one transaction.
      Update `OrderTrackingView`.
 - **Errors:**
 
 | Error | HTTP | Problem `type` slug | Note |
 | --- | --- | --- | --- |
-| `ErrStatusRegression` | — (consumer) | — | For example the order is `CANCELLED` (see the race above). Recorded, logged as an anomaly, acknowledged. |
+| `ErrStatusRegression` | — (consumer) | — | The group is already `SHIPPED`, `DELIVERED`, `LOST` or `RETURNED`. Recorded, logged, acknowledged. |
+| `ErrIllegalTransition` | — (consumer) | — | The group is `CANCELLED`. Recorded, logged, acknowledged. |
 
 - **Events emitted:** none.
 - **Idempotency:** inbox; locking an already locked group is a no-op.
@@ -222,19 +242,24 @@ Error responses use `application/problem+json` (RFC 9457) with `type`
 - **Actor / trigger:** `order-sourcing` reports the group shipped.
 - **Inbound adapter:** Kafka consumer, type
   `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped`.
-- **Preconditions:** the group is locked.
+- **Preconditions:** the group exists. It need not be locked: a shipment on
+  a `PLACED` order is accepted (the lock event may arrive late).
 - **Main flow:**
   1. Inbox check.
   2. Load the order.
-  3. `MarkGroupShipped(groupNo, trackingNumbers, shippedAt)`:
-     `IN_FULFILLMENT → SHIPPED` if every remaining group has shipped, else
-     `→ PARTIALLY_SHIPPED`; `PARTIALLY_SHIPPED → SHIPPED` for the last group.
+  3. `MarkGroupShipped(groupNo, trackingNumbers, shippedAt)`: a `PROMISED`,
+     `LOCKED` or `CANCELLATION_REQUESTED` group becomes `SHIPPED` (a vendor
+     that ships wins over a pending cancel request); the order status is
+     re-derived: `PARTIALLY_SHIPPED` while other groups are open, `SHIPPED`
+     once every counted group has shipped (`PLACED → SHIPPED` is possible when
+     the lock was never seen). Deliveries that arrived early are replayed.
   4. Save and inbox row in one transaction. Update `OrderTrackingView`.
 - **Errors:**
 
 | Error | HTTP | Problem `type` slug | Note |
 | --- | --- | --- | --- |
-| `ErrStatusRegression` | — (consumer) | — | The order is `PLACED` (lock not seen) or `CANCELLED`. A `PLACED` order is retried, because the lock may be late; a `CANCELLED` one is recorded and skipped. |
+| `ErrStatusRegression` | — (consumer) | — | The group is `DELIVERED`, `LOST` or `RETURNED`. Recorded and skipped, never retried. |
+| `ErrIllegalTransition` | — (consumer) | — | The group is `CANCELLED`. Recorded and skipped. |
 
 - **Events emitted:** none.
 - **Idempotency:** inbox; the same `groupNo` shipped twice is a no-op.
@@ -249,18 +274,52 @@ Error responses use `application/problem+json` (RFC 9457) with `type`
   1. Inbox check.
   2. Load the order by `orderId`. Find the group by `assignmentId`.
   3. Record `deliveredAt` for the `trackingNumber`. When every tracking
-     number of the group is delivered, `MarkGroupDelivered(groupNo,
-     deliveredAt)`. `SHIPPED → DELIVERED` when every group is delivered.
+     number of the group is delivered the group is `DELIVERED` (a delivery
+     that arrives before the shipment is remembered and replayed). The order
+     status is re-derived: `PARTIALLY_DELIVERED` while another group is open
+     or lost or returned, `DELIVERED` when every counted group is delivered.
   4. Save and inbox row in one transaction. Update `OrderTrackingView`.
 - **Errors:**
 
 | Error | HTTP | Problem `type` slug | Note |
 | --- | --- | --- | --- |
-| `ErrStatusRegression` | — (consumer) | — | The order is not `SHIPPED`. On `PARTIALLY_SHIPPED` the model has no transition (hotspot H4): the delivery is recorded on the group, the status stays. |
+| `ErrIllegalTransition` | — (consumer) | — | The group is `CANCELLED`, `LOST` or `RETURNED` (terminal). Recorded and skipped. |
 
 - **Events emitted:** none. The verdict `PromiseKept` or `PromiseBroken` comes
   from `delivery-promise`.
 - **Idempotency:** inbox; a tracking number already delivered is a no-op.
+
+## MarkGroupLost and MarkGroupReturned
+
+- **Actor / trigger:** `shipping-and-tracking` declares a package lost or
+  returned (ADR 0002 A19).
+- **Inbound adapter:** Kafka consumer, types
+  `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` and
+  `PackageReturned`.
+- **Main flow:** the group is the one whose `FulfillmentShipped` announced the
+  tracking number (for EVERY group that shares it). `SHIPPED → LOST` or
+  `SHIPPED → RETURNED`, terminal; one lost or returned package closes the whole
+  group. The order status is re-derived: with no group still open it is
+  `DELIVERED`, `PARTIALLY_DELIVERED` (some delivered), `LOST` (none delivered,
+  some lost) or `RETURNED`.
+- **Errors:** a group that has not shipped, is `DELIVERED`, `CANCELLED` or already
+  closed by the other outcome is `ErrIllegalTransition`; a package already
+  reported delivered cannot be lost. All are recorded and skipped.
+- **Events emitted:** none.
+
+## ConfirmGroupCancelled and RefuseGroupCancellation
+
+- **Actor / trigger:** `order-sourcing` answers the cancel request.
+- **Inbound adapter:** Kafka consumer, types
+  `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled`
+  and `FulfillmentCancelRefused`.
+- **Main flow:** `FulfillmentCancelled` makes a `PROMISED`, `CANCELLATION_REQUESTED`
+  or `LOCKED` group `CANCELLED` (the order is `CANCELLED` when no group remains
+  outside `CANCELLED`); a group that already shipped is a status regression.
+  `FulfillmentCancelRefused` returns a `CANCELLATION_REQUESTED` group to `LOCKED`
+  with the refusal reason (the vendor ships).
+- **Errors:** recorded and skipped by the consumer.
+- **Events emitted:** none.
 
 ## UpdateGroupPromise
 

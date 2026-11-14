@@ -45,6 +45,10 @@ sequenceDiagram
     else new key
         H->>UC: Execute(shopperId, shipTo, lines, groups)
         UC->>UC: every line in one group, else ErrLineWithoutPromise
+        UC->>DB: shopper registered?
+        alt unknown shopperId
+            UC-->>H: 422 validation-failed, before any delivery-promise call
+        end
         loop each group
             UC->>PG: MakePromise(offerId, key from offerId)
             alt ErrOfferNotQuotable
@@ -104,27 +108,28 @@ sequenceDiagram
         H->>UC: Execute(orderId, reason)
         UC->>DB: load order and version
         alt not found
-            UC-->>H: 404 order-not-found
-        else already CANCELLED
-            UC-->>H: 200 unchanged, no event
+            UC-->>H: 404 not-found
         else found
-            UC->>A: CancelOrder(all groupNos, reason, now)
+            UC->>A: CancelOrder(reason, now)
             alt ErrCancelAfterLock
-                A-->>UC: error
+                A-->>UC: error, no group unlocked
                 UC-->>H: 409 cancel-after-lock
             else ErrStatusRegression
-                A-->>UC: error
+                A-->>UC: error, order DELIVERED, LOST or RETURNED
                 UC-->>H: 409 status-regression
+            else repeat, every group already requested or cancelled
+                A-->>UC: no change, no event
+                UC-->>H: 200 unchanged
             else allowed
-                A-->>UC: CANCELLED + CustomerOrderCancelled
+                A-->>UC: PROMISED groups now CANCELLATION_REQUESTED + CustomerOrderCancelled
                 UC->>DB: BEGIN, update where version matches
                 alt version changed
                     DB-->>UC: 0 rows, ROLLBACK
-                    UC->>UC: reload and retry once, then 409 stale-order
+                    UC->>UC: reload and retry once, then 409 concurrent-update
                 else saved
                     UC->>DB: insert outbox CustomerOrderCancelled
                     UC->>DB: store key response, COMMIT
-                    UC-->>H: 200 CANCELLED
+                    UC-->>H: 200 order, groups CANCELLATION_REQUESTED
                     K->>DB: poll outbox
                     K->>K: publish key orderId
                 end
@@ -135,53 +140,52 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[customer-ordering].aggregates[CustomerOrder]`
 (`CancelOrder`, `ErrCancelAfterLock`, `ErrStatusRegression`),
-`.publishes[CustomerOrderCancelled]`.
+`.policies[CancelIsARequest]`, `.publishes[CustomerOrderCancelled]`.
 
-Omitted: the relay marking the row published (as in diagram 1). A lock
+Omitted: the relay marking the row published (as in diagram 1). The request
+does not cancel anything by itself: `order-sourcing` answers with
+`FulfillmentCancelled` (the group becomes `CANCELLED`) or
+`FulfillmentCancelRefused` (the group returns to `LOCKED`). A lock
 `order-sourcing` made but this context has not consumed yet is not visible
 here (race, see [Use Cases](/network/contexts/customer-ordering/use-cases)).
 
-## 3. CancelOrder by policy CancelOnUnfulfillable (Kafka)
+## 3. CancelUnkeepableGroup by policy CancelOnUnfulfillable (Kafka PromiseUnkeepable)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
     participant KC as kafka consumer
-    participant UC as CancelOrder policy
+    participant UC as CancelOnUnfulfillable
     participant A as CustomerOrder
     participant DB as Postgres
     participant K as Relay / Kafka
     KC->>DB: processed_events has CloudEvents id?
     alt duplicate
         KC->>KC: ack, no effect
-    else new FulfillmentUnsourceable
-        KC->>UC: Execute(orderId, groupNo, promiseId)
-        UC->>DB: BEGIN, mark group awaiting re-promise, insert inbox row, COMMIT
-        Note over UC: waits for PromiseRevised or for the not-feasible condition, which no model event signals
-        opt not-feasible condition holds
-            UC->>DB: load order and version
-            UC->>A: CancelOrder(groupNo, reason, now)
-            alt ErrCancelAfterLock or ErrStatusRegression
-                A-->>UC: error
-                UC->>UC: log anomaly, no event
-            else allowed
-                A-->>UC: group cancelled + CustomerOrderCancelled
-                UC->>DB: BEGIN, update where version matches
-                UC->>DB: insert outbox CustomerOrderCancelled, COMMIT
-                K->>DB: poll outbox
-                K->>K: publish key orderId
-            end
+    else new PromiseUnkeepable
+        KC->>UC: Execute(orderId, groupNo, promiseId, reason)
+        UC->>DB: load order and version
+        UC->>A: CancelUnkeepableGroup(groupNo, reason, now)
+        alt group not PROMISED (ErrIllegalTransition) or unknown order or group
+            A-->>UC: error
+            UC->>DB: insert inbox row, log skipped, COMMIT
+        else PROMISED
+            A-->>UC: group CANCELLED + CustomerOrderCancelled(groupNos=[groupNo])
+            UC->>DB: BEGIN, update where version matches
+            UC->>DB: insert outbox CustomerOrderCancelled, inbox row, COMMIT
+            K->>DB: poll outbox
+            K->>K: publish key orderId
         end
     end
 ```
 
 Derived from: `model.yaml → contexts[customer-ordering].policies[CancelOnUnfulfillable]`,
-`.consumes` (`FulfillmentUnsourceable`), `.publishes[CustomerOrderCancelled]`.
+`.consumes` (`PromiseUnkeepable`), `.publishes[CustomerOrderCancelled]`.
 
-Omitted: the version-conflict retry (as in diagram 2). The trigger of the
-`opt` block is the model gap recorded as hotspot H6 on
-[EventStorming](/network/contexts/customer-ordering/eventstorming).
+Omitted: the version-conflict retry (as in diagram 2). `FulfillmentUnsourceable`
+does not reach this use case: the consumer only records its reason on the
+tracking view.
 
 ## 4. RegisterShopper (REST POST /shoppers)
 
@@ -236,11 +240,11 @@ sequenceDiagram
             UC-->>KC: retry later, then dead-letter
         else found
             UC->>A: MarkInFulfillment(groupNo, assignmentId, lockedAt)
-            alt ErrStatusRegression
-                A-->>UC: error, for example CANCELLED
-                UC->>DB: insert inbox row, log anomaly, COMMIT
+            alt ErrStatusRegression or ErrIllegalTransition
+                A-->>UC: error, group already SHIPPED or closed, or CANCELLED
+                UC->>DB: insert inbox row, log skipped, COMMIT
             else ok
-                A-->>UC: group locked, PLACED to IN_FULFILLMENT
+                A-->>UC: group locked, order status re-derived (PLACED to IN_FULFILLMENT)
                 UC->>DB: BEGIN, update where version matches
                 alt version changed
                     DB-->>UC: 0 rows, ROLLBACK, redeliver
@@ -277,14 +281,11 @@ sequenceDiagram
         KC->>UC: Execute(orderId, groupNo, trackingNumbers, shippedAt)
         UC->>DB: load order and version
         UC->>A: MarkGroupShipped(groupNo, trackingNumbers, shippedAt)
-        alt ErrStatusRegression on PLACED
-            A-->>UC: error, lock not seen yet
-            UC-->>KC: retry later
-        else ErrStatusRegression on CANCELLED
-            A-->>UC: error
-            UC->>DB: insert inbox row, log anomaly, COMMIT
+        alt ErrStatusRegression or ErrIllegalTransition
+            A-->>UC: error, group DELIVERED, LOST or RETURNED, or CANCELLED
+            UC->>DB: insert inbox row, log skipped, COMMIT (never retried)
         else ok
-            A-->>UC: PARTIALLY_SHIPPED or SHIPPED
+            A-->>UC: group SHIPPED from PROMISED, LOCKED or CANCELLATION_REQUESTED, status re-derived
             UC->>DB: BEGIN, update where version matches
             alt version changed
                 DB-->>UC: 0 rows, ROLLBACK, redeliver
@@ -297,9 +298,10 @@ sequenceDiagram
 ```
 
 Derived from: `model.yaml → contexts[customer-ordering].aggregates[CustomerOrder]`
-(`MarkGroupShipped`, transitions), `.consumes` (`FulfillmentShipped`).
+(`MarkGroupShipped`, transitions), `.policies[ShipmentWinsOverUnlockedAndCancelRequested]`,
+`.consumes` (`FulfillmentShipped`).
 
-Omitted: the order-not-found branch (as in diagram 5) and the tracking
+Omitted: the not-found branch (as in diagram 5) and the tracking
 projection.
 
 ## 7. MarkGroupDelivered (Kafka PackageDelivered)
@@ -318,14 +320,11 @@ sequenceDiagram
     else new
         KC->>UC: Execute(orderId, assignmentId, trackingNumber, deliveredAt)
         UC->>DB: load order and version, group by assignmentId
-        UC->>A: record package delivered
-        alt every package of the group delivered
-            UC->>A: MarkGroupDelivered(groupNo, deliveredAt)
-            alt ErrStatusRegression, order not SHIPPED
-                A-->>UC: error, delivery kept on the group
-            else ok
-                A-->>UC: DELIVERED once every group is
-            end
+        UC->>A: MarkGroupDelivered(groupNo, trackingNumber, deliveredAt)
+        alt ErrIllegalTransition, group CANCELLED, LOST or RETURNED
+            A-->>UC: error, recorded and skipped
+        else ok
+            A-->>UC: group DELIVERED once every package is; order PARTIALLY_DELIVERED or DELIVERED
         end
         UC->>DB: BEGIN, update where version matches
         alt version changed
@@ -340,9 +339,9 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[customer-ordering].aggregates[CustomerOrder]`
 (`MarkGroupDelivered`, transitions), `.consumes` (`PackageDelivered`).
 
-Omitted: the order-not-found branch and the tracking projection. On
-`PARTIALLY_SHIPPED` the model has no transition (hotspot H4), so the status
-stays.
+Omitted: the not-found branch and the tracking projection. The order
+status is re-derived from the group states (`PARTIALLY_DELIVERED` while another
+group is open), so a delivery on a `PARTIALLY_SHIPPED` order changes it.
 
 ## 8. UpdateGroupPromise (Kafka PromiseRevised)
 
