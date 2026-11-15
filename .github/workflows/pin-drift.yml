@@ -1,0 +1,74 @@
+name: Pin drift
+
+# Fleet-wide, read-only report of stale consumer contract pins. Every consumer repo pins its producers'
+# apis/openapi.yaml|asyncapi.yaml as byte-copies (contracts/pinned.json); the consumer's own CI gate only runs
+# when a PR does, so a producer spec merge otherwise surfaces as an UNRELATED consumer PR going red.
+# scripts/pin-drift-report.py compares every pin with its producer through the GitHub API and this job keeps ONE
+# tracking issue ("Pin drift report", label contract-pin-drift) up to date: created or updated in place while
+# drift exists, closed when the fleet is clean, reopened when drift returns. It never opens PRs in other repos
+# (GITHUB_TOKEN cannot, and the fleet has no PAT/App for it): the refresh stays a human- or agent-triggered
+# runbook, docs/architecture/consumer-contract-testing.md#refresh-runbook. No secrets; org repos are public.
+on:
+  schedule:
+    - cron: "0 7 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: pin-drift
+  cancel-in-progress: false
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      LABEL: contract-pin-drift
+      TITLE: Pin drift report
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - run: python3 scripts/test_pin_drift_report.py
+      - name: Scan every consumer's pins against its producers
+        # exit 0 = the scan ran (drift is reported, not failed); exit 2 = API/auth failure, the job goes red
+        run: |
+          set -euo pipefail
+          python3 scripts/pin-drift-report.py --json "$RUNNER_TEMP/pin-drift.json" > "$RUNNER_TEMP/report.md"
+          tee -a "$GITHUB_STEP_SUMMARY" < "$RUNNER_TEMP/report.md"
+          echo "CLEAN=$(python3 -c "import json,sys;print(str(json.load(open(sys.argv[1]))['clean']).lower())" "$RUNNER_TEMP/pin-drift.json")" >> "$GITHUB_ENV"
+      - name: Create, update or close the tracking issue
+        run: |
+          set -euo pipefail
+          gh label create "$LABEL" --force --color D93F0B \
+            --description "Stale consumer contract pin (maintained by .github/workflows/pin-drift.yml)"
+          # one tracking issue, found by the fixed label (any state), oldest first
+          num=$(gh issue list --label "$LABEL" --state all --limit 100 --json number,title \
+                  -q "[.[] | select(.title == env.TITLE)] | sort_by(.number) | .[0].number // empty")
+          state=""
+          [ -n "$num" ] && state=$(gh issue view "$num" --json state -q .state)
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          # issue bodies are capped at 65536 characters; the full report is in the run's step summary
+          head -c 60000 "$RUNNER_TEMP/report.md" > "$RUNNER_TEMP/body.md"
+          if [ "$(wc -c < "$RUNNER_TEMP/report.md")" -gt 60000 ]; then
+            printf '\n\n_Report truncated; the full text is in the run summary._\n' >> "$RUNNER_TEMP/body.md"
+          fi
+          printf '\n---\nUpdated by [pin-drift.yml](%s) (run %s). This issue is rewritten on every run; do not edit it by hand.\n' \
+            "$run_url" "$GITHUB_RUN_ID" >> "$RUNNER_TEMP/body.md"
+          if [ "$CLEAN" = true ]; then
+            if [ "$state" = OPEN ]; then
+              gh issue edit "$num" --body-file "$RUNNER_TEMP/body.md"
+              gh issue close "$num" --comment "Every pin equals its producer's file again ($run_url)."
+            else
+              echo "clean, and no open tracking issue: nothing to do"
+            fi
+          elif [ -z "$num" ]; then
+            gh issue create --title "$TITLE" --label "$LABEL" --body-file "$RUNNER_TEMP/body.md"
+          else
+            gh issue edit "$num" --body-file "$RUNNER_TEMP/body.md"
+            if [ "$state" = CLOSED ]; then
+              gh issue reopen "$num" --comment "Pin drift is back ($run_url)."
+            fi
+          fi
