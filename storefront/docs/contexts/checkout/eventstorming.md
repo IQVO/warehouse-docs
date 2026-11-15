@@ -42,7 +42,7 @@ flowchart TB
     G1["CheckoutSession<br/>OPEN"]:::aggregate
     E1["CheckoutOpened"]:::event
     AN(["analytics"]):::actor
-    ERR["ErrOfferNotQuotable<br/>422 offer-not-quotable<br/>no state change"]:::aggregate
+    ERR["ErrOfferNotQuotable<br/>422 offer-not-quotable<br/>no session, no state change"]:::aggregate
 
     S --> C0
     C0 -->|"qry GetCart,<br/>ErrCartNotCheckoutReady"| SC
@@ -53,7 +53,7 @@ flowchart TB
     PR -->|"binding quote,<br/>lines 1..n, groups"| G1
     G1 --> E1
     E1 --> AN
-    DP -->|"an offer not QUOTED<br/>at the pre-authorize check"| ERR
+    DP -->|"an offer not QUOTED<br/>or expiring within 2 min"| ERR
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000
     classDef command fill:#a5d8ff,stroke:#1971c2,color:#000
@@ -68,10 +68,12 @@ Derived from: `model.yaml → contexts[checkout].inbound` (BFF cmd row),
 `.publishes[CheckoutOpened]`; gap S1 and S2 on the
 [Model Gap Register](/storefront/strategic-design/model-gap-register).
 
-The pre-authorize `GetDeliveryOffer` check is repeated at confirm; an offer
-that is no longer `QUOTED` (with margin) fails with `ErrOfferNotQuotable`
-(`422 offer-not-quotable`), changes no state, and the BFF refreshes the cart
-quote. `REQUOTE_REQUIRED` stays a `PLACING`-time `409` only.
+The `GetDeliveryOffer` check runs once, at open. An offer that is not `QUOTED`,
+or expires within 2 minutes, fails with `ErrOfferNotQuotable`
+(`422 offer-not-quotable`), creates no session, changes no state, and the BFF
+refreshes the cart quote. The check is not repeated at confirm: an offer that
+expires between open and confirm comes back from `customer-ordering` as a
+`PLACING`-time `409`, which is the only way to reach `REQUOTE_REQUIRED`.
 
 Omitted: the `503` when a dependency is unreachable, and the outbox. The
 price quote is binding and expiring; its expiry becomes the session's
@@ -82,7 +84,7 @@ price quote is binding and expiring; its expiry becomes the session's
 ```mermaid
 flowchart TB
     S["Shopper<br/>via storefront-bff"]:::actor
-    C1["ConfirmSession<br/>POST ...:confirm<br/>ErrPriceQuoteExpired"]:::command
+    C1["ConfirmSession<br/>POST .../confirmations<br/>ErrPriceQuoteExpired (422)"]:::command
     G1["CheckoutSession<br/>OPEN to AUTHORIZING"]:::aggregate
     CP["customer-payments"]:::external
     C2["RecordAuthorization<br/>ErrAuthorizationMismatch"]:::command
@@ -167,10 +169,16 @@ bullet), `.aggregates[CheckoutSession].transitions` (`RecordDecline`,
 `DECLINED → AUTHORIZING`), `.publishes[CheckoutDeclined]`;
 `contexts[customer-payments].publishes[PaymentDeclined]`.
 
-A decline voids nothing: no authorization exists. The session stays open for
+A decline from `customer-payments` voids nothing: no authorization exists. (A
+session also goes to `DECLINED` through `RecordAuthorization` when the
+authorized amount or currency is not the quote's, reason
+`authorization-mismatch`; that authorization does exist, so `voidOwed` is set
+with the decision, the void is attempted at once, the call answers `409
+authorization-mismatch`, and a new confirm is refused with `409 void-pending`
+until the void has succeeded.) The session stays open for
 as long as the price quote is valid; `DECLINED → EXPIRED` is a modelled
 transition (`ExpireSession`). Each `DECLINED → AUTHORIZING` increments the
-session field `authAttempt`, so a retry with another token is a new attempt
+session field `authAttempt` (it starts at 0), so a retry with another token is a new attempt
 under a new key `<sessionId>:auth:<authAttempt>` and is never answered with the
 first, declined response, while a stuck call replays the same key.
 
@@ -275,7 +283,8 @@ driving the clock). The timeline is ordered: the alert at 20 h, then
 before the network's 24 h idempotency window closes. `Void` is idempotent, so
 a race between the resolver and the backstop is harmless.
 `RecordPlacementInDoubt` raises the analytics-only
-`CheckoutPlacementInDoubt`.
+`CheckoutPlacementInDoubt` on the first unknown outcome only (it carries
+`placingSince`); later resolver passes that still get no answer raise nothing.
 
 ## 6. Expiry and terminal states
 
@@ -320,12 +329,12 @@ with its quote.
 | # | Hotspot | Where it comes from in the model |
 | --- | --- | --- |
 | H1 | **Resolved in the model-fix:** `DECLINED → EXPIRED` is a transition (`ExpireSession`, policy `ExpireOnQuoteExpiry`). `DECLINED` is not closed: it retries with another token or expires. `ErrSessionClosed` lists `COMPLETED`, `EXPIRED`, `FAILED` and `REQUOTE_REQUIRED` only. | `policies[ExpireOnQuoteExpiry]` vs `aggregates[CheckoutSession].transitions` |
-| H2 | **Resolved in the model-fix:** `AuthorizePayment` is keyed `<sessionId>:auth:<authAttempt>`. The session field `authAttempt` starts at 1 and is incremented on each `DECLINED → AUTHORIZING`, so a retry with another token is a new attempt while a stuck call replays the same key. | `sync_calls[AuthorizePayment]` (note), `transitions` (`DECLINED → AUTHORIZING`), `customer-payments` `ErrDuplicateAuthorization` |
-| H3 | **Resolved in the model-fix:** `ErrOfferNotQuotable` (`422 offer-not-quotable`) is raised by the pre-authorize `GetDeliveryOffer` check; no state change, the BFF refreshes the cart quote. `REQUOTE_REQUIRED` stays a `PLACING`-time `409` only. | `sync_calls[GetDeliveryOffer]` (note) vs `transitions`, `invariants` |
+| H2 | **Resolved in the model-fix:** `AuthorizePayment` is keyed `<sessionId>:auth:<authAttempt>`. The session field `authAttempt` starts at 0 and is incremented on each `DECLINED → AUTHORIZING`, so a retry with another token is a new attempt while a stuck call replays the same key. | `sync_calls[AuthorizePayment]` (note), `transitions` (`DECLINED → AUTHORIZING`), `customer-payments` `ErrDuplicateAuthorization` |
+| H3 | **Resolved in the model-fix:** `ErrOfferNotQuotable` (`422 offer-not-quotable`) is raised by the `GetDeliveryOffer` check at open (an offer not `QUOTED` or expiring within 2 minutes); no session, no state change, the BFF refreshes the cart quote. The check is not repeated at confirm; `REQUOTE_REQUIRED` stays a `PLACING`-time `409` only. | `sync_calls[GetDeliveryOffer]` (note) vs `transitions`, `invariants` |
 | H4 | **Resolved in the model-fix:** the policy `ResolveStuckAuthorizations` re-calls `AuthorizePayment` with the same key for a session in `AUTHORIZING` for more than 2 minutes; `customer-payments`' 24 h void stays the backstop. | `transitions`, `contexts[customer-payments].policies` |
-| H5 | **Resolved in the model-fix:** the session field `voidOwed` (`authorizationId`) is set in the same transaction as the decision to void (definitive `409`, `422`, `ErrAuthorizationMismatch`); the policy `RetryOwedVoids` retries every minute until success. `Void` is idempotent. | `sync_calls[VoidAuthorization]`, `storefront/apis/checkout/openapi.yaml` |
+| H5 | **Resolved in the model-fix:** the session field `voidOwed` (`authorizationId`) is set in the same transaction as the decision to void (definitive `409`, `422`, `ErrAuthorizationMismatch`); the policy `RetryOwedVoids` retries every minute until success. `Void` is idempotent. After an authorization mismatch the session is `DECLINED` and a new confirm is refused with `409 void-pending` until the void has succeeded. | `sync_calls[VoidAuthorization]`, `storefront/apis/checkout/openapi.yaml` |
 | H6 | **Resolved in the model-fix:** an ordered timeline: alert at 20 h, `ResolveInDoubtPlacements` gives up and voids at 22 h, `customer-payments` `VoidUnboundAuthorizations` backstop at 24 h. A race between the two voids is harmless. | `policies[ResolveInDoubtPlacements]` vs `contexts[customer-payments].policies[VoidUnboundAuthorizations]` |
-| H7 | **Resolved in the model-fix:** two new analytics-only events, `CheckoutSessionExpired` (`ExpireSession`) and `CheckoutPlacementInDoubt` (`RecordPlacementInDoubt`). `ConfirmSession` and `RecordAuthorization` stay eventless: `CheckoutCompleted` already covers the outcome. | `aggregates[CheckoutSession].commands` vs `publishes` |
+| H7 | **Resolved in the model-fix:** two new analytics-only events, `CheckoutSessionExpired` (`ExpireSession`) and `CheckoutPlacementInDoubt` (`RecordPlacementInDoubt`, raised on the first unknown outcome only). `ConfirmSession` and `RecordAuthorization` stay eventless: `CheckoutCompleted` already covers the outcome. | `aggregates[CheckoutSession].commands` vs `publishes` |
 | H8 | `shipToAddressId` (NG1), `offer-not-quotable` and `requotedOffers` are named by the storefront model; the network model did not carry them when this pack was written. **Resolved:** the network model's customer-ordering rows and customer-ordering's `apis/openapi.yaml` on develop now carry all three (`POST /checkout`). | `sync_calls[PlaceOrder]`, `business_decisions`, `meta.hard_boundary` vs `network/model/model.yaml → contexts[customer-ordering]` |
 | H9 | **Resolved in the model-fix:** the value object `StoredPlacement{requestBody, requestHash, placingSince}`; the PII-free request replayed byte for byte, `placingSince` drives the 20 h alert, purged 24 h after a terminal state. | `purpose`, `aggregates[CheckoutSession].description`, `.size_estimate` |
 | H10 | The REST contract says the BFF writes `requotedOffers` into the cart as a new quote, but the cart's commands quote only through `delivery-promise` (`QuoteDelivery`); none accepts an offer set from outside. **Resolved in the model and built:** shopping-cart's `AcceptRequotedOffers` (`POST /carts/{cartId}/delivery-requote-acceptances`); `storefront-bff` has no route that calls it yet. | `storefront/apis/checkout/openapi.yaml` (`CheckoutSession.requotedOffers`) vs `contexts[shopping-cart].aggregates[Cart].commands` |

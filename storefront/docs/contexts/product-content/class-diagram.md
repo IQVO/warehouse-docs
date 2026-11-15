@@ -53,7 +53,7 @@ classDiagram
         <<Enumeration>>
         DISCARDED
         DISCONTINUED
-        RETIRED_BY_HAND
+        MANUAL
     }
     class Attribute {
         <<ValueObject>>

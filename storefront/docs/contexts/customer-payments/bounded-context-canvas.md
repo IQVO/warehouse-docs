@@ -134,7 +134,7 @@ To move money with the shipment facts. The context:
 | Role | Applies? | Evidence in the model |
 | --- | --- | --- |
 | **Execution (authorize, capture, void, refund)** | **Yes, primary** | The `PaymentAuthorization` and `Refund` aggregates and the five provider verbs; `ErrOverCapture` and `ErrOverRefund` guard the money moving. |
-| **Enforcer (never two holds for one session)** | **Yes** | `ErrDuplicateAuthorization`: one authorization per checkout session, a replay returns it. |
+| **Enforcer (never two holds for one session)** | **Yes** | `ErrDuplicateAuthorization`: one authorization per checkout session; a sequential replay returns the existing one (`200`), the error is raised only on the concurrent-insert race (`409`). |
 | Analysis | No | The only read model, `ParkedFulfillmentFacts`, holds facts to apply, not a verdict others consume. |
 | Specification | No | The amounts are decided by [pricing](/storefront/contexts/pricing) and carried by `checkout`; this context never computes a price. |
 
@@ -213,7 +213,7 @@ Token** (never a card number).
 
 ## Assumptions
 
-- `checkout` mints `<sessionId>:auth` and `<sessionId>:void` as the
+- `checkout` mints `<sessionId>:auth:<authAttempt>` and `<sessionId>:void` as the
   `Idempotency-Key` of its two writes (checkout's `sync_calls` notes); a
   replay of the same key returns the stored response of the first call.
 - `checkout` calls `VoidAuthorization` only after a definitive rejection of

@@ -76,7 +76,7 @@ flowchart LR
     BC -.->|"qry - REST<br/>GET /carts/{cartId}<br/>GetCart"| out0
     BC -.->|"qry - REST<br/>GET /delivery-offers/{offerId}<br/>GetDeliveryOffer"| out3
     BC -->|"cmd - REST<br/>POST /price-quotes<br/>IssuePriceQuote"| out1
-    BC -->|"cmd - REST<br/>POST /payment-authorizations, :void<br/>AuthorizePayment, VoidAuthorization"| out2
+    BC -->|"cmd - REST<br/>POST /payment-authorizations, .../voids<br/>AuthorizePayment, VoidAuthorization"| out2
     BC -->|"cmd - REST via ACL<br/>POST /checkout<br/>PlaceOrder"| out4
     BC ==>|"evt - Kafka<br/>retailnetwork.checkout.events<br/>CheckoutCompleted"| out0
     BC ==>|"evt - Kafka<br/>retailnetwork.checkout.events<br/>CheckoutCompleted"| out2
@@ -107,8 +107,9 @@ message (see the tables). The model lists no consumed event for this context
 
 To run the purchase saga. The context:
 
-- opens a session from a cart: reads the cart snapshot, pre-checks that every
-  selected offer is still `QUOTED` with margin, obtains the binding
+- opens a session from a cart: reads the cart snapshot, pre-checks (once, at
+  open) that every selected offer is still `QUOTED` and does not expire within
+  2 minutes, obtains the binding
   `PriceQuote`, numbers the lines `1..n` and groups them by the quote's
   `groupNo` (gap S1);
 - on confirm authorizes the quote total with an allocation per group, then
@@ -132,7 +133,7 @@ To run the purchase saga. The context:
 | Role | Applies? | Evidence in the model |
 | --- | --- | --- |
 | **Execution (saga orchestration)** | **Yes, primary** | The `CheckoutSession` aggregate: `OpenSession` through `ExpireSession`, one record of where the purchase stands, plus the two policies. |
-| **Enforcer (no two holds on a card for one session)** | **Yes** | The deterministic `Idempotency-Key` `<sessionId>:auth` on `AuthorizePayment`, the `PLACING` semantic lock (`ErrPlacementInDoubt`) and `customer-payments`' one-authorization-per-session invariant. |
+| **Enforcer (no two holds on a card for one session)** | **Yes** | The deterministic `Idempotency-Key` `<sessionId>:auth:<authAttempt>` on `AuthorizePayment`, the `PLACING` semantic lock (`ErrPlacementInDoubt`) and `customer-payments`' one-authorization-per-session invariant. |
 | Analysis | No | The cart's readiness is [shopping-cart](/storefront/contexts/shopping-cart)'s fact; checkout only enforces it (`ErrCartNotCheckoutReady`). |
 | Specification | No | Prices, charges and tax are [pricing](/storefront/contexts/pricing)'s specification. |
 
@@ -158,7 +159,7 @@ the answers of its outbound calls and from the two policies.
 | `shopping-cart` | `GetCart` | Query | REST `GET /carts/{cartId}` | Customer/Supplier (we are the Customer) |
 | `delivery-promise` (network) | `GetDeliveryOffer` | Query | REST `GET /delivery-offers/{offerId}` (pre-check that every selected offer is still `QUOTED`, with margin) | Open Host Service; we are the Customer |
 | `pricing` | `IssuePriceQuote` | Command | REST `POST /price-quotes` | Customer/Supplier (we are the Customer) |
-| `customer-payments` | `AuthorizePayment` | Command | REST `POST /payment-authorizations` (`Idempotency-Key` `<sessionId>:auth`, allocations per group) | Customer/Supplier (we are the Customer) |
+| `customer-payments` | `AuthorizePayment` | Command | REST `POST /payment-authorizations` (`Idempotency-Key` `<sessionId>:auth:<authAttempt>`, allocations per group) | Customer/Supplier (we are the Customer) |
 | `customer-payments` | `VoidAuthorization` | Command | REST `POST /payment-authorizations/{authorizationId}/voids` (`Idempotency-Key` `<sessionId>:void`; only after a definitive rejection) | Customer/Supplier (we are the Customer) |
 | `customer-ordering` (network) | `PlaceOrder` | Command | REST `POST /checkout` through the ACL (`internal/adapters/outbound/customerordering`); `Idempotency-Key` is the `sessionId`; `shipToAddressId` (NG1), never an inline address | Open Host Service behind an Anti-Corruption Layer; we are the Customer |
 | `shopping-cart`, `customer-payments` | `CheckoutCompleted` | Event | Kafka `retailnetwork.checkout.events`, `com.retailnetwork.storefront.checkout.checkoutsession.CheckoutCompleted` | Customer/Supplier (we are the Supplier) |
@@ -195,10 +196,12 @@ Top terms: **Checkout Session**, **Place-Order Step** (the network's
    `Idempotency-Key` until a definitive answer; alert at 20 h, before the
    network's 24 h idempotency window.
 5. **The cart must be ready, the quote unexpired.** `ErrCartNotCheckoutReady`
-   at open, `ErrPriceQuoteExpired` at confirm, and `ExpireOnQuoteExpiry`
+   at open, `ErrPriceQuoteExpired` (`422`) at confirm, and `ExpireOnQuoteExpiry`
    ends an open or declined session with its quote.
 6. **The authorized amount equals the quote total**
-   (`ErrAuthorizationMismatch`).
+   (`ErrAuthorizationMismatch`): a mismatch returns the session to `DECLINED`
+   with the void owed and answers `409`; a new confirm is refused with
+   `409 void-pending` until the void has succeeded.
 7. **A closed session never changes** (`ErrSessionClosed`): `COMPLETED`,
    `EXPIRED`, `FAILED` and `REQUOTE_REQUIRED` allow no transition out.
 8. **No PII.** The session holds `shopperId` and `shipToAddressId`; the
@@ -232,7 +235,7 @@ Top terms: **Checkout Session**, **Place-Order Step** (the network's
 | `FAILED` sessions (contract bug) | 0; each one alerts | `CheckoutFailed` |
 | Sessions in `PLACING` and their age | 0 older than 20 h; alert at 20 h, before the network's 24 h window | `checkout_sessions.state`, `updated_at` |
 | Sessions with an authorization and no `orderId` after a definitive answer | 0 | `authorizationId` vs `orderId` |
-| Authorization/void calls per session | one authorization key per session (`<sessionId>:auth`) | `customer-payments` metrics |
+| Authorization/void calls per session | one authorization key per attempt (`<sessionId>:auth:<authAttempt>`) | `customer-payments` metrics |
 | Outbox age of the oldest unpublished checkout event | below 5 s | `outbox_events.created_at` |
 
 ## Open Questions
@@ -241,13 +244,15 @@ Top terms: **Checkout Session**, **Place-Order Step** (the network's
   `ExpireOnQuoteExpiry` covers an `OPEN` or `DECLINED` session, but the
   transition list holds only `OPEN → EXPIRED` (hotspot H1 on
   [EventStorming](/storefront/contexts/checkout/eventstorming)).
-- **What key does the second authorize use?** `AuthorizePayment` is keyed
-  `<sessionId>:auth`, and a decline returns the session to `AUTHORIZING` for
-  another token; the model does not say whether the second attempt reuses the
-  key (hotspot H2).
-- **What if the pre-check fails before authorizing?** `REQUOTE_REQUIRED` is
-  reachable only from `PLACING`; the model has no outcome for an offer that is
-  no longer `QUOTED` at open or confirm (hotspot H3).
+- **What key does the second authorize use?** Resolved (hotspot H2):
+  `AuthorizePayment` is keyed `<sessionId>:auth:<authAttempt>`; `authAttempt`
+  starts at 0 and grows on each `DECLINED → AUTHORIZING`, so a retry with
+  another token is a new attempt while a stuck call replays the same key.
+- **What if the pre-check fails before authorizing?** Resolved (hotspot H3):
+  `offer-not-quotable` (`422`) at open, no session and no state change. The
+  check is not repeated at confirm; an offer that expires between open and
+  confirm comes back from `customer-ordering` as a `PLACING`-time `409`,
+  the only way to `REQUOTE_REQUIRED`.
 - **What ends `AUTHORIZING` if the authorize outcome is unknown?** No
   transition leaves `AUTHORIZING` for a timeout; `customer-payments` only
   voids unbound authorizations after 24 h (hotspot H4).

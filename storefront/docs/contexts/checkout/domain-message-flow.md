@@ -38,7 +38,7 @@ sequenceDiagram
     SC-->>CK: qry: reply cart, version,<br/>groups, selections, readiness
     Note over CK: ErrCartNotCheckoutReady<br/>when readiness does not hold
     CK->>DP: qry: GetDeliveryOffer<br/>per selected offer
-    DP-->>CK: qry: reply offer still QUOTED<br/>with margin
+    DP-->>CK: qry: reply offer still QUOTED<br/>(or ErrOfferNotQuotable, 422)
     CK->>PR: cmd: IssuePriceQuote<br/>POST /price-quotes
     PR-->>CK: cmd: reply binding quote,<br/>total, expiresAt
     Note over CK: lines numbered 1..n,<br/>groups by the quote groupNo,<br/>session OPEN
@@ -56,10 +56,12 @@ Derived from: `model.yaml → contexts[checkout].inbound` (BFF rows),
 Omitted: the outbox write and relay (see
 [Sequence Diagrams](/storefront/contexts/checkout/sequence-diagrams)); the
 `503` the REST contract names when one of the three dependencies is
-unreachable (the shopper retries with the same `Idempotency-Key`); what
-happens when an offer is no longer `QUOTED` at this pre-check, which the
-model does not define (hotspot H3 on
-[EventStorming](/storefront/contexts/checkout/eventstorming)).
+unreachable (the shopper retries with the same `Idempotency-Key`); and the
+case where an offer is not `QUOTED`, or expires within 2 minutes, at this
+pre-check: `ErrOfferNotQuotable`, `422 offer-not-quotable`, no session and no
+state change (hotspot H3, resolved, on
+[EventStorming](/storefront/contexts/checkout/eventstorming)). The check runs
+at open only; confirm does not repeat it.
 
 ## 2. Confirm: authorize, place the order, complete
 
@@ -73,11 +75,11 @@ sequenceDiagram
     participant CO as customer-ordering
     participant K as Kafka
     participant SC as shopping-cart
-    BFF->>CK: cmd: ConfirmSession<br/>POST :confirm, token
+    BFF->>CK: cmd: ConfirmSession<br/>POST /checkout-sessions/sessionId/confirmations, token
     Note over CK: ErrPriceQuoteExpired<br/>OPEN to AUTHORIZING
-    CK->>CP: cmd: AuthorizePayment<br/>key sessionId:auth,<br/>allocations per group
+    CK->>CP: cmd: AuthorizePayment<br/>key sessionId:auth:authAttempt,<br/>allocations per group
     CP-->>CK: cmd: reply authorizationId, total
-    Note over CK: RecordAuthorization<br/>ErrAuthorizationMismatch<br/>AUTHORIZING to PLACING,<br/>placement request stored
+    Note over CK: RecordAuthorization<br/>AUTHORIZING to PLACING,<br/>placement request stored<br/>(a mismatch is DECLINED, void owed,<br/>409 authorization-mismatch)
     CK->>CO: cmd: PlaceOrder via ACL<br/>POST /checkout<br/>key sessionId
     CO-->>CK: cmd: reply orderId
     Note over CK: RecordPlaced<br/>PLACING to COMPLETED
@@ -120,7 +122,7 @@ sequenceDiagram
     Note over BFF: the shopper picks another<br/>payment method while the<br/>price quote is valid
     BFF->>CK: cmd: ConfirmSession<br/>second payment method token
     Note over CK: ErrPriceQuoteExpired<br/>if the quote has lapsed<br/>DECLINED to AUTHORIZING
-    CK->>CP: cmd: AuthorizePayment<br/>POST /payment-authorizations
+    CK->>CP: cmd: AuthorizePayment<br/>POST /payment-authorizations<br/>new key (authAttempt + 1)
     CP-->>CK: cmd: reply authorizationId
     Note over CK: RecordAuthorization<br/>AUTHORIZING to PLACING,<br/>then scenario 2 from the place-order step
 ```
@@ -132,10 +134,11 @@ decline keeps the session open), `.aggregates[CheckoutSession].transitions`
 
 A decline voids nothing, because no authorization exists. The quote is the
 clock: the session stays open for as long as the binding price quote is valid,
-and `ExpireOnQuoteExpiry` is meant to end it afterwards. Omitted: whether the second `AuthorizePayment` can reuse the key
-`sessionId:auth`, which would replay the first, declined answer; the model does
-not say (hotspot H2), and the missing `DECLINED → EXPIRED` transition
-(hotspot H1).
+and `ExpireOnQuoteExpiry` ends it afterwards (`DECLINED → EXPIRED`, hotspot
+H1, resolved). The second `AuthorizePayment` is a new attempt: `authAttempt`
+(which starts at 0) is incremented on `DECLINED → AUTHORIZING`, so the key
+`<sessionId>:auth:<authAttempt>` differs and the first, declined answer is not
+replayed (hotspot H2, resolved).
 
 ## 4. A late requote, or a contract failure
 
@@ -153,7 +156,7 @@ sequenceDiagram
     alt definitive 409, offer no longer quotable
         CO-->>CK: cmd: reply 409 with requoted offers
         Note over CK: the ACL maps it to a requote<br/>a definitive rejection allows a void
-        CK->>CP: cmd: VoidAuthorization<br/>POST :void<br/>key sessionId:void
+        CK->>CP: cmd: VoidAuthorization<br/>POST .../voids<br/>key sessionId:void
         CP-->>CK: cmd: reply voided
         Note over CK: RecordRequoteRequired<br/>PLACING to REQUOTE_REQUIRED
         CK->>K: evt: checkoutsession.CheckoutRequoteRequired

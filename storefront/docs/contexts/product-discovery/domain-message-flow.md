@@ -30,12 +30,12 @@ sequenceDiagram
     autonumber
     actor SH as Shopper (BFF)
     participant PD as product-discovery
-    SH->>PD: qry: SearchProducts<br/>GET /products q, filters, sort, after, limit
+    SH->>PD: qry: SearchProducts<br/>GET /products q, filters, sort, cursor, limit
     Note over PD: tsvector weights title A,<br/>category names A, attributes B,<br/>description C, facets category,<br/>price band, in-stock
     alt full-text search returns too little
         Note over PD: pg_trgm similarity fallback<br/>(trigger not modelled)
     end
-    PD-->>SH: qry: reply hits, facets,<br/>categorySuggestions
+    PD-->>SH: qry: reply items, facets,<br/>categorySuggestions, nextCursor
     Note over PD: a product-type query also<br/>answers with categories (benchmark 6)
 ```
 
@@ -171,9 +171,9 @@ sequenceDiagram
     OA-->>PD: qry: reply listings
     loop paged
         PD->>PR: qry: ListItemPrices<br/>GET /item-prices
-        PR-->>PD: qry: reply page + next
+        PR-->>PD: qry: reply page + nextCursor
         PD->>PC: qry: ListProductContents<br/>GET /product-contents
-        PC-->>PD: qry: reply page + next
+        PC-->>PD: qry: reply page + nextCursor
     end
     Note over PD: snapshot loaded, guards seeded<br/>(snapshot shapes not modelled)
     K->>PD: evt: catch-up on all three topics<br/>from the recorded offsets
