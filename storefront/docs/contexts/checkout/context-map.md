@@ -32,7 +32,7 @@ flowchart LR
     CK -.->|"D to U: C/S, CK is Customer<br/>REST GET /carts/cartId<br/>GetCart"| SC
     CK ==>|"U to D: C/S, SC is Customer<br/>Kafka CheckoutCompleted"| SC
     CK -.->|"D to U: C/S, CK is Customer<br/>REST POST /price-quotes<br/>IssuePriceQuote"| PR
-    CK -.->|"D to U: C/S, CK is Customer<br/>REST POST /payment-authorizations, :void<br/>AuthorizePayment, VoidAuthorization"| CP
+    CK -.->|"D to U: C/S, CK is Customer<br/>REST POST /payment-authorizations, .../voids<br/>AuthorizePayment, VoidAuthorization"| CP
     CK ==>|"U to D: C/S, CP is Customer<br/>Kafka CheckoutCompleted"| CP
     CK -.->|"D to U: OHS<br/>REST GET /delivery-offers/offerId<br/>GetDeliveryOffer"| DP
     CK -.->|"D to U: OHS behind an ACL<br/>REST POST /checkout<br/>PlaceOrder"| CO
@@ -71,7 +71,7 @@ through its provider port. Checkout never touches a `warehouse.*` topic
 | `pricing` (Core) | pricing upstream, checkout downstream | **Customer/Supplier** (checkout is the Customer) | REST `POST /price-quotes` | `IssuePriceQuote` (command) | Same domain, negotiated contract: pricing issues the binding, expiring quote and checkout records its id, totals and expiry. |
 | `customer-payments` (Generic) | payments upstream, checkout downstream | **Customer/Supplier** (checkout is the Customer) | REST `POST /payment-authorizations`, `POST /payment-authorizations/{authorizationId}/voids` | `AuthorizePayment`, `VoidAuthorization` (commands) | The authorize and void shapes (idempotency keys, allocations per group) are negotiated between the two; payments owns the provider vocabulary. |
 | `customer-payments` (Generic) | checkout upstream, payments downstream | **Customer/Supplier** (CP is the Customer) | Kafka `retailnetwork.checkout.events` | `CheckoutCompleted` | Payments binds the `orderId` to the session's authorization on the fact (`BindOrderOnCheckoutCompleted`). |
-| `delivery-promise` (network, Core) | DP upstream, checkout downstream | **Open Host Service** (network side) with a conformist consumer | REST `GET /delivery-offers/{offerId}` | `GetDeliveryOffer` (query) | The network publishes the route for the `shopper / storefront` caller; checkout uses it only to pre-check that each selected offer is still `QUOTED`, with margin, before it authorizes anything. |
+| `delivery-promise` (network, Core) | DP upstream, checkout downstream | **Open Host Service** (network side) with a conformist consumer | REST `GET /delivery-offers/{offerId}` | `GetDeliveryOffer` (query) | The network publishes the route for the `shopper / storefront` caller; checkout uses it only to pre-check, once at open, that each selected offer is still `QUOTED` and not expiring within 2 minutes (`422 offer-not-quotable` otherwise). |
 | `customer-ordering` (network, Generic) | CO upstream, checkout downstream | **Open Host Service** (network side) behind an **Anti-Corruption Layer** (checkout side) | REST `POST /checkout` | `PlaceOrder` (command) | The ACL (`internal/adapters/outbound/customerordering`) is the only place that knows the network's wire names; it translates the network's "Checkout", `offer-not-quotable` and `requotedOffers` into the place-order step and the requote. |
 | analytics consumers | checkout upstream, analytics downstream | analytics stream | Kafka `retailnetwork.checkout.analytics` | `CheckoutOpened`, `CheckoutDeclined`, `CheckoutRequoteRequired`, `CheckoutFailed` | Funnel facts only; no context consumes them. |
 

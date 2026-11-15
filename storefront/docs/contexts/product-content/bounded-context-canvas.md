@@ -190,7 +190,7 @@ Top terms: **Product Content**, **Revision**, **Primary Medium**,
 
 | Metric | Target (proposed) | Source |
 | --- | --- | --- |
-| Publish success rate (`201`/`200` on `:publish` of all attempts) | tracked; alert on a drop | REST access log |
+| Publish success rate (`201`/`200` on `POST .../publications` of all attempts) | tracked; alert on a drop | REST access log |
 | Share of publishes rejected `ErrIncompleteContent` | tracked (authoring quality signal) | REST access log |
 | Published content without a matching `ProductContentPublished` in the outbox | 0 | outbox vs aggregate state |
 | p95 latency of `GET /product-contents/{catalogItemId}` | below 200 ms | traces |

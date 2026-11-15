@@ -52,9 +52,10 @@ Derived from: `model.yaml → contexts[pricing].aggregates[ItemPrice].states`,
 The entry arrow `[*] --> ACTIVE` is the creating command `SetListPrice`;
 the model lists transitions between states only, so the creation and the
 self-transition for sale management are this page's reading. The model
-names no transition out of `WITHDRAWN`: a withdrawn price is not revived;
-selling the item again needs a new price decision (open question on the
-[canvas](/storefront/contexts/pricing/bounded-context-canvas)).
+names no transition out of `WITHDRAWN`: a withdrawn price is final (ADR 0002
+A3), accepts no list-price change, sale or second withdraw
+(`409 illegal-transition`) and is never revived; selling the item again needs a
+new catalogue item.
 
 ### 4. Enforced Invariants
 
@@ -63,8 +64,10 @@ selling the item again needs a new price decision (open question on the
 | Every amount is non-negative | all commands → `ErrNegativeAmount` |
 | All prices of an item use the configured currency | all commands → `ErrCurrencyMismatch` |
 | A sale price is below the list price | `ScheduleSale` → `ErrSaleNotBelowList` |
-| Sale windows of one item never overlap | `ScheduleSale` → `ErrOverlappingSaleWindow` |
+| Sale windows of one item never overlap | `ScheduleSale` → `ErrOverlappingSaleWindow` (`409 overlapping-sale-window`) |
 | The item exists in the local `CatalogItemView` and is not `DISCONTINUED` | `SetListPrice`, `ScheduleSale` → `ErrUnknownCatalogItem` |
+| A `WITHDRAWN` price is final: no list-price change, sale, cancellation or second withdraw | all commands → `illegal-transition` (`409`) |
+| An item holds at most 50 live sale windows; a window ends after it starts and in the future; every amount is at most `MaxMinor` (1,000,000,000 minor units) | `ScheduleSale`, `SetListPrice` → `validation-failed` (`422`) |
 
 Derived from: `model.yaml → contexts[pricing].aggregates[ItemPrice].invariants`.
 

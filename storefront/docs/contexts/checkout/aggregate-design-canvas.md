@@ -27,7 +27,7 @@ The purchase transaction from review to placed order. It holds the cart id
 and version, the `shopperId`, the `shipToAddressId` (never the address), the
 numbered lines and groups, the `priceQuoteId`, the totals and
 `quoteExpiresAt`, the `authorizationId`, the stored placement request, the
-`orderId`, the `requotedOffers`, a failure code, `authAttempt` (starts at 1,
+`orderId`, the `requotedOffers`, a failure code, `authAttempt` (starts at 0,
 incremented on each `DECLINED → AUTHORIZING`) and `voidOwed` (the
 `authorizationId`, set in the same transaction as the decision to void).
 Value objects:
@@ -55,6 +55,7 @@ stateDiagram-v2
     DECLINED --> EXPIRED: ExpireSession
     AUTHORIZING --> PLACING: RecordAuthorization
     AUTHORIZING --> DECLINED: RecordDecline
+    AUTHORIZING --> DECLINED: RecordAuthorization on a mismatch
     DECLINED --> AUTHORIZING: ConfirmSession
     PLACING --> PLACING: RecordPlacementInDoubt
     PLACING --> COMPLETED: RecordPlaced
@@ -73,7 +74,7 @@ The entry arrow `[*] --> OPEN` is the creating command `OpenSession`. Four
 states are terminal: `COMPLETED`, `EXPIRED`, `REQUOTE_REQUIRED` and `FAILED`
 (`ErrSessionClosed`). `PLACING` is the semantic lock (no void and no new
 attempt while the place-order outcome is unknown) and `DECLINED` accepts
-another token while the price quote is valid. The only loops are `DECLINED → AUTHORIZING` (a new
+another token while the price quote is valid (also after an authorization mismatch, with the void owed: a new confirm is refused with `void-pending` until the void succeeds). The only loops are `DECLINED → AUTHORIZING` (a new
 token) and `PLACING → PLACING` (an in-doubt outcome that stays in doubt).
 `DECLINED → EXPIRED` (`ExpireSession`) is a modelled transition, as
 `ExpireOnQuoteExpiry` says (hotspot H1, resolved). A session stuck in
@@ -85,17 +86,20 @@ its own.
 | Invariant | Enforced by |
 | --- | --- |
 | The cart's checkout readiness holds at session open | `OpenSession` → `ErrCartNotCheckoutReady` |
-| The price quote is unexpired at confirm | `ConfirmSession` → `ErrPriceQuoteExpired` |
+| The price quote is unexpired at confirm | `ConfirmSession` → `ErrPriceQuoteExpired` (`422 price-quote-expired`) |
 | No transition out of `COMPLETED`, `EXPIRED`, `FAILED` or `REQUOTE_REQUIRED` | all commands → `ErrSessionClosed` |
-| Every selected offer is still quotable at the pre-authorize `GetDeliveryOffer` check; no state change, the BFF refreshes the cart quote (`REQUOTE_REQUIRED` stays a `PLACING`-time `409` only) | `ConfirmSession` → `ErrOfferNotQuotable` (`422 offer-not-quotable`) |
-| The authorized amount equals the quote total | `RecordAuthorization` → `ErrAuthorizationMismatch` |
+| Every selected offer is still `QUOTED` and expires more than 2 minutes from now at open; no state change, the BFF refreshes the cart quote (the check is not repeated at confirm; `REQUOTE_REQUIRED` stays a `PLACING`-time `409` only) | `OpenSession` → `ErrOfferNotQuotable` (`422 offer-not-quotable`) |
+| The authorized amount and currency equal the quote's; otherwise the session goes back to `DECLINED` with the void owed | `RecordAuthorization` → `ErrAuthorizationMismatch` (`409 authorization-mismatch`) |
+| A new confirm is refused while a void is still owed | `ConfirmSession` → `ErrVoidPending` (`409 void-pending`) |
 | No void and no new attempt while the place-order outcome is unknown (the semantic lock) | `ConfirmSession` and the void step in `PLACING` → `ErrPlacementInDoubt` |
 
 Derived from: `model.yaml → contexts[checkout].aggregates[CheckoutSession].invariants`.
 The mapping of an invariant to the command that raises it is read from the
-REST contract (`409` on open: `cart-not-checkout-ready`; `409` on confirm:
-`session-closed`, `price-quote-expired`, `authorization-mismatch`,
-`placement-in-doubt`; `422` on confirm: `offer-not-quotable`) and from the invariant text; the model itself pairs rule
+REST contract (`409` on open: `cart-not-checkout-ready`; `422` on open:
+`offer-not-quotable`; `409` on confirm: `session-closed`,
+`authorization-mismatch`, `placement-in-doubt`, `void-pending`,
+`illegal-transition`; `422` on confirm: `price-quote-expired`,
+`validation-failed`) and from the invariant text; the model itself pairs rule
 and error but names no command.
 
 ### 5. Corrective Policies
@@ -117,7 +121,7 @@ and error but names no command.
 | `ConfirmSession` | Shopper via BFF, REST `POST /checkout-sessions/{sessionId}/confirmations` | `OPEN → AUTHORIZING`; `DECLINED → AUTHORIZING` (increments `authAttempt`) |
 | `RecordAuthorization` | the answer to `AuthorizePayment` (authorized) | `AUTHORIZING → PLACING` |
 | `RecordDecline` | the answer to `AuthorizePayment` (declined) | `AUTHORIZING → DECLINED` |
-| `RecordPlacementInDoubt` | `PlaceOrder` timed out or answered `503`; also each unsuccessful pass of `ResolveInDoubtPlacements` | `PLACING → PLACING` (raises `CheckoutPlacementInDoubt`) |
+| `RecordPlacementInDoubt` | `PlaceOrder` timed out or answered `503`; also each unsuccessful pass of `ResolveInDoubtPlacements` | `PLACING → PLACING` (raises `CheckoutPlacementInDoubt` on the first pass only) |
 | `RecordPlaced` | `PlaceOrder` succeeded (first call or replay) | `PLACING → COMPLETED` |
 | `RecordRequoteRequired` | `PlaceOrder` answered a definitive `409` with re-quoted offers, sets `voidOwed` | `PLACING → REQUOTE_REQUIRED` |
 | `RecordFailure` | `PlaceOrder` answered `422` (a contract bug); sets `voidOwed` | `PLACING → FAILED` |

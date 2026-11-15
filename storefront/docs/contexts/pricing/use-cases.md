@@ -54,6 +54,9 @@ to Kafka after the commit.
 Error responses use `application/problem+json` (RFC 9457) with `type`
 `/problems/<slug>` per `conventions.integration_rules`: not-found 404,
 illegal-transition 409, concurrent-update 409, validation-failed 422.
+Every amount is in minor units and at most `shared.MaxMinor` (1,000,000,000,
+ADR 0002 A6); beyond a bound (below) the request is `validation-failed`
+(422), with the rule named in the `detail`.
 
 ## SetListPrice
 
@@ -80,7 +83,8 @@ illegal-transition 409, concurrent-update 409, validation-failed 422.
 | `ErrUnknownCatalogItem` | 422 | `unknown-catalog-item` | Unknown or discontinued in `CatalogItemView`; the create may just be early (hotspot H6). |
 | `ErrNegativeAmount` | 422 | `negative-amount` | |
 | `ErrCurrencyMismatch` | 422 | `currency-mismatch` | Not the configured currency. |
-| version conflict | 409 | `concurrent-update` | Retried once inside the use case. |
+| price `WITHDRAWN` | 409 | `illegal-transition` | A withdrawn price accepts no list-price change (ADR 0002 A3). |
+| version conflict | 409 | `concurrent-update` | Retried once inside the use case; also a `version` guard that does not match. |
 
 - **Events emitted:** `ItemPriceChanged` (`effectivePriceMinor` recomputed:
   an active sale still wins over the new list price).
@@ -98,7 +102,9 @@ illegal-transition 409, concurrent-update 409, validation-failed 422.
   2. Load `ItemPrice`; 404 `not-found` if never priced.
   3. `ItemPrice.ScheduleSale(...)`: `ErrSaleNotBelowList`,
      `ErrOverlappingSaleWindow`, `ErrNegativeAmount`,
-     `ErrCurrencyMismatch`. A future window does not change the effective
+     `ErrCurrencyMismatch`; a window must end after it starts and end in
+     the future, and an item holds at most 50 live windows (else
+     `validation-failed`, 422). From is inclusive, to exclusive. A future window does not change the effective
      price yet; a window already open does.
   4. Save, outbox `ItemPriceChanged` when the effective price changed,
      store the key response, one transaction.
@@ -108,8 +114,10 @@ illegal-transition 409, concurrent-update 409, validation-failed 422.
 | Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | price not found | 404 | `not-found` |
+| price `WITHDRAWN` | 409 | `illegal-transition` |
+| more than 50 live windows, or a window that ends in the past | 422 | `validation-failed` |
 | `ErrSaleNotBelowList` | 422 | `sale-not-below-list` |
-| `ErrOverlappingSaleWindow` | 422 | `overlapping-sale-window` |
+| `ErrOverlappingSaleWindow` | 409 | `overlapping-sale-window` |
 | `ErrNegativeAmount` / `ErrCurrencyMismatch` | 422 | `negative-amount` / `currency-mismatch` |
 
 - **Events emitted:** `ItemPriceChanged` if the effective price moved;
@@ -139,12 +147,15 @@ illegal-transition 409, concurrent-update 409, validation-failed 422.
 - **Actor / trigger:** the merchandiser.
 - **Inbound adapter:** REST `POST /item-prices/{catalogItemId}/withdrawals` (merchandising UI, cmd channel).
 - **Main flow:** load `ItemPrice`, `WithdrawPrice(...)`: `ACTIVE →
-  WITHDRAWN`; already `WITHDRAWN` → 200 unchanged, no event. Save, outbox
-  `ItemPriceWithdrawn`, one transaction.
-- **Errors:** 404 `not-found`; 409 `illegal-transition` is not used —
-  withdrawing twice is a no-op.
-- **Events emitted:** `ItemPriceWithdrawn`.
-- **Idempotency:** `Idempotency-Key`, and the no-op on `WITHDRAWN`.
+  WITHDRAWN`. Save, outbox `ItemPriceWithdrawn`, one transaction. `WITHDRAWN`
+  is final (ADR 0002 A3): a price is never revived, and a new price needs a
+  new catalogue item.
+- **Errors:** 404 `not-found`; 409 `illegal-transition` when the price is
+  already `WITHDRAWN` (a second withdraw is refused, not a no-op, and raises no
+  event); 409 `concurrent-update`.
+- **Events emitted:** `ItemPriceWithdrawn`, on the first withdraw only.
+- **Idempotency:** `Idempotency-Key` replays the stored response for the same
+  request; a different key on an already withdrawn price is the 409 above.
 
 ## WithdrawPrice (policy WithdrawOnDiscontinue)
 
@@ -199,14 +210,17 @@ illegal-transition 409, concurrent-update 409, validation-failed 422.
 - **Input:** `version`, `bands[]` (`postalPrefixFrom`, `postalPrefixTo`,
   `rateBasisPoints`).
 - **Main flow:** as `PublishChargeSchedule`, with
-  `ErrOverlappingTaxBand` and `ErrRateOutOfRange`; supersedes the current
-  table and publishes `TaxTableChanged`.
+  `ErrOverlappingTaxBand` and `ErrRateOutOfRange`; a table holds 1 to 500
+  bands (else `validation-failed`, 422); prefixes are three upper-case
+  letters or digits with `from <= to`; supersedes the current table and
+  publishes `TaxTableChanged`.
 - **Errors:**
 
 | Error | HTTP | Problem `type` slug |
 | --- | --- | --- |
 | `ErrOverlappingTaxBand` | 422 | `overlapping-tax-band` |
 | `ErrRateOutOfRange` | 422 | `rate-out-of-range` |
+| more than 500 bands | 422 | `validation-failed` |
 | `ErrNonIncreasingVersion` | 409 | `non-increasing-version` |
 
 - **Events emitted:** `TaxTableChanged`.
@@ -222,14 +236,19 @@ illegal-transition 409, concurrent-update 409, validation-failed 422.
   the groups (`groupNo`, `offerId`, `tier`, `lineNos`) and the destination
   postal prefix (`destinationPostalPrefix`), as the model's inbound row lists
   them.
-- **Preconditions:** every line's item has an `ACTIVE` price.
+- **Preconditions:** every line's item has an `ACTIVE` price; a `CURRENT`
+  delivery charge schedule and a `CURRENT` tax table exist; at most 100
+  lines and 50 groups, quantity 1 to 1000 per line (else `validation-failed`,
+  422).
 - **Main flow:**
   1. `Idempotency-Key` lookup.
   2. Price every line at the item's effective price (`ErrItemNotPriced`,
      `ErrEmptyQuote`, `ErrCurrencyMismatch`).
   3. Charge every group its selected tier from the current
-     `DeliveryChargeSchedule` (with the free-over threshold).
-  4. Apply the current `TaxTable` band of the destination postal prefix.
+     `DeliveryChargeSchedule` (with the free-over threshold); with no
+     `CURRENT` schedule the quote is refused (`ErrNoChargeSchedule`).
+  4. Apply the current `TaxTable` band of the destination postal prefix; with
+     no `CURRENT` table the quote is refused (`ErrNoTaxTable`).
   5. `PriceQuote.IssuePriceQuote(...)`: status `ISSUED`, pinning the price
      versions, schedule version and tax-table version, `issuedAt` and
      `expiresAt` (`QuoteTtl`, default 15 minutes).
@@ -244,6 +263,9 @@ illegal-transition 409, concurrent-update 409, validation-failed 422.
 | `ErrItemNotPriced` | 422 | `item-not-priced` | The cart's `PurchasabilityView` should have caught it; a late withdrawal can still land here. |
 | `ErrEmptyQuote` | 422 | `empty-quote` | |
 | `ErrCurrencyMismatch` | 422 | `currency-mismatch` | A contract bug; alert. |
+| `ErrNoChargeSchedule` | 422 | `no-charge-schedule` | No `CURRENT` delivery charge schedule was ever published; until one is, every checkout fails. |
+| `ErrNoTaxTable` | 422 | `no-tax-table` | No `CURRENT` tax table was ever published; until one is, every checkout fails. |
+| more than 100 lines or 50 groups, quantity outside 1 to 1000, a line in no group or in two groups | 422 | `validation-failed` | The `detail` names the rule. |
 
 - **Events emitted:** `PriceQuoteIssued` (analytics only; `checkout` gets
   the quote in the reply).

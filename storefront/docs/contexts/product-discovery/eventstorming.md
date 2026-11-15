@@ -76,6 +76,9 @@ resolves `ListingSuppressed`/`ListingRestored`, which carry only
 `listing.*`, so a listing, price or content fact for an unknown item upserts
 an invisible STUB `ProductView` row (`Purchasable` requires a catalogued
 item) and `CatalogItemCreated` completes it; the fold rule raises no error.
+A `ListingSuppressed`/`ListingRestored` for a listing the map does not know is
+acknowledged and logged as skipped (WARN), not retried or dead-lettered; the
+bootstrap rebuild repairs the listing (service ADR 0002 A1).
 
 Omitted: `ListingSuppressed`/`ListingRestored` (flip one listing's state, never
 count when SUPPRESSED), `CatalogItemCreated`/`CatalogItemDiscontinued`

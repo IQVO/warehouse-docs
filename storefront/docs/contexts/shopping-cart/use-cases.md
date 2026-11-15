@@ -55,7 +55,12 @@ Error responses use `application/problem+json` (RFC 9457) with `type`
 `/problems/<slug>` per `conventions.integration_rules`: not-found 404,
 illegal-transition / cart-closed 409, concurrent-update 409,
 validation-failed 422, plus one kebab-case slug per `Err` in the model.
-Every write route takes an `Idempotency-Key` header, minted by the BFF.
+Every write route takes an `Idempotency-Key` header, minted by the BFF: 1 to
+128 printable ASCII characters (absent is 400 `idempotency-key-required`,
+malformed or longer than 128 characters is 400 `idempotency-key-invalid`). A
+replay of the same request returns the stored first response with the header
+`Idempotency-Replayed: true` (only a replay carries it); the same key with a
+different request is 409 `idempotency-key-reused`, never 422.
 
 ## CreateCart
 
@@ -188,7 +193,10 @@ Every write route takes an `Idempotency-Key` header, minted by the BFF.
   offer has expired, `CheckoutReadiness` holds. Save (version-checked),
   one transaction.
 - **Errors:** 404 `not-found`; 409 `stale-delivery-selection` /
-  `cart-closed` / `concurrent-update`; 422 `validation-failed`.
+  `cart-closed` / `concurrent-update`. There is no 422: a missing `groupNo` or
+  `offerId`, a group the quote does not have, or a cart with no quote all
+  name no offer of the current quote and answer 409
+  `stale-delivery-selection`.
 - **Events emitted:** none (hotspot H1).
 - **Idempotency:** `Idempotency-Key`; re-selecting the same offer replays
   the stored response.
@@ -203,14 +211,17 @@ Every write route takes an `Idempotency-Key` header, minted by the BFF.
 - **Inbound adapter:** REST `POST /carts/{cartId}/merges`, header
   `Idempotency-Key` required.
 - **Input:** `targetCartId`.
-- **Preconditions:** the target is an `OPEN` cart of the same shopper,
-  never the cart itself (`ErrMergeTarget`).
+- **Preconditions:** the source is `OPEN`; the target is another `OPEN` cart
+  that has a shopper, never the cart itself; the source is a guest cart (no
+  shopper) or belongs to the same shopper as the target (`ErrMergeTarget`).
 - **Main flow:** load both carts and versions (404), take the source's
-  lines into the target, merging quantities, clear the target's quote and
-  selections (its lines changed), mark the source `MERGED`; both saves in
-  one transaction, both version-checked.
+  lines into the target, merging quantities (a merged quantity clamps at 99;
+  the merged line list must fit 100 lines, else `ErrTooManyLines` and neither
+  cart changes), clear the target's quote and selections (its lines changed),
+  mark the source `MERGED`; both saves in one transaction, both
+  version-checked.
 - **Errors:** 404 `not-found`; 409 `cart-closed` / `concurrent-update`;
-  422 `merge-target` / `validation-failed`.
+  422 `merge-target` / `too-many-lines` / `validation-failed`.
 - **Events emitted:** none (hotspot H1 — analytics never sees a merge).
 - **Idempotency:** `Idempotency-Key`; the source is terminal after the
   merge (`ErrCartClosed` on any later change).

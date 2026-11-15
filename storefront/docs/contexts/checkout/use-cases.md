@@ -37,7 +37,7 @@ after an in-doubt placement it is the endpoint the BFF polls.
 | `ConfirmSession` | Shopper via `storefront-bff` | REST `POST /checkout-sessions/{sessionId}/confirmations` | the outcome's event (see below) |
 | `RecordAuthorization` | The answer to `AuthorizePayment` | inside `ConfirmSession` | none |
 | `RecordDecline` | The answer to `AuthorizePayment` | inside `ConfirmSession` | `CheckoutDeclined` |
-| `RecordPlacementInDoubt` | `PlaceOrder` timed out or answered `503` | inside `ConfirmSession` or `ResolveInDoubtPlacements` | `CheckoutPlacementInDoubt` |
+| `RecordPlacementInDoubt` | `PlaceOrder` timed out or answered `503` | inside `ConfirmSession` or `ResolveInDoubtPlacements` | `CheckoutPlacementInDoubt` (first time only) |
 | `RecordPlaced` | `PlaceOrder` succeeded | inside `ConfirmSession` or `ResolveInDoubtPlacements` | `CheckoutCompleted` |
 | `RecordRequoteRequired` | `PlaceOrder` answered a definitive `409`; sets `voidOwed` | inside `ConfirmSession` or `ResolveInDoubtPlacements` | `CheckoutRequoteRequired` |
 | `RecordFailure` | `PlaceOrder` answered `422`; sets `voidOwed` | inside `ConfirmSession` or `ResolveInDoubtPlacements` | `CheckoutFailed` |
@@ -76,7 +76,7 @@ one kebab-case slug per `Err` in the model. Every write route takes an
 - **Input:** `cartId`, `shopperId`, `shipToAddressId` (a reference to a saved
   address in `customer-ordering` (NG1), never the address).
 - **Preconditions:** the cart's checkout readiness holds; every selected
-  offer is still `QUOTED`, with margin.
+  offer is still `QUOTED` and expires more than 2 minutes from now.
 - **Main flow:**
   1. `Idempotency-Key` lookup; replay the stored response on a hit.
   2. `GetCart` (`shopping-cart`): the cart snapshot, its version, groups,
@@ -85,8 +85,10 @@ one kebab-case slug per `Err` in the model. Every write route takes an
      `ErrCartNotCheckoutReady` before calling anyone else (the aggregate
      enforces the same invariant in step 6).
   4. `GetDeliveryOffer` (`delivery-promise`) for each selected offer: still
-     `QUOTED`, with margin; a failure here is `ErrOfferNotQuotable` (the same
-     check is repeated before authorize at confirm).
+     `QUOTED` and not expiring within 2 minutes; a failure here is
+     `ErrOfferNotQuotable` (`422 offer-not-quotable`, no session created, no
+     state change). This check runs once, at open: `ConfirmSession` does not
+     repeat it.
   5. `IssuePriceQuote` (`pricing`): the binding `PriceQuote`; the session
      records `priceQuoteId`, `currency`, `totalMinor` and `quoteExpiresAt`.
   6. `CheckoutSession.OpenSession(cart, quote, now)`: `ErrCartNotCheckoutReady`
@@ -100,6 +102,7 @@ one kebab-case slug per `Err` in the model. Every write route takes an
 | --- | --- | --- | --- |
 | `ErrCartNotCheckoutReady` | 409 | `cart-not-checkout-ready` | A group is unselected or an offer expired. |
 | dependency unreachable | 503 | (`503`) | `shopping-cart`, `delivery-promise` or `pricing`; the shopper retries with the same `Idempotency-Key`. |
+| `ErrOfferNotQuotable` | 422 | `offer-not-quotable` | A selected offer is no longer `QUOTED` or expires within 2 minutes; no session is created, the BFF refreshes the cart's delivery quote. |
 | invalid input | 422 | `validation-failed` | A missing `cartId`, `shopperId` or `shipToAddressId`. |
 | version conflict | 409 | `concurrent-update` | Retried once inside the use case. |
 
@@ -118,26 +121,26 @@ one kebab-case slug per `Err` in the model. Every write route takes an
 - **Main flow:**
   1. `Idempotency-Key` lookup; replay the stored response on a hit.
   2. Load `CheckoutSession` (404 `not-found`).
-  3. `GetDeliveryOffer` (`delivery-promise`) for each selected offer, before
-     anything is authorized: still `QUOTED`, with margin. A failure is
-     `ErrOfferNotQuotable` (`422`), with no state change; the BFF refreshes
-     the cart quote.
-  4. `ConfirmSession(now)`: `ErrSessionClosed` on a terminal state,
-     `ErrPlacementInDoubt` while `PLACING`, `ErrPriceQuoteExpired` past
-     `quoteExpiresAt`; `OPEN` or `DECLINED` becomes `AUTHORIZING` (from
-     `DECLINED`, `authAttempt` is incremented). Save.
-  5. `AuthorizePayment` (`customer-payments`), key
+  3. `ConfirmSession(now)`: `ErrSessionClosed` on a terminal state,
+     `ErrPlacementInDoubt` while `PLACING`, `ErrVoidPending` while a void is
+     still owed, `ErrPriceQuoteExpired` past `quoteExpiresAt`; `OPEN` or
+     `DECLINED` becomes `AUTHORIZING` (from `DECLINED`, `authAttempt` is
+     incremented). Save. The offers are **not** re-checked here: the check ran
+     at open, and an offer that expired between open and confirm comes back
+     from `customer-ordering` as a `PLACING`-time `409` requote (step 7).
+  4. `AuthorizePayment` (`customer-payments`), key
      `<sessionId>:auth:<authAttempt>`, allocations per group. Declined:
      `RecordDecline`, answer `200` `DECLINED`. Authorized: continue.
-  6. `RecordAuthorization(authorizationId, totalMinor)`: `ErrAuthorizationMismatch`
-     unless the authorized amount equals the quote total (then `voidOwed` is
-     set with the decision to void); `AUTHORIZING`
-     becomes `PLACING`, and the PII-free placement request is stored in the
-     same save.
-  7. `PlaceOrder` (`customer-ordering`) through the Anti-Corruption Layer,
+  5. `RecordAuthorization(authorizationId, totalMinor)`: if the authorized
+     amount or currency is not the quote's, the session goes back to
+     `DECLINED` (reason `authorization-mismatch`, `CheckoutDeclined` raised)
+     with `voidOwed` set in the same save, and the call answers `409
+     authorization-mismatch`; otherwise `AUTHORIZING` becomes `PLACING` and
+     the PII-free placement request is stored in the same save.
+  6. `PlaceOrder` (`customer-ordering`) through the Anti-Corruption Layer,
      `Idempotency-Key` the `sessionId`, `shipToAddressId` never an inline
      address.
-  8. Map the answer: success to `RecordPlaced` (`COMPLETED`, answer `200`);
+  7. Map the answer: success to `RecordPlaced` (`COMPLETED`, answer `200`);
      definitive `409` to `RecordRequoteRequired` (answer `200`
      `REQUOTE_REQUIRED` with `requotedOffers`); `422` to `RecordFailure` and
      an alert (answer `200` `FAILED`); timeout or `503` to
@@ -150,9 +153,9 @@ one kebab-case slug per `Err` in the model. Every write route takes an
 | Error | HTTP | Problem `type` slug | Note |
 | --- | --- | --- | --- |
 | `ErrSessionClosed` | 409 | `session-closed` | `COMPLETED`, `EXPIRED`, `FAILED` or `REQUOTE_REQUIRED`; `DECLINED` is not closed. |
-| `ErrPriceQuoteExpired` | 409 | `price-quote-expired` | Checked at confirm; the session is `OPEN` or `DECLINED`. |
-| `ErrOfferNotQuotable` | 422 | `offer-not-quotable` | A selected offer is no longer `QUOTED` at the pre-authorize check; no state change. |
-| `ErrAuthorizationMismatch` | 409 | `authorization-mismatch` | The authorized amount is not the quote total; the authorization is voided (`voidOwed`). |
+| `ErrPriceQuoteExpired` | 422 | `price-quote-expired` | Checked at confirm; the session is `OPEN` or `DECLINED`; open a new session. |
+| `ErrAuthorizationMismatch` | 409 | `authorization-mismatch` | The authorized amount or currency is not the quote's; the session is `DECLINED` with the authorization owed a void (`voidOwed`). |
+| `ErrVoidPending` | 409 | `void-pending` | A new confirm while the void of a previous authorization is still owed; retry once `RetryOwedVoids` has voided it (one active authorization per session). |
 | `ErrPlacementInDoubt` | 409 | `placement-in-doubt` | A confirm or a void while `PLACING`: the semantic lock. |
 | session not found | 404 | `not-found` | |
 | invalid input | 422 | `validation-failed` | A missing `paymentMethodToken`. |
@@ -162,8 +165,8 @@ one kebab-case slug per `Err` in the model. Every write route takes an
   `CheckoutCompleted`, `CheckoutRequoteRequired` or `CheckoutFailed`; none
   for an in-doubt answer.
 - **Idempotency:** `Idempotency-Key`, plus the deterministic downstream keys
-  `<sessionId>:auth:<authAttempt>`, the `sessionId` and `<sessionId>:void`.
-  A repeated confirm returns the stored first response; a second authorize
+  `<sessionId>:auth:<authAttempt>` (`authAttempt` starts at 0), the
+  `sessionId` and `<sessionId>:void`. A repeated confirm returns the stored first response; a second authorize
   after a decline is a new attempt (`authAttempt` + 1), so it is not answered
   with the first, declined response, while a stuck call replays the same key.
 
@@ -173,9 +176,13 @@ one kebab-case slug per `Err` in the model. Every write route takes an
   `ConfirmSession`.
 - **Main flow:** `AUTHORIZING → PLACING`; store `authorizationId` and the
   placement request; save. `ErrAuthorizationMismatch` if the authorized amount
-  is not the quote total; the authorization is then voided: `voidOwed` is set
-  in the same save and `RetryOwedVoids` retries the void until it succeeds.
-- **Events emitted:** none.
+  or currency is not the quote's: the session goes back to `DECLINED` (reason
+  `authorization-mismatch`) and `voidOwed` is set in the same save. The use
+  case alerts, attempts the void at once and answers `409
+  authorization-mismatch`; `RetryOwedVoids` retries a failed void until it
+  succeeds, and until then a new confirm is refused with `409 void-pending`.
+- **Events emitted:** none on success; `CheckoutDeclined` (analytics) on a
+  mismatch.
 - **Idempotency:** the transition is taken once; a replayed answer finds the
   session already `PLACING`.
 
@@ -192,12 +199,15 @@ one kebab-case slug per `Err` in the model. Every write route takes an
 ## RecordPlacementInDoubt
 
 - **Trigger:** `PlaceOrder` timed out or answered `503`; also each pass of
-  `ResolveInDoubtPlacements` that still gets no definitive answer.
+  `ResolveInDoubtPlacements` that still gets no definitive answer (the event
+  is raised on the first one only).
 - **Main flow:** `PLACING → PLACING`. No void and no new attempt: the
   semantic lock. The session answers `202`.
 - **Events emitted:** `CheckoutPlacementInDoubt` (analytics; carries
-  `placingSince`).
-- **Idempotency:** recorded as often as it happens; it changes nothing.
+  `placingSince`), on the **first** unknown outcome only; later passes of
+  `ResolveInDoubtPlacements` raise nothing.
+- **Idempotency:** the attempt counter and the next backoff are recorded on
+  every pass; the event is written once.
 
 ## RecordPlaced
 
