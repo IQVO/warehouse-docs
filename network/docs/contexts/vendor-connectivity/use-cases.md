@@ -11,7 +11,7 @@ description: One proposed application use case per Vendor Connectivity command -
 Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml). This context's service is built; the model carries its as-built contracts, and identifiers (`Err...` names, routes, CloudEvents types) are the names the service uses.
 :::
 
-One proposed application service per command in
+One application service per command in
 `contexts[vendor-connectivity].aggregates[*].commands`, under
 `internal/application/usecases`. The step-by-step runtime view is on
 [Sequence Diagrams](/network/contexts/vendor-connectivity/sequence-diagrams).
@@ -23,8 +23,12 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 ## Conventions for every use case
 
 - **Errors** are RFC 9457 `application/problem+json`. Mapping: validation
-  `422`, conflict or state `409`, not found `404`, stale version `409`.
-  The `type` is the slug shown.
+  `422`, conflict or state `409`, not found `404`, version conflict `409`.
+  The `type` is the slug shown: the shared slugs are `not-found`,
+  `illegal-transition`, `concurrent-update` and `validation-failed`; the rest
+  is one slug per `Err...` name (kebab-case, no `Err`). The earlier placeholders
+  `validation`, `stale` and `purchase-order-state` are not used (service ADR
+  0002; `internal/adapters/inbound/http/errors.go`).
 - **Rate limit.** Every `/vendor/...` route may answer `429` `rate-limited`
   with `Retry-After` before the use case runs (`RATE_LIMIT_RPS`).
 - **Idempotency-Key.** Every `POST`/`PUT` carries one. A repeat with the
@@ -47,12 +51,16 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 | `ErrAckWindowClosed` | 409 | `ack-window-closed` |
 | `ErrLabelBeforeAcceptance` | 409 | `label-before-acceptance` |
 | `ErrConfirmWithoutLabel` | 409 | `confirm-without-label` |
+| `ErrVendorSuspended` | 409 | `vendor-suspended` (every vendor write while the vendor is `SUSPENDED`) |
 | `ErrCancelAfterAcknowledgement` | no HTTP (Kafka consumer) | would be 409 `cancel-after-acknowledgement` |
 | `ErrSubmissionAlreadyProcessed` | no HTTP (internal) | would be 409 `submission-already-processed` |
 | `ErrSubmissionNotDue` | no HTTP (internal) | would be 409 `submission-not-due` |
-| purchase order, node or transaction unknown (no model `Err`) | 404 | `not-found` |
-| request body malformed (no model `Err`) | 422 | `validation` |
-| optimistic-concurrency version conflict (no model `Err`) | 409 | `stale` (retried once inside the use case before it is returned) |
+| `ErrNotFound`: purchase order, vendor, node or transaction unknown | 404 | `not-found` |
+| `ErrValidation`: request body malformed | 422 | `validation-failed` |
+| `ErrIllegalTransition`: a command from a state that has no dedicated `Err...` | 409 | `illegal-transition` |
+| `ErrConcurrentUpdate`: optimistic-concurrency version conflict | 409 | `concurrent-update` (retried once inside the use case before it is returned) |
+| `ErrUpstreamUnavailable`: a neighbouring context did not answer | 503 | `upstream-unavailable` |
+| `ErrUpstreamRefused`: a neighbouring context answered with a refusal this context does not translate | 502 | `upstream-refused` |
 
 ## OnboardVendor
 
@@ -72,46 +80,58 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 
 - **Events:** `VendorOnboarded`.
 - **Idempotency:** `Idempotency-Key`; a second onboarding of an existing
-  `vendorId` with a new key returns the existing account unchanged
-  (proposed; the model has no duplicate-vendor error).
+  `vendorId` with a new key returns the existing account unchanged, `200`
+  (service ADR 0002 A8; the model has no duplicate-vendor error).
 
 ## SuspendVendor
 
-- **Actor / trigger:** not stated in the model.
-- **Inbound adapter:** none in the model (no route).
-- **Preconditions:** the vendor is `ACTIVE`.
+- **Actor / trigger:** network partner manager.
+- **Inbound adapter:** REST `POST /vendors/{vendorId}/suspensions` (optional
+  body `reason`, 1 to 200 characters).
+- **Preconditions:** the vendor exists.
 - **Main flow:**
   1. Load the `VendorAccount`.
   2. `Suspend()`: `ACTIVE` to `SUSPENDED`.
-  3. Save with a version check.
+  3. Save with a version check and write `VendorSuspended` to the outbox in
+     one transaction.
+- **Effect while `SUSPENDED` (service ADR 0002 A9):** every vendor write is refused
+  with 409 `vendor-suspended` (`ErrVendorSuspended`): acknowledgement,
+  inventory feed, node registration, node profile, label request, shipment
+  confirmation and inbound receipt. Reads, polling, the issuing of new
+  purchase orders, the expiry sweep and the processing of submissions already
+  received continue.
 
 | Error | HTTP | Problem `type` |
 | --- | --- | --- |
 | vendor unknown | 404 | `not-found` |
-| version conflict | 409 | `stale` |
+| version conflict | 409 | `concurrent-update` |
 
-- **Events:** none in the model.
-- **Idempotency:** suspending a `SUSPENDED` vendor is a no-op (proposed).
-- **Gap:** the model gives this command no channel, no event and no rule
-  for what a suspended vendor may not do.
+- **Events:** `VendorSuspended` (`vendorId`, `suspendedAt`, optional `reason`)
+  on `retailnetwork.vendor-connectivity.events`; no context consumes it yet
+  (service ADR 0002 A14, ADR 0004).
+- **Idempotency:** suspending a `SUSPENDED` vendor is a no-op: `200` with the
+  account unchanged and no event (service ADR 0002 A8).
 
 ## ReinstateVendor
 
-- **Actor / trigger:** not stated in the model.
-- **Inbound adapter:** none in the model (no route).
-- **Preconditions:** the vendor is `SUSPENDED`.
+- **Actor / trigger:** network partner manager.
+- **Inbound adapter:** REST `POST /vendors/{vendorId}/reinstatements`.
+- **Preconditions:** the vendor exists.
 - **Main flow:**
   1. Load the `VendorAccount`.
   2. `Reinstate()`: `SUSPENDED` to `ACTIVE`.
-  3. Save with a version check.
+  3. Save with a version check and write `VendorReinstated` to the outbox in
+     one transaction.
 
 | Error | HTTP | Problem `type` |
 | --- | --- | --- |
 | vendor unknown | 404 | `not-found` |
-| version conflict | 409 | `stale` |
+| version conflict | 409 | `concurrent-update` |
 
-- **Events:** none in the model.
-- **Idempotency:** reinstating an `ACTIVE` vendor is a no-op (proposed).
+- **Events:** `VendorReinstated` (`vendorId`, `reinstatedAt`) on
+  `retailnetwork.vendor-connectivity.events`; no context consumes it yet.
+- **Idempotency:** reinstating an `ACTIVE` vendor is a no-op: `200` with the
+  account unchanged and no event (service ADR 0002 A8).
 
 ## IssuePurchaseOrder
 
@@ -127,7 +147,10 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
   2. Look up the node in `VendorNodeView`. Not a vendor node: record the
      inbox row and stop.
   3. Derive `poNumber` from `assignmentId + releaseNo`. If it exists, stop.
-  4. Load the vendor's ack window.
+  4. Load the vendor's ack window and the node's `handlingTimeMinutes` from
+     `VendorNodeView`, which `NodeOperationalProfileDeclared` feeds (a lower
+     `profileRevision` never overwrites a higher one). A node with no declared
+     profile has handling time 0 (service ADR 0002 A3).
   5. `po.Issue(...)` with `requiredShipBy`, `lines` (`listingId`,
      `quantity`, numbered `lineNo`) and
      `ackBy = min(issuedAt + ackWindow, requiredShipBy - handlingTime)`.
@@ -141,8 +164,8 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 - **Events:** `PurchaseOrderIssued`.
 - **Idempotency:** the inbox on the event `id`, and `poNumber` on
   `assignmentId + releaseNo`.
-- **Gap:** step 5 needs the node's `handlingTime`, which this context has
-  no source for.
+- **Handling time:** consumed from `NodeOperationalProfileDeclared` (service
+  ADR 0003); there is no gap.
 
 ## SubmitAcknowledgement
 
@@ -165,9 +188,11 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 | `ErrAlreadyAcknowledged` | 409 | `already-acknowledged` |
 | `ErrAckWindowClosed` | 409 | `ack-window-closed` |
 | `ErrNodeNotOwnedByVendor` | 404 | `node-not-owned-by-vendor` |
+| `ErrVendorSuspended` | 409 | `vendor-suspended` |
 | PO unknown | 404 | `not-found` |
-| `REJECT` without `reasonCode` | 422 | `validation` |
-| version conflict | 409 | `stale` |
+| a `CANCELLED` PO (`ErrIllegalTransition`) | 409 | `illegal-transition` |
+| `REJECT` without `reasonCode` | 422 | `validation-failed` |
+| version conflict | 409 | `concurrent-update` |
 
 - **Events:** none at receipt. `PurchaseOrderAccepted` or
   `PurchaseOrderRejected` and `SubmissionProcessed` follow from
@@ -175,9 +200,9 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 - **Idempotency:** `Idempotency-Key` returns the same `transactionId`. A
   second acknowledgement with a new key is `ErrAlreadyAcknowledged` until a
   failed transaction returns the PO to `ISSUED`.
-- **Gap:** an acknowledgement of a `CANCELLED` or `EXPIRED` PO has no
-  dedicated `Err...`; `EXPIRED` is past `ackBy` and gets
-  `ErrAckWindowClosed`, `CANCELLED` has none.
+- **Other states (service ADR 0002 A7):** an acknowledgement of a `CANCELLED`
+  PO is `ErrIllegalTransition`; `EXPIRED` is past `ackBy` and gets
+  `ErrAckWindowClosed`.
 
 ## RequestLabel
 
@@ -197,13 +222,19 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 | --- | --- | --- |
 | `ErrLabelBeforeAcceptance` | 409 | `label-before-acceptance` |
 | `ErrNodeNotOwnedByVendor` | 404 | `node-not-owned-by-vendor` |
+| `ErrVendorSuspended` | 409 | `vendor-suspended` |
 | PO unknown | 404 | `not-found` |
-| shipping-and-tracking unavailable | 503 | `upstream-unavailable` (proposed) |
+| a `REJECTED`, `EXPIRED` or `CANCELLED` PO (`ErrIllegalTransition`) | 409 | `illegal-transition` |
+| shipping-and-tracking did not answer (`ErrUpstreamUnavailable`) | 503 | `upstream-unavailable` |
+| shipping-and-tracking refused with an answer this context does not translate (`ErrUpstreamRefused`) | 502 | `upstream-refused` |
 
 - **Events:** none here; shipping-and-tracking publishes `LabelIssued`.
 - **Idempotency:** shipping-and-tracking issues one label per
   `(poNumber, packageNo)` (`ErrLabelAlreadyIssued` there); this use case
   returns the stored label for a package it already holds.
+- **Partial failure:** labels already issued stay stored when a later package
+  fails; the answer is then 503 or 502 and a retry returns the stored labels and
+  issues only the missing ones (service ADR 0002 A19).
 - **Gap:** synchronous, unlike every other vendor write.
 
 ## SubmitShipmentConfirmation
@@ -224,15 +255,18 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 | `ErrConfirmWithoutLabel` | 409 | `confirm-without-label` |
 | `ErrNodeNotOwnedByVendor` | 404 | `node-not-owned-by-vendor` |
 | PO unknown | 404 | `not-found` |
-| PO not `ACCEPTED` and no label missing (no model `Err`) | 409 | `purchase-order-state` (proposed; see gap) |
-| version conflict | 409 | `stale` |
+| `ErrVendorSuspended` | 409 | `vendor-suspended` |
+| PO `SHIPMENT_PROCESSING`, `SHIPPED`, `REJECTED`, `EXPIRED` or `CANCELLED` (`ErrIllegalTransition`) | 409 | `illegal-transition` |
+| version conflict | 409 | `concurrent-update` |
 
 - **Events:** none at receipt; `VendorShipmentConfirmed` and
   `SubmissionProcessed` follow from `ProcessSubmission`.
 - **Idempotency:** `Idempotency-Key`. A confirmation while one is
   processing is refused by state.
-- **Gap:** the model has no `Err...` for a shipment confirmation against a
-  PO that is not `ACCEPTED` (for example `SHIPMENT_PROCESSING` or `SHIPPED`).
+- **Other states (service ADR 0002 A7):** a confirmation against an `ISSUED`
+  or `ACK_PROCESSING` PO is `ErrConfirmWithoutLabel` (no label can exist yet);
+  against `SHIPMENT_PROCESSING`, `SHIPPED`, `REJECTED`, `EXPIRED` or
+  `CANCELLED` it is `ErrIllegalTransition`.
 
 ## ExpireUnacknowledgedOrders
 
@@ -260,6 +294,11 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
   `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled`.
 - **Inbound adapter:** Kafka consumer on `retailnetwork.order-sourcing.events`.
 - **Preconditions:** a PO exists for that `assignmentId` and is `ISSUED`.
+  Any other state is refused: `ErrCancelAfterAcknowledgement` for
+  `ACK_PROCESSING`, `ACCEPTED`, `REJECTED`, `SHIPMENT_PROCESSING` and
+  `SHIPPED`, and `ErrIllegalTransition` for `EXPIRED` and `CANCELLED`
+  (`PurchaseOrder.Cancel`). Both are logged at INFO and acknowledged, so the
+  observable result is the same.
 - **Main flow:**
   1. Claim the event `id` in the inbox.
   2. Find the PO of the assignment's open release (the event carries
@@ -270,11 +309,12 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 
 | Error | HTTP | Problem `type` |
 | --- | --- | --- |
-| `ErrCancelAfterAcknowledgement` | no HTTP | logged; the inbox row is written so the event is not retried |
+| `ErrCancelAfterAcknowledgement` (the order is past acknowledgement and not `EXPIRED` or `CANCELLED`) | no HTTP | logged at INFO; the inbox row is written so the event is not retried |
+| `ErrIllegalTransition` (the order is `EXPIRED` or `CANCELLED`) | no HTTP | logged at INFO; the inbox row is written, nothing is published |
 | no PO for the assignment | no HTTP | inbox row written, nothing else |
 
 - **Events:** `PurchaseOrderCancelled`.
-- **Idempotency:** the inbox; a `CANCELLED` PO is left as is.
+- **Idempotency:** the inbox; a `CANCELLED` PO is left as is (it answers `ErrIllegalTransition`, logged and acknowledged).
 - **Gap:** nothing tells the vendor or order-sourcing when the cancel is
   refused after acknowledgement.
 
@@ -288,8 +328,9 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 - **Main flow:** claim the event `id` in the inbox; find the order by (`assignmentId`, `releaseNo`);
   not found is a no-op; `po.Cancel('release withdrawn: ' + reason)` (sanitised, at most 200 characters);
   save and write `PurchaseOrderCancelled` in the same transaction as the inbox row.
-- **Errors:** `ErrCancelAfterAcknowledgement` (the vendor already accepted) and `ErrIllegalTransition`
-  (rejected, expired, already cancelled) are logged at INFO and acknowledged, not retried.
+- **Errors:** `ErrCancelAfterAcknowledgement` (the order is past acknowledgement: `ACK_PROCESSING`, `ACCEPTED`,
+  `REJECTED`, `SHIPMENT_PROCESSING` or `SHIPPED`) and `ErrIllegalTransition` (`EXPIRED` or already `CANCELLED`) are
+  logged at INFO and acknowledged, not retried.
 - **Events:** `PurchaseOrderCancelled`.
 - **Idempotency:** the inbox. The lookup is by release number, so it never touches the order of a later
   release. The reason is carried as opaque text; this context does not branch on it.
@@ -317,8 +358,9 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 | Error | HTTP | Problem `type` |
 | --- | --- | --- |
 | `ErrNodeNotOwnedByVendor` | 404 | `node-not-owned-by-vendor` |
+| `ErrVendorSuspended` | 409 | `vendor-suspended` |
 | node unknown | 404 | `not-found` |
-| body malformed | 422 | `validation` |
+| body malformed | 422 | `validation-failed` |
 
 - **Events:** none at receipt.
 - **Idempotency:** `Idempotency-Key` per vendor, stored on the submission.
@@ -370,5 +412,5 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 - **Actor / trigger:** a vendor (for the fleet, `network-fulfillment`). REST `POST /vendor/inbound-receipts` with an `Idempotency-Key`.
 - **Preconditions:** the shipment is in `InboundShipmentView` and its `nodeId` belongs to the vendor.
 - **Flow:** validate the body (carton statuses, GTIN and SSCC shapes, quantities as eaches), create a `Submission` of kind `INBOUND_RECEIPT` in `PROCESSING`, return `202` with the `transactionId`. `InboundReceiptSubmitted` is appended to the outbox in the same unit of work, so a `202` always has its event; `ProcessSubmission` later reports `SubmissionProcessed` (service ADR 0005).
-- **Errors:** `ErrNodeNotOwnedByVendor` (404), an unknown vendor, shipment or node (404 `not-found`, so a vendor cannot probe another vendor's shipments; the design named it `ErrUnknownInboundShipment`), body malformed (422 `validation`).
+- **Errors:** `ErrNodeNotOwnedByVendor` (404), a suspended vendor (409 `vendor-suspended`), an unknown vendor, shipment or node (404 `not-found`, so a vendor cannot probe another vendor's shipments; the design named it `ErrUnknownInboundShipment`), body malformed (422 `validation-failed`).
 - **Reads:** `GET /vendor/inbound-shipments?vendorId=&nodeId=&createdAfter=&nextCursor=&limit=` and `GET /vendor/inbound-shipments/{shipmentId}` read `InboundShipmentView` directly. They return the shipment as a tree (shipment, optional pallet, carton, item) with `sscc`, `gtin`, `qtyEaches`, `lot`, `expiry` and `sellerId` (the seller of record, which the vendor keeps as its `ownerRef`).

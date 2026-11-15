@@ -106,9 +106,8 @@ trusts its in-org caller.
   future `customer-notification` context (Generic, buy not build).
 - **Returns.** A return authorisation and its routing to a returns centre
   belong to the future `customer-returns` context. This context only ends a
-  journey as `RETURNED` (`ReturnToSender` from `AT_STATION`; the model names
-  no trigger for it yet, see the
-  [canvas open questions](/network/contexts/shipping-and-tracking/bounded-context-canvas)).
+  journey as `RETURNED` (`ReturnToSender` from `AT_STATION`, triggered by `last-mile-delivery`'s
+  `PackageReturnInitiated`; ADR 0002 A8).
 - **Routing and loading decisions.** Which load or route a package rides is
   decided by `linehaul-transportation` and `last-mile-delivery`. This context
   only records what they report.

@@ -208,8 +208,10 @@ Top terms: **Middle Mile**, **Departure** (kinds `PICKUP`, `LINEHAUL`,
    and a load never carries more packages than its departure's capacity
    (`ErrLoadOverCapacity`).
 6. **Book on lock.** One package is booked on the pickup departure when an
-   assignment locks (`FulfillmentLocked`); it is released on
-   `FulfillmentCancelled` or reassignment (policy `BookOnLock`). A follower's lock of a
+   assignment locks (`FulfillmentLocked`; policy `BookOnLock`). It is not
+   released on `FulfillmentCancelled` or reassignment: those happen only before the lock
+   and update the expected volume only (ADR 0002 A16); the release branch was removed.
+   A follower's lock of a
    consolidation merge (`consolidatedInto` set) books nothing, so one merged package occupies
    one package of pickup capacity (policy `FollowerLockBooksNothing`).
 7. **Announce cancellations early.** A cancelled departure is announced
@@ -250,8 +252,9 @@ Each of these is a gap in `model.yaml` reported to the orchestrator, not
 patched here.
 
 - **Who triggers `CloseDeparture`, `RecordDeparture` and `RecordArrival`?**
-  No inbound row, policy or route names an actor; the model lists the
-  commands only.
+  (resolved, ADR 0002 A21) The load commands: `CloseLoad` runs
+  `CloseDeparture`, `DispatchLoad` runs `RecordDeparture` and `ReceiveLoad`
+  runs `RecordArrival`, each in the load's transaction.
 - **How does capacity change?** `DepartureCapacityChanged` carries
   `capacityPackages`, but the only commands that touch capacity are
   `BookCapacity` and `ReleaseCapacity`, which change `booked`.

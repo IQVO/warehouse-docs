@@ -217,8 +217,9 @@ API**.
 7. **One release, one purchase order.** `poNumber` is idempotent on
    `assignmentId + releaseNo` (policy `IssueOnRelease`), so a redelivered
    release never issues a second order.
-8. **Cancel only while `ISSUED`** (`ErrCancelAfterAcknowledgement`, policy
-   `CancelOnSourcingCancel`).
+8. **Cancel only while `ISSUED`** (`ErrCancelAfterAcknowledgement` for an
+   order past acknowledgement, `ErrIllegalTransition` for an `EXPIRED` or
+   `CANCELLED` one; policy `CancelOnSourcingCancel`).
 
 ## Assumptions
 
@@ -245,10 +246,10 @@ API**.
 
 ## Open Questions
 
-- **Where does `ackBy` get `handlingTime`?** The rule needs the node's
-  declared handling time, but this context consumes neither
-  `NodeOperationalProfileDeclared` nor any other source of it. Raised as a
-  model gap.
+- **Where does `ackBy` get `handlingTime`? (resolved, service ADR 0003).**
+  From `NodeOperationalProfileDeclared`, which this context consumes into
+  `VendorNodeView.handlingTimeMinutes`; a node with no declared profile has
+  handling time 0.
 - **Cancellation after acknowledgement (resolved, G12; one race stays open).**
   order-sourcing may cancel a `RELEASED` assignment while its purchase order is
   `ACK_PROCESSING` or `ACCEPTED`; here cancel is refused
@@ -257,9 +258,10 @@ API**.
   (`FulfillmentCancelRefused`). An acceptance that arrives after order-sourcing
   cancelled a `RELEASED` assignment is only logged there, so the vendor may
   still ship a cancelled group.
-- **Vendor suspension.** `SuspendVendor` and `ReinstateVendor` have no
-  route, no event and no invariant saying what a `SUSPENDED` vendor may not
-  do. Raised as a model gap.
+- **Vendor suspension (resolved, service ADR 0002 A9, A14).** `SuspendVendor`
+  and `ReinstateVendor` are `POST /vendors/{vendorId}/suspensions` and
+  `/reinstatements`, raise `VendorSuspended` and `VendorReinstated` on the events
+  topic, and a `SUSPENDED` vendor's writes are refused with 409 `vendor-suspended`.
 - **The label request is synchronous.** The model says every write returns
   `202`, but `SubmissionKind` has no label kind and `IssueLabel` is a
   synchronous call. The proposed contract returns labels in the response.

@@ -226,6 +226,10 @@ stop capacity), **Induction**, **Route**, **Delivery Service Partner (DSP)**,
   no offline or batch attempt upload.
 - Every consumer is idempotent on the CloudEvents `id`, and every published
   event leaves through a transactional outbox (model `integration_rules`).
+- A package whose destination postal prefix is a `CARRIER_HANDOFF` service area
+  is never inducted into a wave: it takes no stop capacity and raises no
+  event, and the counter `last_mile_delivery.carrier_area.skipped` counts it
+  (last-mile-delivery ADR 0015).
 
 ## Verification Metrics
 
@@ -243,9 +247,11 @@ stop capacity), **Induction**, **Route**, **Delivery Service Partner (DSP)**,
 
 ## Open Questions
 
-- **Who triggers `CompleteWave`, `CancelWave` and `CompleteRoute`?** They are
-  commands of the aggregates, but the model gives them no REST route, no
-  `inbound` row and no policy.
+- **Who triggers `CompleteWave`, `CancelWave` and `CompleteRoute`?**
+  (resolved) `CancelWave` is the station planner's `POST /waves/{waveId}/cancellations`.
+  `CompleteWave` and `CompleteRoute` have no caller: a route completes after
+  the attempt that records its last package (ADR 0002 A16) and a wave completes
+  with its last route, or at once when dispatched with no route (A9).
 - **Who calls `POST /partners` and `GET /waves`?** The routes are in `rest`
   but no `inbound` row names a caller. `CloseInduction` has a route but is
   missing from the planner's `inbound` row.
@@ -260,18 +266,19 @@ stop capacity), **Induction**, **Route**, **Delivery Service Partner (DSP)**,
   `InductPackage` fails with `ErrWaveFull` or `ErrInductionClosed`. No
   event tells `delivery-promise` that the witness wave was missed. Today
   only `shipping-and-tracking`'s `ExceptionOnSilence` would surface it later.
-- **Does `delivery-promise` learn that a wave was cancelled?**
-  `DeliveryWaveCancelled` is analytics only, and `DeliveryWaveView` is fed by
-  `DeliveryWaveScheduled` and `DeliveryWaveCapacityChanged` only. A promise
-  whose witness wave is cancelled is not re-promised by `RepromiseOnRisk`.
+- **Does `delivery-promise` learn that a wave was cancelled?** Yes:
+  `DeliveryWaveCancelled` goes to the integration stream and `delivery-promise`
+  and `order-sourcing` consume it (ADR 0002 A22; last-mile-delivery ADR 0003
+  addendum).
 - **Who records the third failure and the return to sender?**
   `RetryNextWave` needs a failure count per package across routes and waves.
   No aggregate holds that count, and no event carries "return to sender" to
   `shipping-and-tracking`, whose `ReturnToSender` has no trigger from this
   context.
-- **What happens to packages in a cancelled wave?** `CancelWave` is allowed
-  only from `OPEN`, when packages may already be inducted. The model does
-  not say whether they are re-inducted.
+- **What happens to packages in a cancelled wave?** (resolved, ADR 0002 A10)
+  `CancelWave` is allowed only from `OPEN`. In the same transaction every
+  inducted package is re-inducted onto the next eligible wave; one with no
+  eligible wave is unplaced and raises `PackageInductionDeferred`.
 - **Is a station still active?** `StationView` is fed by `NodeRegistered` and
   `ServiceAreaAssigned` only. `NodeSuspended` and `NodeRetired` do not
   reach this context, so a wave can be scheduled at a suspended station.

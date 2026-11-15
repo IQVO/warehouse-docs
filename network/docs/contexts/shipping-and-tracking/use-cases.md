@@ -29,8 +29,8 @@ HTTP adapter loads the journey through the repository and returns it.
 | `StartJourney` | Inside `IssueLabel` (no trigger named in the model) | none |
 | `RecordScan` | Five consumed event types; an unnamed REST caller | Kafka consumers; REST `POST /journeys/{trackingNumber}/scans` |
 | `RaiseException` | `ExceptionOnSilence` sweep | internal scheduler |
-| `ReturnToSender` | Not named in the model | none |
-| `DeclareLost` | Not named in the model | none |
+| `ReturnToSender` | Kafka consumer of `last-mile-delivery`'s `PackageReturnInitiated` (ADR 0002 A8) | Kafka consumer |
+| `DeclareLost` | The silence sweep, 48 h after an unanswered `NO_SCAN` (ADR 0002 A8) | internal scheduler |
 
 ## How save and publish commit
 
@@ -100,13 +100,18 @@ not found 404, stale 409. Problems are `application/problem+json`
 
 | Error | HTTP | Problem `type` |
 | --- | --- | --- |
-| Label not found (no `Err...` in the model) | 404 | `label-not-found` |
-| Request validation (no `Err...` in the model) | 422 | `validation-failed` |
+| Label not found (`ErrNotFound`) | 404 | `not-found` |
+| Request validation (`ErrValidation`) | 422 | `validation-failed` |
+| The journey is past `LABELLED` and still open (`ErrVoidAfterHandover`) | 409 | `void-after-handover` |
+| The journey is closed, for example `DELIVERED` (`ErrJourneyClosed`) | 409 | `journey-closed` |
 
 - **Events:** `LabelVoided`.
-- **Idempotency:** a repeat void is a no-op that returns the voided label.
-- **Not modelled:** whether a label can be voided after handover, and what
-  happens to the `LABELLED` journey of the same tracking number.
+- **Journey:** the void closes the `LABELLED` journey of the same tracking
+  number as `VOIDED` in the same transaction (ADR 0002 A13). The journey is
+  checked first: a delivered, returned, lost or already voided journey answers
+  `journey-closed`, an open journey past `LABELLED` `void-after-handover`.
+- **Idempotency:** voiding a `VOIDED` label returns it unchanged with `200`
+  and publishes nothing.
 
 ## StartJourney
 
@@ -145,9 +150,11 @@ not found 404, stale 409. Problems are `application/problem+json`
      (`scanId` = `<CloudEvents id>:<trackingNumber>` for events; the caller's
      `scanId` for REST).
   2. Load the journey.
-  3. `RecordScan`: refuse a known `scanId`; refuse on a closed journey; if
-     the scan is older than the last applied scan, store it as not applied;
-     otherwise apply the transition from the fact (mapping on the
+  3. `RecordScan`, in this order: refuse on a closed journey
+     (`ErrJourneyClosed`); refuse a known `scanId` (`ErrDuplicateScan`); if the
+     scan is older than the last applied scan, store it as not applied; a scan
+     with no edge from the current state is stored as not applied and answers
+     `ErrIllegalTransition`; otherwise apply the transition from the fact (mapping on the
      [Aggregate Design Canvas](/network/contexts/shipping-and-tracking/aggregate-design-canvas)).
   4. On `LABELLED -> HANDED_OVER` raise `PackageHandedOver`
      (`HandoverOnFirstScan`); on `-> DELIVERED` raise `PackageDelivered`;
@@ -160,7 +167,8 @@ not found 404, stale 409. Problems are `application/problem+json`
 | `ErrDuplicateScan` | 409 | `duplicate-scan` | treated as done, acknowledged |
 | `ErrScanOutOfOrder` | 409 | `scan-out-of-order` | scan stored, not applied, acknowledged |
 | `ErrJourneyClosed` | 409 | `journey-closed` | logged, acknowledged |
-| Journey not found (no `Err...` in the model) | 404 | `journey-not-found` | logged, counted, acknowledged |
+| `ErrIllegalTransition` (no edge from the current state) | 409 | `illegal-transition` | scan stored, not applied, acknowledged |
+| Journey not found (no `Err...` in the model) | 404 | `not-found` | logged, counted, acknowledged |
 | Request validation (no `Err...` in the model) | 422 | `validation-failed` | not applicable |
 
 - **Events:** `PackageScanned`, plus `PackageHandedOver` or
@@ -193,26 +201,30 @@ not found 404, stale 409. Problems are `application/problem+json`
 
 ## ReturnToSender
 
-- **Actor / trigger:** not named in the model. `last-mile-delivery`'s
-  `RetryNextWave` returns a package after three failed attempts but
-  publishes no event for it.
-- **Inbound adapter:** none in the model.
+- **Actor / trigger:** the consumed `PackageReturnInitiated` of
+  `last-mile-delivery` (raised on the third failed attempt; ADR 0002 A8).
+- **Inbound adapter:** Kafka consumer of
+  `com.retailnetwork.logistics.last-mile-delivery.packageattempthistory.PackageReturnInitiated`
+  (the `route` entity spelling is accepted).
 - **Preconditions:** the journey is `AT_STATION`.
 - **Main flow:** move `AT_STATION -> RETURNED`; save with the
-  `PackageReturned` outbox row in one transaction.
+  `PackageReturned` outbox row in one transaction; `returnedAt` is the event's
+  CloudEvents `time`.
 
 | Error | HTTP | Problem `type` |
 | --- | --- | --- |
 | `ErrJourneyClosed` | 409 (if a route is added) | `journey-closed` |
 
 - **Events:** `PackageReturned`.
-- **Idempotency:** a second call on a `RETURNED` journey hits
-  `ErrJourneyClosed`.
+- **Idempotency:** the inbox on the CloudEvents `id`; a second call on a
+  `RETURNED` journey hits `ErrJourneyClosed`.
 
 ## DeclareLost
 
-- **Actor / trigger:** not named in the model.
-- **Inbound adapter:** none in the model.
+- **Actor / trigger:** the silence sweep (ADR 0002 A8): an `IN_TRANSIT`
+  journey whose `NO_SCAN` exception stayed unanswered (no applied scan since)
+  for 48 hours is declared lost. The model names no other trigger.
+- **Inbound adapter:** internal scheduler.
 - **Preconditions:** the journey is `IN_TRANSIT` (the only state with a
   `LOST` edge).
 - **Main flow:** move `IN_TRANSIT -> LOST`; save with the `PackageLost`

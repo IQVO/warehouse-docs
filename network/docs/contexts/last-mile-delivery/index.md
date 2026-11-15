@@ -34,7 +34,7 @@ four aggregates: `DeliveryWave`, `Route`, `DeliveryServicePartner` and
 
 :::info[What its own pages describe]
 - **Inbound:** REST commands from the station planner (`/waves`, `/routes`)
-  and from the DSP driver app (`/routes/{routeId}:start`,
+  and from the DSP driver app (`/routes/{routeId}/starts`,
   `/routes/{routeId}/attempts`); `LoadArrived` from
   `linehaul-transportation`; `NodeRegistered` and `ServiceAreaAssigned` from
   `node-topology`.

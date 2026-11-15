@@ -66,7 +66,7 @@ flowchart TB
     C1["IssuePurchaseOrder"]:::command
     G1["PurchaseOrder"]:::aggregate
     E1["PurchaseOrderIssued"]:::event
-    H1["Hotspot H1: ackBy needs<br/>handlingTime, no source"]:::hotspot
+    H1["H1 resolved: handlingTime from<br/>NodeOperationalProfileDeclared"]:::hotspot
     V["Vendor system<br/>network-fulfillment"]:::external
     R2["Purchase orders<br/>poll with nextCursor"]:::readmodel
     C2["SubmitAcknowledgement<br/>whole order"]:::command
@@ -231,7 +231,7 @@ flowchart TB
     C1["OnboardVendor"]:::command
     G1["VendorAccount"]:::aggregate
     E1["VendorOnboarded"]:::event
-    H4["Hotspot H4: SuspendVendor,<br/>ReinstateVendor have no<br/>route, event or effect"]:::hotspot
+    H4["H4 resolved: suspensions and<br/>reinstatements routes, events,<br/>409 vendor-suspended"]:::hotspot
     V["Vendor system<br/>network-fulfillment"]:::external
     C2["ReceiveSubmission<br/>NODE_REGISTRATION,<br/>NODE_PROFILE, INVENTORY"]:::command
     G2["Submission"]:::aggregate
@@ -283,9 +283,9 @@ goes out for every processed write (board 2).
 | `FulfillmentReleasedToNode`, `FulfillmentCancelled`, `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `ListingCreated` | Domain Event (consumed) | `consumes` |
 | `IssueOnRelease`, `CancelOnSourcingCancel`, `ExpireUnacknowledged`, `SimulationKnobs` | Policy | `policies` |
 | `VendorNodeView`, `ListingView`, purchase-order poll | Read Model | `read_models`; `rest` `GET /vendor/purchase-orders` |
-| H1: `ackBy` needs `handlingTime`, no source | Hotspot | `business_decisions` (`ackBy = min(...)`) vs `consumes` (no `NodeOperationalProfileDeclared`) and `read_models` (`VendorNodeView` sources) |
+| H1: `ackBy` needs `handlingTime` (resolved) | Hotspot | `business_decisions` (`ackBy = min(...)`); `consumes` lists `NodeOperationalProfileDeclared`, which feeds `VendorNodeView.handlingTimeMinutes` |
 | H2: cancel after acknowledgement is refused (resolved, G12; one race stays open) | Hotspot | `invariants` (`ErrCancelAfterAcknowledgement`), `policies[CancelOnSourcingCancel]`: logged, nothing published; order-sourcing decides the cancel (`CancelDecision`) and an acceptance after a cancel is only logged there (`AcceptanceAfterCancelOnlyLogged`) |
 | H3: label is synchronous | Hotspot | `business_decisions` ("every vendor write returns 202") vs `SubmissionKind` (no label kind) and `sync_calls` (`IssueLabel`) |
-| H4: vendor suspension has no route, event or effect | Hotspot | `aggregates[VendorAccount].commands` vs `rest`, `publishes`, `invariants` |
+| H4: vendor suspension (resolved) | Hotspot | `rest` has `POST /vendors/{vendorId}/suspensions` and `/reinstatements`; `publishes` has `VendorSuspended` and `VendorReinstated`; `ErrVendorSuspended` (409 `vendor-suspended`) refuses a suspended vendor's writes |
 | H5: vendor never learns its `nodeId` | Hotspot | `aggregates[Submission]` (status and errors only) vs `rest` (`GET /vendor/nodes/{nodeId}` needs it) |
 | H6: caller identity without auth | Hotspot | `conventions.no_auth` vs invariant `ErrNodeNotOwnedByVendor` and the `rest` query parameters (no vendor id on reads) |
