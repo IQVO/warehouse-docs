@@ -42,7 +42,7 @@
     },
     {
       "name": "analytics",
-      "description": "The analytics read side of this context (ADR 0006): the analytics topic, its projector and the reports binary."
+      "description": "The analytics read side of this context (ADR 0013): the analytics topic, its projector and the reports binary."
     },
     {
       "name": "consumed",
@@ -826,11 +826,11 @@
       }
     },
     "warehouse.exception-management.analytics": {
-      "description": "This service's own analytics stream (ADR 0006), written by the SAME\ntransactional outbox relay as the integration topic: every published\nfact appears here too, under the SAME CloudEvents id and `type`, with\nonly the `dataschema` stream segment different\n(urn:warehouse:exception-management:analytics:<EventName>:v1). It is NOT\nan integration contract: the only consumer is this service's\ncmd/exceptions-projector (fixed group from `ANALYTICS_CONSUMER_GROUP`,\nstarting at the earliest retained offset), which folds the events into\nthe analytical database; its deterministic poison goes to\nwarehouse.exception-management.analytics.dlq. Other contexts keep\nreading warehouse.exception-management.events.\n",
+      "description": "This service's own analytics stream (ADR 0013), written by the SAME\ntransactional outbox relay as the integration topic: every published\nfact appears here too, under the SAME CloudEvents id and `type`, with\nonly the `dataschema` stream segment different\n(urn:warehouse:exception-management:analytics:<EventName>:v1). It is NOT\nan integration contract: the only consumer is this service's\ncmd/exceptions-projector (fixed group from `ANALYTICS_CONSUMER_GROUP`,\nstarting at the earliest retained offset), which folds the events into\nthe analytical database; its deterministic poison goes to\nwarehouse.exception-management.analytics.dlq. Other contexts keep\nreading warehouse.exception-management.events.\n",
       "subscribe": {
         "operationId": "receiveExceptionAnalytics",
         "summary": "Receive the analytics twin of every published fact.",
-        "description": "Payloads are byte-for-byte the integration payloads (ADR 0006); only\nthe dataschema names the analytics stream. The projector answers the\nroot-cause-frequency, mean-time-to-resolve, sla-breach-rate and\nfreshness reports from the folded facts.\n",
+        "description": "Payloads are byte-for-byte the integration payloads (ADR 0013); only\nthe dataschema names the analytics stream. The projector answers the\nroot-cause-frequency, mean-time-to-resolve, sla-breach-rate and\nfreshness reports from the folded facts.\n",
         "tags": [
           {
             "name": "analytics"
@@ -841,7 +841,7 @@
             {
               "name": "ExceptionOpened",
               "title": "Exception opened (analytics twin)",
-              "summary": "The analytics-stream twin of ExceptionOpened (ADR 0006).",
+              "summary": "The analytics-stream twin of ExceptionOpened (ADR 0013).",
               "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionOpened:v1`. Consumed only by cmd/exceptions-projector.",
               "contentType": "application/cloudevents+json",
               "tags": [
@@ -887,7 +887,7 @@
             {
               "name": "ExceptionTriaged",
               "title": "Exception triaged (analytics twin)",
-              "summary": "The analytics-stream twin of ExceptionTriaged (ADR 0006).",
+              "summary": "The analytics-stream twin of ExceptionTriaged (ADR 0013).",
               "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionTriaged:v1`. Consumed only by cmd/exceptions-projector.",
               "contentType": "application/cloudevents+json",
               "tags": [
@@ -923,7 +923,7 @@
             {
               "name": "ExceptionAssigned",
               "title": "Exception assigned (analytics twin)",
-              "summary": "The analytics-stream twin of ExceptionAssigned (ADR 0006).",
+              "summary": "The analytics-stream twin of ExceptionAssigned (ADR 0013).",
               "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionAssigned:v1`. Consumed only by cmd/exceptions-projector.",
               "contentType": "application/cloudevents+json",
               "tags": [
@@ -958,7 +958,7 @@
             {
               "name": "ExceptionEscalated",
               "title": "Exception escalated (analytics twin)",
-              "summary": "The analytics-stream twin of ExceptionEscalated (ADR 0006).",
+              "summary": "The analytics-stream twin of ExceptionEscalated (ADR 0013).",
               "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionEscalated:v1`. Consumed only by cmd/exceptions-projector.",
               "contentType": "application/cloudevents+json",
               "tags": [
@@ -992,7 +992,7 @@
             {
               "name": "ExceptionResolved",
               "title": "Exception resolved (analytics twin)",
-              "summary": "The analytics-stream twin of ExceptionResolved (ADR 0006).",
+              "summary": "The analytics-stream twin of ExceptionResolved (ADR 0013).",
               "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionResolved:v1`. Consumed only by cmd/exceptions-projector.",
               "contentType": "application/cloudevents+json",
               "tags": [
@@ -1029,7 +1029,7 @@
             {
               "name": "ExceptionAutoResolved",
               "title": "Exception auto-resolved (analytics twin)",
-              "summary": "The analytics-stream twin of ExceptionAutoResolved (ADR 0006).",
+              "summary": "The analytics-stream twin of ExceptionAutoResolved (ADR 0013).",
               "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionAutoResolved:v1`. Consumed only by cmd/exceptions-projector.",
               "contentType": "application/cloudevents+json",
               "tags": [
@@ -1065,7 +1065,7 @@
             {
               "name": "ExceptionPolicyDeclared",
               "title": "Exception policy declared (analytics twin)",
-              "summary": "The analytics-stream twin of ExceptionPolicyDeclared (ADR 0006).",
+              "summary": "The analytics-stream twin of ExceptionPolicyDeclared (ADR 0013).",
               "description": "Same `type`, `id`, `subject`, key and payload as the integration message; `dataschema` = `urn:warehouse:exception-management:analytics:ExceptionPolicyDeclared:v1`. Consumed only by cmd/exceptions-projector.",
               "contentType": "application/cloudevents+json",
               "tags": [
