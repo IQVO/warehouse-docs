@@ -32,8 +32,8 @@ sequenceDiagram
     participant CP as customer-payments
     participant PSP as payment-provider
     participant K as Kafka analytics
-    CK->>CP: cmd: AuthorizePayment<br/>POST /payment-authorizations<br/>key sessionId:auth
-    Note over CP: ErrDuplicateAuthorization,<br/>ErrAllocationMismatch
+    CK->>CP: cmd: AuthorizePayment<br/>POST /payment-authorizations<br/>key sessionId:auth:authAttempt
+    Note over CP: a live authorization exists: 200, the same one<br/>(ErrDuplicateAuthorization only on a concurrent race: 409),<br/>ErrAllocationMismatch
     CP->>PSP: cmd: Authorize<br/>PSP token, total, key
     alt the provider approves
         PSP-->>CP: reply providerAuthorizationId,<br/>expiresAt
@@ -46,7 +46,7 @@ sequenceDiagram
         CP-->>CK: cmd: reply 201 DECLINED<br/>session stays open
     end
     opt the place-order step is definitively rejected
-        CK->>CP: cmd: VoidAuthorization<br/>POST /payment-authorizations/<br/>authorizationId:void<br/>key sessionId:void
+        CK->>CP: cmd: VoidAuthorization<br/>POST /payment-authorizations/<br/>authorizationId/voids<br/>key sessionId:void
         CP->>PSP: cmd: Void
         CP-->>CK: cmd: reply 200 VOIDED
     end

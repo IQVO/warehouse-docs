@@ -160,14 +160,14 @@ integration event; the other six name their consumers as "analytics only"
 | Topic | `retailnetwork.checkout.analytics` |
 | Subject / key | `sessionId` |
 | Dataschema | `urn:retailnetwork:checkout:analytics:CheckoutPlacementInDoubt:v1` |
-| Producing command / use case | `RecordPlacementInDoubt` (timeout or `503` from the network; the session stays `PLACING`) |
+| Producing command / use case | `RecordPlacementInDoubt` on the first unknown outcome only (timeout or `503` from the network; the session stays `PLACING`; later `ResolveInDoubtPlacements` passes raise nothing) |
 | Consumers | analytics only |
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `sessionId` | string | The session whose place-order outcome is unknown. |
 | `placingSince` | timestamp | When the session entered `PLACING` (the clock of the 20 h alert and the 22 h give-up). |
-| `at` | timestamp | When the in-doubt outcome was recorded. |
+| `at` | timestamp | When the first in-doubt outcome was recorded. |
 
 `ConfirmSession` and `RecordAuthorization` raise no event: `CheckoutCompleted`
 already covers the outcome. Expiry and an in-doubt placement are operator

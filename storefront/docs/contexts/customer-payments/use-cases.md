@@ -74,16 +74,19 @@ is still written, which is a proposed disposition the model does not state.
 
 - **Actor / trigger:** `checkout`, saga step before the place-order pivot.
 - **Inbound adapter:** REST `POST /payment-authorizations`, header
-  `Idempotency-Key` required (`<sessionId>:auth`).
+  `Idempotency-Key` required (checkout sends `<sessionId>:auth:<authAttempt>`).
 - **Input:** `checkoutSessionId`, `paymentMethodToken` (the PSP token,
   never a card number), `currency`, `totalMinor`, `allocations` (`groupNo`,
   `amountMinor`).
-- **Preconditions:** no authorization exists for the session; allocations
-  sum to the total and name the session's groups.
+- **Preconditions:** the session holds no live (non-declined) authorization, or
+  the existing one is returned; allocations sum to the total and name the
+  session's groups.
 - **Main flow:**
   1. `Idempotency-Key` lookup; replay the stored response on a hit.
-  2. Check that the session has no authorization (`ErrDuplicateAuthorization`)
-     and that the allocations sum to the total (`ErrAllocationMismatch`).
+  2. Look up the session's live (non-declined) authorization. If there is one
+     (a sequential second authorize, under a different key), return it
+     unchanged with `200` and do not call the provider. Otherwise check that
+     the allocations sum to the total (`ErrAllocationMismatch`).
   3. Call the provider `Authorize` through the ACL port with the token, the
      total and the deterministic key.
   4. Approved: create the `PaymentAuthorization` `AUTHORIZED` with the
@@ -92,19 +95,23 @@ is still written, which is a proposed disposition the model does not state.
   5. In one transaction: save, outbox `PaymentAuthorized` or
      `PaymentDeclined`, store the key response.
   6. Answer `201` with the authorization (`AUTHORIZED` or `DECLINED`); the
-     checkout session stays open for another token after a decline.
+     checkout session stays open for another token after a decline (a
+     `DECLINED` record is not live, so the next authorize creates a new
+     authorization).
 - **Errors:**
 
 | Error | HTTP | Problem `type` slug | Note |
 | --- | --- | --- | --- |
-| `ErrDuplicateAuthorization` | 409 | `duplicate-authorization` | A second authorize for the same session under a different key; the same key replays the first response. |
+| `ErrDuplicateAuthorization` | 409 | `duplicate-authorization` | Only the concurrent race: two first authorizes for the same session under different keys run at once and the unique index rejects the second insert. It is not the answer to a sequential second authorize. |
 | `ErrAllocationMismatch` | 422 | `allocation-mismatch` | Allocations do not sum to the total or do not name the session's groups. |
 | provider unreachable or timed out | 503 | `payment-provider-unavailable` | Retry with the same `Idempotency-Key`; the provider key is deterministic. |
 | version conflict | 409 | `concurrent-update` | |
 | malformed request | 422 | `validation-failed` | |
+| sequential second authorize, different `Idempotency-Key` | 200 | (none) | Not an error: the session's existing live authorization is returned unchanged. |
+| same `Idempotency-Key` again | the first status | (none) | The stored response is replayed (header `Idempotency-Replayed: true`); the same key with a different request is 409 `idempotency-key-reused`. |
 
 - **Events emitted:** `PaymentAuthorized` or `PaymentDeclined` (analytics).
-- **Idempotency:** `Idempotency-Key`; one authorization per session.
+- **Idempotency:** `Idempotency-Key` replays the stored response; independently, one live authorization per session: a different key while one is live returns it (`200`), and `duplicate-authorization` (409) is raised only when two concurrent first calls race on the unique index.
 
 ## VoidAuthorization
 

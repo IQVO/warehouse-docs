@@ -193,7 +193,7 @@ Derived from: `model.yaml → contexts[product-content].aggregates[ProductConten
 
 Omitted: nothing beyond the shared notes at the top.
 
-## 4. RetireContent by the content manager (REST POST .../catalogItemId:retire)
+## 4. RetireContent by the content manager (REST POST .../catalogItemId/retirements)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
@@ -261,7 +261,7 @@ sequenceDiagram
         alt no content, or already RETIRED
             UC->>UC: nothing to retire
         else DRAFT
-            UC->>A: RetireContent(DISCONTINUED)
+            UC->>A: RetireOnDiscontinue (reason DISCONTINUED)
             A-->>UC: RETIRED, no event
             UC->>DB: update where version matches, COMMIT
         else PUBLISHED
@@ -458,7 +458,7 @@ Omitted: nothing beyond the shared notes. `PublishCategoryTree` re-publishes
 the live tree unchanged so consumers can resync; the structural invariants need
 no re-check at publication: they hold for the live tree at all times.
 
-## 10. ReviseDraft and DiscardDraft (REST POST .../catalogItemId:revise on a DRAFT, :discard)
+## 10. ReviseDraft and DiscardDraft (REST POST .../catalogItemId/revisions on a DRAFT, DELETE .../catalogItemId/draft)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%

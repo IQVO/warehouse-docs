@@ -69,8 +69,8 @@ The entry arrow `[*] --> DRAFT` is the creating command
 - Re-publication after a revision is `PUBLISHED → PUBLISHED` through
   `PublishContent`, carrying the new `revision` in `ProductContentPublished`
   (the revise-then-publish-again path `product-discovery` orders by).
-- `RETIRED` carries a reason: `DISCARDED`, `DISCONTINUED` or
-  `RETIRED_BY_HAND`. Only the retirement of PUBLISHED content raises
+- `RETIRED` carries a reason: `MANUAL` (retired by a content manager),
+  `DISCARDED` or `DISCONTINUED`. Only the retirement of PUBLISHED content raises
   `ProductContentRetired`.
 
 ### 4. Enforced Invariants
@@ -109,7 +109,7 @@ attributes, media) are the named invariants `ErrTooManyBullets`,
 | `ReviseContent` | Content manager, REST `POST /product-contents/{catalogItemId}/revisions` | `PUBLISHED → PUBLISHED` |
 | `PublishContent` | Content manager, REST `POST /product-contents/{catalogItemId}/publications` | `DRAFT → PUBLISHED`, `PUBLISHED → PUBLISHED` |
 | `DiscardDraft` | Content manager, REST `DELETE /product-contents/{catalogItemId}/draft` | `DRAFT → RETIRED` (reason `DISCARDED`) |
-| `RetireContent` | Content manager, REST `POST /product-contents/{catalogItemId}/retirements`; or the `RetireOnDiscontinue` policy on `CatalogItemDiscontinued` | `PUBLISHED → RETIRED`, `DRAFT → RETIRED` (policy, reason `DISCONTINUED`) |
+| `RetireContent` | Content manager, REST `POST /product-contents/{catalogItemId}/retirements`; or the `RetireOnDiscontinue` policy on `CatalogItemDiscontinued` | `PUBLISHED → RETIRED` (reason `MANUAL`); by the policy `PUBLISHED → RETIRED` and `DRAFT → RETIRED` (reason `DISCONTINUED`) |
 
 Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent].commands`,
 `.inbound`, `.policies`.

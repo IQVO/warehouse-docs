@@ -38,8 +38,10 @@ sequenceDiagram
     participant UC as SearchProducts
     participant SP as SearchPort
     participant DB as Postgres
-    H->>UC: Execute(q, filters, sort, after, limit)
-    alt invalid sort, negative price, limit outside 1 to 100
+    H->>UC: Execute(q, filters, sort, cursor, limit)
+    alt limit outside 1 to 500, bad cursor, undeclared parameter
+        UC-->>H: 400 invalid-limit, invalid-cursor<br/>or unknown-query-parameter
+    else invalid sort, negative or inverted price, q over 200 characters
         UC-->>H: 422 validation-failed
     else valid
         UC->>SP: Search(query)
@@ -48,17 +50,17 @@ sequenceDiagram
             SP->>DB: pg_trgm similarity retry<br/>(trigger not modelled)
         end
         DB-->>SP: rows
-        SP->>UC: hits
+        SP->>UC: rows
         UC->>DB: facet counts over the same rows<br/>category, price band, in-stock
         Note over UC: product-type query: add<br/>categorySuggestions (benchmark 6)
-        UC-->>H: 200 hits, facets, suggestions, next
+        UC-->>H: 200 items, facets, suggestions, nextCursor
     end
 ```
 
 Derived from: `model.yaml → contexts[product-discovery].rest`,
 `.business_decisions` (2, 3); `apis/product-discovery/openapi.yaml`.
 
-Omitted: pagination mechanics (keyset on `after`).
+Omitted: pagination mechanics (keyset on the opaque `cursor`, answered as `nextCursor`).
 
 ## 2. GetProduct (REST GET /products/catalogItemId)
 
@@ -215,9 +217,9 @@ sequenceDiagram
     OA-->>R: listings
     loop paged
         R->>PR: qry ListItemPrices GET /item-prices
-        PR-->>R: page + next
+        PR-->>R: page + nextCursor
         R->>PC: qry ListProductContents GET /product-contents
-        PC-->>R: page + next
+        PC-->>R: page + nextCursor
     end
     R->>DB: write snapshot rows,<br/>seed the guards (shapes not modelled, H7)
     R->>K: consume all three topics<br/>from the recorded offsets

@@ -45,7 +45,7 @@ live in the network's [customer-ordering](/network/contexts/customer-ordering).
 | Shopper (via `storefront-bff`, the experience layer) | Reviews the binding total, opens a session, confirms it, reads the session to learn whether it completed, needs a requote or failed | REST `POST /checkout-sessions`, `POST /checkout-sessions/{sessionId}/confirmations`, `GET /checkout-sessions/{sessionId}` |
 | `shopping-cart` | Supplies the cart (with its checkout readiness) at session open; closes the cart when the purchase completes | REST `GET /carts/{cartId}`; Kafka `CheckoutCompleted` |
 | `pricing` | Issues the binding, expiring `PriceQuote` the session confirms against | REST `POST /price-quotes` |
-| `customer-payments` | Authorizes the quote total with allocations per group; voids on a definitive rejection; binds the order on `CheckoutCompleted` | REST `POST /payment-authorizations`, `:void`; Kafka `CheckoutCompleted` |
+| `customer-payments` | Authorizes the quote total with allocations per group; voids on a definitive rejection; binds the order on `CheckoutCompleted` | REST `POST /payment-authorizations`, `POST /payment-authorizations/{authorizationId}/voids`; Kafka `CheckoutCompleted` |
 | `delivery-promise` (network) | Answers whether each selected offer is still quotable, with margin, before anything is authorized | REST `GET /delivery-offers/{offerId}` |
 | `customer-ordering` (network) | Places the order and confirms a promise per group; the place-order step | REST `POST /checkout`, through the Anti-Corruption Layer |
 | Analytics consumers | Follow the funnel: opened, declined, requote required, failed | Kafka `retailnetwork.checkout.analytics` |

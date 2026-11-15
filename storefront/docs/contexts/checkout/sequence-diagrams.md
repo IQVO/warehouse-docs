@@ -78,11 +78,12 @@ Derived from: `model.yaml → contexts[checkout].aggregates[CheckoutSession].com
 
 Omitted: the `503` when `Clients` cannot answer (the shopper retries with the
 same `Idempotency-Key`), the `422` on invalid input, and the case where an
-offer is no longer `QUOTED` at the pre-check, which fails as
-`ErrOfferNotQuotable` (`422 offer-not-quotable`, no state change; hotspot H3,
+offer is not `QUOTED` or expires within 2 minutes at this pre-check, which
+fails as `ErrOfferNotQuotable` (`422 offer-not-quotable`, no session, no state
+change; hotspot H3,
 resolved, on [EventStorming](/storefront/contexts/checkout/eventstorming)).
 
-## 2. ConfirmSession, part 1: authorize (REST POST ...:confirm)
+## 2. ConfirmSession, part 1: authorize (REST POST .../confirmations)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 110, "actorMargin": 12, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
@@ -91,7 +92,6 @@ sequenceDiagram
     participant H as http
     participant UC as ConfirmSession
     participant A as CheckoutSession
-    participant C as Clients
     participant P as Payments
     participant DB as Postgres
     participant K as Relay / Kafka
@@ -104,15 +104,10 @@ sequenceDiagram
         UC->>DB: load session (version)
         DB-->>UC: session or not found
         UC->>A: ConfirmSession(now)
-        alt closed, in doubt or quote expired
-            A-->>UC: ErrSessionClosed, ErrPlacementInDoubt<br/>or ErrPriceQuoteExpired
-            UC-->>H: 409 problem
+        alt closed, in doubt, void owed or quote expired
+            A-->>UC: ErrSessionClosed, ErrPlacementInDoubt,<br/>ErrVoidPending or ErrPriceQuoteExpired
+            UC-->>H: 409 problem, or 422 price-quote-expired
         else OPEN or DECLINED
-            UC->>C: GetDeliveryOffer(offerId) per selected offer
-            alt an offer is no longer QUOTED
-                C-->>UC: not quotable
-                UC-->>H: 422 offer-not-quotable, no state change
-            else all quotable
             A-->>UC: AUTHORIZING, authAttempt + 1 from DECLINED
             UC->>DB: save, version-checked
             UC->>P: AuthorizePayment<br/>key sessionId:auth:authAttempt
@@ -126,16 +121,15 @@ sequenceDiagram
             else authorized
                 P-->>UC: authorizationId, total
                 UC->>A: RecordAuthorization(authorizationId, total, request)
-                alt total differs from the quote total
-                    A-->>UC: ErrAuthorizationMismatch, voidOwed set
-                    UC->>DB: save voidOwed (RetryOwedVoids voids it)
+                alt total or currency differs from the quote
+                    A-->>UC: ErrAuthorizationMismatch, DECLINED, voidOwed set
+                    UC->>DB: save DECLINED and voidOwed (RetryOwedVoids voids it)
                     UC-->>H: 409 authorization-mismatch
                 else equal
                     A-->>UC: PLACING with the stored request
                     UC->>DB: save, version-checked
                     Note over UC,DB: continues with part 2
                 end
-            end
             end
         end
     end
@@ -149,9 +143,13 @@ Derived from: `model.yaml → contexts[checkout].aggregates[CheckoutSession]`
 Omitted: the `404` for an unknown session, a version conflict retried once
 and then `409 concurrent-update`. A `Payments` timeout on authorize leaves
 the session `AUTHORIZING`; `ResolveStuckAuthorizations` re-calls after 2
-minutes with the same key (hotspot H4, resolved). A mismatching total sets
-`voidOwed` (hotspot H5, resolved), and a second authorize after a decline is
-a new attempt with its own key (hotspot H2, resolved).
+minutes with the same key (hotspot H4, resolved). The offer check is not
+repeated here: it runs at open only. A mismatching total or currency returns
+the session to `DECLINED` with `voidOwed` set (hotspot H5, resolved): the void
+is attempted at once, `RetryOwedVoids` repeats it every minute, and a new
+confirm is refused with `409 void-pending` until it has succeeded. A second
+authorize after a decline is a new attempt with its own key (hotspot H2,
+resolved; `authAttempt` starts at 0).
 
 ## 3. ConfirmSession, part 2: place the order
 
