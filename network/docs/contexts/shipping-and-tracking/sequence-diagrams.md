@@ -92,15 +92,24 @@ sequenceDiagram
     UC->>DB: load label
     alt not found
         UC-->>H: label not found
-        Note over H: 404 label-not-found
+        Note over H: 404 not-found
     else already VOIDED
         UC-->>H: label unchanged
         Note over H: 200, no second event
     else ISSUED
-        UC->>A: VoidLabel reason
-        UC->>DB: update label, outbox LabelVoided, idempotency key
-        UC-->>H: label VOIDED
-        Note over H: 200
+        UC->>DB: load journey of the tracking number
+        alt journey closed (for example DELIVERED)
+            UC-->>H: ErrJourneyClosed
+            Note over H: 409 journey-closed
+        else journey past LABELLED and open
+            UC-->>H: ErrVoidAfterHandover
+            Note over H: 409 void-after-handover
+        else journey LABELLED
+            UC->>A: VoidLabel reason
+            UC->>DB: update label, journey VOIDED, outbox LabelVoided, idempotency key
+            UC-->>H: label VOIDED
+            Note over H: 200
+        end
     end
     RL->>DB: claim unpublished outbox rows
     Note over RL: publish label.LabelVoided keyed by labelRef
@@ -109,8 +118,9 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[shipping-and-tracking].aggregates[ShippingLabel].transitions`,
 `.rest`, `.publishes[LabelVoided]`.
 
-Omitted: the `Idempotency-Key` replay (as in diagram 1). The journey of the
-same tracking number is not touched; the model does not say it should be.
+Omitted: the `Idempotency-Key` replay (as in diagram 1). A `LABELLED` journey
+of the same tracking number closes as `VOIDED` in the same transaction
+(ADR 0002 A13).
 
 ## 3. RecordScan (Kafka consumer)
 
@@ -135,10 +145,10 @@ sequenceDiagram
                 Note over UC: log, count, skip this tracking number
             else found
                 UC->>A: RecordScan
-                alt ErrDuplicateScan
+                alt ErrJourneyClosed
+                    Note over UC: closed is checked first, log, skip
+                else ErrDuplicateScan
                     Note over UC: already applied, skip
-                else ErrJourneyClosed
-                    Note over UC: log, skip
                 else ErrScanOutOfOrder
                     UC->>DB: insert scan applied false, no event
                 else applied
@@ -164,7 +174,7 @@ Derived from: `model.yaml → contexts[shipping-and-tracking].consumes`,
 `.publishes`; `conventions.integration_rules` (inbox on the CloudEvents id).
 
 Omitted: the REST path `POST /journeys/{trackingNumber}/scans` runs the same
-`RecordScan` for one scan and answers `200`, `404 journey-not-found`,
+`RecordScan` for one scan and answers `200`, `404 not-found`,
 `409 duplicate-scan`, `409 scan-out-of-order`, `409 journey-closed` or
 `422 validation-failed`. For a one-package event the `processed_events`
 insert shares the journey's transaction; for a load event it is written
@@ -215,12 +225,12 @@ does not change.
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
-    participant C as caller not named
+    participant C as kafka consumer<br/>PackageReturnInitiated
     participant UC as ReturnToSender
     participant A as PackageJourney
     participant DB as DB transaction
     participant RL as Relay to Kafka
-    C->>UC: Execute trackingNumber
+    C->>UC: Execute trackingNumber, at
     UC->>DB: load journey and version
     UC->>A: ReturnToSender
     alt ErrJourneyClosed
@@ -242,9 +252,10 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[shipping-and-tracking].aggregates[PackageJourney].transitions`,
 `.publishes[PackageReturned]`.
 
-Omitted: the trigger. The model names none; `last-mile-delivery`'s
-`RetryNextWave` returns a package after three failures but publishes no
-event. The model also names no `Err...` for "no edge from this state".
+The trigger is `last-mile-delivery`'s `PackageReturnInitiated`, raised on the
+third failed attempt (ADR 0002 A8); `returnedAt` is the event's CloudEvents
+`time`. A journey that is open but not `AT_STATION` is `ErrIllegalTransition`
+(409 `illegal-transition`).
 
 ## 6. DeclareLost
 
@@ -252,7 +263,7 @@ event. The model also names no `Err...` for "no edge from this state".
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
-    participant C as caller not named
+    participant C as silence sweep<br/>48 h after NO_SCAN
     participant UC as DeclareLost
     participant A as PackageJourney
     participant DB as DB transaction
@@ -279,5 +290,6 @@ sequenceDiagram
 Derived from: `model.yaml → contexts[shipping-and-tracking].aggregates[PackageJourney].transitions`,
 `.publishes[PackageLost]`.
 
-Omitted: the trigger, which the model does not name; `LOST` is reachable
-only from `IN_TRANSIT`.
+The trigger is the silence sweep: an `IN_TRANSIT` journey whose `NO_SCAN`
+exception stayed unanswered for 48 hours is declared lost (ADR 0002 A8). `LOST`
+is reachable only from `IN_TRANSIT`.

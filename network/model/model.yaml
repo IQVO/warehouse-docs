@@ -1209,8 +1209,9 @@ contexts:
         invariants:
           - {rule: "ackWindow between 1h and 24h", error: ErrAckWindowOutOfRange}
           - {rule: "a vendor acts only on its own nodes", error: ErrNodeNotOwnedByVendor}
+          - {rule: "a SUSPENDED vendor's writes are refused with 409 vendor-suspended: acknowledgement, inventory, node registration, node profile, label request, shipment confirmation and inbound receipt; reads, polling, new purchase orders, the expiry sweep and submissions already received continue. Suspending a SUSPENDED vendor or reinstating an ACTIVE one is a no-op, 200 with the account unchanged and no event (ADR 0002 A8, A9)", error: ErrVendorSuspended}
         commands: [OnboardVendor, SuspendVendor, ReinstateVendor]
-        events: [VendorOnboarded]
+        events: [VendorOnboarded, VendorSuspended, VendorReinstated]
         throughput_estimate: "rare"
         size_estimate: "tens"
       - name: PurchaseOrder
@@ -1238,7 +1239,7 @@ contexts:
           - {rule: "no acknowledgement after ackBy", error: ErrAckWindowClosed}
           - {rule: "no label before ACCEPTED", error: ErrLabelBeforeAcceptance}
           - {rule: "no shipment confirmation without a label for every package", error: ErrConfirmWithoutLabel}
-          - {rule: "cancel only while ISSUED", error: ErrCancelAfterAcknowledgement}
+          - {rule: "cancel only while ISSUED: an order past acknowledgement (ACK_PROCESSING, ACCEPTED, REJECTED, SHIPMENT_PROCESSING, SHIPPED) is ErrCancelAfterAcknowledgement; an EXPIRED or CANCELLED order is ErrIllegalTransition (PurchaseOrder.Cancel); the observable result is the same, logged and acknowledged", error: ErrCancelAfterAcknowledgement}
         commands: [IssuePurchaseOrder, SubmitAcknowledgement, RequestLabel, SubmitShipmentConfirmation, ExpireUnacknowledgedOrders, CancelPurchaseOrder]
         events: [PurchaseOrderIssued, PurchaseOrderAccepted, PurchaseOrderRejected, PurchaseOrderExpired, PurchaseOrderCancelled, VendorShipmentConfirmed]
         throughput_estimate: "medium; polling reads dominate"
@@ -1258,23 +1259,24 @@ contexts:
         throughput_estimate: "medium-high"
         size_estimate: "retained 30 days"
     read_models:
-      - {name: VendorNodeView, source: "node-topology NodeRegistered, NodeActivated, NodeSuspended, NodeRetired"}
+      - {name: VendorNodeView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared (handlingTimeMinutes and profileRevision, the source of the handling time in ackBy; a lower revision never overwrites a higher one; a node with no declared profile has handling time 0), NodeActivated, NodeSuspended, NodeRetired. The node status is applied last-delivered-wins: the CloudEvents time is not read, and RETIRED is terminal (no later event changes it)"}
       - {name: ListingView, source: "offer-availability ListingCreated"}
       - {name: InboundShipmentView, source: "seller-inbound InboundShipmentLabelled, InboundShipmentShipped, InboundShipmentReceived"}
       - {name: CatalogPackagingView, source: "offer-availability CatalogItemPackagingDeclared, CatalogItemPackLevelRetired"}
     policies:
       - {name: IssueOnRelease, rule: "on FulfillmentReleasedToNode for a VENDOR node, issue a purchase order (poNumber is idempotent on assignmentId + releaseNo)"}
       - {name: PurchaseOrderOfMergedRelease, rule: "a merged FulfillmentReleasedToNode (carrier id, the union lines in member order with no lineNo, an optional members array and a per-line assignmentId) needs no code change: the tolerant decoder ignores members and the per-line assignmentId, so ONE purchase order is issued under the carrier's assignmentId, orderId, groupNo and tier, its lines are numbered by position (1..n), a listingId that two members both ordered appears on two lines (duplicates are legal) and each line keeps its own ownerRef. The release carries the carrier's fulfilment class (STANDARD for a consolidated group), so the tier validator never sees a fifth tier. The vendor sees one package; the Vendor API is unchanged (vendor-connectivity ADR 0013)"}
-      - {name: CancelOnReleaseWithdrawn, rule: "on FulfillmentReleaseWithdrawn (assignmentId, releaseNo, orderId, groupNo, reason, withdrawnAt) look the order up by (assignmentId, releaseNo), never by the latest release, so a withdraw that arrives after the carrier was released again cannot cancel the new order: not found is a no-op; an ISSUED order is cancelled (CancelPurchaseOrder) with the reason 'release withdrawn: ' + the event reason (sanitised and capped at 200 characters like every cancel reason) and raises PurchaseOrderCancelled in the same transaction; any other state is logged at INFO and acknowledged (ErrCancelAfterAcknowledgement when the vendor already accepted, ErrIllegalTransition for rejected, expired or cancelled). The reason is carried as an opaque string; this context does not branch on it. The existing FulfillmentCancelled policy cannot serve because a withdrawn release does not cancel the carrier assignment, which is released again under the next release number (vendor-connectivity ADR 0013)"}
+      - {name: CancelOnReleaseWithdrawn, rule: "on FulfillmentReleaseWithdrawn (assignmentId, releaseNo, orderId, groupNo, reason, withdrawnAt) look the order up by (assignmentId, releaseNo), never by the latest release, so a withdraw that arrives after the carrier was released again cannot cancel the new order: not found is a no-op; an ISSUED order is cancelled (CancelPurchaseOrder) with the reason 'release withdrawn: ' + the event reason (sanitised and capped at 200 characters like every cancel reason) and raises PurchaseOrderCancelled in the same transaction; any other state is logged at INFO and acknowledged (ErrCancelAfterAcknowledgement when the order is past acknowledgement, ErrIllegalTransition for expired or cancelled; ADR 0013 words rejected as ErrIllegalTransition, the code answers ErrCancelAfterAcknowledgement). The reason is carried as an opaque string; this context does not branch on it. The existing FulfillmentCancelled policy cannot serve because a withdrawn release does not cancel the carrier assignment, which is released again under the next release number (vendor-connectivity ADR 0013)"}
       - {name: PoLineNamesTheOwner, rule: "each purchase-order line carries the ownerRef of its released line (absent or empty = operator-owned), persisted on the line and exposed, optional and additive, on GET /vendor/purchase-orders, GET /vendor/purchase-orders/{poNumber} and PurchaseOrderIssued. Acknowledgement, cancellation, labels and shipment confirmation ignore it. KNOWN RESIDUAL: the fleet's network-fulfillment does not read it yet, so seller-owned lines are still picked without owner segregation (vendor-connectivity ADR 0012, gap G47)"}
       - {name: CancelOnSourcingCancel, rule: "on FulfillmentCancelled cancel the purchase order of the assignment's highest releaseNo (CancelPurchaseOrder; no order is a no-op). If the vendor has already acknowledged it, CancelPurchaseOrder fails with ErrCancelAfterAcknowledgement, which is logged at INFO: nothing is published and the event is not retried, because order-sourcing decides the cancel and learns the order's fate from PurchaseOrderAccepted. Known residual: an acceptance that arrives after order-sourcing cancelled a RELEASED assignment is only logged there (order-sourcing policy AcceptanceAfterCancelOnlyLogged)"}
       - {name: ExpireUnacknowledged, rule: "sweep: ISSUED past ackBy -> EXPIRED"}
+      - {name: LabelUpstreamOutage, rule: "RequestLabel is synchronous: when shipping-and-tracking does not answer the answer is 503 upstream-unavailable, and when it answers with a refusal this context does not translate 502 upstream-refused (apis/openapi.yaml documents both); labels already issued stay stored and a retry issues only the missing ones (ADR 0002 A19)"}
       - {name: ReceiptRelay, rule: "when an INBOUND_RECEIPT submission is accepted, append InboundReceiptSubmitted (subject and key shipmentId) to the outbox in the same unit of work, so a 202 always has its event (vendor-connectivity ADR 0005); SubmissionProcessed still reports the processing. The receipt is not applied to the shipment here, seller-inbound owns that"}
       - {name: SimulationKnobs, rule: "TX_PROCESSING_DELAY, TX_FAILURE_RATE, RATE_LIMIT_RPS, PO_REDELIVERY_RATE; all default to well-behaved"}
     inbound:
       - {from: "network-fulfillment (warehouse-systems, vendor V-WS)", type: cmd, channel: "Vendor API POST /vendor/nodes, PUT /vendor/nodes/{nodeId}/profile, POST /vendor/inventory, POST /vendor/acknowledgements, POST /vendor/shipping-labels, POST /vendor/shipment-confirmations, POST /vendor/inbound-receipts", routes: ["POST /vendor/nodes", "PUT /vendor/nodes/{nodeId}/profile", "POST /vendor/inventory", "POST /vendor/acknowledgements", "POST /vendor/shipping-labels", "POST /vendor/shipment-confirmations", "POST /vendor/inbound-receipts"], message: "RegisterVendorNode, DeclareNodeProfile, SubmitInventory, SubmitAcknowledgement, RequestLabel, SubmitShipmentConfirmation, SubmitInboundReceipt", relationship: "OHS + PL (downstream is Conformist + ACL)"}
       - {from: "network-fulfillment (warehouse-systems, vendor V-WS)", type: qry, channel: "Vendor API GET /vendor/purchase-orders, GET /vendor/purchase-orders/{poNumber}, GET /vendor/transactions/{transactionId}, GET /vendor/nodes, GET /vendor/nodes/{nodeId}, GET /vendor/nodes/{nodeId}/scorecard, GET /vendor/inbound-shipments, GET /vendor/inbound-shipments/{shipmentId}", routes: ["GET /vendor/purchase-orders", "GET /vendor/purchase-orders/{poNumber}", "GET /vendor/transactions/{transactionId}", "GET /vendor/nodes", "GET /vendor/nodes/{nodeId}", "GET /vendor/nodes/{nodeId}/scorecard", "GET /vendor/inbound-shipments", "GET /vendor/inbound-shipments/{shipmentId}"], message: "PollPurchaseOrders, GetPurchaseOrder, GetTransaction, ListVendorNodes, GetNode, GetScorecard, PollInboundShipments, GetInboundShipment", relationship: "OHS + PL"}
-      - {from: "network partner managers (human)", type: cmd, channel: "REST POST /vendors, POST /vendors/{vendorId}:suspend, POST /vendors/{vendorId}:reinstate", routes: ["POST /vendors", "POST /vendors/{vendorId}:suspend", "POST /vendors/{vendorId}:reinstate"], message: "OnboardVendor, SuspendVendor, ReinstateVendor", relationship: UI}
+      - {from: "network partner managers (human)", type: cmd, channel: "REST POST /vendors, POST /vendors/{vendorId}/suspensions, POST /vendors/{vendorId}/reinstatements", routes: ["POST /vendors", "POST /vendors/{vendorId}/suspensions", "POST /vendors/{vendorId}/reinstatements"], message: "OnboardVendor, SuspendVendor, ReinstateVendor", relationship: UI}
       - {from: "network partner managers (human)", type: qry, channel: "REST GET /vendors/{vendorId}", routes: ["GET /vendors/{vendorId}"], message: "GetVendor", relationship: UI}
       - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentReleasedToNode, FulfillmentCancelled, FulfillmentReleaseWithdrawn", relationship: Customer/Supplier}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeActivated, NodeSuspended, NodeRetired", relationship: Conformist}
@@ -1299,8 +1301,8 @@ contexts:
       - "POST /vendors"
       - "GET /vendor/nodes"
       - "GET /vendors/{vendorId}"
-      - "POST /vendors/{vendorId}:suspend"
-      - "POST /vendors/{vendorId}:reinstate"
+      - "POST /vendors/{vendorId}/suspensions"
+      - "POST /vendors/{vendorId}/reinstatements"
     publishes:
       - {event: VendorOnboarded, entity: vendoraccount, data: [vendorId, name, ackWindowMinutes], consumers: [node-performance]}
       - {event: PurchaseOrderIssued, entity: purchaseorder, data: [poNumber, vendorId, nodeId, assignmentId, releaseNo, requiredShipBy, ackBy, "lines(lineNo, listingId, quantity, ownerRef (optional, omitted when operator-owned))"], consumers: [node-performance]}
@@ -1311,8 +1313,8 @@ contexts:
       - {event: VendorShipmentConfirmed, entity: purchaseorder, data: [poNumber, assignmentId, nodeId, trackingNumbers, shippedAt, requiredShipBy], consumers: [order-sourcing, shipping-and-tracking, node-performance]}
       - {event: SubmissionProcessed, entity: submission, data: [transactionId, vendorId, kind, status, errorCount], consumers: [node-performance]}
       - {event: InboundReceiptSubmitted, entity: inboundreceipt, data: [transactionId, vendorId, nodeId, shipmentId, receivedAt, cartons(sscc, status, items(gtin, qtyEaches), complianceCodes)], consumers: [seller-inbound, node-performance]}
-      - {event: VendorSuspended, entity: vendoraccount, data: [vendorId, suspendedAt, reason], consumers: [analytics only]}
-      - {event: VendorReinstated, entity: vendoraccount, data: [vendorId, reinstatedAt], consumers: [analytics only]}
+      - {event: VendorSuspended, entity: vendoraccount, data: [vendorId, suspendedAt, reason], consumers: []}
+      - {event: VendorReinstated, entity: vendoraccount, data: [vendorId, reinstatedAt], consumers: []}
     reasons:
       - name: RejectReason
         fields: [PurchaseOrderRejected.reasonCode, "rest:RejectReason", "rest:Acknowledgement.reasonCode"]
@@ -1422,19 +1424,20 @@ contexts:
     read_models:
       - {name: NodeProfileView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
       - {name: LaneView, source: "node-topology LaneOpened, LaneClosed"}
-      - {name: ExpectedVolumeView, source: "order-sourcing FulfillmentReleasedToNode, FulfillmentReassigned, FulfillmentLocked, FulfillmentCancelled; shipping-and-tracking LabelIssued. A FulfillmentLocked that carries consolidatedInto (a follower of a merge) writes no row"}
+      - {name: ExpectedVolumeView, source: "order-sourcing FulfillmentReleasedToNode, FulfillmentReassigned, FulfillmentLocked, FulfillmentCancelled; shipping-and-tracking LabelIssued. A FulfillmentLocked that carries consolidatedInto (a follower of a merge) writes no row. FulfillmentReassigned and FulfillmentCancelled update the row only (nothing is released); FulfillmentReassigned reads only assignmentId and toNodeId, so no assignmentVersion check exists and the last delivered event wins"}
     policies:
-      - {name: PickupFromCutoffs, rule: "on NodeOperationalProfileDeclared (re)generate PICKUP departures for every cutoff of the horizon; on NodeSuspended/NodeRetired cancel future pickups"}
-      - {name: BookOnLock, rule: "on FulfillmentLocked book one package on the pickup departure; on FulfillmentCancelled or reassignment release it. A lock that carries consolidatedInto books nothing (FollowerLockBooksNothing)"}
+      - {name: PickupFromCutoffs, rule: "on NodeOperationalProfileDeclared (re)generate PICKUP departures for every cutoff of the horizon; on NodeSuspended/NodeRetired cancel future pickups. A pickup's departsAt equals its cutoffAt (the truck leaves at the cutoff) and arrivesAt is the cutoff plus the lane's nominalTransitMinutes (ADR 0002 A7)"}
+      - {name: BookOnLock, rule: "on FulfillmentLocked book one package on the pickup departure, once per assignment; when the departure cannot take it (DEPARTURE_UNKNOWN, DEPARTURE_CANCELLED, DEPARTURE_CLOSED, DEPARTURE_FULL) book the next SCHEDULED pickup of the same origin and publish BookingMoved, or BookingFailed when none can (ADR 0002 A14). FulfillmentCancelled and FulfillmentReassigned only update ExpectedVolumeView and release nothing: they happen before LOCKED and the release branch was removed (gap G15; ADR 0002 A16, A28). ReleaseCapacity is used only by the rebooking inside CancelDeparture (A15). A lock that carries consolidatedInto books nothing (FollowerLockBooksNothing)"}
+      - {name: DriveDepartureFromLoad, rule: "CloseLoad runs CloseDeparture on its SCHEDULED departure, DispatchLoad runs RecordDeparture (the departure must be CLOSED) and ReceiveLoad runs RecordArrival, each in the load's own transaction; CloseDeparture, RecordDeparture and RecordArrival have no REST route, consumer or clock of their own and no actor other than the load command (ADR 0002 A21)"}
       - {name: FollowerLockBooksNothing, rule: "order-sourcing publishes one FulfillmentLocked per member of a merge; a follower's lock carries the optional consolidatedInto (the carrier's assignment id) and every merged member carries mergedAssignmentIds. HandleLocked decodes consolidatedInto tolerantly; when it is set the CloudEvents id is claimed in the inbox (same transaction as every consumer) and nothing else happens: no ExpectedVolume row, no booking, no DepartureCapacityChanged, BookingMoved or BookingFailed, and a redelivery stops at the inbox claim. The carrier's lock books ONE package like an unmerged assignment, and rebooking, BookingMoved and BookingFailed are raised for the carrier id only (order-sourcing fans BookingMoved out to the followers on its side). mergedAssignmentIds is ignored: consolidatedInto alone decides. Absence means unmerged, and no order between the follower's and the carrier's lock is assumed. A follower dissolved from its merge before the lock is re-queued and books as any other assignment later. One merged package therefore occupies one package of pickup capacity (linehaul-transportation ADR 0014)"}
       - {name: HorizonRoll, rule: "nightly GenerateDepartures keeps a 14-day horizon"}
       - {name: NodeTypeSnapshot, rule: "a departure stores the node types of its origin and destination when it is scheduled, and OpenLoad copies departureKind, both node types and the capacity onto the load. LoadDeparted therefore carries departureKind and nodeType = the type of the origin node, and LoadArrived carries departureKind and nodeType = the type of the destination node, with no lookup. The wire field is nodeType, not destinationNodeType; shipping-and-tracking uses it to tell a pickup departure from a linehaul one and a delivery station from a sort centre"}
       - {name: DefaultOutboundLane, rule: "node-topology declares no default outbound lane, so the pickup's lane is the node's OPEN GROUND lane that ranks first by destination type (SORTATION_CENTER before any other known type, before an unknown one), then lowest nominalTransitMinutes, then lowest laneId. With no such lane no pickup is planned until a lane opens"}
       - {name: PickupCapacity, rule: "a pickup departure's capacityPackages = capacityOrders x packagesPerOrder. capacityOrders = max(1, min(CutoffSlot.maxOrders if set, throughputCap over the window)), where the window runs from the node's previous cutoff of the same day (its opening time for the first) to this cutoff, at least 60 minutes: a HOUR cap gives value x minutes / 60 and a DAY cap value x minutes / operating minutes of the day, rounded down. packagesPerOrder is linehaul-transportation's own setting (default 1, 1..1000), because node-topology declares none"}
     inbound:
-      # caller inferred for POST /lane-schedules/{laneId}:retire only (sibling of DefineLaneSchedule); change-capacity is named a planner command in the spec
-      - {from: network-ops planner, type: cmd, channel: "REST POST /lane-schedules, POST /lane-schedules/{laneId}:retire, POST /departures/{departureId}:cancel, POST /departures/{departureId}:change-capacity", routes: ["POST /lane-schedules", "POST /lane-schedules/{laneId}:retire", "POST /departures/{departureId}:cancel", "POST /departures/{departureId}:change-capacity"], message: "DefineLaneSchedule, RetireLaneSchedule, CancelDeparture, ChangeDepartureCapacity", relationship: UI}
-      - {from: "sort-centre and station operators (human/scanner)", type: cmd, channel: "REST POST /loads, POST /loads/{loadId}/packages, POST /loads/{loadId}:close, POST /loads/{loadId}:dispatch, POST /loads/{loadId}:receive", routes: ["POST /loads", "POST /loads/{loadId}/packages", "POST /loads/{loadId}:close", "POST /loads/{loadId}:dispatch", "POST /loads/{loadId}:receive"], message: "OpenLoad, AddPackage, CloseLoad, DispatchLoad, ReceiveLoad", relationship: UI}
+      # caller inferred for POST /lane-schedules/{laneId}/retirements only (sibling of DefineLaneSchedule); the capacity change is named a planner command in the spec
+      - {from: network-ops planner, type: cmd, channel: "REST POST /lane-schedules, POST /lane-schedules/{laneId}/retirements, POST /departures/{departureId}/cancellations, PUT /departures/{departureId}/capacity", routes: ["POST /lane-schedules", "POST /lane-schedules/{laneId}/retirements", "POST /departures/{departureId}/cancellations", "PUT /departures/{departureId}/capacity"], message: "DefineLaneSchedule, RetireLaneSchedule, CancelDeparture, ChangeDepartureCapacity", relationship: UI}
+      - {from: "sort-centre and station operators (human/scanner)", type: cmd, channel: "REST POST /loads, POST /loads/{loadId}/packages, POST /loads/{loadId}/closures, POST /loads/{loadId}/dispatches, POST /loads/{loadId}/receipts", routes: ["POST /loads", "POST /loads/{loadId}/packages", "POST /loads/{loadId}/closures", "POST /loads/{loadId}/dispatches", "POST /loads/{loadId}/receipts"], message: "OpenLoad, AddPackage, CloseLoad, DispatchLoad, ReceiveLoad", relationship: UI}
       # caller inferred for GET /departures/{departureId} only (sibling of the any-context list read)
       - {from: any context, type: qry, channel: "REST GET /departures?origin=&destination=&from=&to=, GET /departures/{departureId}", routes: ["GET /departures", "GET /departures/{departureId}"], message: "ListDepartures, GetDeparture", relationship: OHS}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired, LaneOpened, LaneClosed", relationship: Conformist}
@@ -1442,16 +1445,16 @@ contexts:
       - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "LabelIssued", relationship: Conformist}
     rest:
       - "POST /lane-schedules"
-      - "POST /lane-schedules/{laneId}:retire"
+      - "POST /lane-schedules/{laneId}/retirements"
       - "GET /departures?origin=&destination=&from=&to="
       - "GET /departures/{departureId}"
-      - "POST /departures/{departureId}:cancel"
+      - "POST /departures/{departureId}/cancellations"
       - "POST /loads"
       - "POST /loads/{loadId}/packages"
-      - "POST /loads/{loadId}:close"
-      - "POST /loads/{loadId}:dispatch"
-      - "POST /loads/{loadId}:receive"
-      - "POST /departures/{departureId}:change-capacity"
+      - "POST /loads/{loadId}/closures"
+      - "POST /loads/{loadId}/dispatches"
+      - "POST /loads/{loadId}/receipts"
+      - "PUT /departures/{departureId}/capacity"
     publishes:
       - {event: DepartureScheduled, entity: departure, data: [departureId, laneId, kind, originNodeId, destinationNodeId, cutoffAt, departsAt, arrivesAt, capacityPackages], consumers: [delivery-promise, order-sourcing]}
       - {event: DepartureCapacityChanged, entity: departure, data: [departureId, capacityPackages, bookedPackages, remainingPackages], consumers: [delivery-promise, order-sourcing]}
@@ -1529,6 +1532,7 @@ contexts:
           - {rule: "inductCutoffAt < windowStart < windowEnd", error: ErrInvalidWaveTimes}
           - {rule: "assigned stops <= stops, where assigned stops counts the distinct stopKeys among the wave's inductions", error: ErrWaveFull}
           - {rule: "no package joins after induction closes", error: ErrInductionClosed}
+          - {rule: "a wave is scheduled only for a known DELIVERY_STATION of StationView; checked by the use case, not by the aggregate (ADR 0002 A1)", error: ErrUnknownStation}
         commands: [ScheduleWave, InductPackage, CloseInduction, DispatchWave, CompleteWave, CancelWave]
         events: [DeliveryWaveScheduled, DeliveryWaveCapacityChanged, DeliveryWaveCancelled]
         throughput_estimate: "medium"
@@ -1544,6 +1548,9 @@ contexts:
           - {rule: "an attempt is recorded only on an OUT_FOR_DELIVERY route", error: ErrRouteNotStarted}
           - {rule: "a package is delivered at most once", error: ErrAlreadyDelivered}
           - {rule: "the packages of one stop share one stopKey", error: ErrStopKeyMismatch}
+          - {rule: "an attempt names a package that is on the route (404 package-not-on-route) and is recorded once per package per route: a second after DELIVERED is ErrAlreadyDelivered, after FAILED ErrAttemptAlreadyRecorded", error: ErrPackageNotOnRoute}
+          - {rule: "PlanRoute needs the wave INDUCTION_CLOSED (ErrIllegalTransition), an ACTIVE partner of the wave's station (ErrPartnerInactive, ErrPartnerStationMismatch) and packages inducted in the wave and on no other route (ErrPackageNotInducted, ErrPackageAlreadyRouted); StartRoute needs the wave DISPATCHED (ADR 0002 A12, A14)", error: ErrIllegalTransition}
+          - {rule: "a route completes only when every package has an attempt", error: ErrRouteIncomplete}
           - {rule: "outcomeDetail, when reported, pairs with the outcome: FAILED carries NOT_HOME, ACCESS_PROBLEM or OTHER, DELIVERED carries SAFE_PLACE_USED; empty means not reported (a legacy client) and never replaces failureReason", error: ErrValidation}
         commands: [PlanRoute, StartRoute, RecordAttempt, CompleteRoute]
         events: [RoutePlanned, PackageOutForDelivery, StopEtaWindowAssigned, DeliveryAttempted]
@@ -1574,13 +1581,17 @@ contexts:
         throughput_estimate: "one Observe per attempt"
         size_estimate: "one small row per distinct delivery point"
     read_models:
-      - {name: StationView, source: "node-topology NodeRegistered, ServiceAreaAssigned"}
+      - {name: StationView, source: "node-topology NodeRegistered (DELIVERY_STATION only; the first write per nodeId is kept, ON CONFLICT DO NOTHING, ADR 0003), ServiceAreaAssigned (applied only when assignmentVersion is higher than the stored one; carries deliveryMode, absent means NETWORK_ROUTE, ADR 0015)"}
       - {name: InboundPackagesView, source: "linehaul-transportation LoadArrived"}
-      - {name: PackageStopView, source: "shipping-and-tracking LabelIssued (trackingNumber, stopKey, destinationPostalPrefix, assignmentId)"}
+      - {name: PackageStopView, source: "shipping-and-tracking LabelIssued (trackingNumber, stopKey, destinationPostalPrefix, assignmentId); the first write per trackingNumber is kept (ON CONFLICT DO NOTHING, ADR 0003); a label without stopKey is ignored"}
       - {name: LastMileAnalytics, source: "analytical read side (last-mile-delivery ADR 0012): cmd/lm-projector, the only writer of a SEPARATE analytical database, projects this context's OWN topics only (retailnetwork.last-mile-delivery.events and .analytics, RoutePlanned included) in one consumer group, deduped in the projection transaction; cmd/lm-reports serves the read-only /reports routes on :8092. ADR 0013 adds the stop_eta_windows fact (one row per package of a StopEtaWindowAssigned, migration 0002) and the GET /reports/eta-window report: per UTC day of the DELIVERED attempt and per station, deliveriesWithEta, deliveriesInsideEta, deliveriesBeforeEta, deliveriesAfterEta and etaHitRate = inside / withEta (null when no delivery had an ETA); only the attempt that DELIVERED counts, and a delivered package whose ETA row was never projected is not in the denominator. DeliveryPointFlagged is acknowledged without a fact"}
     policies:
       - {name: InductOnArrival, rule: "on LoadArrived at a delivery station induct every package into the earliest eligible wave"}
       - {name: RetryNextWave, rule: "a FAILED attempt re-inducts the package into the next wave; three failures return it to sender"}
+      - {name: CompleteRouteOnLastAttempt, rule: "a route completes (OUT_FOR_DELIVERY to COMPLETED) in the same unit of work as the attempt that records its last outstanding package, so CompleteRoute has no REST route and no caller; a route whose driver never records every package stays OUT_FOR_DELIVERY (ADR 0002 A16)"}
+      - {name: CompleteWaveWithLastRoute, rule: "a DISPATCHED wave completes in the transaction in which its last route completes; a wave dispatched with no route completes at once, so the dispatch response may show COMPLETED. CompleteWave has no REST route and no caller (ADR 0002 A9)"}
+      - {name: ReinduceOnCancel, rule: "CancelWave (OPEN to CANCELLED, a reason of 1 to 200 characters, REST POST /waves/{waveId}/cancellations) re-inducts every package of the wave onto the next eligible wave in the same transaction; one with no eligible wave is unplaced and raises PackageInductionDeferred. A second cancel of a CANCELLED wave is 409 illegal-transition: the wave stays CANCELLED and no second DeliveryWaveCancelled is raised (ADR 0002 A10)"}
+      - {name: IdempotentPosts, rule: "every POST takes an Idempotency-Key (1 to 128 printable ASCII; missing 400 idempotency-key-required, malformed 400 idempotency-key-invalid). The key is global (looked up by key alone); the fingerprint is method + path + SHA-256 of the body; the same key and fingerprint replays the stored 2xx or 4xx answer with Idempotency-Replayed: true, the same key with another fingerprint is 409 idempotency-key-reused; a 5xx is never stored; 24 h (ADR 0010, which supersedes ADR 0002 A21)"}
       - {name: GroupByStopKey, rule: "packages are grouped into stops by the stopKey of LabelIssued, never by an address. Wave capacity counts stops: assignedStops is the number of distinct stopKeys among the wave's inductions, so a package for a stop already in the wave adds no stop and raises no DeliveryWaveCapacityChanged. A package with no label data is its own stop (key pkg: followed by the tracking number)"}
       - {name: NoAddressAtLastMile, rule: "last-mile-delivery never receives an address: it holds a stopKey and a postal prefix only, and no address route exists (shipping-and-tracking policy NoAddressRoute). How the driver learns the address is not decided"}
       - {name: EtaWindowAtRouteStart, rule: "StartRoute raises one StopEtaWindowAssigned per stop, after every PackageOutForDelivery, in the same transaction and under the same Kafka key (the routeId): the stops are spread linearly over what is left of the wave's delivery window (from max(now, windowStart) to windowEnd), each stop a window of at most two hours truncated to the minute; when less than 30 minutes of the wave window is left at the start instant no event is raised (counted skipped, reason window_elapsed) and the route starts normally. The CloudEvents time is the route start instant; an ETA is never retracted, never re-raised for the same start, and a re-inducted package gets a new one from its next StartRoute. Nothing is persisted on the route and GET /routes/{routeId} shows no window: the events and the analytics read side are the record (last-mile-delivery ADR 0013)"}
@@ -1588,11 +1599,11 @@ contexts:
       - {name: CarrierAreaRefusal, rule: "a ServiceAreaAssigned whose deliveryMode is CARRIER_HANDOFF is not wave territory (RN-0010): StationView marks the prefix carrier-served, InductPackage refuses a package whose destination prefix is carrier-served (no wave, no stop capacity), and the package leaves at the handoff node through shipping-and-tracking's HandToCarrier"}
       - {name: PointIsOneStop, rule: "a pickup point is one stop of a station route with its own stop identity, the pickupPointId, never an address key (RN-0011): many packages for one point take one unit of stop capacity"}
     inbound:
-      # caller inferred for close-induction, cancel, POST /partners and :deactivate (ADR 0003 names only the station planner and the driver app as UI callers; sibling of the wave and route commands)
-      - {from: "station planner (human)", type: cmd, channel: "REST POST /waves, POST /waves/{waveId}:close-induction, POST /waves/{waveId}:dispatch, POST /waves/{waveId}:cancel, POST /routes, POST /partners, POST /partners/{dspId}:deactivate", routes: ["POST /waves", "POST /waves/{waveId}:close-induction", "POST /waves/{waveId}:dispatch", "POST /waves/{waveId}:cancel", "POST /routes", "POST /partners", "POST /partners/{dspId}:deactivate"], message: "ScheduleWave, CloseInduction, DispatchWave, CancelWave, PlanRoute, ContractPartner, DeactivatePartner", relationship: UI}
+      # caller inferred for close-induction, cancel, POST /partners and deactivations (ADR 0003 names only the station planner and the driver app as UI callers; sibling of the wave and route commands)
+      - {from: "station planner (human)", type: cmd, channel: "REST POST /waves, POST /waves/{waveId}/induction-closures, POST /waves/{waveId}/dispatches, POST /waves/{waveId}/cancellations, POST /routes, POST /partners, POST /partners/{dspId}/deactivations", routes: ["POST /waves", "POST /waves/{waveId}/induction-closures", "POST /waves/{waveId}/dispatches", "POST /waves/{waveId}/cancellations", "POST /routes", "POST /partners", "POST /partners/{dspId}/deactivations"], message: "ScheduleWave, CloseInduction, DispatchWave, CancelWave, PlanRoute, ContractPartner, DeactivatePartner", relationship: UI}
       # caller inferred for GET /waves; the spec says the planner builds PlanRoute from the stops list
       - {from: "station planner (human)", type: qry, channel: "REST GET /waves, GET /waves/{waveId}/stops", routes: ["GET /waves", "GET /waves/{waveId}/stops"], message: "ListWaves, GetWaveStops", relationship: UI}
-      - {from: delivery service partner driver app, type: cmd, channel: "REST POST /routes/{routeId}:start, POST /routes/{routeId}/attempts", routes: ["POST /routes/{routeId}:start", "POST /routes/{routeId}/attempts"], message: "StartRoute, RecordAttempt", relationship: UI}
+      - {from: delivery service partner driver app, type: cmd, channel: "REST POST /routes/{routeId}/starts, POST /routes/{routeId}/attempts", routes: ["POST /routes/{routeId}/starts", "POST /routes/{routeId}/attempts"], message: "StartRoute, RecordAttempt", relationship: UI}
       # caller inferred: the spec names no caller; the driver app records the attempts the route read returns
       - {from: delivery service partner driver app, type: qry, channel: "REST GET /routes/{routeId}", routes: ["GET /routes/{routeId}"], message: "GetRoute", relationship: UI}
       - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "LoadArrived", relationship: Customer/Supplier}
@@ -1602,16 +1613,16 @@ contexts:
     rest:
       - "POST /waves"
       - "GET /waves?stationNodeId=&serviceDate="
-      - "POST /waves/{waveId}:close-induction"
-      - "POST /waves/{waveId}:dispatch"
+      - "POST /waves/{waveId}/induction-closures"
+      - "POST /waves/{waveId}/dispatches"
       - "POST /routes"
-      - "POST /routes/{routeId}:start"
+      - "POST /routes/{routeId}/starts"
       - "POST /routes/{routeId}/attempts"
       - "POST /partners"
       - "GET /waves/{waveId}/stops"
-      - "POST /waves/{waveId}:cancel"
+      - "POST /waves/{waveId}/cancellations"
       - "GET /routes/{routeId}"
-      - "POST /partners/{dspId}:deactivate"
+      - "POST /partners/{dspId}/deactivations"
       - "GET /reports/route-efficiency?from=&to="
       - "GET /reports/attempt-outcomes?from=&to="
       - "GET /reports/eta-window?from=&to="
@@ -1705,8 +1716,10 @@ contexts:
       - name: PackageJourney
         root_id: trackingNumber
         description: "The customer-visible timeline of one package."
-        states: [LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, WITH_CARRIER, READY_FOR_COLLECTION, DELIVERED, COLLECTED, RETURNED, LOST]
+        states: [LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, WITH_CARRIER, READY_FOR_COLLECTION, DELIVERED, COLLECTED, RETURNED, LOST, VOIDED]
         transitions:
+          - [LABELLED, LABELLED, RecordScan]
+          - [LABELLED, VOIDED, VoidLabel]
           - [LABELLED, HANDED_OVER, RecordScan]
           - [HANDED_OVER, IN_TRANSIT, RecordScan]
           - [HANDED_OVER, AT_STATION, RecordScan]
@@ -1730,7 +1743,8 @@ contexts:
         invariants:
           - {rule: "scans apply in time order; an older scan is stored but does not move the state", error: ErrScanOutOfOrder}
           - {rule: "a scanId is applied once", error: ErrDuplicateScan}
-          - {rule: "DELIVERED, COLLECTED, RETURNED and LOST are terminal", error: ErrJourneyClosed}
+          - {rule: "DELIVERED, COLLECTED, RETURNED, LOST and VOIDED are terminal; RecordScan checks the journey is open before it checks the scanId, so a redelivered scan on a closed journey answers ErrJourneyClosed, not ErrDuplicateScan", error: ErrJourneyClosed}
+          - {rule: "a label is voided only before handover: VoidLabel closes a LABELLED journey as VOIDED in the same transaction; a journey that is past LABELLED and still open answers ErrVoidAfterHandover (409 void-after-handover) and a closed one, for example DELIVERED, ErrJourneyClosed (409 journey-closed) (ADR 0002 A13)", error: ErrVoidAfterHandover}
           - {rule: "a CARRIER_HANDOFF scan applies only to a journey whose area is CARRIER_HANDOFF, and a POINT_DEPOSITED or COLLECTED scan only to a pickup journey (destinationKind PICKUP_POINT); anything else is stored with applied=false and answers ErrIllegalTransition (shipping-and-tracking ADR 0015/0016)", error: ErrIllegalTransition}
           - {rule: "the stored ETA window is empty or has etaStart < etaEnd and a non-zero etaAssignedAt; an assignment not strictly newer than the stored one is refused (ErrEtaStale) and a terminal journey refuses AssignEta (ErrJourneyClosed)", error: ErrEtaStale}
           - {rule: "pointFlagReason and pointFlaggedAt are null together and the reason is NOT_HOME or ACCESS_PROBLEM; a flag not strictly newer than the stored one is refused (ErrPointFlagStale) and a terminal journey refuses FlagDeliveryPoint (ErrJourneyClosed)", error: ErrPointFlagStale}
@@ -1745,8 +1759,11 @@ contexts:
       - {name: DeliveryAnalytics, source: "analytical read side (shipping-and-tracking ADR 0012, the pilot): cmd/st-projector, the only writer of a SEPARATE analytical database, projects this context's OWN integration topic only (retailnetwork.shipping-and-tracking.events; the analytics topic is not subscribed while nothing is published on it), deduped in the projection transaction; cmd/st-reports serves the read-only /reports routes on :8092"}
     policies:
       - {name: HandoverOnFirstScan, rule: "the first PICKUP_DEPARTURE scan, made from a LoadDeparted whose departureKind is PICKUP, moves LABELLED to HANDED_OVER; its origin node and departedAt are the handover node and instant used by node-performance. A LoadDeparted with no departureKind counts as a pickup only while the journey is still LABELLED"}
-      - {name: ScanTypeFromLoadFacts, rule: "LoadDeparted of kind PICKUP is a PICKUP_DEPARTURE scan (LABELLED to HANDED_OVER) and of any other kind a DEPARTURE scan (HANDED_OVER or IN_TRANSIT to IN_TRANSIT). LoadArrived whose nodeType is DELIVERY_STATION is a STATION_ARRIVAL scan (HANDED_OVER or IN_TRANSIT to AT_STATION) and any other or absent nodeType a TRANSIT_ARRIVAL scan (HANDED_OVER or IN_TRANSIT to IN_TRANSIT). HANDED_OVER to AT_STATION is direct injection: a package that goes from a fulfillment centre straight to a delivery station, the SAME_DAY path, has no IN_TRANSIT step. A scan with no edge from the current state is stored with applied=false and answers ErrIllegalTransition"}
+      - {name: ScanTypeFromLoadFacts, rule: "VendorShipmentConfirmed is an applied SHIPMENT_CONFIRMED scan: LABELLED stays LABELLED and PackageScanned is raised (ADR 0002 A5). LoadDeparted of kind PICKUP is a PICKUP_DEPARTURE scan (LABELLED to HANDED_OVER) and of any other kind a DEPARTURE scan (HANDED_OVER or IN_TRANSIT to IN_TRANSIT). LoadArrived whose nodeType is DELIVERY_STATION is a STATION_ARRIVAL scan (HANDED_OVER or IN_TRANSIT to AT_STATION) and any other or absent nodeType a TRANSIT_ARRIVAL scan (HANDED_OVER or IN_TRANSIT to IN_TRANSIT). HANDED_OVER to AT_STATION is direct injection: a package that goes from a fulfillment centre straight to a delivery station, the SAME_DAY path, has no IN_TRANSIT step. A scan with no edge from the current state is stored with applied=false and answers ErrIllegalTransition"}
       - {name: ExceptionOnSilence, rule: "no scan within expected leg time + tolerance raises PackageExceptionRaised(NO_SCAN)"}
+      - {name: DeclareLostOnSilence, rule: "the silence sweep declares an IN_TRANSIT journey LOST (DeclareLost, PackageLost) when its NO_SCAN exception has stayed unanswered, with no applied scan since, for 48 hours (ADR 0002 A8)"}
+      - {name: ReturnOnReturnInitiated, rule: "on last-mile-delivery's PackageReturnInitiated (the third failed attempt) run ReturnToSender on an AT_STATION journey: RETURNED and PackageReturned, whose returnedAt is the CloudEvents time of the consumed event (ADR 0002 A8)"}
+      - {name: EventTimeIsCommitTime, rule: "the CloudEvents time of every event this context publishes is the instant the change was committed (the aggregate's own clock, OccurredAt), not the instant the fact happened; the fact instant is a data field (deliveredAt, handedOverAt, returnedAt, the scan's at) and can be earlier (ADR 0004; encoder.go)"}
       - {name: StopKeyAtLabelTime, rule: "at IssueLabel the address is read from customer-ordering (GetShipTo), normalized (upper case, letters and digits only; line1, line2, city, region, postalCode and countryCode, not the recipient name or phone) and hashed with a service secret into the stopKey, so neighbours at one address share a stop. stopKey and destinationPostalPrefix go on LabelIssued; the address is then encrypted into the ship-to snapshot and dropped from memory"}
       - {name: NoAddressRoute, rule: "no address leaves shipping-and-tracking and customer-ordering: no route, event or read model carries it, and no restricted label route is built. How a delivery partner learns the address at the door is not decided"}
       - {name: ShipToRetention, rule: "a periodic job (PurgeShipTo) deletes a ship-to snapshot 30 days after its journey closed: DELIVERED, RETURNED or LOST, or VOIDED when the label was voided before handover. A journey still open keeps its snapshot"}
@@ -1757,7 +1774,7 @@ contexts:
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /labels (in-org)", routes: ["POST /labels"], message: "IssueLabel", relationship: Customer/Supplier}
       # caller inferred: the spec names no caller for either route; both are ground-operations actions (a scan is recorded at a scanner, a label is voided before handover); no sibling service has a client for them
-      - {from: "sort-centre and station operators (human/scanner)", type: cmd, channel: "REST POST /labels/{labelRef}:void, POST /journeys/{trackingNumber}/scans", routes: ["POST /labels/{labelRef}:void", "POST /journeys/{trackingNumber}/scans"], message: "VoidLabel, RecordScan", relationship: UI}
+      - {from: "sort-centre and station operators (human/scanner)", type: cmd, channel: "REST POST /labels/{labelRef}/voids, POST /journeys/{trackingNumber}/scans", routes: ["POST /labels/{labelRef}/voids", "POST /journeys/{trackingNumber}/scans"], message: "VoidLabel, RecordScan", relationship: UI}
       - {from: carrier, type: cmd, channel: "REST POST /carrier-events (the carrier webhook of CARRIER_HANDOFF areas, an inbound translation layer, RN-0010)", routes: ["POST /carrier-events"], message: "RecordCarrierEvent", relationship: OHS}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events (area modes and pickup points, ST_AREAS_CONSUMER_GROUP)", message: "NodeRegistered, NodeActivated, NodeSuspended, NodeRetired, ServiceAreaAssigned", relationship: Conformist}
       - {from: shopper / customer-ordering, type: qry, channel: "REST GET /journeys/{trackingNumber}", routes: ["GET /journeys/{trackingNumber}"], message: "GetJourney", relationship: OHS}
@@ -1769,7 +1786,7 @@ contexts:
       - {from: network analysts (human), type: qry, channel: "REST GET /reports/package-touches, GET /reports/delivery-outcomes, GET /reports/freshness (cmd/st-reports, :8092)", routes: ["GET /reports/package-touches", "GET /reports/delivery-outcomes", "GET /reports/freshness"], message: "GetPackageTouchesReport, GetDeliveryOutcomesReport, GetReportFreshness", relationship: UI}
     rest:
       - "POST /labels"
-      - "POST /labels/{labelRef}:void"
+      - "POST /labels/{labelRef}/voids"
       - "GET /journeys/{trackingNumber}"
       - "POST /journeys/{trackingNumber}/scans"
       - "POST /carrier-events"
@@ -1976,6 +1993,7 @@ contexts:
         invariants:
           - {rule: "sellerId is unique", error: ErrSellerExists}
           - {rule: "a suspended seller creates no plan, shipment or carton and ships nothing", error: ErrSellerSuspended}
+          - {rule: "suspending a SUSPENDED seller or reinstating an ACTIVE one is a no-op: 200 with the account unchanged and no event, not an ErrIllegalTransition (ADR 0002 A3); every other command is strict, a transition the state forbids is 409 illegal-transition", error: ErrIllegalTransition}
         commands: [OnboardSeller, SuspendSeller, ReinstateSeller]
         events: [SellerOnboarded, SellerSuspended, SellerReinstated]
         throughput_estimate: "rare"
@@ -2025,7 +2043,7 @@ contexts:
           - {rule: "carton dimensions are within the destination node's maxCartonDimsMm", error: ErrCartonOversize}
           - {rule: "an SSCC is unique network-wide", error: ErrSsccNotUnique}
           - {rule: "an SSCC has 18 digits and a valid mod-10 check digit", error: ErrInvalidSscc}
-          - {rule: "at labelling, the eaches per item and GTIN over the cartons of this shipment equal the confirmed plan's lines (every line exactly, no extra item)", error: ErrCartonContentsMismatchPlan}
+          - {rule: "a carton adds only items that are on the plan, and the eaches per item over this shipment and the plan's other shipments never exceed the plan line (checked on AddCarton); at labelling, only when the plan has a single shipment, the eaches per item and GTIN over its cartons equal the confirmed plan's lines exactly (Shipment.Label, SingleShipment); with several shipments no exact match is required (seller-inbound use-cases and code; ADR 0002 A10 words it as every line exactly)", error: ErrCartonContentsMismatchPlan}
           - {rule: "the destination node is ACTIVE with the INBOUND capability when the shipment is created and when it ships", error: ErrNodeCannotReceive}
           - {rule: "the seller is ACTIVE when the shipment is created, labelled and shipped", error: ErrSellerSuspended}
           - {rule: "no ship without a label for every carton", error: ErrShipmentNotLabelled}
@@ -2039,6 +2057,7 @@ contexts:
       - {name: CatalogPackagingView, source: "offer-availability CatalogItemPackagingDeclared, CatalogItemPackLevelRetired"}
       - {name: SellerScorecard, source: "own facts only (no consumer, no event): one row per closed shipment and one per InboundDiscrepancyRecorded or SellerComplianceViolationRecorded, written in the receipt's unit of work (seller-inbound ADR 0005)"}
     policies:
+      - {name: CaseLevelAtAddCarton, rule: "CreateInboundPlan does not read CatalogPackagingView: whether a CASE_PACKED item has an active CASE level is enforced on AddCarton (ErrCaseQtyMismatchesGtin), not when the plan is created"}
       - {name: SsccIssuance, rule: "a carton added with an sscc is accepted only if valid and unique network-wide; a carton added without one gets an SSCC issued from the network's GS1 company prefix; either way a Label is returned"}
       - {name: NodeMustBeAbleToReceive, rule: "the destination node, its INBOUND capability, acceptsPallets and carton limits are read from NodeInboundView; a node that is not ACTIVE receives nothing; a node whose profile declares no inbound limits is treated as accepting cartons with limits unchecked"}
       - {name: OwnerSegregation, rule: "every carton of a plan is owned by the plan's seller (ownerRef = sellerId); ownership travels on InboundShipmentShipped and the Vendor API and is never merged with another owner's"}
@@ -2048,9 +2067,9 @@ contexts:
       - {name: RecordDiscrepancies, rule: "a MISSING, UNEXPECTED or DAMAGED carton, or a received quantity different from the manifest, raises InboundDiscrepancyRecorded; each complianceCode on the receipt raises SellerComplianceViolationRecorded; the manifest is never edited"}
     inbound:
       - {from: seller / seller portal, type: cmd, channel: "REST POST /sellers", routes: ["POST /sellers"], message: OnboardSeller, relationship: OHS}
-      - {from: network partner managers (human), type: cmd, channel: "REST POST /sellers/{sellerId}:suspend, POST /sellers/{sellerId}:reinstate", routes: ["POST /sellers/{sellerId}:suspend", "POST /sellers/{sellerId}:reinstate"], message: "SuspendSeller, ReinstateSeller", relationship: UI}
-      - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans, POST /inbound-plans/{planId}:confirm, POST /inbound-plans/{planId}:cancel", routes: ["POST /inbound-plans", "POST /inbound-plans/{planId}:confirm", "POST /inbound-plans/{planId}:cancel"], message: "CreateInboundPlan, ConfirmInboundPlan, CancelInboundPlan", relationship: OHS}
-      - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans/{planId}/shipments, POST /inbound-shipments/{shipmentId}/cartons, POST /inbound-shipments/{shipmentId}:label, POST /inbound-shipments/{shipmentId}:ship", routes: ["POST /inbound-plans/{planId}/shipments", "POST /inbound-shipments/{shipmentId}/cartons", "POST /inbound-shipments/{shipmentId}:label", "POST /inbound-shipments/{shipmentId}:ship"], message: "CreateInboundShipment, AddCarton, LabelShipment, ShipInboundShipment", relationship: OHS}
+      - {from: network partner managers (human), type: cmd, channel: "REST POST /sellers/{sellerId}/suspensions, POST /sellers/{sellerId}/reinstatements", routes: ["POST /sellers/{sellerId}/suspensions", "POST /sellers/{sellerId}/reinstatements"], message: "SuspendSeller, ReinstateSeller", relationship: UI}
+      - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans, POST /inbound-plans/{planId}/confirmations, POST /inbound-plans/{planId}/cancellations", routes: ["POST /inbound-plans", "POST /inbound-plans/{planId}/confirmations", "POST /inbound-plans/{planId}/cancellations"], message: "CreateInboundPlan, ConfirmInboundPlan, CancelInboundPlan", relationship: OHS}
+      - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans/{planId}/shipments, POST /inbound-shipments/{shipmentId}/cartons, POST /inbound-shipments/{shipmentId}/labels, POST /inbound-shipments/{shipmentId}/dispatches", routes: ["POST /inbound-plans/{planId}/shipments", "POST /inbound-shipments/{shipmentId}/cartons", "POST /inbound-shipments/{shipmentId}/labels", "POST /inbound-shipments/{shipmentId}/dispatches"], message: "CreateInboundShipment, AddCarton, LabelShipment, ShipInboundShipment", relationship: OHS}
       - {from: seller / seller portal, type: qry, channel: "REST GET /inbound-plans/{planId}, GET /inbound-shipments/{shipmentId}, GET /inbound-shipments/{shipmentId}/labels", routes: ["GET /inbound-plans/{planId}", "GET /inbound-shipments/{shipmentId}", "GET /inbound-shipments/{shipmentId}/labels"], message: "GetInboundPlan, GetInboundShipment, GetLabels", relationship: OHS}
       - {from: "seller / seller portal, network partner managers (human)", type: qry, channel: "REST GET /sellers/{sellerId}/scorecard?window=", routes: ["GET /sellers/{sellerId}/scorecard"], message: "GetSellerScorecard (informational, seller-inbound ADR 0005)", relationship: OHS}
       - {from: seller / network partner manager, type: cmd, channel: "REST POST /placement-plans (compute), GET /placement-plans, GET /placement-plans/{planId}, POST /placement-plans/{planId}/acceptances", routes: ["POST /placement-plans", "GET /placement-plans", "GET /placement-plans/{planId}", "POST /placement-plans/{planId}/acceptances"], message: "ComputePlacementPlan, ListPlacementPlans, GetPlacementPlan, AcceptPlacementPlan", relationship: OHS}
@@ -2060,18 +2079,18 @@ contexts:
       - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentReleasedToNode, FulfillmentCancelled", relationship: Conformist}
     rest:
       - "POST /sellers"
-      - "POST /sellers/{sellerId}:suspend"
-      - "POST /sellers/{sellerId}:reinstate"
+      - "POST /sellers/{sellerId}/suspensions"
+      - "POST /sellers/{sellerId}/reinstatements"
       - "GET /sellers/{sellerId}/scorecard?window="
       - "POST /inbound-plans"
       - "GET /inbound-plans/{planId}"
-      - "POST /inbound-plans/{planId}:confirm"
-      - "POST /inbound-plans/{planId}:cancel"
+      - "POST /inbound-plans/{planId}/confirmations"
+      - "POST /inbound-plans/{planId}/cancellations"
       - "POST /inbound-plans/{planId}/shipments"
       - "POST /inbound-shipments/{shipmentId}/cartons"
-      - "POST /inbound-shipments/{shipmentId}:label"
+      - "POST /inbound-shipments/{shipmentId}/labels"
       - "GET /inbound-shipments/{shipmentId}/labels"
-      - "POST /inbound-shipments/{shipmentId}:ship"
+      - "POST /inbound-shipments/{shipmentId}/dispatches"
       - "GET /inbound-shipments/{shipmentId}"
       - "POST /placement-plans"
       - "GET /placement-plans"

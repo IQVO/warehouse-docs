@@ -136,7 +136,7 @@ flowchart TB
     C3["StartRoute"]:::command
     E3["PackageOutFor<br/>Delivery"]:::event
     ST["shipping-and-<br/>tracking"]:::external
-    H3["H3 CompleteRoute has<br/>no trigger"]:::hotspot
+    H3["H3 CompleteRoute is<br/>automatic, no REST route"]:::hotspot
 
     SP --> C0 --> G0
     G0 -. van capacity .-> C1
@@ -160,8 +160,8 @@ Derived from: model.yaml → `contexts[last-mile-delivery].aggregates[Route]`,
 `.aggregates[DeliveryServicePartner]`, `.aggregates[DeliveryWave].transitions`,
 `.publishes[RoutePlanned, PackageOutForDelivery]`.
 
-Omitted: `ErrRouteOverCapacity` (the van-capacity check on `PlanRoute`) and
-`CompleteWave`.
+Omitted: `ErrRouteOverCapacity` (the van-capacity check on `PlanRoute`).
+`CompleteWave` has no caller: it runs automatically (ADR 0002 A9).
 
 ## 4. Attempts and retries
 
@@ -207,9 +207,9 @@ Omitted: `ErrRouteNotStarted` and `ErrAlreadyDelivered`, and
 
 | # | Hotspot | Where it comes from in the model |
 | --- | --- | --- |
-| H1 | A suspended or retired station can still get waves. | `read_models[StationView].source` lists only `NodeRegistered`, `ServiceAreaAssigned`; `node-topology` does not list this context as a consumer of `NodeSuspended` or `NodeRetired`. `DeliveryWave.invariants` has no station check. |
-| H2 | A cancelled wave may stay in the promise's view. | `publishes[DeliveryWaveCancelled].consumers` is `analytics only`; `delivery-promise.read_models[DeliveryWaveView]` reads only `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged`; `RepromiseOnRisk` names cancelled departures, not waves. |
-| H3 | `CancelWave`, `CompleteWave` and `CompleteRoute` have no trigger. | They are in `aggregates[*].commands` and `transitions` but have no `rest` route, `inbound` row or policy. |
+| H1 | A suspended or retired station can still get waves. | `read_models[StationView].source` lists only `NodeRegistered`, `ServiceAreaAssigned`; `node-topology` does not list this context as a consumer of `NodeSuspended` or `NodeRetired`. `DeliveryWave.invariants` has no station check; the use case checks the node is a known `DELIVERY_STATION` at `ScheduleWave` (ADR 0002 A1). |
+| H2 | Resolved: `DeliveryWaveCancelled` reaches the promise and sourcing. | `publishes[DeliveryWaveCancelled].consumers` lists `delivery-promise` and `order-sourcing`; the event goes to the integration stream (ADR 0002 A22). |
+| H3 | Resolved: `CancelWave` has a REST route; `CompleteWave` and `CompleteRoute` are automatic and have none. | `POST /waves/{waveId}/cancellations`; ADR 0002 A9 (a wave completes with its last route, or at once when dispatched with no route) and A16 (a route completes after the attempt that records its last package). |
 | H4 | Resolved (G11): capacity is in stops, induction is per package, and stops are grouped by the opaque `stopKey` of `LabelIssued`, never by an address. | `StopCapacity{stops, assigned}`, `Stop{stopNo, trackingNumbers[], outcome}`, `read_models[PackageStopView]`, `policies[GroupByStopKey]`; the address stays in `customer-ordering` and `shipping-and-tracking` ([ADR 0006](/network/adr/0006-pii-confinement)) and no address route exists (`policies[NoAddressAtLastMile]`). |
 | H5 | When no wave is eligible, nobody hears about it. | `InductOnArrival` has no failure outcome and no event; only `shipping-and-tracking`'s `ExceptionOnSilence` would surface it later. |
 | H6 | "Three failures return it to sender" has no home. | `RetryNextWave.rule`; no aggregate holds a failure count across routes; no event or command carries the return to sender; `shipping-and-tracking`'s `ReturnToSender` has no inbound trigger from this context. |

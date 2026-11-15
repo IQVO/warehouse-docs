@@ -52,6 +52,23 @@ transaction as the aggregate change.
 | `name` | string | The vendor's name |
 | `ackWindowMinutes` | integer | The vendor's ack window, 60 to 1440 |
 
+### VendorSuspended and VendorReinstated
+
+| | |
+| --- | --- |
+| Types | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorSuspended`, `...VendorReinstated` |
+| Subject / key | `vendorId` |
+| Produced by | `SuspendVendor` (REST `POST /vendors/{vendorId}/suspensions`), `ReinstateVendor` (REST `POST /vendors/{vendorId}/reinstatements`) |
+| Stream | `retailnetwork.vendor-connectivity.events` (integration); no context consumes them yet (service ADR 0002 A14, ADR 0004) |
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `vendorId` | string | The vendor account id |
+| `suspendedAt` / `reinstatedAt` | date-time | When the change was made |
+| `reason` | string, optional | Why the vendor was suspended (`VendorSuspended` only) |
+
+A repeated suspend or reinstate is a no-op and raises no event.
+
 ### PurchaseOrderIssued
 
 | | |
@@ -213,18 +230,17 @@ and dispatches on the full `type` string.
 | --- | --- | --- | --- |
 | order-sourcing | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | Policy `IssueOnRelease`: if `nodeId` is a `VENDOR` node in `VendorNodeView`, `IssuePurchaseOrder` with `requiredShipBy` and `lines` (`listingId`, `quantity`); ignores `orderId`, `tier` and `promisedDeliverByLatest`. A merged release (optional `members`, per-line `assignmentId`, the union lines with no `lineNo`) issues ONE order under the carrier's ids, lines numbered by position, a `listingId` that two members ordered on two lines; the release carries the fulfilment class, so a fifth tier never arrives | `poNumber` is derived from `assignmentId + releaseNo`; a second release event with the same pair finds the order and does nothing |
 | order-sourcing | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleaseWithdrawn` | Policy `CancelOnReleaseWithdrawn`: look the order up by (`assignmentId`, `releaseNo`) and `CancelPurchaseOrder` with the reason `release withdrawn: <reason>`; not found is a no-op | Only an `ISSUED` order is cancelled; an accepted, rejected, expired or cancelled one is logged at INFO and acknowledged. The lookup is by release number, never "latest", so a withdraw that arrives after the carrier was released again cannot cancel the new order |
-| order-sourcing | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | Policy `CancelOnSourcingCancel`: `CancelPurchaseOrder` on the order of the assignment's highest `releaseNo` (no order is a no-op) | A `CANCELLED` order is left as is; a non-`ISSUED` one is refused (`ErrCancelAfterAcknowledgement`), logged at INFO, nothing published and not retried |
+| order-sourcing | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | Policy `CancelOnSourcingCancel`: `CancelPurchaseOrder` on the order of the assignment's highest `releaseNo` (no order is a no-op) | A non-`ISSUED` order is refused: `ErrCancelAfterAcknowledgement` when it is past acknowledgement (`ACK_PROCESSING`, `ACCEPTED`, `REJECTED`, `SHIPMENT_PROCESSING`, `SHIPPED`), `ErrIllegalTransition` when it is `EXPIRED` or `CANCELLED`; either way logged at INFO, nothing published and not retried |
 | node-topology | `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | Upsert `VendorNodeView` (`nodeId`, `vendorId`, `vendorNodeCode`, `nodeType`, `operator`, status `PROPOSED`) | Upsert by `nodeId` |
-| node-topology | `com.retailnetwork.logistics.node-topology.node.NodeActivated` | Set status `ACTIVE` in `VendorNodeView` | Last write by event time wins |
-| node-topology | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | Set status `SUSPENDED` | Last write by event time wins |
-| node-topology | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | Set status `RETIRED` | Terminal |
+| node-topology | `com.retailnetwork.logistics.node-topology.node.NodeActivated` | Set status `ACTIVE` in `VendorNodeView` | Last delivered event wins; the CloudEvents `time` is not read; a `RETIRED` node never changes status |
+| node-topology | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | Set status `SUSPENDED` | Last delivered event wins; the CloudEvents `time` is not read; a `RETIRED` node never changes status |
+| node-topology | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | Set status `RETIRED` | Terminal: no later event changes it |
 | offer-availability | `com.retailnetwork.commerce.offer-availability.listing.ListingCreated` | Insert into `ListingView` (`listingId`, `catalogItemId`, `nodeId`) | Insert-if-absent by `listingId` |
 
-Not consumed, though a reader might expect it:
-`com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared`.
-The `ackBy` rule needs the node's handling time, and the model gives this
-context no source for it. This is listed as an open question on the
-[canvas](/network/contexts/vendor-connectivity/bounded-context-canvas).
+`com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared`
+is consumed too: it stores `profileRevision` and `handlingTimeMinutes` in
+`VendorNodeView`, the source of the handling time in the `ackBy` rule (a lower
+revision never overwrites a higher one; service ADR 0003).
 
 ## Inbound receipts
 

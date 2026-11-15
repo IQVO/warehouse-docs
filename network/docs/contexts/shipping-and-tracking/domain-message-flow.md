@@ -160,5 +160,6 @@ Derived from: `model.yaml → contexts[shipping-and-tracking].policies[Exception
 Omitted: the next wave's `PackageOutForDelivery` (as in scenario 3);
 `PromiseRevised` also goes to `order-sourcing`. If nothing is feasible even at
 `STANDARD`, `delivery-promise` reports `PromiseBroken` at judgement time. After
-three failed attempts `last-mile-delivery` returns the package to sender, but
-no event tells this context, so `ReturnToSender` is not drawn.
+the third failed attempt `last-mile-delivery` raises `PackageReturnInitiated`;
+this context consumes it and runs `ReturnToSender` on an `AT_STATION` journey
+(ADR 0002 A8), which is not drawn.

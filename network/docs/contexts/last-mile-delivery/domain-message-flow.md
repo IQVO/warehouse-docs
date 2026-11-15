@@ -106,7 +106,7 @@ Omitted: the routes behind each command (`POST /waves/waveId/induction-closures`
 `POST /routes`, `POST /waves/waveId/dispatches`, `POST /routes/routeId/starts`,
 `POST /routes/routeId/attempts`); `PackageOutForDelivery` is sent once per
 package; `ErrRouteOverCapacity` on `PlanRoute`; `CompleteRoute` and
-`CompleteWave` (no trigger in the model); the other consumers of
+`CompleteWave` (automatic, no caller: ADR 0002 A9 and A16); the other consumers of
 `PackageDelivered`.
 
 ## 4. Failed attempt, next wave, return to sender

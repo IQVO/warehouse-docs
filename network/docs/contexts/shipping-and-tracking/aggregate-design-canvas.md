@@ -64,9 +64,9 @@ is not modelled (a `LABELLED` journey has no exit; see the
 - **Neighbour reactions to `LabelIssued`:** `linehaul-transportation` adds
   the package to its `ExpectedVolumeView`; `customer-ordering` adds the
   tracking number to its `OrderTrackingView`.
-- **`LabelVoided` has no in-org consumer** (`consumers: [analytics only]`), so
-  neither view is corrected by a void. That is a model consequence, not a
-  page choice.
+- **`LabelVoided` is an integration event**: `customer-ordering` and
+  `linehaul-transportation` (`ExpectedVolumeView`) consume it (contracts-delta
+  E16; `apis/asyncapi.yaml`), so a void corrects both views.
 
 ### 6. Handled Commands
 
@@ -149,7 +149,7 @@ this context does not receive.
 
 | Source fact | Journey state before | State after | Note |
 | --- | --- | --- | --- |
-| `VendorShipmentConfirmed` (per tracking number) | `LABELLED` | `LABELLED` | Stored as a timeline scan at the vendor node, not applied. The model has no `LABELLED -> LABELLED` edge, and handover is the network's own scan (`HandoverOnFirstScan`). *Gap: the model does not say what this event does to the journey.* |
+| `VendorShipmentConfirmed` (per tracking number) | `LABELLED` | `LABELLED` | An applied `SHIPMENT_CONFIRMED` scan at the vendor node that moves no state and raises `PackageScanned` (ADR 0002 A5). Handover is still the network's own scan (`HandoverOnFirstScan`). |
 | First `LoadDeparted` naming the tracking number | `LABELLED` | `HANDED_OVER` | The pickup departure at the vendor node. Raises `PackageHandedOver` with `handedOverAt = departedAt`, `nodeId = originNodeId`. The event carries `departureKind`; `PICKUP` marks the pickup departure (policy `ScanTypeFromLoadFacts`). |
 | `LoadArrived` at a sortation centre or air hub | `HANDED_OVER` or `IN_TRANSIT` | `IN_TRANSIT` | |
 | Later `LoadDeparted` | `IN_TRANSIT` | `IN_TRANSIT` | |
@@ -167,7 +167,8 @@ Every applied scan raises `PackageScanned` with the new `state`.
 | --- | --- |
 | Scans apply in time order; an older scan is stored but does not move the state | `ErrScanOutOfOrder` |
 | A `scanId` is applied once | `ErrDuplicateScan` |
-| `DELIVERED`, `RETURNED` and `LOST` are terminal | `ErrJourneyClosed` |
+| `DELIVERED`, `RETURNED`, `LOST` and `VOIDED` are terminal | `ErrJourneyClosed` |
+| A label is voided only before handover: a void of a journey that is past `LABELLED` and still open is refused | `ErrVoidAfterHandover` (409 `void-after-handover`); a void of a closed journey (for example `DELIVERED`) answers `ErrJourneyClosed` (409 `journey-closed`) |
 | The stored ETA window is empty or has `etaStart < etaEnd` and a non-zero `etaAssignedAt`; an assignment not strictly newer than the stored one is refused, and a terminal journey refuses `AssignEta` | `ErrEtaStale` (stale) / `ErrJourneyClosed` (terminal) |
 | `pointFlagReason` and `pointFlaggedAt` are null together and the reason is `NOT_HOME` or `ACCESS_PROBLEM`; a flag not strictly newer than the stored one is refused, and a terminal journey refuses `FlagDeliveryPoint` | `ErrPointFlagStale` (stale) / `ErrJourneyClosed` (terminal) |
 | Only the transitions drawn above exist (forward only) | The model names no `Err...` for a scan whose fact has no edge from the current state (for example `PackageOutForDelivery` on an `IN_TRANSIT` journey). These pages store such a scan as not applied, like an out-of-order one, and list the missing error as a model gap |
@@ -187,8 +188,12 @@ Every applied scan raises `PackageScanned` with the new `state`.
 - **`order-sourcing`** moves the assignment `SHIPPED -> DELIVERED`
   (`MarkDelivered`) on `PackageDelivered`.
 - **`RetryNextWave`** (`last-mile-delivery`): a failed attempt re-inducts the
-  package into the next wave; three failures return it to sender. No event
-  tells this context about the return, so `ReturnToSender` has no trigger.
+  package into the next wave; the third failure raises `PackageReturnInitiated`.
+  This context consumes it and runs `ReturnToSender` on an `AT_STATION`
+  journey (ADR 0002 A8).
+- **Lost sweep** (this context): an `IN_TRANSIT` journey whose `NO_SCAN`
+  exception stayed unanswered (no applied scan) for 48 hours is declared lost
+  (`DeclareLost`, ADR 0002 A8).
 
 ### 6. Handled Commands
 
@@ -199,8 +204,8 @@ Every applied scan raises `PackageScanned` with the new `state`.
 | `AssignEta` | The Kafka consumer of `StopEtaWindowAssigned` (use case `ApplyEtaWindows`, one unit per event, inbox claim first) | `internal/adapters/inbound/kafka` |
 | `FlagDeliveryPoint` | The Kafka consumer of `DeliveryPointFlagged` (one unit per event, inbox claim first) | `internal/adapters/inbound/kafka` |
 | `RaiseException` | The `ExceptionOnSilence` sweep | internal scheduler |
-| `ReturnToSender` | Not named in the model | none |
-| `DeclareLost` | Not named in the model | none |
+| `ReturnToSender` | The Kafka consumer of `PackageReturnInitiated` (`last-mile-delivery`; ADR 0002 A8) | `internal/adapters/inbound/kafka` |
+| `DeclareLost` | The silence sweep, 48 h after an unanswered `NO_SCAN` on an `IN_TRANSIT` journey (ADR 0002 A8) | internal scheduler |
 
 ### 7. Created Events
 

@@ -42,7 +42,7 @@ The model states the context's purpose as:
 | Actor | Kind (model `external`) | What they do here |
 | --- | --- | --- |
 | Station planner | person | Schedules waves, closes induction, plans routes and dispatches waves (REST `/waves`, `/routes`) |
-| Delivery service partner driver app | external organisation (driver app) | Starts a route and records each delivery attempt (REST `/routes/{routeId}:start`, `/routes/{routeId}/attempts`) |
+| Delivery service partner driver app | external organisation (driver app) | Starts a route and records each delivery attempt (REST `/routes/{routeId}/starts`, `/routes/{routeId}/attempts`) |
 | `linehaul-transportation` | sibling context | Tells the station that a load has arrived, with its tracking numbers (`LoadArrived`) |
 | `node-topology` | sibling context | Tells the station which nodes exist and which postal prefixes it serves (`NodeRegistered`, `ServiceAreaAssigned`) |
 | `delivery-promise`, `order-sourcing` | sibling contexts | Read the published waves to quote and source on them |

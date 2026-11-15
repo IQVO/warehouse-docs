@@ -50,28 +50,33 @@ deleted.
 | --- | --- |
 | `ackWindow` is between 1h and 24h | `ErrAckWindowOutOfRange` |
 | A vendor acts only on its own nodes | `ErrNodeNotOwnedByVendor` (checked against `VendorNodeView` on every node-scoped and PO-scoped write) |
+| A suspended vendor's writes are refused | `ErrVendorSuspended` (409 `vendor-suspended`) |
 
 ### 5. Corrective Policies
 
-None in the model. What a `SUSPENDED` vendor may still do is not stated
-(see the open questions on the
-[canvas](/network/contexts/vendor-connectivity/bounded-context-canvas)).
+None. A `SUSPENDED` vendor's writes (acknowledgement, inventory, node
+registration, node profile, label request, shipment confirmation, inbound
+receipt) are refused with `ErrVendorSuspended`; reads, polling, new purchase
+orders, the expiry sweep and submissions already received continue (service ADR
+0002 A9).
 
 ### 6. Handled Commands
 
 | Command | Issued by | Channel |
 | --- | --- | --- |
 | `OnboardVendor` | Network partner manager | REST `POST /vendors` |
-| `SuspendVendor` | not stated in the model | none |
-| `ReinstateVendor` | not stated in the model | none |
+| `SuspendVendor` | Network partner manager | REST `POST /vendors/{vendorId}/suspensions` |
+| `ReinstateVendor` | Network partner manager | REST `POST /vendors/{vendorId}/reinstatements` |
 
 ### 7. Created Events
 
 | Event | Raised when | Full CloudEvents type |
 | --- | --- | --- |
 | `VendorOnboarded` | `OnboardVendor` succeeds | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorOnboarded` |
+| `VendorSuspended` | `SuspendVendor` succeeds | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorSuspended` |
+| `VendorReinstated` | `ReinstateVendor` succeeds | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorReinstated` |
 
-`SuspendVendor` and `ReinstateVendor` raise no event in the model.
+`SuspendVendor` raises `VendorSuspended` and `ReinstateVendor` raises `VendorReinstated`; a repeat of either is a no-op that raises nothing (service ADR 0002 A8).
 
 ### 8. Throughput
 
@@ -135,8 +140,8 @@ applies; the model lists the transitions without naming the condition.
 | No acknowledgement after `ackBy` (judged on the receipt instant) | `ErrAckWindowClosed` |
 | No label before `ACCEPTED` | `ErrLabelBeforeAcceptance` |
 | No shipment confirmation without a label for every package | `ErrConfirmWithoutLabel` |
-| Cancel only while `ISSUED` | `ErrCancelAfterAcknowledgement` |
-| `ackBy = min(issuedAt + ackWindow, requiredShipBy - handlingTime)`, fixed at issue | computed by `IssuePurchaseOrder`; a business decision, no `Err...` in the model |
+| Cancel only while `ISSUED` | `ErrCancelAfterAcknowledgement` for an order past acknowledgement; an `EXPIRED` or `CANCELLED` order is `ErrIllegalTransition` (same observable result: logged, acknowledged) |
+| `ackBy = min(issuedAt + ackWindow, requiredShipBy - handlingTime)`, fixed at issue | computed by `IssuePurchaseOrder` from the `handlingTimeMinutes` of `VendorNodeView`; a business decision, no `Err...` in the model |
 
 ### 5. Corrective Policies
 
