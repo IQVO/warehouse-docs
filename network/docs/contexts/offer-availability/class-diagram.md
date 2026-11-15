@@ -144,6 +144,7 @@ classDiagram
         +Receive(header, lines)$ InventoryFeed
         +MarkApplied(at) error
         +MarkFailed(cause) error
+        +MarkSuperseded() error
         +LineCount() int
     }
     class FeedLine {
@@ -157,6 +158,7 @@ classDiagram
         RECEIVED
         APPLIED
         FAILED
+        SUPERSEDED
     }
     class FeedRepository {
         <<Repository>>

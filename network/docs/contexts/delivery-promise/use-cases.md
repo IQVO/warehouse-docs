@@ -201,16 +201,21 @@ no HTTP reply: the error column says what the consumer does instead.
   `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderPlaced`.
 - **Input**: `orderId`, and for each group `groupNo`, `promiseId`.
 - **Preconditions**: each promise is `PROVISIONAL` and `now < holdExpiresAt`.
-- **Main flow** (all groups in one transaction with the inbox row):
-  1. For each group, load the promise; `ConfirmPromise(orderId, groupNo)`
-     (`PROVISIONAL` → `CONFIRMED`).
+  This consumer is the reconciling confirm: `customer-ordering` normally
+  confirmed the promise synchronously at checkout
+  (`POST /promises/{promiseId}/confirmations`), and a promise already
+  `CONFIRMED` for the same order and group is a no-op (ADR 0002 A16).
+- **Main flow** (all groups share one transaction with the inbox row; a lapsed
+  group does not fail it):
+  1. For each group, load the promise (an unknown one is logged and skipped);
+     `ConfirmPromise(orderId, groupNo)` (`PROVISIONAL` → `CONFIRMED`).
   2. `ConfirmCapacity` on its book (`provisional - 1`, `confirmed + 1`).
   3. Save both, write `PromiseConfirmed`, record the CloudEvents `id`.
 - **Errors**:
 
   | Error | Consumer outcome | Problem `type` (for logs) |
   | --- | --- | --- |
-  | `ErrPromiseHoldExpired` | logged and alerted; the order exists without a held promise (hotspot H6) | `promise-hold-expired` |
+  | `ErrPromiseHoldExpired` | that group is skipped with a warning log and never retried; the other groups of the order are still confirmed, and the `ReleaseExpiredHolds` sweeper releases the lapsed `PROVISIONAL` promise (hotspot H6) | `promise-hold-expired` |
   | `ErrPromiseClosed` (already `RELEASED`) | as above | `promise-closed` |
   | `ErrCapacityUnderflow` | bug alarm; transaction rolled back, message retried | `capacity-underflow` |
   | stale version | retried | `stale-write` |
@@ -301,16 +306,24 @@ no HTTP reply: the error column says what the consumer does instead.
 
 ## JudgePromise
 
-- **Actor / trigger**: `JudgeOnDelivery`, on `PackageDelivered`.
+- **Actor / trigger**: `JudgeOnDelivery`, on `PackageDelivered`; and on
+  `PackageLost` or `PackageReturned`, which break the promise (a lost or
+  returned package's promise IS judged, ADR 0025).
 - **Inbound adapter**: Kafka consumer of
-  `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDelivered`.
-- **Input**: `assignmentId`, `orderId`, `deliveredAt`.
+  `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDelivered`,
+  `PackageLost` and `PackageReturned`.
+- **Input**: `assignmentId`, `orderId`, `deliveredAt` (for a loss or a return
+  the tracking number and `declaredAt` or `returnedAt`, no `deliveredAt`).
 - **Preconditions**: the group's promise is `CONFIRMED` or `AT_RISK`. Finding
   it needs `assignmentId` → (`orderId`, `groupNo`), which only
-  `FulfillmentLocked` carries (open questions 3 and 4).
+  `FulfillmentLocked` carries (open questions 3 and 4). A tracking number may
+  belong to several assignments: every sharing promise is judged, each on its
+  own window (`SharedTrackingJudgement`).
 - **Main flow**:
   1. `JudgePromise(deliveredAt)`: `KEPT` if `deliveredAt <= deliverByLatest`,
-     else `BROKEN` with `lateByMinutes` and a `cause`.
+     else `BROKEN` with `lateByMinutes` and a `cause`. On `PackageLost` or
+     `PackageReturned` the promise is `BROKEN` with cause `LOST` or `RETURNED`
+     and no `deliveredAt`.
   2. Save, write `PromiseKept` or `PromiseBroken`, record the `id`.
 - **Errors**:
 

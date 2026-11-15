@@ -270,18 +270,18 @@ contexts:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /nodes (in-org)", routes: ["POST /nodes"], message: "RegisterNode (vendor node)", relationship: Customer/Supplier}
       - {from: vendor-connectivity, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile (in-org)", routes: ["PUT /nodes/{nodeId}/operational-profile"], message: "DeclareOperationalProfile", relationship: Customer/Supplier}
       - {from: network-ops planner, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile", routes: ["PUT /nodes/{nodeId}/operational-profile"], message: "DeclareOperationalProfile (declaredBy NETWORK_OPS)", relationship: UI}
-      - {from: network-ops planner, type: cmd, channel: "REST POST /nodes, POST /nodes/{nodeId}:activate, POST /nodes/{nodeId}:suspend, POST /nodes/{nodeId}:retire, POST /lanes, POST /lanes/{laneId}:close, PUT /service-areas/{postalPrefix}, POST /regions", routes: ["POST /nodes", "POST /nodes/{nodeId}:activate", "POST /nodes/{nodeId}:suspend", "POST /nodes/{nodeId}:retire", "POST /lanes", "POST /lanes/{laneId}:close", "PUT /service-areas/{postalPrefix}", "POST /regions"], message: "RegisterNode (network node), ActivateNode, SuspendNode, RetireNode, OpenLane, CloseLane, AssignServiceArea, DefineRegion", relationship: UI}
+      - {from: network-ops planner, type: cmd, channel: "REST POST /nodes, POST /nodes/{nodeId}/activations, POST /nodes/{nodeId}/suspensions, POST /nodes/{nodeId}/retirements, POST /lanes, POST /lanes/{laneId}/closures, PUT /service-areas/{postalPrefix}, POST /regions", routes: ["POST /nodes", "POST /nodes/{nodeId}/activations", "POST /nodes/{nodeId}/suspensions", "POST /nodes/{nodeId}/retirements", "POST /lanes", "POST /lanes/{laneId}/closures", "PUT /service-areas/{postalPrefix}", "POST /regions"], message: "RegisterNode (network node), ActivateNode, SuspendNode, RetireNode, OpenLane, CloseLane, AssignServiceArea, DefineRegion", relationship: UI}
       - {from: any context, type: qry, channel: "REST GET /nodes/{nodeId}, GET /nodes, GET /lanes, GET /service-areas/{postalPrefix}, GET /regions, GET /regions/{regionId}", routes: ["GET /nodes/{nodeId}", "GET /nodes", "GET /lanes", "GET /service-areas/{postalPrefix}", "GET /regions", "GET /regions/{regionId}"], message: "GetNode, ListNodes, ListLanes, ResolveServiceArea, ListRegions, GetRegion", relationship: OHS}
     rest:
       - "POST /nodes"
       - "GET /nodes/{nodeId}"
       - "GET /nodes?type=&region=&status="
       - "PUT /nodes/{nodeId}/operational-profile"
-      - "POST /nodes/{nodeId}:activate"
-      - "POST /nodes/{nodeId}:suspend"
-      - "POST /nodes/{nodeId}:retire"
+      - "POST /nodes/{nodeId}/activations"
+      - "POST /nodes/{nodeId}/suspensions"
+      - "POST /nodes/{nodeId}/retirements"
       - "POST /lanes"
-      - "POST /lanes/{laneId}:close"
+      - "POST /lanes/{laneId}/closures"
       - "GET /lanes?origin=&destination="
       - "PUT /service-areas/{postalPrefix}"
       - "GET /service-areas/{postalPrefix}"
@@ -338,7 +338,7 @@ contexts:
     business_decisions:
       - A listing is sellable only while its node is ACTIVE and its owner is not a suspended seller (offer-availability ADR 0013).
       - Received seller stock becomes the seller's listing on the receiving node at availability 0 / UNKNOWN; only the vendor's inventory feed sets availability (offer-availability ADR 0014).
-      - A feed older than the last applied feed for that node is ignored.
+      - "A feed older than the last applied feed for that node is not applied: it ends SUPERSEDED (nothing applied, no event, offer-availability ADR 0002 A11); a line older than its listing's current asOf is skipped and counted as stale."
       - A full feed zeroes every listing of that node it omits.
       - The basis the vendor declares (PHYSICAL or THROUGHPUT_CONSTRAINED) is kept with the number, never re-derived.
     aggregates:
@@ -383,13 +383,17 @@ contexts:
       - name: InventoryFeed
         root_id: feedId
         description: "One vendor inventory submission for one node, full or partial, applied atomically."
-        states: [RECEIVED, APPLIED, FAILED]
+        # as built (offer-availability ADR 0002 A11, gap G23): the feed is one transaction, saved RECEIVED, then APPLIED, FAILED or SUPERSEDED
+        # (feed asOf strictly older than the last APPLIED feed of the node: nothing applied, no event); a FAILED feedId may be sent again
+        states: [RECEIVED, APPLIED, FAILED, SUPERSEDED]
         transitions:
           - [RECEIVED, APPLIED, ApplyInventoryFeed]
           - [RECEIVED, FAILED, ApplyInventoryFeed]
+          - [RECEIVED, SUPERSEDED, ApplyInventoryFeed]
+          - [FAILED, RECEIVED, ApplyInventoryFeed]
         invariants:
           - {rule: "every line names a listing of the feed's node", error: ErrListingNotOnNode}
-          - {rule: "a feed is applied at most once", error: ErrFeedAlreadyApplied}
+          - {rule: "a feed is applied at most once: an APPLIED or SUPERSEDED feedId is refused with HTTP 409 feed-already-applied; a FAILED feedId MAY be sent again (FAILED -> RECEIVED) and must keep its nodeId (offer-availability ADR 0002 A11, apis/openapi.yaml)", error: ErrFeedAlreadyApplied}
         commands: [ApplyInventoryFeed]
         events: [InventoryFeedApplied]
         throughput_estimate: "medium: per vendor node every few minutes"
@@ -401,13 +405,14 @@ contexts:
       - {name: SuppressOnNodeUnavailable, rule: "on NodeSuspended or NodeRetired suppress every listing of the node; on NodeActivated reconcile every listing of the node: it becomes LIVE only when no other cause holds, and a listing whose owner is SUSPENDED switches to OWNER_SUSPENDED instead (offer-availability ADR 0013)"}
       - {name: SuppressOnOwnerSuspended, rule: "on SellerSuspended suppress every LIVE listing with ownerRef = sellerId with reason OWNER_SUSPENDED (one ListingSuppressed each, in the transaction of the view update); a listing already suppressed for a higher cause keeps its reason, and the owner's view row stops a later restore of that cause; on SellerReinstated reconcile every OWNER_SUSPENDED listing of the owner: ListingRestored when no cause remains, otherwise one ListingSuppressed with the remaining highest cause (offer-availability ADR 0013, gap G48)"}
       - {name: ListingReconcile, rule: "Listing.Reconcile reads the listing's three causes (node ACTIVE in NodeStatusView, item discontinued, owner SUSPENDED in SellerStatusView) and moves the listing to the highest active cause: LIVE when none holds (ListingRestored), otherwise SUPPRESSED with that reason (one ListingSuppressed when the reason changes); DISCONTINUED stays final"}
+      - {name: SuppressOnItemDiscontinued, rule: "DiscontinueItem suppresses the item's listings (offer-availability ADR 0002 A4, gap G24; the model was silent): in the SAME transaction every listing of the item that is not already SUPPRESSED(DISCONTINUED) is suppressed with reason DISCONTINUED, one ListingSuppressed each; a listing suppressed for NODE_NOT_SELLABLE changes reason and raises the event again so that a later NodeActivated can never restore it; DISCONTINUED is final. A listing created for a DISCONTINUED item starts SUPPRESSED(DISCONTINUED); creating a listing for an unknown catalogItemId is 404 not-found. Discontinuing a DISCONTINUED item answers 200 with the item unchanged and raises nothing (A3)"}
       - {name: ListingsFromReceivedStock, rule: "on InboundShipmentReceived, for each received line with qtyEaches > 0 resolve the item (the line's catalogItemId, else the own GTIN/packaging index, retired levels included) and, when no listing of (catalogItemId, nodeId, ownerRef = sellerId) exists, create one as the system actor: ListingCreated with ownerRef, availability 0 basis UNKNOWN, then ListingSuppressed for the highest cause when the node is not sellable, the item is discontinued or the owner is SUSPENDED. An existing listing is a no-op; availability still comes only from the vendor feed; an unresolvable GTIN, an unknown item or an event without received is skipped and counted, never an error; one transaction per event, inbox-idempotent (offer-availability ADR 0014, gap G51)"}
       - {name: FullFeedZeroing, rule: "a full feed sets availableQty=0 on every listing of the node it omits"}
       - {name: OwnerSuspendedOnCreate, rule: "CreateListing (REST or ListingsFromReceivedStock) for an owner SUSPENDED in SellerStatusView raises ListingCreated then ListingSuppressed(OWNER_SUSPENDED) at version 1, unless a higher cause applies, which wins"}
       - {name: SegregatedByOwner, rule: "availability is per listing and a listing has one owner: quantities of different owners are never summed, merged or moved between listings; commingling stock by GTIN is not designed"}
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /inventory-feeds (in-org)", routes: ["POST /inventory-feeds"], message: "ApplyInventoryFeed", relationship: Customer/Supplier}
-      - {from: "network merchandising (human)", type: cmd, channel: "REST POST /catalog-items, POST /catalog-items/{catalogItemId}:discontinue, PUT /catalog-items/{catalogItemId}/packaging/{level}, POST /catalog-items/{catalogItemId}/packaging/{level}:retire, POST /listings", routes: ["POST /catalog-items", "POST /catalog-items/{catalogItemId}:discontinue", "PUT /catalog-items/{catalogItemId}/packaging/{level}", "POST /catalog-items/{catalogItemId}/packaging/{level}:retire", "POST /listings"], message: "CreateCatalogItem, DiscontinueItem, DeclarePackaging, RetirePackLevel, CreateListing", relationship: UI}
+      - {from: "network merchandising (human)", type: cmd, channel: "REST POST /catalog-items, POST /catalog-items/{catalogItemId}/discontinuations, PUT /catalog-items/{catalogItemId}/packaging/{level}, POST /catalog-items/{catalogItemId}/packaging/{level}/retirements, POST /listings", routes: ["POST /catalog-items", "POST /catalog-items/{catalogItemId}/discontinuations", "PUT /catalog-items/{catalogItemId}/packaging/{level}", "POST /catalog-items/{catalogItemId}/packaging/{level}/retirements", "POST /listings"], message: "CreateCatalogItem, DiscontinueItem, DeclarePackaging, RetirePackLevel, CreateListing", relationship: UI}
       # caller inferred: ADR 0003 names no caller for these plain reads (merchandising; vendor-connectivity has no client for them). There is no separate packaging read: the packaging hierarchy is part of GET /catalog/{catalogItemId} (as built)
       - {from: "network merchandising (human)", type: qry, channel: "REST GET /listings, GET /inventory-feeds/{feedId}", routes: ["GET /listings", "GET /inventory-feeds/{feedId}"], message: "ListListings, GetInventoryFeed", relationship: UI}
       - {from: shopper / storefront, type: qry, channel: "REST GET /catalog, GET /catalog/{catalogItemId}", routes: ["GET /catalog", "GET /catalog/{catalogItemId}"], message: "BrowseCatalog", relationship: OHS}
@@ -415,9 +420,9 @@ contexts:
       - {from: seller-inbound, type: evt, channel: "Kafka retailnetwork.seller-inbound.events", message: "SellerSuspended, SellerReinstated, InboundShipmentReceived", relationship: Conformist}
     rest:
       - "POST /catalog-items"
-      - "POST /catalog-items/{catalogItemId}:discontinue"
+      - "POST /catalog-items/{catalogItemId}/discontinuations"
       - "PUT /catalog-items/{catalogItemId}/packaging/{level}"
-      - "POST /catalog-items/{catalogItemId}/packaging/{level}:retire"
+      - "POST /catalog-items/{catalogItemId}/packaging/{level}/retirements"
       - "GET /catalog"
       - "GET /catalog/{catalogItemId}"
       - "POST /listings"
@@ -596,8 +601,9 @@ contexts:
       - {name: PromiseCalibration, rule: "ADR 0020: for each candidate the search adds the segment's buffer to the final-arrival time BEFORE the delivery window is snapped, so the window width never changes and the offer lands in a later fixed window when needed (a candidate that no longer fits the horizon is dropped like any infeasible one). Buffer = Calibrate(observations, policy): with n at least minCalibrationObservations the smallest b such that at least targetOnTimeProbabilityPercent of the observations have lateBy <= b (nearest rank, kept promises count 0), capped at maxCalibrationBufferMinutes; ONE-SIDED, never earlier; below the minimum the buffer is 0 and the search behaves as before. Applied to every tier including STANDARD. The segment is (tier, basis, nodeGrade of the candidate's node read from ScorecardView); the destination region is not in the key because it is not stored on the promise. One global target value, not one per tier. A store error is logged and means no calibration, never a failed quote. confidence is reported only when n reaches the minimum. Metrics: histogram promising.calibration.buffer (tier) and counter promising.calibration.segments_below_minimum"}
       - {name: FlagPredictedLate, rule: "ADR 0021: the clock-driven sweeper pass FlagPredictedLate(ctx, limit) examines each CONFIRMED promise's witness-path departures (the pickup departure and the legs; a NOMINAL witness has none): expectedArrival = arrivesAt plus the same one-sided measured-transit adjustment the search uses (0 below minTransitObservations); when now is later than expectedArrival plus lateRiskGrace (15 minutes, a constant, not a policy field) and DepartureArrival has no row for the departure, the promise is flagged AT_RISK with reason PREDICTED_LATE through the existing flagAtRisk path, one INFO log and the counter deliverypromise_predicted_late_flagged_total per flag. RepriceAtRisk does NOT re-promise a PREDICTED_LATE promise while its window is still reachable (the latest remaining expected arrival shifted by the late leg's observed lateness, plus the downstream sort dwell and the wave's last-mile allowance, no later than the window end; a missing, cancelled or unscheduled wave means not reachable); otherwise the normal re-promise runs and never moves the window earlier. DELIBERATE LIMIT: the flag is not cleared when the load arrives later (AT_RISK stays Active until the judgement closes the promise); an event without departureId is ignored by the arrival model and counted"}
       - {name: ShipmentGrouping, rule: "prefer one node for the whole cart; split only when no single node covers every line, minimising the number of groups"}
-      - {name: RepromiseOnRisk, rule: "on FulfillmentUnsourceable, PackageExceptionRaised, a cancelled departure on the witness path or the FlagPredictedLate sweep (only when the window is no longer reachable, see FlagPredictedLate), recompute and RevisePromise; if nothing is feasible even at STANDARD, report PromiseBroken at judgement time"}
-      - {name: JudgeOnDelivery, rule: "on PackageDelivered judge every promise of the package's group, and every promise that shares the package's tracking number (SharedTrackingJudgement); on PackageReadyForCollection the promise of a pickup-point order is judged KEPT exactly as a ship-to promise is judged on PackageDelivered (delivery-promise ADR 0027)"}
+      - {name: RepromiseOnRisk, rule: "on FulfillmentUnsourceable, PackageExceptionRaised, a cancelled departure on the witness path, DeliveryWaveCancelled or the FlagPredictedLate sweep (only when the window is no longer reachable, see FlagPredictedLate), recompute and RevisePromise; if nothing is feasible even at STANDARD, report PromiseBroken at judgement time. DeliveryWaveCancelled is consumed, not analytics-only: the wave is marked cancelled in DeliveryWaveView and every active promise whose witness wave it is is flagged AT_RISK with reason WAVE_CANCELLED (delivery-promise OnWaveCancelled, ADR 0003)"}
+      - {name: JudgeOnDelivery, rule: "on PackageDelivered judge every promise of the package's group, and every promise that shares the package's tracking number (SharedTrackingJudgement); on PackageLost or PackageReturned the group's promise is judged BROKEN with cause LOST or RETURNED (no deliveredAt), so a lost or returned package's promise IS judged (delivery-promise ADR 0025, OnPackageLost and OnPackageReturned); on PackageReadyForCollection the promise of a pickup-point order is judged KEPT exactly as a ship-to promise is judged on PackageDelivered (delivery-promise ADR 0027)"}
+      - {name: ConfirmOnOrderPlaced, rule: "customer-ordering confirms each promise synchronously at checkout (POST /promises/{promiseId}/confirmations); the consumer of CustomerOrderPlaced is the reconciling confirm: for each group of the event, in ONE transaction with the inbox row, a promise still PROVISIONAL inside its hold is confirmed, an already CONFIRMED promise of the same order and group is a no-op, an unknown promise is logged. A group whose hold has lapsed (ErrPromiseHoldExpired) or whose promise is already closed does NOT fail the event: it is skipped with a warning log and never retried, the other groups are still confirmed, and the clock-driven ReleaseExpiredHolds sweeper releases the lapsed PROVISIONAL promise (delivery-promise ADR 0002 A16, OnCustomerOrderPlaced)"}
       - {name: ConsolidatedTierQuote, rule: "ADR 0024. CONSOLIDATED is the fifth tier: shared.AllTiers() stays the four classic tiers (the default quote set), shared.KnownTiers() returns five, Rank orders it last, MaxCalendarDays is 14 (MaxConsolidatedCalendarDays), AllowsNominal is true for STANDARD and CONSOLIDATED, and a re-promise never falls through from one of them to the other. It is returned ONLY when the quote request lists it in tiers or names consolidatedDeliveryDay; a present day adds CONSOLIDATED to whatever set tiers names. Local construction with no sibling call: fastest = the minimum window latest of the group's STANDARD candidates (none: the tier is unavailable, DELIVERY_SLA_UNAVAILABLE, or NODE_CAPACITY_EXHAUSTED when the same search without the capacity checks would find one); the chosen local day D of the destination station is the request's day, else DefaultConsolidatedOffsetDays (2) after the local day of fastest, clamped UP to the local day of fastest; a D more than 14 local days from now is DELIVERY_SLA_UNAVAILABLE. Candidates are the usual pickups and paths, with the final wave the earliest usable wave whose induct cutoff is not before the arrival and whose window END falls on local day D (a pickup with none is dropped); with no scheduled candidate the NOMINAL fallback gives the window D 09:00 to 21:00 local. Rank: the usual order, then the LATER shipBy first (the longest hold), then fewer legs, better grade, node id. A CONSOLIDATED promise has no TierOrderDeadline, its calibration segment is its own (buffer 0 until it has minCalibrationObservations) and fast-tier eligibility does not govern it. The read models load MaxConsolidatedCalendarDays plus 1 days instead of the 8-day SearchHorizon when the tier is asked for"}
       - {name: ConsolidationEligibility, rule: "ADR 0024: consolidationEligible = (D is at least MinConsolidationHoldDays (1) local days after the local day of the fastest window). It is false when D is the fastest day, and a false offer is still quotable: the shopper chose the fastest day and the network has nothing to hold. It is computed from this service's own candidate set and never asserts that another order exists. Present on the offer, the promise terms, DeliveryOfferQuoted and PromiseMade only for the tier CONSOLIDATED; omitted otherwise and never false by default"}
       - {name: ConsolidatedRepromise, rule: "ADR 0024: ReviseAtRisk of a CONSOLIDATED promise searches only CONSOLIDATED, with the local date of the promise window latest as a MINIMUM day: the search walks forward day by day up to the horizon and the existing rule takes the first candidate that does not move deliverByLatest earlier and whose book accepts the hold; none is PromiseUnkeepable as today. A day without a scheduled wave falls back to a NOMINAL window of that day, so a cancelled wave is re-promised on the same day on a NOMINAL basis rather than moved to a later day. The chosen day is not a stored field: it is the local day of the promise window"}
@@ -775,10 +781,11 @@ contexts:
     roles: [Execution (checkout), Gateway (storefront)]
     business_decisions:
       - No order is placed unless every line belongs to exactly one confirmed-able promise.
+      - "A checkout names a shopper that must be registered: an unknown shopperId is refused with 422 validation-failed before delivery-promise is called (customer-ordering ADR 0002 A9). The same 422 answers a shipToAddressId that is not a saved address of that shopper (A25)."
       - "Checkout takes exactly one of an inline shipTo and a saved shipToAddressId (the address is copied into the order). When a selected offer is no longer quotable, nothing is placed: the response is 409 offer-not-quotable carrying requotedOffers (one per feasible tier of each failed group) for the shopper to re-confirm."
       - "POST /checkout and the other state-changing routes are idempotent on (route, Idempotency-Key) inside a 24-hour window; a replay with the same body returns the stored response, which is how an in-doubt placement is settled."
       - The ship-to address never leaves this context except to shipping-and-tracking for a label.
-      - A customer may cancel until every shipment group is locked; after that, cancellation is a return.
+      - A customer may cancel the shipment groups no node has locked yet; once every group is locked, shipped or delivered, cancellation is a return (ErrCancelAfterLock, advisory).
       - A cancel is a request: order-sourcing decides for each group, and its answer (FulfillmentCancelled or FulfillmentCancelRefused) is what this context shows.
       - The shopper's choice of a CONSOLIDATED delivery day needs no checkout field: the choice is the offerId of the group. The group stores the tier, the chosen local delivery day and delivery-promise's consolidationEligible answer, and the placed order carries them (customer-ordering ADR 0013).
       - Only this context owns both the shopper and the ship-to, so it derives an opaque consolidation key that lets order-sourcing merge the groups of one shopper and one address without ever seeing the address (customer-ordering ADR 0012).
@@ -787,15 +794,30 @@ contexts:
       - name: CustomerOrder
         root_id: orderId
         description: "A shopper's order: lines, ship-to (PII), the promise per shipment group and the customer-facing status."
-        states: [PLACED, IN_FULFILLMENT, PARTIALLY_SHIPPED, SHIPPED, DELIVERED, CANCELLED]
+        # as built (customer-ordering ADR 0002 A1, A3, A19, A23): the order status is DERIVED from the group states after every command
+        # (groups: PROMISED, LOCKED, SHIPPED, DELIVERED, LOST, RETURNED, CANCELLATION_REQUESTED, CANCELLED), never set directly;
+        # a derived status that ranks below the current one is refused with ErrStatusRegression
+        states: [PLACED, IN_FULFILLMENT, PARTIALLY_SHIPPED, SHIPPED, PARTIALLY_DELIVERED, DELIVERED, LOST, RETURNED, CANCELLED]
         transitions:
           - [PLACED, IN_FULFILLMENT, MarkInFulfillment]
+          - [PLACED, PARTIALLY_SHIPPED, MarkGroupShipped]
+          - [PLACED, SHIPPED, MarkGroupShipped]
           - [IN_FULFILLMENT, PARTIALLY_SHIPPED, MarkGroupShipped]
           - [IN_FULFILLMENT, SHIPPED, MarkGroupShipped]
           - [PARTIALLY_SHIPPED, SHIPPED, MarkGroupShipped]
+          - [PLACED, PARTIALLY_DELIVERED, MarkGroupDelivered]
+          - [IN_FULFILLMENT, PARTIALLY_DELIVERED, MarkGroupDelivered]
+          - [PARTIALLY_SHIPPED, PARTIALLY_DELIVERED, MarkGroupDelivered]
+          - [SHIPPED, PARTIALLY_DELIVERED, MarkGroupDelivered]
           - [SHIPPED, DELIVERED, MarkGroupDelivered]
-          - [PLACED, CANCELLED, CancelOrder]
-          - [IN_FULFILLMENT, CANCELLED, CancelOrder]
+          - [PARTIALLY_SHIPPED, DELIVERED, MarkGroupDelivered]
+          - [PARTIALLY_DELIVERED, DELIVERED, MarkGroupDelivered]
+          - [SHIPPED, PARTIALLY_DELIVERED, MarkGroupLost]
+          - [SHIPPED, LOST, MarkGroupLost]
+          - [SHIPPED, RETURNED, MarkGroupReturned]
+          - [SHIPPED, PARTIALLY_DELIVERED, MarkGroupReturned]
+          - [PLACED, CANCELLED, ConfirmGroupCancelled]
+          - [PLACED, CANCELLED, CancelUnkeepableGroup]
         value_objects:
           - "ShipTo{name, line1, line2, city, region, postalCode, countryCode, phone} (PII, synthetic)"
           - "OrderLine{lineNo, catalogItemId, quantity}"
@@ -805,10 +827,11 @@ contexts:
           - {rule: "every line is in exactly one group, and every group has a promise", error: ErrLineWithoutPromise}
           - {rule: "the promise's destination postal prefix matches the ship-to", error: ErrPromiseDestinationMismatch}
           - {rule: "cancel only while some group is unlocked; advisory, because order-sourcing decides and its FulfillmentCancelRefused wins. A request when every group is locked, shipped or delivered is answered with ErrCancelAfterLock", error: ErrCancelAfterLock}
-          - {rule: "status moves forward only", error: ErrStatusRegression}
+          - {rule: "status moves forward only: the order status is derived from the group states and a derived status that ranks below the current one is refused (a consumer records the event and skips it, it never fails the message)", error: ErrStatusRegression}
+          - {rule: "the shopper named by a checkout is registered (checked by the PlaceOrder use case before delivery-promise is called; customer-ordering ADR 0002 A9); HTTP 422 validation-failed", error: ErrValidation}
           - {rule: "chosenDeliveryDay and consolidationEligible are allowed only on a CONSOLIDATED group, and the day must be a valid calendar date (ErrValidation on Place, ErrInvalidSnapshot on Restore)", error: ErrValidation}
           - {rule: "consolidationKey is empty or 64 lower-case hex characters (ErrValidation on Place, ErrInvalidSnapshot on Restore)", error: ErrValidation}
-        commands: [PlaceOrder, MarkInFulfillment, MarkGroupShipped, MarkGroupDelivered, CancelOrder, ConfirmGroupCancelled, RefuseGroupCancellation, UpdateGroupPromise]
+        commands: [PlaceOrder, MarkInFulfillment, MarkGroupShipped, MarkGroupDelivered, MarkGroupLost, MarkGroupReturned, CancelOrder, CancelUnkeepableGroup, ConfirmGroupCancelled, RefuseGroupCancellation, UpdateGroupPromise]
         events: [CustomerOrderPlaced, CustomerOrderCancelled]
         throughput_estimate: "medium"
         size_estimate: "one row per order + lines"
@@ -831,11 +854,13 @@ contexts:
       - {name: ConsolidationKeyDerivation, rule: "PlaceOrder computes the key after resolveAddress through the ConsolidationKeyer port (an HMAC adapter) with the secret from the environment (at least 16 bytes); with no secret configured no key is computed, the event omits the field and the order never merges. Rotating the secret only stops merges between orders keyed under different secrets. The key is not in REST, MCP or A2A, and the placed event still carries no address field. A new normalisation rule is a new derivation version, never an edit of the old one (customer-ordering ADR 0012)"}
       - {name: ConsolidatedChoiceStored, rule: "the Tier enum accepts CONSOLIDATED (aggregate, constraint and OpenAPI); PlaceOrder copies tier, window and consolidationEligible from the made promise and derives chosenDeliveryDay with the time zone database in the use case (the domain only checks the SHAPE of a zone). GroupPromise on POST /checkout 201, GET /orders/{orderId} and GET /orders gains the two optional fields, omitted when unknown. A re-quote after an expired offer asks for the default tiers, so the 409 offer-not-quotable answer never offers CONSOLIDATED (an accepted limitation). Nothing here asks delivery-promise for the tier: it stays invisible until a caller opts in (customer-ordering ADR 0013)"}
       - {name: SharedTrackingNumbers, rule: "AttachTrackingNumbers and the assignment link only ADD a link row, never overwrite or remove one; tracking_packages.order_id and group_no keep meaning the first group that named the package. ApplyPackageDelivered, ApplyPackageLost and ApplyPackageReturned record the package fact once, then run MarkGroupDelivered, MarkGroupLost or MarkGroupReturned for EVERY group of GroupsOfTracking plus the group the event itself resolves, each in its own mutate inside the event's unit of work. A group that has not shipped yet is not in the set and is replayed by reconcile when its own FulfillmentShipped arrives. The tracking view of a follower order shows the shared package under the follower's group; the package's assignmentId stays the carrier's (customer-ordering ADR 0012)"}
-      - {name: CancelOnUnfulfillable, rule: "when a group is unsourceable and no revised promise is feasible, cancel the group and the order if nothing remains"}
-      - {name: CancelIsARequest, rule: "CancelOrder moves every unlocked group to a cancellation-requested state and publishes CustomerOrderCancelled for exactly those groups; locked, shipped and delivered groups are untouched. FulfillmentCancelled (ConfirmGroupCancelled) makes the group CANCELLED, and the order becomes CANCELLED when no group remains outside CANCELLED. FulfillmentCancelRefused (RefuseGroupCancellation) returns the group to LOCKED with the refusal reason, because the vendor ships and the shopper's path is then a return"}
+      - {name: CancelOnUnfulfillable, rule: "triggered by delivery-promise's PromiseUnkeepable{promiseId, orderId, groupNo, reason}, not by FulfillmentUnsourceable (customer-ordering ADR 0002 A5, gap G10): a PROMISED group goes straight to CANCELLED (command CancelUnkeepableGroup) and CustomerOrderCancelled{groupNos:[groupNo], reason 'PROMISE_UNKEEPABLE: <reason>'} is published; the order becomes CANCELLED when no group remains outside CANCELLED. In any other group state the event is recorded and skipped. FulfillmentUnsourceable only records its reason on the tracking view (OrderTrackingView) and cancels nothing"}
+      - {name: CancelIsARequest, rule: "CancelOrder moves every unlocked group (PROMISED) to CANCELLATION_REQUESTED and publishes CustomerOrderCancelled for exactly those groups; locked, shipped and delivered groups are untouched, so the order status does not change on the request. FulfillmentCancelled (ConfirmGroupCancelled) makes the group CANCELLED, and the order becomes CANCELLED when no group remains outside CANCELLED. FulfillmentCancelRefused (RefuseGroupCancellation) returns the group to LOCKED with the refusal reason, because the vendor ships and the shopper's path is then a return. A repeat request (every group already CANCELLATION_REQUESTED or CANCELLED) changes and publishes nothing; a DELIVERED, LOST or RETURNED order is refused with ErrStatusRegression (customer-ordering ADR 0002 A3, A4, A23)"}
+      - {name: OrderStatusDerivedFromGroups, rule: "the order status is never set directly: after every command it is derived from the groups that are not CANCELLED, first match wins: none left CANCELLED; every counted group closed (DELIVERED, LOST or RETURNED) DELIVERED when all delivered, else PARTIALLY_DELIVERED when some were, else LOST when any is lost, else RETURNED; some group DELIVERED PARTIALLY_DELIVERED; every group SHIPPED, LOST or RETURNED SHIPPED; some SHIPPED, LOST or RETURNED PARTIALLY_SHIPPED; some LOCKED IN_FULFILLMENT; otherwise PLACED. A LOST or RETURNED group did ship, so beside open groups it counts as shipped progress. Group states: PROMISED (not locked), LOCKED, SHIPPED, DELIVERED, LOST, RETURNED, CANCELLATION_REQUESTED, CANCELLED (customer-ordering ADR 0002 A1, A19, A23, REST OrderStatus and GroupStatus)"}
+      - {name: ShipmentWinsOverUnlockedAndCancelRequested, rule: "FulfillmentShipped moves a group from PROMISED, LOCKED or CANCELLATION_REQUESTED to SHIPPED: a shipment on a PLACED order is accepted even when the lock event has not been seen (cross-topic reordering), and a vendor that ships wins over a pending cancel request. SHIPPED again is a no-op; DELIVERED, LOST and RETURNED are a status regression and CANCELLED is illegal, both recorded and skipped by the consumer, never retried (customer-ordering internal/domain/customerorder MarkGroupShipped; ADR 0002 A7, A21)"}
     inbound:
       - {from: shopper / storefront, type: cmd, channel: "REST POST /checkout", routes: ["POST /checkout"], message: "PlaceOrder", relationship: OHS}
-      - {from: shopper / storefront, type: cmd, channel: "REST POST /orders/{orderId}:cancel", routes: ["POST /orders/{orderId}:cancel"], message: "CancelOrder", relationship: OHS}
+      - {from: shopper / storefront, type: cmd, channel: "REST POST /orders/{orderId}/cancellations", routes: ["POST /orders/{orderId}/cancellations"], message: "CancelOrder", relationship: OHS}
       - {from: shopper / storefront, type: cmd, channel: "REST POST /shoppers", routes: ["POST /shoppers"], message: "RegisterShopper", relationship: OHS}
       - {from: shopper / storefront, type: cmd, channel: "REST POST /shoppers/{shopperId}/addresses", routes: ["POST /shoppers/{shopperId}/addresses"], message: "AddShopperAddress", relationship: OHS}
       - {from: shopper / storefront, type: qry, channel: "REST GET /shoppers/{shopperId}, GET /shoppers?email=", routes: ["GET /shoppers/{shopperId}", "GET /shoppers?email="], message: "GetShopper, FindShopperByEmail", relationship: OHS}
@@ -849,7 +874,7 @@ contexts:
       - "POST /checkout"
       - "GET /orders/{orderId}"
       - "GET /orders/{orderId}/tracking"
-      - "POST /orders/{orderId}:cancel"
+      - "POST /orders/{orderId}/cancellations"
       - "GET /orders/{orderId}/ship-to"
       - "POST /shoppers"
       - "POST /shoppers/{shopperId}/addresses"
@@ -937,6 +962,12 @@ contexts:
           - [RELEASED, CANCELLED, CancelAssignment]
           - [UNSOURCEABLE, CANCELLED, CancelAssignment]
           - [UNSOURCEABLE, QUEUED, ApplyRevisedPromise]
+          # as built (order-sourcing ADR 0002 A9, gap G13): in every non-terminal state a revision with a higher revisionNo replaces the constraint; only QUEUED and UNSOURCEABLE re-search
+          - [QUEUED, QUEUED, ApplyRevisedPromise]
+          - [RELEASED, RELEASED, ApplyRevisedPromise]
+          - [LOCKED, LOCKED, ApplyRevisedPromise]
+          - [SHIPPED, SHIPPED, ApplyRevisedPromise]
+          - [UNSOURCEABLE, UNSOURCEABLE, ApplyRevisedPromise]
           - [LOCKED, LOCKED, RefuseCancel]
           - [SHIPPED, SHIPPED, RefuseCancel]
           - [DELIVERED, DELIVERED, RefuseCancel]
@@ -956,7 +987,7 @@ contexts:
           - {rule: "cancel only before LOCKED: a cancel request on a LOCKED, SHIPPED or DELIVERED assignment is refused, the assignment keeps its state and raises FulfillmentCancelRefused (reason CANCEL_AFTER_LOCK) instead of FulfillmentCancelled", error: ErrCancelAfterLock}
           - {rule: "a member of a live merge (carrier or follower, state RELEASED, not yet LOCKED) is not cancelled: the cancel is refused through RefuseCancel with reason CANCEL_WHILE_MERGED, the state does not change, nothing is withdrawn and the merge stays intact; the cancel can be retried after the carrier's lock (then CANCEL_AFTER_LOCK) or after the merge is dissolved (then the group is QUEUED again and cancels). A cancel of a QUEUED group or of an unmerged RELEASED group is unchanged", error: ErrCancelWhileMerged}
         commands: [QueueAssignment, ReoptimiseAssignment, ReleaseToNode, ReleaseConsolidated, ReleaseAsFollower, HandleNodeRefusal, LockAssignment, MarkShipped, MarkDelivered, CancelAssignment, RefuseCancel, ApplyRevisedPromise, Requeue]
-        events: [FulfillmentQueued, FulfillmentReleasedToNode, FulfillmentReleaseWithdrawn, FulfillmentReassigned, FulfillmentLocked, FulfillmentShipped, FulfillmentDelivered, FulfillmentUnsourceable, FulfillmentCancelled, FulfillmentCancelRefused, FulfillmentSourcingDecided, AssignmentsConsolidated, AssignmentsDeconsolidated]
+        events: [FulfillmentQueued, FulfillmentReleasedToNode, FulfillmentReleaseWithdrawn, FulfillmentReassigned, FulfillmentLocked, FulfillmentShipped, FulfillmentDelivered, FulfillmentUnsourceable, FulfillmentCancelled, FulfillmentCancelRefused, FulfillmentConstraintRevised, FulfillmentSourcingDecided, AssignmentsConsolidated, AssignmentsDeconsolidated]
         notes: "Known residual (G12): an acceptance that reaches order-sourcing after it cancelled a RELEASED assignment is only recorded and logged (policy AcceptanceAfterCancelOnlyLogged); the vendor may still ship a cancelled group."
         throughput_estimate: "medium-high; re-optimisation sweeps touch QUEUED rows only"
         size_estimate: "one row per shipment group + releases"
@@ -1843,7 +1874,8 @@ contexts:
           - "FastTierState{eligible, reinstatementStreakDays, streakLastUtcDay}: held on the 7d scorecard only (migration 0004), every node starts eligible; the 30d scorecard never evaluates it and keeps the defaults (node-performance ADR 0013)"
         invariants:
           - {rule: "rates are in [0,1]", error: ErrRateOutOfRange}
-          - {rule: "grade requires observations >= minObservations", error: ErrInsufficientObservations}
+          # as built (node-performance ADR 0002 A5, G33): minObservations = 50 (MinObservations); the only problem types of this context are not-found (404) and validation-failed (422), the three invariants are consumer-side (ADR 0002 A18)
+          - {rule: "grade requires observations >= minObservations (50, ADR 0002 A5)", error: ErrInsufficientObservations}
           - {rule: "an observation is counted once (idempotent on source event id)", error: ErrDuplicateObservation}
         commands: [RecordObservation, Recompute]
         events: [NodeScorecardUpdated, NodeThresholdBreached, NodeTierEligibilityChanged]

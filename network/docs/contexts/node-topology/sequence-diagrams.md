@@ -324,11 +324,12 @@ sequenceDiagram
         H-->>H: replay it, nothing runs
     else new key
         H->>UC: Execute
-        alt origin equals destination
-            UC-->>H: 422 lane-loop
-        end
         UC->>R: FindByID origin and destination nodes
-        alt type pair not in lane_rules
+        alt a node is unknown
+            UC-->>H: 404 not-found
+        else origin equals destination
+            UC-->>H: 422 lane-loop
+        else type pair not in lane_rules
             UC-->>H: 422 lane-type-pair-not-allowed
         else an end not ACTIVE
             UC-->>H: 409 lane-endpoint-not-active
@@ -353,7 +354,7 @@ sequenceDiagram
 
 Derived from: model.yaml → `contexts[node-topology].aggregates[Lane]` (`commands`, `invariants`), `.rest`, `.publishes[LaneOpened]`; `conventions.integration_rules`.
 
-Omitted: the 404 when a named node is unknown. `ErrLaneLoop` and `ErrLaneTypePairNotAllowed` are raised by the `Lane` constructor; the diagram shows them before it for brevity. The two `Node` aggregates are read, never saved.
+Omitted: the check order as built is: load both nodes (404), then in the `Lane` constructor loop, type pair, endpoint state, then the duplicate check against open lanes. The two `Node` aggregates are read, never saved.
 
 ## 7. CloseLane
 

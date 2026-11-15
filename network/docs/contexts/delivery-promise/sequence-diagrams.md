@@ -182,7 +182,7 @@ sequenceDiagram
             UC->>P: Confirm(orderId, groupNo, now)
             alt hold expired or promise closed
                 P-->>UC: ErrPromiseHoldExpired or ErrPromiseClosed
-                Note over UC: group skipped, alert, hotspot H6
+                Note over UC: group skipped with a warning log, never retried, hotspot H6<br/>the ReleaseExpiredHolds sweeper releases it later
             else confirmed
                 UC->>B: Confirm()
                 UC->>DB: update promise and book WHERE version<br/>outbox PromiseConfirmed
@@ -200,9 +200,11 @@ Derived from: `model.yaml → contexts[delivery-promise].consumes[CustomerOrderP
 `.aggregates[Promise].transitions[PROVISIONAL, CONFIRMED]`,
 `.aggregates[PromiseBook].commands[ConfirmCapacity]`.
 
-Omitted: nothing else. All groups of one order commit in one transaction with
-the inbox row, so a failure redelivers the whole event and a success can never
-be half applied.
+Omitted: nothing else. All groups of one order share one transaction with
+the inbox row, but a lapsed group does not fail it: it is skipped (warning log,
+never retried), the other groups are confirmed, and a database failure
+redelivers the whole event, so a success is never half applied. The sweeper
+(`ReleaseExpiredHolds`) releases the promise of the lapsed group.
 
 ## 4. CancelPromise (Kafka: CustomerOrderCancelled)
 

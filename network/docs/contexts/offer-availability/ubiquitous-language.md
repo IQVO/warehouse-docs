@@ -33,7 +33,7 @@ package names. The domain-wide glossary is
 | **asOf** | The instant the vendor's number is true for. Monotonic per listing: an update with `asOf` not after the current one is ignored. | `listing.Availability.AsOf` | The time the feed was applied (`appliedAt`). |
 | **Inventory Feed** | One vendor submission of availability for one node, full or partial, applied atomically. | `feed.InventoryFeed` | A **Submission / Transaction** (`vendor-connectivity`), the asynchronous Vendor API write that carries it. |
 | **Full Feed** | A feed that is the complete truth for its node; omitted listings become zero. | `feed.InventoryFeed.FullUpdate` | A partial feed (`fullUpdate` false), which changes only the listings it names. |
-| **Feed state** | `RECEIVED`, then `APPLIED` or `FAILED`. | `feed.State` | **Submission** states `PROCESSING` / `SUCCESS` / `FAILURE` in `vendor-connectivity`. |
+| **Feed state** | `RECEIVED`, then `APPLIED`, `FAILED` or `SUPERSEDED` (older than the node's last applied feed); a `FAILED` feedId may be sent again. | `feed.State` | **Submission** states `PROCESSING` / `SUCCESS` / `FAILURE` in `vendor-connectivity`. |
 | **Listing state** | `LIVE` (sellable) or `SUPPRESSED` (not sellable, for example because its node is not `ACTIVE`). | `listing.State` | A zero **Available Quantity**: a `LIVE` listing can have zero. |
 | **Catalog item state** | `ACTIVE` or `DISCONTINUED`. | `catalog.State` | **Node** status `ACTIVE` (`node-topology`). |
 | **Suppression** | Taking a listing out of sale; the event carries a `reason`. | `listing.Listing.Suppress` | Discontinuing a catalogue item. |

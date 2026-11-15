@@ -312,11 +312,14 @@ owner, not decided here.
    `PackageExceptionRaised` carry `assignmentId` and `orderId`, not
    `promiseId` or `groupNo`. For a group shipped in several packages, the model
    does not say which delivery judges it.
-5. **A package that never arrives.** `PackageLost` and `PackageReturned` are
-   analytics-only, so a lost package's promise is never judged.
-6. **A cancelled delivery wave.** `DeliveryWaveCancelled` is analytics-only.
-   `DeliveryWaveView` cannot drop a cancelled wave, and `RepromiseOnRisk` cannot
-   react to one on a witness path.
+5. **A package that never arrives (resolved).** `PackageLost` and
+   `PackageReturned` are consumed: the promise of every assignment that shares
+   the tracking number is judged `BROKEN` with cause `LOST` or `RETURNED`
+   (ADR 0025), so a lost package's promise is judged.
+6. **A cancelled delivery wave (resolved).** `DeliveryWaveCancelled` is
+   consumed: the wave is marked cancelled in `DeliveryWaveView` and every
+   active promise whose witness wave it is is flagged `AT_RISK` with reason
+   `WAVE_CANCELLED`, then `RepromiseOnRisk` runs.
 7. **Where a book comes from (resolved, G9).** The first `HoldCapacity` for a
    pickup opens the book (`OpenBook`, policy `LazyBookOpening`). Its `share` is
    `ceil(min(maxOrders, throughput cap x window) x capacitySharePercent / 100)`,
@@ -330,9 +333,12 @@ owner, not decided here.
    reads it as no handicap), and does not say which scorecard window (7-day or
    30-day) applies. As built, grades and handicaps read the 30-day window and the
    7-day window gates the fast tiers through `NodeTierEligibilityChanged`.
-10. **A late `CustomerOrderPlaced`.** Confirmation is asynchronous. If the hold
-    expires first, the order exists with a `RELEASED` promise; no recovery is
-    named.
+10. **A late `CustomerOrderPlaced`.** `customer-ordering` normally confirms
+    synchronously, and the event consumer is the reconciling confirm. If the
+    hold expired first, the consumer skips that group with a warning log (never
+    retried), confirms the other groups of the order, and the `ReleaseExpiredHolds`
+    sweeper releases the lapsed `PROVISIONAL` promise; the placed order then has a
+    `RELEASED` promise and no event tells `customer-ordering`.
 11. **Capacity on revision and cancellation.** The model does not say whether
     `RevisePromise` moves the hold to a new book, or that `CustomerOrderCancelled`
     maps to `CancelPromise` and releases confirmed capacity. This pack assumes

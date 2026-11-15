@@ -79,7 +79,7 @@ Derived from: model.yaml → `contexts[order-sourcing].aggregates[FulfillmentAss
 
 Omitted: `DELIVERED` and `CANCELLED` are drawn as final because no transition
 leaves them; the model does not name terminal states for this aggregate.
-`UNSOURCEABLE` is not final: `ApplyRevisedPromise` re-queues it. A merge is not a state: the carrier and its followers are all `RELEASED` (then `LOCKED`, `SHIPPED`, `DELIVERED`), and `Requeue` returns every member of a dissolved merge to `QUEUED`. The
+`UNSOURCEABLE` is not final: `ApplyRevisedPromise` re-queues it (and applies in every other non-terminal state without a state change). A merge is not a state: the carrier and its followers are all `RELEASED` (then `LOCKED`, `SHIPPED`, `DELIVERED`), and `Requeue` returns every member of a dissolved merge to `QUEUED`. The
 self-transition `QUEUED → QUEUED` covers both a change of candidate and a
 re-optimisation that keeps the same one. In `RELEASED` exactly one release
 is `PENDING` (a purchase order sits at the node); from `LOCKED` on, the node
@@ -164,7 +164,7 @@ Neighbours' reactions that close the loops:
 | `MarkDelivered` | `SHIPPED → DELIVERED` | Kafka consumer of `PackageDelivered` |
 | `CancelAssignment` | `QUEUED → CANCELLED`, an unmerged `RELEASED → CANCELLED` or `UNSOURCEABLE → CANCELLED` | Kafka consumer of `CustomerOrderCancelled`, per `groupNos` |
 | `RefuseCancel` | `LOCKED`, `SHIPPED`, `DELIVERED`, or a merged `RELEASED` member, unchanged (version + 1) | same consumer, when `CancelAssignment` hits `ErrCancelAfterLock` or `ErrCancelWhileMerged` |
-| `ApplyRevisedPromise` | `UNSOURCEABLE → QUEUED` (a revision that dissolves a merge goes through `Requeue`) | Kafka consumer of `PromiseRevised` |
+| `ApplyRevisedPromise` | every non-terminal state (replaces the constraint; `UNSOURCEABLE → QUEUED` when a candidate exists; a revision that dissolves a merge goes through `Requeue`) | Kafka consumer of `PromiseRevised` |
 
 ### 7. Created Events
 
@@ -183,6 +183,8 @@ on `retailnetwork.order-sourcing.events` (the analytics-only ones on
 | `FulfillmentDelivered` | `MarkDelivered` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentDelivered` |
 | `FulfillmentCancelled` | `CancelAssignment` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` |
 | `FulfillmentCancelRefused` | `RefuseCancel` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelRefused` |
+| `FulfillmentConstraintRevised` | `ApplyRevisedPromise`, always (analytics only) | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentConstraintRevised` |
+| `FulfillmentSourcingDecided` | `ReleaseToNode`, one per release (analytics only, ADR 0013) | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentSourcingDecided` |
 | `FulfillmentReleaseWithdrawn` | `Requeue` after a promise revision dissolved a merge | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleaseWithdrawn` |
 | `AssignmentsConsolidated` | `ReleaseConsolidated` (analytics only) | `com.retailnetwork.commerce.order-sourcing.assignment.AssignmentsConsolidated` |
 | `AssignmentsDeconsolidated` | a merge ends before the lock (analytics only) | `com.retailnetwork.commerce.order-sourcing.assignment.AssignmentsDeconsolidated` |
@@ -191,8 +193,8 @@ Derived from: model.yaml → `aggregates[FulfillmentAssignment].events`,
 `.transitions`; `publishes[*].data`. The model lists the events but not which
 command raises which; the pairing above follows the transitions and each
 event's data (`FulfillmentReassigned` carries `fromNodeId`, `toNodeId`).
-`ApplyRevisedPromise` has **no** event in the model (open question on the
-[canvas](/network/contexts/order-sourcing/bounded-context-canvas)); a
+`ApplyRevisedPromise` always raises `FulfillmentConstraintRevised`
+(analytics only, ADR 0002 A9); a
 `ReoptimiseAssignment` that keeps the same node raises nothing.
 
 ### 8. Throughput

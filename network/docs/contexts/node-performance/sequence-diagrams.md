@@ -166,6 +166,6 @@ republishes the same CloudEvents `id`; consumers deduplicate on it.
 
 The two GET routes read `ScorecardRepository` directly and touch no
 aggregate method, outbox or Kafka. They are not drawn.
-`GET /scorecards/{nodeId}` answers 404 `scorecard-not-found` when the node has
-no scorecard; `GET /scorecards?grade=` answers 422 `invalid-grade` for an
-unknown grade.
+`GET /scorecards/{nodeId}` answers 404 `not-found` when the node has
+no scorecard; `GET /scorecards?grade=` answers 422 `validation-failed` for an
+unknown grade or window (ADR 0002 A18).

@@ -187,23 +187,26 @@ stateDiagram-v2
     [*] --> RECEIVED: ApplyInventoryFeed
     RECEIVED --> APPLIED: ApplyInventoryFeed
     RECEIVED --> FAILED: ApplyInventoryFeed
+    RECEIVED --> SUPERSEDED: ApplyInventoryFeed
+    FAILED --> RECEIVED: ApplyInventoryFeed (resent)
     APPLIED --> [*]
-    FAILED --> [*]
+    SUPERSEDED --> [*]
 ```
 
 Derived from: `model.yaml → contexts[offer-availability].aggregates[InventoryFeed].states`,
 `.transitions`, `.commands`.
 
-Omitted: nothing. All three edges belong to the one command: the feed is
-recorded `RECEIVED` and resolved in the same apply. `APPLIED` and `FAILED`
-have no outgoing transition in the model and are drawn as terminal.
+Omitted: nothing. Every edge belongs to the one command: the feed is
+recorded `RECEIVED` and resolved in the same apply. `APPLIED` and `SUPERSEDED`
+are terminal; a `FAILED` feed may be resubmitted (`FAILED → RECEIVED`,
+ADR 0002 A11).
 
 ### 4. Enforced Invariants
 
 | Invariant | Enforced by |
 | --- | --- |
 | Every line names a listing of the feed's node | `ApplyInventoryFeed` → `ErrListingNotOnNode` (the feed ends `FAILED`, no line applied) |
-| A feed is applied at most once | `ApplyInventoryFeed` → `ErrFeedAlreadyApplied` |
+| A feed is applied at most once | `ApplyInventoryFeed` → `ErrFeedAlreadyApplied` (an `APPLIED` or `SUPERSEDED` feedId; a `FAILED` one may be sent again) |
 | (carried from `Listing`) every line's `availableQty >= 0` | `ApplyAvailability` → `ErrNegativeAvailability` (proposed: the feed ends `FAILED`, because it is applied atomically) |
 
 ### 5. Corrective Policies
@@ -226,7 +229,7 @@ have no outgoing transition in the model and are drawn as terminal.
 | --- | --- | --- |
 | `InventoryFeedApplied` | after the feed reaches `APPLIED` | `com.retailnetwork.commerce.offer-availability.inventoryfeed.InventoryFeedApplied` |
 
-A `FAILED` feed raises no event: the model publishes none.
+A `FAILED` or `SUPERSEDED` feed raises no event.
 
 ### 8. Throughput
 
@@ -271,4 +274,4 @@ A listing whose owner is a suspended seller is `SUPPRESSED` with reason
 cause, `DISCONTINUED` > `NODE_NOT_SELLABLE` > `OWNER_SUSPENDED` (service
 ADR 0013, gap G48, closed). Received seller stock (`InboundShipmentReceived`
 `received` lines) creates the owner's listing at availability 0 / `UNKNOWN`
-(service ADR 0014, gap G51, closed).
+(service ADR 0014, gap G51, closed). ADR 0013 first recorded this rule 8 as blocked on the producer payload; ADR 0014 supersedes that and builds rule 8 as written, so ADR 0014 is the current state.

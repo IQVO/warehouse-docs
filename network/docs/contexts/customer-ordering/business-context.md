@@ -58,18 +58,18 @@ The model lists three business decisions (`contexts[customer-ordering].business_
    `shipping-and-tracking` for a label, through the restricted route
    `GET /orders/{orderId}/ship-to`. No event this context publishes carries
    it; `CustomerOrderPlaced` carries only `destinationPostalPrefix`.
-3. **Cancellation ends at the lock.** A customer may cancel only while no
-   shipment group is locked to a node (`ErrCancelAfterLock`). After that,
+3. **Cancellation ends at the lock.** A customer may cancel only the shipment
+   groups that no node has locked yet; a request with every group locked,
+   shipped or delivered is refused (`ErrCancelAfterLock`). After that,
    cancellation is a return, which is a future context (`customer-returns`).
-   The model words this decision as "until every shipment group is locked",
-   while the invariant says "while no group is locked"; these pages follow the
-   invariant, and the difference is an open question on the
-   [canvas](/network/contexts/customer-ordering/bounded-context-canvas).
+   A cancel is a request: `order-sourcing` decides per group (customer-ordering
+   ADR 0002 A3). The model words this decision as "until every shipment group
+   is locked", while the invariant and the service act on the unlocked groups.
 
 It also runs two policies: **CheckoutPromising** (promise each group from the
 offer the shopper saw; re-quote if it expired) and **CancelOnUnfulfillable**
-(cancel a group that is unsourceable when no revised promise is feasible,
-and the order if nothing remains).
+(cancel a group at once when `delivery-promise` publishes `PromiseUnkeepable`
+for it and no node has locked it, and the order if nothing remains).
 
 ## How it relates to the real fulfillment networks
 

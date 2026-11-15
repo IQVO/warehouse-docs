@@ -100,7 +100,7 @@ sequenceDiagram
     end
     UC->>R: load assignment
     alt not found
-        UC-->>AD: 404 assignment-not-found
+        UC-->>AD: 404 not-found
     else found
         Note over UC: candidates without excluded nodes and with eta within deliverByLatest
         UC->>A: ReoptimiseAssignment(best)
@@ -412,15 +412,19 @@ sequenceDiagram
     participant K as Kafka
     AD->>UC: PromiseRevised
     UC->>R: inbox check, load by promiseId
-    alt state UNSOURCEABLE
+    alt state QUEUED or UNSOURCEABLE
         Note over UC: candidates against the new deliverByLatest
         UC->>A: ApplyRevisedPromise(constraint, best)
-        A-->>UC: QUEUED, releaseAt, version + 1
-        UC->>R: BEGIN, update where version matches
-        UC->>R: insert inbox row, COMMIT
-        Note over R,K: no event in the model, nothing for the relay
-    else any other state
-        Note over UC: no transition in the model, inbox row only
+        A-->>UC: UNSOURCEABLE re-queued if a candidate exists<br/>QUEUED re-searched, version + 1
+    else RELEASED, LOCKED or SHIPPED
+        UC->>A: ApplyRevisedPromise(constraint, no search)
+        A-->>UC: only the constraint changes, version + 1
+    end
+    UC->>R: BEGIN, update where version matches
+    UC->>R: outbox FulfillmentConstraintRevised, inbox row, COMMIT
+    Note over R,K: the relay publishes the analytics-only event
+    opt revisionNo not above the applied one
+        A-->>UC: ErrStaleRevision, ignored, inbox row only
     end
     opt version mismatch
         R-->>UC: ErrStaleAssignmentVersion
@@ -429,9 +433,8 @@ sequenceDiagram
 ```
 
 Derived from: model.yaml → `aggregates[FulfillmentAssignment].transitions`
-(`UNSOURCEABLE → QUEUED`), `.events` (none for this command);
+(`UNSOURCEABLE → QUEUED`), `.events` (`FulfillmentConstraintRevised`);
 `contexts[delivery-promise].publishes[PromiseRevised].data`.
 
-Omitted: the relay and Kafka do nothing here, because the model names no
-event for this transition (open question). The re-queued assignment is then
+Omitted: a revision of a merged `RELEASED` member that moves the window off the merged delivery (`Requeue`, ADR 0015) and the `FulfillmentReassigned` / `FulfillmentUnsourceable` events a `QUEUED` re-search can add. A re-queued assignment is then
 released by diagram 3.

@@ -82,7 +82,7 @@ and the count falls below `minObservations`.
 | A grade requires `observations >= minObservations` | `NodeScorecard.Recompute` (and any grade assignment) → `ErrInsufficientObservations`. `Recompute` itself never returns it for a thin window: it moves the scorecard to `PROVISIONAL` instead. |
 | An observation is counted once (idempotent on source event id) | `NodeScorecard.RecordObservation` → `ErrDuplicateObservation` |
 
-`minObservations` has no value in the model (open question).
+`minObservations` is 50 (ADR 0002 A5, gap G33); the model gives no value.
 
 ### 5. Corrective Policies
 

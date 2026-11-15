@@ -162,29 +162,24 @@ pack's reading. The model lists both sides but not the pairs.
 ```mermaid
 flowchart TB
     SH["Shopper<br/>via storefront"]:::actor
-    OS["order-sourcing"]:::external
-    C1["CancelOrder<br/>POST orders:cancel"]:::command
-    E0["OS FulfillmentUnsourceable"]:::event
-    P1["CancelOnUnfulfillable<br/>no revised promise feasible:<br/>cancel the group"]:::policy
-    P2["Policy: cancel only while<br/>no group is locked"]:::policy
+    C1["CancelOrder<br/>POST orders/cancellations"]:::command
+    E0["DP PromiseUnkeepable"]:::event
+    P1["CancelOnUnfulfillable<br/>PROMISED group: cancel the group<br/>(CancelUnkeepableGroup)"]:::policy
+    P2["Policy: a request for every<br/>unlocked group, order-sourcing decides"]:::policy
     G1["CustomerOrder"]:::aggregate
     E1["CustomerOrderCancelled"]:::event
     DP["delivery-promise<br/>CancelPromise"]:::external
     OS2["order-sourcing<br/>CancelAssignment"]:::external
-    H6["H6 no event says<br/>re-promise not feasible"]:::hotspot
-    H7["H7 cancel wording, and<br/>IN_FULFILLMENT to CANCELLED"]:::hotspot
     H9["H9 no UNSOURCEABLE to<br/>CANCELLED in order-sourcing"]:::hotspot
     H10["H10 lock not yet seen<br/>when the cancel is accepted"]:::hotspot
 
     SH --> C1
-    OS --> E0 --> P1
-    P1 --> C1
+    DP0["delivery-promise"]:::external --> E0 --> P1
+    P1 --> G1
     C1 --> P2 --> G1
     G1 --> E1
     E1 --> DP
     E1 --> OS2
-    P1 --- H6
-    P2 --- H7
     OS2 --- H9
     G1 --- H10
 
@@ -199,13 +194,15 @@ flowchart TB
 
 Derived from: `model.yaml → contexts[customer-ordering].business_decisions`,
 `.aggregates[CustomerOrder].invariants` (`ErrCancelAfterLock`),
-`.transitions`, `.policies[CancelOnUnfulfillable]`,
+`.transitions`, `.policies[CancelIsARequest]`, `.policies[CancelOnUnfulfillable]`,
 `.publishes[CustomerOrderCancelled]`; `contexts[order-sourcing].aggregates[FulfillmentAssignment].transitions`;
-`contexts[delivery-promise].policies[RepromiseOnRisk]`.
+`contexts[delivery-promise].publishes[PromiseUnkeepable]`.
 
 Omitted: the 409 answer to a refused cancellation (`cancel-after-lock`), the
-re-promise branch (`PromiseRevised` → `UpdateGroupPromise`, board 2), and
-returns after the lock (future `customer-returns`).
+re-promise branch (`PromiseRevised` → `UpdateGroupPromise`, board 2), the
+answers of `order-sourcing` to the request (`FulfillmentCancelled`,
+`FulfillmentCancelRefused`), and returns after the lock (future
+`customer-returns`).
 
 ## Hotspots
 
@@ -214,10 +211,10 @@ returns after the lock (future `customer-returns`).
 | H1 | A `DeliveryOffer` is quoted for one catalogue item and quantity, but a `Promise` covers a multi-line shipment group and names one `offerId`. The model does not say how a group of several lines maps to one offer. | `contexts[delivery-promise].aggregates[DeliveryOffer].description` vs `.aggregates[Promise]` and `publishes[PromiseMade].data` |
 | H2 | `delivery-promise` confirms the promise only when it consumes `CustomerOrderPlaced`. If that happens after `holdExpiresAt`, `ConfirmPromise` fails (`ErrPromiseHoldExpired`) and the promise is `RELEASED`. `PromiseReleased` goes to analytics only, so this context never learns that a placed order has no promise. | `contexts[delivery-promise].aggregates[Promise].invariants`, `.transitions` (`ReleaseExpiredHolds`), `publishes[PromiseReleased].consumers` |
 | H3 | `GET /orders/{orderId}/ship-to` is "in-org, restricted", but the network has no authentication. | `contexts[customer-ordering].inbound`; `conventions.no_auth` |
-| H4 | There is no transition for a group delivered while the order is `PARTIALLY_SHIPPED`, and no partially-delivered status. | `contexts[customer-ordering].aggregates[CustomerOrder].transitions` |
-| H5 | `GroupPromise` has no field for a group's lock, shipment, delivery or cancellation. `ErrCancelAfterLock` and the `PARTIALLY_SHIPPED`/`SHIPPED` choice need one. It also lacks `tier`, `witnessNodeId` and `shipBy`, which `CustomerOrderPlaced` publishes. | `aggregates[CustomerOrder].value_objects`, `.invariants`, `publishes[CustomerOrderPlaced].data` |
-| H6 | `CancelOnUnfulfillable` waits for "no revised promise is feasible", but no event says so. `delivery-promise` reports an infeasible re-promise only as `PromiseBroken` at judgement, which needs a delivery. | `policies[CancelOnUnfulfillable]`; `contexts[delivery-promise].policies[RepromiseOnRisk]` |
-| H7 | The business decision allows cancel "until every shipment group is locked". The invariant allows it only "while no group is locked". If `IN_FULFILLMENT` starts at the first lock, `IN_FULFILLMENT → CANCELLED` can never pass `ErrCancelAfterLock`. | `business_decisions`, `aggregates[CustomerOrder].invariants`, `.transitions` |
+| H4 | Resolved: the order status is derived from the group states, so a delivery while the order is `PARTIALLY_SHIPPED` is recorded and gives `PARTIALLY_DELIVERED`; `LOST` and `RETURNED` exist as order and group states (ADR 0002 A1, A19, A23). | `contexts[customer-ordering].aggregates[CustomerOrder].states`, `.transitions`, `.policies[OrderStatusDerivedFromGroups]` |
+| H5 | Resolved: `GroupPromise` also stores the per-group status, `tier`, `witnessNodeId`, `shipBy`, the lock, shipment, delivery and cancellation facts (ADR 0002 A2). The model's `value_objects` list names only the promise fields. | `aggregates[CustomerOrder].value_objects`, `.invariants`, `publishes[CustomerOrderPlaced].data` |
+| H6 | Resolved (G10): `delivery-promise` publishes `PromiseUnkeepable` when a re-promise is not feasible, and that event, not `FulfillmentUnsourceable`, triggers `CancelOnUnfulfillable` (ADR 0002 A5). | `policies[CancelOnUnfulfillable]`; `contexts[delivery-promise].publishes[PromiseUnkeepable]` |
+| H7 | Resolved: a cancel is a request for the `PROMISED` groups; ADR 0002 says `IN_FULFILLMENT → CANCELLED` stays unreachable (a group can only be cancelled while unlocked), so `PLACED → CANCELLED` is the only reachable cancellation. | `business_decisions`, `aggregates[CustomerOrder].invariants`, `.policies[CancelIsARequest]` |
 | H8 | `POST /shoppers` (`RegisterShopper`) is in `rest`, but no `inbound` row names its caller. | `contexts[customer-ordering].rest` vs `.inbound` |
 | H9 | Resolved: `order-sourcing` cancels a `FulfillmentAssignment` from `QUEUED`, `RELEASED` and `UNSOURCEABLE`, the state of the group `CancelOnUnfulfillable` cancels. | `contexts[order-sourcing].aggregates[FulfillmentAssignment].transitions` |
 | H10 | Resolved (G12): this context learns of a lock only from `FulfillmentLocked`, so a cancel accepted between the vendor's acceptance and that event passes `ErrCancelAfterLock` here, which is advisory. `order-sourcing` decides and answers `FulfillmentCancelRefused` (`CANCEL_AFTER_LOCK`); the group returns to `LOCKED` and the shopper's path is a return. One race stays open in `order-sourcing` (`AcceptanceAfterCancelOnlyLogged`). | `contexts[customer-ordering].aggregates[CustomerOrder].invariants`; `contexts[order-sourcing].aggregates[FulfillmentAssignment].invariants`, `policies[LockOnCommit]` |
