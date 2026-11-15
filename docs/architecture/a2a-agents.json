@@ -55,7 +55,8 @@
             "product",
             "classification",
             "packaging",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"product_profile\",\"arguments\":{\"sku\":\"SKU-1\"}}",
@@ -70,7 +71,8 @@
           "tags": [
             "product",
             "packaging",
-            "write"
+            "write",
+            "authority:L3"
           ],
           "examples": [
             "{\"skill\":\"declare_pack_level\",\"arguments\":{\"sku\":\"SKU-1\",\"level\":\"EACH\",\"gtin\":\"4006381333931\"}}",
@@ -133,7 +135,8 @@
           "tags": [
             "slotting",
             "forward-slots",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"forward_slot_map\",\"arguments\":{\"siteId\":\"SITE-1\"}}",
@@ -148,7 +151,8 @@
           "tags": [
             "slotting",
             "slot-plan",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"slot_plan_review\",\"arguments\":{\"planId\":\"plan-1b4e28ba-2fa1-4d3c-8f6e-0a1b2c3d4e5f\"}}",
@@ -174,7 +178,8 @@
             "inbound",
             "asn",
             "receipt",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"asn_receiving_status\",\"arguments\":{\"asnNumber\":\"ASN-1001\"}}"
@@ -189,7 +194,8 @@
             "inbound",
             "dock",
             "appointment",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"dock_schedule\",\"arguments\":{}}",
@@ -214,7 +220,8 @@
           "tags": [
             "replenishment",
             "pick-face",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"pick_face_status\",\"arguments\":{\"siteId\":\"SITE-1\"}}",
@@ -229,7 +236,8 @@
           "tags": [
             "replenishment",
             "request",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"replenishment_lookup\",\"arguments\":{\"requestId\":\"repl-1b4e28ba\"}}",
@@ -345,7 +353,7 @@
           "id": "assign_labor",
           "name": "Assign an associate to a process path",
           "kind": "write",
-          "description": "Puts an associate on a process path, ending their prior active assignment if any, exactly as the REST and MCP surfaces do, and publishes LaborAssigned or LaborReassigned through the transactional outbox. Rejected (as a problem answer, nothing written) when the associate is unknown, lacks the path's required certification, is on break, or their shift has ended. NOT idempotent: each accepted call closes the prior interval and starts a new one, so a caller must not blindly retry an ambiguous failure.",
+          "description": "Puts an associate on a process path, ending their prior active assignment if any, exactly as the REST and MCP surfaces do, and publishes LaborAssigned or LaborReassigned through the transactional outbox. Rejected (as a problem answer, nothing written) when the associate is unknown, lacks the path's required certification, is on break, or their shift has ended. NOT idempotent: each accepted call closes the prior interval and starts a new one, so a caller must not blindly retry an ambiguous failure. Optional proposalId, approvedBy and agentId (trimmed, max 128 characters each) are recorded on the published event as initiated_by so the assignment is attributable; they grant nothing, and the adapter itself stamps via=a2a.",
           "tags": [
             "workforce",
             "assignment",
@@ -353,7 +361,8 @@
             "authority:L3"
           ],
           "examples": [
-            "{\"skill\":\"assign_labor\",\"arguments\":{\"associateId\":\"assoc-1\",\"pathId\":\"PICK\"}}"
+            "{\"skill\":\"assign_labor\",\"arguments\":{\"associateId\":\"assoc-1\",\"pathId\":\"PICK\"}}",
+            "{\"skill\":\"assign_labor\",\"arguments\":{\"associateId\":\"assoc-1\",\"pathId\":\"PICK\",\"proposalId\":\"prop-42\",\"approvedBy\":\"supervisor-7\",\"agentId\":\"warehouse-ops-agent\"}}"
           ]
         }
       ]
@@ -418,7 +427,8 @@
             "interleaving",
             "station",
             "hint",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"station_hint_status\",\"arguments\":{\"stationId\":\"STN-07\"}}"
@@ -433,7 +443,8 @@
             "interleaving",
             "site",
             "policy",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"site_interleaving_overview\",\"arguments\":{\"siteId\":\"SITE-1\"}}",
@@ -458,7 +469,8 @@
           "tags": [
             "process-path",
             "catalogue",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"get_process_path\",\"arguments\":{\"pathId\":\"PICK\"}}"
@@ -472,7 +484,8 @@
           "tags": [
             "process-path",
             "catalogue",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"list_process_paths\",\"arguments\":{}}",
@@ -535,7 +548,8 @@
           "tags": [
             "orders",
             "status",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"order_status\",\"arguments\":{\"orderId\":\"ORD-1\"}}"
@@ -550,7 +564,8 @@
             "orders",
             "promise",
             "analytics",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"promise_health\",\"arguments\":{\"from\":\"2026-10-01T00:00:00Z\",\"to\":\"2026-10-08T00:00:00Z\"}}",
@@ -615,7 +630,8 @@
           "tags": [
             "topology",
             "service-area",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"serving_station\",\"arguments\":{\"postalPrefix\":\"013\"}}"
@@ -629,7 +645,8 @@
           "tags": [
             "topology",
             "node",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"find_nodes\",\"arguments\":{}}",
@@ -744,7 +761,7 @@
           "id": "assignment_detail",
           "name": "Explain one fulfillment assignment",
           "kind": "read",
-          "description": "Reads one fulfillment assignment in full by assignmentId: the promise it must keep (tier, deliverByLatest, witness node), its lines, the current candidate node and path with the cost in cost points, the VirtualQueue release point, the whole release history with each outcome (ACCEPTED, REJECTED, EXPIRED, PENDING), the nodes that were excluded and why, and the lock, shipment and delivery facts once they apply. Answered as a not-found problem for an unknown id. Read-only.",
+          "description": "Reads one fulfillment assignment in full by assignmentId: the promise it must keep (tier, deliverByLatest, witness node), its lines, the current candidate node and path with the cost in cost points, the VirtualQueue release point, the whole release history with each outcome (ACCEPTED, REJECTED, EXPIRED, WITHDRAWN, PENDING), the nodes that were excluded and why, and the lock, shipment and delivery facts once they apply. Answered as a not-found problem for an unknown id. Read-only.",
           "tags": [
             "order-sourcing",
             "assignment",
@@ -772,7 +789,8 @@
           "tags": [
             "delivery-promise",
             "promise",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"promise_status\",\"arguments\":{\"orderId\":\"ord-1001\"}}",
@@ -787,7 +805,8 @@
           "tags": [
             "delivery-promise",
             "capacity",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"book_capacity\",\"arguments\":{\"nodeId\":\"N-AUS3\",\"date\":\"2026-10-22\"}}"
@@ -807,11 +826,12 @@
           "id": "check_availability",
           "name": "Check where an item is sold and how much is available",
           "kind": "read",
-          "description": "Composed read of this context's own listings, narrowed by catalogItemId and/or nodeId (at least one is required). With catalogItemId the answer also carries that catalogue item (title, dimensions in mm, weightG, hazmat and fragile flags, state ACTIVE or DISCONTINUED) and an unknown item is a not-found problem. Each listing says LIVE or SUPPRESSED (reason NODE_NOT_SELLABLE or DISCONTINUED), its ownerRef when owned by a seller, and the availability a vendor's feed last gave it (availableQty, basis, asOf, feedId). Listings come one keyset page at a time: pass the returned nextCursor as after; limit is 1..500 (default 100).",
+          "description": "Composed read of this context's own listings, narrowed by catalogItemId and/or nodeId (at least one is required). With catalogItemId the answer also carries that catalogue item (title, dimensions in mm, weightG, hazmat and fragile flags, state ACTIVE or DISCONTINUED) and an unknown item is a not-found problem. Each listing says LIVE or SUPPRESSED (reason DISCONTINUED, NODE_NOT_SELLABLE or OWNER_SUSPENDED), its ownerRef when owned by a seller, and the availability a vendor's feed last gave it (availableQty, basis, asOf, feedId). Listings come one keyset page at a time: pass the returned nextCursor as after; limit is 1..500 (default 100).",
           "tags": [
             "offer-availability",
             "availability",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"check_availability\",\"arguments\":{\"catalogItemId\":\"item-1\"}}",
@@ -826,7 +846,8 @@
           "tags": [
             "offer-availability",
             "inventory-feed",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"feed_outcome\",\"arguments\":{\"feedId\":\"feed-7\"}}"
@@ -851,7 +872,8 @@
             "seller",
             "compliance",
             "scorecard",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"seller_compliance\",\"arguments\":{\"sellerId\":\"seller-77\"}}",
@@ -867,7 +889,8 @@
             "inbound",
             "plan",
             "shipment",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"inbound_status\",\"arguments\":{\"planId\":\"pln-0f3a91\"}}",
@@ -892,7 +915,8 @@
           "tags": [
             "vendor",
             "purchase-order",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"get_purchase_order\",\"arguments\":{\"vendorId\":\"vend-south-1\",\"poNumber\":\"PO-9a1b-0001\"}}"
@@ -907,7 +931,8 @@
             "vendor",
             "node",
             "scorecard",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"get_node_scorecard\",\"arguments\":{\"vendorId\":\"vend-south-1\",\"nodeId\":\"node-76c2\"}}"
@@ -982,7 +1007,7 @@
           "id": "get_route",
           "name": "Look up where one route stands",
           "kind": "read",
-          "description": "Read one route of a delivery service partner: its state (PLANNED, OUT_FOR_DELIVERY or COMPLETED), its numbered stops with the trackingNumbers of each and the outcome derived from the per-package attempts (omitted until every package of the stop has one), and every recorded attempt (trackingNumber, DELIVERED or FAILED, failureReason, at). Answers a 404 not-found problem when no route has that id. Persists nothing.",
+          "description": "Read one route of a delivery service partner: its state (PLANNED, OUT_FOR_DELIVERY or COMPLETED), its numbered stops with the trackingNumbers of each and the outcome derived from the per-package attempts (omitted until every package of the stop has one), and every recorded attempt (trackingNumber, DELIVERED or FAILED, the optional outcomeDetail, failureReason, at). Answers a 404 not-found problem when no route has that id. Persists nothing.",
           "tags": [
             "route",
             "delivery-attempt",
@@ -1006,7 +1031,7 @@
           "id": "get_journey",
           "name": "Track one package",
           "kind": "read",
-          "description": "Read the customer-visible journey of one package by its trackingNumber: the state (LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, DELIVERED, RETURNED, LOST or VOIDED), the poNumber, assignmentId, orderId and tier of its label, handedOverAt and deliveredAt when they happened, and every stored scan in the order they were recorded, each with its scanType, nodeId, when, and applied (false for a scan stored out of order or without an edge from the state it met). Answers a 404 problem when no journey has that tracking number. Persists nothing.",
+          "description": "Read the customer-visible journey of one package by its trackingNumber: the state (LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, DELIVERED, RETURNED, LOST or VOIDED), the poNumber, assignmentId, orderId and tier of its label, handedOverAt and deliveredAt when they happened, the day-of ETA window (etaStart, etaEnd) while the package is out for delivery, and every stored scan in the order they were recorded, each with its scanType, nodeId, when, and applied (false for a scan stored out of order or without an edge from the state it met). Answers a 404 problem when no journey has that tracking number. Persists nothing.",
           "tags": [
             "shipping",
             "tracking",
@@ -1035,7 +1060,8 @@
           "tags": [
             "returns",
             "rma",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"return_status\",\"arguments\":{\"rmaId\":\"rma-1b4e28ba\"}}",
@@ -1051,7 +1077,8 @@
             "returns",
             "disposition",
             "policy",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"disposition_policy\",\"arguments\":{}}",
@@ -1076,7 +1103,8 @@
           "tags": [
             "pricing",
             "item-price",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"item_price\",\"arguments\":{\"catalogItemId\":\"sku-1\"}}"
@@ -1090,7 +1118,8 @@
           "tags": [
             "pricing",
             "price-quote",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"quote_status\",\"arguments\":{\"quoteId\":\"quote-1\"}}"
@@ -1138,7 +1167,8 @@
           "tags": [
             "order",
             "customer-ordering",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"get_order\",\"arguments\":{\"orderId\":\"ord-3f9c1a2b\"}}"
@@ -1153,7 +1183,8 @@
             "order",
             "tracking",
             "customer-ordering",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"get_order_tracking\",\"arguments\":{\"orderId\":\"ord-3f9c1a2b\"}}"
@@ -1177,7 +1208,8 @@
           "tags": [
             "payment",
             "authorization",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"get_payment_status\",\"arguments\":{\"orderId\":\"ord-1\"}}",
@@ -1193,7 +1225,8 @@
           "tags": [
             "payment",
             "refund",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"get_refund_status\",\"arguments\":{\"orderId\":\"ord-1\"}}",
@@ -1217,7 +1250,8 @@
           "description": "Read one cart by its cartId: lines, destinationPostalPrefix, deliveryQuote, selections, the labelled estimate (minor units, estimateComplete says whether every line is priced) and checkoutReadiness. The same document GET /carts/{cartId} returns, for a cart of any state. Answers a 404 problem when no cart has that id. Persists nothing.",
           "tags": [
             "cart",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"get_cart\",\"arguments\":{\"cartId\":\"cart-123\"}}"
@@ -1227,11 +1261,12 @@
           "id": "list_shopper_carts",
           "name": "List a shopper's carts",
           "kind": "read",
-          "description": "Read the carts of one shopper, newest first, optionally of one state (OPEN, CHECKED_OUT, ABANDONED or MERGED). Each entry is the same document get_cart returns. The same answer as GET /carts?shopperId=&state=. A shopper with no carts gets an empty list, not a problem. Persists nothing.",
+          "description": "Read the carts of one shopper, newest first, optionally of one state (OPEN, CHECKED_OUT, ABANDONED or MERGED). Each entry is the same document get_cart returns. The same answer as GET /carts?shopperId=&state= with every page followed (up to 1000 carts, the newest). A shopper with no carts gets an empty list, not a problem. Persists nothing.",
           "tags": [
             "cart",
             "shopper",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"list_shopper_carts\",\"arguments\":{\"shopperId\":\"shopper-42\"}}",
@@ -1256,7 +1291,8 @@
           "tags": [
             "product-content",
             "catalogue",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"get_product_content\",\"arguments\":{\"catalogItemId\":\"item-123\"}}"
@@ -1270,7 +1306,8 @@
           "tags": [
             "product-content",
             "categories",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"list_categories\",\"arguments\":{}}"
@@ -1290,7 +1327,7 @@
           "id": "search_products",
           "name": "Search the product catalogue",
           "kind": "read",
-          "description": "Find purchasable products. Arguments (all optional): q (free text, at most 200 characters; a product-type query also returns categorySuggestions), categoryId (restrict to that category subtree), inStock (true / false), priceMin and priceMax (effective price in minor units, not negative), sort (relevance | price-asc | price-desc | title), limit (1 to 100, default 20) and after (the next cursor of a previous answer). Each hit carries catalogItemId, title, effectivePrice, primaryMedia, categoryPath, inStock and purchasable; the answer also carries the facets and a next cursor (null on the last page). A bad value is answered as a 422 validation-failed problem. Persists nothing.",
+          "description": "Find purchasable products. Arguments (all optional): q (free text, at most 200 characters; a product-type query also returns categorySuggestions), categoryId (restrict to that category subtree), inStock (true / false), priceMin and priceMax (effective price in minor units, not negative), sort (relevance | price-asc | price-desc | title), limit (1 to 500, default 100) and after (the next cursor of a previous answer). Each hit carries catalogItemId, title, effectivePrice, primaryMedia, categoryPath, inStock and purchasable; the answer also carries the facets and a next cursor (null on the last page). A bad value is answered as a 422 validation-failed problem. Persists nothing.",
           "tags": [
             "product",
             "search",
@@ -1334,7 +1371,8 @@
           "tags": [
             "exceptions",
             "sla",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"sla_status\",\"arguments\":{}}",
@@ -1349,7 +1387,8 @@
           "tags": [
             "exceptions",
             "cases",
-            "read"
+            "read",
+            "authority:L1"
           ],
           "examples": [
             "{\"skill\":\"find_exceptions\",\"arguments\":{\"status\":\"OPEN\",\"queue\":\"ps-main\"}}",
