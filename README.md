@@ -202,6 +202,19 @@ When it goes red:
   `scripts/develop-drift-allow.json`. An entry that matches nothing any more
   fails the gate, so the list cannot rot.
 
+### Pin drift report (`scripts/pin-drift-report.py`)
+
+Consumer repos pin their producers' specs as byte-copies (`contracts/pinned.json`)
+and fail their own CI on drift, but only when one of their PRs runs. The daily
+`Pin drift` workflow (`.github/workflows/pin-drift.yml`) scans the whole org and
+keeps one issue, `Pin drift report` (label `contract-pin-drift`), listing stale
+pins by producer and by consumer. It is read-only and informational (a default
+`GITHUB_TOKEN` cannot open PRs in other repos); the refresh is the runbook in
+the [consumer contract testing standard](https://iqvo.github.io/warehouse-docs/architecture/consumer-contract-testing#refresh-runbook).
+Run it locally with `python3 scripts/pin-drift-report.py [--json out.json]`
+(exit `0` = it ran, drift or not; `2` = GitHub API/auth failure); its tests
+(`python3 scripts/test_pin_drift_report.py`) use injected fetchers, no network.
+
 ### Alert rules
 
 `alerting/warehouse-alert-rules.json` is a copy of warehouse-infra's
