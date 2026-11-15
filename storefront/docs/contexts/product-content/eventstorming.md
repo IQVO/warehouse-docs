@@ -40,9 +40,9 @@ flowchart LR
     C1["CreateProductContent<br/>POST /product-contents"]:::command
     RM["CatalogItemView<br/>item known, not<br/>discontinued?"]:::readmodel
     G1["ProductContent<br/>DRAFT"]:::aggregate
-    C1b["ReviseDraft<br/>POST :revise<br/>(state picks)"]:::command
-    C1c["DiscardDraft<br/>POST :discard<br/>no event"]:::command
-    C2["PublishContent<br/>POST :publish<br/>DRAFT or PUBLISHED"]:::command
+    C1b["ReviseDraft<br/>POST /product-contents/catalogItemId/revisions<br/>(state picks)"]:::command
+    C1c["DiscardDraft<br/>DELETE /product-contents/catalogItemId/draft<br/>no event"]:::command
+    C2["PublishContent<br/>POST /product-contents/catalogItemId/publications<br/>DRAFT or PUBLISHED"]:::command
     P1["Publish gate<br/>description, one PRIMARY<br/>medium, category"]:::policy
     E1["ProductContentPublished<br/>revision bumped"]:::event
     PD["product-discovery<br/>ProductView"]:::external
@@ -87,8 +87,8 @@ hand (board 3 shows the policy variant), the invariant errors
 flowchart LR
     CM["Storefront content<br/>manager"]:::actor
     C1["CreateCategory<br/>POST /categories"]:::command
-    C2["MoveCategory<br/>POST :move"]:::command
-    C3["RenameCategory<br/>POST :rename"]:::command
+    C2["MoveCategory<br/>PUT /categories/id/parent"]:::command
+    C3["RenameCategory<br/>PUT /categories/id/name"]:::command
     G2["CategoryTree<br/>live tree, PUBLISHED"]:::aggregate
     P2["Structural rules<br/>no cycle, depth 4,<br/>unique sibling names"]:::policy
     C4["PublishCategoryTree<br/>POST /category-tree-publications"]:::command

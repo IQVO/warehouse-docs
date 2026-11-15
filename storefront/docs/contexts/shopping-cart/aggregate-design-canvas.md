@@ -80,12 +80,12 @@ impossible in practice.
 | --- | --- |
 | One line per item; adding an existing item merges quantities | `AddLine` merges quantities into the existing line; no error exists for it, nothing is ever rejected as a duplicate |
 | Quantity in `1..99` | `AddLine`, `SetLineQuantity` → `ErrQuantityOutOfRange` |
-| At most 100 lines (customer-ordering A15) | `AddLine` → `ErrTooManyLines` |
+| At most 100 lines (customer-ordering A15); quantities merged by `MergeInto` clamp at 99 | `AddLine`, `MergeInto` → `ErrTooManyLines` |
 | The item is purchasable in the local views | `AddLine` → `ErrItemNotPurchasable` (against `PurchasabilityView`) |
 | A delivery quote needs a destination postal prefix | `QuoteDelivery` → `ErrNoDestination` |
 | A selection names an offer of the current quote; any line or destination change clears quote and selections | `SelectDelivery` and every line/destination mutation → `ErrStaleDeliverySelection` |
 | No change to a `CHECKED_OUT`, `ABANDONED` or `MERGED` cart | all commands → `ErrCartClosed` |
-| A merge target is an `OPEN` cart of the same shopper, never the cart itself | `MergeInto` → `ErrMergeTarget` |
+| A merge target is another `OPEN` cart that has a shopper, never the cart itself; the source is a guest cart or belongs to the same shopper | `MergeInto` → `ErrMergeTarget` |
 
 Derived from: `model.yaml → contexts[shopping-cart].aggregates[Cart].invariants`.
 

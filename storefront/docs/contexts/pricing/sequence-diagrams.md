@@ -97,7 +97,13 @@ sequenceDiagram
             UC-->>H: 404 not-found
         else found
             UC->>A: ScheduleSale(price, from, to)
-            alt ErrSaleNotBelowList or ErrOverlappingSaleWindow
+            alt ErrOverlappingSaleWindow
+                A-->>UC: error
+                UC-->>H: 409 overlapping-sale-window
+            else price WITHDRAWN
+                A-->>UC: illegal transition
+                UC-->>H: 409 illegal-transition
+            else ErrSaleNotBelowList or an invalid window (over 50 live windows, ends in the past)
                 A-->>UC: error
                 UC-->>H: 422 problem
             else added
@@ -124,10 +130,11 @@ Derived from: `model.yaml → contexts[pricing].aggregates[ItemPrice]`
 (`ScheduleSale`, invariants), `.publishes[ItemPriceChanged]`.
 
 Omitted: `ErrNegativeAmount` and `ErrCurrencyMismatch` (422, same branch as
-the sale rules). A future window emits nothing now; the boundary policy
+the sale-below-list rule). An overlapping window is `409
+overlapping-sale-window`, not 422. A future window emits nothing now; the boundary policy
 publishes when it opens (diagram 8).
 
-## 3. CancelSale (REST POST .../sales/saleId:cancel)
+## 3. CancelSale (REST POST .../sales/saleId/cancellations)
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
@@ -187,7 +194,7 @@ sequenceDiagram
         alt not found
             UC-->>H: 404 not-found
         else already WITHDRAWN
-            UC-->>H: 200 unchanged, no event
+            UC-->>H: 409 illegal-transition, no event
         else ACTIVE
             UC->>A: WithdrawPrice(now)
             A-->>UC: WITHDRAWN + ItemPriceWithdrawn
@@ -205,7 +212,8 @@ Derived from: `model.yaml → contexts[pricing].aggregates[ItemPrice]`
 (`WithdrawPrice`, transitions), `.publishes[ItemPriceWithdrawn]`.
 
 Omitted: the HTTP adapter detail. The route is
-`POST /item-prices/{catalogItemId}/withdrawals`.
+`POST /item-prices/{catalogItemId}/withdrawals`. `WITHDRAWN` is final (ADR
+0002 A3): a second withdraw is `409 illegal-transition`, not a no-op.
 
 ## 5. WithdrawPrice by policy WithdrawOnDiscontinue (Kafka)
 

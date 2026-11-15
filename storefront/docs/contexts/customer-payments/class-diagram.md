@@ -86,8 +86,11 @@ Omitted: the `Err...` variables (`ErrDuplicateAuthorization`,
 [Aggregate Design Canvas](/storefront/contexts/customer-payments/aggregate-design-canvas))
 and the tracking numbers the model says `CaptureOnShipment` stores against
 the group, which have no field in the model's value objects (hotspot H6).
-`ErrDuplicateAuthorization` is enforced by a unique key on
-`checkoutSessionId` in the repository, not by a method of the aggregate. The
+`ErrDuplicateAuthorization` is enforced by a unique index on
+`checkoutSessionId` in the repository, not by a method of the aggregate; it
+reaches a caller (`409 duplicate-authorization`) only on the concurrent-insert
+race, because a sequential second authorize is answered with the existing live
+authorization (`200`). The
 PSP token is an argument of the provider port; no field of the aggregate
 holds card data.
 

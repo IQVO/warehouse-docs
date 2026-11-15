@@ -38,7 +38,7 @@ page width.
 flowchart LR
     CK["checkout"]:::external
     C0["AuthorizePayment<br/>POST /payment-authorizations"]:::command
-    C1["VoidAuthorization<br/>POST ...:void"]:::command
+    C1["VoidAuthorization<br/>POST .../voids"]:::command
     PSP["payment-provider<br/>ACL port"]:::external
     G1["PaymentAuthorization"]:::aggregate
     E1["PaymentAuthorized"]:::event
@@ -48,7 +48,7 @@ flowchart LR
 
     CK --> C0
     CK -->|only after a definitive<br/>rejection| C1
-    C0 -->|Authorize<br/>ErrDuplicateAuthorization,<br/>ErrAllocationMismatch| PSP
+    C0 -->|Authorize<br/>ErrAllocationMismatch| PSP
     PSP --> G1
     C1 -->|Void| PSP
     C1 --> G1

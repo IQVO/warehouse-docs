@@ -118,7 +118,7 @@ never on a suffix. Consumer group names come from mandatory environment variable
 | Event | Full type | Fields used | What this context does |
 | --- | --- | --- | --- |
 | `CatalogItemCreated` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemCreated` | `catalogItemId` | Projects the item into `CatalogItemView`, so `CreateProductContent` can pass `ErrUnknownCatalogItem`. The event's other fields (title, dimensions, GTIN, flags) are dropped: the item master owns them. |
-| `CatalogItemDiscontinued` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued` | `catalogItemId` | Marks the item discontinued in `CatalogItemView`, then the `RetireOnDiscontinue` policy runs `RetireContent` on the item's PUBLISHED content, publishing `ProductContentRetired`. A DRAFT is left alone (the model is silent; see the canvas open questions). |
+| `CatalogItemDiscontinued` | `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued` | `catalogItemId` | Marks the item discontinued in `CatalogItemView`, then the `RetireOnDiscontinue` policy retires the item's content with reason `DISCONTINUED`: PUBLISHED content is retired and `ProductContentRetired` is published; a DRAFT is retired silently (no event, because nothing was published); content that is already RETIRED is left alone. |
 
 **Ordering.** The producer keys by `catalogItemId`, so the two events of one
 item arrive in order. Content events of one item are keyed the same way

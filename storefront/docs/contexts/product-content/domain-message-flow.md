@@ -59,7 +59,7 @@ sequenceDiagram
     autonumber
     actor CM as Content manager
     participant PC as product-content
-    CM->>PC: cmd: PublishContent<br/>POST :publish
+    CM->>PC: cmd: PublishContent<br/>POST /product-contents/catalogItemId/publications
     alt no description, or not exactly one PRIMARY medium, or no category
         PC-->>CM: cmd: reply 422<br/>incomplete-content
     else primary category not in the current tree
@@ -72,11 +72,11 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[product-content].aggregates[ProductContent].invariants`
 (`ErrIncompleteContent`, `ErrUnknownCategory`, `ErrContentRetired`);
-`apis/product-content/openapi.yaml` (`:publish` responses).
+`apis/product-content/openapi.yaml` (`/publications` responses).
 
-Omitted: the correction loop (the manager edits and publishes again; with
-the model as written, a DRAFT is corrected by creating the full content —
-hotspot H1 on [EventStorming](/storefront/contexts/product-content/eventstorming)).
+Omitted: the correction loop (the manager revises the DRAFT through
+`ReviseContent` and publishes again; hotspot H1, resolved, on
+[EventStorming](/storefront/contexts/product-content/eventstorming)).
 
 ## 3. Edit the tree and publish it
 
@@ -128,12 +128,14 @@ sequenceDiagram
     K->>PC: evt: catalogitem.<br/>CatalogItemDiscontinued
     Note over PC: mark discontinued,<br/>policy RetireOnDiscontinue
     alt content is PUBLISHED
-        Note over PC: RetireContent,<br/>state RETIRED
+        Note over PC: RetireOnDiscontinue,<br/>state RETIRED (DISCONTINUED)
         PC->>K: evt: productcontent.<br/>ProductContentRetired
         K->>PD: evt: productcontent.<br/>ProductContentRetired
         Note over PD: content not PUBLISHED,<br/>not purchasable
-    else content is DRAFT or absent
-        Note over PC: nothing happens<br/>(model silent, hotspot H7)
+    else content is DRAFT
+        Note over PC: RetireOnDiscontinue,<br/>DRAFT to RETIRED (DISCONTINUED),<br/>no event (hotspot H7, resolved)
+    else content is absent or already RETIRED
+        Note over PC: nothing happens
     end
 ```
 

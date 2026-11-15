@@ -147,13 +147,15 @@ contexts:
           - {rule: "every amount >= 0", error: ErrNegativeAmount}
           - {rule: "all prices of an item use the configured currency", error: ErrCurrencyMismatch}
           - {rule: "a sale price is below the list price", error: ErrSaleNotBelowList}
-          - {rule: "sale windows of one item never overlap", error: ErrOverlappingSaleWindow}
+          - {rule: "sale windows of one item never overlap (409 overlapping-sale-window)", error: ErrOverlappingSaleWindow}
           - {rule: "the item exists in the local CatalogItemView and is not DISCONTINUED", error: ErrUnknownCatalogItem}
+          - {rule: "WITHDRAWN is final (ADR 0002 A3): a withdrawn price accepts no list-price change, sale, cancellation or second withdraw (409 illegal-transition, no event); a new price needs a new catalogue item"}
+          - {rule: "bounds: an item holds at most 50 live sale windows, a window ends after it starts and in the future; every amount is at most MaxMinor (1000000000 minor units); beyond a bound the request is 422 validation-failed"}
         commands: [SetListPrice, ScheduleSale, CancelSale, WithdrawPrice]
         events: [ItemPriceChanged, ItemPriceWithdrawn]
         throughput_estimate: "low: merchandising writes; bursts on sale boundaries"
         size_estimate: "one row per ACTIVE catalogue item; ~10^6"
-        notes: "WithdrawPrice is reachable: POST /item-prices/{catalogItemId}:withdraw (merchandising UI, cmd channel) and by the WithdrawOnDiscontinue policy. CancelSale raises no event of its own: cancelling a live sale changes the effective price, and the window-boundary policy emits ItemPriceChanged for it (idempotent per item and boundary), so a separate event would duplicate the fact."
+        notes: "WithdrawPrice is reachable: POST /item-prices/{catalogItemId}/withdrawals (merchandising UI, cmd channel) and by the WithdrawOnDiscontinue policy, which only withdraws an ACTIVE price; a second withdraw over REST is 409 illegal-transition. CancelSale raises no event of its own: cancelling a live sale changes the effective price, and the window-boundary policy emits ItemPriceChanged for it (idempotent per item and boundary), so a separate event would duplicate the fact."
       - name: DeliveryChargeSchedule
         root_id: scheduleId
         description: "The delivery charge per service tier (SAME_DAY, NEXT_DAY, TWO_DAY, STANDARD), with an optional free-over threshold per tier. Exactly one schedule is current; versions strictly increase."
@@ -179,7 +181,7 @@ contexts:
         value_objects:
           - "TaxBand{postalPrefixFrom, postalPrefixTo, rateBasisPoints}"
         invariants:
-          - {rule: "bands never overlap", error: ErrOverlappingTaxBand}
+          - {rule: "bands never overlap; a table holds 1 to 500 bands (beyond that 422 validation-failed)", error: ErrOverlappingTaxBand}
           - {rule: "a rate is within the configured range", error: ErrRateOutOfRange}
         commands: [PublishTaxTable]
         events: [TaxTableChanged]
@@ -197,7 +199,9 @@ contexts:
           - "QuoteGroup{groupNo, tier, deliveryCharge}"
         invariants:
           - {rule: "every line names an ACTIVE price", error: ErrItemNotPriced}
-          - {rule: "a quote has at least one line", error: ErrEmptyQuote}
+          - {rule: "a quote has at least one line, at most 100 lines and 50 groups, quantity 1 to 1000 per line (beyond a bound: 422 validation-failed)", error: ErrEmptyQuote}
+          - {rule: "a CURRENT delivery charge schedule exists (422 no-charge-schedule; until one is published every checkout fails)", error: ErrNoChargeSchedule}
+          - {rule: "a CURRENT tax table exists (422 no-tax-table; until one is published every checkout fails)", error: ErrNoTaxTable}
           - {rule: "all amounts use the configured currency", error: ErrCurrencyMismatch}
         commands: [IssuePriceQuote, ExpireQuote]
         events: [PriceQuoteIssued]
@@ -219,10 +223,10 @@ contexts:
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated, CatalogItemDiscontinued", relationship: Conformist}
     rest:
       - "POST /item-prices"
-      - "POST /item-prices/{catalogItemId}:set-list-price"
-      - "POST /item-prices/{catalogItemId}:withdraw"
+      - "PUT /item-prices/{catalogItemId}/list-price"
+      - "POST /item-prices/{catalogItemId}/withdrawals"
       - "POST /item-prices/{catalogItemId}/sales"
-      - "POST /item-prices/{catalogItemId}/sales/{saleId}:cancel"
+      - "POST /item-prices/{catalogItemId}/sales/{saleId}/cancellations"
       - "GET /item-prices"
       - "GET /item-prices/{catalogItemId}"
       - "POST /delivery-charge-schedules"
@@ -297,7 +301,7 @@ contexts:
         events: [ProductContentPublished, ProductContentRetired]
         throughput_estimate: "low"
         size_estimate: "one row per catalogue item + revisions"
-        notes: "A DRAFT is editable (ReviseDraft, DRAFT to DRAFT, new revision) and discardable (DiscardDraft, DRAFT to RETIRED with reason DISCARDED; no event, because nothing was ever published). Re-publication after a revision is PUBLISHED to PUBLISHED via PublishContent, carrying the new revision in ProductContentPublished (the revise-then-publish-again path). RETIRED carries a reason: DISCARDED, DISCONTINUED or RETIRED_BY_HAND; only the retirement of PUBLISHED content raises ProductContentRetired."
+        notes: "A DRAFT is editable (ReviseDraft, DRAFT to DRAFT, new revision) and discardable (DiscardDraft, DRAFT to RETIRED with reason DISCARDED; no event, because nothing was ever published). Re-publication after a revision is PUBLISHED to PUBLISHED via PublishContent, carrying the new revision in ProductContentPublished (the revise-then-publish-again path). RETIRED carries a reason: MANUAL (retired by a content manager), DISCARDED or DISCONTINUED; only the retirement of PUBLISHED content raises ProductContentRetired."
       - name: CategoryTree
         root_id: categoryTreeId
         description: "The single, versioned, always-published category tree a shopper browses; categories are created, moved and renamed on the live tree, and every command publishes a new version."
@@ -325,7 +329,7 @@ contexts:
       - {name: RetireOnDiscontinue, rule: "on CatalogItemDiscontinued retire the item's content: PUBLISHED to RETIRED (ProductContentRetired) and DRAFT to RETIRED (reason DISCONTINUED, no event); a discontinued item can never publish (ErrItemDiscontinued)"}
     inbound:
       - {from: "storefront content manager (human)", type: cmd, channel: "REST /product-contents, /categories", message: "CreateProductContent, ReviseDraft, ReviseContent, PublishContent, DiscardDraft, RetireContent, CreateCategory, MoveCategory, RenameCategory", relationship: UI}
-      - {from: "storefront content manager (human)", type: cmd, channel: "REST POST /categories:publish", message: PublishCategoryTree, relationship: UI}
+      - {from: "storefront content manager (human)", type: cmd, channel: "REST POST /category-tree-publications", message: PublishCategoryTree, relationship: UI}
       - {from: "storefront content manager (human)", type: qry, channel: "REST GET /product-contents/{catalogItemId}", message: GetProductContent, relationship: UI}
       - {from: product-discovery, type: qry, channel: "REST GET /product-contents (bootstrap, paged), GET /categories", message: "ListProductContents, ListCategories", note: "product-discovery does not call GetProductContent; bootstrap needs the list and the tree", relationship: Customer/Supplier}
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemCreated, CatalogItemDiscontinued", relationship: Conformist}
@@ -333,14 +337,14 @@ contexts:
       - "POST /product-contents"
       - "GET /product-contents"
       - "GET /product-contents/{catalogItemId}"
-      - "POST /product-contents/{catalogItemId}:revise"
-      - "POST /product-contents/{catalogItemId}:publish"
-      - "POST /product-contents/{catalogItemId}:discard"
-      - "POST /product-contents/{catalogItemId}:retire"
+      - "POST /product-contents/{catalogItemId}/revisions"
+      - "POST /product-contents/{catalogItemId}/publications"
+      - "DELETE /product-contents/{catalogItemId}/draft"
+      - "POST /product-contents/{catalogItemId}/retirements"
       - "POST /categories"
-      - "POST /categories:publish"
-      - "POST /categories/{categoryId}:move"
-      - "POST /categories/{categoryId}:rename"
+      - "POST /category-tree-publications"
+      - "PUT /categories/{categoryId}/parent"
+      - "PUT /categories/{categoryId}/name"
       - "GET /categories"
     publishes:
       - {event: ProductContentPublished, entity: productcontent, data: [catalogItemId, revision, description, bullets, attributes, media, primaryCategoryId], consumers: [product-discovery]}
@@ -386,7 +390,7 @@ contexts:
     aggregates: []
     read_models:
       - {name: ProductView, source: "offer-availability CatalogItemCreated, CatalogItemDiscontinued, ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored; product-content ProductContentPublished, ProductContentRetired; pricing ItemPriceChanged, ItemPriceWithdrawn. Per-source monotonic guards: listing asOf, content revision, price version. Stores categoryId only (categoryPath joined from CategoryView at query time). Each bootstrap snapshot row carries updatedAt, seeded into the per-key guard so replayed events older than the snapshot are dropped."}
-      - {name: ListingItemMap, source: "offer-availability ListingCreated (listingId -> catalogItemId)", note: "read-side lookup: ListingSuppressed and ListingRestored carry only listingId, so the projector resolves the item through this map"}
+      - {name: ListingItemMap, source: "offer-availability ListingCreated (listingId -> catalogItemId)", note: "read-side lookup: ListingSuppressed and ListingRestored carry only listingId, so the projector resolves the item through this map. A suppress or restore for a listing the map does not know (the create was lost or predates retention) is acknowledged and logged as skipped, not retried or dead-lettered; the bootstrap rebuild repairs the listing (service ADR 0002 A1)"}
       - {name: CategoryView, source: "product-content CategoryTreePublished plus purchasable counts derived from ProductView"}
     policies:
       - {name: PurchasableRule, rule: "purchasable = item ACTIVE in the item master, content PUBLISHED, price ACTIVE, and at least one LIVE listing with quantity > 0"}
@@ -398,7 +402,7 @@ contexts:
       - {from: product-content, type: evt, channel: "Kafka retailnetwork.product-content.events", message: "ProductContentPublished, ProductContentRetired, CategoryTreePublished", relationship: Conformist}
       - {from: pricing, type: evt, channel: "Kafka retailnetwork.pricing.events", message: "ItemPriceChanged, ItemPriceWithdrawn", relationship: Conformist}
     rest:
-      - "GET /products?q=&categoryId=&inStock=&priceMin=&priceMax=&sort=&after=&limit="
+      - "GET /products?q=&categoryId=&inStock=&priceMin=&priceMax=&sort=&cursor=&limit="
       - "GET /products/{catalogItemId}"
       - "GET /categories"
     publishes: []
@@ -471,12 +475,12 @@ contexts:
         invariants:
           - {rule: "one line per item; adding an existing item merges quantities (the merge is the behaviour, nothing is ever rejected)"}
           - {rule: "quantity in 1..99", error: ErrQuantityOutOfRange}
-          - {rule: "at most 100 lines (customer-ordering A15)", error: ErrTooManyLines}
+          - {rule: "at most 100 lines (customer-ordering A15); also checked when a merge would add a line to a full target (422 too-many-lines, neither cart changes)", error: ErrTooManyLines}
           - {rule: "the item is purchasable in the local views", error: ErrItemNotPurchasable}
           - {rule: "a delivery quote needs a destination postal prefix", error: ErrNoDestination}
           - {rule: "a selection names an offer of the current quote; any line or destination change clears quote and selections", error: ErrStaleDeliverySelection}
           - {rule: "no change to a CHECKED_OUT, ABANDONED or MERGED cart", error: ErrCartClosed}
-          - {rule: "a merge target is an OPEN cart of the same shopper, never the cart itself", error: ErrMergeTarget}
+          - {rule: "a merge target is another OPEN cart that has a shopper, never the cart itself; the source is a guest cart (no shopper) or belongs to the same shopper as the target (422 merge-target); merged quantities clamp at 99 and the merged line list must fit 100 lines (422 too-many-lines)", error: ErrMergeTarget}
         commands: [CreateCart, AddLine, SetLineQuantity, RemoveLine, SetDestination, QuoteDelivery, SelectDelivery, AcceptRequotedOffers, MergeInto, AbandonInactive, CloseOnCheckoutCompleted]
         events: [CartLineAdded, CartDeliveryQuoted, CartAbandoned, CartCheckedOut]
         throughput_estimate: "medium-high: every add-to-cart"
@@ -502,13 +506,13 @@ contexts:
       - "GET /carts/{cartId}"
       - "GET /carts?shopperId=&state="
       - "POST /carts/{cartId}/lines"
-      - "POST /carts/{cartId}/lines/{catalogItemId}:set-quantity"
-      - "POST /carts/{cartId}/lines/{catalogItemId}:remove"
-      - "POST /carts/{cartId}:set-destination"
-      - "POST /carts/{cartId}:quote-delivery"
-      - "POST /carts/{cartId}:select-delivery"
-      - "POST /carts/{cartId}/delivery/requoted"
-      - "POST /carts/{cartId}:merge-into"
+      - "PUT /carts/{cartId}/lines/{catalogItemId}"
+      - "DELETE /carts/{cartId}/lines/{catalogItemId}"
+      - "PUT /carts/{cartId}/destination"
+      - "POST /carts/{cartId}/delivery-quotes"
+      - "PUT /carts/{cartId}/delivery-selection"
+      - "POST /carts/{cartId}/delivery-requote-acceptances"
+      - "POST /carts/{cartId}/merges"
     publishes:
       - {event: CartLineAdded, entity: cart, data: [cartId, catalogItemId, quantity, at], consumers: ["analytics only"]}
       - {event: CartDeliveryQuoted, entity: cart, data: [cartId, destinationPostalPrefix, groupCount, at], consumers: ["analytics only"]}
@@ -566,6 +570,7 @@ contexts:
           - [OPEN, AUTHORIZING, ConfirmSession]
           - [AUTHORIZING, PLACING, RecordAuthorization]
           - [AUTHORIZING, DECLINED, RecordDecline]
+          - [AUTHORIZING, DECLINED, RecordAuthorization]
           - [DECLINED, AUTHORIZING, ConfirmSession]
           - [PLACING, PLACING, RecordPlacementInDoubt]
           - [PLACING, COMPLETED, RecordPlaced]
@@ -580,16 +585,17 @@ contexts:
           - "StoredPlacement{requestBody, requestHash, placingSince}: the PII-free placement request replayed byte for byte; placingSince drives the 20 h alert; purged 24 h after a terminal state"
         invariants:
           - {rule: "the cart's checkout readiness holds at session open", error: ErrCartNotCheckoutReady}
-          - {rule: "the price quote is unexpired at confirm", error: ErrPriceQuoteExpired}
+          - {rule: "the price quote is unexpired at confirm (422 price-quote-expired; open a new session)", error: ErrPriceQuoteExpired}
           - {rule: "no transition out of COMPLETED, EXPIRED, FAILED or REQUOTE_REQUIRED (DECLINED is not closed: it retries with another token or expires)", error: ErrSessionClosed}
-          - {rule: "every selected offer is still quotable at the pre-authorize GetDeliveryOffer check; no state change, the BFF refreshes the cart quote (422 offer-not-quotable; REQUOTE_REQUIRED stays a PLACING-time 409 only)", error: ErrOfferNotQuotable}
-          - {rule: "the authorized amount equals the quote total", error: ErrAuthorizationMismatch}
+          - {rule: "every selected offer is still QUOTED and expires more than 2 minutes from now at the GetDeliveryOffer check at OpenSession; no session is created, no state changes, the BFF refreshes the cart quote (422 offer-not-quotable). The check is not repeated at confirm: an offer that expires between open and confirm comes back from customer-ordering as a PLACING-time 409 requote, the only way to REQUOTE_REQUIRED", error: ErrOfferNotQuotable}
+          - {rule: "the authorized amount and currency equal the quote's; otherwise the session goes back to DECLINED (reason authorization-mismatch) with the void owed and the call answers 409 authorization-mismatch", error: ErrAuthorizationMismatch}
+          - {rule: "a new confirm is refused while a void is still owed (409 void-pending), because customer-payments allows one active authorization per session", error: ErrVoidPending}
           - {rule: "no void and no new attempt while the place-order outcome is unknown (the semantic lock [15])", error: ErrPlacementInDoubt}
         commands: [OpenSession, ConfirmSession, RecordAuthorization, RecordDecline, RecordPlacementInDoubt, RecordPlaced, RecordRequoteRequired, RecordFailure, ExpireSession]
         events: [CheckoutCompleted, CheckoutOpened, CheckoutDeclined, CheckoutRequoteRequired, CheckoutFailed, CheckoutSessionExpired, CheckoutPlacementInDoubt]
         throughput_estimate: "medium: one session per purchase attempt"
         size_estimate: "one row per session; placement request retained for the idempotency window"
-        notes: "AuthorizePayment is called with the key <sessionId>:auth:<authAttempt>; authAttempt starts at 1 and is incremented on each DECLINED to AUTHORIZING, so a retry with another token is a new attempt while a stuck call replays the same key. voidOwed is set together with the decision to void (definitive 409, 422, ErrAuthorizationMismatch) so no void is lost. RecordPlacementInDoubt raises CheckoutPlacementInDoubt and ExpireSession raises CheckoutSessionExpired (both analytics-only)."
+        notes: "AuthorizePayment is called with the key <sessionId>:auth:<authAttempt>; authAttempt starts at 0 and is incremented on each DECLINED to AUTHORIZING, so a retry with another token is a new attempt while a stuck call replays the same key. voidOwed is set together with the decision to void (definitive 409, 422, ErrAuthorizationMismatch, which also returns the session to DECLINED and blocks a new confirm with 409 void-pending until the void succeeds) so no void is lost. RecordPlacementInDoubt raises CheckoutPlacementInDoubt on the first unknown outcome only (later passes of ResolveInDoubtPlacements raise nothing; the event carries placingSince) and ExpireSession raises CheckoutSessionExpired (both analytics-only)."
     read_models: []
     policies:
       - {name: ResolveInDoubtPlacements, rule: "re-send the stored placement body with the same Idempotency-Key (customer-ordering replays the first response) with backoff until a definitive answer; alert at 20 h (from placingSince); give up and void at 22 h; customer-payments VoidUnboundAuthorizations is the 24 h backstop"}
@@ -597,12 +603,12 @@ contexts:
       - {name: RetryOwedVoids, rule: "every minute, until success, void the authorization named by voidOwed (covers ErrAuthorizationMismatch voids and every definitive-rejection void); Void is idempotent"}
       - {name: ExpireOnQuoteExpiry, rule: "an OPEN or DECLINED session expires with its price quote (ExpireSession, raises CheckoutSessionExpired)"}
     inbound:
-      - {from: "storefront-bff (experience layer)", type: cmd, channel: "REST POST /checkout-sessions, POST /checkout-sessions/{sessionId}:confirm", message: "OpenSession, ConfirmSession", relationship: UI}
+      - {from: "storefront-bff (experience layer)", type: cmd, channel: "REST POST /checkout-sessions, POST /checkout-sessions/{sessionId}/confirmations", message: "OpenSession, ConfirmSession", relationship: UI}
       - {from: "storefront-bff (experience layer)", type: qry, channel: "REST GET /checkout-sessions/{sessionId}", message: GetSession, relationship: UI}
     rest:
       - "POST /checkout-sessions"
       - "GET /checkout-sessions/{sessionId}"
-      - "POST /checkout-sessions/{sessionId}:confirm"
+      - "POST /checkout-sessions/{sessionId}/confirmations"
     publishes:
       - {event: CheckoutCompleted, entity: checkoutsession, data: [sessionId, orderId, shopperId, cartId, authorizationId, currency, totalMinor, "groups(groupNo, tier, amountMinor)", completedAt], consumers: [shopping-cart, customer-payments]}
       - {event: CheckoutOpened, entity: checkoutsession, data: [sessionId, cartId, shopperId, totalMinor, openedAt], consumers: ["analytics only"]}
@@ -614,7 +620,7 @@ contexts:
     consumes: []
     sync_calls:
       - {to: shopping-cart, type: qry, message: GetCart, channel: "REST GET /carts/{cartId}"}
-      - {to: delivery-promise, type: qry, message: GetDeliveryOffer, channel: "REST GET /delivery-offers/{offerId}", note: "pre-authorize check that every selected offer is still QUOTED, with margin; a failure is ErrOfferNotQuotable (422 offer-not-quotable), no state change"}
+      - {to: delivery-promise, type: qry, message: GetDeliveryOffer, channel: "REST GET /delivery-offers/{offerId}", note: "check at OpenSession (not repeated at confirm) that every selected offer is still QUOTED and expires more than 2 minutes from now; a failure is ErrOfferNotQuotable (422 offer-not-quotable), no session, no state change"}
       - {to: pricing, type: cmd, message: IssuePriceQuote, channel: "REST POST /price-quotes"}
       - {to: customer-payments, type: cmd, message: AuthorizePayment, channel: "REST POST /payment-authorizations", note: "Idempotency-Key <sessionId>:auth:<authAttempt>, allocations per group"}
       - {to: customer-payments, type: cmd, message: VoidAuthorization, channel: "REST POST /payment-authorizations/{authorizationId}/voids", note: "Idempotency-Key <sessionId>:void; only after a definitive rejection; recorded as voidOwed and retried by RetryOwedVoids"}
@@ -675,7 +681,7 @@ contexts:
           - "Allocation{groupNo, amountMinor, state(PENDING|CAPTURED|RELEASED), trackingNumber? (nullable, set at capture; PackageLost and PackageReturned map to a group by it)}"
           - "ProviderRef{providerAuthorizationId, providerCaptureIds[]}"
         invariants:
-          - {rule: "one authorization per checkout session; a replay returns it", error: ErrDuplicateAuthorization}
+          - {rule: "one live authorization per checkout session; a sequential second authorize (another Idempotency-Key) returns the existing live authorization (200) and a same-key replay returns the stored response; ErrDuplicateAuthorization (409 duplicate-authorization) is raised only on the concurrent-insert race caught by the unique index", error: ErrDuplicateAuthorization}
           - {rule: "allocations sum to the authorized total and name the session's groups", error: ErrAllocationMismatch}
           - {rule: "captured per group never exceeds the allocation", error: ErrOverCapture}
           - {rule: "no capture after expiresAt", error: ErrCaptureAfterExpiry}
