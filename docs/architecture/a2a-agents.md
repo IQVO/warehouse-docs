@@ -224,7 +224,7 @@ Network Inventory Planning agent for the Warehouse Execution System, read-only: 
 Order Sourcing agent of the retail network (read-only): answers which vendor node and path will fulfil each shipment group of a customer order, in which state, and why (the promise it must keep, the candidate with its cost, the VirtualQueue release point, the release history, the excluded nodes and the lock and shipment facts).
 
 - **`find_assignments`** (read): Lists the fulfillment assignments (one per shipment group of a customer order), ordered by assignmentId ascending, optionally narrowed by state (QUEUED, RELEASED, LOCKED, SHIPPED, DELIVERED, UNSOURCEABLE or CANCELLED), orderId and nodeId (the candidate node while QUEUED, the node of the latest release later); filters combine with AND.
-- **`assignment_detail`** (read): Reads one fulfillment assignment in full by assignmentId: the promise it must keep (tier, deliverByLatest, witness node), its lines, the current candidate node and path with the cost in cost points, the VirtualQueue release point, the whole release history with each outcome (ACCEPTED, REJECTED, EXPIRED, PENDING), the nodes that were excluded and why, and the lock, shipment and delivery facts once they apply.
+- **`assignment_detail`** (read): Reads one fulfillment assignment in full by assignmentId: the promise it must keep (tier, deliverByLatest, witness node), its lines, the current candidate node and path with the cost in cost points, the VirtualQueue release point, the whole release history with each outcome (ACCEPTED, REJECTED, EXPIRED, WITHDRAWN, PENDING), the nodes that were excluded and why, and the lock, shipment and delivery facts once they apply.
 
 ### delivery-promise
 
@@ -266,13 +266,13 @@ Linehaul Transportation agent of the retail network (read-only): it answers whic
 Last-Mile Delivery agent of the retail network: the read-only source of truth for a delivery station's waves and for the routes its delivery service partners run.
 
 - **`list_waves`** (read): Read the delivery waves of one station on one service date, ordered by inductCutoffAt: state (OPEN, INDUCTION_CLOSED, DISPATCHED, COMPLETED or CANCELLED), the induct cutoff and delivery window, the stop capacity with assignedStops and remainingStops, and cancelReason on a cancelled wave.
-- **`get_route`** (read): Read one route of a delivery service partner: its state (PLANNED, OUT_FOR_DELIVERY or COMPLETED), its numbered stops with the trackingNumbers of each and the outcome derived from the per-package attempts (omitted until every package of the stop has one), and every recorded attempt (trackingNumber, DELIVERED or FAILED, failureReason, at).
+- **`get_route`** (read): Read one route of a delivery service partner: its state (PLANNED, OUT_FOR_DELIVERY or COMPLETED), its numbered stops with the trackingNumbers of each and the outcome derived from the per-package attempts (omitted until every package of the stop has one), and every recorded attempt (trackingNumber, DELIVERED or FAILED, the optional outcomeDetail, failureReason, at).
 
 ### shipping-and-tracking
 
 Shipping & Tracking agent of the retail network: the read-only source of truth for where a package is.
 
-- **`get_journey`** (read): Read the customer-visible journey of one package by its trackingNumber: the state (LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, DELIVERED, RETURNED, LOST or VOIDED), the poNumber, assignmentId, orderId and tier of its label, handedOverAt and deliveredAt when they happened, and every stored scan in the order they were recorded, each with its scanType, nodeId, when, and applied (false for a scan stored out of order or without an edge from the state it met).
+- **`get_journey`** (read): Read the customer-visible journey of one package by its trackingNumber: the state (LABELLED, HANDED_OVER, IN_TRANSIT, AT_STATION, OUT_FOR_DELIVERY, DELIVERED, RETURNED, LOST or VOIDED), the poNumber, assignmentId, orderId and tier of its label, handedOverAt and deliveredAt when they happened, the day-of ETA window (etaStart, etaEnd) while the package is out for delivery, and every stored scan in the order they were recorded, each with its scanType, nodeId, when, and applied (false for a scan stored out of order or without an edge from the state it met).
 
 ### returns-processing
 

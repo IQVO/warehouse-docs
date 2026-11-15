@@ -46,12 +46,12 @@
           {
             "id": "get_order",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "get_order_tracking",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -92,12 +92,12 @@
           {
             "id": "get_payment_status",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "get_refund_status",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -150,12 +150,12 @@
           {
             "id": "promise_status",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "book_capacity",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -196,12 +196,12 @@
           {
             "id": "sla_status",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "find_exceptions",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -370,12 +370,12 @@
           {
             "id": "asn_receiving_status",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "dock_schedule",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -682,12 +682,12 @@
           {
             "id": "serving_station",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "find_nodes",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -728,12 +728,12 @@
           {
             "id": "check_availability",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "feed_outcome",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -762,12 +762,12 @@
           {
             "id": "order_status",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "promise_health",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -848,12 +848,12 @@
           {
             "id": "pick_face_status",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "replenishment_lookup",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -882,12 +882,12 @@
           {
             "id": "item_price",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "quote_status",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -928,12 +928,12 @@
           {
             "id": "get_process_path",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "list_process_paths",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -962,12 +962,12 @@
           {
             "id": "get_product_content",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "list_categories",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -1066,12 +1066,12 @@
           {
             "id": "product_profile",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "declare_pack_level",
             "kind": "write",
-            "authority": null
+            "authority": "L3"
           }
         ]
       }
@@ -1106,12 +1106,12 @@
           {
             "id": "return_status",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "disposition_policy",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -1164,12 +1164,12 @@
           {
             "id": "seller_compliance",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "inbound_status",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -1221,12 +1221,12 @@
           {
             "id": "get_cart",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "list_shopper_carts",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -1267,12 +1267,12 @@
           {
             "id": "forward_slot_map",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "slot_plan_review",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -1313,12 +1313,12 @@
           {
             "id": "station_hint_status",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "site_interleaving_overview",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }
@@ -1389,12 +1389,12 @@
           {
             "id": "get_purchase_order",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           },
           {
             "id": "get_node_scorecard",
             "kind": "read",
-            "authority": null
+            "authority": "L1"
           }
         ]
       }

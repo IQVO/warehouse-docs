@@ -24,7 +24,7 @@ server to offer tools, at least one resource and at least one prompt. This page 
 | Measure | Declared | Total |
 |---|---|---|
 | MCP tools with an authority level | 90 | 124 |
-| A2A skills with an authority level | 2 | 68 |
+| A2A skills with an authority level | 40 | 68 |
 | MCP servers with a resource and a prompt | 27 | 36 |
 
 ## By context
@@ -32,13 +32,13 @@ server to offer tools, at least one resource and at least one prompt. This page 
 | Context | MCP tools | MCP levels | Resources | Prompts | A2A skills | A2A levels |
 |---|---|---|---|---|---|---|
 | `checkout` | no pinned registry | unknown | 0 | 0 | 1 | none declared |
-| `customer-ordering` | 3 | L1 3 | 1 | 1 | 2 | none declared |
-| `customer-payments` | 4 | L1 4 | 1 | 1 | 2 | none declared |
-| `delivery-promise` | 6 | L1 6 | 1 | 1 | 2 | none declared |
-| `exception-management` | 4 | L1 4 | 1 | 1 | 2 | none declared |
+| `customer-ordering` | 3 | L1 3 | 1 | 1 | 2 | L1 2 |
+| `customer-payments` | 4 | L1 4 | 1 | 1 | 2 | L1 2 |
+| `delivery-promise` | 6 | L1 6 | 1 | 1 | 2 | L1 2 |
+| `exception-management` | 4 | L1 4 | 1 | 1 | 2 | L1 2 |
 | `facility-layout` | 6 | none declared | 1 | 1 | 2 | none declared |
 | `fulfillment-execution` | 5 | none declared | 1 | 1 | 2 | none declared |
-| `inbound-receiving` | 7 | L1 7 | 1 | 1 | 2 | none declared |
+| `inbound-receiving` | 7 | L1 7 | 1 | 1 | 2 | L1 2 |
 | `inventory-storage` | 6 | none declared | 1 | 1 | 2 | none declared |
 | `labor-performance` | 4 | none declared | 1 | 1 | 2 | none declared |
 | `last-mile-delivery` | 3 | none declared | 0 | 0 | 2 | none declared |
@@ -46,23 +46,23 @@ server to offer tools, at least one resource and at least one prompt. This page 
 | `network-fulfillment` | no pinned registry | unknown | 1 | 1 | 2 | none declared |
 | `network-inventory-planning` | no pinned registry | unknown | 0 | 0 | 2 | none declared |
 | `node-performance` | 2 | none declared | 0 | 0 | 2 | none declared |
-| `node-topology` | 6 | L1 6 | 1 | 1 | 2 | none declared |
-| `offer-availability` | 4 | L1 4 | 1 | 1 | 2 | none declared |
-| `order-management` | 2 | L1 2 | 1 | 1 | 2 | none declared |
+| `node-topology` | 6 | L1 6 | 1 | 1 | 2 | L1 2 |
+| `offer-availability` | 4 | L1 4 | 1 | 1 | 2 | L1 2 |
+| `order-management` | 2 | L1 2 | 1 | 1 | 2 | L1 2 |
 | `order-sourcing` | 2 | none declared | 0 | 0 | 2 | none declared |
-| `pick-face-replenishment` | 5 | L1 5 | 1 | 1 | 2 | none declared |
-| `pricing` | 2 | L1 2 | 1 | 1 | 2 | none declared |
-| `process-path-management` | 4 | L1 4 | 1 | 1 | 2 | none declared |
-| `product-content` | 2 | L1 2 | 1 | 1 | 2 | none declared |
+| `pick-face-replenishment` | 5 | L1 5 | 1 | 1 | 2 | L1 2 |
+| `pricing` | 2 | L1 2 | 1 | 1 | 2 | L1 2 |
+| `process-path-management` | 4 | L1 4 | 1 | 1 | 2 | L1 2 |
+| `product-content` | 2 | L1 2 | 1 | 1 | 2 | L1 2 |
 | `product-discovery` | 2 | L1 2 | 1 | 1 | 2 | none declared |
-| `product-master` | 8 | L1 6, L3 2 | 1 | 1 | 2 | none declared |
-| `returns-processing` | 3 | L1 3 | 1 | 1 | 2 | none declared |
-| `seller-inbound` | 6 | L1 6 | 1 | 1 | 2 | none declared |
+| `product-master` | 8 | L1 6, L3 2 | 1 | 1 | 2 | L1 1, L3 1 |
+| `returns-processing` | 3 | L1 3 | 1 | 1 | 2 | L1 2 |
+| `seller-inbound` | 6 | L1 6 | 1 | 1 | 2 | L1 2 |
 | `shipping-and-tracking` | 1 | none declared | 0 | 0 | 1 | none declared |
-| `shopping-cart` | 2 | L1 2 | 1 | 1 | 2 | none declared |
-| `slotting-optimization` | 4 | L1 4 | 1 | 1 | 2 | none declared |
-| `task-interleaving` | 4 | L1 4 | 1 | 1 | 2 | none declared |
-| `vendor-connectivity` | 9 | L1 9 | 1 | 1 | 2 | none declared |
+| `shopping-cart` | 2 | L1 2 | 1 | 1 | 2 | L1 2 |
+| `slotting-optimization` | 4 | L1 4 | 1 | 1 | 2 | L1 2 |
+| `task-interleaving` | 4 | L1 4 | 1 | 1 | 2 | L1 2 |
+| `vendor-connectivity` | 9 | L1 9 | 1 | 1 | 2 | L1 2 |
 | `warehouse-ops-agent` | no pinned registry | unknown | 0 | 0 | no A2A agent | - |
 | `warehouse-planning` | no pinned registry | unknown | 0 | 0 | 2 | none declared |
 | `wes-work-planning` | 3 | none declared | 1 | 1 | 2 | none declared |
