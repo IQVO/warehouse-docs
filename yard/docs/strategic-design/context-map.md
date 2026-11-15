@@ -83,5 +83,5 @@ flowchart TD
 - Every consumer is idempotent on the CloudEvents id (inbox table) and dispatches on the full type string.
 - Sibling data used in a decision is a local, event-fed read model; no synchronous sibling call at request time, in either direction.
 - Postgres and Kafka are the only runtime (no in-memory mode, real-wiring rule).
-- Every state-changing POST/PUT takes an Idempotency-Key; mutable aggregates carry an optimistic-concurrency version (ETag / If-Match).
+- Every state-changing POST/PUT takes an Idempotency-Key; mutable aggregates carry an optimistic-concurrency version (ETag / If-Match). An Idempotency-Key, where a route takes one, is 1 to 128 printable ASCII characters (400 idempotency-key-invalid otherwise); the same key with another request is 409 idempotency-key-reused.
 - REST follows the fleet guideline (sub-resource nouns for actions, problem+json errors).
