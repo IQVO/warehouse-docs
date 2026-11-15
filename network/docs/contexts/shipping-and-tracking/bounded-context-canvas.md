@@ -107,22 +107,19 @@ flowchart LR
         out2["delivery-promise"]:::ctx
         out3["order-sourcing"]:::ctx
         out4["node-performance"]:::ctx
-        out5["analytics only<br/>no in-org consumer"]:::none
     end
     BC -.->|"qry - REST in-org, restricted<br/>GetShipTo"| out0
-    BC ==>|"evt - Kafka<br/>LabelIssued, PackageScanned,<br/>PackageDelivered,<br/>PackageExceptionRaised"| out0
-    BC ==>|"evt - Kafka<br/>LabelIssued"| out1
-    BC ==>|"evt - Kafka<br/>PackageDelivered,<br/>PackageExceptionRaised"| out2
+    BC ==>|"evt - Kafka<br/>LabelIssued, LabelVoided, PackageScanned,<br/>PackageDelivered,<br/>PackageExceptionRaised"| out0
+    BC ==>|"evt - Kafka<br/>LabelIssued, LabelVoided"| out1
+    BC ==>|"evt - Kafka<br/>PackageDelivered,<br/>PackageExceptionRaised,<br/>PackageReturned, PackageLost"| out2
     BC ==>|"evt - Kafka<br/>PackageDelivered"| out3
     BC ==>|"evt - Kafka<br/>PackageHandedOver"| out4
-    BC ==>|"evt - Kafka<br/>LabelVoided, PackageReturned,<br/>PackageLost"| out5
     linkStyle 0 stroke:#2f9e44,stroke-width:1.5px
     linkStyle 1 stroke:#e8590c,stroke-width:2.5px
     linkStyle 2 stroke:#e8590c,stroke-width:2.5px
     linkStyle 3 stroke:#e8590c,stroke-width:2.5px
     linkStyle 4 stroke:#e8590c,stroke-width:2.5px
     linkStyle 5 stroke:#e8590c,stroke-width:2.5px
-    linkStyle 6 stroke:#e8590c,stroke-width:2.5px
 ```
 
 Derived from: `model.yaml → contexts[shipping-and-tracking].inbound`,
@@ -196,13 +193,13 @@ address ([ADR 0006](/network/adr/0006-pii-confinement)). It publishes no address
 | --- | --- | --- | --- | --- |
 | `customer-ordering` | `GetShipTo` | Query (sync) | REST `GET /orders/{orderId}/ship-to` (in-org, restricted) | Customer/Supplier (this context is the Customer) |
 | `linehaul-transportation`, `customer-ordering` | `LabelIssued` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.label.LabelIssued` | Conformist downstream |
-| analytics only | `LabelVoided` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.label.LabelVoided` | Published Language, no in-org consumer |
+| `customer-ordering`, `linehaul-transportation` | `LabelVoided` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.label.LabelVoided` | Conformist downstream |
 | `customer-ordering` | `PackageScanned` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageScanned` | Conformist downstream |
 | `node-performance` | `PackageHandedOver` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageHandedOver` | Conformist downstream |
 | `delivery-promise`, `order-sourcing`, `customer-ordering` | `PackageDelivered` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageDelivered` | Conformist downstream |
 | `delivery-promise`, `customer-ordering` | `PackageExceptionRaised` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageExceptionRaised` | Conformist downstream |
-| analytics only | `PackageReturned` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` | Published Language, no in-org consumer |
-| analytics only | `PackageLost` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | Published Language, no in-org consumer |
+| `delivery-promise`, `customer-ordering` | `PackageReturned` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageReturned` | Conformist downstream |
+| `delivery-promise`, `customer-ordering` | `PackageLost` | Event | Kafka `retailnetwork.shipping-and-tracking.events`, `com.retailnetwork.logistics.shipping-and-tracking.journey.PackageLost` | Conformist downstream |
 
 Full message details: [Domain Events](/network/contexts/shipping-and-tracking/domain-events).
 Relationship evidence: [Context Map](/network/contexts/shipping-and-tracking/context-map).
@@ -225,8 +222,8 @@ Top terms: **Tracking Number**, **Shipping Label** (≠ the Vendor API
    address route is built (policy `NoAddressRoute`).
 3. **The journey only moves forward.** A duplicate scan is refused
    (`ErrDuplicateScan`); an out-of-order scan is stored, not applied
-   (`ErrScanOutOfOrder`); `DELIVERED`, `RETURNED` and `LOST` are terminal
-   (`ErrJourneyClosed`).
+   (`ErrScanOutOfOrder`); `DELIVERED`, `RETURNED`, `LOST` and `VOIDED` are
+   terminal (`ErrJourneyClosed`, checked before the duplicate-scan check).
 4. **Handover is the network's observation.** The first pickup-load
    departure scan at the vendor node is the handover instant
    (`HandoverOnFirstScan`), not the vendor's `VendorShipmentConfirmed`.
@@ -286,10 +283,14 @@ and are not resolved on these pages.
   through the transition `HANDED_OVER -> AT_STATION`.
 - **What is the expected leg time for `ExceptionOnSilence`?** This context
   consumes no departure, lane or wave data, and the tolerance is not set.
-- **What triggers `ReturnToSender`, `DeclareLost` and `StartJourney`?** No
-  policy, route or event names a trigger. `last-mile-delivery`'s
-  `RetryNextWave` returns a package after three failures but publishes no
-  event for it.
-- **What does `VoidLabel` do to the journey?** A voided label leaves a
-  `LABELLED` journey with no exit transition.
+- **What triggers `ReturnToSender`, `DeclareLost` and `StartJourney`?**
+  (resolved, ADR 0002 A4, A8) `StartJourney` runs inside `IssueLabel`.
+  `ReturnToSender` is triggered by `last-mile-delivery`'s `PackageReturnInitiated`
+  on an `AT_STATION` journey. `DeclareLost` is the silence sweep: an
+  `IN_TRANSIT` journey whose `NO_SCAN` exception stayed unanswered for 48 hours.
+- **What does `VoidLabel` do to the journey?** (resolved, ADR 0002 A13) It
+  closes a `LABELLED` journey as `VOIDED` in the same transaction. A journey
+  past `LABELLED` that is still open refuses with `ErrVoidAfterHandover`
+  (409 `void-after-handover`); a closed one, for example `DELIVERED`, with
+  `ErrJourneyClosed` (409 `journey-closed`).
 - **How long is the ship-to snapshot kept? (resolved, G40).** 30 days after the journey closes (`DELIVERED`, `RETURNED`, `LOST`, or `VOIDED` when the label was voided), then the job `PurgeShipTo` deletes it (policy `ShipToRetention`).

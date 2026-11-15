@@ -137,7 +137,7 @@ sequenceDiagram
     SC->>LH: cmd: CloseLoad
     SC->>LH: cmd: DispatchLoad
     LH->>ST: evt: load.LoadDeparted
-    DS->>LH: cmd: ReceiveLoad<br/>POST /loads/<br/>loadId:receive
+    DS->>LH: cmd: ReceiveLoad<br/>POST /loads/<br/>loadId/receipts
     LH->>ST: evt: load.LoadArrived
     LH->>LM: evt: load.LoadArrived<br/>destinationNodeId,<br/>trackingNumbers
     Note over LM: InductOnArrival<br/>earliest eligible wave
@@ -148,10 +148,10 @@ Derived from: `model.yaml → contexts[linehaul-transportation].aggregates[Load]
 `contexts[last-mile-delivery].policies[InductOnArrival]`.
 
 Omitted: the success replies of each command (`200` with the load);
-`LoadClosed` (analytics only). The model does not say whether
-`DispatchLoad` and `ReceiveLoad` also drive `RecordDeparture` and
-`RecordArrival` on the departure, so `DepartureDeparted` and
-`DepartureArrived` are not drawn.
+`LoadClosed` (analytics only). `DispatchLoad` and `ReceiveLoad` also
+drive `RecordDeparture` and `RecordArrival` on the departure in the same
+transaction (ADR 0002 A21), so `DepartureDeparted` and `DepartureArrived`
+(analytics only) are not drawn.
 
 ## 4. Failure path: a departure is cancelled and promises are revised
 
@@ -166,7 +166,7 @@ sequenceDiagram
     participant OS as order-<br/>sourcing
     participant CO as customer-<br/>ordering
     alt planner cancels one departure
-        PL->>LH: cmd: CancelDeparture<br/>POST /departures/<br/>departureId:cancel
+        PL->>LH: cmd: CancelDeparture<br/>POST /departures/<br/>departureId/cancellations
     else vendor node suspended
         NT->>LH: evt: node.NodeSuspended
         Note over LH: PickupFromCutoffs<br/>cancels future pickups

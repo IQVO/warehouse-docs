@@ -90,19 +90,17 @@ flowchart TB
     RM["ExpectedVolumeView"]:::rm
     P1["BookOnLock"]:::pol
     C1["BookCapacity"]:::cmd
-    C2["ReleaseCapacity"]:::cmd
     A1["Departure"]:::agg
     E4["DepartureCapacity-<br/>Changed"]:::evt
     H3["H3 full at lock<br/>time?"]:::hot
-    H4["H4 release never<br/>finds a booking"]:::hot
+    H4["H4 reassign and cancel<br/>release nothing"]:::hot
     OS --> E0 --> RM
     OS --> E1 --> P1 --> C1 --> A1
-    OS --> E2 --> P1
-    P1 --> C2 --> A1
+    OS --> E2 --> RM
     ST --> E3 --> RM
     A1 --> E4
     C1 --- H3
-    C2 --- H4
+    E2 --- H4
 ```
 
 Derived from: `model.yaml → contexts[linehaul-transportation].policies[BookOnLock]`,
@@ -198,8 +196,8 @@ Omitted: `RepromiseOnRisk`'s outputs (`PromiseRevised`), shown in
 | --- | --- | --- |
 | H1 | Pickups are generated on `NodeOperationalProfileDeclared`, but the business decision limits them to `ACTIVE` nodes and a profile is declared before activation (`ErrIncompleteOperationalProfile` in `node-topology`). `NodeActivated` is consumed with no stated reaction. | `contexts[linehaul-transportation].policies[PickupFromCutoffs]` vs `.business_decisions[0]`; `contexts[node-topology].aggregates[Node].invariants` |
 | H2 | Resolved (G9): a `PICKUP` departure's lane is the node's default outbound lane (policy `DefaultOutboundLane`) and its `capacityPackages` is `capacityOrders x packagesPerOrder` (policy `PickupCapacity`); `node-topology` declares neither. | `aggregates[Departure].value_objects` (`Capacity{packages, booked}`), `aggregates[LaneSchedule].description` ("or the node cutoffs for a pickup lane"); `lane_rules.allowed` |
-| H3 | `BookOnLock` runs after the vendor accepted; if the pickup is full (`ErrDepartureFull`) or closed (`ErrDepartureClosed`) the model names no follow-up. | `policies[BookOnLock]`, `aggregates[Departure].invariants` |
-| H4 | `FulfillmentReassigned` and `FulfillmentCancelled` happen only before `LOCKED`, so `ReleaseCapacity` never finds a booking made on lock. | `policies[BookOnLock]`; `contexts[order-sourcing].aggregates[FulfillmentAssignment].transitions`, `ErrAssignmentLocked`, `ErrCancelAfterLock` |
-| H5 | No actor, policy or route triggers `CloseDeparture`, `RecordDeparture` or `RecordArrival`; their link to `DispatchLoad` / `ReceiveLoad` is not stated. | `aggregates[Departure].commands` vs `.inbound` and `.rest` |
+| H3 | Resolved (ADR 0002 A14): `BookOnLock` runs after the vendor accepted; if the pickup is full (`ErrDepartureFull`), closed, cancelled or unknown, the service books the next `SCHEDULED` pickup of the same origin (`BookingMoved`) or publishes `BookingFailed`. | `policies[BookOnLock]`, `aggregates[Departure].invariants` |
+| H4 | Resolved (G15, ADR 0002 A16, A28): `FulfillmentReassigned` and `FulfillmentCancelled` happen only before `LOCKED`, so nothing is booked; they update `ExpectedVolumeView` only and the release branch of `BookOnLock` was removed. `ReleaseCapacity` is used only by the rebooking of a cancelled departure. | `policies[BookOnLock]`; `contexts[order-sourcing].aggregates[FulfillmentAssignment].transitions`, `ErrAssignmentLocked`, `ErrCancelAfterLock` |
+| H5 | Resolved (ADR 0002 A21): `CloseLoad`, `DispatchLoad` and `ReceiveLoad` drive `CloseDeparture`, `RecordDeparture` and `RecordArrival` in the load's transaction; no route or clock of their own. | `aggregates[Departure].commands` vs `.inbound` and `.rest` |
 | H6 | `DepartureCapacityChanged` carries `capacityPackages`, yet no command changes capacity (only `booked`). | `publishes[DepartureCapacityChanged].data`, `aggregates[Departure].commands` |
-| H7 | What happens to bookings and loads on a cancelled departure (re-book onto the next one?) is not modelled; only `delivery-promise` reacts. | `aggregates[Departure].transitions`, `policies` |
+| H7 | Resolved for bookings (ADR 0002 A15): `CancelDeparture` rebooks every assignment booked on the departure onto the next eligible pickup in the same transaction. Loads on a cancelled departure: `AddPackage` and `CloseLoad` are `ErrIllegalTransition`. | `aggregates[Departure].transitions`, `policies` |

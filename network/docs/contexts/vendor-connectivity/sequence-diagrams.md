@@ -65,7 +65,7 @@ Derived from: `model.yaml → contexts[vendor-connectivity].aggregates[VendorAcc
 `.publishes[VendorOnboarded]`, `.rest` (`POST /vendors`).
 
 Omitted: the `Idempotency-Key` replay (returns the stored `201`); body
-validation (`422 validation`).
+validation (`422 validation-failed`).
 
 ## 2. SuspendVendor and ReinstateVendor
 
@@ -73,11 +73,13 @@ validation (`422 validation`).
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
-    participant C as caller, no route in the model
+    participant C as http POST /vendors/vendorId/<br/>suspensions or reinstatements
     participant UC as SuspendVendor or ReinstateVendor
     participant A as VendorAccount
     participant R as VendorAccountRepo
-    C->>UC: Execute(vendorId)
+    participant OB as outbox
+    participant K as relay to Kafka
+    C->>UC: Execute(vendorId, reason)
     UC->>R: FindById(vendorId)
     alt unknown
         R-->>UC: not found
@@ -87,25 +89,29 @@ sequenceDiagram
         UC->>A: Suspend() or Reinstate()
         alt already in the target state
             A-->>UC: no-op
-            UC-->>C: unchanged
+            UC-->>C: 200 account unchanged, no event
         else transition
             A-->>UC: SUSPENDED or ACTIVE
+            Note over R,OB: one transaction
             UC->>R: Save(account, expected n)
             alt version conflict
-                R-->>UC: stale
-                UC-->>C: 409 stale
+                R-->>UC: ErrConcurrentUpdate
+                UC-->>C: 409 concurrent-update
             else saved
-                UC-->>C: ok, no event in the model
+                UC->>OB: append VendorSuspended or VendorReinstated
+                UC-->>C: 200 account
             end
         end
     end
+    OB->>K: relay publishes, key vendorId
 ```
 
 Derived from: `model.yaml → contexts[vendor-connectivity].aggregates[VendorAccount].transitions`,
-`.commands`.
+`.rest`, `.publishes[VendorSuspended, VendorReinstated]`.
 
-Omitted: outbox and Kafka, because the model gives these commands no
-event. The caller is unknown: the model lists no channel (a model gap).
+While the account is `SUSPENDED`, every vendor write answers 409
+`vendor-suspended` (service ADR 0002 A9); reads, polling, new purchase orders,
+the expiry sweep and submissions already received continue.
 
 ## 3. IssuePurchaseOrder (policy IssueOnRelease)
 
@@ -190,8 +196,8 @@ sequenceDiagram
                     Note over R,OB: one transaction, no event yet
                     UC->>R: Save(po, expected version), Save(submission)
                     alt version conflict
-                        R-->>UC: stale, rolled back
-                        UC-->>H: 409 stale
+                        R-->>UC: ErrConcurrentUpdate, rolled back
+                        UC-->>H: 409 concurrent-update
                     else committed
                         UC-->>H: 202 transactionId
                     end
@@ -243,8 +249,8 @@ sequenceDiagram
             UC->>A: AddLabels(labels)
             UC->>R: Save(po, expected version)
             alt version conflict
-                R-->>UC: stale
-                UC-->>H: 409 stale, labels are safe to request again
+                R-->>UC: ErrConcurrentUpdate
+                UC-->>H: 409 concurrent-update, labels are safe to request again
             else saved
                 UC-->>H: 200 labels, no address
             end
@@ -283,15 +289,15 @@ sequenceDiagram
             A-->>UC: ErrConfirmWithoutLabel
             UC-->>H: 409 confirm-without-label
         else not ACCEPTED
-            A-->>UC: state refusal, no model Err
-            UC-->>H: 409 purchase-order-state
+            A-->>UC: ErrIllegalTransition
+            UC-->>H: 409 illegal-transition
         else valid
             A-->>UC: SHIPMENT_PROCESSING
             UC->>S: Receive(vendorId, SHIPMENT_CONFIRMATION, payload, now)
             Note over R,S: one transaction, no event yet
             UC->>R: Save(po, expected version), Save(submission)
             alt version conflict
-                UC-->>H: 409 stale
+                UC-->>H: 409 concurrent-update
             else committed
                 UC-->>H: 202 transactionId
             end
@@ -326,7 +332,7 @@ sequenceDiagram
         Note over R,OB: one transaction
         UC->>R: Save(po, expected version)
         alt version conflict, the vendor acknowledged meanwhile
-            R-->>UC: stale, rolled back
+            R-->>UC: ErrConcurrentUpdate, rolled back
             Note over UC: skip, the next pass re-reads
         else saved
             UC->>OB: append PurchaseOrderExpired
@@ -421,7 +427,7 @@ Derived from: `model.yaml → contexts[vendor-connectivity].aggregates[Submissio
 `.inbound` (`RegisterVendorNode`, `DeclareNodeProfile`, `SubmitInventory`),
 `.policies[SimulationKnobs]`.
 
-Omitted: rate limiting and body validation (`422 validation`); outbox and
+Omitted: rate limiting and body validation (`422 validation-failed`); outbox and
 relay, because nothing is published at receipt.
 
 ## 10. ProcessSubmission

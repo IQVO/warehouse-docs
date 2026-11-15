@@ -174,8 +174,8 @@ Topic `retailnetwork.vendor-connectivity.events`.
 | `VendorShipmentConfirmed` | `com.retailnetwork.partner.vendor-connectivity.purchaseorder.VendorShipmentConfirmed` | `order-sourcing`, `shipping-and-tracking`, `node-performance` |
 | `SubmissionProcessed` | `com.retailnetwork.partner.vendor-connectivity.submission.SubmissionProcessed` | `node-performance` |
 | `InboundReceiptSubmitted` | `com.retailnetwork.partner.vendor-connectivity.inboundreceipt.InboundReceiptSubmitted` | `seller-inbound`, `node-performance` |
-| `VendorSuspended` | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorSuspended` | analytics only |
-| `VendorReinstated` | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorReinstated` | analytics only |
+| `VendorSuspended` | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorSuspended` | - |
+| `VendorReinstated` | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorReinstated` | - |
 
 ### `linehaul-transportation`
 

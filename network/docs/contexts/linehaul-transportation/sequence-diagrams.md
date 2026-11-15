@@ -18,9 +18,9 @@ outbox (same transaction) → relay → Kafka. The relay and Kafka share one
 lifeline ("relay to Kafka") to keep each diagram at six participants or
 fewer. `alt` blocks show error
 branches, optimistic-concurrency `version` checks and idempotency (REST
-`Idempotency-Key`, Kafka inbox on the CloudEvents `id`). Problem slugs with
-no `Err...` in the model (`not-found`, `invalid-state-transition`,
-`concurrent-modification`) are proposed placeholders. Route parameters are
+`Idempotency-Key`, Kafka inbox on the CloudEvents `id`). Problem slugs
+`not-found`, `illegal-transition` and `concurrent-update` are the shared slugs
+of every retail-network service (ADR 0002 A25). Route parameters are
 written without braces. The relay always publishes to
 `retailnetwork.linehaul-transportation.events`, keyed by the aggregate root
 id.
@@ -128,125 +128,89 @@ Omitted: the read-model write is shown as part of the outbox step for width; it 
 
 ## 3. ReleaseCapacity
 
-Policy `BookOnLock` on `FulfillmentCancelled` or `FulfillmentReassigned`.
+Used only by the rebooking of a cancelled departure (ADR 0002 A15, A28). The
+release branch of `BookOnLock` was removed: `FulfillmentCancelled` and
+`FulfillmentReassigned` only update `ExpectedVolumeView` and release nothing.
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
-    participant H as kafka<br/>consumer
-    participant U as use case
-    participant A as Departure
+    participant U as CancelDeparture<br/>use case
+    participant A as Departure<br/>being cancelled
+    participant B as next pickup<br/>Departure
     participant R as Departure<br/>Repository
     participant O as outbox
-    participant RL as relay to Kafka
-    H->>U: FulfillmentCancelled or Reassigned
-    U->>O: processed_events contains event id?
-    alt already processed
-        U-->>H: ack, no effect
-    else no booking recorded for assignmentId
-        U->>O: insert processed_events row
-        U-->>H: ack, nothing to release
-    else booking recorded
-        U->>R: Get departure with version
+    U->>A: CancelDeparture reason
+    Note over U,O: one transaction
+    loop each assignment booked on A
         U->>A: ReleaseCapacity
-        A-->>U: booked minus one
-        Note over U,O: one transaction
-        U->>R: update where version matches
-        alt version changed
-            U-->>H: rollback, redeliver
-        else saved
-            U->>O: insert DepartureCapacityChanged
-            U->>O: clear booking, insert processed_events row
-            U-->>H: ack
+        A-->>U: booked minus one,<br/>no capacity event
+        U->>R: next SCHEDULED pickup,<br/>same origin, remaining 1 or more
+        alt found
+            U->>B: BookCapacity
+            U->>O: DepartureCapacityChanged,<br/>BookingMoved
+        else none can take it
+            U->>O: BookingFailed
         end
     end
-    Note over O,RL: after commit
-    RL->>O: claim unpublished rows
-    Note over RL: publish to retailnetwork.<br/>linehaul-transportation.events
-    RL->>O: mark published
+    U->>O: DepartureCancelled
 ```
 
-Derived from: `model.yaml → contexts[linehaul-transportation].policies[BookOnLock]`; `contexts[order-sourcing].aggregates[FulfillmentAssignment].invariants`.
+Derived from: ADR 0002 A14, A15, A28; `model.yaml → contexts[linehaul-transportation].policies[BookOnLock]`.
 
-Omitted: in the model as written the "no booking recorded" branch is the only reachable one, because `order-sourcing` cancels and reassigns only before `LOCKED`.
+Omitted: the inbox and idempotency-key checks, shown in diagrams 2 and 7.
 
 ## 4. CloseDeparture
 
-No trigger is named in the model; the caller is drawn as a generic adapter.
+Driven by `CloseLoad` in the load's transaction (ADR 0002 A21); there is no REST route of its own.
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
-    participant H as caller<br/>unnamed
-    participant U as use case
+    participant H as CloseLoad<br/>use case
     participant A as Departure
     participant R as Departure<br/>Repository
-    participant O as outbox
-    participant RL as relay to Kafka
-    H->>U: CloseDeparture departureId
-    U->>R: Get with version
-    alt not found
-        U-->>H: 404 not-found
-    else found
-        U->>A: CloseDeparture
-        alt state CLOSED already
-            A-->>U: unchanged, idempotent
-        else state not SCHEDULED
-            A-->>U: 409 invalid-state-transition
-        else SCHEDULED
-            A-->>U: CLOSED
-            U->>R: update where version matches
-            alt version changed
-                U-->>H: 409 concurrent-modification
-            else saved
-                U-->>H: ok
-            end
+    H->>R: Get the load's departure
+    H->>A: CloseDeparture
+    alt state not SCHEDULED
+        A-->>H: ErrIllegalTransition<br/>409 illegal-transition
+    else SCHEDULED
+        A-->>H: CLOSED
+        H->>R: update where version matches,<br/>same transaction as the load
+        alt version changed
+            R-->>H: ErrConcurrentUpdate<br/>409 concurrent-update
         end
     end
 ```
 
-Derived from: `model.yaml → contexts[linehaul-transportation].aggregates[Departure].transitions`.
+Derived from: ADR 0002 A21; `model.yaml → contexts[linehaul-transportation].aggregates[Departure].transitions`.
 
-Omitted: no outbox row: the model lists no event for `CloseDeparture`, so the relay and Kafka are not involved.
+Omitted: no outbox row: `CloseDeparture` raises no event.
 
 ## 5. RecordDeparture
 
-No trigger is named in the model.
+Driven by `DispatchLoad` in the load's transaction (ADR 0002 A21); there is no REST route of its own.
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
-    participant H as caller<br/>unnamed
-    participant U as use case
+    participant H as DispatchLoad<br/>use case
     participant A as Departure
     participant R as Departure<br/>Repository
     participant O as outbox
     participant RL as relay to Kafka
-    H->>U: RecordDeparture departureId, at
-    U->>R: Get with version
-    alt not found
-        U-->>H: 404 not-found
-    else found
-        U->>A: RecordDeparture
-        alt state DEPARTED already
-            A-->>U: unchanged, idempotent
-        else state not CLOSED
-            A-->>U: 409 invalid-state-transition
-        else CLOSED
-            A-->>U: DEPARTED
-            Note over U,O: one transaction
-            U->>R: update where version matches
-            alt version changed
-                R-->>U: conflict
-                U-->>H: 409 concurrent-modification
-            else saved
-                U->>O: insert DepartureDeparted
-                U-->>H: ok
-            end
-        end
+    H->>R: Get the load's departure
+    H->>A: RecordDeparture now
+    alt state not CLOSED
+        A-->>H: ErrIllegalTransition<br/>409 illegal-transition
+    else CLOSED
+        A-->>H: DEPARTED
+        Note over H,O: one transaction with the load
+        H->>R: update where version matches
+        H->>O: insert DepartureDeparted
     end
     Note over O,RL: after commit
     RL->>O: claim unpublished rows
@@ -254,46 +218,30 @@ sequenceDiagram
     RL->>O: mark published
 ```
 
-Derived from: `model.yaml → contexts[linehaul-transportation].aggregates[Departure]`, `.publishes[DepartureDeparted]`.
-
-Omitted: the caller is unnamed in the model (a reported gap).
+Derived from: ADR 0002 A21; `model.yaml → contexts[linehaul-transportation].aggregates[Departure]`, `.publishes[DepartureDeparted]`.
 
 ## 6. RecordArrival
 
-No trigger is named in the model.
+Driven by `ReceiveLoad` in the load's transaction (ADR 0002 A21); there is no REST route of its own.
 
 ```mermaid
 %%{init: {"sequence": {"wrap": true, "width": 120, "actorMargin": 24, "messageMargin": 28, "boxMargin": 6, "noteMargin": 6, "mirrorActors": false}}}%%
 sequenceDiagram
     autonumber
-    participant H as caller<br/>unnamed
-    participant U as use case
+    participant H as ReceiveLoad<br/>use case
     participant A as Departure
     participant R as Departure<br/>Repository
     participant O as outbox
     participant RL as relay to Kafka
-    H->>U: RecordArrival departureId, at
-    U->>R: Get with version
-    alt not found
-        U-->>H: 404 not-found
-    else found
-        U->>A: RecordArrival
-        alt state ARRIVED already
-            A-->>U: unchanged, idempotent
-        else state not DEPARTED
-            A-->>U: 409 invalid-state-transition
-        else DEPARTED
-            A-->>U: ARRIVED
-            Note over U,O: one transaction
-            U->>R: update where version matches
-            alt version changed
-                R-->>U: conflict
-                U-->>H: 409 concurrent-modification
-            else saved
-                U->>O: insert DepartureArrived
-                U-->>H: ok
-            end
-        end
+    H->>R: Get the load's departure
+    H->>A: RecordArrival now
+    alt state not DEPARTED
+        A-->>H: ErrIllegalTransition<br/>409 illegal-transition
+    else DEPARTED
+        A-->>H: ARRIVED
+        Note over H,O: one transaction with the load
+        H->>R: update where version matches
+        H->>O: insert DepartureArrived
     end
     Note over O,RL: after commit
     RL->>O: claim unpublished rows
@@ -301,9 +249,7 @@ sequenceDiagram
     RL->>O: mark published
 ```
 
-Derived from: `model.yaml → contexts[linehaul-transportation].aggregates[Departure]`, `.publishes[DepartureArrived]`.
-
-Omitted: the caller is unnamed in the model (a reported gap).
+Derived from: ADR 0002 A21; `model.yaml → contexts[linehaul-transportation].aggregates[Departure]`, `.publishes[DepartureArrived]`.
 
 ## 7. CancelDeparture
 
@@ -319,7 +265,7 @@ sequenceDiagram
     participant R as Departure<br/>Repository
     participant O as outbox
     participant RL as relay to Kafka
-    H->>U: POST departures/id:cancel<br/>reason, Idempotency-Key
+    H->>U: POST departures/id/cancellations<br/>reason, Idempotency-Key
     U->>O: idempotency_keys has key?
     alt key seen
         U-->>H: stored response
@@ -333,13 +279,13 @@ sequenceDiagram
                 A-->>U: unchanged
                 U-->>H: 200 departure
             else state not SCHEDULED
-                A-->>U: 409 invalid-state-transition
+                A-->>U: 409 illegal-transition
             else SCHEDULED
                 A-->>U: CANCELLED
                 Note over U,O: one transaction
                 U->>R: update where version matches
                 alt version changed
-                    U-->>H: 409 concurrent-modification
+                    U-->>H: 409 concurrent-update
                 else saved
                     U->>O: insert DepartureCancelled
                     U->>O: store idempotency key
@@ -397,7 +343,7 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[linehaul-transportation].aggregates[LaneSchedule]`, `.inbound`, `.rest`.
 
-Omitted: no outbox, relay or Kafka: `LaneSchedule` raises no event. A `RETIRED` schedule for the lane answers 409 `invalid-state-transition` (not drawn).
+Omitted: no outbox, relay or Kafka: `LaneSchedule` raises no event. A `RETIRED` schedule for the lane answers 409 `illegal-transition` (not drawn).
 
 ## 9. RetireLaneSchedule
 
@@ -411,7 +357,7 @@ sequenceDiagram
     participant U as use case
     participant A as LaneSchedule
     participant R as LaneSchedule<br/>Repository
-    H->>U: POST lane-schedules/laneId:retire<br/>Idempotency-Key
+    H->>U: POST lane-schedules/laneId/retirements<br/>Idempotency-Key
     U->>R: Get laneId with version
     alt not found
         U-->>H: 404 not-found
@@ -424,7 +370,7 @@ sequenceDiagram
             A-->>U: RETIRED
             U->>R: update where version matches
             alt version changed
-                U-->>H: 409 concurrent-modification
+                U-->>H: 409 concurrent-update
             else saved
                 U-->>H: 200 schedule
             end
@@ -537,7 +483,7 @@ sequenceDiagram
             U->>R: IsOnOpenLoad trackingNumber
             U->>A: AddPackage trackingNumber
             alt load not OPEN
-                A-->>U: 409 invalid-state-transition
+                A-->>U: 409 illegal-transition
             else on another OPEN or CLOSED load
                 A-->>U: ErrPackageAlreadyLoaded
                 U-->>H: 409 package-already-loaded
@@ -548,7 +494,7 @@ sequenceDiagram
                 Note over U,I: one transaction
                 U->>R: update where version matches
                 alt version changed or unique index hit
-                    U-->>H: 409 concurrent-modification or package-already-loaded
+                    U-->>H: 409 concurrent-update or package-already-loaded
                 else saved
                     U->>I: store key
                     U-->>H: 200 load
@@ -576,7 +522,7 @@ sequenceDiagram
     participant R as Load<br/>Repository
     participant O as outbox
     participant RL as relay to Kafka
-    H->>U: POST loads/<br/>loadId:close<br/>Idempotency-Key
+    H->>U: POST loads/<br/>loadId/closures<br/>Idempotency-Key
     U->>R: Get loadId with version
     alt not found
         U-->>H: 404 not-found
@@ -586,13 +532,13 @@ sequenceDiagram
             A-->>U: unchanged
             U-->>H: 200 load
         else state not OPEN
-            A-->>U: 409 invalid-state-transition
+            A-->>U: 409 illegal-transition
         else OPEN
             A-->>U: CLOSED
             Note over U,O: one transaction
             U->>R: update where version matches
             alt version changed
-                U-->>H: 409 concurrent-modification
+                U-->>H: 409 concurrent-update
             else saved
                 U->>O: insert LoadClosed
                 U-->>H: 200 load
@@ -623,7 +569,7 @@ sequenceDiagram
     participant R as Load<br/>Repository
     participant O as outbox
     participant RL as relay to Kafka
-    H->>U: POST loads/<br/>loadId:dispatch<br/>Idempotency-Key
+    H->>U: POST loads/<br/>loadId/dispatches<br/>Idempotency-Key
     U->>R: Get loadId with version
     alt not found
         U-->>H: 404 not-found
@@ -633,13 +579,13 @@ sequenceDiagram
             A-->>U: unchanged
             U-->>H: 200 load
         else state not CLOSED
-            A-->>U: 409 invalid-state-transition
+            A-->>U: 409 illegal-transition
         else CLOSED
             A-->>U: DEPARTED
             Note over U,O: one transaction
             U->>R: update where version matches
             alt version changed
-                U-->>H: 409 concurrent-modification
+                U-->>H: 409 concurrent-update
             else saved
                 U->>O: insert LoadDeparted
                 U-->>H: 200 load
@@ -654,7 +600,7 @@ sequenceDiagram
 
 Derived from: `model.yaml → contexts[linehaul-transportation].aggregates[Load]`, `.publishes[LoadDeparted]`.
 
-Omitted: the idempotency-key check; clearing `on_open_load` on the package rows (same transaction). Whether this also drives `RecordDeparture` is not stated in the model.
+Omitted: the idempotency-key check; clearing `on_open_load` on the package rows (same transaction). `DispatchLoad` also runs `RecordDeparture` on the load's departure, which must be `CLOSED`, in the same transaction (diagram 5; ADR 0002 A21); `CloseLoad` runs `CloseDeparture` (diagram 4) and `ReceiveLoad` runs `RecordArrival` (diagram 6).
 
 ## 15. ReceiveLoad
 
@@ -670,7 +616,7 @@ sequenceDiagram
     participant R as Load<br/>Repository
     participant O as outbox
     participant RL as relay to Kafka
-    H->>U: POST loads/<br/>loadId:receive<br/>Idempotency-Key
+    H->>U: POST loads/<br/>loadId/receipts<br/>Idempotency-Key
     U->>R: Get loadId with version
     alt not found
         U-->>H: 404 not-found
@@ -680,13 +626,13 @@ sequenceDiagram
             A-->>U: unchanged
             U-->>H: 200 load
         else state not DEPARTED
-            A-->>U: 409 invalid-state-transition
+            A-->>U: 409 illegal-transition
         else DEPARTED
             A-->>U: ARRIVED
             Note over U,O: one transaction
             U->>R: update where version matches
             alt version changed
-                U-->>H: 409 concurrent-modification
+                U-->>H: 409 concurrent-update
             else saved
                 U->>O: insert LoadArrived
                 U-->>H: 200 load

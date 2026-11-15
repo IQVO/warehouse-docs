@@ -72,8 +72,9 @@ model, so they are drawn as terminal.
   every cutoff of the horizon; on `NodeSuspended` or `NodeRetired`, cancel
   future pickups (`CancelDeparture`).
 - **`BookOnLock`** (this context): on `FulfillmentLocked`, book one package
-  on the pickup departure (`BookCapacity`); on `FulfillmentCancelled` or
-  reassignment, release it (`ReleaseCapacity`). A lock that carries
+  on the pickup departure (`BookCapacity`). `FulfillmentCancelled` and
+  reassignment release nothing: they happen only before the lock and update
+  the expected volume only (ADR 0002 A16, A28). A lock that carries
   `consolidatedInto` (a follower of a merged release) books nothing
   (**`FollowerLockBooksNothing`**): the carrier's lock books the one package that ships.
 - **`HorizonRoll`** (this context): nightly `GenerateDepartures` keeps a
@@ -91,10 +92,10 @@ model, so they are drawn as terminal.
 | --- | --- |
 | `ScheduleDeparture` | `GenerateDepartures` (lane schedules), `PickupFromCutoffs` |
 | `BookCapacity` | `BookOnLock` on `FulfillmentLocked` |
-| `ReleaseCapacity` | `BookOnLock` on `FulfillmentCancelled` or `FulfillmentReassigned` |
-| `CloseDeparture` | not named in the model |
-| `RecordDeparture` | not named in the model |
-| `RecordArrival` | not named in the model |
+| `ReleaseCapacity` | the rebooking inside `CancelDeparture` only (ADR 0002 A15, A28) |
+| `CloseDeparture` | driven by `CloseLoad` (ADR 0002 A21) |
+| `RecordDeparture` | driven by `DispatchLoad` (ADR 0002 A21) |
+| `RecordArrival` | driven by `ReceiveLoad` (ADR 0002 A21) |
 | `CancelDeparture` | Network-ops planner, REST `POST /departures/{departureId}/cancellations`; `PickupFromCutoffs` on `NodeSuspended` / `NodeRetired` |
 
 ### 7. Created Events
@@ -102,7 +103,7 @@ model, so they are drawn as terminal.
 | Event | Raised when | Full CloudEvents type |
 | --- | --- | --- |
 | `DepartureScheduled` | `ScheduleDeparture` succeeds | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureScheduled` |
-| `DepartureCapacityChanged` | `BookCapacity` or `ReleaseCapacity` succeeds | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCapacityChanged` |
+| `DepartureCapacityChanged` | `BookCapacity` succeeds, or a rebooking onto the target departure | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCapacityChanged` |
 | `DepartureCancelled` | `CancelDeparture` succeeds | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCancelled` |
 | `DepartureDeparted` | `RecordDeparture` succeeds | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureDeparted` |
 | `DepartureArrived` | `RecordArrival` succeeds | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureArrived` |

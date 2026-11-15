@@ -90,7 +90,7 @@ stateDiagram-v2
 | Carton dimensions within the node's `maxCartonDimsMm` | `ErrCartonOversize` |
 | An SSCC is unique network-wide | `ErrSsccNotUnique` |
 | An SSCC has 18 digits and a valid mod-10 check digit | `ErrInvalidSscc` |
-| At labelling, the eaches per item and GTIN over this shipment's cartons equal the confirmed plan's lines (every line exactly, no extra item) | `ErrCartonContentsMismatchPlan` |
+| At labelling, when this is the plan's only shipment, the eaches per item and GTIN over its cartons equal the confirmed plan's lines (every line exactly); with several shipments the plan line is a cap checked on `AddCarton` (every item on the plan, total over all the plan's shipments within the line) | `ErrCartonContentsMismatchPlan` |
 | Node `ACTIVE` with `INBOUND` when created and when shipped | `ErrNodeCannotReceive` |
 | Seller `ACTIVE` when created, labelled and shipped | `ErrSellerSuspended` |
 | No ship without a label on every carton | `ErrShipmentNotLabelled` |

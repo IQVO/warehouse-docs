@@ -42,7 +42,7 @@ transaction as the aggregate change.
 | Event | Full `type` | `data` fields | Producing command / use case | Consumers |
 | --- | --- | --- | --- | --- |
 | `DepartureScheduled` | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureScheduled` | `departureId`, `laneId`, `kind`, `originNodeId`, `destinationNodeId`, `cutoffAt`, `departsAt`, `arrivesAt`, `capacityPackages` | `ScheduleDeparture`, via `GenerateDepartures` (`HorizonRoll`) or `PickupFromCutoffs` | `delivery-promise` (`DepartureView`), `order-sourcing` (`NetworkGraphView`) |
-| `DepartureCapacityChanged` | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCapacityChanged` | `departureId`, `capacityPackages`, `bookedPackages`, `remainingPackages` | `BookCapacity`, `ReleaseCapacity` (policy `BookOnLock`) | `delivery-promise`, `order-sourcing` |
+| `DepartureCapacityChanged` | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCapacityChanged` | `departureId`, `capacityPackages`, `bookedPackages`, `remainingPackages` | `BookCapacity` (policy `BookOnLock`), `ReleaseCapacity` (only in the rebooking of a cancelled departure) | `delivery-promise`, `order-sourcing` |
 | `DepartureCancelled` | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCancelled` | `departureId`, `reason`, `cancelledAt` | `CancelDeparture` (planner, or `PickupFromCutoffs` on `NodeSuspended` / `NodeRetired`) | `delivery-promise` (`RepromiseOnRisk`), `order-sourcing` |
 | `DepartureDeparted` | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureDeparted` | `departureId`, `departedAt` | `RecordDeparture` | analytics only |
 | `DepartureArrived` | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureArrived` | `departureId`, `arrivedAt` | `RecordArrival` | analytics only |
@@ -85,8 +85,8 @@ and times are illustrative):
     "originNodeId": "node-fc017",
     "destinationNodeId": "node-sc003",
     "cutoffAt": "2026-10-23T21:00:00Z",
-    "departsAt": "2026-10-23T21:30:00Z",
-    "arrivesAt": "2026-10-23T23:45:00Z",
+    "departsAt": "2026-10-23T21:00:00Z",
+    "arrivesAt": "2026-10-23T23:15:00Z",
     "capacityPackages": 1200
   }
 }
@@ -108,9 +108,9 @@ dispatches on the full `type` string, never on a suffix.
 | `node-topology` | `com.retailnetwork.logistics.node-topology.lane.LaneOpened` | Inserts the lane (origin, destination, mode, nominal transit) into `LaneView` as `OPEN` | Upsert on `laneId` |
 | `node-topology` | `com.retailnetwork.logistics.node-topology.lane.LaneClosed` | Marks the lane `CLOSED`; later `ScheduleDeparture` on it fails with `ErrLaneClosed` | Status overwrite |
 | `order-sourcing` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | Records the assignment, node and `pickupDepartureId` in `ExpectedVolumeView` | Upsert on (`assignmentId`, `releaseNo`) |
-| `order-sourcing` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReassigned` | Moves the assignment in `ExpectedVolumeView`; `BookOnLock` releases a booking if one exists (`ReleaseCapacity`) | Ignore an `assignmentVersion` not above the stored one |
+| `order-sourcing` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReassigned` | Updates the node of the assignment's `ExpectedVolumeView` row and forgets its planned departure; releases nothing (no booking exists before the lock; ADR 0002 A16) | Reads only `assignmentId` and `toNodeId`: no version is consumed, so the last delivered event wins |
 | `order-sourcing` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | `BookOnLock`: `BookCapacity` of one package on `pickupDepartureId`; marks the assignment booked in `ExpectedVolumeView`. When the optional `consolidatedInto` is set (a follower of a merged release) the event id is claimed in the inbox and nothing else happens: no row, no booking, no capacity event (`FollowerLockBooksNothing`); `mergedAssignmentIds` is ignored | One booking per `assignmentId`; a follower lock before or after the carrier's gives the same result |
-| `order-sourcing` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | Removes the assignment from `ExpectedVolumeView`; `BookOnLock` releases its booking if one exists (`ReleaseCapacity`) | Release only a booking that exists |
+| `order-sourcing` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentCancelled` | Updates the assignment's `ExpectedVolumeView` row only; releases nothing (ADR 0002 A16, A28: the release branch of `BookOnLock` was removed) | Inbox on the CloudEvents `id` |
 | `shipping-and-tracking` | `com.retailnetwork.logistics.shipping-and-tracking.label.LabelIssued` | Adds `trackingNumber` and `packageNo` to the assignment in `ExpectedVolumeView` | Upsert on `labelRef` |
 
 Derived from: `model.yaml → contexts[linehaul-transportation].consumes`,
@@ -121,8 +121,10 @@ Derived from: `model.yaml → contexts[linehaul-transportation].consumes`,
 - `FulfillmentReassigned` and `FulfillmentCancelled` are raised by
   `order-sourcing` only before `LOCKED` (`ErrAssignmentLocked`,
   `ErrCancelAfterLock` on its side), while `BookOnLock` books only on
-  `FulfillmentLocked`. The release branch is therefore defensive: in the
-  model as written it never finds a booking. Reported as a model gap.
+  `FulfillmentLocked`. The release branch was therefore removed (gap G15,
+  ADR 0002 A16, A28): both events update `ExpectedVolumeView` only. If
+  `order-sourcing` ever cancels after the lock, the capacity stays booked
+  until the departure leaves (reported model gap).
 - `DepartureCapacityChanged` carries `capacityPackages`, which suggests the
   capacity itself can change; no command in the model changes it. Reported
   as a model gap.

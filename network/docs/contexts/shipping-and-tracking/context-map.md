@@ -75,7 +75,6 @@ that is deliberately absent.
 Omitted: the callers of `POST /journeys/{trackingNumber}/scans` and
 `POST /labels/{labelRef}/voids`, which the model does not name (see the
 [canvas open questions](/network/contexts/shipping-and-tracking/bounded-context-canvas));
-analytics-only events (`LabelVoided`, `PackageReturned`, `PackageLost`);
 Postgres and Kafka as infrastructure. `node-topology` has no edge here: this
 context consumes no node event (a gap noted on the canvas).
 
