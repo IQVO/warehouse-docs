@@ -1081,15 +1081,15 @@ contexts:
       - {from: network-ops planner, type: qry, channel: "REST GET /assignments, GET /assignments/{assignmentId}", routes: ["GET /assignments", "GET /assignments/{assignmentId}"], message: "ListAssignments, GetAssignment", relationship: UI}
       # caller inferred: ADR 0013 names the report questions, not a client; the routes are served by cmd/os-reports on :8092, not cmd/api
       - {from: network analysts (human), type: qry, channel: "REST GET /reports/sourcing-mix, GET /reports/order-splits, GET /reports/cost-to-serve, GET /reports/freshness (cmd/os-reports, :8092)", routes: ["GET /reports/sourcing-mix", "GET /reports/order-splits", "GET /reports/cost-to-serve", "GET /reports/freshness"], message: "GetSourcingMixReport, GetOrderSplitsReport, GetCostToServeReport, GetReportFreshness", relationship: UI}
-      # caller inferred: ADR 0014 names an operator publishing a policy, not a client; the planner is the actor of the sibling reoptimise route
+      # caller inferred: ADR 0014 names an operator publishing a policy, not a client; the planner is the actor of the sibling reoptimisations route
       - {from: network-ops planner, type: cmd, channel: "REST PUT /sourcing-policy", routes: ["PUT /sourcing-policy"], message: "PublishSourcingPolicy", relationship: UI}
       # caller inferred: the spec names no caller for the read; attributed to the same operator
       - {from: network-ops planner, type: qry, channel: "REST GET /sourcing-policy", routes: ["GET /sourcing-policy"], message: "GetSourcingPolicy", relationship: UI}
-      - {from: network-ops planner, type: cmd, channel: "REST POST /assignments/{assignmentId}:reoptimise", routes: ["POST /assignments/{assignmentId}:reoptimise"], message: "ReoptimiseAssignment", relationship: UI}
+      - {from: network-ops planner, type: cmd, channel: "REST POST /assignments/{assignmentId}/reoptimisations", routes: ["POST /assignments/{assignmentId}/reoptimisations"], message: "ReoptimiseAssignment", relationship: UI}
     rest:
       - "GET /assignments?state=&nodeId=&orderId="
       - "GET /assignments/{assignmentId}"
-      - "POST /assignments/{assignmentId}:reoptimise"
+      - "POST /assignments/{assignmentId}/reoptimisations"
       - "GET /sourcing-policy"
       - "PUT /sourcing-policy"
       - "GET /reports/sourcing-mix?from=&to="
