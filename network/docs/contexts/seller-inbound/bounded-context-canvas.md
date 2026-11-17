@@ -66,6 +66,7 @@ Service), Enforcer (carton and label compliance).
 | seller / seller portal | command | `CreateInboundShipment`, `AddCarton`, `LabelShipment`, `ShipInboundShipment` | REST `POST /inbound-plans/{planId}/shipments`, `POST /inbound-shipments/{shipmentId}/cartons`, `POST /inbound-shipments/{shipmentId}/labels`, `POST /inbound-shipments/{shipmentId}/dispatches` | OHS |
 | seller / seller portal | query | `GetInboundPlan`, `GetInboundShipment`, `GetLabels` | REST `GET /inbound-plans/{planId}`, `GET /inbound-shipments/{shipmentId}`, `.../labels` | OHS |
 | seller / seller portal, network partner managers | query | `GetSellerScorecard` (informational) | REST `GET /sellers/{sellerId}/scorecard?window=7d` or `30d` | OHS |
+| seller / seller portal, network partner managers | query | `GetSellerCapacityAllocations` (the operator-facing read of the monthly capacity reservations, service ADR 0015) | REST `GET /sellers/{sellerId}/capacity-allocations?month=` | OHS |
 | `vendor-connectivity` | event | `InboundReceiptSubmitted` | Kafka `retailnetwork.vendor-connectivity.events` | Customer/Supplier |
 | `node-topology` | event | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | Kafka `retailnetwork.node-topology.events` | Conformist |
 | `offer-availability` | event | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` | Kafka `retailnetwork.offer-availability.events` | Conformist |

@@ -557,7 +557,16 @@ Appears in: `InboundShipmentReceived.cartons(sscc, status)`.
 | `UNEXPECTED` | A carton was received that the manifest does not list. |
 | `DAMAGED` | A carton was received damaged. |
 
-**`ComplianceTier`**: The informational tier of a seller's compliance scorecard: the worst of three signals over the window (seller-inbound ADR 0005 A3). Nothing acts on it.
+**`PlacementOption`**: Who splits an inbound plan (seller-inbound ADR 0015).
+
+Appears in: `InboundPlanConfirmed.placementOption`, REST `PlacementOption`.
+
+| Value | Meaning |
+| --- | --- |
+| `SELLER_SPLIT` | The default: everything goes to the destination the seller picked. |
+| `NETWORK_SPLIT` | The destination is an ACTIVE inbound cross-dock and the plan records a redistribution of its eaches across the region's fulfilment centres; nothing downstream executes it. |
+
+**`ComplianceTier`**: The tier of a seller's compliance scorecard: the worst of three signals over the window (seller-inbound ADR 0005 A3). The monthly capacity gate reads it as the seller's allocation factor (seller-inbound ADR 0015); nothing else acts on it.
 
 Appears in: REST `SellerScorecard.complianceTier`.
 

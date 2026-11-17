@@ -26,6 +26,7 @@ are the proposed Go package and type names. Each context's own
 | **Book Share** | `delivery-promise` | The number of orders a promise book may hold for one pickup cutoff: the node's declared limit for the window, scaled by the policy's capacitySharePercent, at least 1. | `book.Capacity.Share` |
 | **Break Case** | `seller-inbound` | Opening a sealed case at a vendor node to release its eaches. A vendor-node operation, not a network event; quantities stay in eaches. | `(vendor node operation, not modelled)` |
 | **Calibration Buffer** | `delivery-promise` | The minutes a quote adds to its arrival, learned from the lateness of this service's own judged promises in the same segment; one-sided and capped. | `search.Calibration.BufferMinutes` |
+| **Capacity Allocation** | `seller-inbound` | The cubic decimetres a seller's DRAFT and CONFIRMED plans of one calendar month promise to one node. Bookkeeping kept by the use cases, not an aggregate and not an event. | `capacity.Allocation` |
 | **Capacity Band** | `delivery-promise` | AMPLE, TIGHT or SCARCE: how full the promise book behind an offer's window is at quote time (under 60%, 60% to under 85%, 85% and over of its share). A signal, never a price. | `shared.CapacityBand` |
 | **Capacity Hold** | `delivery-promise` | A provisional reservation on a promise book released if the order is not placed in time. | `book.Capacity.Provisional` |
 | **Carbon Estimate** | `order-sourcing` | The estimated carbon footprint of a candidate path in planner-declared grams of CO2e: the per-unit lane emissions of every departure traversed plus the final wave's per-stop emission. Recorded beside the money estimate and never used to rank; absent on the wire when a component was not declared. | `assignment.Candidate.EstimatedCo2eGrams` |
@@ -77,7 +78,7 @@ are the proposed Go package and type names. Each context's own
 | **Handover** | `shipping-and-tracking` | The instant a vendor node's package enters the network. | `journey.HandedOver` |
 | **Hold Deadline** | `delivery-promise` | The instant from which a promise book accepts no new hold: the pickup cutoff minus the node's handling time. | `book.BookTimes.HoldDeadline` |
 | **Hysteresis** | `node-performance` | The gap between the suspension bar (0.90) and the reinstatement bar (0.95), with the three-day streak, that stops a node at the boundary from flapping. | `scorecard.FastTierEligibility` |
-| **Inbound Limits** | `node-topology` | A receiving node's declared carton weight and size limits, whether it accepts pallets and whether it requires an SSCC on every carton. | `node.OperationalProfile.Inbound` |
+| **Inbound Limits** | `node-topology` | A receiving node's declared carton weight and size limits, whether it accepts pallets, whether it requires an SSCC on every carton and, optionally, the inbound volume it accepts per calendar month. | `node.OperationalProfile.Inbound` |
 | **Inbound Plan** | `seller-inbound` | A seller's declaration, in eaches, of what it will send to one node and with which packing option. | `inboundplan.Plan` |
 | **Inbound Receipt** | `vendor-connectivity` | A vendor's carton-level report of what arrived for one inbound shipment: per SSCC a status, the eaches received per GTIN and any compliance codes. | `inbound.Receipt` |
 | **Inbound Shipment** | `seller-inbound` | One physical consignment of a plan to a node: its cartons, labels and receipt outcome. | `inboundshipment.Shipment` |
@@ -97,6 +98,7 @@ are the proposed Go package and type names. Each context's own
 | **Master Carton** | `seller-inbound` | An outer carton holding one case: identical sellable units of one item, labelled with an SSCC. A HOMOGENEOUS_CASE carton in the model. | `inboundshipment.Carton (kind HOMOGENEOUS_CASE)` |
 | **Middle Mile** | `linehaul-transportation` | Transport between nodes: vendor node to sortation centre, sortation centre to delivery station, air. | `(context)` |
 | **Mixed Carton** | `seller-inbound` | A carton holding more than one item. It has no pack GTIN: it is a logistic unit identified by its SSCC and carton manifest only. | `inboundshipment.Carton (kind MIXED)` |
+| **Monthly Capacity Gate** | `seller-inbound` | The check at plan creation that a seller's reserved volume plus the plan's volume stays within the node's declared monthly volume times the seller's tier factor. It applies only when both sides are known; otherwise the plan is allowed and recorded as not enforced. | `capacity.Check` |
 | **Node** | `node-topology` | One physical building of the network, of exactly one node type. | `node.Node` |
 | **Node Operator** | `node-topology` | Who runs the building: NETWORK, a VENDOR, or a PARTNER (a pickup-point operator, RN-0011). | `node.Operator` |
 | **Node Type** | `node-topology` | FULFILLMENT_CENTER, INBOUND_CROSS_DOCK, RETURNS_CENTER, SORTATION_CENTER, DELIVERY_STATION, AIR_HUB or PICKUP_POINT. | `node.Type` |
@@ -114,6 +116,8 @@ are the proposed Go package and type names. Each context's own
 | **Path Lock** | `order-sourcing` | The point after which an assignment never changes node: the vendor's acceptance. | `assignment.Lock` |
 | **Pickup Departure** | `linehaul-transportation` | The departure that collects packages at a vendor node at one of its declared cutoffs. | `departure.KindPickup` |
 | **Pickup Point** | `node-topology` | A PICKUP_POINT node (a staffed point or a locker) the shopper collects a package from: one stop of its serving delivery station's route, a checkout destination with no address, never a lane endpoint. | `node.Type` |
+| **Placement Fee Basis** | `seller-inbound` | The recorded basis of a NETWORK_SPLIT plan (month, declared volume, recipient nodes) for a future settlement context. Never a charge. | `inboundplan.FeeBasis` |
+| **Placement Option** | `seller-inbound` | Who splits an inbound plan: SELLER_SPLIT (the seller picks one destination, the default) or NETWORK_SPLIT (the plan goes to an inbound cross-dock and records a redistribution across the region's fulfilment centres). | `inboundplan.PlacementOption` |
 | **Predicted Late** | `delivery-promise` | The at-risk reason of a confirmed promise whose witness-path departure is past its expected arrival with no arrival seen. | `promise.ReasonPredictedLate` |
 | **Promise** | `delivery-promise` | The network's commitment of a delivery window for one shipment group. | `promise.Promise` |
 | **Promise Basis** | `delivery-promise` | SCHEDULED (from real departures and waves), MEASURED (a leg stretched by its measured P-serviceLevel transit, ADR 0014) or NOMINAL (STANDARD tier from nominal lane times). | `promise.Basis` |
@@ -122,6 +126,7 @@ are the proposed Go package and type names. Each context's own
 | **Purchase Order (PO)** | `vendor-connectivity` | The instruction to one vendor node to ship one shipment group in full by requiredShipBy. | `po.PurchaseOrder` |
 | **Re-promise** | `delivery-promise` | Revising a confirmed promise to a later window when its path is no longer feasible. | `promise.Promise.Revise` |
 | **Reassignment** | `order-sourcing` | Moving a group to another node after a refusal, or while still queued. | `assignment.Reassign` |
+| **Redistribution** | `seller-inbound` | The recorded split of a NETWORK_SPLIT plan's eaches across at most three fulfilment centres of the destination's region. A fact, executed by nothing downstream. | `capacity.Split, inboundplan.RedistributionLine` |
 | **Region** | `node-topology` | A largely self-sufficient partition of the network. | `region.Region` |
 | **Release (to node)** | `order-sourcing` | Sending a group to one node; for a vendor node this issues a purchase order. | `assignment.Release` |
 | **Required Ship-By** | `vendor-connectivity` | The pickup cutoff the PO must be ready for; the fleet calls it the CPT. | `po.PurchaseOrder.RequiredShipBy` |
@@ -158,6 +163,7 @@ are the proposed Go package and type names. Each context's own
 | **Throughput Cap** | `node-topology` | Declared maximum orders per time unit a node accepts. | `node.ThroughputCap` |
 | **Tracking Number** | `shipping-and-tracking` | The network-wide unique id of one package. | `journey.TrackingNumber` |
 | **Unexpected Line** | `customer-returns` | An outcome line the authorization never covered; recorded as a fact, never published and never restocked. | `requests.OutcomeFactLine` |
+| **Unit Volume** | `seller-inbound` | The seller-declared volume of one each of a plan line, in cubic decimetres. Undeclared on any line makes the plan's volume unknown. | `inboundplan.Line.UnitVolumeDm3` |
 | **Unsourceable** | `order-sourcing` | No node can still meet the promise; the group goes back to delivery-promise. | `assignment.StateUnsourceable` |
 | **Vendor** | `vendor-connectivity` | An organisation operating fulfillment nodes for the network (the warehouse-systems fleet is vendor V-WS). | `vendor.VendorAccount` |
 | **Vendor API** | `vendor-connectivity` | The Open Host Service of this context; its JSON schemas are the Published Language. | `apis/vendor-connectivity/openapi.yaml` |

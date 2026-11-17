@@ -192,7 +192,7 @@ contexts:
           - [SUSPENDED, RETIRED, RetireNode]
         entities: []
         value_objects:
-          - "OperationalProfile{profileRevision, timezone, operatingHoursByDay, holidays[], handlingTime, cutoffs[CutoffSlot{localTime HH:mm, days[] (default every operating day), maxOrders?}], throughputCap{value int>0, timeUnit HOUR|DAY, unit=ORDER}, sortDwellMinutes (sort centres and air hubs only), inbound{maxCartonWeightG, maxCartonDimsMm{l,w,h}, acceptsPallets, requiresSscc} (optional; nodes with the INBOUND capability only), declaredBy(VENDOR|NETWORK_OPS), declaredAt}; operatingHoursByDay{monday..sunday: {start HH:mm, end HH:mm}} (a missing day is closed); holidays[] are ISO dates (closed all day)"
+          - "OperationalProfile{profileRevision, timezone, operatingHoursByDay, holidays[], handlingTime, cutoffs[CutoffSlot{localTime HH:mm, days[] (default every operating day), maxOrders?}], throughputCap{value int>0, timeUnit HOUR|DAY, unit=ORDER}, sortDwellMinutes (sort centres and air hubs only), inbound{maxCartonWeightG, maxCartonDimsMm{l,w,h}, acceptsPallets, requiresSscc, monthlyVolumeDm3 (optional int 1..2147483647: the inbound volume the node accepts per calendar month, in cubic decimetres; absent is not declared; node-topology ADR 0019)} (optional; nodes with the INBOUND capability only), declaredBy(VENDOR|NETWORK_OPS), declaredAt}; operatingHoursByDay{monday..sunday: {start HH:mm, end HH:mm}} (a missing day is closed); holidays[] are ISO dates (closed all day)"
           - NodeCapabilities{outbound, inbound, returns, sort, lastMile, air, collection}
           - GeoLocation{postalCode, countryCode, lat, lon}
           - VendorRef{vendorId, vendorNodeCode}
@@ -336,7 +336,7 @@ contexts:
       - {term: Handling Time, definition: "Declared time from order release to a package ready for handover.", code: "node.OperationalProfile.HandlingTime"}
       - {term: Sort Dwell, definition: "Declared minutes a package normally spends inside a sortation centre or air hub between arrival and departure; declared only by those node types.", code: "node.OperationalProfile.SortDwellMinutes"}
       - {term: Throughput Cap, definition: "Declared maximum orders per time unit a node accepts.", code: "node.ThroughputCap"}
-      - {term: Inbound Limits, definition: "A receiving node's declared carton weight and size limits, whether it accepts pallets and whether it requires an SSCC on every carton.", code: "node.OperationalProfile.Inbound"}
+      - {term: Inbound Limits, definition: "A receiving node's declared carton weight and size limits, whether it accepts pallets, whether it requires an SSCC on every carton and, optionally, the inbound volume it accepts per calendar month.", code: "node.OperationalProfile.Inbound"}
       - {term: Lane, definition: "A directed, mode-specific connection between two nodes.", code: "lane.Lane"}
       - {term: Lane Cost, definition: "The planner's declared marginal cost of moving one package-unit across a lane on one departure, in integer cents (0 to 10000000), with no currency field. A declaration, never a quote, an invoice or a measurement; 0 is legal, and a lane never declared on also reads 0 but publishes nothing.", code: "lane.Lane.CostPerUnitCents"}
       - {term: Lane Emission, definition: "The planner's declared carbon emission of moving one package-unit across a lane on one departure, in grams of CO2-equivalent (0 to 10000000). A declaration, never a measurement; 0 is legal, and a lane never declared on also reads 0 but publishes nothing.", code: "lane.Lane.EmissionPerUnitG"}
@@ -2081,18 +2081,26 @@ contexts:
         size_estimate: "tens to thousands"
       - name: InboundPlan
         root_id: planId
-        description: "A seller's declaration of what it intends to send to one vendor node, in eaches, and how it will pack it."
+        description: "A seller's declaration of what it intends to send to one vendor node, in eaches, how it will pack it and who splits it (the seller, or the network across the region's fulfilment centres). It records whether the monthly inbound capacity gate was applied (seller-inbound ADR 0015)."
         states: [DRAFT, CONFIRMED, CANCELLED]
         transitions:
           - [DRAFT, CONFIRMED, ConfirmInboundPlan]
           - [DRAFT, CANCELLED, CancelInboundPlan]
         value_objects:
           - "PackingOption(INDIVIDUAL|CASE_PACKED)"
-          - "PlanLine{catalogItemId, gtin, qtyEaches}"
+          - "PlanLine{catalogItemId, gtin, qtyEaches, unitVolumeDm3?}: unitVolumeDm3 is the seller-declared volume of one each in cubic decimetres, 1 to 100000; omitted or 0 is undeclared. The plan's volume is the sum of qtyEaches x unitVolumeDm3 over its lines, and it is 0 when ANY line's unit volume is undeclared: a partial sum is not a fact (seller-inbound ADR 0015)"
+          - "PlacementOption(SELLER_SPLIT|NETWORK_SPLIT): SELLER_SPLIT (the default) sends everything to the destination the seller picked; NETWORK_SPLIT destinations an ACTIVE INBOUND_CROSS_DOCK and records a redistribution across the region's fulfilment centres (seller-inbound ADR 0015)"
+          - "RedistributionLine{nodeId, lineNo, qtyEaches}: one (node, line) share of a NETWORK_SPLIT plan's recorded redistribution (capacity-split-v1); lineNo is the 1-based position of the plan line. Present only for NETWORK_SPLIT"
+          - "PlacementFeeBasis{basis=NETWORK_SPLIT, month (YYYY-MM), dm3, nodeIds[]}: the recorded fee basis of a NETWORK_SPLIT plan, set exactly when NETWORK_SPLIT; dm3 is the plan's total declared volume (0 when any line's unit volume is undeclared) and nodeIds the redistribution's recipients, unique and sorted. A fact for a future settlement context, never a charge: no money moves and no invoice is derived here"
+          - "CapacityEnforced (boolean, always present on the REST plan): whether the monthly capacity gate was actually applied, that is both the node's declared monthly volume and every line's unit volume were known. false never blocks the plan; the unenforced fact is recorded"
         invariants:
           - {rule: "the destination node is ACTIVE and has the INBOUND capability (and accepts pallets when the shipment is palletised)", error: ErrNodeCannotReceive}
           - {rule: "the seller is ACTIVE when the plan is created and confirmed", error: ErrSellerSuspended}
           - {rule: "1 to 500 lines, one per catalogue item; every line names a catalogItemId, a valid GTIN (8, 12, 13 or 14 digits, mod-10 check digit) and qtyEaches > 0. Whether the item is live is not checked: the context consumes no CatalogItemCreated or CatalogItemDiscontinued (seller-inbound ADR 0003)", error: ErrValidation}
+          - {rule: "unitVolumeDm3, when declared, is an integer from 1 to 100000 cubic decimetres (seller-inbound ADR 0015)", error: ErrValidation}
+          - {rule: "monthly capacity gate, checked on CreateInboundPlan after the node can receive: when the node declares a monthly volume AND every line declares unitVolumeDm3, the seller's reserved dm3 for the (month, node) plus the plan's volume never exceed the node's monthly volume x the seller's tier factor; HTTP 422 inbound-capacity-exceeded. When either side is unknown the plan is allowed and records capacityEnforced false (policy MonthlyCapacityGate)", error: ErrInboundCapacityExceeded}
+          - {rule: "the destination of a NETWORK_SPLIT plan is an ACTIVE INBOUND_CROSS_DOCK; HTTP 422 network-split-destination", error: ErrNetworkSplitDestination}
+          - {rule: "the region of a NETWORK_SPLIT plan's destination holds at least one ACTIVE FULFILLMENT_CENTER that NodeInboundView has seen; HTTP 422 network-split-unavailable (a redistribution with no destination is not a recordable fact)", error: ErrNetworkSplitUnavailable}
         commands: [CreateInboundPlan, ConfirmInboundPlan, CancelInboundPlan]
         events: [InboundPlanConfirmed]
         throughput_estimate: "low-medium: one per seller replenishment"
@@ -2136,11 +2144,14 @@ contexts:
       - {name: DemandHeatView, source: "order-sourcing FulfillmentReleasedToNode and FulfillmentCancelled (the released lines per item+region over a 28-day window, the node region from node-topology events), offer-availability ListingAvailabilityChanged (declared availability per item+node); seller-inbound ADR 0012"}
       - {name: NodeInboundView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
       - {name: CatalogPackagingView, source: "offer-availability CatalogItemPackagingDeclared, CatalogItemPackLevelRetired"}
+      - {name: InboundCapacityAllocations, source: "own write-side bookkeeping (table inbound_capacity_allocations, keyed sellerId, month as a YYYY-MM calendar key, nodeId): the dm3 the seller's DRAFT and CONFIRMED plans promise to the node. CreateInboundPlan reserves, CancelInboundPlan releases, confirmation keeps the hold; a reservation lives in the calendar month of the plan's createdAt, so the month rolls over in the key. Maintained transactionally by the use cases: not an aggregate, raises no event, rebuilt by nothing. Read at GET /sellers/{sellerId}/capacity-allocations (seller-inbound ADR 0015)"}
       - {name: SellerScorecard, source: "own facts only (no consumer, no event): one row per closed shipment and one per InboundDiscrepancyRecorded or SellerComplianceViolationRecorded, written in the receipt's unit of work (seller-inbound ADR 0005)"}
     policies:
       - {name: CaseLevelAtAddCarton, rule: "CreateInboundPlan does not read CatalogPackagingView: whether a CASE_PACKED item has an active CASE level is enforced on AddCarton (ErrCaseQtyMismatchesGtin), not when the plan is created"}
       - {name: SsccIssuance, rule: "a carton added with an sscc is accepted only if valid and unique network-wide; a carton added without one gets an SSCC issued from the network's GS1 company prefix; either way a Label is returned"}
       - {name: NodeMustBeAbleToReceive, rule: "the destination node, its INBOUND capability, acceptsPallets and carton limits are read from NodeInboundView; a node that is not ACTIVE receives nothing; a node whose profile declares no inbound limits is treated as accepting cartons with limits unchecked"}
+      - {name: MonthlyCapacityGate, rule: "record-and-allow (seller-inbound ADR 0015): in CreateInboundPlan the limit is NodeInboundView's monthlyVolumeDm3 (the node's declared inbound limits, from NodeOperationalProfileDeclared) x the seller's tier factor / 10000, the factor read from this context's own scorecard tier in basis points: GOOD 10000, WATCH 8000, AT_RISK 5000 (a scorecard with no observations reads GOOD). When the limit is above 0 AND the plan's volume is above 0 AND reserved + volume exceeds the limit the plan is refused (ErrInboundCapacityExceeded). When either side is unknown, the node declared no monthly volume or any line's unit volume is undeclared, the plan is ALLOWED and capacityEnforced false is recorded on it: the gate never blocks a legacy plan and is inert until a node declares a monthly volume and a seller sends unit volumes. No sibling is called"}
+      - {name: CapacitySplitV1, rule: "at create a NETWORK_SPLIT plan computes its redistribution deterministically (seller-inbound ADR 0015): the candidates are the region's ACTIVE FULFILLMENT_CENTERs in NodeInboundView; exactly one candidate takes every line whole; when EVERY candidate declares a monthly volume and has remaining capacity (limit x tier factor - reserved above 0) they are ranked by remaining capacity descending, ties to the lowest nodeId, the 3 largest are kept and each line is split proportionally to remaining capacity (floor shares, at least 1 unit to each recipient that still has units to take, leftovers to the largest); otherwise the 3 lowest nodeIds share each line evenly (floor shares, leftovers in ascending nodeId order) and the plan records the degraded mode. The split is stored on the plan and carried on InboundPlanConfirmed (omitted for SELLER_SPLIT). It is a recorded fact only: nothing downstream executes it"}
       - {name: OwnerSegregation, rule: "every carton of a plan is owned by the plan's seller (ownerRef = sellerId); ownership travels on InboundShipmentShipped and the Vendor API and is never merged with another owner's"}
       - {name: ReceiveOnVendorReceipt, rule: "on InboundReceiptSubmitted run RecordInboundReceipt for the shipment: the shipment closes when every carton has a final status, CLOSED if nothing differs from the manifest and CLOSED_WITH_DISCREPANCY otherwise"}
       - {name: SellerStatusIsIntegration, rule: "SellerSuspended and SellerReinstated are integration events on retailnetwork.seller-inbound.events (subject and key sellerId), consumed by offer-availability to suppress and restore the seller's listings; SellerOnboarded stays analytics-only (seller-inbound ADR 0013, gap G48)"}
@@ -2152,7 +2163,8 @@ contexts:
       - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans, POST /inbound-plans/{planId}/confirmations, POST /inbound-plans/{planId}/cancellations", routes: ["POST /inbound-plans", "POST /inbound-plans/{planId}/confirmations", "POST /inbound-plans/{planId}/cancellations"], message: "CreateInboundPlan, ConfirmInboundPlan, CancelInboundPlan", relationship: OHS}
       - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans/{planId}/shipments, POST /inbound-shipments/{shipmentId}/cartons, POST /inbound-shipments/{shipmentId}/labels, POST /inbound-shipments/{shipmentId}/dispatches", routes: ["POST /inbound-plans/{planId}/shipments", "POST /inbound-shipments/{shipmentId}/cartons", "POST /inbound-shipments/{shipmentId}/labels", "POST /inbound-shipments/{shipmentId}/dispatches"], message: "CreateInboundShipment, AddCarton, LabelShipment, ShipInboundShipment", relationship: OHS}
       - {from: seller / seller portal, type: qry, channel: "REST GET /inbound-plans/{planId}, GET /inbound-shipments/{shipmentId}, GET /inbound-shipments/{shipmentId}/labels", routes: ["GET /inbound-plans/{planId}", "GET /inbound-shipments/{shipmentId}", "GET /inbound-shipments/{shipmentId}/labels"], message: "GetInboundPlan, GetInboundShipment, GetLabels", relationship: OHS}
-      - {from: "seller / seller portal, network partner managers (human)", type: qry, channel: "REST GET /sellers/{sellerId}/scorecard?window=", routes: ["GET /sellers/{sellerId}/scorecard"], message: "GetSellerScorecard (informational, seller-inbound ADR 0005)", relationship: OHS}
+      # caller inferred for the capacity read: ADR 0015 calls it the operator-facing honesty surface and names no client; it rides the scorecard's query row
+      - {from: "seller / seller portal, network partner managers (human)", type: qry, channel: "REST GET /sellers/{sellerId}/scorecard?window=, GET /sellers/{sellerId}/capacity-allocations?month=", routes: ["GET /sellers/{sellerId}/scorecard", "GET /sellers/{sellerId}/capacity-allocations"], message: "GetSellerScorecard (seller-inbound ADR 0005), GetSellerCapacityAllocations (seller-inbound ADR 0015)", relationship: OHS}
       - {from: seller / network partner manager, type: cmd, channel: "REST POST /placement-plans (compute), GET /placement-plans, GET /placement-plans/{planId}, POST /placement-plans/{planId}/acceptances", routes: ["POST /placement-plans", "GET /placement-plans", "GET /placement-plans/{planId}", "POST /placement-plans/{planId}/acceptances"], message: "ComputePlacementPlan, ListPlacementPlans, GetPlacementPlan, AcceptPlacementPlan", relationship: OHS}
       - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: InboundReceiptSubmitted, relationship: Customer/Supplier}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired", relationship: Conformist}
@@ -2163,6 +2175,7 @@ contexts:
       - "POST /sellers/{sellerId}/suspensions"
       - "POST /sellers/{sellerId}/reinstatements"
       - "GET /sellers/{sellerId}/scorecard?window="
+      - "GET /sellers/{sellerId}/capacity-allocations?month="
       - "POST /inbound-plans"
       - "GET /inbound-plans/{planId}"
       - "POST /inbound-plans/{planId}/confirmations"
@@ -2182,7 +2195,7 @@ contexts:
       - {event: PlacementPlanSuggested, entity: placementplan, data: [planId, sellerId, catalogItemId, basis, suggestions(nodeId, regionId, suggestedUnits, regionDemandUnits, nodeAvailabilityUnits), createdAt], consumers: [analytics only in v1 (ADR 0012)]}
       - {event: SellerSuspended, entity: seller, data: [sellerId, suspendedAt, reason (optional)], consumers: [offer-availability]}
       - {event: SellerReinstated, entity: seller, data: [sellerId, reinstatedAt], consumers: [offer-availability]}
-      - {event: InboundPlanConfirmed, entity: inboundplan, data: [planId, sellerId, destinationNodeId, packingOption, lines(catalogItemId, gtin, qtyEaches), confirmedAt], consumers: [analytics only]}
+      - {event: InboundPlanConfirmed, entity: inboundplan, data: [planId, sellerId, destinationNodeId, packingOption, placementOption, "lines(catalogItemId, gtin, qtyEaches, unitVolumeDm3 (optional, omitted when undeclared))", "redistribution(nodeId, lineNo, qtyEaches) (optional, NETWORK_SPLIT only)", "placementFeeBasis(basis, month, dm3, nodeIds) (optional, NETWORK_SPLIT only)", confirmedAt], consumers: [analytics only]}
       - {event: InboundShipmentLabelled, entity: inboundshipment, data: [shipmentId, planId, sellerId, nodeId, cartons(sscc, parentSscc, kind, contents(catalogItemId, gtin, qtyEaches, lot, expiry), grossWeightG, dimsMm), labelledAt], consumers: [vendor-connectivity]}
       - {event: InboundShipmentShipped, entity: inboundshipment, data: [shipmentId, planId, sellerId, nodeId, shippedAt], consumers: [vendor-connectivity, node-performance]}
       - {event: InboundShipmentReceived, entity: inboundshipment, data: [shipmentId, sellerId, nodeId, status, "cartons(sscc, status)", receivedAt, "received(catalogItemId (optional), gtin, qtyEaches)"], consumers: [vendor-connectivity, offer-availability]}
@@ -2206,9 +2219,15 @@ contexts:
           - {value: MISSING, meaning: "A manifest carton was not received."}
           - {value: UNEXPECTED, meaning: "A carton was received that the manifest does not list."}
           - {value: DAMAGED, meaning: "A carton was received damaged."}
+      - name: PlacementOption
+        fields: [InboundPlanConfirmed.placementOption, "rest:PlacementOption"]
+        about: "Who splits an inbound plan (seller-inbound ADR 0015)."
+        values:
+          - {value: SELLER_SPLIT, meaning: "The default: everything goes to the destination the seller picked."}
+          - {value: NETWORK_SPLIT, meaning: "The destination is an ACTIVE inbound cross-dock and the plan records a redistribution of its eaches across the region's fulfilment centres; nothing downstream executes it."}
       - name: ComplianceTier
         fields: ["rest:SellerScorecard.complianceTier"]
-        about: "The informational tier of a seller's compliance scorecard: the worst of three signals over the window (seller-inbound ADR 0005 A3). Nothing acts on it."
+        about: "The tier of a seller's compliance scorecard: the worst of three signals over the window (seller-inbound ADR 0005 A3). The monthly capacity gate reads it as the seller's allocation factor (seller-inbound ADR 0015); nothing else acts on it."
         values:
           - {value: GOOD, meaning: "No signal reaches WATCH, or nothing was observed in the window."}
           - {value: WATCH, meaning: "Receipt accuracy below 0.98, or at least 0.5 discrepancies per shipment, or at least one compliance violation."}
@@ -2230,6 +2249,12 @@ contexts:
       - {term: Seller, definition: "An organisation that sends its own stock to the network. Distinct from a Vendor, which operates fulfillment nodes.", code: "seller.Account"}
       - {term: "Owner / Seller of Record", definition: "Whose stock it is. On the network ownerRef equals the sellerId; stock, listings and reservations are segregated by it.", code: "seller.ID (shared.ValidOwnerRef)"}
       - {term: Inbound Plan, definition: "A seller's declaration, in eaches, of what it will send to one node and with which packing option.", code: "inboundplan.Plan"}
+      - {term: Placement Option, definition: "Who splits an inbound plan: SELLER_SPLIT (the seller picks one destination, the default) or NETWORK_SPLIT (the plan goes to an inbound cross-dock and records a redistribution across the region's fulfilment centres).", code: "inboundplan.PlacementOption"}
+      - {term: Unit Volume, definition: "The seller-declared volume of one each of a plan line, in cubic decimetres. Undeclared on any line makes the plan's volume unknown.", code: "inboundplan.Line.UnitVolumeDm3"}
+      - {term: Capacity Allocation, definition: "The cubic decimetres a seller's DRAFT and CONFIRMED plans of one calendar month promise to one node. Bookkeeping kept by the use cases, not an aggregate and not an event.", code: "capacity.Allocation"}
+      - {term: Monthly Capacity Gate, definition: "The check at plan creation that a seller's reserved volume plus the plan's volume stays within the node's declared monthly volume times the seller's tier factor. It applies only when both sides are known; otherwise the plan is allowed and recorded as not enforced.", code: "capacity.Check"}
+      - {term: Redistribution, definition: "The recorded split of a NETWORK_SPLIT plan's eaches across at most three fulfilment centres of the destination's region. A fact, executed by nothing downstream.", code: "capacity.Split, inboundplan.RedistributionLine"}
+      - {term: Placement Fee Basis, definition: "The recorded basis of a NETWORK_SPLIT plan (month, declared volume, recipient nodes) for a future settlement context. Never a charge.", code: "inboundplan.FeeBasis"}
       - {term: Inbound Shipment, definition: "One physical consignment of a plan to a node: its cartons, labels and receipt outcome.", code: "inboundshipment.Shipment"}
       - {term: Carton, definition: "One physical outer carton of a shipment, identified by an SSCC and holding the contents it declares.", code: "inboundshipment.Carton"}
       - {term: Packing Option, definition: "INDIVIDUAL (eaches packed freely) or CASE_PACKED (cartons are case packs of a declared CASE level).", code: "inboundplan.PackingOption"}
