@@ -43,7 +43,12 @@ stateDiagram-v2
 
 **Description.** What a seller intends to send to one node, in eaches, and
 how it will pack it. Value objects: `PackingOption(INDIVIDUAL|CASE_PACKED)`,
-`PlanLine{catalogItemId, gtin, qtyEaches}`.
+`PlanLine{catalogItemId, gtin, qtyEaches, unitVolumeDm3?}`. As built (service
+ADR 0015) the plan also carries `PlacementOption(SELLER_SPLIT|NETWORK_SPLIT)`,
+for `NETWORK_SPLIT` only the recorded
+`RedistributionLine{nodeId, lineNo, qtyEaches}` list and
+`PlacementFeeBasis{basis, month, dm3, nodeIds}` (a fact, never a charge), and
+`capacityEnforced`: whether the monthly capacity gate was actually applied.
 
 ```mermaid
 stateDiagram-v2
@@ -57,6 +62,10 @@ stateDiagram-v2
 | Destination node is `ACTIVE` with the `INBOUND` capability (and accepts pallets when palletised) | `ErrNodeCannotReceive` |
 | The seller is `ACTIVE` when the plan is created and confirmed | `ErrSellerSuspended` |
 | 1 to 500 lines, one per catalogue item; every line names a `catalogItemId`, a valid GTIN and `qtyEaches > 0` (whether the item is live is not checked: no `CatalogItemCreated`/`CatalogItemDiscontinued` is consumed) | `ErrValidation` |
+| `unitVolumeDm3`, when declared, is an integer from 1 to 100000 cubic decimetres | `ErrValidation` |
+| Monthly capacity gate, at `CreateInboundPlan`: when the node declares a monthly volume and every line declares `unitVolumeDm3`, the seller's reserved volume for the (month, node) plus the plan's volume never exceed the node's monthly volume times the seller's tier factor; either side unknown allows the plan and records `capacityEnforced: false` | `ErrInboundCapacityExceeded` |
+| The destination of a `NETWORK_SPLIT` plan is an `ACTIVE` `INBOUND_CROSS_DOCK` | `ErrNetworkSplitDestination` |
+| The region of a `NETWORK_SPLIT` plan's destination holds at least one `ACTIVE` `FULFILLMENT_CENTER` | `ErrNetworkSplitUnavailable` |
 
 **Commands:** `CreateInboundPlan`, `ConfirmInboundPlan`, `CancelInboundPlan`.
 **Events:** `InboundPlanConfirmed`. Cancelling raises no event.
@@ -114,4 +123,5 @@ several shipments of one plan is the relief valve (gap G50).
 | --- | --- |
 | `NodeInboundView` | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` |
 | `CatalogPackagingView` | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired` |
+| `InboundCapacityAllocations` | No event: write-side bookkeeping keyed (seller, `YYYY-MM` month, node), the cubic decimetres the seller's `DRAFT` and `CONFIRMED` plans promise to the node; `CreateInboundPlan` reserves, `CancelInboundPlan` releases; read by `GET /sellers/{sellerId}/capacity-allocations` (service ADR 0015) |
 | `SellerScorecard` | No event: this service's own facts (one row per closed shipment, one per discrepancy or violation), written with each applied receipt; read by `GET /sellers/{sellerId}/scorecard` (service ADR 0005) |

@@ -20,6 +20,9 @@ the REST contract is `apis/customer-ordering/openapi.yaml`.
 Reads are not use cases here: `GET /orders/{orderId}` (`GetOrder`),
 `GET /orders/{orderId}/tracking` (`GetTracking`, from `OrderTrackingView`) and
 `GET /orders/{orderId}/ship-to` (`GetShipTo`) read the stores directly.
+`GET /notification-policy` (`GetNotificationPolicy`) returns the current
+`NotificationPolicy` version, or the built-in version 0 (every family
+`NOBODY`, no `publishedAt`) when nothing was published.
 
 ## Triggers at a glance
 
@@ -35,6 +38,7 @@ Reads are not use cases here: `GET /orders/{orderId}` (`GetOrder`),
 | `MarkGroupLost`, `MarkGroupReturned` | `shipping-and-tracking` | Kafka consumer, `PackageLost`, `PackageReturned` | none |
 | `ConfirmGroupCancelled`, `RefuseGroupCancellation` | `order-sourcing` | Kafka consumer, `FulfillmentCancelled`, `FulfillmentCancelRefused` | none |
 | `UpdateGroupPromise` | `delivery-promise` | Kafka consumer, `PromiseRevised` | none |
+| `PublishNotificationPolicy` | Network operator | REST `PUT /notification-policy` | none (no policy event, service ADR 0017) |
 
 The pairing of consumed events with commands is this pack's reading. The
 model lists both sides but does not pair them (see the
@@ -341,3 +345,31 @@ Error responses use `application/problem+json` (RFC 9457) with `type`
   `customer-notification`.
 - **Idempotency:** inbox, plus the `revisionNo` check (Kafka keys
   `PromiseRevised` by `promiseId`, so revisions of one promise arrive in order).
+
+## PublishNotificationPolicy
+
+- **Actor / trigger:** a network operator (service ADR 0017 names an operator
+  and no client).
+- **Inbound adapter:** REST `PUT /notification-policy`, header
+  `Idempotency-Key` required (every call publishes a new version); body `rows`,
+  the whole document: seven rows of `family` and `notifier`.
+- **Main flow:**
+  1. Look up the `Idempotency-Key`; replay on a hit.
+  2. Read the current version (0 when nothing was published).
+  3. Validate the document: exactly one row per family, every family and
+     notifier known.
+  4. Store version current + 1; every version is kept. A concurrent publish
+     that took the same number is retried once on fresh state.
+  5. Answer `200` with the published document.
+- **Errors:**
+
+| Error | HTTP | Problem `type` slug |
+| --- | --- | --- |
+| `ErrValidation` | 422 | `validation-failed` |
+| `ErrConcurrentUpdate` | 409 | `concurrent-update` |
+| Idempotency-Key reused with a different request | 409 | `idempotency-key-reused` |
+
+- **Events emitted:** none. The policy only decides the `notifier` stamp of
+  later `ShopperNoticeDecided` facts; publishing version 1 is what wakes a
+  family up.
+- **Idempotency:** `Idempotency-Key`.

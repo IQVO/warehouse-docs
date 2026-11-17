@@ -176,6 +176,7 @@ Topic `retailnetwork.vendor-connectivity.events`.
 | `VendorShipmentConfirmed` | `com.retailnetwork.partner.vendor-connectivity.purchaseorder.VendorShipmentConfirmed` | `order-sourcing`, `shipping-and-tracking`, `node-performance` |
 | `SubmissionProcessed` | `com.retailnetwork.partner.vendor-connectivity.submission.SubmissionProcessed` | `node-performance` |
 | `InboundReceiptSubmitted` | `com.retailnetwork.partner.vendor-connectivity.inboundreceipt.InboundReceiptSubmitted` | `seller-inbound`, `node-performance` |
+| `VendorReturnOutcomeSubmitted` | `com.retailnetwork.partner.vendor-connectivity.returnoutcome.VendorReturnOutcomeSubmitted` | `customer-returns` |
 | `VendorSuspended` | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorSuspended` | - |
 | `VendorReinstated` | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorReinstated` | - |
 
@@ -269,10 +270,10 @@ Topic `retailnetwork.customer-returns.events`.
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
-| `ReturnAuthorized` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnAuthorized` | none on develop (vendor-connectivity ADR 0014 decides the consumer) |
-| `ReturnLabelIssued` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnLabelIssued` | none on develop (vendor-connectivity ADR 0014 decides the consumer) |
+| `ReturnAuthorized` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnAuthorized` | `vendor-connectivity` |
+| `ReturnLabelIssued` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnLabelIssued` | `vendor-connectivity` |
 | `ReturnCompleted` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCompleted` | `offer-availability` |
-| `ReturnCancelled` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCancelled` | none on develop (vendor-connectivity ADR 0014 decides the consumer) |
+| `ReturnCancelled` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCancelled` | `vendor-connectivity` |
 
 ## Reason vocabularies
 
@@ -343,7 +344,7 @@ Appears in: REST `OfferConstraint`.
 
 **`ShopperNoticeFamily`**: The family of fact a shopper notice was decided for (customer-ordering ADR 0017). One event per family occurrence, whatever the notifier.
 
-Appears in: `ShopperNoticeDecided.family`.
+Appears in: `ShopperNoticeDecided.family`, REST `NotificationPolicyRow.family`.
 
 | Value | Meaning |
 | --- | --- |
@@ -359,7 +360,7 @@ Branched on by `customer-returns` (`GROUP_SHIPPED`, `GROUP_DELIVERED`, `GROUP_LO
 
 **`ShopperNoticeNotifier`**: Who the notification policy names to deliver the notice. The network itself sends nothing.
 
-Appears in: `ShopperNoticeDecided.notifier`.
+Appears in: `ShopperNoticeDecided.notifier`, REST `NotificationPolicyRow.notifier`.
 
 | Value | Meaning |
 | --- | --- |
@@ -557,7 +558,16 @@ Appears in: `InboundShipmentReceived.cartons(sscc, status)`.
 | `UNEXPECTED` | A carton was received that the manifest does not list. |
 | `DAMAGED` | A carton was received damaged. |
 
-**`ComplianceTier`**: The informational tier of a seller's compliance scorecard: the worst of three signals over the window (seller-inbound ADR 0005 A3). Nothing acts on it.
+**`PlacementOption`**: Who splits an inbound plan (seller-inbound ADR 0015).
+
+Appears in: `InboundPlanConfirmed.placementOption`, REST `PlacementOption`.
+
+| Value | Meaning |
+| --- | --- |
+| `SELLER_SPLIT` | The default: everything goes to the destination the seller picked. |
+| `NETWORK_SPLIT` | The destination is an ACTIVE inbound cross-dock and the plan records a redistribution of its eaches across the region's fulfilment centres; nothing downstream executes it. |
+
+**`ComplianceTier`**: The tier of a seller's compliance scorecard: the worst of three signals over the window (seller-inbound ADR 0005 A3). The monthly capacity gate reads it as the seller's allocation factor (seller-inbound ADR 0015); nothing else acts on it.
 
 Appears in: REST `SellerScorecard.complianceTier`.
 

@@ -414,3 +414,14 @@ Reads are not use cases. `PollPurchaseOrders`, `GetPurchaseOrder`,
 - **Flow:** validate the body (carton statuses, GTIN and SSCC shapes, quantities as eaches), create a `Submission` of kind `INBOUND_RECEIPT` in `PROCESSING`, return `202` with the `transactionId`. `InboundReceiptSubmitted` is appended to the outbox in the same unit of work, so a `202` always has its event; `ProcessSubmission` later reports `SubmissionProcessed` (service ADR 0005).
 - **Errors:** `ErrNodeNotOwnedByVendor` (404), a suspended vendor (409 `vendor-suspended`), an unknown vendor, shipment or node (404 `not-found`, so a vendor cannot probe another vendor's shipments; the design named it `ErrUnknownInboundShipment`), body malformed (422 `validation-failed`).
 - **Reads:** `GET /vendor/inbound-shipments?vendorId=&nodeId=&createdAfter=&nextCursor=&limit=` and `GET /vendor/inbound-shipments/{shipmentId}` read `InboundShipmentView` directly. They return the shipment as a tree (shipment, optional pallet, carton, item) with `sscc`, `gtin`, `qtyEaches`, `lot`, `expiry` and `sellerId` (the seller of record, which the vendor keeps as its `ownerRef`).
+
+## SubmitReturnOutcome
+
+> **Built, [ADR 0012](/network/adr/0012-customer-returns-is-a-bounded-context)** as realized by `vendor-connectivity` ADR 0014 (return advices and return outcomes).
+
+- **Actor / trigger:** a vendor's returns-centre system. REST `POST /vendor/return-outcomes` with an `Idempotency-Key`. The fleet's `network-fulfillment` has no client for it on its `develop`.
+- **Preconditions:** the authorization is in `ReturnAdviceView` and still `AUTHORIZED`; `nodeId` is the advice's node and belongs to the vendor.
+- **Flow:** validate the body (`vendorId`, `authorizationId`, `nodeId`, `receivedAt`, 1 to 50 lines of `catalogItemId`, optional `ownerRef`, `qtyRestockable`, `qtyUnsellable`), create a `Submission` of kind `RETURN_OUTCOME`, move the advice to `OUTCOME_RECORDED` and append `VendorReturnOutcomeSubmitted` to the outbox in the same unit of work, return `202` with the `transactionId`. Lines the advice never authorized are reported, never refused; `customer-returns` records them as unexpected.
+- **Errors:** a suspended vendor (409 `vendor-suspended`), an unknown vendor, authorization or node (404 `not-found`), `ErrNodeNotOwnedByVendor` (404), an advice that is not `AUTHORIZED` (409 `illegal-transition`), a `nodeId` that is not the advice's node or a malformed body (422 `validation-failed`).
+- **Events:** `VendorReturnOutcomeSubmitted` (subject and key `authorizationId`), consumed by `customer-returns`.
+- **Reads:** `GET /vendor/return-advices?vendorId=&readyAfter=&nodeId=&cursor=&limit=` (`PollReturnAdvices`) and `GET /vendor/return-advices/{authorizationId}` (`GetReturnAdvice`) read `ReturnAdviceView` directly. The poll answers the `AUTHORIZED` advices of the vendor's nodes, oldest first; the single read also answers a closed advice (`CANCELLED` or `OUTCOME_RECORDED`).

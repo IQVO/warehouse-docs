@@ -39,15 +39,14 @@ number or free text.
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
-| `ReturnAuthorized` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnAuthorized` | none on `develop` |
-| `ReturnLabelIssued` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnLabelIssued` | none on `develop` |
+| `ReturnAuthorized` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnAuthorized` | `vendor-connectivity` |
+| `ReturnLabelIssued` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnLabelIssued` | `vendor-connectivity` |
 | `ReturnCompleted` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCompleted` | `offer-availability` |
-| `ReturnCancelled` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCancelled` | none on `develop` |
+| `ReturnCancelled` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCancelled` | `vendor-connectivity` |
 
-`vendor-connectivity` ADR 0014 decides that it consumes `ReturnAuthorized`,
-`ReturnLabelIssued` and `ReturnCancelled` into its return advices. That
-consumer is not in its `develop` contract, so the model names no consumer
-for the three.
+`vendor-connectivity` consumes `ReturnAuthorized`, `ReturnLabelIssued` and
+`ReturnCancelled` into its return advices (`ReturnAdviceView`, its ADR 0014);
+the consumer is in its `develop` contract.
 
 ### Payloads
 
@@ -109,6 +108,7 @@ CloudEvents `id` (`processed_events` inbox).
 | `node-topology` | `com.retailnetwork.logistics.node-topology.servicearea.ServiceAreaAssigned` | Stores which region a postal prefix belongs to; the highest `assignmentVersion` wins. |
 | `order-sourcing` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | Stores the per-item `ownerRef` of the release on the group's origin row. |
 | `order-sourcing` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | Stores the fulfilling node: the `ORIGIN_NODE` fallback. |
+| `vendor-connectivity` | `com.retailnetwork.partner.vendor-connectivity.returnoutcome.VendorReturnOutcomeSubmitted` | Completes the first open authorization the graded outcome fits (`RECEIVED`, `ReturnCompleted` with the authorized lines only); every outcome is recorded on `ReturnOutcomeFacts`, lines beyond the authorization flagged unexpected. |
 
 As built (service ADR 0003): one consumer per producer topic, each under a
 mandatory group variable (`ORDER_CONSUMER_GROUP`, `TOPOLOGY_CONSUMER_GROUP`,
@@ -117,7 +117,6 @@ retried with capped backoff; a payload that can never apply is dead-lettered
 to `<topic>.dlq`. A type the context does not act on is committed past.
 
 The fourth consumer reads `retailnetwork.vendor-connectivity.events` for the
-vendor's graded outcome, `VendorReturnOutcomeSubmitted`. It is built here
-and is not in the table: `vendor-connectivity`'s `develop` contract does not
-publish that event yet (its ADR 0014 decides it), so the model has no
-`consumes` row for it and this page prints no type for it.
+vendor's graded outcome, `VendorReturnOutcomeSubmitted`, the last row of the
+table: `vendor-connectivity` publishes it since its ADR 0014 shipped, and the
+model has a `consumes` row for it.

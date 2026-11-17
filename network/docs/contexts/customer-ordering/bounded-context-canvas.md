@@ -152,6 +152,8 @@ To turn a shopper's cart into a customer order. The context:
 | Shopper / storefront | `GetOrder` | Query | REST `GET /orders/{orderId}` | Open Host |
 | Shopper / storefront | `GetTracking` | Query | REST `GET /orders/{orderId}/tracking` | Open Host |
 | `shipping-and-tracking` | `GetShipTo` | Query | REST `GET /orders/{orderId}/ship-to` (in-org, restricted) | Customer/Supplier (we are the Supplier) |
+| Network operator | `PublishNotificationPolicy` | Command | REST `PUT /notification-policy` (the whole document; every call publishes a new version) | UI |
+| Network operator | `GetNotificationPolicy` | Query | REST `GET /notification-policy` | UI |
 | `order-sourcing` | `FulfillmentLocked` | Event | Kafka `retailnetwork.order-sourcing.events`, `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | Conformist |
 | `order-sourcing` | `FulfillmentShipped` | Event | Kafka `retailnetwork.order-sourcing.events`, `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | Conformist |
 | `order-sourcing` | `FulfillmentUnsourceable` | Event | Kafka `retailnetwork.order-sourcing.events`, `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentUnsourceable` | Conformist |

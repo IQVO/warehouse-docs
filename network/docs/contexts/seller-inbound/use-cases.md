@@ -18,6 +18,11 @@ One application service per command in
 Reads (`GetInboundPlan`, `GetInboundShipment`, `GetLabels`) go straight to the repository;
 `GetSellerScorecard` (`GET /sellers/{sellerId}/scorecard`, service ADR 0005) computes an
 informational scorecard from this service's own facts and changes nothing.
+`GetSellerCapacityAllocations`
+(`GET /sellers/{sellerId}/capacity-allocations?month=`, service ADR 0015) reads
+the seller's inbound capacity reservations of one calendar month (`month` is a
+`YYYY-MM` key and defaults to the current month), ordered by `nodeId`; it
+publishes no event, an unknown seller answers 404 and a malformed month 422.
 
 ## Conventions for every use case
 
@@ -43,6 +48,9 @@ informational scorecard from this service's own facts and changes nothing.
 | `ErrInvalidSscc` | 422 | `invalid-sscc` |
 | `ErrCartonContentsMismatchPlan` | 422 | `carton-contents-mismatch-plan` |
 | `ErrShipmentNotLabelled` | 409 | `shipment-not-labelled` |
+| `ErrInboundCapacityExceeded` | 422 | `inbound-capacity-exceeded` |
+| `ErrNetworkSplitDestination` | 422 | `network-split-destination` |
+| `ErrNetworkSplitUnavailable` | 422 | `network-split-unavailable` |
 | `ErrInvalidWindow` (scorecard read) | 400 | `invalid-window` |
 | `ErrValidation`, `ErrNotFound`, `ErrIllegalTransition`, `ErrConcurrentUpdate` | 422, 404, 409, 409 | the shared slugs from `conventions.errors` |
 
@@ -77,18 +85,31 @@ informational scorecard from this service's own facts and changes nothing.
 - **Flow:** validate each line (1 to 500 lines, one per catalogue item; whether
   the item is live is not checked, since no `CatalogItemCreated` or
   `CatalogItemDiscontinued` is consumed; GTIN of 8, 12, 13 or 14 digits with a valid check digit, normalised to
-  14 digits, `qtyEaches > 0`). Save `DRAFT`. The plan is not checked against
+  14 digits, `qtyEaches > 0`, an optional `unitVolumeDm3` of 1 to 100000). Run
+  the monthly capacity gate (service ADR 0015): when the node declares
+  `monthlyVolumeDm3` and every line declares `unitVolumeDm3`, the seller's
+  reserved volume for the (month, node) plus the plan's volume must stay within
+  the node's monthly volume times the seller's tier factor (`GOOD` 100%,
+  `WATCH` 80%, `AT_RISK` 50%); when either side is unknown the plan is allowed
+  and records `capacityEnforced: false`. A `NETWORK_SPLIT` plan must
+  destination an `ACTIVE` `INBOUND_CROSS_DOCK` whose region holds at least one
+  `ACTIVE` `FULFILLMENT_CENTER`, and records its redistribution
+  (capacity-split-v1) and fee basis. Reserve the plan's volume and save
+  `DRAFT`. The plan is not checked against
   `CatalogPackagingView`: whether a `CASE_PACKED` item has an active CASE
   level is enforced on `AddCarton`, not here (service use-cases page,
   `CreateInboundPlan`).
-- **Errors:** `ErrSellerSuspended`, `ErrNodeCannotReceive`, `ErrValidation`.
+- **Errors:** `ErrSellerSuspended`, `ErrNodeCannotReceive`, `ErrValidation`,
+  `ErrInboundCapacityExceeded`, `ErrNetworkSplitDestination`,
+  `ErrNetworkSplitUnavailable`.
 - **Events:** none (`DRAFT` is private to the seller).
 
 ## ConfirmInboundPlan / CancelInboundPlan
 
 - **REST:** `POST /inbound-plans/{planId}/confirmations` and
   `POST /inbound-plans/{planId}/cancellations`.
-- **Flow:** `DRAFT → CONFIRMED` re-checks seller and node; `DRAFT → CANCELLED`.
+- **Flow:** `DRAFT → CONFIRMED` re-checks seller and node and keeps the
+  capacity reservation; `DRAFT → CANCELLED` releases it (service ADR 0015).
   `CONFIRMED` and `CANCELLED` are terminal: a second confirm or cancel is
   `ErrIllegalTransition` (service ADR 0002 A3).
 - **Errors:** `ErrSellerSuspended`, `ErrNodeCannotReceive`, `ErrIllegalTransition`.

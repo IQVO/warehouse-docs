@@ -25,6 +25,7 @@ HTTP adapter loads the journey through the repository and returns it.
 | Use case | Actor / trigger | Inbound adapter (proposed) |
 | --- | --- | --- |
 | `IssueLabel` | `vendor-connectivity` | REST `POST /labels` |
+| `IssueReturnLabel` | `customer-returns` | REST `POST /return-labels` (in-org, service ADR 0017) |
 | `VoidLabel` | Not named in the model | REST `POST /labels/{labelRef}/voids` |
 | `StartJourney` | Inside `IssueLabel` (no trigger named in the model) | none |
 | `RecordScan` | Five consumed event types; an unnamed REST caller | Kafka consumers; REST `POST /journeys/{trackingNumber}/scans` |
@@ -83,6 +84,38 @@ not found 404, stale 409. Problems are `application/problem+json`
 - **Idempotency:** the `Idempotency-Key` replays the first response; a new
   key for the same `(poNumber, packageNo)` hits the unique constraint and
   answers `409 label-already-issued`.
+
+## IssueReturnLabel
+
+- **Actor / trigger:** `customer-returns`, inside a shopper's label request
+  for a return authorization (service ADR 0017). The reverse twin of
+  `IssueLabel`.
+- **Inbound adapter:** REST `POST /return-labels` (in-org), `Idempotency-Key`
+  required; body `returnAuthorizationId`, `orderId`, `packageNo`,
+  `destinationPostalPrefix` (the return destination's prefix, which only the
+  caller knows).
+- **Main flow:**
+  1. Read the ship-to of `orderId` from `customer-ordering` (`GetShipTo`)
+     before the transaction opens.
+  2. Derive the `stopKey` exactly like the outbound label of the same order
+     (same secret over the same normalized address), so a return pickup stop
+     groups with the outbound delivery stop.
+  3. Save an `ISSUED` label with purpose `RETURN` and the
+     `returnAuthorizationId`, tier `STANDARD`, carrier `RN-GROUND`. No
+     package journey is started and no ship-to snapshot is sealed.
+  4. Answer `201` with a `ReturnLabel` (no `poNumber`, no `assignmentId`).
+- **Errors:**
+
+| Error | HTTP | Problem `type` slug |
+| --- | --- | --- |
+| `ErrLabelAlreadyIssued` (a label already covers this `returnAuthorizationId` and `packageNo`) | 409 | `label-already-issued` |
+| `ErrTrackingNumberTaken` | 409 | `tracking-number-taken` |
+| `ErrValidation` (a malformed request, or an order unknown to `customer-ordering`) | 422 | `validation-failed` |
+| `ErrShipToUnavailable` (no ship-to in time; no label is stored) | 503 | `ship-to-unavailable` |
+
+- **Events emitted:** `LabelIssued` with the optional `purpose` (`RETURN`) and
+  `returnAuthorizationId`.
+- **Idempotency:** `Idempotency-Key`; a replay returns the first response.
 
 ## VoidLabel
 

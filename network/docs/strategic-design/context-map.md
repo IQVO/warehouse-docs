@@ -150,7 +150,7 @@ Derived from: same sections as above.
 
 ## Returns view: the authorization, the facts it reads and the restock
 
-`customer-returns` is the twelfth context ([ADR 0012](/network/adr/0012-customer-returns-is-a-bounded-context)). Its reverse-label call to `shipping-and-tracking` and the vendor seam through `vendor-connectivity` are built on its side only: those services' `develop` contracts do not carry them yet, so they are not edges of this map.
+`customer-returns` is the twelfth context ([ADR 0012](/network/adr/0012-customer-returns-is-a-bounded-context)). Its reverse-label call to `shipping-and-tracking` (`POST /return-labels`) and the vendor seam through `vendor-connectivity` (return advices in, the graded outcome back) are built on both sides and are edges of this map.
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 22, "rankSpacing": 56, "padding": 6}}}%%
@@ -165,7 +165,7 @@ flowchart TB
     NT["node-topology"]:::sup
     OA["offer-availability"]:::sup
     NT ==>|"CF 4e"| OA
-    NT ==>|"? + CF 11e"| OS
+    NT ==>|"CF 11e"| OS
     NT ==>|"CF 5e"| CR
     OA ==>|"CF 5e"| OS
     CO ==>|"C/S 2e"| OS
@@ -195,7 +195,7 @@ flowchart TB
     OS["order-sourcing"]:::core
     NT ==>|"CF 4e"| OA
     NT ==>|"CF 9e"| DP
-    NT ==>|"? + CF 11e"| OS
+    NT ==>|"CF 11e"| OS
     NT ==>|"CF 7e"| LH
     NT ==>|"CF 2e"| LM
     NT ==>|"CF 2e"| NP
@@ -226,6 +226,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `customer-ordering` | `order-sourcing` | C/S | `CustomerOrderPlaced`, `CustomerOrderCancelled` | - |
 | `customer-ordering` | `shipping-and-tracking` | C/S | - | qry GetShipTo (`REST GET /orders/{orderId}/ship-to`) |
 | `customer-returns` | `offer-availability` | CF | `ReturnCompleted` | - |
+| `customer-returns` | `vendor-connectivity` | CF | `ReturnAuthorized`, `ReturnLabelIssued`, `ReturnCancelled` | - |
 | `delivery-promise` | `customer-ordering` | ? + C/S | `PromiseAtRisk`, `PromiseRevised`, `PromiseKept`, `PromiseBroken`, `PromiseUnkeepable` | qry QuoteDeliveryOffers (`REST POST /delivery-quotes`); cmd MakePromise, ConfirmPromise, CancelPromise (`REST POST /promises, POST /promises/{promiseId}/confirmations, POST /promises/{promiseId}/cancellations`) |
 | `delivery-promise` | `node-performance` | CF | `PromiseKept`, `PromiseBroken` | - |
 | `delivery-promise` | `order-sourcing` | C/S | `PromiseRevised`, `PromiseBookExhausted` | - |
@@ -245,7 +246,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `node-topology` | `linehaul-transportation` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneClosed` | - |
 | `node-topology` | `node-performance` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared` | - |
 | `node-topology` | `offer-availability` | CF | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | - |
-| `node-topology` | `order-sourcing` | ? + CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneCostDeclared`, `LaneEmissionDeclared`, `LaneClosed`, `ServiceAreaAssigned`, `RegionDefined` | - |
+| `node-topology` | `order-sourcing` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneCostDeclared`, `LaneEmissionDeclared`, `LaneClosed`, `ServiceAreaAssigned`, `RegionDefined` | - |
 | `node-topology` | `seller-inbound` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | - |
 | `node-topology` | `shipping-and-tracking` | CF | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `ServiceAreaAssigned` | - |
 | `node-topology` | `vendor-connectivity` | ? + C/S + CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | cmd RegisterNode, DeclareOperationalProfile (`REST POST /nodes, PUT /nodes/{nodeId}/operational-profile`) |
@@ -265,12 +266,14 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `seller-inbound` | `offer-availability` | CF | `SellerSuspended`, `SellerReinstated`, `InboundShipmentReceived` | - |
 | `seller-inbound` | `vendor-connectivity` | C/S | `InboundShipmentLabelled`, `InboundShipmentShipped`, `InboundShipmentReceived` | - |
 | `shipping-and-tracking` | `customer-ordering` | ? + CF | `LabelIssued`, `LabelVoided`, `PackageScanned`, `PackageDelivered`, `PackageExceptionRaised`, `PackageReturned`, `PackageLost`, `PackageEtaWindowAssigned`, `PackageDeliveryPointFlagged` | - |
+| `shipping-and-tracking` | `customer-returns` | C/S | - | cmd IssueReturnLabel (`REST POST /return-labels`) |
 | `shipping-and-tracking` | `delivery-promise` | ? + CF | `PackageDelivered`, `PackageExceptionRaised`, `PackageReturned`, `PackageLost`, `PackageHandedToCarrier`, `PackageReadyForCollection` | - |
 | `shipping-and-tracking` | `last-mile-delivery` | ? | `LabelIssued` | - |
 | `shipping-and-tracking` | `linehaul-transportation` | ? + CF | `LabelIssued`, `LabelVoided` | - |
 | `shipping-and-tracking` | `node-performance` | CF | `PackageHandedOver` | - |
 | `shipping-and-tracking` | `order-sourcing` | CF | `PackageDelivered` | - |
 | `shipping-and-tracking` | `vendor-connectivity` | C/S | - | cmd IssueLabel (`REST POST /labels`) |
+| `vendor-connectivity` | `customer-returns` | C/S | `VendorReturnOutcomeSubmitted` | - |
 | `vendor-connectivity` | `node-performance` | CF | `VendorOnboarded`, `PurchaseOrderIssued`, `PurchaseOrderAccepted`, `PurchaseOrderRejected`, `PurchaseOrderExpired`, `VendorShipmentConfirmed`, `SubmissionProcessed`, `InboundReceiptSubmitted` | - |
 | `vendor-connectivity` | `order-sourcing` | C/S | `PurchaseOrderAccepted`, `PurchaseOrderRejected`, `PurchaseOrderExpired`, `VendorShipmentConfirmed` | - |
 | `vendor-connectivity` | `seller-inbound` | C/S | `InboundReceiptSubmitted` | - |

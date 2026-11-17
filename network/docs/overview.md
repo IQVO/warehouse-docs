@@ -40,10 +40,10 @@ analytics read side: `shipping-and-tracking`, `last-mile-delivery`,
 `delivery-promise` and `order-sourcing` each run a projector over their OWN
 topics into a separate analytical database and a read-only reports binary
 (`/reports/...` on `:8092`). The other eight have none, and there are no
-report screens yet. Two seams of `customer-returns` are built on its side only:
+report screens yet. The two seams of `customer-returns` are built on both sides:
 the reverse-label route of `shipping-and-tracking` and the return advices and
-outcomes of `vendor-connectivity` are decided in those services' ADRs but are
-not in their `develop` contracts, so the model does not draw them (see the
+outcomes of `vendor-connectivity` are in those services' `develop` contracts,
+and the model draws them (see the
 [context](/network/contexts/customer-returns)). The model is derived from public fulfillment-network research and the fleet's repositories. The canonical model is
 [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml);
 every page is derived from it, and a CI gate fails the build when a page names

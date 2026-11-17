@@ -2,7 +2,7 @@
 id: aggregate-design-canvas
 title: Aggregate Design Canvas
 sidebar_label: Aggregate Design Canvas
-description: The ddd-crew Aggregate Design Canvas for Customer Ordering's two aggregates, CustomerOrder and Shopper, and its one read model.
+description: The ddd-crew Aggregate Design Canvas for Customer Ordering's three aggregates, CustomerOrder, Shopper and NotificationPolicy, and its one read model.
 ---
 
 # Aggregate Design Canvas
@@ -12,9 +12,10 @@ Derived from [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs
 :::
 
 Following the ddd-crew [Aggregate Design Canvas v1.1](https://github.com/ddd-crew/aggregate-design-canvas).
-The model has two aggregate roots in this context, **CustomerOrder** and
-**Shopper**, and one read model, **OrderTrackingView**. Proposed Go
-packages: `internal/domain/order` and `internal/domain/shopper`.
+The model has three aggregate roots in this context, **CustomerOrder**,
+**Shopper** and **NotificationPolicy**, and one read model,
+**OrderTrackingView**. Proposed Go packages: `internal/domain/order` and
+`internal/domain/shopper`; the policy lives in `internal/domain/notice`.
 
 ## CustomerOrder
 
@@ -263,6 +264,57 @@ None (`events: []`). No other context needs to know a shopper exists:
 ### 9. Size
 
 *Estimate.* The model says "small": one row, plus its saved addresses.
+
+## NotificationPolicy
+
+### 1. Name
+
+`NotificationPolicy` (`notice.Policy`), identified by its `version`: a single
+document with one current version.
+
+### 2. Description
+
+The operator's versioned decision of who notifies the shopper for each family
+of fact (service ADR 0017): seven rows of `family` and `notifier`. Version 0
+is the built-in default, every family `NOBODY` and no `publishedAt`; a
+published version is immutable and every version is kept. It decides only the
+`notifier` stamp of `ShopperNoticeDecided`; the network itself sends nothing.
+
+### 3. State Transitions
+
+One state, `PUBLISHED`, and no transition: every publish creates the next
+version, and the current policy is the highest one.
+
+### 4. Enforced Invariants
+
+| Invariant | Enforced by |
+| --- | --- |
+| A publish is the whole document: exactly seven rows, one per family, each family exactly once, every family and notifier known | `PublishNotificationPolicy` → `ErrValidation` (422 `validation-failed`) |
+| A publish creates version current + 1; a concurrent publish that took the same number is retried once, then refused | `PublishNotificationPolicy` → `ErrConcurrentUpdate` (409 `concurrent-update`) |
+| The version never passes 2147483647 | `PublishNotificationPolicy` → `ErrVersionNotNext` (the specification names no problem type for it) |
+
+### 5. Corrective Policies
+
+`NotificationPolicyPublication`: a read with nothing published answers the
+version 0 defaults; the posture is silence until version 1 is published.
+
+### 6. Handled Commands
+
+| Command | Trigger | Transition |
+| --- | --- | --- |
+| `PublishNotificationPolicy` | REST `PUT /notification-policy` (network operator) | none; version current + 1 is stored |
+
+### 7. Created Events
+
+None (`events: []`): no policy event is raised when a version is published.
+
+### 8. Throughput
+
+*Estimate.* The model says "rare".
+
+### 9. Size
+
+*Estimate.* The model says one row per published version.
 
 ## Read models
 

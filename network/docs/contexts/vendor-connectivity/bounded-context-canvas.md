@@ -162,6 +162,9 @@ asynchronous transaction a vendor reconciles.
 | network-fulfillment | GetTransaction | Query | Vendor API `GET /vendor/transactions/{transactionId}` | OHS + PL |
 | network-fulfillment | GetNode | Query | Vendor API `GET /vendor/nodes/{nodeId}` | OHS + PL |
 | network-fulfillment | GetScorecard | Query | Vendor API `GET /vendor/nodes/{nodeId}/scorecard` | OHS + PL |
+| A vendor's returns-centre system (the fleet has no client for these on its `develop`) | PollReturnAdvices, GetReturnAdvice | Query | Vendor API `GET /vendor/return-advices`, `GET /vendor/return-advices/{authorizationId}` (service ADR 0014) | OHS + PL |
+| A vendor's returns-centre system | SubmitReturnOutcome | Command | Vendor API `POST /vendor/return-outcomes` (service ADR 0014) | OHS + PL |
+| customer-returns | ReturnAuthorized, ReturnLabelIssued, ReturnCancelled | Event | Kafka `retailnetwork.customer-returns.events` (into `ReturnAdviceView`) | Conformist |
 | Network partner managers (human) | OnboardVendor | Command | REST `POST /vendors` | UI |
 | order-sourcing | FulfillmentReleasedToNode | Event | Kafka `retailnetwork.order-sourcing.events`, `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | Customer/Supplier |
 | order-sourcing | FulfillmentReleaseWithdrawn | Event | Kafka `retailnetwork.order-sourcing.events`, `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleaseWithdrawn` | Customer/Supplier |

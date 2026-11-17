@@ -54,6 +54,7 @@ is not modelled (a `LABELLED` journey has no exit; see the
 | Invariant | Enforced by |
 | --- | --- |
 | One label per `(poNumber, packageNo)` | `ErrLabelAlreadyIssued` |
+| One reverse label per `(returnAuthorizationId, packageNo)` (service ADR 0017) | `ErrLabelAlreadyIssued` |
 | `trackingNumber` is unique | `ErrTrackingNumberTaken` |
 | The ship-to address is never published (business decision, no `Err...` in the model) | By construction: no event `data`, response schema or read model of this context has an address field |
 
@@ -73,6 +74,7 @@ is not modelled (a `LABELLED` journey has no exit; see the
 | Command | Issued by | Inbound adapter (proposed) |
 | --- | --- | --- |
 | `IssueLabel` | `vendor-connectivity`, inside a vendor's label request | REST `POST /labels` (in-org) |
+| `IssueReturnLabel` | `customer-returns`, inside a shopper's return-label request (service ADR 0017) | REST `POST /return-labels` (in-org) |
 | `VoidLabel` | Not named in the model | REST `POST /labels/{labelRef}/voids` |
 
 ### 7. Created Events

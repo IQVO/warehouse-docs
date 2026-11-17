@@ -192,7 +192,7 @@ contexts:
           - [SUSPENDED, RETIRED, RetireNode]
         entities: []
         value_objects:
-          - "OperationalProfile{profileRevision, timezone, operatingHoursByDay, holidays[], handlingTime, cutoffs[CutoffSlot{localTime HH:mm, days[] (default every operating day), maxOrders?}], throughputCap{value int>0, timeUnit HOUR|DAY, unit=ORDER}, sortDwellMinutes (sort centres and air hubs only), inbound{maxCartonWeightG, maxCartonDimsMm{l,w,h}, acceptsPallets, requiresSscc} (optional; nodes with the INBOUND capability only), declaredBy(VENDOR|NETWORK_OPS), declaredAt}; operatingHoursByDay{monday..sunday: {start HH:mm, end HH:mm}} (a missing day is closed); holidays[] are ISO dates (closed all day)"
+          - "OperationalProfile{profileRevision, timezone, operatingHoursByDay, holidays[], handlingTime, cutoffs[CutoffSlot{localTime HH:mm, days[] (default every operating day), maxOrders?}], throughputCap{value int>0, timeUnit HOUR|DAY, unit=ORDER}, sortDwellMinutes (sort centres and air hubs only), inbound{maxCartonWeightG, maxCartonDimsMm{l,w,h}, acceptsPallets, requiresSscc, monthlyVolumeDm3 (optional int 1..2147483647: the inbound volume the node accepts per calendar month, in cubic decimetres; absent is not declared; node-topology ADR 0019)} (optional; nodes with the INBOUND capability only), declaredBy(VENDOR|NETWORK_OPS), declaredAt}; operatingHoursByDay{monday..sunday: {start HH:mm, end HH:mm}} (a missing day is closed); holidays[] are ISO dates (closed all day)"
           - NodeCapabilities{outbound, inbound, returns, sort, lastMile, air, collection}
           - GeoLocation{postalCode, countryCode, lat, lon}
           - VendorRef{vendorId, vendorNodeCode}
@@ -217,25 +217,30 @@ contexts:
         size_estimate: "one row + one profile row per revision; ~10^3 nodes"
       - name: Lane
         root_id: laneId
-        description: A directed, mode-specific connection between two nodes with a nominal transit time and a planner-declared carbon emission per package-unit. Its scheduled departures belong to linehaul-transportation.
+        description: A directed, mode-specific connection between two nodes with a nominal transit time, a planner-declared cost per package-unit and a planner-declared carbon emission per package-unit. Its scheduled departures belong to linehaul-transportation.
         states: [OPEN, CLOSED]
         transitions:
           - [OPEN, CLOSED, CloseLane]
           # as built (node-topology ADR 0018): a declaration changes no state, bumps the lane version and is valid on an OPEN lane only
           - [OPEN, OPEN, DeclareLaneEmission]
+          # as built (node-topology ADR 0014): same shape, the cost declaration
+          - [OPEN, OPEN, DeclareLaneCost]
         value_objects:
           - "NominalTransit{minutes}"
           - "LaneMode(GROUND|AIR)"
+          - "CostPerUnitCents (int64 integer cents, 0 to 10000000, default 0): the planner's declared marginal cost of moving ONE package-unit across the lane on one departure; no currency field (single-currency study). Published and read on the REST lane as costPerUnitCents. 0 is a legal declaration; a lane never declared on also reads 0 but publishes nothing (node-topology ADR 0014)"
           - "EmissionPerUnitG (int64 grams of CO2-equivalent, 0 to 10000000, default 0): the planner's declared carbon emission of moving ONE package-unit across the lane on one departure; no unit field. Published as gCo2ePerUnit, read on the REST lane as emissionPerUnitG. 0 is a legal declaration; a lane never declared on also reads 0 but publishes nothing (node-topology ADR 0018)"
         invariants:
           - {rule: "origin and destination differ", error: ErrLaneLoop}
           - {rule: "(origin type, destination type) is an allowed pair", error: ErrLaneTypePairNotAllowed}
           - {rule: "both ends ACTIVE when opening", error: ErrLaneEndpointNotActive}
           - {rule: "at most one OPEN lane per (origin, destination, mode)", error: ErrDuplicateLane}
+          - {rule: "a declared cost is an integer from 0 to 10000000 cents; HTTP 422 validation-failed outside the range (node-topology ADR 0014)", error: ErrValidation}
+          - {rule: "a cost is declared on an OPEN lane only; a CLOSED lane refuses the declaration (HTTP 409 illegal-transition)", error: ErrIllegalTransition}
           - {rule: "a declared emission is an integer from 0 to 10000000 grams of CO2-equivalent; HTTP 422 validation-failed outside the range (node-topology ADR 0018)", error: ErrValidation}
           - {rule: "an emission is declared on an OPEN lane only; a CLOSED lane refuses the declaration (HTTP 409 illegal-transition)", error: ErrIllegalTransition}
-        commands: [OpenLane, CloseLane, DeclareLaneEmission]
-        events: [LaneOpened, LaneClosed, LaneEmissionDeclared]
+        commands: [OpenLane, CloseLane, DeclareLaneCost, DeclareLaneEmission]
+        events: [LaneOpened, LaneClosed, LaneCostDeclared, LaneEmissionDeclared]
         throughput_estimate: "low"
         size_estimate: "~10^4 lanes"
       - name: ServiceArea
@@ -274,12 +279,14 @@ contexts:
       - {name: DefaultCapabilitiesByType, rule: "node capabilities are derived from node_types, never typed by hand"}
       - {name: SuspendedEndpointsUnusable, rule: "suspending or retiring a node closes nothing: its OPEN lanes and ASSIGNED service areas stay as they are, and consumers treat them as unusable while the node is not ACTIVE (they react to NodeSuspended and NodeRetired)"}
       - {name: NoDefaultLaneNoPackagesPerOrder, rule: "node-topology declares no default outbound lane and no packagesPerOrder: neither is a field of Node, Lane or OperationalProfile. linehaul-transportation derives the pickup's lane itself (policy DefaultOutboundLane) and keeps its own packagesPerOrder setting (policy PickupCapacity); delivery-promise reads packagesPerOrder from its PromisePolicy"}
+      - {name: CostIsDeclaredNotMeasured, rule: "a lane cost is a planner declaration and a fact: every DeclareLaneCost (REST POST /lanes/{laneId}/cost-declarations, Idempotency-Key required, 201 returning the lane) supersedes the previous value, bumps the lane version and publishes LaneCostDeclared (subject and key the laneId); nothing re-derives it from invoices or measurements, and it is neither a quote nor an invoice. An undeclared lane reads 0 and publishes nothing, so a consumer tells a declared zero from no declaration only by whether an event arrived: an undeclared lane contributes 0 to a money sum and leaves the consumer's estimate incomplete, and what incomplete means is the consumer's decision. One number per lane is one number per mode; there is no currency field (node-topology ADR 0014)"}
       - {name: EmissionIsDeclaredNotMeasured, rule: "a lane emission is a planner declaration and a fact: every DeclareLaneEmission supersedes the previous value and publishes LaneEmissionDeclared, nothing re-derives it from fuel, energy or distance, and no measurement replaces it. An undeclared lane reads 0 and publishes nothing, so a consumer tells a declared zero from no declaration only by whether an event arrived; what an undeclared lane means for an estimate is the consumer's decision (node-topology ADR 0018)"}
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /nodes (in-org)", routes: ["POST /nodes"], message: "RegisterNode (vendor node)", relationship: Customer/Supplier}
       - {from: vendor-connectivity, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile (in-org)", routes: ["PUT /nodes/{nodeId}/operational-profile"], message: "DeclareOperationalProfile", relationship: Customer/Supplier}
       - {from: network-ops planner, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile", routes: ["PUT /nodes/{nodeId}/operational-profile"], message: "DeclareOperationalProfile (declaredBy NETWORK_OPS)", relationship: UI}
       - {from: network-ops planner, type: cmd, channel: "REST POST /nodes, POST /nodes/{nodeId}/activations, POST /nodes/{nodeId}/suspensions, POST /nodes/{nodeId}/retirements, POST /lanes, POST /lanes/{laneId}/closures, PUT /service-areas/{postalPrefix}, POST /regions", routes: ["POST /nodes", "POST /nodes/{nodeId}/activations", "POST /nodes/{nodeId}/suspensions", "POST /nodes/{nodeId}/retirements", "POST /lanes", "POST /lanes/{laneId}/closures", "PUT /service-areas/{postalPrefix}", "POST /regions"], message: "RegisterNode (network node), ActivateNode, SuspendNode, RetireNode, OpenLane, CloseLane, AssignServiceArea, DefineRegion", relationship: UI}
+      - {from: network-ops planner, type: cmd, channel: "REST POST /lanes/{laneId}/cost-declarations", routes: ["POST /lanes/{laneId}/cost-declarations"], message: "DeclareLaneCost", relationship: UI}
       - {from: network-ops planner, type: cmd, channel: "REST POST /lanes/{laneId}/emission-declarations", routes: ["POST /lanes/{laneId}/emission-declarations"], message: "DeclareLaneEmission", relationship: UI}
       - {from: any context, type: qry, channel: "REST GET /nodes/{nodeId}, GET /nodes, GET /lanes, GET /service-areas/{postalPrefix}, GET /regions, GET /regions/{regionId}", routes: ["GET /nodes/{nodeId}", "GET /nodes", "GET /lanes", "GET /service-areas/{postalPrefix}", "GET /regions", "GET /regions/{regionId}"], message: "GetNode, ListNodes, ListLanes, ResolveServiceArea, ListRegions, GetRegion", relationship: OHS}
     rest:
@@ -292,6 +299,7 @@ contexts:
       - "POST /nodes/{nodeId}/retirements"
       - "POST /lanes"
       - "POST /lanes/{laneId}/closures"
+      - "POST /lanes/{laneId}/cost-declarations"
       - "POST /lanes/{laneId}/emission-declarations"
       - "GET /lanes?origin=&destination="
       - "PUT /service-areas/{postalPrefix}"
@@ -328,8 +336,9 @@ contexts:
       - {term: Handling Time, definition: "Declared time from order release to a package ready for handover.", code: "node.OperationalProfile.HandlingTime"}
       - {term: Sort Dwell, definition: "Declared minutes a package normally spends inside a sortation centre or air hub between arrival and departure; declared only by those node types.", code: "node.OperationalProfile.SortDwellMinutes"}
       - {term: Throughput Cap, definition: "Declared maximum orders per time unit a node accepts.", code: "node.ThroughputCap"}
-      - {term: Inbound Limits, definition: "A receiving node's declared carton weight and size limits, whether it accepts pallets and whether it requires an SSCC on every carton.", code: "node.OperationalProfile.Inbound"}
+      - {term: Inbound Limits, definition: "A receiving node's declared carton weight and size limits, whether it accepts pallets, whether it requires an SSCC on every carton and, optionally, the inbound volume it accepts per calendar month.", code: "node.OperationalProfile.Inbound"}
       - {term: Lane, definition: "A directed, mode-specific connection between two nodes.", code: "lane.Lane"}
+      - {term: Lane Cost, definition: "The planner's declared marginal cost of moving one package-unit across a lane on one departure, in integer cents (0 to 10000000), with no currency field. A declaration, never a quote, an invoice or a measurement; 0 is legal, and a lane never declared on also reads 0 but publishes nothing.", code: "lane.Lane.CostPerUnitCents"}
       - {term: Lane Emission, definition: "The planner's declared carbon emission of moving one package-unit across a lane on one departure, in grams of CO2-equivalent (0 to 10000000). A declaration, never a measurement; 0 is legal, and a lane never declared on also reads 0 but publishes nothing.", code: "lane.Lane.EmissionPerUnitG"}
       - {term: Region, definition: "A largely self-sufficient partition of the network.", code: "region.Region"}
       - {term: Service Area, definition: "The postal prefixes one delivery station serves.", code: "servicearea.ServiceArea"}
@@ -861,11 +870,30 @@ contexts:
         events: []
         throughput_estimate: "low"
         size_estimate: "small"
+      # as built (customer-ordering ADR 0017, internal/domain/notice: Policy is the aggregate root). The spec gives the operationIds
+      # getNotificationPolicy and putNotificationPolicy; the command name follows the sibling PublishSourcingPolicy of order-sourcing
+      - name: NotificationPolicy
+        root_id: "version (a single document: one current version, every publish creates version n+1, version 0 is the built-in default)"
+        description: "The operator's versioned decision of who notifies the shopper for each family of fact: a document of seven rows of family and notifier, data and not logic, like order-sourcing's SourcingPolicy and delivery-promise's PromisePolicy. It decides only the notifier stamp of ShopperNoticeDecided; the network itself sends nothing."
+        states: [PUBLISHED]
+        value_objects:
+          - "NotificationPolicyRow{family, notifier}: family is one of DELAY_EXPECTED, ETA_WINDOW_ASSIGNED, DELIVERY_POINT_ADVISORY, GROUP_SHIPPED, GROUP_DELIVERED, GROUP_LOST, GROUP_RETURNED; notifier is one of MARKETPLACE, SELLER, NOBODY"
+          - "PolicyVersion (integer, 0 or more): version 0 is the built-in default, every family NOBODY and no publishedAt; a published version is immutable and every version is kept (table notification_policies, one snapshot per version; the current policy is the highest version)"
+        invariants:
+          - {rule: "a publish is the whole document: exactly seven rows, one per family, each family exactly once, every family and notifier known; HTTP 422 validation-failed otherwise", error: ErrValidation}
+          - {rule: "a publish creates version current + 1; a concurrent publish that took the same number is retried once on fresh state, then HTTP 409 concurrent-update", error: ErrConcurrentUpdate}
+          - {rule: "the version never passes 2147483647 (what the wire and the table hold): a publish from a current version at that bound is refused. The domain sentinel; the specification names no problem type for it", error: ErrVersionNotNext}
+        commands: [PublishNotificationPolicy]
+        events: []
+        notes: "No policy event is raised when a version is published: the slice is analytics-free (customer-ordering ADR 0017). Publishing version 1 is what wakes a family up; until then the posture is silence."
+        throughput_estimate: "rare"
+        size_estimate: "one row per published version"
     read_models:
       - {name: OrderTrackingView, source: "shipping-and-tracking LabelIssued, PackageScanned, PackageDelivered, PackageExceptionRaised; order-sourcing FulfillmentLocked, FulfillmentShipped; delivery-promise PromiseAtRisk, PromiseRevised, PromiseKept, PromiseBroken. A tracking number belongs to a SET of groups: tracking_package_groups(tracking_number, order_id, group_no) with a primary key on all three, written only by adding (ON CONFLICT DO NOTHING) and read through for DeliveredPackages, OutcomePackages and the tracking view; the package facts stay one row per tracking number (customer-ordering ADR 0012). The row also carries the day-of window (etaStart, etaEnd, etaAssignedAt, upserted by ApplyEta, newest wins, migration 0009) and the delivery-point flag (pointFlagReason, pointFlaggedAt, upserted by ApplyPointFlag, newest wins, migration 0010), both stored only as read-model facts: no aggregate, no outbox event (customer-ordering ADR 0014/0015)"}
     policies:
       - {name: CheckoutPromising, rule: "for each shipment group call MakePromise with the offer the shopper saw; if the offer expired, re-quote and show the new window before placing"}
-      - {name: ShopperNoticeDecision, rule: "customer-ordering ADR 0017: when a consumer use case records a fact of a notice family (a promise revision, a package ETA window, a delivery-point flag, or a group becoming SHIPPED, DELIVERED, LOST or RETURNED) it decides the notice in the SAME unit of work and appends one ShopperNoticeDecided per family occurrence, whatever the notifier. The notifier is read from the versioned NotificationPolicy document (rows of family and notifier; every family defaults to NOBODY at version 0; published whole through the notification-policy operator routes, with no policy event). noticeKey = sha256 over orderId, groupNo, family and the fact digest is the consumer dedupe key. The notice is delivered OUTSIDE the network (the storefront is the marketplace notifier; seller delivery is deferred); inside the network only customer-returns consumes the event, for its OrderGroupView. The notice path writes no order or group field. RESIDUAL: the NotificationPolicy aggregate and its two operator routes are not modelled here yet"}
+      - {name: ShopperNoticeDecision, rule: "customer-ordering ADR 0017: when a consumer use case records a fact of a notice family (a promise revision, a package ETA window, a delivery-point flag, or a group becoming SHIPPED, DELIVERED, LOST or RETURNED) it decides the notice in the SAME unit of work and appends one ShopperNoticeDecided per family occurrence, whatever the notifier. The notifier is read from the versioned NotificationPolicy document (rows of family and notifier; every family defaults to NOBODY at version 0; published whole through the notification-policy operator routes, with no policy event; aggregate NotificationPolicy). noticeKey = sha256 over orderId, groupNo, family and the fact digest is the consumer dedupe key. The notice is delivered OUTSIDE the network (the storefront is the marketplace notifier; seller delivery is deferred); inside the network only customer-returns consumes the event, for its OrderGroupView. The notice path writes no order or group field"}
+      - {name: NotificationPolicyPublication, rule: "GET /notification-policy returns the current version, or the defaults with version 0 (every family NOBODY, publishedAt absent) when nothing was published; PUT /notification-policy validates the whole document (422 validation-failed), publishes version n + 1 and returns it with 200. Because every call publishes a new version the PUT takes an Idempotency-Key; a key reused with a different request is 409 idempotency-key-reused. No event is raised (customer-ordering ADR 0017)"}
       - {name: EtaWindowOnTracking, rule: "views.TrackingFrom shows a package's etaStart and etaEnd only while its state is OUT_FOR_DELIVERY, etaAssignedAt is non-zero and not before lastScanAt, the same currency rule as shipping-and-tracking's EtaCurrent; a newer scan, a failed attempt (back to AT_STATION) or any terminal state omits both. The window is shown as received, never clipped to the group's deliverByLatest (hiding a late window would contradict the judgement the promise still uses), and a window event never touches the group promise, status or verdict: they are byte-identical before and after (customer-ordering ADR 0014)"}
       - {name: DeliveryPointAdvisory, rule: "views.TrackingFrom carries deliveryPointAdvisory{reason, flaggedAt} on a package while its state is not DELIVERED, RETURNED, LOST or VOIDED and a flag is stored: the advisory ends when the package ends, because no cleared event exists. The API carries the reason code and the instant only, the words belong to the storefront. It is not an address change (the ship-to stays as placed), not delivery instructions (nothing the shopper types reaches the driver) and not a notification; it changes no ETA window, no group, no promise field and no status (customer-ordering ADR 0015)"}
       - {name: ConsolidationKeyDerivation, rule: "PlaceOrder computes the key after resolveAddress through the ConsolidationKeyer port (an HMAC adapter) with the secret from the environment (at least 16 bytes); with no secret configured no key is computed, the event omits the field and the order never merges. Rotating the secret only stops merges between orders keyed under different secrets. The key is not in REST, MCP or A2A, and the placed event still carries no address field. A new normalisation rule is a new derivation version, never an edit of the old one (customer-ordering ADR 0012)"}
@@ -883,6 +911,9 @@ contexts:
       - {from: shopper / storefront, type: qry, channel: "REST GET /shoppers/{shopperId}, GET /shoppers?email=", routes: ["GET /shoppers/{shopperId}", "GET /shoppers?email="], message: "GetShopper, FindShopperByEmail", relationship: OHS}
       - {from: shopper / storefront, type: qry, channel: "REST GET /orders?shopperId=", routes: ["GET /orders?shopperId="], message: "ListOrders", relationship: OHS}
       - {from: shopper / storefront, type: qry, channel: "REST GET /orders/{orderId}, GET /orders/{orderId}/tracking", routes: ["GET /orders/{orderId}", "GET /orders/{orderId}/tracking"], message: "GetOrder, GetTracking", relationship: OHS}
+      # caller inferred: ADR 0017 names an operator publishing the policy (operator-facing, like PUT /sourcing-policy) and no client
+      - {from: network operator (human), type: cmd, channel: "REST PUT /notification-policy", routes: ["PUT /notification-policy"], message: "PublishNotificationPolicy", relationship: UI}
+      - {from: network operator (human), type: qry, channel: "REST GET /notification-policy", routes: ["GET /notification-policy"], message: "GetNotificationPolicy", relationship: UI}
       - {from: shipping-and-tracking, type: qry, channel: "REST GET /orders/{orderId}/ship-to (in-org, restricted)", routes: ["GET /orders/{orderId}/ship-to"], message: "GetShipTo", relationship: Customer/Supplier}
       - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentLocked, FulfillmentShipped, FulfillmentUnsourceable", relationship: Conformist}
       - {from: delivery-promise, type: evt, channel: "Kafka retailnetwork.delivery-promise.events", message: "PromiseAtRisk, PromiseRevised, PromiseKept, PromiseBroken", relationship: Customer/Supplier}
@@ -898,6 +929,8 @@ contexts:
       - "GET /shoppers/{shopperId}"
       - "GET /shoppers?email="
       - "GET /orders?shopperId="
+      - "GET /notification-policy"
+      - "PUT /notification-policy"
     publishes:
       - {event: CustomerOrderPlaced, entity: customerorder, data: [orderId, shopperId, destinationPostalPrefix, placedAt, consolidationKey (optional), groups(groupNo, promiseId, tier, witnessNodeId, shipBy, deliverByEarliest, deliverByLatest, chosenDeliveryDay (optional), consolidationEligible (optional), lines(lineNo, catalogItemId, quantity))], consumers: [order-sourcing, delivery-promise, customer-returns]}
       - {event: CustomerOrderCancelled, entity: customerorder, data: [orderId, reason, cancelledAt, groupNos], consumers: [order-sourcing, delivery-promise]}
@@ -906,7 +939,7 @@ contexts:
     reasons:
       # CustomerOrderCancelled.reason and the cancel-refused reason stay free text
       - name: ShopperNoticeFamily
-        fields: [ShopperNoticeDecided.family]
+        fields: [ShopperNoticeDecided.family, "rest:NotificationPolicyRow.family"]
         about: "The family of fact a shopper notice was decided for (customer-ordering ADR 0017). One event per family occurrence, whatever the notifier."
         values:
           - {value: DELAY_EXPECTED, meaning: "A promise revision moved the window later; the fact carries the revised deliverByLatest."}
@@ -919,7 +952,7 @@ contexts:
         consumers:
           - {context: customer-returns, uses: [GROUP_SHIPPED, GROUP_DELIVERED, GROUP_LOST, GROUP_RETURNED], rule: "the four terminal families set the status of the OrderGroupView row (the status of the fact wins over the family); GROUP_SHIPPED and GROUP_DELIVERED make the group authorizable. The other families are ignored."}
       - name: ShopperNoticeNotifier
-        fields: [ShopperNoticeDecided.notifier]
+        fields: [ShopperNoticeDecided.notifier, "rest:NotificationPolicyRow.notifier"]
         about: "Who the notification policy names to deliver the notice. The network itself sends nothing."
         values:
           - {value: MARKETPLACE, meaning: "The storefront delivers the notice."}
@@ -956,6 +989,10 @@ contexts:
       - {term: Chosen Delivery Day, definition: "The local calendar date a shopper picked for a CONSOLIDATED group, stored on the group at placement.", code: "order.GroupPromise.ChosenDeliveryDay"}
       - {term: Day-of Delivery Window, definition: "The at-most-two-hours window consumed from shipping-and-tracking and stored on the tracking package row (a read-model fact, never an order fact). Shown on the tracking view only while the package is OUT_FOR_DELIVERY and the window was assigned at or after the last scan; never clipped to the promised window, and never touching the promise.", code: "readmodel.Package.EtaStart"}
       - {term: Delivery-Point Advisory, definition: "The reason-and-flaggedAt pair shown on the tracking view while the package has not ended and its delivery point is flagged (two counted failed attempts). A code for the storefront to word: not an address change, not delivery instructions, not a notification.", code: "readmodel.Package.PointFlagReason"}
+      - {term: Notification Policy, definition: "The versioned document that names, for each notice family, who notifies the shopper: the marketplace, the seller or nobody. Version 0 names nobody for every family; each publish is the whole document and creates the next version.", code: "notice.Policy"}
+      - {term: Notice Family, definition: "The kind of fact a shopper notice is decided for: a delay, a day-of ETA window, a delivery-point advisory, or a group becoming shipped, delivered, lost or returned.", code: "notice.Family"}
+      - {term: Notifier, definition: "Who the notification policy names to deliver a notice: MARKETPLACE, SELLER or NOBODY. An instruction to the side that delivers; the network sends nothing.", code: "notice.Notifier"}
+      - {term: Shopper Notice, definition: "The decided fact that a notice family occurred for an order group, stamped with the notifier and the policy version and published as ShopperNoticeDecided; a fact, not a notification.", code: "notice.ShopperNoticeDecided"}
       - {term: Checkout, definition: "The act of turning a cart into a customer order, promising every group.", code: "order.PlaceOrder"}
 
   # =========================================================================
@@ -1073,23 +1110,23 @@ contexts:
       - {from: delivery-promise, type: evt, channel: "Kafka retailnetwork.delivery-promise.events", message: "PromiseRevised, PromiseBookExhausted", relationship: Customer/Supplier}
       - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: "PurchaseOrderAccepted, PurchaseOrderRejected, PurchaseOrderExpired, VendorShipmentConfirmed", relationship: Customer/Supplier}
       - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "PackageDelivered", relationship: Conformist}
-      - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired, LaneOpened, LaneClosed, LaneEmissionDeclared, ServiceAreaAssigned, RegionDefined", relationship: Conformist}
+      - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired, LaneOpened, LaneClosed, LaneCostDeclared, LaneEmissionDeclared, ServiceAreaAssigned, RegionDefined", relationship: Conformist}
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored, CatalogItemDiscontinued", relationship: Conformist}
       - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "DepartureScheduled, DepartureCapacityChanged, DepartureCancelled", relationship: Conformist}
-      - {from: last-mile-delivery, type: evt, channel: "Kafka retailnetwork.last-mile-delivery.events", message: "DeliveryWaveScheduled, DeliveryWaveCapacityChanged, WaveEmissionDeclared", relationship: Conformist}
+      - {from: last-mile-delivery, type: evt, channel: "Kafka retailnetwork.last-mile-delivery.events", message: "DeliveryWaveScheduled, DeliveryWaveCapacityChanged, WaveCostDeclared, WaveEmissionDeclared", relationship: Conformist}
       - {from: node-performance, type: evt, channel: "Kafka retailnetwork.node-performance.events", message: "NodeScorecardUpdated", relationship: Conformist}
       - {from: network-ops planner, type: qry, channel: "REST GET /assignments, GET /assignments/{assignmentId}", routes: ["GET /assignments", "GET /assignments/{assignmentId}"], message: "ListAssignments, GetAssignment", relationship: UI}
       # caller inferred: ADR 0013 names the report questions, not a client; the routes are served by cmd/os-reports on :8092, not cmd/api
       - {from: network analysts (human), type: qry, channel: "REST GET /reports/sourcing-mix, GET /reports/order-splits, GET /reports/cost-to-serve, GET /reports/freshness (cmd/os-reports, :8092)", routes: ["GET /reports/sourcing-mix", "GET /reports/order-splits", "GET /reports/cost-to-serve", "GET /reports/freshness"], message: "GetSourcingMixReport, GetOrderSplitsReport, GetCostToServeReport, GetReportFreshness", relationship: UI}
-      # caller inferred: ADR 0014 names an operator publishing a policy, not a client; the planner is the actor of the sibling reoptimise route
+      # caller inferred: ADR 0014 names an operator publishing a policy, not a client; the planner is the actor of the sibling reoptimisations route
       - {from: network-ops planner, type: cmd, channel: "REST PUT /sourcing-policy", routes: ["PUT /sourcing-policy"], message: "PublishSourcingPolicy", relationship: UI}
       # caller inferred: the spec names no caller for the read; attributed to the same operator
       - {from: network-ops planner, type: qry, channel: "REST GET /sourcing-policy", routes: ["GET /sourcing-policy"], message: "GetSourcingPolicy", relationship: UI}
-      - {from: network-ops planner, type: cmd, channel: "REST POST /assignments/{assignmentId}:reoptimise", routes: ["POST /assignments/{assignmentId}:reoptimise"], message: "ReoptimiseAssignment", relationship: UI}
+      - {from: network-ops planner, type: cmd, channel: "REST POST /assignments/{assignmentId}/reoptimisations", routes: ["POST /assignments/{assignmentId}/reoptimisations"], message: "ReoptimiseAssignment", relationship: UI}
     rest:
       - "GET /assignments?state=&nodeId=&orderId="
       - "GET /assignments/{assignmentId}"
-      - "POST /assignments/{assignmentId}:reoptimise"
+      - "POST /assignments/{assignmentId}/reoptimisations"
       - "GET /sourcing-policy"
       - "PUT /sourcing-policy"
       - "GET /reports/sourcing-mix?from=&to="
@@ -1234,7 +1271,10 @@ contexts:
       feeds, poll purchase orders, acknowledge them in full inside the
       acknowledgement window, request labels and confirm shipment. It also
       lets a vendor poll the inbound shipments sellers are sending to its
-      nodes (a carton manifest) and submit a carton-level receipt for each.
+      nodes (a carton manifest) and submit a carton-level receipt for each,
+      and poll the return advices addressed to its nodes (the network's
+      return authorizations as the vendor's work items) and report the
+      graded outcome of each.
       Every write is an asynchronous transaction a vendor reconciles.
     roles: [Gateway / Open Host Service, Execution (purchase-order protocol and its clock)]
     business_decisions:
@@ -1290,16 +1330,19 @@ contexts:
         size_estimate: "one row per release to a vendor node"
       - name: Submission
         root_id: transactionId
-        description: "One asynchronous vendor write (acknowledgement, inventory feed, node registration, profile declaration, shipment confirmation, inbound receipt) and its processing outcome."
+        description: "One asynchronous vendor write (acknowledgement, inventory feed, node registration, profile declaration, shipment confirmation, inbound receipt, return outcome) and its processing outcome."
         states: [PROCESSING, SUCCESS, FAILURE]
         transitions: [[PROCESSING, SUCCESS, ProcessSubmission], [PROCESSING, FAILURE, ProcessSubmission]]
-        value_objects: ["SubmissionKind(ACKNOWLEDGEMENT|INVENTORY|NODE_REGISTRATION|NODE_PROFILE|SHIPMENT_CONFIRMATION|INBOUND_RECEIPT)", "SubmissionError{code, message, path}"]
+        value_objects: ["SubmissionKind(ACKNOWLEDGEMENT|INVENTORY|NODE_REGISTRATION|NODE_PROFILE|SHIPMENT_CONFIRMATION|INBOUND_RECEIPT|RETURN_OUTCOME); RETURN_OUTCOME is the seventh kind (vendor-connectivity ADR 0014; the route text and the domain carry it, the OpenAPI SubmissionKind enum still lists six)", "ReturnOutcomeLine{catalogItemId, ownerRef?, qtyRestockable, qtyUnsellable}", "SubmissionError{code, message, path}"]
         invariants:
           - {rule: "outcome set once", error: ErrSubmissionAlreadyProcessed}
           - {rule: "processing never starts before notBefore = receivedAt + simulated processing delay", error: ErrSubmissionNotDue}
           - {rule: "an INBOUND_RECEIPT names a shipment in InboundShipmentView addressed to a node of the submitting vendor; an unknown vendor, shipment or node is not-found (404), a node of another vendor stays ErrNodeNotOwnedByVendor (vendor-connectivity ADR 0005)", error: ErrNotFound}
-        commands: [ReceiveSubmission, ProcessSubmission, SubmitInboundReceipt]
-        events: [SubmissionProcessed, InboundReceiptSubmitted]
+          - {rule: "a RETURN_OUTCOME names a known authorization of ReturnAdviceView and a node of the submitting vendor; an unknown vendor, authorization or node is not-found (404), a node of another vendor stays ErrNodeNotOwnedByVendor (vendor-connectivity ADR 0014)", error: ErrNotFound}
+          - {rule: "the nodeId of a RETURN_OUTCOME is the advice's node; receivedAt is present; 1 to 50 lines with no duplicate catalogItemId for the same ownerRef; qtyRestockable and qtyUnsellable from 0 to 2147483647; HTTP 422 validation-failed. Lines the advice never authorized are NOT refused", error: ErrValidation}
+          - {rule: "an outcome is recorded only while the advice is AUTHORIZED; an advice whose outcome is recorded or whose authorization was cancelled answers HTTP 409 illegal-transition", error: ErrIllegalTransition}
+        commands: [ReceiveSubmission, ProcessSubmission, SubmitInboundReceipt, SubmitReturnOutcome]
+        events: [SubmissionProcessed, InboundReceiptSubmitted, VendorReturnOutcomeSubmitted]
         throughput_estimate: "medium-high"
         size_estimate: "retained 30 days"
     read_models:
@@ -1307,6 +1350,7 @@ contexts:
       - {name: ListingView, source: "offer-availability ListingCreated"}
       - {name: InboundShipmentView, source: "seller-inbound InboundShipmentLabelled, InboundShipmentShipped, InboundShipmentReceived"}
       - {name: CatalogPackagingView, source: "offer-availability CatalogItemPackagingDeclared, CatalogItemPackLevelRetired"}
+      - {name: ReturnAdviceView, source: "customer-returns ReturnAuthorized (creates the advice), ReturnLabelIssued (appends a tracking number it has not seen), ReturnCancelled (table vendor_return_advices, consumer group env CUSTOMER_RETURNS_CONSUMER_GROUP). The advice's node is the event's destinationNodeId, else originNodeId; its vendorId is that node's operator vendor from VendorNodeView, never from the event; an advice whose node the view does not know, or whose node has no operator vendor, is counted and skipped. States AUTHORIZED, CANCELLED, OUTCOME_RECORDED: this context's vocabulary, customer-returns' own states are not mirrored. The view only moves forward, whatever the arrival order; readyAt is the authorization's authorizedAt (vendor-connectivity ADR 0014)"}
     policies:
       - {name: IssueOnRelease, rule: "on FulfillmentReleasedToNode for a VENDOR node, issue a purchase order (poNumber is idempotent on assignmentId + releaseNo)"}
       - {name: PurchaseOrderOfMergedRelease, rule: "a merged FulfillmentReleasedToNode (carrier id, the union lines in member order with no lineNo, an optional members array and a per-line assignmentId) needs no code change: the tolerant decoder ignores members and the per-line assignmentId, so ONE purchase order is issued under the carrier's assignmentId, orderId, groupNo and tier, its lines are numbered by position (1..n), a listingId that two members both ordered appears on two lines (duplicates are legal) and each line keeps its own ownerRef. The release carries the carrier's fulfilment class (STANDARD for a consolidated group), so the tier validator never sees a fifth tier. The vendor sees one package; the Vendor API is unchanged (vendor-connectivity ADR 0013)"}
@@ -1316,10 +1360,15 @@ contexts:
       - {name: ExpireUnacknowledged, rule: "sweep: ISSUED past ackBy -> EXPIRED"}
       - {name: LabelUpstreamOutage, rule: "RequestLabel is synchronous: when shipping-and-tracking does not answer the answer is 503 upstream-unavailable, and when it answers with a refusal this context does not translate 502 upstream-refused (apis/openapi.yaml documents both); labels already issued stay stored and a retry issues only the missing ones (ADR 0002 A19)"}
       - {name: ReceiptRelay, rule: "when an INBOUND_RECEIPT submission is accepted, append InboundReceiptSubmitted (subject and key shipmentId) to the outbox in the same unit of work, so a 202 always has its event (vendor-connectivity ADR 0005); SubmissionProcessed still reports the processing. The receipt is not applied to the shipment here, seller-inbound owns that"}
+      - {name: ReturnOutcomeRelay, rule: "when a RETURN_OUTCOME submission is accepted, VendorReturnOutcomeSubmitted (subject and key authorizationId) is appended to the outbox in the SAME unit of work that saves the submission and moves the advice to OUTCOME_RECORDED, so a 202 always has its event and the advice leaves the poll atomically. Lines the advice never authorized are relayed, never refused (goods on the dock are never turned away): customer-returns records them as unexpected and nothing restocks them. The outcome is not applied to the authorization here, customer-returns owns that; no synchronous call to customer-returns exists (vendor-connectivity ADR 0014)"}
+      - {name: ReturnAdvicePoll, rule: "GET /vendor/return-advices answers the AUTHORIZED advices of the vendor's nodes, oldest first, keyset-paged by (readyAt, authorizationId) with cursor and limit; readyAfter compares with readyAt; a nodeId of another vendor is node-not-owned-by-vendor. An advice leaves the poll when its outcome is recorded or customer-returns cancels the authorization. GET /vendor/return-advices/{authorizationId} also answers a closed advice (CANCELLED or OUTCOME_RECORDED); an advice of another vendor's node, or unknown, is not-found (vendor-connectivity ADR 0014)"}
       - {name: SimulationKnobs, rule: "TX_PROCESSING_DELAY, TX_FAILURE_RATE, RATE_LIMIT_RPS, PO_REDELIVERY_RATE; all default to well-behaved"}
     inbound:
       - {from: "network-fulfillment (warehouse-systems, vendor V-WS)", type: cmd, channel: "Vendor API POST /vendor/nodes, PUT /vendor/nodes/{nodeId}/profile, POST /vendor/inventory, POST /vendor/acknowledgements, POST /vendor/shipping-labels, POST /vendor/shipment-confirmations, POST /vendor/inbound-receipts", routes: ["POST /vendor/nodes", "PUT /vendor/nodes/{nodeId}/profile", "POST /vendor/inventory", "POST /vendor/acknowledgements", "POST /vendor/shipping-labels", "POST /vendor/shipment-confirmations", "POST /vendor/inbound-receipts"], message: "RegisterVendorNode, DeclareNodeProfile, SubmitInventory, SubmitAcknowledgement, RequestLabel, SubmitShipmentConfirmation, SubmitInboundReceipt", relationship: "OHS + PL (downstream is Conformist + ACL)"}
       - {from: "network-fulfillment (warehouse-systems, vendor V-WS)", type: qry, channel: "Vendor API GET /vendor/purchase-orders, GET /vendor/purchase-orders/{poNumber}, GET /vendor/transactions/{transactionId}, GET /vendor/nodes, GET /vendor/nodes/{nodeId}, GET /vendor/nodes/{nodeId}/scorecard, GET /vendor/inbound-shipments, GET /vendor/inbound-shipments/{shipmentId}", routes: ["GET /vendor/purchase-orders", "GET /vendor/purchase-orders/{poNumber}", "GET /vendor/transactions/{transactionId}", "GET /vendor/nodes", "GET /vendor/nodes/{nodeId}", "GET /vendor/nodes/{nodeId}/scorecard", "GET /vendor/inbound-shipments", "GET /vendor/inbound-shipments/{shipmentId}"], message: "PollPurchaseOrders, GetPurchaseOrder, GetTransaction, ListVendorNodes, GetNode, GetScorecard, PollInboundShipments, GetInboundShipment", relationship: "OHS + PL"}
+      # caller: a vendor's returns-centre system through the Vendor API; the fleet's network-fulfillment (vendor V-WS) has no client for these three routes on its develop
+      - {from: "vendor returns-centre system (Vendor API client)", type: qry, channel: "Vendor API GET /vendor/return-advices, GET /vendor/return-advices/{authorizationId}", routes: ["GET /vendor/return-advices", "GET /vendor/return-advices/{authorizationId}"], message: "PollReturnAdvices, GetReturnAdvice", relationship: "OHS + Published Language"}
+      - {from: "vendor returns-centre system (Vendor API client)", type: cmd, channel: "Vendor API POST /vendor/return-outcomes", routes: ["POST /vendor/return-outcomes"], message: "SubmitReturnOutcome", relationship: "OHS + Published Language"}
       - {from: "network partner managers (human)", type: cmd, channel: "REST POST /vendors, POST /vendors/{vendorId}/suspensions, POST /vendors/{vendorId}/reinstatements", routes: ["POST /vendors", "POST /vendors/{vendorId}/suspensions", "POST /vendors/{vendorId}/reinstatements"], message: "OnboardVendor, SuspendVendor, ReinstateVendor", relationship: UI}
       - {from: "network partner managers (human)", type: qry, channel: "REST GET /vendors/{vendorId}", routes: ["GET /vendors/{vendorId}"], message: "GetVendor", relationship: UI}
       - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentReleasedToNode, FulfillmentCancelled, FulfillmentReleaseWithdrawn", relationship: Customer/Supplier}
@@ -1327,6 +1376,7 @@ contexts:
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "ListingCreated", relationship: Conformist}
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemPackagingDeclared, CatalogItemPackLevelRetired", relationship: Conformist}
       - {from: seller-inbound, type: evt, channel: "Kafka retailnetwork.seller-inbound.events", message: "InboundShipmentLabelled, InboundShipmentShipped, InboundShipmentReceived", relationship: Customer/Supplier}
+      - {from: customer-returns, type: evt, channel: "Kafka retailnetwork.customer-returns.events (CUSTOMER_RETURNS_CONSUMER_GROUP)", message: "ReturnAuthorized, ReturnLabelIssued, ReturnCancelled", relationship: Conformist}
     rest:
       - "GET /vendor/purchase-orders?createdAfter=&nodeId=&nextToken="
       - "GET /vendor/purchase-orders/{poNumber}"
@@ -1341,6 +1391,9 @@ contexts:
       - "GET /vendor/inbound-shipments?nodeId=&createdAfter=&nextToken="
       - "GET /vendor/inbound-shipments/{shipmentId}"
       - "POST /vendor/inbound-receipts"
+      - "GET /vendor/return-advices?readyAfter=&nodeId=&cursor=&limit="
+      - "GET /vendor/return-advices/{authorizationId}"
+      - "POST /vendor/return-outcomes"
       - "GET /vendor/transactions/{transactionId}"
       - "POST /vendors"
       - "GET /vendor/nodes"
@@ -1357,6 +1410,7 @@ contexts:
       - {event: VendorShipmentConfirmed, entity: purchaseorder, data: [poNumber, assignmentId, nodeId, trackingNumbers, shippedAt, requiredShipBy], consumers: [order-sourcing, shipping-and-tracking, node-performance]}
       - {event: SubmissionProcessed, entity: submission, data: [transactionId, vendorId, kind, status, errorCount], consumers: [node-performance]}
       - {event: InboundReceiptSubmitted, entity: inboundreceipt, data: [transactionId, vendorId, nodeId, shipmentId, receivedAt, cartons(sscc, status, items(gtin, qtyEaches), complianceCodes)], consumers: [seller-inbound, node-performance]}
+      - {event: VendorReturnOutcomeSubmitted, entity: returnoutcome, data: [transactionId, vendorId, authorizationId, nodeId, receivedAt, "lines(catalogItemId, ownerRef (optional), qtyRestockable, qtyUnsellable)"], consumers: [customer-returns]}
       - {event: VendorSuspended, entity: vendoraccount, data: [vendorId, suspendedAt, reason], consumers: []}
       - {event: VendorReinstated, entity: vendoraccount, data: [vendorId, reinstatedAt], consumers: []}
     reasons:
@@ -1383,6 +1437,9 @@ contexts:
       - {event: InboundShipmentReceived, from: seller-inbound}
       - {event: CatalogItemPackagingDeclared, from: offer-availability}
       - {event: CatalogItemPackLevelRetired, from: offer-availability}
+      - {event: ReturnAuthorized, from: customer-returns}
+      - {event: ReturnLabelIssued, from: customer-returns}
+      - {event: ReturnCancelled, from: customer-returns}
     sync_calls:
       - {to: node-topology, type: cmd, message: "RegisterNode, DeclareOperationalProfile", channel: "REST POST /nodes, PUT /nodes/{nodeId}/operational-profile"}
       - {to: offer-availability, type: cmd, message: ApplyInventoryFeed, channel: "REST POST /inventory-feeds"}
@@ -1397,6 +1454,8 @@ contexts:
       - {term: Submission / Transaction, definition: "An asynchronous vendor write and its outcome, reconciled by transactionId.", code: "submission.Submission"}
       - {term: Label, definition: "labelRef + trackingNumber + carrier; never the address.", code: "po.Label"}
       - {term: Vendor API, definition: "The Open Host Service of this context; its JSON schemas are the Published Language.", code: "apis/vendor-connectivity/openapi.yaml"}
+      - {term: Return Advice, definition: "A network return authorization as the vendor's work item: its lines and, as reverse labels are issued, their tracking numbers, addressed to the node that receives the return. AUTHORIZED until its outcome is recorded or the authorization is cancelled.", code: "ReturnAdviceView (vendor_return_advices)"}
+      - {term: Return Outcome, definition: "A vendor's graded report against a return advice: per item, the units that may be restocked and the units that may not.", code: "submission.KindReturnOutcome"}
       - {term: Inbound Receipt, definition: "A vendor's carton-level report of what arrived for one inbound shipment: per SSCC a status, the eaches received per GTIN and any compliance codes.", code: "inbound.Receipt"}
 
   # =========================================================================
@@ -1575,20 +1634,27 @@ contexts:
           - [OPEN, OPEN, DeclareEmission]
           - [INDUCTION_CLOSED, INDUCTION_CLOSED, DeclareEmission]
           - [DISPATCHED, DISPATCHED, DeclareEmission]
+          # as built (last-mile-delivery ADR 0011): same shape, the stop-cost declaration
+          - [OPEN, OPEN, DeclareCost]
+          - [INDUCTION_CLOSED, INDUCTION_CLOSED, DeclareCost]
+          - [DISPATCHED, DISPATCHED, DeclareCost]
         value_objects:
           - "Window{start, end}"
           - "StopCapacity{stops, assigned}"
           - "Induction{trackingNumber, stopKey, kind(DELIVERY|PICKUP)}: why a package takes a stop of the wave. DELIVERY is the default and what every writer of this context passes; a PICKUP induction occupies stop capacity and raises DeliveryWaveCapacityChanged exactly like a delivery. There is no REST induction route, so the kind rides the domain command only (last-mile-delivery ADR 0017)"
+          - "CostPerStopCents (int64 integer cents, 0 to 10000000, default 0): the planner's declared marginal cost of ONE delivery stop on the wave (route driver time plus the stop's mileage share), per stop (the stopKey grouping), never per package; no currency field (single-currency study). Published and read on the REST wave as costPerStopCents. 0 is a legal declaration; a wave with no declaration also reads 0 (last-mile-delivery ADR 0011)"
           - "EmissionPerStopG (int64 grams of CO2 equivalent, 0 to 10000000, default 0): the planner's declared marginal greenhouse emission of ONE delivery stop on the wave (the stop's share of the route's driving), per stop (the stopKey grouping), never per package; no unit field. Published and read on the REST wave as gCo2ePerStop. 0 is a legal declaration; a wave with no declaration also reads 0 (last-mile-delivery ADR 0016)"
         invariants:
           - {rule: "inductCutoffAt < windowStart < windowEnd", error: ErrInvalidWaveTimes}
           - {rule: "assigned stops <= stops, where assigned stops counts the distinct stopKeys among the wave's inductions", error: ErrWaveFull}
           - {rule: "no package joins after induction closes", error: ErrInductionClosed}
           - {rule: "a wave is scheduled only for a known DELIVERY_STATION of StationView; checked by the use case, not by the aggregate (ADR 0002 A1)", error: ErrUnknownStation}
+          - {rule: "a declared stop cost is an integer from 0 to 10000000 cents; HTTP 422 validation-failed outside the range (last-mile-delivery ADR 0011)", error: ErrValidation}
+          - {rule: "a stop cost is declared only while the wave still runs (OPEN, INDUCTION_CLOSED or DISPATCHED); a CANCELLED or COMPLETED wave refuses the declaration", error: ErrIllegalTransition}
           - {rule: "a declared stop emission is an integer from 0 to 10000000 grams of CO2 equivalent; HTTP 422 validation-failed outside the range (last-mile-delivery ADR 0016)", error: ErrValidation}
           - {rule: "an emission is declared only while the wave still runs (OPEN, INDUCTION_CLOSED or DISPATCHED); a CANCELLED or COMPLETED wave refuses the declaration", error: ErrIllegalTransition}
-        commands: [ScheduleWave, InductPackage, CloseInduction, DispatchWave, CompleteWave, CancelWave, DeclareEmission]
-        events: [DeliveryWaveScheduled, DeliveryWaveCapacityChanged, DeliveryWaveCancelled, WaveEmissionDeclared]
+        commands: [ScheduleWave, InductPackage, CloseInduction, DispatchWave, CompleteWave, CancelWave, DeclareCost, DeclareEmission]
+        events: [DeliveryWaveScheduled, DeliveryWaveCapacityChanged, DeliveryWaveCancelled, WaveCostDeclared, WaveEmissionDeclared]
         throughput_estimate: "medium"
         size_estimate: "stations x waves/day x horizon"
       - name: Route
@@ -1642,6 +1708,7 @@ contexts:
     policies:
       - {name: InductOnArrival, rule: "on LoadArrived at a delivery station induct every package into the earliest eligible wave"}
       - {name: RetryNextWave, rule: "a FAILED attempt re-inducts the package into the next wave; three failures return it to sender"}
+      - {name: StopCostIsDeclared, rule: "DeclareCost (REST POST /waves/{waveId}/cost-declarations, Idempotency-Key required, 201 returning the wave) sets the wave's costPerStopCents, bumps the version and raises WaveCostDeclared (subject and key the waveId). A later declaration overwrites the earlier one and publishes again; the last one wins. A wave with no declaration reads 0 and contributes 0 to a consumer's sum while leaving its estimate incomplete; whether an undeclared wave may be treated as free is the consumer's decision. What the planner bases the number on (driver pay, fuel, van depreciation) stays outside the contract; only the cents cross the boundary (last-mile-delivery ADR 0011)"}
       - {name: StopEmissionIsDeclared, rule: "DeclareEmission (REST POST /waves/{waveId}/emission-declarations, Idempotency-Key required, 201 returning the wave) sets the wave's emissionPerStopG, bumps the version and raises WaveEmissionDeclared (subject and key the waveId). A later declaration overwrites the earlier one and publishes again; the last one wins. A wave with no declaration reads 0 and contributes 0 to a consumer's sum while leaving its estimate incomplete; whether an undeclared wave may be treated as emission-free is the consumer's decision. What the planner bases the number on stays outside the contract (last-mile-delivery ADR 0016)"}
       - {name: CompleteRouteOnLastAttempt, rule: "a route completes (OUT_FOR_DELIVERY to COMPLETED) in the same unit of work as the attempt that records its last outstanding package, so CompleteRoute has no REST route and no caller; a route whose driver never records every package stays OUT_FOR_DELIVERY (ADR 0002 A16)"}
       - {name: CompleteWaveWithLastRoute, rule: "a DISPATCHED wave completes in the transaction in which its last route completes; a wave dispatched with no route completes at once, so the dispatch response may show COMPLETED. CompleteWave has no REST route and no caller (ADR 0002 A9)"}
@@ -1659,6 +1726,7 @@ contexts:
       - {from: "station planner (human)", type: cmd, channel: "REST POST /waves, POST /waves/{waveId}/induction-closures, POST /waves/{waveId}/dispatches, POST /waves/{waveId}/cancellations, POST /routes, POST /partners, POST /partners/{dspId}/deactivations", routes: ["POST /waves", "POST /waves/{waveId}/induction-closures", "POST /waves/{waveId}/dispatches", "POST /waves/{waveId}/cancellations", "POST /routes", "POST /partners", "POST /partners/{dspId}/deactivations"], message: "ScheduleWave, CloseInduction, DispatchWave, CancelWave, PlanRoute, ContractPartner, DeactivatePartner", relationship: UI}
       # caller inferred for GET /waves; the spec says the planner builds PlanRoute from the stops list
       - {from: "station planner (human)", type: qry, channel: "REST GET /waves, GET /waves/{waveId}/stops", routes: ["GET /waves", "GET /waves/{waveId}/stops"], message: "ListWaves, GetWaveStops", relationship: UI}
+      - {from: "station planner (human)", type: cmd, channel: "REST POST /waves/{waveId}/cost-declarations", routes: ["POST /waves/{waveId}/cost-declarations"], message: "DeclareCost", relationship: UI}
       - {from: "station planner (human)", type: cmd, channel: "REST POST /waves/{waveId}/emission-declarations", routes: ["POST /waves/{waveId}/emission-declarations"], message: "DeclareEmission", relationship: UI}
       - {from: delivery service partner driver app, type: cmd, channel: "REST POST /routes/{routeId}/starts, POST /routes/{routeId}/attempts", routes: ["POST /routes/{routeId}/starts", "POST /routes/{routeId}/attempts"], message: "StartRoute, RecordAttempt", relationship: UI}
       # caller inferred: the spec names no caller; the driver app records the attempts the route read returns
@@ -1678,6 +1746,7 @@ contexts:
       - "POST /partners"
       - "GET /waves/{waveId}/stops"
       - "POST /waves/{waveId}/cancellations"
+      - "POST /waves/{waveId}/cost-declarations"
       - "POST /waves/{waveId}/emission-declarations"
       - "GET /routes/{routeId}"
       - "POST /partners/{dspId}/deactivations"
@@ -1728,6 +1797,7 @@ contexts:
     ul:
       - {term: Last Mile, definition: "From the delivery station to the customer's door.", code: "(context)"}
       - {term: Delivery Wave, definition: "A station's dispatch slot: induct cutoff, delivery window and stop capacity.", code: "wave.DeliveryWave"}
+      - {term: Stop Cost, definition: "The planner's declared marginal cost of one delivery stop on a wave, in integer cents (0 to 10000000), with no currency field; per stop, never per package. A declaration, not a measurement; 0 is legal and an undeclared wave also reads 0.", code: "wave.DeliveryWave.CostPerStopCents"}
       - {term: Stop Emission, definition: "The planner's declared marginal greenhouse emission of one delivery stop on a wave, in grams of CO2 equivalent (0 to 10000000); per stop, never per package. A declaration, not a measurement; 0 is legal and an undeclared wave also reads 0.", code: "wave.DeliveryWave.EmissionPerStopG"}
       - {term: Induction, definition: "Placing an arrived package into a wave.", code: "wave.InductPackage"}
       - {term: Route, definition: "One van's ordered stops in one wave.", code: "route.Route"}
@@ -1767,10 +1837,12 @@ contexts:
           - "StopKey: opaque hex keyed hash (HMAC-SHA-256 under a service secret) of the normalized ship-to address, derived at IssueLabel (policy StopKeyAtLabelTime)"
           - "DestinationPostalPrefix: the first 5 letters or digits of the normalized postal code (the whole code when shorter)"
           - "ShipToSnapshot{labelRef, nonce, ciphertext, keyId, createdAt}; AES-256-GCM, never returned or published, purged by PurgeShipTo"
+          - "Purpose(OUTBOUND|RETURN) and ReturnAuthorizationId: OUTBOUND is the default; a RETURN label (a reverse label of a customer return) always carries the returnAuthorizationId and never a poNumber or an assignmentId. On REST an outbound label answers the Label schema (no purpose) and a reverse label the ReturnLabel schema (purpose RETURN) (shipping-and-tracking ADR 0017)"
         invariants:
           - {rule: "one label per (poNumber, packageNo)", error: ErrLabelAlreadyIssued}
+          - {rule: "one reverse label per (returnAuthorizationId, packageNo); HTTP 409 label-already-issued (shipping-and-tracking ADR 0017)", error: ErrLabelAlreadyIssued}
           - {rule: "trackingNumber unique", error: ErrTrackingNumberTaken}
-        commands: [IssueLabel, VoidLabel, PurgeShipTo]
+        commands: [IssueLabel, IssueReturnLabel, VoidLabel, PurgeShipTo]
         events: [LabelIssued, LabelVoided]
         throughput_estimate: "medium"
         size_estimate: "one per package"
@@ -1826,6 +1898,7 @@ contexts:
       - {name: ReturnOnReturnInitiated, rule: "on last-mile-delivery's PackageReturnInitiated (the third failed attempt) run ReturnToSender on an AT_STATION journey: RETURNED and PackageReturned, whose returnedAt is the CloudEvents time of the consumed event (ADR 0002 A8)"}
       - {name: EventTimeIsCommitTime, rule: "the CloudEvents time of every event this context publishes is the instant the change was committed (the aggregate's own clock, OccurredAt), not the instant the fact happened; the fact instant is a data field (deliveredAt, handedOverAt, returnedAt, the scan's at) and can be earlier (ADR 0004; encoder.go)"}
       - {name: StopKeyAtLabelTime, rule: "at IssueLabel the address is read from customer-ordering (GetShipTo), normalized (upper case, letters and digits only; line1, line2, city, region, postalCode and countryCode, not the recipient name or phone) and hashed with a service secret into the stopKey, so neighbours at one address share a stop. stopKey and destinationPostalPrefix go on LabelIssued; the address is then encrypted into the ship-to snapshot and dropped from memory"}
+      - {name: ReverseLabelHasNoJourney, rule: "IssueReturnLabel (REST POST /return-labels, in-org, Idempotency-Key required, 201 answering ReturnLabel; shipping-and-tracking ADR 0017) is the reverse twin of IssueLabel, called by customer-returns with returnAuthorizationId, orderId, packageNo and destinationPostalPrefix. The ship-to of orderId is read from customer-ordering BEFORE the transaction and the stopKey is derived exactly like the outbound label's (same secret over the same normalized address), so a return pickup stop groups with the outbound delivery stop by construction; destinationPostalPrefix is the return destination's prefix, which only the caller knows. The label rides the ground carrier (tier STANDARD, carrier RN-GROUND), starts NO package journey, seals NO ship-to snapshot and runs no deliverability check; scans of the reverse package are counted-and-acknowledged unknowns, and shopper-facing return tracking is customer-returns' authorization view. LabelIssued carries the optional purpose and returnAuthorizationId (omitted on an outbound label). An order unknown to customer-ordering is 422 validation-failed; no ship-to in time is 503 ship-to-unavailable with no label stored. VoidLabel voids a reverse label without a journey: the label moves to VOIDED and LabelVoided is published, nothing else"}
       - {name: NoAddressRoute, rule: "no address leaves shipping-and-tracking and customer-ordering: no route, event or read model carries it, and no restricted label route is built. How a delivery partner learns the address at the door is not decided"}
       - {name: ShipToRetention, rule: "a periodic job (PurgeShipTo) deletes a ship-to snapshot 30 days after its journey closed: DELIVERED, RETURNED or LOST, or VOIDED when the label was voided before handover. A journey still open keeps its snapshot"}
       - {name: EtaWindowOnJourney, rule: "the use case ApplyEtaWindows (same shape as ApplyScans: inbox claim, then per tracking number) consumes StopEtaWindowAssigned and stores etaStart/etaEnd/etaAssignedAt on each journey of the stop via AssignEta; the stopKey is received and dropped (this context keeps no address-derived value of a stop). Each journey then publishes PackageEtaWindowAssigned with its own orderId. EtaCurrent() is the one currency rule, shared with customer-ordering: the window shows only while the state is OUT_FOR_DELIVERY, etaAssignedAt is non-zero and not before lastScanAt, so a newer scan, a failed attempt (back to AT_STATION) or any terminal state hides it; yesterday's window never survives a newer OUT_FOR_DELIVERY scan. The window is relayed as received, never clipped to the promised window (shipping-and-tracking ADR 0013)"}
@@ -1834,6 +1907,7 @@ contexts:
       - {name: CollectionAtPoint, rule: "RN-0011 as built (shipping-and-tracking ADR 0016): a pickup journey (destinationKind PICKUP_POINT) is deposited by the wave at its point, a POINT_DEPOSITED scan moving OUT_FOR_DELIVERY to READY_FOR_COLLECTION (PackageReadyForCollection carries pickupPointId, readyForCollectionAt and holdUntil), and collected by the shopper, a COLLECTED scan moving READY_FOR_COLLECTION to COLLECTED, terminal (PackageCollected; proofCode optional). A package uncollected by holdUntil is returned by the sweep through ReturnToSender with reason UNCOLLECTED, the pickup hold expiry; the station-initiated return omits the reason. The promise judgement keeps deliverByLatest: collection ends the package, the window does not move"}
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /labels (in-org)", routes: ["POST /labels"], message: "IssueLabel", relationship: Customer/Supplier}
+      - {from: customer-returns, type: cmd, channel: "REST POST /return-labels (in-org)", routes: ["POST /return-labels"], message: "IssueReturnLabel", relationship: Customer/Supplier}
       # caller inferred: the spec names no caller for either route; both are ground-operations actions (a scan is recorded at a scanner, a label is voided before handover); no sibling service has a client for them
       - {from: "sort-centre and station operators (human/scanner)", type: cmd, channel: "REST POST /labels/{labelRef}/voids, POST /journeys/{trackingNumber}/scans", routes: ["POST /labels/{labelRef}/voids", "POST /journeys/{trackingNumber}/scans"], message: "VoidLabel, RecordScan", relationship: UI}
       - {from: carrier, type: cmd, channel: "REST POST /carrier-events (the carrier webhook of CARRIER_HANDOFF areas, an inbound translation layer, RN-0010)", routes: ["POST /carrier-events"], message: "RecordCarrierEvent", relationship: OHS}
@@ -1847,6 +1921,7 @@ contexts:
       - {from: network analysts (human), type: qry, channel: "REST GET /reports/package-touches, GET /reports/delivery-outcomes, GET /reports/freshness (cmd/st-reports, :8092)", routes: ["GET /reports/package-touches", "GET /reports/delivery-outcomes", "GET /reports/freshness"], message: "GetPackageTouchesReport, GetDeliveryOutcomesReport, GetReportFreshness", relationship: UI}
     rest:
       - "POST /labels"
+      - "POST /return-labels"
       - "POST /labels/{labelRef}/voids"
       - "GET /journeys/{trackingNumber}"
       - "POST /journeys/{trackingNumber}/scans"
@@ -1855,7 +1930,7 @@ contexts:
       - "GET /reports/delivery-outcomes?from=&to="
       - "GET /reports/freshness"
     publishes:
-      - {event: LabelIssued, entity: label, data: [labelRef, trackingNumber, poNumber, assignmentId, packageNo, tier, carrier, orderId, stopKey, destinationPostalPrefix], consumers: [linehaul-transportation, customer-ordering, last-mile-delivery]}
+      - {event: LabelIssued, entity: label, data: [labelRef, trackingNumber, poNumber, assignmentId, packageNo, tier, carrier, orderId, stopKey, destinationPostalPrefix, "purpose (optional, RETURN on a reverse label only)", "returnAuthorizationId (optional, reverse label only)"], consumers: [linehaul-transportation, customer-ordering, last-mile-delivery]}
       - {event: LabelVoided, entity: label, data: [labelRef, trackingNumber, reason], consumers: [customer-ordering, linehaul-transportation]}
       - {event: PackageScanned, entity: journey, data: [trackingNumber, scanId, nodeId, scanType, at, state], consumers: [customer-ordering]}
       - {event: PackageHandedOver, entity: journey, data: [trackingNumber, poNumber, nodeId, handedOverAt], consumers: [node-performance]}
@@ -1897,6 +1972,7 @@ contexts:
       - {term: Package Journey, definition: "The customer-visible timeline of one package.", code: "journey.PackageJourney"}
       - {term: Scan, definition: "One observation of a package at a node.", code: "journey.Scan"}
       - {term: Handover, definition: "The instant a vendor node's package enters the network.", code: "journey.HandedOver"}
+      - {term: Reverse Label, definition: "The label of one package of a customer return, issued for customer-returns: purpose RETURN, the return authorization id, no purchase order, no assignment and no package journey. Its stop key equals the outbound label's of the same order.", code: "label.ShippingLabel (Purpose RETURN)"}
       - {term: Stop Key, definition: "An opaque keyed hash of the normalized ship-to address, put on the label event so last-mile-delivery can group packages into stops without ever receiving an address.", code: "label.StopKey"}
       - {term: Ship-To Snapshot, definition: "The encrypted copy of the ship-to address kept to print a label; never published and purged 30 days after the journey closes.", code: "label.ShipToSnapshot"}
       - {term: Day-of ETA Window, definition: "The at-most-two-hours delivery window consumed from last-mile-delivery at route start and stored on the journey (etaStart, etaEnd, etaAssignedAt). Not a scan: it never moves the state, and it shows on the journey view only while EtaCurrent holds (OUT_FOR_DELIVERY, assigned at or after the last applied scan).", code: "journey.PackageJourney"}
@@ -2061,18 +2137,26 @@ contexts:
         size_estimate: "tens to thousands"
       - name: InboundPlan
         root_id: planId
-        description: "A seller's declaration of what it intends to send to one vendor node, in eaches, and how it will pack it."
+        description: "A seller's declaration of what it intends to send to one vendor node, in eaches, how it will pack it and who splits it (the seller, or the network across the region's fulfilment centres). It records whether the monthly inbound capacity gate was applied (seller-inbound ADR 0015)."
         states: [DRAFT, CONFIRMED, CANCELLED]
         transitions:
           - [DRAFT, CONFIRMED, ConfirmInboundPlan]
           - [DRAFT, CANCELLED, CancelInboundPlan]
         value_objects:
           - "PackingOption(INDIVIDUAL|CASE_PACKED)"
-          - "PlanLine{catalogItemId, gtin, qtyEaches}"
+          - "PlanLine{catalogItemId, gtin, qtyEaches, unitVolumeDm3?}: unitVolumeDm3 is the seller-declared volume of one each in cubic decimetres, 1 to 100000; omitted or 0 is undeclared. The plan's volume is the sum of qtyEaches x unitVolumeDm3 over its lines, and it is 0 when ANY line's unit volume is undeclared: a partial sum is not a fact (seller-inbound ADR 0015)"
+          - "PlacementOption(SELLER_SPLIT|NETWORK_SPLIT): SELLER_SPLIT (the default) sends everything to the destination the seller picked; NETWORK_SPLIT destinations an ACTIVE INBOUND_CROSS_DOCK and records a redistribution across the region's fulfilment centres (seller-inbound ADR 0015)"
+          - "RedistributionLine{nodeId, lineNo, qtyEaches}: one (node, line) share of a NETWORK_SPLIT plan's recorded redistribution (capacity-split-v1); lineNo is the 1-based position of the plan line. Present only for NETWORK_SPLIT"
+          - "PlacementFeeBasis{basis=NETWORK_SPLIT, month (YYYY-MM), dm3, nodeIds[]}: the recorded fee basis of a NETWORK_SPLIT plan, set exactly when NETWORK_SPLIT; dm3 is the plan's total declared volume (0 when any line's unit volume is undeclared) and nodeIds the redistribution's recipients, unique and sorted. A fact for a future settlement context, never a charge: no money moves and no invoice is derived here"
+          - "CapacityEnforced (boolean, always present on the REST plan): whether the monthly capacity gate was actually applied, that is both the node's declared monthly volume and every line's unit volume were known. false never blocks the plan; the unenforced fact is recorded"
         invariants:
           - {rule: "the destination node is ACTIVE and has the INBOUND capability (and accepts pallets when the shipment is palletised)", error: ErrNodeCannotReceive}
           - {rule: "the seller is ACTIVE when the plan is created and confirmed", error: ErrSellerSuspended}
           - {rule: "1 to 500 lines, one per catalogue item; every line names a catalogItemId, a valid GTIN (8, 12, 13 or 14 digits, mod-10 check digit) and qtyEaches > 0. Whether the item is live is not checked: the context consumes no CatalogItemCreated or CatalogItemDiscontinued (seller-inbound ADR 0003)", error: ErrValidation}
+          - {rule: "unitVolumeDm3, when declared, is an integer from 1 to 100000 cubic decimetres (seller-inbound ADR 0015)", error: ErrValidation}
+          - {rule: "monthly capacity gate, checked on CreateInboundPlan after the node can receive: when the node declares a monthly volume AND every line declares unitVolumeDm3, the seller's reserved dm3 for the (month, node) plus the plan's volume never exceed the node's monthly volume x the seller's tier factor; HTTP 422 inbound-capacity-exceeded. When either side is unknown the plan is allowed and records capacityEnforced false (policy MonthlyCapacityGate)", error: ErrInboundCapacityExceeded}
+          - {rule: "the destination of a NETWORK_SPLIT plan is an ACTIVE INBOUND_CROSS_DOCK; HTTP 422 network-split-destination", error: ErrNetworkSplitDestination}
+          - {rule: "the region of a NETWORK_SPLIT plan's destination holds at least one ACTIVE FULFILLMENT_CENTER that NodeInboundView has seen; HTTP 422 network-split-unavailable (a redistribution with no destination is not a recordable fact)", error: ErrNetworkSplitUnavailable}
         commands: [CreateInboundPlan, ConfirmInboundPlan, CancelInboundPlan]
         events: [InboundPlanConfirmed]
         throughput_estimate: "low-medium: one per seller replenishment"
@@ -2116,11 +2200,14 @@ contexts:
       - {name: DemandHeatView, source: "order-sourcing FulfillmentReleasedToNode and FulfillmentCancelled (the released lines per item+region over a 28-day window, the node region from node-topology events), offer-availability ListingAvailabilityChanged (declared availability per item+node); seller-inbound ADR 0012"}
       - {name: NodeInboundView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
       - {name: CatalogPackagingView, source: "offer-availability CatalogItemPackagingDeclared, CatalogItemPackLevelRetired"}
+      - {name: InboundCapacityAllocations, source: "own write-side bookkeeping (table inbound_capacity_allocations, keyed sellerId, month as a YYYY-MM calendar key, nodeId): the dm3 the seller's DRAFT and CONFIRMED plans promise to the node. CreateInboundPlan reserves, CancelInboundPlan releases, confirmation keeps the hold; a reservation lives in the calendar month of the plan's createdAt, so the month rolls over in the key. Maintained transactionally by the use cases: not an aggregate, raises no event, rebuilt by nothing. Read at GET /sellers/{sellerId}/capacity-allocations (seller-inbound ADR 0015)"}
       - {name: SellerScorecard, source: "own facts only (no consumer, no event): one row per closed shipment and one per InboundDiscrepancyRecorded or SellerComplianceViolationRecorded, written in the receipt's unit of work (seller-inbound ADR 0005)"}
     policies:
       - {name: CaseLevelAtAddCarton, rule: "CreateInboundPlan does not read CatalogPackagingView: whether a CASE_PACKED item has an active CASE level is enforced on AddCarton (ErrCaseQtyMismatchesGtin), not when the plan is created"}
       - {name: SsccIssuance, rule: "a carton added with an sscc is accepted only if valid and unique network-wide; a carton added without one gets an SSCC issued from the network's GS1 company prefix; either way a Label is returned"}
       - {name: NodeMustBeAbleToReceive, rule: "the destination node, its INBOUND capability, acceptsPallets and carton limits are read from NodeInboundView; a node that is not ACTIVE receives nothing; a node whose profile declares no inbound limits is treated as accepting cartons with limits unchecked"}
+      - {name: MonthlyCapacityGate, rule: "record-and-allow (seller-inbound ADR 0015): in CreateInboundPlan the limit is NodeInboundView's monthlyVolumeDm3 (the node's declared inbound limits, from NodeOperationalProfileDeclared) x the seller's tier factor / 10000, the factor read from this context's own scorecard tier in basis points: GOOD 10000, WATCH 8000, AT_RISK 5000 (a scorecard with no observations reads GOOD). When the limit is above 0 AND the plan's volume is above 0 AND reserved + volume exceeds the limit the plan is refused (ErrInboundCapacityExceeded). When either side is unknown, the node declared no monthly volume or any line's unit volume is undeclared, the plan is ALLOWED and capacityEnforced false is recorded on it: the gate never blocks a legacy plan and is inert until a node declares a monthly volume and a seller sends unit volumes. No sibling is called"}
+      - {name: CapacitySplitV1, rule: "at create a NETWORK_SPLIT plan computes its redistribution deterministically (seller-inbound ADR 0015): the candidates are the region's ACTIVE FULFILLMENT_CENTERs in NodeInboundView; exactly one candidate takes every line whole; when EVERY candidate declares a monthly volume and has remaining capacity (limit x tier factor - reserved above 0) they are ranked by remaining capacity descending, ties to the lowest nodeId, the 3 largest are kept and each line is split proportionally to remaining capacity (floor shares, at least 1 unit to each recipient that still has units to take, leftovers to the largest); otherwise the 3 lowest nodeIds share each line evenly (floor shares, leftovers in ascending nodeId order) and the plan records the degraded mode. The split is stored on the plan and carried on InboundPlanConfirmed (omitted for SELLER_SPLIT). It is a recorded fact only: nothing downstream executes it"}
       - {name: OwnerSegregation, rule: "every carton of a plan is owned by the plan's seller (ownerRef = sellerId); ownership travels on InboundShipmentShipped and the Vendor API and is never merged with another owner's"}
       - {name: ReceiveOnVendorReceipt, rule: "on InboundReceiptSubmitted run RecordInboundReceipt for the shipment: the shipment closes when every carton has a final status, CLOSED if nothing differs from the manifest and CLOSED_WITH_DISCREPANCY otherwise"}
       - {name: SellerStatusIsIntegration, rule: "SellerSuspended and SellerReinstated are integration events on retailnetwork.seller-inbound.events (subject and key sellerId), consumed by offer-availability to suppress and restore the seller's listings; SellerOnboarded stays analytics-only (seller-inbound ADR 0013, gap G48)"}
@@ -2132,7 +2219,8 @@ contexts:
       - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans, POST /inbound-plans/{planId}/confirmations, POST /inbound-plans/{planId}/cancellations", routes: ["POST /inbound-plans", "POST /inbound-plans/{planId}/confirmations", "POST /inbound-plans/{planId}/cancellations"], message: "CreateInboundPlan, ConfirmInboundPlan, CancelInboundPlan", relationship: OHS}
       - {from: seller / seller portal, type: cmd, channel: "REST POST /inbound-plans/{planId}/shipments, POST /inbound-shipments/{shipmentId}/cartons, POST /inbound-shipments/{shipmentId}/labels, POST /inbound-shipments/{shipmentId}/dispatches", routes: ["POST /inbound-plans/{planId}/shipments", "POST /inbound-shipments/{shipmentId}/cartons", "POST /inbound-shipments/{shipmentId}/labels", "POST /inbound-shipments/{shipmentId}/dispatches"], message: "CreateInboundShipment, AddCarton, LabelShipment, ShipInboundShipment", relationship: OHS}
       - {from: seller / seller portal, type: qry, channel: "REST GET /inbound-plans/{planId}, GET /inbound-shipments/{shipmentId}, GET /inbound-shipments/{shipmentId}/labels", routes: ["GET /inbound-plans/{planId}", "GET /inbound-shipments/{shipmentId}", "GET /inbound-shipments/{shipmentId}/labels"], message: "GetInboundPlan, GetInboundShipment, GetLabels", relationship: OHS}
-      - {from: "seller / seller portal, network partner managers (human)", type: qry, channel: "REST GET /sellers/{sellerId}/scorecard?window=", routes: ["GET /sellers/{sellerId}/scorecard"], message: "GetSellerScorecard (informational, seller-inbound ADR 0005)", relationship: OHS}
+      # caller inferred for the capacity read: ADR 0015 calls it the operator-facing honesty surface and names no client; it rides the scorecard's query row
+      - {from: "seller / seller portal, network partner managers (human)", type: qry, channel: "REST GET /sellers/{sellerId}/scorecard?window=, GET /sellers/{sellerId}/capacity-allocations?month=", routes: ["GET /sellers/{sellerId}/scorecard", "GET /sellers/{sellerId}/capacity-allocations"], message: "GetSellerScorecard (seller-inbound ADR 0005), GetSellerCapacityAllocations (seller-inbound ADR 0015)", relationship: OHS}
       - {from: seller / network partner manager, type: cmd, channel: "REST POST /placement-plans (compute), GET /placement-plans, GET /placement-plans/{planId}, POST /placement-plans/{planId}/acceptances", routes: ["POST /placement-plans", "GET /placement-plans", "GET /placement-plans/{planId}", "POST /placement-plans/{planId}/acceptances"], message: "ComputePlacementPlan, ListPlacementPlans, GetPlacementPlan, AcceptPlacementPlan", relationship: OHS}
       - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: InboundReceiptSubmitted, relationship: Customer/Supplier}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired", relationship: Conformist}
@@ -2143,6 +2231,7 @@ contexts:
       - "POST /sellers/{sellerId}/suspensions"
       - "POST /sellers/{sellerId}/reinstatements"
       - "GET /sellers/{sellerId}/scorecard?window="
+      - "GET /sellers/{sellerId}/capacity-allocations?month="
       - "POST /inbound-plans"
       - "GET /inbound-plans/{planId}"
       - "POST /inbound-plans/{planId}/confirmations"
@@ -2162,7 +2251,7 @@ contexts:
       - {event: PlacementPlanSuggested, entity: placementplan, data: [planId, sellerId, catalogItemId, basis, suggestions(nodeId, regionId, suggestedUnits, regionDemandUnits, nodeAvailabilityUnits), createdAt], consumers: [analytics only in v1 (ADR 0012)]}
       - {event: SellerSuspended, entity: seller, data: [sellerId, suspendedAt, reason (optional)], consumers: [offer-availability]}
       - {event: SellerReinstated, entity: seller, data: [sellerId, reinstatedAt], consumers: [offer-availability]}
-      - {event: InboundPlanConfirmed, entity: inboundplan, data: [planId, sellerId, destinationNodeId, packingOption, lines(catalogItemId, gtin, qtyEaches), confirmedAt], consumers: [analytics only]}
+      - {event: InboundPlanConfirmed, entity: inboundplan, data: [planId, sellerId, destinationNodeId, packingOption, placementOption, "lines(catalogItemId, gtin, qtyEaches, unitVolumeDm3 (optional, omitted when undeclared))", "redistribution(nodeId, lineNo, qtyEaches) (optional, NETWORK_SPLIT only)", "placementFeeBasis(basis, month, dm3, nodeIds) (optional, NETWORK_SPLIT only)", confirmedAt], consumers: [analytics only]}
       - {event: InboundShipmentLabelled, entity: inboundshipment, data: [shipmentId, planId, sellerId, nodeId, cartons(sscc, parentSscc, kind, contents(catalogItemId, gtin, qtyEaches, lot, expiry), grossWeightG, dimsMm), labelledAt], consumers: [vendor-connectivity]}
       - {event: InboundShipmentShipped, entity: inboundshipment, data: [shipmentId, planId, sellerId, nodeId, shippedAt], consumers: [vendor-connectivity, node-performance]}
       - {event: InboundShipmentReceived, entity: inboundshipment, data: [shipmentId, sellerId, nodeId, status, "cartons(sscc, status)", receivedAt, "received(catalogItemId (optional), gtin, qtyEaches)"], consumers: [vendor-connectivity, offer-availability]}
@@ -2186,9 +2275,15 @@ contexts:
           - {value: MISSING, meaning: "A manifest carton was not received."}
           - {value: UNEXPECTED, meaning: "A carton was received that the manifest does not list."}
           - {value: DAMAGED, meaning: "A carton was received damaged."}
+      - name: PlacementOption
+        fields: [InboundPlanConfirmed.placementOption, "rest:PlacementOption"]
+        about: "Who splits an inbound plan (seller-inbound ADR 0015)."
+        values:
+          - {value: SELLER_SPLIT, meaning: "The default: everything goes to the destination the seller picked."}
+          - {value: NETWORK_SPLIT, meaning: "The destination is an ACTIVE inbound cross-dock and the plan records a redistribution of its eaches across the region's fulfilment centres; nothing downstream executes it."}
       - name: ComplianceTier
         fields: ["rest:SellerScorecard.complianceTier"]
-        about: "The informational tier of a seller's compliance scorecard: the worst of three signals over the window (seller-inbound ADR 0005 A3). Nothing acts on it."
+        about: "The tier of a seller's compliance scorecard: the worst of three signals over the window (seller-inbound ADR 0005 A3). The monthly capacity gate reads it as the seller's allocation factor (seller-inbound ADR 0015); nothing else acts on it."
         values:
           - {value: GOOD, meaning: "No signal reaches WATCH, or nothing was observed in the window."}
           - {value: WATCH, meaning: "Receipt accuracy below 0.98, or at least 0.5 discrepancies per shipment, or at least one compliance violation."}
@@ -2210,6 +2305,12 @@ contexts:
       - {term: Seller, definition: "An organisation that sends its own stock to the network. Distinct from a Vendor, which operates fulfillment nodes.", code: "seller.Account"}
       - {term: "Owner / Seller of Record", definition: "Whose stock it is. On the network ownerRef equals the sellerId; stock, listings and reservations are segregated by it.", code: "seller.ID (shared.ValidOwnerRef)"}
       - {term: Inbound Plan, definition: "A seller's declaration, in eaches, of what it will send to one node and with which packing option.", code: "inboundplan.Plan"}
+      - {term: Placement Option, definition: "Who splits an inbound plan: SELLER_SPLIT (the seller picks one destination, the default) or NETWORK_SPLIT (the plan goes to an inbound cross-dock and records a redistribution across the region's fulfilment centres).", code: "inboundplan.PlacementOption"}
+      - {term: Unit Volume, definition: "The seller-declared volume of one each of a plan line, in cubic decimetres. Undeclared on any line makes the plan's volume unknown.", code: "inboundplan.Line.UnitVolumeDm3"}
+      - {term: Capacity Allocation, definition: "The cubic decimetres a seller's DRAFT and CONFIRMED plans of one calendar month promise to one node. Bookkeeping kept by the use cases, not an aggregate and not an event.", code: "capacity.Allocation"}
+      - {term: Monthly Capacity Gate, definition: "The check at plan creation that a seller's reserved volume plus the plan's volume stays within the node's declared monthly volume times the seller's tier factor. It applies only when both sides are known; otherwise the plan is allowed and recorded as not enforced.", code: "capacity.Check"}
+      - {term: Redistribution, definition: "The recorded split of a NETWORK_SPLIT plan's eaches across at most three fulfilment centres of the destination's region. A fact, executed by nothing downstream.", code: "capacity.Split, inboundplan.RedistributionLine"}
+      - {term: Placement Fee Basis, definition: "The recorded basis of a NETWORK_SPLIT plan (month, declared volume, recipient nodes) for a future settlement context. Never a charge.", code: "inboundplan.FeeBasis"}
       - {term: Inbound Shipment, definition: "One physical consignment of a plan to a node: its cartons, labels and receipt outcome.", code: "inboundshipment.Shipment"}
       - {term: Carton, definition: "One physical outer carton of a shipment, identified by an SSCC and holding the contents it declares.", code: "inboundshipment.Carton"}
       - {term: Packing Option, definition: "INDIVIDUAL (eaches packed freely) or CASE_PACKED (cartons are case packs of a declared CASE level).", code: "inboundplan.PackingOption"}
@@ -2226,9 +2327,9 @@ contexts:
 
   # =========================================================================
   # as built (customer-returns ADRs 0001 to 0005, apis/openapi.yaml and apis/asyncapi.yaml on origin/develop, read 2026-11-16).
-  # Two seams of this context are built on ITS side only and are therefore NOT rows below (the bidirectional rules of check_model.py):
-  #  - the reverse-label call to shipping-and-tracking (its ADR 0017 decides the route; its develop OpenAPI does not carry it), policy ReverseLabelCall;
-  #  - the vendor seam (vendor-connectivity ADR 0014 decides the return advices, the outcome route and VendorReturnOutcomeSubmitted; its develop specs carry none of them), policy FirstFittingOutcomeCompletes.
+  # Both seams of this context are built on both sides and are rows below (re-checked 2026-11-17):
+  #  - the reverse-label call to shipping-and-tracking (its ADR 0017; POST /return-labels is in its develop OpenAPI), policy ReverseLabelCall;
+  #  - the vendor seam (vendor-connectivity ADR 0014: the return advices, the outcome route and VendorReturnOutcomeSubmitted are in its develop specs), policy FirstFittingOutcomeCompletes.
   - id: customer-returns
     name: Customer Returns
     code: CR
@@ -2301,15 +2402,15 @@ contexts:
     read_models:
       - {name: OrderGroupView, source: "customer-ordering CustomerOrderPlaced (writes PROMISED per group with the destination postal PREFIX, the witness node and the placed lines) and the terminal ShopperNoticeDecided families GROUP_SHIPPED, GROUP_DELIVERED, GROUP_LOST, GROUP_RETURNED (set the status; the status of the fact wins over the family). Keyed (orderId, groupNo). Order tolerant: a notice before its placed event creates the row, and a placed event never demotes a status a notice already set. Only SHIPPED and DELIVERED are authorizable (customer-returns ADR 0003)"}
       - {name: ReturnsNetworkView, source: "three halves (customer-returns ADR 0003): nodes from node-topology NodeRegistered, NodeActivated, NodeSuspended, NodeRetired (only ACTIVE RETURNS_CENTER nodes are candidates); prefixes from node-topology ServiceAreaAssigned (which region a postal prefix belongs to; the highest assignmentVersion wins); origins from order-sourcing FulfillmentLocked (the fulfilling node, the ORIGIN_NODE fallback) and FulfillmentReleasedToNode (the per-item ownerRef), merged into one row per group"}
-      - {name: ReturnOutcomeFacts, source: "own audit trail (table return_outcomes): every graded outcome as received, with a per-line unexpected flag; nothing re-decides an authorization from it. Its feeding consumer of the vendor's outcome fact is built here, but the producer's develop specification does not carry the event yet (policy FirstFittingOutcomeCompletes)"}
+      - {name: ReturnOutcomeFacts, source: "own audit trail (table return_outcomes): every graded outcome as received, with a per-line unexpected flag; nothing re-decides an authorization from it. Fed by vendor-connectivity VendorReturnOutcomeSubmitted (policy FirstFittingOutcomeCompletes)"}
     policies:
       - {name: DispositionDecidedAtAuthorization, rule: "decide is a pure function with no I/O (customer-returns ADR 0002), in this order: KEEP when the method is not PICKUP, every line has a price and the total (unit price times quantity over the lines) is at most ReturnlessThresholdCents (1500 cents); else NEAREST_RETURNS_CENTER when the region of the group's destination prefix has an ACTIVE RETURNS_CENTER in ReturnsNetworkView; else ORIGIN_NODE when a sourcing fact named the fulfilling node; else ErrNoReturnDestination. The authorize use case reads only local tables and is one unit of work. RN-0012 words the origin as the locked assignment node falling back to the promise witness; as built the fallback to the witness node is not in decide (the witness node is stored on OrderGroupView only)"}
       - {name: ReturnlessKeep, rule: "KEEP closes the authorization at once (CLOSED_KEEP at creation, closedAt = authorizedAt): no destination node, no label, no outcome. ReturnAuthorized is still raised, without destinationNodeId. The refund is not this context's"}
       - {name: PricesAreCallerFacts, rule: "unitPriceCents per line is declared by the storefront, stored on the aggregate and echoed on the REST view, and is on no event. A line without a price makes KEEP impossible and the view carries pricesAbsent true (customer-returns ADR 0002 A2)"}
       - {name: LazyExpiry, rule: "every read, label and outcome call first checks expiresAt; once it has passed the authorization is cancelled (ReturnCancelled with reason EXPIRED). An expired authorization that nobody touches stays AUTHORIZED in the table until the next touch; there is no sweeper (customer-returns ADR 0002 A4)"}
-      - {name: ReverseLabelCall, rule: "IssueLabel is the ONE synchronous in-organization call of this context (customer-returns ADR 0005): it asks shipping-and-tracking's reverse-label route for the label of one package (body returnAuthorizationId, orderId, packageNo, destinationPostalPrefix; answer trackingNumber, carrier) BEFORE the transaction, with Idempotency-Key returnAuthorizationId:packageNo, then one transaction links the tracking number and appends ReturnLabelIssued. The call is config-gated (SHIPPING_LABELS_URL, default empty) and tolerant: unset, a transport failure, a non-200 answer or a body without a tracking number all answer 422 label-unavailable with no outbox row and no retry. RESIDUAL, as built on origin/develop: shipping-and-tracking decided the route in its ADR 0017 but its OpenAPI does not carry it, so the call is not a sync_calls row of this model and a label request answers label-unavailable until that route ships. This context keeps the tracking number and the destination node id, never the address or the label document"}
+      - {name: ReverseLabelCall, rule: "IssueLabel is the ONE synchronous in-organization call of this context (customer-returns ADR 0005): it asks shipping-and-tracking's reverse-label route for the label of one package (body returnAuthorizationId, orderId, packageNo, destinationPostalPrefix; answer trackingNumber, carrier) BEFORE the transaction, with Idempotency-Key returnAuthorizationId:packageNo, then one transaction links the tracking number and appends ReturnLabelIssued. The call is config-gated (SHIPPING_LABELS_URL, default empty) and tolerant: unset, a transport failure, an answer other than the 201 the route gives or a body without a tracking number all answer 422 label-unavailable with no outbox row and no retry. The route is shipping-and-tracking's POST /return-labels (its ADR 0017), a sync_calls row of this model. This context keeps the tracking number and the destination node id, never the address or the label document"}
       - {name: OneLabelPerPackage, rule: "at most five packages per authorization (packageNo 1 to 5); a tracking number already linked is not linked again (customer-returns ADR 0002 A5)"}
-      - {name: FirstFittingOutcomeCompletes, rule: "the consumer of the vendor's graded outcome (type name VendorReturnOutcomeSubmitted on retailnetwork.vendor-connectivity.events, in this context's AsyncAPI) completes the first open authorization the outcome fits: RECEIVED and ReturnCompleted with the authorized lines only; an absent ownerRef on an outcome line is filled from the authorization. Later outcomes, and outcomes for an unknown or closed authorization, are recorded on ReturnOutcomeFacts and acknowledged, never a consumer error (customer-returns ADR 0002 A6). RESIDUAL, as built on origin/develop: vendor-connectivity decided the event, the return-advice poll and the outcome route in its ADR 0014, but its AsyncAPI and OpenAPI do not carry them, so the event is not a consumes row of this model, vendor-connectivity is not a consumer row of this context's events, and no authorization reaches RECEIVED until that producer ships"}
+      - {name: FirstFittingOutcomeCompletes, rule: "the consumer of the vendor's graded outcome (type name VendorReturnOutcomeSubmitted on retailnetwork.vendor-connectivity.events, in this context's AsyncAPI) completes the first open authorization the outcome fits: RECEIVED and ReturnCompleted with the authorized lines only; an absent ownerRef on an outcome line is filled from the authorization. Later outcomes, and outcomes for an unknown or closed authorization, are recorded on ReturnOutcomeFacts and acknowledged, never a consumer error (customer-returns ADR 0002 A6). The producer side is vendor-connectivity's return-advice poll and outcome route (its ADR 0014): it consumes ReturnAuthorized, ReturnLabelIssued and ReturnCancelled into its ReturnAdviceView and publishes the outcome fact"}
       - {name: UnexpectedLinesStayFacts, rule: "outcome lines beyond the authorization are recorded on ReturnOutcomeFacts flagged unexpected, never published and never restocked; the vendor's own exception handling owns them (customer-returns ADR 0002 A7)"}
       - {name: RestockIsAFact, rule: "ReturnCompleted carries, per authorized item, the owner and the restockable and unsellable quantities at the grading node. offer-availability raises the owner listing's available quantity by qtyRestockable; unsellable units touch no listing. This context adjusts no stock itself"}
       - {name: PickupIsRecordedNotRun, rule: "PICKUP is accepted with its window and published on ReturnAuthorized, and the state machine knows PICKUP_FAILED, but nothing in this context asks last-mile-delivery for a pickup and nothing consumes a last-mile event: the doorstep pickup leg is a later slice (customer-returns OpenAPI; last-mile-delivery ADR 0017 ships the dormant induction kind)"}
@@ -2320,6 +2421,7 @@ contexts:
       - {from: customer-ordering, type: evt, channel: "Kafka retailnetwork.customer-ordering.events", message: "CustomerOrderPlaced, ShopperNoticeDecided", relationship: Conformist}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeActivated, NodeSuspended, NodeRetired, ServiceAreaAssigned", relationship: Conformist}
       - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentReleasedToNode, FulfillmentLocked", relationship: Conformist}
+      - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: "VendorReturnOutcomeSubmitted", relationship: Customer/Supplier}
     rest:
       - "POST /return-authorizations"
       - "GET /return-authorizations?orderId=&cursor=&limit="
@@ -2327,10 +2429,10 @@ contexts:
       - "POST /return-authorizations/{authorizationId}/labels"
       - "POST /return-authorizations/{authorizationId}/cancellations"
     publishes:
-      - {event: ReturnAuthorized, entity: returnauthorization, data: [authorizationId, orderId, groupNo, reason, disposition, method, "lines(lineNo, catalogItemId, quantity, ownerRef (optional))", "destinationNodeId (optional, omitted for KEEP)", "originNodeId (optional)", "pickupWindowStart (optional, PICKUP only)", "pickupWindowEnd (optional, PICKUP only)", expiresAt, authorizedAt], consumers: ["none on develop (vendor-connectivity ADR 0014 decides the consumer)"]}
-      - {event: ReturnLabelIssued, entity: returnauthorization, data: [authorizationId, trackingNumber, destinationNodeId, issuedAt], consumers: ["none on develop (vendor-connectivity ADR 0014 decides the consumer)"]}
+      - {event: ReturnAuthorized, entity: returnauthorization, data: [authorizationId, orderId, groupNo, reason, disposition, method, "lines(lineNo, catalogItemId, quantity, ownerRef (optional))", "destinationNodeId (optional, omitted for KEEP)", "originNodeId (optional)", "pickupWindowStart (optional, PICKUP only)", "pickupWindowEnd (optional, PICKUP only)", expiresAt, authorizedAt], consumers: [vendor-connectivity]}
+      - {event: ReturnLabelIssued, entity: returnauthorization, data: [authorizationId, trackingNumber, destinationNodeId, issuedAt], consumers: [vendor-connectivity]}
       - {event: ReturnCompleted, entity: returnauthorization, data: [authorizationId, outcome, nodeId, "lines(catalogItemId, ownerRef (optional), qtyRestockable, qtyUnsellable)", receivedAt], consumers: [offer-availability]}
-      - {event: ReturnCancelled, entity: returnauthorization, data: [authorizationId, reason, cancelledAt], consumers: ["none on develop (vendor-connectivity ADR 0014 decides the consumer)"]}
+      - {event: ReturnCancelled, entity: returnauthorization, data: [authorizationId, reason, cancelledAt], consumers: [vendor-connectivity]}
     reasons:
       - name: ReturnReason
         fields: [ReturnAuthorized.reason, "rest:AuthorizeReturnRequest.reason", "rest:ReturnAuthorization.reason"]
@@ -2385,7 +2487,9 @@ contexts:
       - {event: ServiceAreaAssigned, from: node-topology}
       - {event: FulfillmentReleasedToNode, from: order-sourcing}
       - {event: FulfillmentLocked, from: order-sourcing}
-    sync_calls: []   # the reverse-label call is built on this side only; see policy ReverseLabelCall
+      - {event: VendorReturnOutcomeSubmitted, from: vendor-connectivity}
+    sync_calls:
+      - {to: shipping-and-tracking, type: cmd, message: IssueReturnLabel, channel: "REST POST /return-labels"}
     ul:
       - {term: Return Authorization, definition: "The network's permission for a shopper to return one shipped or delivered order group, with the decided disposition and its state.", code: "returnauthorization.ReturnAuthorization"}
       - {term: Disposition, definition: "What happens to the returned goods: KEEP, NEAREST_RETURNS_CENTER or ORIGIN_NODE. Decided by the context at authorization, never by the caller.", code: "returnauthorization.Disposition"}
