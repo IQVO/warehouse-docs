@@ -130,13 +130,16 @@ are the proposed Go package and type names. Each context's own
 | **Region** | `node-topology` | A largely self-sufficient partition of the network. | `region.Region` |
 | **Release (to node)** | `order-sourcing` | Sending a group to one node; for a vendor node this issues a purchase order. | `assignment.Release` |
 | **Required Ship-By** | `vendor-connectivity` | The pickup cutoff the PO must be ready for; the fleet calls it the CPT. | `po.PurchaseOrder.RequiredShipBy` |
+| **Return Advice** | `vendor-connectivity` | A network return authorization as the vendor's work item: its lines and, as reverse labels are issued, their tracking numbers, addressed to the node that receives the return. AUTHORIZED until its outcome is recorded or the authorization is cancelled. | `ReturnAdviceView (vendor_return_advices)` |
 | **Return Authorization** | `customer-returns` | The network's permission for a shopper to return one shipped or delivered order group, with the decided disposition and its state. | `returnauthorization.ReturnAuthorization` |
 | **Return Method** | `customer-returns` | How the shopper hands the package back: DROP_OFF, or PICKUP with a window. | `returnauthorization.Method` |
+| **Return Outcome** | `vendor-connectivity` | A vendor's graded report against a return advice: per item, the units that may be restocked and the units that may not. | `submission.KindReturnOutcome` |
 | **Return Reason** | `customer-returns` | The enum code of why the group is returned; never free text. | `returnauthorization.Reason` |
 | **Returnless Return (Keep)** | `customer-returns` | A return whose goods the shopper keeps, chosen when every price is known and the declared total is within the returnless threshold; no label and no movement. | `returnauthorization.KeepDisposition` |
 | **Returnless Threshold** | `customer-returns` | The ceiling on the caller-declared total, 1500 cents, under which a return is returnless. | `returnauthorization.ReturnlessThresholdCents` |
 | **Returns Network View** | `customer-returns` | The local, event-fed copy of the returns centres, the region of each postal prefix and the node that fulfilled each group. | `network.Node, network.PrefixAssignment, network.GroupOrigin` |
 | **Reverse Label** | `customer-returns` | The carrier label of a return package, issued by shipping-and-tracking; this context keeps only its tracking number. | `ports.LabelIssuer` |
+| **Reverse Label** | `shipping-and-tracking` | The label of one package of a customer return, issued for customer-returns: purpose RETURN, the return authorization id, no purchase order, no assignment and no package journey. Its stop key equals the outbound label's of the same order. | `label.ShippingLabel (Purpose RETURN)` |
 | **Route** | `last-mile-delivery` | One van's ordered stops in one wave. | `route.Route` |
 | **Scan** | `shipping-and-tracking` | One observation of a package at a node. | `journey.Scan` |
 | **Scorecard** | `node-performance` | A node's measured performance over a rolling window, with a grade. | `scorecard.NodeScorecard` |

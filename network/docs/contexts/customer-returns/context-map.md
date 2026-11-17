@@ -2,7 +2,7 @@
 id: context-map
 title: Context Map
 sidebar_label: Context Map
-description: "Customer Returns' slice of the context map: every neighbour with direction and pattern, and the two seams the model does not draw yet."
+description: "Customer Returns' slice of the context map: every neighbour with direction and pattern, and the two seams to shipping-and-tracking and vendor-connectivity."
 ---
 
 # Context Map
@@ -45,9 +45,12 @@ flowchart LR
 Derived from: model.yaml → contexts[customer-returns].inbound, .publishes,
 .consumes; contexts[offer-availability].consumes; meta.hard_boundary.
 
-Omitted: the contexts with no edge to this one in the model:
-`delivery-promise`, `linehaul-transportation`, `last-mile-delivery`,
-`node-performance`, `seller-inbound`, and the two below.
+Omitted: the contexts with no edge to this one in the model
+(`delivery-promise`, `linehaul-transportation`, `last-mile-delivery`,
+`node-performance`, `seller-inbound`), and, from the two diagrams only,
+`shipping-and-tracking` and `vendor-connectivity`: both are edges of the
+model since their side shipped, listed in the section below; the diagrams
+were not redrawn.
 
 ## Relationships
 
@@ -60,16 +63,16 @@ Omitted: the contexts with no edge to this one in the model:
 | Storefront (external) | U → D | Open Host Service | REST (no auth) | authorize, label, cancel, read | A published returns API; the storefront is the only caller. |
 | `network-fulfillment` (warehouse-systems fleet) | none | Separate Ways | none | none | The hard boundary: the fleet reaches the network through the Vendor API of `vendor-connectivity` only. |
 
-## The two seams the model does not draw
+## The two returns seams
 
-Both are built in this service and decided in the neighbour's ADRs. Neither
-is in the neighbour's `develop` contract, and the model draws an edge only
-when both ends carry it.
+Both are built in this service and in the neighbour: the neighbour's
+`develop` contract carries its side, so both are edges of the model.
 
-| Neighbour | What this service does | What is missing | Effect today |
-| --- | --- | --- | --- |
-| `shipping-and-tracking` | `IssueLabel` calls its reverse-label route (`/return-labels`) before the transaction, with an idempotency key of the authorization id and the package number. The call is config-gated and off by default. | The route is decided in `shipping-and-tracking` ADR 0017 and is not in its OpenAPI on `develop`. | A label request answers 422 `label-unavailable`; no `ReturnLabelIssued` is raised. |
-| `vendor-connectivity` | Publishes `ReturnAuthorized`, `ReturnLabelIssued` and `ReturnCancelled` for the vendor's return advices, and consumes the graded outcome (`VendorReturnOutcomeSubmitted`) to complete an authorization. | The advices, the outcome route and the event are decided in `vendor-connectivity` ADR 0014 and are not in its OpenAPI or AsyncAPI on `develop`. | No authorization reaches `RECEIVED` and no `ReturnCompleted` is raised. |
+| Neighbour | Direction | Pattern | Channel | What crosses |
+| --- | --- | --- | --- | --- |
+| `shipping-and-tracking` | CR calls ST | Customer/Supplier | REST `POST /return-labels` (in-org, `Idempotency-Key` of the authorization id and the package number) | `IssueLabel` calls the reverse-label route before the transaction and stores the tracking number of the `201` answer (`shipping-and-tracking` ADR 0017). The call is config-gated and off by default; when it is unset or fails the label request answers 422 `label-unavailable`. |
+| `vendor-connectivity` | CR → VC | Conformist (`vendor-connectivity` conforms) | Kafka `retailnetwork.customer-returns.events` | `ReturnAuthorized`, `ReturnLabelIssued`, `ReturnCancelled` feed the vendor's return advices (`vendor-connectivity` ADR 0014). |
+| `vendor-connectivity` | VC → CR | Customer/Supplier | Kafka `retailnetwork.vendor-connectivity.events` | `VendorReturnOutcomeSubmitted`, the vendor's graded outcome, completes the first fitting open authorization (`RECEIVED`, `ReturnCompleted`). |
 
 ## Notes on the patterns
 
@@ -78,5 +81,5 @@ when both ends carry it.
 - **Conformist upstream, three times.** The context decides from local
   copies; a view that lags refuses the command instead of calling the
   producer.
-- **One synchronous call, not drawn.** The reverse-label call is the only
-  one the service makes; see the table above.
+- **One synchronous call.** The reverse-label call is the only one the
+  service makes; see the table above.

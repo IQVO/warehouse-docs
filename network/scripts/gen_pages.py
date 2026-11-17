@@ -165,7 +165,7 @@ shared in either direction. Details on
     out.append(mermaid_view("partner", ["seller-inbound", "vendor-connectivity", "offer-availability", "node-topology", "node-performance"]))
     out.append("Derived from: same sections as above.\n")
     out.append("## Returns view: the authorization, the facts it reads and the restock\n")
-    out.append("`customer-returns` is the twelfth context ([ADR 0012](/adr/0012-customer-returns-is-a-bounded-context)). Its reverse-label call to `shipping-and-tracking` and the vendor seam through `vendor-connectivity` are built on its side only: those services' `develop` contracts do not carry them yet, so they are not edges of this map.\n")
+    out.append("`customer-returns` is the twelfth context ([ADR 0012](/adr/0012-customer-returns-is-a-bounded-context)). Its reverse-label call to `shipping-and-tracking` (`POST /return-labels`) and the vendor seam through `vendor-connectivity` (return advices in, the graded outcome back) are built on both sides and are edges of this map.\n")
     out.append(mermaid_view("returns", ["customer-returns", "customer-ordering", "order-sourcing", "node-topology", "offer-availability"]))
     out.append("Derived from: same sections as above.\n")
     out.append("## Feedback view: what feeds the two Core contexts\n")

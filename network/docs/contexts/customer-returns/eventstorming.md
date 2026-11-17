@@ -144,7 +144,7 @@ flowchart TB
 | Hotspot | Where it comes from |
 | --- | --- |
 | Nothing stops a second authorization of the same group | Aggregate note: two authorizations of one group are distinct aggregates (service ADR 0002 A3) |
-| The label route is not in its owner's contract yet | Policy `ReverseLabelCall`: decided in `shipping-and-tracking` ADR 0017, not in its OpenAPI on `develop` |
+| The label call is off by default | Policy `ReverseLabelCall`: `shipping-and-tracking` serves `POST /return-labels` (its ADR 0017), but the call is config-gated; unset, a label request answers `label-unavailable` |
 | An untouched expired authorization stays `AUTHORIZED` | Policy `LazyExpiry`: there is no sweeper (service ADR 0002 A4) |
-| The graded outcome is not published by its owner yet | Policy `FirstFittingOutcomeCompletes`: decided in `vendor-connectivity` ADR 0014, not in its contracts on `develop` |
+| No fleet vendor reports a graded outcome yet | Policy `FirstFittingOutcomeCompletes`: `vendor-connectivity` serves the return advices and the outcome route (its ADR 0014), but the fleet's `network-fulfillment` has no client for them on its `develop` |
 | Nothing sets `IN_TRANSIT` or `PICKUP_FAILED` | Aggregate note: `MarkInTransit` and `MarkPickupFailed` have no caller; policy `PickupIsRecordedNotRun` |

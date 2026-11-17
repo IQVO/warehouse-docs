@@ -31,10 +31,11 @@ flowchart TB
 Derived from: model.yaml → contexts[customer-returns].inbound, .publishes,
 .consumes; contexts[offer-availability].consumes.
 
-Omitted: `shipping-and-tracking` and `vendor-connectivity`. Their side of the
-reverse-label call and of the vendor seam is not in their `develop`
-contracts, so the model has no row for either (policies `ReverseLabelCall`
-and `FirstFittingOutcomeCompletes`).
+Omitted from the diagram only (not redrawn): `shipping-and-tracking` and
+`vendor-connectivity`. Their side of the reverse-label call and of the vendor
+seam is in their `develop` contracts, so both are rows of the model and of
+sections 5 and 6 (policies `ReverseLabelCall` and
+`FirstFittingOutcomeCompletes`).
 
 ## 1. Name
 
@@ -69,29 +70,28 @@ Service), Specification (the disposition decision).
 | `customer-ordering` | event | `CustomerOrderPlaced`, `ShopperNoticeDecided` | Kafka `retailnetwork.customer-ordering.events` | Conformist |
 | `node-topology` | event | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `ServiceAreaAssigned` | Kafka `retailnetwork.node-topology.events` | Conformist |
 | `order-sourcing` | event | `FulfillmentReleasedToNode`, `FulfillmentLocked` | Kafka `retailnetwork.order-sourcing.events` | Conformist |
+| `vendor-connectivity` | event | `VendorReturnOutcomeSubmitted` | Kafka `retailnetwork.vendor-connectivity.events` | Customer/Supplier |
 
 All write routes take an `Idempotency-Key`. No authentication, as in every
 other context (`conventions.no_auth`).
 
-The service also runs a consumer of the vendor's graded outcome
-(`VendorReturnOutcomeSubmitted`, named in this service's event contract). It
-is not a row above: `vendor-connectivity`'s `develop` contracts do not publish
-that event yet.
+The consumer of the vendor's graded outcome (`VendorReturnOutcomeSubmitted`)
+completes the first fitting open authorization; `vendor-connectivity`
+publishes the event since its ADR 0014 shipped.
 
 ## 6. Outbound communication
 
 | Message | Type | Consumers |
 | --- | --- | --- |
-| `ReturnAuthorized` | event | none on `develop`; `vendor-connectivity` ADR 0014 decides the consumer |
-| `ReturnLabelIssued` | event | none on `develop`; `vendor-connectivity` ADR 0014 decides the consumer |
+| `ReturnAuthorized` | event | `vendor-connectivity` (its `ReturnAdviceView`) |
+| `ReturnLabelIssued` | event | `vendor-connectivity` (its `ReturnAdviceView`) |
 | `ReturnCompleted` | event | `offer-availability` |
-| `ReturnCancelled` | event | none on `develop`; `vendor-connectivity` ADR 0014 decides the consumer |
+| `ReturnCancelled` | event | `vendor-connectivity` (its `ReturnAdviceView`) |
+| `IssueReturnLabel` | command (synchronous) | `shipping-and-tracking`, REST `POST /return-labels` |
 
-The model lists **no synchronous call** (`sync_calls` is empty). The service
-does make one, the reverse-label call of `IssueLabel` to
-`shipping-and-tracking`; it is config-gated and off by default, and the
-callee's route is not in its `develop` contract, so the call is described in
-policy `ReverseLabelCall` instead of drawn.
+The model lists **one synchronous call** (`sync_calls`): the reverse-label
+call of `IssueLabel` to `shipping-and-tracking`'s `POST /return-labels`. It is
+config-gated and off by default (policy `ReverseLabelCall`).
 
 ## 7. Ubiquitous language
 

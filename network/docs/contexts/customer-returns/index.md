@@ -24,12 +24,12 @@ It holds no money, no address and no free text: the reason is an enum, unit
 prices are the caller's facts and never leave the context, and only the
 postal prefix of the group's destination is kept.
 
-Two of its seams are built on this side only. The reverse-label route of
-`shipping-and-tracking` and the return advices and outcomes of
-`vendor-connectivity` are decided in those services' ADRs but are not in
-their `develop` contracts, so the model draws neither. Until they ship, a
-label request answers `label-unavailable` and no authorization reaches
-`RECEIVED`. See [Context Map](/network/contexts/customer-returns/context-map).
+Two seams reach other contexts, and both are built on both sides. The
+reverse-label route of `shipping-and-tracking` (`POST /return-labels`) and the
+return advices and outcomes of `vendor-connectivity` are in those services'
+`develop` contracts, so the model draws both. The label call stays
+config-gated and off by default: unset, a label request answers
+`label-unavailable`. See [Context Map](/network/contexts/customer-returns/context-map).
 
 ## Pages
 
@@ -39,9 +39,9 @@ label request answers `label-unavailable` and no authorization reaches
 | [Ubiquitous Language](/network/contexts/customer-returns/ubiquitous-language) | Terms (return authorization, disposition, returnless return, graded outcome...) and code identifiers | — |
 | [Core Domain Chart](/network/contexts/customer-returns/core-domain-chart) | Why this context is Supporting | [core-domain-charts](https://github.com/ddd-crew/core-domain-charts) |
 | [Bounded Context Canvas](/network/contexts/customer-returns/bounded-context-canvas) | Purpose, roles, inbound and outbound messages, decisions | [bounded-context-canvas](https://github.com/ddd-crew/bounded-context-canvas) |
-| [Context Map](/network/contexts/customer-returns/context-map) | Every neighbour with direction and pattern, and the two seams not drawn yet | [context-mapping](https://github.com/ddd-crew/context-mapping) |
+| [Context Map](/network/contexts/customer-returns/context-map) | Every neighbour with direction and pattern, and the two returns seams | [context-mapping](https://github.com/ddd-crew/context-mapping) |
 | [Aggregate Design Canvas](/network/contexts/customer-returns/aggregate-design-canvas) | `ReturnAuthorization` and the three read models | [aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas) |
-| [Domain Events](/network/contexts/customer-returns/domain-events) | Four published events, nine consumed | — |
+| [Domain Events](/network/contexts/customer-returns/domain-events) | Four published events, ten consumed | — |
 | [Domain Message Flow](/network/contexts/customer-returns/domain-message-flow) | A physical return, a returnless return, cancellation and expiry | [domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling) |
 | [EventStorming](/network/contexts/customer-returns/eventstorming) | Process-level boards with hotspots | [eventstorming-glossary-cheat-sheet](https://github.com/ddd-crew/eventstorming-glossary-cheat-sheet) |
 | [Use Cases](/network/contexts/customer-returns/use-cases) | One section per command, errors mapped to HTTP | — |
@@ -72,6 +72,6 @@ label request answers `label-unavailable` and no authorization reaches
 - Read-only MCP server (service ADR 0006): `cmd/mcp`, Streamable HTTP, no auth, its own reads
   only. Two tools: `get_return_authorization` and `list_return_authorizations`. Authorizing,
   labelling and cancelling stay REST-only.
-- What the model does not carry yet for this context:
-  [Context Map](/network/contexts/customer-returns/context-map#the-two-seams-the-model-does-not-draw).
+- The two seams to `shipping-and-tracking` and `vendor-connectivity`:
+  [Context Map](/network/contexts/customer-returns/context-map#the-two-returns-seams).
 - Where the context sits among the twelve: [Context Map](/network/strategic-design/context-map).

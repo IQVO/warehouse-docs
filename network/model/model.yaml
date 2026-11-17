@@ -1243,7 +1243,10 @@ contexts:
       feeds, poll purchase orders, acknowledge them in full inside the
       acknowledgement window, request labels and confirm shipment. It also
       lets a vendor poll the inbound shipments sellers are sending to its
-      nodes (a carton manifest) and submit a carton-level receipt for each.
+      nodes (a carton manifest) and submit a carton-level receipt for each,
+      and poll the return advices addressed to its nodes (the network's
+      return authorizations as the vendor's work items) and report the
+      graded outcome of each.
       Every write is an asynchronous transaction a vendor reconciles.
     roles: [Gateway / Open Host Service, Execution (purchase-order protocol and its clock)]
     business_decisions:
@@ -1299,16 +1302,19 @@ contexts:
         size_estimate: "one row per release to a vendor node"
       - name: Submission
         root_id: transactionId
-        description: "One asynchronous vendor write (acknowledgement, inventory feed, node registration, profile declaration, shipment confirmation, inbound receipt) and its processing outcome."
+        description: "One asynchronous vendor write (acknowledgement, inventory feed, node registration, profile declaration, shipment confirmation, inbound receipt, return outcome) and its processing outcome."
         states: [PROCESSING, SUCCESS, FAILURE]
         transitions: [[PROCESSING, SUCCESS, ProcessSubmission], [PROCESSING, FAILURE, ProcessSubmission]]
-        value_objects: ["SubmissionKind(ACKNOWLEDGEMENT|INVENTORY|NODE_REGISTRATION|NODE_PROFILE|SHIPMENT_CONFIRMATION|INBOUND_RECEIPT)", "SubmissionError{code, message, path}"]
+        value_objects: ["SubmissionKind(ACKNOWLEDGEMENT|INVENTORY|NODE_REGISTRATION|NODE_PROFILE|SHIPMENT_CONFIRMATION|INBOUND_RECEIPT|RETURN_OUTCOME); RETURN_OUTCOME is the seventh kind (vendor-connectivity ADR 0014; the route text and the domain carry it, the OpenAPI SubmissionKind enum still lists six)", "ReturnOutcomeLine{catalogItemId, ownerRef?, qtyRestockable, qtyUnsellable}", "SubmissionError{code, message, path}"]
         invariants:
           - {rule: "outcome set once", error: ErrSubmissionAlreadyProcessed}
           - {rule: "processing never starts before notBefore = receivedAt + simulated processing delay", error: ErrSubmissionNotDue}
           - {rule: "an INBOUND_RECEIPT names a shipment in InboundShipmentView addressed to a node of the submitting vendor; an unknown vendor, shipment or node is not-found (404), a node of another vendor stays ErrNodeNotOwnedByVendor (vendor-connectivity ADR 0005)", error: ErrNotFound}
-        commands: [ReceiveSubmission, ProcessSubmission, SubmitInboundReceipt]
-        events: [SubmissionProcessed, InboundReceiptSubmitted]
+          - {rule: "a RETURN_OUTCOME names a known authorization of ReturnAdviceView and a node of the submitting vendor; an unknown vendor, authorization or node is not-found (404), a node of another vendor stays ErrNodeNotOwnedByVendor (vendor-connectivity ADR 0014)", error: ErrNotFound}
+          - {rule: "the nodeId of a RETURN_OUTCOME is the advice's node; receivedAt is present; 1 to 50 lines with no duplicate catalogItemId for the same ownerRef; qtyRestockable and qtyUnsellable from 0 to 2147483647; HTTP 422 validation-failed. Lines the advice never authorized are NOT refused", error: ErrValidation}
+          - {rule: "an outcome is recorded only while the advice is AUTHORIZED; an advice whose outcome is recorded or whose authorization was cancelled answers HTTP 409 illegal-transition", error: ErrIllegalTransition}
+        commands: [ReceiveSubmission, ProcessSubmission, SubmitInboundReceipt, SubmitReturnOutcome]
+        events: [SubmissionProcessed, InboundReceiptSubmitted, VendorReturnOutcomeSubmitted]
         throughput_estimate: "medium-high"
         size_estimate: "retained 30 days"
     read_models:
@@ -1316,6 +1322,7 @@ contexts:
       - {name: ListingView, source: "offer-availability ListingCreated"}
       - {name: InboundShipmentView, source: "seller-inbound InboundShipmentLabelled, InboundShipmentShipped, InboundShipmentReceived"}
       - {name: CatalogPackagingView, source: "offer-availability CatalogItemPackagingDeclared, CatalogItemPackLevelRetired"}
+      - {name: ReturnAdviceView, source: "customer-returns ReturnAuthorized (creates the advice), ReturnLabelIssued (appends a tracking number it has not seen), ReturnCancelled (table vendor_return_advices, consumer group env CUSTOMER_RETURNS_CONSUMER_GROUP). The advice's node is the event's destinationNodeId, else originNodeId; its vendorId is that node's operator vendor from VendorNodeView, never from the event; an advice whose node the view does not know, or whose node has no operator vendor, is counted and skipped. States AUTHORIZED, CANCELLED, OUTCOME_RECORDED: this context's vocabulary, customer-returns' own states are not mirrored. The view only moves forward, whatever the arrival order; readyAt is the authorization's authorizedAt (vendor-connectivity ADR 0014)"}
     policies:
       - {name: IssueOnRelease, rule: "on FulfillmentReleasedToNode for a VENDOR node, issue a purchase order (poNumber is idempotent on assignmentId + releaseNo)"}
       - {name: PurchaseOrderOfMergedRelease, rule: "a merged FulfillmentReleasedToNode (carrier id, the union lines in member order with no lineNo, an optional members array and a per-line assignmentId) needs no code change: the tolerant decoder ignores members and the per-line assignmentId, so ONE purchase order is issued under the carrier's assignmentId, orderId, groupNo and tier, its lines are numbered by position (1..n), a listingId that two members both ordered appears on two lines (duplicates are legal) and each line keeps its own ownerRef. The release carries the carrier's fulfilment class (STANDARD for a consolidated group), so the tier validator never sees a fifth tier. The vendor sees one package; the Vendor API is unchanged (vendor-connectivity ADR 0013)"}
@@ -1325,10 +1332,15 @@ contexts:
       - {name: ExpireUnacknowledged, rule: "sweep: ISSUED past ackBy -> EXPIRED"}
       - {name: LabelUpstreamOutage, rule: "RequestLabel is synchronous: when shipping-and-tracking does not answer the answer is 503 upstream-unavailable, and when it answers with a refusal this context does not translate 502 upstream-refused (apis/openapi.yaml documents both); labels already issued stay stored and a retry issues only the missing ones (ADR 0002 A19)"}
       - {name: ReceiptRelay, rule: "when an INBOUND_RECEIPT submission is accepted, append InboundReceiptSubmitted (subject and key shipmentId) to the outbox in the same unit of work, so a 202 always has its event (vendor-connectivity ADR 0005); SubmissionProcessed still reports the processing. The receipt is not applied to the shipment here, seller-inbound owns that"}
+      - {name: ReturnOutcomeRelay, rule: "when a RETURN_OUTCOME submission is accepted, VendorReturnOutcomeSubmitted (subject and key authorizationId) is appended to the outbox in the SAME unit of work that saves the submission and moves the advice to OUTCOME_RECORDED, so a 202 always has its event and the advice leaves the poll atomically. Lines the advice never authorized are relayed, never refused (goods on the dock are never turned away): customer-returns records them as unexpected and nothing restocks them. The outcome is not applied to the authorization here, customer-returns owns that; no synchronous call to customer-returns exists (vendor-connectivity ADR 0014)"}
+      - {name: ReturnAdvicePoll, rule: "GET /vendor/return-advices answers the AUTHORIZED advices of the vendor's nodes, oldest first, keyset-paged by (readyAt, authorizationId) with cursor and limit; readyAfter compares with readyAt; a nodeId of another vendor is node-not-owned-by-vendor. An advice leaves the poll when its outcome is recorded or customer-returns cancels the authorization. GET /vendor/return-advices/{authorizationId} also answers a closed advice (CANCELLED or OUTCOME_RECORDED); an advice of another vendor's node, or unknown, is not-found (vendor-connectivity ADR 0014)"}
       - {name: SimulationKnobs, rule: "TX_PROCESSING_DELAY, TX_FAILURE_RATE, RATE_LIMIT_RPS, PO_REDELIVERY_RATE; all default to well-behaved"}
     inbound:
       - {from: "network-fulfillment (warehouse-systems, vendor V-WS)", type: cmd, channel: "Vendor API POST /vendor/nodes, PUT /vendor/nodes/{nodeId}/profile, POST /vendor/inventory, POST /vendor/acknowledgements, POST /vendor/shipping-labels, POST /vendor/shipment-confirmations, POST /vendor/inbound-receipts", routes: ["POST /vendor/nodes", "PUT /vendor/nodes/{nodeId}/profile", "POST /vendor/inventory", "POST /vendor/acknowledgements", "POST /vendor/shipping-labels", "POST /vendor/shipment-confirmations", "POST /vendor/inbound-receipts"], message: "RegisterVendorNode, DeclareNodeProfile, SubmitInventory, SubmitAcknowledgement, RequestLabel, SubmitShipmentConfirmation, SubmitInboundReceipt", relationship: "OHS + PL (downstream is Conformist + ACL)"}
       - {from: "network-fulfillment (warehouse-systems, vendor V-WS)", type: qry, channel: "Vendor API GET /vendor/purchase-orders, GET /vendor/purchase-orders/{poNumber}, GET /vendor/transactions/{transactionId}, GET /vendor/nodes, GET /vendor/nodes/{nodeId}, GET /vendor/nodes/{nodeId}/scorecard, GET /vendor/inbound-shipments, GET /vendor/inbound-shipments/{shipmentId}", routes: ["GET /vendor/purchase-orders", "GET /vendor/purchase-orders/{poNumber}", "GET /vendor/transactions/{transactionId}", "GET /vendor/nodes", "GET /vendor/nodes/{nodeId}", "GET /vendor/nodes/{nodeId}/scorecard", "GET /vendor/inbound-shipments", "GET /vendor/inbound-shipments/{shipmentId}"], message: "PollPurchaseOrders, GetPurchaseOrder, GetTransaction, ListVendorNodes, GetNode, GetScorecard, PollInboundShipments, GetInboundShipment", relationship: "OHS + PL"}
+      # caller: a vendor's returns-centre system through the Vendor API; the fleet's network-fulfillment (vendor V-WS) has no client for these three routes on its develop
+      - {from: "vendor returns-centre system (Vendor API client)", type: qry, channel: "Vendor API GET /vendor/return-advices, GET /vendor/return-advices/{authorizationId}", routes: ["GET /vendor/return-advices", "GET /vendor/return-advices/{authorizationId}"], message: "PollReturnAdvices, GetReturnAdvice", relationship: "OHS + Published Language"}
+      - {from: "vendor returns-centre system (Vendor API client)", type: cmd, channel: "Vendor API POST /vendor/return-outcomes", routes: ["POST /vendor/return-outcomes"], message: "SubmitReturnOutcome", relationship: "OHS + Published Language"}
       - {from: "network partner managers (human)", type: cmd, channel: "REST POST /vendors, POST /vendors/{vendorId}/suspensions, POST /vendors/{vendorId}/reinstatements", routes: ["POST /vendors", "POST /vendors/{vendorId}/suspensions", "POST /vendors/{vendorId}/reinstatements"], message: "OnboardVendor, SuspendVendor, ReinstateVendor", relationship: UI}
       - {from: "network partner managers (human)", type: qry, channel: "REST GET /vendors/{vendorId}", routes: ["GET /vendors/{vendorId}"], message: "GetVendor", relationship: UI}
       - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentReleasedToNode, FulfillmentCancelled, FulfillmentReleaseWithdrawn", relationship: Customer/Supplier}
@@ -1336,6 +1348,7 @@ contexts:
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "ListingCreated", relationship: Conformist}
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "CatalogItemPackagingDeclared, CatalogItemPackLevelRetired", relationship: Conformist}
       - {from: seller-inbound, type: evt, channel: "Kafka retailnetwork.seller-inbound.events", message: "InboundShipmentLabelled, InboundShipmentShipped, InboundShipmentReceived", relationship: Customer/Supplier}
+      - {from: customer-returns, type: evt, channel: "Kafka retailnetwork.customer-returns.events (CUSTOMER_RETURNS_CONSUMER_GROUP)", message: "ReturnAuthorized, ReturnLabelIssued, ReturnCancelled", relationship: Conformist}
     rest:
       - "GET /vendor/purchase-orders?createdAfter=&nodeId=&nextToken="
       - "GET /vendor/purchase-orders/{poNumber}"
@@ -1350,6 +1363,9 @@ contexts:
       - "GET /vendor/inbound-shipments?nodeId=&createdAfter=&nextToken="
       - "GET /vendor/inbound-shipments/{shipmentId}"
       - "POST /vendor/inbound-receipts"
+      - "GET /vendor/return-advices?readyAfter=&nodeId=&cursor=&limit="
+      - "GET /vendor/return-advices/{authorizationId}"
+      - "POST /vendor/return-outcomes"
       - "GET /vendor/transactions/{transactionId}"
       - "POST /vendors"
       - "GET /vendor/nodes"
@@ -1366,6 +1382,7 @@ contexts:
       - {event: VendorShipmentConfirmed, entity: purchaseorder, data: [poNumber, assignmentId, nodeId, trackingNumbers, shippedAt, requiredShipBy], consumers: [order-sourcing, shipping-and-tracking, node-performance]}
       - {event: SubmissionProcessed, entity: submission, data: [transactionId, vendorId, kind, status, errorCount], consumers: [node-performance]}
       - {event: InboundReceiptSubmitted, entity: inboundreceipt, data: [transactionId, vendorId, nodeId, shipmentId, receivedAt, cartons(sscc, status, items(gtin, qtyEaches), complianceCodes)], consumers: [seller-inbound, node-performance]}
+      - {event: VendorReturnOutcomeSubmitted, entity: returnoutcome, data: [transactionId, vendorId, authorizationId, nodeId, receivedAt, "lines(catalogItemId, ownerRef (optional), qtyRestockable, qtyUnsellable)"], consumers: [customer-returns]}
       - {event: VendorSuspended, entity: vendoraccount, data: [vendorId, suspendedAt, reason], consumers: []}
       - {event: VendorReinstated, entity: vendoraccount, data: [vendorId, reinstatedAt], consumers: []}
     reasons:
@@ -1392,6 +1409,9 @@ contexts:
       - {event: InboundShipmentReceived, from: seller-inbound}
       - {event: CatalogItemPackagingDeclared, from: offer-availability}
       - {event: CatalogItemPackLevelRetired, from: offer-availability}
+      - {event: ReturnAuthorized, from: customer-returns}
+      - {event: ReturnLabelIssued, from: customer-returns}
+      - {event: ReturnCancelled, from: customer-returns}
     sync_calls:
       - {to: node-topology, type: cmd, message: "RegisterNode, DeclareOperationalProfile", channel: "REST POST /nodes, PUT /nodes/{nodeId}/operational-profile"}
       - {to: offer-availability, type: cmd, message: ApplyInventoryFeed, channel: "REST POST /inventory-feeds"}
@@ -1406,6 +1426,8 @@ contexts:
       - {term: Submission / Transaction, definition: "An asynchronous vendor write and its outcome, reconciled by transactionId.", code: "submission.Submission"}
       - {term: Label, definition: "labelRef + trackingNumber + carrier; never the address.", code: "po.Label"}
       - {term: Vendor API, definition: "The Open Host Service of this context; its JSON schemas are the Published Language.", code: "apis/vendor-connectivity/openapi.yaml"}
+      - {term: Return Advice, definition: "A network return authorization as the vendor's work item: its lines and, as reverse labels are issued, their tracking numbers, addressed to the node that receives the return. AUTHORIZED until its outcome is recorded or the authorization is cancelled.", code: "ReturnAdviceView (vendor_return_advices)"}
+      - {term: Return Outcome, definition: "A vendor's graded report against a return advice: per item, the units that may be restocked and the units that may not.", code: "submission.KindReturnOutcome"}
       - {term: Inbound Receipt, definition: "A vendor's carton-level report of what arrived for one inbound shipment: per SSCC a status, the eaches received per GTIN and any compliance codes.", code: "inbound.Receipt"}
 
   # =========================================================================
@@ -1787,10 +1809,12 @@ contexts:
           - "StopKey: opaque hex keyed hash (HMAC-SHA-256 under a service secret) of the normalized ship-to address, derived at IssueLabel (policy StopKeyAtLabelTime)"
           - "DestinationPostalPrefix: the first 5 letters or digits of the normalized postal code (the whole code when shorter)"
           - "ShipToSnapshot{labelRef, nonce, ciphertext, keyId, createdAt}; AES-256-GCM, never returned or published, purged by PurgeShipTo"
+          - "Purpose(OUTBOUND|RETURN) and ReturnAuthorizationId: OUTBOUND is the default; a RETURN label (a reverse label of a customer return) always carries the returnAuthorizationId and never a poNumber or an assignmentId. On REST an outbound label answers the Label schema (no purpose) and a reverse label the ReturnLabel schema (purpose RETURN) (shipping-and-tracking ADR 0017)"
         invariants:
           - {rule: "one label per (poNumber, packageNo)", error: ErrLabelAlreadyIssued}
+          - {rule: "one reverse label per (returnAuthorizationId, packageNo); HTTP 409 label-already-issued (shipping-and-tracking ADR 0017)", error: ErrLabelAlreadyIssued}
           - {rule: "trackingNumber unique", error: ErrTrackingNumberTaken}
-        commands: [IssueLabel, VoidLabel, PurgeShipTo]
+        commands: [IssueLabel, IssueReturnLabel, VoidLabel, PurgeShipTo]
         events: [LabelIssued, LabelVoided]
         throughput_estimate: "medium"
         size_estimate: "one per package"
@@ -1846,6 +1870,7 @@ contexts:
       - {name: ReturnOnReturnInitiated, rule: "on last-mile-delivery's PackageReturnInitiated (the third failed attempt) run ReturnToSender on an AT_STATION journey: RETURNED and PackageReturned, whose returnedAt is the CloudEvents time of the consumed event (ADR 0002 A8)"}
       - {name: EventTimeIsCommitTime, rule: "the CloudEvents time of every event this context publishes is the instant the change was committed (the aggregate's own clock, OccurredAt), not the instant the fact happened; the fact instant is a data field (deliveredAt, handedOverAt, returnedAt, the scan's at) and can be earlier (ADR 0004; encoder.go)"}
       - {name: StopKeyAtLabelTime, rule: "at IssueLabel the address is read from customer-ordering (GetShipTo), normalized (upper case, letters and digits only; line1, line2, city, region, postalCode and countryCode, not the recipient name or phone) and hashed with a service secret into the stopKey, so neighbours at one address share a stop. stopKey and destinationPostalPrefix go on LabelIssued; the address is then encrypted into the ship-to snapshot and dropped from memory"}
+      - {name: ReverseLabelHasNoJourney, rule: "IssueReturnLabel (REST POST /return-labels, in-org, Idempotency-Key required, 201 answering ReturnLabel; shipping-and-tracking ADR 0017) is the reverse twin of IssueLabel, called by customer-returns with returnAuthorizationId, orderId, packageNo and destinationPostalPrefix. The ship-to of orderId is read from customer-ordering BEFORE the transaction and the stopKey is derived exactly like the outbound label's (same secret over the same normalized address), so a return pickup stop groups with the outbound delivery stop by construction; destinationPostalPrefix is the return destination's prefix, which only the caller knows. The label rides the ground carrier (tier STANDARD, carrier RN-GROUND), starts NO package journey, seals NO ship-to snapshot and runs no deliverability check; scans of the reverse package are counted-and-acknowledged unknowns, and shopper-facing return tracking is customer-returns' authorization view. LabelIssued carries the optional purpose and returnAuthorizationId (omitted on an outbound label). An order unknown to customer-ordering is 422 validation-failed; no ship-to in time is 503 ship-to-unavailable with no label stored. VoidLabel voids a reverse label without a journey: the label moves to VOIDED and LabelVoided is published, nothing else"}
       - {name: NoAddressRoute, rule: "no address leaves shipping-and-tracking and customer-ordering: no route, event or read model carries it, and no restricted label route is built. How a delivery partner learns the address at the door is not decided"}
       - {name: ShipToRetention, rule: "a periodic job (PurgeShipTo) deletes a ship-to snapshot 30 days after its journey closed: DELIVERED, RETURNED or LOST, or VOIDED when the label was voided before handover. A journey still open keeps its snapshot"}
       - {name: EtaWindowOnJourney, rule: "the use case ApplyEtaWindows (same shape as ApplyScans: inbox claim, then per tracking number) consumes StopEtaWindowAssigned and stores etaStart/etaEnd/etaAssignedAt on each journey of the stop via AssignEta; the stopKey is received and dropped (this context keeps no address-derived value of a stop). Each journey then publishes PackageEtaWindowAssigned with its own orderId. EtaCurrent() is the one currency rule, shared with customer-ordering: the window shows only while the state is OUT_FOR_DELIVERY, etaAssignedAt is non-zero and not before lastScanAt, so a newer scan, a failed attempt (back to AT_STATION) or any terminal state hides it; yesterday's window never survives a newer OUT_FOR_DELIVERY scan. The window is relayed as received, never clipped to the promised window (shipping-and-tracking ADR 0013)"}
@@ -1854,6 +1879,7 @@ contexts:
       - {name: CollectionAtPoint, rule: "RN-0011 as built (shipping-and-tracking ADR 0016): a pickup journey (destinationKind PICKUP_POINT) is deposited by the wave at its point, a POINT_DEPOSITED scan moving OUT_FOR_DELIVERY to READY_FOR_COLLECTION (PackageReadyForCollection carries pickupPointId, readyForCollectionAt and holdUntil), and collected by the shopper, a COLLECTED scan moving READY_FOR_COLLECTION to COLLECTED, terminal (PackageCollected; proofCode optional). A package uncollected by holdUntil is returned by the sweep through ReturnToSender with reason UNCOLLECTED, the pickup hold expiry; the station-initiated return omits the reason. The promise judgement keeps deliverByLatest: collection ends the package, the window does not move"}
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /labels (in-org)", routes: ["POST /labels"], message: "IssueLabel", relationship: Customer/Supplier}
+      - {from: customer-returns, type: cmd, channel: "REST POST /return-labels (in-org)", routes: ["POST /return-labels"], message: "IssueReturnLabel", relationship: Customer/Supplier}
       # caller inferred: the spec names no caller for either route; both are ground-operations actions (a scan is recorded at a scanner, a label is voided before handover); no sibling service has a client for them
       - {from: "sort-centre and station operators (human/scanner)", type: cmd, channel: "REST POST /labels/{labelRef}/voids, POST /journeys/{trackingNumber}/scans", routes: ["POST /labels/{labelRef}/voids", "POST /journeys/{trackingNumber}/scans"], message: "VoidLabel, RecordScan", relationship: UI}
       - {from: carrier, type: cmd, channel: "REST POST /carrier-events (the carrier webhook of CARRIER_HANDOFF areas, an inbound translation layer, RN-0010)", routes: ["POST /carrier-events"], message: "RecordCarrierEvent", relationship: OHS}
@@ -1867,6 +1893,7 @@ contexts:
       - {from: network analysts (human), type: qry, channel: "REST GET /reports/package-touches, GET /reports/delivery-outcomes, GET /reports/freshness (cmd/st-reports, :8092)", routes: ["GET /reports/package-touches", "GET /reports/delivery-outcomes", "GET /reports/freshness"], message: "GetPackageTouchesReport, GetDeliveryOutcomesReport, GetReportFreshness", relationship: UI}
     rest:
       - "POST /labels"
+      - "POST /return-labels"
       - "POST /labels/{labelRef}/voids"
       - "GET /journeys/{trackingNumber}"
       - "POST /journeys/{trackingNumber}/scans"
@@ -1875,7 +1902,7 @@ contexts:
       - "GET /reports/delivery-outcomes?from=&to="
       - "GET /reports/freshness"
     publishes:
-      - {event: LabelIssued, entity: label, data: [labelRef, trackingNumber, poNumber, assignmentId, packageNo, tier, carrier, orderId, stopKey, destinationPostalPrefix], consumers: [linehaul-transportation, customer-ordering, last-mile-delivery]}
+      - {event: LabelIssued, entity: label, data: [labelRef, trackingNumber, poNumber, assignmentId, packageNo, tier, carrier, orderId, stopKey, destinationPostalPrefix, "purpose (optional, RETURN on a reverse label only)", "returnAuthorizationId (optional, reverse label only)"], consumers: [linehaul-transportation, customer-ordering, last-mile-delivery]}
       - {event: LabelVoided, entity: label, data: [labelRef, trackingNumber, reason], consumers: [customer-ordering, linehaul-transportation]}
       - {event: PackageScanned, entity: journey, data: [trackingNumber, scanId, nodeId, scanType, at, state], consumers: [customer-ordering]}
       - {event: PackageHandedOver, entity: journey, data: [trackingNumber, poNumber, nodeId, handedOverAt], consumers: [node-performance]}
@@ -1917,6 +1944,7 @@ contexts:
       - {term: Package Journey, definition: "The customer-visible timeline of one package.", code: "journey.PackageJourney"}
       - {term: Scan, definition: "One observation of a package at a node.", code: "journey.Scan"}
       - {term: Handover, definition: "The instant a vendor node's package enters the network.", code: "journey.HandedOver"}
+      - {term: Reverse Label, definition: "The label of one package of a customer return, issued for customer-returns: purpose RETURN, the return authorization id, no purchase order, no assignment and no package journey. Its stop key equals the outbound label's of the same order.", code: "label.ShippingLabel (Purpose RETURN)"}
       - {term: Stop Key, definition: "An opaque keyed hash of the normalized ship-to address, put on the label event so last-mile-delivery can group packages into stops without ever receiving an address.", code: "label.StopKey"}
       - {term: Ship-To Snapshot, definition: "The encrypted copy of the ship-to address kept to print a label; never published and purged 30 days after the journey closes.", code: "label.ShipToSnapshot"}
       - {term: Day-of ETA Window, definition: "The at-most-two-hours delivery window consumed from last-mile-delivery at route start and stored on the journey (etaStart, etaEnd, etaAssignedAt). Not a scan: it never moves the state, and it shows on the journey view only while EtaCurrent holds (OUT_FOR_DELIVERY, assigned at or after the last applied scan).", code: "journey.PackageJourney"}
@@ -2271,9 +2299,9 @@ contexts:
 
   # =========================================================================
   # as built (customer-returns ADRs 0001 to 0005, apis/openapi.yaml and apis/asyncapi.yaml on origin/develop, read 2026-11-16).
-  # Two seams of this context are built on ITS side only and are therefore NOT rows below (the bidirectional rules of check_model.py):
-  #  - the reverse-label call to shipping-and-tracking (its ADR 0017 decides the route; its develop OpenAPI does not carry it), policy ReverseLabelCall;
-  #  - the vendor seam (vendor-connectivity ADR 0014 decides the return advices, the outcome route and VendorReturnOutcomeSubmitted; its develop specs carry none of them), policy FirstFittingOutcomeCompletes.
+  # Both seams of this context are built on both sides and are rows below (re-checked 2026-11-17):
+  #  - the reverse-label call to shipping-and-tracking (its ADR 0017; POST /return-labels is in its develop OpenAPI), policy ReverseLabelCall;
+  #  - the vendor seam (vendor-connectivity ADR 0014: the return advices, the outcome route and VendorReturnOutcomeSubmitted are in its develop specs), policy FirstFittingOutcomeCompletes.
   - id: customer-returns
     name: Customer Returns
     code: CR
@@ -2346,15 +2374,15 @@ contexts:
     read_models:
       - {name: OrderGroupView, source: "customer-ordering CustomerOrderPlaced (writes PROMISED per group with the destination postal PREFIX, the witness node and the placed lines) and the terminal ShopperNoticeDecided families GROUP_SHIPPED, GROUP_DELIVERED, GROUP_LOST, GROUP_RETURNED (set the status; the status of the fact wins over the family). Keyed (orderId, groupNo). Order tolerant: a notice before its placed event creates the row, and a placed event never demotes a status a notice already set. Only SHIPPED and DELIVERED are authorizable (customer-returns ADR 0003)"}
       - {name: ReturnsNetworkView, source: "three halves (customer-returns ADR 0003): nodes from node-topology NodeRegistered, NodeActivated, NodeSuspended, NodeRetired (only ACTIVE RETURNS_CENTER nodes are candidates); prefixes from node-topology ServiceAreaAssigned (which region a postal prefix belongs to; the highest assignmentVersion wins); origins from order-sourcing FulfillmentLocked (the fulfilling node, the ORIGIN_NODE fallback) and FulfillmentReleasedToNode (the per-item ownerRef), merged into one row per group"}
-      - {name: ReturnOutcomeFacts, source: "own audit trail (table return_outcomes): every graded outcome as received, with a per-line unexpected flag; nothing re-decides an authorization from it. Its feeding consumer of the vendor's outcome fact is built here, but the producer's develop specification does not carry the event yet (policy FirstFittingOutcomeCompletes)"}
+      - {name: ReturnOutcomeFacts, source: "own audit trail (table return_outcomes): every graded outcome as received, with a per-line unexpected flag; nothing re-decides an authorization from it. Fed by vendor-connectivity VendorReturnOutcomeSubmitted (policy FirstFittingOutcomeCompletes)"}
     policies:
       - {name: DispositionDecidedAtAuthorization, rule: "decide is a pure function with no I/O (customer-returns ADR 0002), in this order: KEEP when the method is not PICKUP, every line has a price and the total (unit price times quantity over the lines) is at most ReturnlessThresholdCents (1500 cents); else NEAREST_RETURNS_CENTER when the region of the group's destination prefix has an ACTIVE RETURNS_CENTER in ReturnsNetworkView; else ORIGIN_NODE when a sourcing fact named the fulfilling node; else ErrNoReturnDestination. The authorize use case reads only local tables and is one unit of work. RN-0012 words the origin as the locked assignment node falling back to the promise witness; as built the fallback to the witness node is not in decide (the witness node is stored on OrderGroupView only)"}
       - {name: ReturnlessKeep, rule: "KEEP closes the authorization at once (CLOSED_KEEP at creation, closedAt = authorizedAt): no destination node, no label, no outcome. ReturnAuthorized is still raised, without destinationNodeId. The refund is not this context's"}
       - {name: PricesAreCallerFacts, rule: "unitPriceCents per line is declared by the storefront, stored on the aggregate and echoed on the REST view, and is on no event. A line without a price makes KEEP impossible and the view carries pricesAbsent true (customer-returns ADR 0002 A2)"}
       - {name: LazyExpiry, rule: "every read, label and outcome call first checks expiresAt; once it has passed the authorization is cancelled (ReturnCancelled with reason EXPIRED). An expired authorization that nobody touches stays AUTHORIZED in the table until the next touch; there is no sweeper (customer-returns ADR 0002 A4)"}
-      - {name: ReverseLabelCall, rule: "IssueLabel is the ONE synchronous in-organization call of this context (customer-returns ADR 0005): it asks shipping-and-tracking's reverse-label route for the label of one package (body returnAuthorizationId, orderId, packageNo, destinationPostalPrefix; answer trackingNumber, carrier) BEFORE the transaction, with Idempotency-Key returnAuthorizationId:packageNo, then one transaction links the tracking number and appends ReturnLabelIssued. The call is config-gated (SHIPPING_LABELS_URL, default empty) and tolerant: unset, a transport failure, a non-200 answer or a body without a tracking number all answer 422 label-unavailable with no outbox row and no retry. RESIDUAL, as built on origin/develop: shipping-and-tracking decided the route in its ADR 0017 but its OpenAPI does not carry it, so the call is not a sync_calls row of this model and a label request answers label-unavailable until that route ships. This context keeps the tracking number and the destination node id, never the address or the label document"}
+      - {name: ReverseLabelCall, rule: "IssueLabel is the ONE synchronous in-organization call of this context (customer-returns ADR 0005): it asks shipping-and-tracking's reverse-label route for the label of one package (body returnAuthorizationId, orderId, packageNo, destinationPostalPrefix; answer trackingNumber, carrier) BEFORE the transaction, with Idempotency-Key returnAuthorizationId:packageNo, then one transaction links the tracking number and appends ReturnLabelIssued. The call is config-gated (SHIPPING_LABELS_URL, default empty) and tolerant: unset, a transport failure, an answer other than the 201 the route gives or a body without a tracking number all answer 422 label-unavailable with no outbox row and no retry. The route is shipping-and-tracking's POST /return-labels (its ADR 0017), a sync_calls row of this model. This context keeps the tracking number and the destination node id, never the address or the label document"}
       - {name: OneLabelPerPackage, rule: "at most five packages per authorization (packageNo 1 to 5); a tracking number already linked is not linked again (customer-returns ADR 0002 A5)"}
-      - {name: FirstFittingOutcomeCompletes, rule: "the consumer of the vendor's graded outcome (type name VendorReturnOutcomeSubmitted on retailnetwork.vendor-connectivity.events, in this context's AsyncAPI) completes the first open authorization the outcome fits: RECEIVED and ReturnCompleted with the authorized lines only; an absent ownerRef on an outcome line is filled from the authorization. Later outcomes, and outcomes for an unknown or closed authorization, are recorded on ReturnOutcomeFacts and acknowledged, never a consumer error (customer-returns ADR 0002 A6). RESIDUAL, as built on origin/develop: vendor-connectivity decided the event, the return-advice poll and the outcome route in its ADR 0014, but its AsyncAPI and OpenAPI do not carry them, so the event is not a consumes row of this model, vendor-connectivity is not a consumer row of this context's events, and no authorization reaches RECEIVED until that producer ships"}
+      - {name: FirstFittingOutcomeCompletes, rule: "the consumer of the vendor's graded outcome (type name VendorReturnOutcomeSubmitted on retailnetwork.vendor-connectivity.events, in this context's AsyncAPI) completes the first open authorization the outcome fits: RECEIVED and ReturnCompleted with the authorized lines only; an absent ownerRef on an outcome line is filled from the authorization. Later outcomes, and outcomes for an unknown or closed authorization, are recorded on ReturnOutcomeFacts and acknowledged, never a consumer error (customer-returns ADR 0002 A6). The producer side is vendor-connectivity's return-advice poll and outcome route (its ADR 0014): it consumes ReturnAuthorized, ReturnLabelIssued and ReturnCancelled into its ReturnAdviceView and publishes the outcome fact"}
       - {name: UnexpectedLinesStayFacts, rule: "outcome lines beyond the authorization are recorded on ReturnOutcomeFacts flagged unexpected, never published and never restocked; the vendor's own exception handling owns them (customer-returns ADR 0002 A7)"}
       - {name: RestockIsAFact, rule: "ReturnCompleted carries, per authorized item, the owner and the restockable and unsellable quantities at the grading node. offer-availability raises the owner listing's available quantity by qtyRestockable; unsellable units touch no listing. This context adjusts no stock itself"}
       - {name: PickupIsRecordedNotRun, rule: "PICKUP is accepted with its window and published on ReturnAuthorized, and the state machine knows PICKUP_FAILED, but nothing in this context asks last-mile-delivery for a pickup and nothing consumes a last-mile event: the doorstep pickup leg is a later slice (customer-returns OpenAPI; last-mile-delivery ADR 0017 ships the dormant induction kind)"}
@@ -2365,6 +2393,7 @@ contexts:
       - {from: customer-ordering, type: evt, channel: "Kafka retailnetwork.customer-ordering.events", message: "CustomerOrderPlaced, ShopperNoticeDecided", relationship: Conformist}
       - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeActivated, NodeSuspended, NodeRetired, ServiceAreaAssigned", relationship: Conformist}
       - {from: order-sourcing, type: evt, channel: "Kafka retailnetwork.order-sourcing.events", message: "FulfillmentReleasedToNode, FulfillmentLocked", relationship: Conformist}
+      - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: "VendorReturnOutcomeSubmitted", relationship: Customer/Supplier}
     rest:
       - "POST /return-authorizations"
       - "GET /return-authorizations?orderId=&cursor=&limit="
@@ -2372,10 +2401,10 @@ contexts:
       - "POST /return-authorizations/{authorizationId}/labels"
       - "POST /return-authorizations/{authorizationId}/cancellations"
     publishes:
-      - {event: ReturnAuthorized, entity: returnauthorization, data: [authorizationId, orderId, groupNo, reason, disposition, method, "lines(lineNo, catalogItemId, quantity, ownerRef (optional))", "destinationNodeId (optional, omitted for KEEP)", "originNodeId (optional)", "pickupWindowStart (optional, PICKUP only)", "pickupWindowEnd (optional, PICKUP only)", expiresAt, authorizedAt], consumers: ["none on develop (vendor-connectivity ADR 0014 decides the consumer)"]}
-      - {event: ReturnLabelIssued, entity: returnauthorization, data: [authorizationId, trackingNumber, destinationNodeId, issuedAt], consumers: ["none on develop (vendor-connectivity ADR 0014 decides the consumer)"]}
+      - {event: ReturnAuthorized, entity: returnauthorization, data: [authorizationId, orderId, groupNo, reason, disposition, method, "lines(lineNo, catalogItemId, quantity, ownerRef (optional))", "destinationNodeId (optional, omitted for KEEP)", "originNodeId (optional)", "pickupWindowStart (optional, PICKUP only)", "pickupWindowEnd (optional, PICKUP only)", expiresAt, authorizedAt], consumers: [vendor-connectivity]}
+      - {event: ReturnLabelIssued, entity: returnauthorization, data: [authorizationId, trackingNumber, destinationNodeId, issuedAt], consumers: [vendor-connectivity]}
       - {event: ReturnCompleted, entity: returnauthorization, data: [authorizationId, outcome, nodeId, "lines(catalogItemId, ownerRef (optional), qtyRestockable, qtyUnsellable)", receivedAt], consumers: [offer-availability]}
-      - {event: ReturnCancelled, entity: returnauthorization, data: [authorizationId, reason, cancelledAt], consumers: ["none on develop (vendor-connectivity ADR 0014 decides the consumer)"]}
+      - {event: ReturnCancelled, entity: returnauthorization, data: [authorizationId, reason, cancelledAt], consumers: [vendor-connectivity]}
     reasons:
       - name: ReturnReason
         fields: [ReturnAuthorized.reason, "rest:AuthorizeReturnRequest.reason", "rest:ReturnAuthorization.reason"]
@@ -2430,7 +2459,9 @@ contexts:
       - {event: ServiceAreaAssigned, from: node-topology}
       - {event: FulfillmentReleasedToNode, from: order-sourcing}
       - {event: FulfillmentLocked, from: order-sourcing}
-    sync_calls: []   # the reverse-label call is built on this side only; see policy ReverseLabelCall
+      - {event: VendorReturnOutcomeSubmitted, from: vendor-connectivity}
+    sync_calls:
+      - {to: shipping-and-tracking, type: cmd, message: IssueReturnLabel, channel: "REST POST /return-labels"}
     ul:
       - {term: Return Authorization, definition: "The network's permission for a shopper to return one shipped or delivered order group, with the decided disposition and its state.", code: "returnauthorization.ReturnAuthorization"}
       - {term: Disposition, definition: "What happens to the returned goods: KEEP, NEAREST_RETURNS_CENTER or ORIGIN_NODE. Decided by the context at authorization, never by the caller.", code: "returnauthorization.Disposition"}

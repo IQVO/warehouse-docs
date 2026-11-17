@@ -176,6 +176,7 @@ Topic `retailnetwork.vendor-connectivity.events`.
 | `VendorShipmentConfirmed` | `com.retailnetwork.partner.vendor-connectivity.purchaseorder.VendorShipmentConfirmed` | `order-sourcing`, `shipping-and-tracking`, `node-performance` |
 | `SubmissionProcessed` | `com.retailnetwork.partner.vendor-connectivity.submission.SubmissionProcessed` | `node-performance` |
 | `InboundReceiptSubmitted` | `com.retailnetwork.partner.vendor-connectivity.inboundreceipt.InboundReceiptSubmitted` | `seller-inbound`, `node-performance` |
+| `VendorReturnOutcomeSubmitted` | `com.retailnetwork.partner.vendor-connectivity.returnoutcome.VendorReturnOutcomeSubmitted` | `customer-returns` |
 | `VendorSuspended` | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorSuspended` | - |
 | `VendorReinstated` | `com.retailnetwork.partner.vendor-connectivity.vendoraccount.VendorReinstated` | - |
 
@@ -269,10 +270,10 @@ Topic `retailnetwork.customer-returns.events`.
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
-| `ReturnAuthorized` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnAuthorized` | none on develop (vendor-connectivity ADR 0014 decides the consumer) |
-| `ReturnLabelIssued` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnLabelIssued` | none on develop (vendor-connectivity ADR 0014 decides the consumer) |
+| `ReturnAuthorized` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnAuthorized` | `vendor-connectivity` |
+| `ReturnLabelIssued` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnLabelIssued` | `vendor-connectivity` |
 | `ReturnCompleted` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCompleted` | `offer-availability` |
-| `ReturnCancelled` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCancelled` | none on develop (vendor-connectivity ADR 0014 decides the consumer) |
+| `ReturnCancelled` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCancelled` | `vendor-connectivity` |
 
 ## Reason vocabularies
 
