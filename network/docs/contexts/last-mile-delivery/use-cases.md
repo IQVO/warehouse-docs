@@ -32,6 +32,7 @@ wave table directly.
 | `DispatchWave` | `DeliveryWave` | Station planner | REST `POST /waves/{waveId}/dispatches` |
 | `CompleteWave` | `DeliveryWave` | policy: the last route of the wave completes, or a dispatch with no route (ADR 0002 A9) | none (internal, same transaction) |
 | `CancelWave` | `DeliveryWave` | Station planner | REST `POST /waves/{waveId}/cancellations` |
+| `DeclareEmission` | `DeliveryWave` | Station planner | REST `POST /waves/{waveId}/emission-declarations` |
 | `PlanRoute` | `Route` | Station planner | REST `POST /routes` |
 | `StartRoute` | `Route` | DSP driver app | REST `POST /routes/{routeId}/starts` |
 | `RecordAttempt` | `Route` | DSP driver app | REST `POST /routes/{routeId}/attempts` |

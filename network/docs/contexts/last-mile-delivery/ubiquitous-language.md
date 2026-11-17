@@ -24,6 +24,7 @@ rest are aggregate states, value objects and policies of the same context.
 | --- | --- | --- | --- |
 | **Last Mile** | From the delivery station to the customer's door. | (context) `last-mile-delivery` | **Middle Mile** (`linehaul-transportation`): transport between nodes, ending at the station |
 | **Delivery Wave** | A station's dispatch slot: induct cutoff, delivery window and stop capacity. | `wave.DeliveryWave` | **Departure** (`linehaul-transportation`): a trip on a lane, counted in packages, not stops |
+| **Stop Emission** | The planner's declared marginal greenhouse emission of one delivery stop on a wave, in grams of CO2 equivalent (0 to 10000000); per stop, never per package. A declaration, not a measurement; 0 is legal and an undeclared wave also reads 0. | `wave.DeliveryWave.EmissionPerStopG` | **Lane Emission** (`node-topology`): declared per package-unit crossing a lane |
 | **Induction** | Placing an arrived package into a wave. | `wave.InductPackage` | **Load arrival** (`LoadArrived`): the package is at the station but in no wave yet |
 | **Route** | One van's ordered stops in one wave. | `route.Route` | **Lane** (`node-topology`): a directed node-to-node connection |
 | **Delivery Service Partner (DSP)** | An independent delivery business working for a station. | `partner.DeliveryServicePartner` | **Vendor** (`vendor-connectivity`): operates fulfillment nodes, never stations |

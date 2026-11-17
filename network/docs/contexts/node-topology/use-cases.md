@@ -33,6 +33,7 @@ read the repositories directly; an unknown id answers 404.
 | `RetireNode` | network-ops planner | REST `POST /nodes/{nodeId}/retirements` | `NodeRetired` |
 | `OpenLane` | network-ops planner | REST `POST /lanes` | `LaneOpened` |
 | `CloseLane` | network-ops planner | REST `POST /lanes/{laneId}/closures` | `LaneClosed` |
+| `DeclareLaneEmission` | network-ops planner | REST `POST /lanes/{laneId}/emission-declarations` | `LaneEmissionDeclared` |
 | `AssignServiceArea` | network-ops planner | REST `PUT /service-areas/{postalPrefix}` | `ServiceAreaAssigned` |
 | `DefineRegion` | network-ops planner | REST `POST /regions` | `RegionDefined` |
 

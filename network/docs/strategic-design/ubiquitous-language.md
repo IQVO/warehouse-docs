@@ -28,6 +28,7 @@ are the proposed Go package and type names. Each context's own
 | **Calibration Buffer** | `delivery-promise` | The minutes a quote adds to its arrival, learned from the lateness of this service's own judged promises in the same segment; one-sided and capped. | `search.Calibration.BufferMinutes` |
 | **Capacity Band** | `delivery-promise` | AMPLE, TIGHT or SCARCE: how full the promise book behind an offer's window is at quote time (under 60%, 60% to under 85%, 85% and over of its share). A signal, never a price. | `shared.CapacityBand` |
 | **Capacity Hold** | `delivery-promise` | A provisional reservation on a promise book released if the order is not placed in time. | `book.Capacity.Provisional` |
+| **Carbon Estimate** | `order-sourcing` | The estimated carbon footprint of a candidate path in planner-declared grams of CO2e: the per-unit lane emissions of every departure traversed plus the final wave's per-stop emission. Recorded beside the money estimate and never used to rank; absent on the wire when a component was not declared. | `assignment.Candidate.EstimatedCo2eGrams` |
 | **Carrier** | `order-sourcing` | The QUEUED assignment whose release is due and which carries a consolidation merge: one purchase order, one label and one tracking number carry its id. | `assignment.Assignment.Members` |
 | **Carrier Event** | `shipping-and-tracking` | A carrier's report on a package it carries, received on POST /carrier-events through an inbound translation layer and applied as a scan; statuses PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED and DELIVERY_FAILED. No carrier writes to a network topic. | `journey.CarrierEvent` |
 | **Carrier Option** | `node-topology` | A carrier declared on a CARRIER_HANDOFF service area: carrier id, handoff node, cost per package and transit minutes. | `servicearea.CarrierOption` |
@@ -83,6 +84,7 @@ are the proposed Go package and type names. Each context's own
 | **Inventory Feed** | `offer-availability` | One vendor submission of availability for one node, full or partial. | `feed.InventoryFeed` |
 | **Label** | `vendor-connectivity` | labelRef + trackingNumber + carrier; never the address. | `po.Label` |
 | **Lane** | `node-topology` | A directed, mode-specific connection between two nodes. | `lane.Lane` |
+| **Lane Emission** | `node-topology` | The planner's declared carbon emission of moving one package-unit across a lane on one departure, in grams of CO2-equivalent (0 to 10000000). A declaration, never a measurement; 0 is legal, and a lane never declared on also reads 0 but publishes nothing. | `lane.Lane.EmissionPerUnitG` |
 | **Lane Schedule** | `linehaul-transportation` | The weekly template that generates a lane's departures. | `schedule.LaneSchedule` |
 | **Last Mile** | `last-mile-delivery` | From the delivery station to the customer's door. | `(context)` |
 | **Late Ack Rate** | `node-performance` | Share of purchase orders acknowledged in the last 10% of the window or expired. | `scorecard.Metrics.LateAckRate` |
@@ -136,6 +138,7 @@ are the proposed Go package and type names. Each context's own
 | **Sourcing Policy** | `order-sourcing` | The operator's versioned lever over cross-region cost and consolidation: a surcharge in cents, a deviation percent and a cap on merged groups; version 0 is the default and changes nothing. | `policy.Policy` |
 | **SSCC** | `seller-inbound` | The 18-digit serial shipping container code identifying one logistic unit. Unique network-wide, with a mod-10 check digit. | `gs1.SSCC` |
 | **Stop** | `last-mile-delivery` | The packages of one route that share one stop key; wave capacity is counted in stops. | `route.Stop` |
+| **Stop Emission** | `last-mile-delivery` | The planner's declared marginal greenhouse emission of one delivery stop on a wave, in grams of CO2 equivalent (0 to 10000000); per stop, never per package. A declaration, not a measurement; 0 is legal and an undeclared wave also reads 0. | `wave.DeliveryWave.EmissionPerStopG` |
 | **Stop ETA Window** | `last-mile-delivery` | The day-of delivery window of one stop of a started route: at most two hours, spread linearly over what is left of the wave's delivery window at the start instant. A deterministic spread, not a prediction; never retracted. | `route.StopEta` |
 | **Stop Key** | `shipping-and-tracking` | An opaque keyed hash of the normalized ship-to address, put on the label event so last-mile-delivery can group packages into stops without ever receiving an address. | `label.StopKey` |
 | **Submission / Transaction** | `vendor-connectivity` | An asynchronous vendor write and its outcome, reconciled by transactionId. | `submission.Submission` |

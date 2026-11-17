@@ -216,18 +216,25 @@ contexts:
         size_estimate: "one row + one profile row per revision; ~10^3 nodes"
       - name: Lane
         root_id: laneId
-        description: A directed, mode-specific connection between two nodes with a nominal transit time. Its scheduled departures belong to linehaul-transportation.
+        description: A directed, mode-specific connection between two nodes with a nominal transit time and a planner-declared carbon emission per package-unit. Its scheduled departures belong to linehaul-transportation.
         states: [OPEN, CLOSED]
         transitions:
           - [OPEN, CLOSED, CloseLane]
-        value_objects: ["NominalTransit{minutes}", "LaneMode(GROUND|AIR)"]
+          # as built (node-topology ADR 0018): a declaration changes no state, bumps the lane version and is valid on an OPEN lane only
+          - [OPEN, OPEN, DeclareLaneEmission]
+        value_objects:
+          - "NominalTransit{minutes}"
+          - "LaneMode(GROUND|AIR)"
+          - "EmissionPerUnitG (int64 grams of CO2-equivalent, 0 to 10000000, default 0): the planner's declared carbon emission of moving ONE package-unit across the lane on one departure; no unit field. Published as gCo2ePerUnit, read on the REST lane as emissionPerUnitG. 0 is a legal declaration; a lane never declared on also reads 0 but publishes nothing (node-topology ADR 0018)"
         invariants:
           - {rule: "origin and destination differ", error: ErrLaneLoop}
           - {rule: "(origin type, destination type) is an allowed pair", error: ErrLaneTypePairNotAllowed}
           - {rule: "both ends ACTIVE when opening", error: ErrLaneEndpointNotActive}
           - {rule: "at most one OPEN lane per (origin, destination, mode)", error: ErrDuplicateLane}
-        commands: [OpenLane, CloseLane]
-        events: [LaneOpened, LaneClosed]
+          - {rule: "a declared emission is an integer from 0 to 10000000 grams of CO2-equivalent; HTTP 422 validation-failed outside the range (node-topology ADR 0018)", error: ErrValidation}
+          - {rule: "an emission is declared on an OPEN lane only; a CLOSED lane refuses the declaration (HTTP 409 illegal-transition)", error: ErrIllegalTransition}
+        commands: [OpenLane, CloseLane, DeclareLaneEmission]
+        events: [LaneOpened, LaneClosed, LaneEmissionDeclared]
         throughput_estimate: "low"
         size_estimate: "~10^4 lanes"
       - name: ServiceArea
@@ -266,11 +273,13 @@ contexts:
       - {name: DefaultCapabilitiesByType, rule: "node capabilities are derived from node_types, never typed by hand"}
       - {name: SuspendedEndpointsUnusable, rule: "suspending or retiring a node closes nothing: its OPEN lanes and ASSIGNED service areas stay as they are, and consumers treat them as unusable while the node is not ACTIVE (they react to NodeSuspended and NodeRetired)"}
       - {name: NoDefaultLaneNoPackagesPerOrder, rule: "node-topology declares no default outbound lane and no packagesPerOrder: neither is a field of Node, Lane or OperationalProfile. linehaul-transportation derives the pickup's lane itself (policy DefaultOutboundLane) and keeps its own packagesPerOrder setting (policy PickupCapacity); delivery-promise reads packagesPerOrder from its PromisePolicy"}
+      - {name: EmissionIsDeclaredNotMeasured, rule: "a lane emission is a planner declaration and a fact: every DeclareLaneEmission supersedes the previous value and publishes LaneEmissionDeclared, nothing re-derives it from fuel, energy or distance, and no measurement replaces it. An undeclared lane reads 0 and publishes nothing, so a consumer tells a declared zero from no declaration only by whether an event arrived; what an undeclared lane means for an estimate is the consumer's decision (node-topology ADR 0018)"}
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /nodes (in-org)", routes: ["POST /nodes"], message: "RegisterNode (vendor node)", relationship: Customer/Supplier}
       - {from: vendor-connectivity, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile (in-org)", routes: ["PUT /nodes/{nodeId}/operational-profile"], message: "DeclareOperationalProfile", relationship: Customer/Supplier}
       - {from: network-ops planner, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile", routes: ["PUT /nodes/{nodeId}/operational-profile"], message: "DeclareOperationalProfile (declaredBy NETWORK_OPS)", relationship: UI}
       - {from: network-ops planner, type: cmd, channel: "REST POST /nodes, POST /nodes/{nodeId}/activations, POST /nodes/{nodeId}/suspensions, POST /nodes/{nodeId}/retirements, POST /lanes, POST /lanes/{laneId}/closures, PUT /service-areas/{postalPrefix}, POST /regions", routes: ["POST /nodes", "POST /nodes/{nodeId}/activations", "POST /nodes/{nodeId}/suspensions", "POST /nodes/{nodeId}/retirements", "POST /lanes", "POST /lanes/{laneId}/closures", "PUT /service-areas/{postalPrefix}", "POST /regions"], message: "RegisterNode (network node), ActivateNode, SuspendNode, RetireNode, OpenLane, CloseLane, AssignServiceArea, DefineRegion", relationship: UI}
+      - {from: network-ops planner, type: cmd, channel: "REST POST /lanes/{laneId}/emission-declarations", routes: ["POST /lanes/{laneId}/emission-declarations"], message: "DeclareLaneEmission", relationship: UI}
       - {from: any context, type: qry, channel: "REST GET /nodes/{nodeId}, GET /nodes, GET /lanes, GET /service-areas/{postalPrefix}, GET /regions, GET /regions/{regionId}", routes: ["GET /nodes/{nodeId}", "GET /nodes", "GET /lanes", "GET /service-areas/{postalPrefix}", "GET /regions", "GET /regions/{regionId}"], message: "GetNode, ListNodes, ListLanes, ResolveServiceArea, ListRegions, GetRegion", relationship: OHS}
     rest:
       - "POST /nodes"
@@ -282,6 +291,7 @@ contexts:
       - "POST /nodes/{nodeId}/retirements"
       - "POST /lanes"
       - "POST /lanes/{laneId}/closures"
+      - "POST /lanes/{laneId}/emission-declarations"
       - "GET /lanes?origin=&destination="
       - "PUT /service-areas/{postalPrefix}"
       - "GET /service-areas/{postalPrefix}"
@@ -296,6 +306,7 @@ contexts:
       - {event: NodeRetired, entity: node, data: [nodeId, retiredAt], consumers: [offer-availability, delivery-promise, order-sourcing, linehaul-transportation, vendor-connectivity, seller-inbound, shipping-and-tracking]}
       - {event: LaneOpened, entity: lane, data: [laneId, originNodeId, destinationNodeId, mode, nominalTransitMinutes], consumers: [linehaul-transportation, delivery-promise, order-sourcing]}
       - {event: LaneCostDeclared, entity: lane, data: [laneId, costPerUnitCents, declaredAt], consumers: [order-sourcing]}
+      - {event: LaneEmissionDeclared, entity: lane, data: [laneId, gCo2ePerUnit, declaredAt], consumers: [order-sourcing]}
       - {event: LaneClosed, entity: lane, data: [laneId, closedAt], consumers: [linehaul-transportation, delivery-promise, order-sourcing]}
       - {event: ServiceAreaAssigned, entity: servicearea, data: [postalPrefix, deliveryStationNodeId, regionId, assignmentVersion, "deliveryMode (optional; absence is NETWORK_ROUTE)", "carriers (optional; 1 to 4 CarrierOption entries, CARRIER_HANDOFF only)"], consumers: [delivery-promise, order-sourcing, last-mile-delivery, shipping-and-tracking]}
       - {event: RegionDefined, entity: region, data: [regionId, code, name], consumers: [delivery-promise, order-sourcing]}
@@ -318,6 +329,7 @@ contexts:
       - {term: Throughput Cap, definition: "Declared maximum orders per time unit a node accepts.", code: "node.ThroughputCap"}
       - {term: Inbound Limits, definition: "A receiving node's declared carton weight and size limits, whether it accepts pallets and whether it requires an SSCC on every carton.", code: "node.OperationalProfile.Inbound"}
       - {term: Lane, definition: "A directed, mode-specific connection between two nodes.", code: "lane.Lane"}
+      - {term: Lane Emission, definition: "The planner's declared carbon emission of moving one package-unit across a lane on one departure, in grams of CO2-equivalent (0 to 10000000). A declaration, never a measurement; 0 is legal, and a lane never declared on also reads 0 but publishes nothing.", code: "lane.Lane.EmissionPerUnitG"}
       - {term: Region, definition: "A largely self-sufficient partition of the network.", code: "region.Region"}
       - {term: Service Area, definition: "The postal prefixes one delivery station serves.", code: "servicearea.ServiceArea"}
 
@@ -973,7 +985,7 @@ contexts:
           - [DELIVERED, DELIVERED, RefuseCancel]
         value_objects:
           - "PromiseConstraint{promiseId, tier (SAME_DAY|NEXT_DAY|TWO_DAY|STANDARD|CONSOLIDATED), deliverByEarliest (optional, zero = unknown, never after deliverByLatest), deliverByLatest, witnessNodeId}: the tier carries a FulfilmentClass, and CONSOLIDATED maps to STANDARD so the tier on FulfillmentReleasedToNode never carries the fifth value (order-sourcing ADR 0015)"
-          - "Candidate{nodeId, pickupDepartureId, legs[], deliveryWaveId, eta, cost, estimatedCostCents, effectiveCostCents (estimate plus the cross-region surcharge), policyVersion (the SourcingPolicy version the search read, stamped on the candidate and so on the release)}"
+          - "Candidate{nodeId, pickupDepartureId, legs[], deliveryWaveId, eta, cost, estimatedCostCents, effectiveCostCents (estimate plus the cross-region surcharge), policyVersion (the SourcingPolicy version the search read, stamped on the candidate and so on the release), estimatedCo2eGrams (the carbon estimate of the path in planner-declared grams of CO2e, carried only when emissionComplete), emissionComplete (every emission component of the path was declared)}: the carbon fields are recorded beside the money estimate and never read by the comparator (order-sourcing ADR 0017)"
           - "ConsolidationLink{consolidationKey ('' or 64 lower-case hex, from CustomerOrderPlaced), consolidatedInto (a follower only: the carrier's id), members (a carrier only: follower ids ascending, non-empty exactly while it is the carrier of a merge)}: a follower is RELEASED, LOCKED, SHIPPED or DELIVERED and its candidate is a copy of the carrier's (order-sourcing ADR 0015)"
           - "Release{releaseNo, nodeId, releasedAt, requiredShipBy, outcome(ACCEPTED|REJECTED|EXPIRED|PENDING|WITHDRAWN), reasonCode}"
           - "ExcludedNode{nodeId, reason}"
@@ -1007,7 +1019,7 @@ contexts:
         size_estimate: "one row per published version"
     read_models:
       - {name: NodeProfileView, source: "node-topology NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired"}
-      - {name: NetworkGraphView, source: "node-topology LaneOpened, LaneClosed, ServiceAreaAssigned, RegionDefined; linehaul-transportation DepartureScheduled, DepartureCapacityChanged, DepartureCancelled; last-mile-delivery DeliveryWaveScheduled, DeliveryWaveCapacityChanged"}
+      - {name: NetworkGraphView, source: "node-topology LaneOpened, LaneClosed, ServiceAreaAssigned, RegionDefined; linehaul-transportation DepartureScheduled, DepartureCapacityChanged, DepartureCancelled; last-mile-delivery DeliveryWaveScheduled, DeliveryWaveCapacityChanged; the planner-declared emissions node-topology LaneEmissionDeclared (per lane, grams per package-unit) and last-mile-delivery WaveEmissionDeclared (per wave, grams per stop) are columns of the same lane and wave rows as the declared costs, each with its emission declaredAt: the newer declaredAt wins, and a declaration for a lane or wave the view does not know yet is stored keyed by its id and completed by the later LaneOpened or DeliveryWaveScheduled (order-sourcing ADR 0017)"}
       - {name: AvailabilityView, source: "offer-availability ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored, CatalogItemDiscontinued; keyed by (catalogItemId, nodeId, ownerRef), operator-owned stored as '' (absent ownerRef), a suppressed key covers nothing (order-sourcing ADR 0012)"}
       - {name: ScorecardView, source: "node-performance NodeScorecardUpdated"}
       - {name: PromiseBookPressureView, source: "delivery-promise PromiseBookExhausted"}
@@ -1015,6 +1027,7 @@ contexts:
     policies:
       - {name: VirtualQueue, rule: "releaseAt = pickup cutoff of the best candidate - node handling time - vendor ack budget; release immediately for SAME_DAY"}
       - {name: AssignmentCost, rule: "estimatedCostCents = lane costPerUnitCents over the path legs + the final wave costPerStopCents (planner-declared, consumed from LaneCostDeclared and WaveCostDeclared; a cost arriving before its lane or wave is known is kept); an undeclared component contributes 0 and marks the estimate incomplete; the comparator leads with the effective cost (the estimate plus the SourcingPolicy cross-region surcharge, see RegionalBudget; lower wins) and the ordinal penalties (legs, crossRegionPenalty, scorecardPenalty, bookPressurePenalty) are tie-breakers, then the witness node; for a CONSOLIDATED group the later pickup (ConsolidatedHold) sits after the money keys and before the ordinal penalties; FulfillmentReleasedToNode carries estimatedCostCents only when the estimate is complete (ADR 0011, F7)"}
+      - {name: CarbonEstimate, rule: "ADR 0017, the emission twin of AssignmentCost: estimatedCo2eGrams of a candidate path = the declared per-unit lane emission of EVERY departure traversed (the pickup plus the onward legs) + the declared per-stop emission of the final wave, integer grams of CO2e, per package-unit with no multiplication. A declared 0 contributes 0 and the estimate stays complete; a component without a declaration (a lane the view does not know or knows without an emission declaration, a wave without one) contributes 0 AND marks the estimate incomplete (emissionComplete false); the distinction lives in the read model and never on the wire. An ESTIMATE only, NOT a sourcing objective: the comparator never sees grams, so the ordering is exactly the one AssignmentCost, RegionalBudget and ConsolidatedHold define. FulfillmentReleasedToNode and FulfillmentSourcingDecided carry optional estimatedCo2eGrams and emissionComplete, both omitted when the estimate is incomplete, so absence means not known, never zero; the REST candidate view carries estimatedCo2eGrams under the same rule. In a merged release the estimate is per member from the merged option. No consumer in the network reads the fields yet; a declaration that arrives late changes the estimate at the next sweep at the earliest; the estimate excludes node handling, as the money estimate does"}
       - {name: OwnerChoice, rule: "a line is feasible at a node only when ONE owner covers its quantity (availableQty of that key; summing across owners is forbidden, a line never spans owners). The owner is: operator-owned ('') first if it covers the line; otherwise the covering seller owner with the highest availableQty; ties go to the lowest ownerRef in byte order; no covering owner means the node is not a candidate (NO_CANDIDATE path). Recomputed on every search; the owner at the released node is persisted on the line and published on FulfillmentReleasedToNode lines[].ownerRef. The same rule, verbatim, is applied by delivery-promise (order-sourcing ADR 0012, gap G47)"}
       - {name: SourcingDecisionFact, rule: "every release also appends the analytics-only FulfillmentSourcingDecided (one per assignment and releaseNo: node and destination regions, inRegion, legs, estimated cost and its completeness, units, candidate count), read only by this context's own analytics projector (order-sourcing ADR 0013)"}
       - {name: RegionalBudget, rule: "ADR 0014 (gap G26): effectiveCostCents = estimatedCostCents + crossRegionSurchargeCents for a candidate whose node region differs from the delivery area region (both known; an unknown region counts as in-region), also when the estimate is incomplete. Let cheapest be the minimum effective cost among the candidates and budget = cheapest + floor(cheapest x maxCostDeviationPercent / 100). Among candidates within the budget an IN-REGION candidate beats a cross-region one; then effective cents, then the legacy ordinal tie-break and the id tie-breaks; candidates over the budget follow by effective cents. The budget rule is active only when maxCostDeviationPercent is above 0: with 0 and a surcharge of 0 the ordering is byte-identical to the one before the policy (a table test over the search fixtures proves it). The policy version read is stamped on the candidate and so on the release; FulfillmentReleasedToNode, FulfillmentSourcingDecided and the REST candidate view carry optional policyVersion (only when a version of 1 or more was in force) and optional effectiveCostCents (only when the surcharge changed the cost). Metrics: gauge ordersourcing_sourcing_policy_version and counter ordersourcing_budget_preferred_total with kind region, incremented once per release when the budget changed the winner (order-sourcing ADR 0014)"}
@@ -1032,10 +1045,10 @@ contexts:
       - {from: delivery-promise, type: evt, channel: "Kafka retailnetwork.delivery-promise.events", message: "PromiseRevised, PromiseBookExhausted", relationship: Customer/Supplier}
       - {from: vendor-connectivity, type: evt, channel: "Kafka retailnetwork.vendor-connectivity.events", message: "PurchaseOrderAccepted, PurchaseOrderRejected, PurchaseOrderExpired, VendorShipmentConfirmed", relationship: Customer/Supplier}
       - {from: shipping-and-tracking, type: evt, channel: "Kafka retailnetwork.shipping-and-tracking.events", message: "PackageDelivered", relationship: Conformist}
-      - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired, LaneOpened, LaneClosed, ServiceAreaAssigned, RegionDefined", relationship: Conformist}
+      - {from: node-topology, type: evt, channel: "Kafka retailnetwork.node-topology.events", message: "NodeRegistered, NodeOperationalProfileDeclared, NodeActivated, NodeSuspended, NodeRetired, LaneOpened, LaneClosed, LaneEmissionDeclared, ServiceAreaAssigned, RegionDefined", relationship: Conformist}
       - {from: offer-availability, type: evt, channel: "Kafka retailnetwork.offer-availability.events", message: "ListingCreated, ListingAvailabilityChanged, ListingSuppressed, ListingRestored, CatalogItemDiscontinued", relationship: Conformist}
       - {from: linehaul-transportation, type: evt, channel: "Kafka retailnetwork.linehaul-transportation.events", message: "DepartureScheduled, DepartureCapacityChanged, DepartureCancelled", relationship: Conformist}
-      - {from: last-mile-delivery, type: evt, channel: "Kafka retailnetwork.last-mile-delivery.events", message: "DeliveryWaveScheduled, DeliveryWaveCapacityChanged", relationship: Conformist}
+      - {from: last-mile-delivery, type: evt, channel: "Kafka retailnetwork.last-mile-delivery.events", message: "DeliveryWaveScheduled, DeliveryWaveCapacityChanged, WaveEmissionDeclared", relationship: Conformist}
       - {from: node-performance, type: evt, channel: "Kafka retailnetwork.node-performance.events", message: "NodeScorecardUpdated", relationship: Conformist}
       - {from: network-ops planner, type: qry, channel: "REST GET /assignments, GET /assignments/{assignmentId}", routes: ["GET /assignments", "GET /assignments/{assignmentId}"], message: "ListAssignments, GetAssignment", relationship: UI}
       # caller inferred: ADR 0013 names the report questions, not a client; the routes are served by cmd/os-reports on :8092, not cmd/api
@@ -1057,7 +1070,7 @@ contexts:
       - "GET /reports/freshness"
     publishes:
       - {event: FulfillmentQueued, entity: assignment, data: [assignmentId, orderId, groupNo, promiseId, deliverByLatest, lines], consumers: [analytics only]}
-      - {event: FulfillmentReleasedToNode, entity: assignment, data: [assignmentId, releaseNo, orderId, groupNo, nodeId, pickupDepartureId, requiredShipBy, promisedDeliverByLatest, tier, lines(catalogItemId, listingId, quantity, ownerRef (optional, omitted when operator-owned)), estimatedCostCents (optional, omitted when the estimate is incomplete), policyVersion (optional), effectiveCostCents (optional), members(assignmentId, orderId, groupNo, promiseId) (optional, merged release only)], consumers: [vendor-connectivity, linehaul-transportation, seller-inbound]}
+      - {event: FulfillmentReleasedToNode, entity: assignment, data: [assignmentId, releaseNo, orderId, groupNo, nodeId, pickupDepartureId, requiredShipBy, promisedDeliverByLatest, tier, lines(catalogItemId, listingId, quantity, ownerRef (optional, omitted when operator-owned)), estimatedCostCents (optional, omitted when the estimate is incomplete), policyVersion (optional), effectiveCostCents (optional), estimatedCo2eGrams (optional, omitted when the carbon estimate is incomplete), emissionComplete (optional, omitted exactly when estimatedCo2eGrams is omitted), members(assignmentId, orderId, groupNo, promiseId) (optional, merged release only)], consumers: [vendor-connectivity, linehaul-transportation, seller-inbound]}
       - {event: FulfillmentReleaseWithdrawn, entity: assignment, data: [assignmentId, releaseNo, orderId, groupNo, reason, withdrawnAt], consumers: [vendor-connectivity]}
       - {event: FulfillmentReassigned, entity: assignment, data: [assignmentId, fromNodeId, toNodeId, reason, assignmentVersion], consumers: [linehaul-transportation]}
       - {event: FulfillmentLocked, entity: assignment, data: [assignmentId, orderId, groupNo, nodeId, pickupDepartureId, lockedAt, lockReason, promiseId, consolidatedInto (optional), mergedAssignmentIds (optional)], consumers: [delivery-promise, customer-ordering, linehaul-transportation]}
@@ -1067,7 +1080,7 @@ contexts:
       - {event: FulfillmentCancelled, entity: assignment, data: [assignmentId, orderId, groupNo, reason], consumers: [vendor-connectivity, linehaul-transportation, customer-ordering, seller-inbound]}
       - {event: FulfillmentCancelRefused, entity: assignment, data: [assignmentId, orderId, groupNo, reason], consumers: [customer-ordering]}
       - {event: FulfillmentConstraintRevised, entity: assignment, data: [assignmentId, revisionNo, deliverByLatest], consumers: [analytics only]}
-      - {event: FulfillmentSourcingDecided, entity: assignment, data: [assignmentId, orderId, groupNo (optional), releaseNo, nodeId, nodeRegionId (optional), destinationRegionId (optional), inRegion (optional), legs, estimatedCostCents (optional), costComplete, units, candidateCount, decidedAt, policyVersion (optional), effectiveCostCents (optional), carrierAssignmentId (optional), consolidatedCount (optional)], consumers: [analytics only]}
+      - {event: FulfillmentSourcingDecided, entity: assignment, data: [assignmentId, orderId, groupNo (optional), releaseNo, nodeId, nodeRegionId (optional), destinationRegionId (optional), inRegion (optional), legs, estimatedCostCents (optional), costComplete, estimatedCo2eGrams (optional), emissionComplete (optional), units, candidateCount, decidedAt, policyVersion (optional), effectiveCostCents (optional), carrierAssignmentId (optional), consolidatedCount (optional)], consumers: [analytics only]}
       - {event: SourcingPolicyPublished, entity: policy, data: [version, crossRegionSurchargeCents, maxCostDeviationPercent, consolidationMaxAssignments (optional), publishedAt], consumers: [analytics only]}
       - {event: AssignmentsConsolidated, entity: assignment, data: [carrierAssignmentId, releaseNo, nodeId, memberCount, units, members(assignmentId, orderId, groupNo, promiseId, units), consolidatedAt], consumers: [analytics only]}
       - {event: AssignmentsDeconsolidated, entity: assignment, data: [carrierAssignmentId, releaseNo, reason, triggerAssignmentId (optional), memberAssignmentIds, deconsolidatedAt], consumers: [analytics only]}
@@ -1144,6 +1157,7 @@ contexts:
       - {event: LaneOpened, from: node-topology}
       - {event: LaneClosed, from: node-topology}
       - {event: LaneCostDeclared, from: node-topology}
+      - {event: LaneEmissionDeclared, from: node-topology}
       - {event: ServiceAreaAssigned, from: node-topology}
       - {event: RegionDefined, from: node-topology}
       - {event: ListingCreated, from: offer-availability}
@@ -1156,6 +1170,7 @@ contexts:
       - {event: DepartureCancelled, from: linehaul-transportation}
       - {event: DeliveryWaveScheduled, from: last-mile-delivery}
       - {event: WaveCostDeclared, from: last-mile-delivery}
+      - {event: WaveEmissionDeclared, from: last-mile-delivery}
       - {event: DeliveryWaveCapacityChanged, from: last-mile-delivery}
       - {event: NodeScorecardUpdated, from: node-performance}
       - {event: DeliveryWaveCancelled, from: last-mile-delivery}
@@ -1170,6 +1185,7 @@ contexts:
       - {term: Reassignment, definition: "Moving a group to another node after a refusal, or while still queued.", code: "assignment.Reassign"}
       - {term: Sourcing Policy, definition: "The operator's versioned lever over cross-region cost and consolidation: a surcharge in cents, a deviation percent and a cap on merged groups; version 0 is the default and changes nothing.", code: "policy.Policy"}
       - {term: Effective Cost, definition: "The estimated cost of a candidate plus the policy's cross-region surcharge; the leading key of the comparator.", code: "sourcing.Option.EffectiveCostCents"}
+      - {term: Carbon Estimate, definition: "The estimated carbon footprint of a candidate path in planner-declared grams of CO2e: the per-unit lane emissions of every departure traversed plus the final wave's per-stop emission. Recorded beside the money estimate and never used to rank; absent on the wire when a component was not declared.", code: "assignment.Candidate.EstimatedCo2eGrams"}
       - {term: Carrier, definition: "The QUEUED assignment whose release is due and which carries a consolidation merge: one purchase order, one label and one tracking number carry its id.", code: "assignment.Assignment.Members"}
       - {term: Follower, definition: "A QUEUED assignment absorbed into a carrier's release; it keeps its own events and locks, ships and delivers with the carrier.", code: "assignment.Assignment.ConsolidatedInto"}
       - {term: Consolidation Merge, definition: "The carrier and its followers released as one; it exists only from release until the lock or until it is dissolved.", code: "sourcing.Merge"}
@@ -1527,14 +1543,23 @@ contexts:
           - [INDUCTION_CLOSED, DISPATCHED, DispatchWave]
           - [DISPATCHED, COMPLETED, CompleteWave]
           - [OPEN, CANCELLED, CancelWave]
-        value_objects: ["Window{start, end}", "StopCapacity{stops, assigned}"]
+          # as built (last-mile-delivery ADR 0016): a declaration changes no state, bumps the wave version and is allowed while the wave still runs
+          - [OPEN, OPEN, DeclareEmission]
+          - [INDUCTION_CLOSED, INDUCTION_CLOSED, DeclareEmission]
+          - [DISPATCHED, DISPATCHED, DeclareEmission]
+        value_objects:
+          - "Window{start, end}"
+          - "StopCapacity{stops, assigned}"
+          - "EmissionPerStopG (int64 grams of CO2 equivalent, 0 to 10000000, default 0): the planner's declared marginal greenhouse emission of ONE delivery stop on the wave (the stop's share of the route's driving), per stop (the stopKey grouping), never per package; no unit field. Published and read on the REST wave as gCo2ePerStop. 0 is a legal declaration; a wave with no declaration also reads 0 (last-mile-delivery ADR 0016)"
         invariants:
           - {rule: "inductCutoffAt < windowStart < windowEnd", error: ErrInvalidWaveTimes}
           - {rule: "assigned stops <= stops, where assigned stops counts the distinct stopKeys among the wave's inductions", error: ErrWaveFull}
           - {rule: "no package joins after induction closes", error: ErrInductionClosed}
           - {rule: "a wave is scheduled only for a known DELIVERY_STATION of StationView; checked by the use case, not by the aggregate (ADR 0002 A1)", error: ErrUnknownStation}
-        commands: [ScheduleWave, InductPackage, CloseInduction, DispatchWave, CompleteWave, CancelWave]
-        events: [DeliveryWaveScheduled, DeliveryWaveCapacityChanged, DeliveryWaveCancelled]
+          - {rule: "a declared stop emission is an integer from 0 to 10000000 grams of CO2 equivalent; HTTP 422 validation-failed outside the range (last-mile-delivery ADR 0016)", error: ErrValidation}
+          - {rule: "an emission is declared only while the wave still runs (OPEN, INDUCTION_CLOSED or DISPATCHED); a CANCELLED or COMPLETED wave refuses the declaration", error: ErrIllegalTransition}
+        commands: [ScheduleWave, InductPackage, CloseInduction, DispatchWave, CompleteWave, CancelWave, DeclareEmission]
+        events: [DeliveryWaveScheduled, DeliveryWaveCapacityChanged, DeliveryWaveCancelled, WaveEmissionDeclared]
         throughput_estimate: "medium"
         size_estimate: "stations x waves/day x horizon"
       - name: Route
@@ -1588,6 +1613,7 @@ contexts:
     policies:
       - {name: InductOnArrival, rule: "on LoadArrived at a delivery station induct every package into the earliest eligible wave"}
       - {name: RetryNextWave, rule: "a FAILED attempt re-inducts the package into the next wave; three failures return it to sender"}
+      - {name: StopEmissionIsDeclared, rule: "DeclareEmission (REST POST /waves/{waveId}/emission-declarations, Idempotency-Key required, 201 returning the wave) sets the wave's emissionPerStopG, bumps the version and raises WaveEmissionDeclared (subject and key the waveId). A later declaration overwrites the earlier one and publishes again; the last one wins. A wave with no declaration reads 0 and contributes 0 to a consumer's sum while leaving its estimate incomplete; whether an undeclared wave may be treated as emission-free is the consumer's decision. What the planner bases the number on stays outside the contract (last-mile-delivery ADR 0016)"}
       - {name: CompleteRouteOnLastAttempt, rule: "a route completes (OUT_FOR_DELIVERY to COMPLETED) in the same unit of work as the attempt that records its last outstanding package, so CompleteRoute has no REST route and no caller; a route whose driver never records every package stays OUT_FOR_DELIVERY (ADR 0002 A16)"}
       - {name: CompleteWaveWithLastRoute, rule: "a DISPATCHED wave completes in the transaction in which its last route completes; a wave dispatched with no route completes at once, so the dispatch response may show COMPLETED. CompleteWave has no REST route and no caller (ADR 0002 A9)"}
       - {name: ReinduceOnCancel, rule: "CancelWave (OPEN to CANCELLED, a reason of 1 to 200 characters, REST POST /waves/{waveId}/cancellations) re-inducts every package of the wave onto the next eligible wave in the same transaction; one with no eligible wave is unplaced and raises PackageInductionDeferred. A second cancel of a CANCELLED wave is 409 illegal-transition: the wave stays CANCELLED and no second DeliveryWaveCancelled is raised (ADR 0002 A10)"}
@@ -1603,6 +1629,7 @@ contexts:
       - {from: "station planner (human)", type: cmd, channel: "REST POST /waves, POST /waves/{waveId}/induction-closures, POST /waves/{waveId}/dispatches, POST /waves/{waveId}/cancellations, POST /routes, POST /partners, POST /partners/{dspId}/deactivations", routes: ["POST /waves", "POST /waves/{waveId}/induction-closures", "POST /waves/{waveId}/dispatches", "POST /waves/{waveId}/cancellations", "POST /routes", "POST /partners", "POST /partners/{dspId}/deactivations"], message: "ScheduleWave, CloseInduction, DispatchWave, CancelWave, PlanRoute, ContractPartner, DeactivatePartner", relationship: UI}
       # caller inferred for GET /waves; the spec says the planner builds PlanRoute from the stops list
       - {from: "station planner (human)", type: qry, channel: "REST GET /waves, GET /waves/{waveId}/stops", routes: ["GET /waves", "GET /waves/{waveId}/stops"], message: "ListWaves, GetWaveStops", relationship: UI}
+      - {from: "station planner (human)", type: cmd, channel: "REST POST /waves/{waveId}/emission-declarations", routes: ["POST /waves/{waveId}/emission-declarations"], message: "DeclareEmission", relationship: UI}
       - {from: delivery service partner driver app, type: cmd, channel: "REST POST /routes/{routeId}/starts, POST /routes/{routeId}/attempts", routes: ["POST /routes/{routeId}/starts", "POST /routes/{routeId}/attempts"], message: "StartRoute, RecordAttempt", relationship: UI}
       # caller inferred: the spec names no caller; the driver app records the attempts the route read returns
       - {from: delivery service partner driver app, type: qry, channel: "REST GET /routes/{routeId}", routes: ["GET /routes/{routeId}"], message: "GetRoute", relationship: UI}
@@ -1621,6 +1648,7 @@ contexts:
       - "POST /partners"
       - "GET /waves/{waveId}/stops"
       - "POST /waves/{waveId}/cancellations"
+      - "POST /waves/{waveId}/emission-declarations"
       - "GET /routes/{routeId}"
       - "POST /partners/{dspId}/deactivations"
       - "GET /reports/route-efficiency?from=&to="
@@ -1631,6 +1659,7 @@ contexts:
     publishes:
       - {event: DeliveryWaveScheduled, entity: wave, data: [waveId, stationNodeId, serviceDate, inductCutoffAt, windowStart, windowEnd, stopCapacity], consumers: [delivery-promise, order-sourcing]}
       - {event: WaveCostDeclared, entity: wave, data: [waveId, costPerStopCents, declaredAt], consumers: [order-sourcing]}
+      - {event: WaveEmissionDeclared, entity: wave, data: [waveId, gCo2ePerStop, declaredAt], consumers: [order-sourcing]}
       - {event: DeliveryWaveCapacityChanged, entity: wave, data: [waveId, stopCapacity, assignedStops, remainingStops], consumers: [delivery-promise, order-sourcing]}
       - {event: DeliveryWaveCancelled, entity: wave, data: [waveId, reason], consumers: [delivery-promise, order-sourcing]}
       - {event: RoutePlanned, entity: route, data: [routeId, waveId, dspId, stopCount], consumers: [analytics only]}
@@ -1668,6 +1697,7 @@ contexts:
     ul:
       - {term: Last Mile, definition: "From the delivery station to the customer's door.", code: "(context)"}
       - {term: Delivery Wave, definition: "A station's dispatch slot: induct cutoff, delivery window and stop capacity.", code: "wave.DeliveryWave"}
+      - {term: Stop Emission, definition: "The planner's declared marginal greenhouse emission of one delivery stop on a wave, in grams of CO2 equivalent (0 to 10000000); per stop, never per package. A declaration, not a measurement; 0 is legal and an undeclared wave also reads 0.", code: "wave.DeliveryWave.EmissionPerStopG"}
       - {term: Induction, definition: "Placing an arrived package into a wave.", code: "wave.InductPackage"}
       - {term: Route, definition: "One van's ordered stops in one wave.", code: "route.Route"}
       - {term: Stop, definition: "The packages of one route that share one stop key; wave capacity is counted in stops.", code: "route.Stop"}

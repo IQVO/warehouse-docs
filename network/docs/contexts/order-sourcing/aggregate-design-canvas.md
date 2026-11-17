@@ -39,7 +39,7 @@ It carries:
 | Destination | `destinationPostalPrefix`, from `CustomerOrderPlaced`; needed to find the delivery station of a candidate path. The model's value objects do not list it (open question on the [canvas](/network/contexts/order-sourcing/bounded-context-canvas)) |
 | Promise constraint | `PromiseConstraint{promiseId, tier (five values, `CONSOLIDATED` included), deliverByEarliest (optional), deliverByLatest, witnessNodeId}` |
 | Lines | `lines(catalogItemId, listingId, quantity)`, as released; `listingId` is resolved per node from `AvailabilityView` |
-| Current candidate | `Candidate{nodeId, pickupDepartureId, legs[], deliveryWaveId, eta, cost, estimatedCostCents, effectiveCostCents, policyVersion}` |
+| Current candidate | `Candidate{nodeId, pickupDepartureId, legs[], deliveryWaveId, eta, cost, estimatedCostCents, effectiveCostCents, policyVersion, estimatedCo2eGrams, emissionComplete}`; the two carbon fields are recorded and never ranked on (service ADR 0017) |
 | Consolidation | `ConsolidationLink{consolidationKey, consolidatedInto (follower), members (carrier)}`; the key is optional and never exposed on REST |
 | Release point | `releaseAt` (`VirtualQueue`) |
 | Release history | `Release{releaseNo, nodeId, releasedAt, requiredShipBy, outcome(ACCEPTED, REJECTED, EXPIRED, PENDING, WITHDRAWN), reasonCode}` |

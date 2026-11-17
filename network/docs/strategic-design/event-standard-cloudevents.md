@@ -89,6 +89,7 @@ Topic `retailnetwork.node-topology.events`.
 | `NodeRetired` | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound`, `shipping-and-tracking` |
 | `LaneOpened` | `com.retailnetwork.logistics.node-topology.lane.LaneOpened` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
 | `LaneCostDeclared` | `com.retailnetwork.logistics.node-topology.lane.LaneCostDeclared` | `order-sourcing` |
+| `LaneEmissionDeclared` | `com.retailnetwork.logistics.node-topology.lane.LaneEmissionDeclared` | `order-sourcing` |
 | `LaneClosed` | `com.retailnetwork.logistics.node-topology.lane.LaneClosed` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
 | `ServiceAreaAssigned` | `com.retailnetwork.logistics.node-topology.servicearea.ServiceAreaAssigned` | `delivery-promise`, `order-sourcing`, `last-mile-delivery`, `shipping-and-tracking` |
 | `RegionDefined` | `com.retailnetwork.logistics.node-topology.region.RegionDefined` | `delivery-promise`, `order-sourcing` |
@@ -202,6 +203,7 @@ Topic `retailnetwork.last-mile-delivery.events`.
 | --- | --- | --- |
 | `DeliveryWaveScheduled` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveScheduled` | `delivery-promise`, `order-sourcing` |
 | `WaveCostDeclared` | `com.retailnetwork.logistics.last-mile-delivery.wave.WaveCostDeclared` | `order-sourcing` |
+| `WaveEmissionDeclared` | `com.retailnetwork.logistics.last-mile-delivery.wave.WaveEmissionDeclared` | `order-sourcing` |
 | `DeliveryWaveCapacityChanged` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCapacityChanged` | `delivery-promise`, `order-sourcing` |
 | `DeliveryWaveCancelled` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCancelled` | `delivery-promise`, `order-sourcing` |
 | `RoutePlanned` | `com.retailnetwork.logistics.last-mile-delivery.route.RoutePlanned` | analytics only |

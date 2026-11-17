@@ -95,6 +95,17 @@ Cross-region is a cost, never a filter (gap G26). With no `SourcingPolicy` publi
 the percent are 0, and the ordering is the one the ordinal penalties alone gave. The split surcharge of
 the first contract is not built: this context never splits an order, because each group is assigned on its own.
 
+As built (order-sourcing ADR 0017) every candidate also carries a carbon estimate,
+`estimatedCo2eGrams`: the planner-declared per-unit emission of every lane the path
+traverses (`LaneEmissionDeclared` from `node-topology`) plus the declared per-stop
+emission of the final wave (`WaveEmissionDeclared` from `last-mile-delivery`), in
+integer grams of CO2e. It is an estimate only, not a sourcing objective: the
+comparator above never reads it, so the ordering is unchanged. A component with no
+declaration contributes 0 and marks the estimate incomplete, and
+`FulfillmentReleasedToNode` and `FulfillmentSourcingDecided` then omit both
+`estimatedCo2eGrams` and `emissionComplete`, so absence means not known, never zero.
+Derived from: `model.yaml` → `contexts[order-sourcing].policies[CarbonEstimate]`.
+
 At `releaseAt` the cheapest candidate is released: `FulfillmentReleasedToNode`.
 For a vendor node, `vendor-connectivity` turns it into a purchase order with
 

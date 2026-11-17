@@ -166,7 +166,7 @@ flowchart TB
     OS["order-sourcing"]:::core
     NT ==>|"CF 4e"| OA
     NT ==>|"CF 9e"| DP
-    NT ==>|"? + CF 10e"| OS
+    NT ==>|"? + CF 11e"| OS
     NT ==>|"CF 7e"| LH
     NT ==>|"CF 2e"| LM
     NT ==>|"CF 2e"| NP
@@ -181,7 +181,7 @@ flowchart TB
     LH ==>|"? + CF 5e"| OS
     LH ==>|"C/S 1e"| LM
     LM ==>|"? + CF 4e"| DP
-    LM ==>|"? + CF 4e"| OS
+    LM ==>|"? + CF 5e"| OS
     NP ==>|"CF 2e"| DP
     NP ==>|"CF 1e"| OS
 ```
@@ -199,7 +199,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `delivery-promise` | `node-performance` | CF | `PromiseKept`, `PromiseBroken` | - |
 | `delivery-promise` | `order-sourcing` | C/S | `PromiseRevised`, `PromiseBookExhausted` | - |
 | `last-mile-delivery` | `delivery-promise` | ? + CF | `DeliveryWaveScheduled`, `DeliveryWaveCapacityChanged`, `DeliveryWaveCancelled`, `PackageInductionDeferred` | - |
-| `last-mile-delivery` | `order-sourcing` | ? + CF | `DeliveryWaveScheduled`, `WaveCostDeclared`, `DeliveryWaveCapacityChanged`, `DeliveryWaveCancelled` | - |
+| `last-mile-delivery` | `order-sourcing` | ? + CF | `DeliveryWaveScheduled`, `WaveCostDeclared`, `WaveEmissionDeclared`, `DeliveryWaveCapacityChanged`, `DeliveryWaveCancelled` | - |
 | `last-mile-delivery` | `shipping-and-tracking` | ? + CF | `PackageOutForDelivery`, `StopEtaWindowAssigned`, `DeliveryAttempted`, `PackageReturnInitiated`, `DeliveryPointFlagged` | - |
 | `linehaul-transportation` | `delivery-promise` | ? + CF | `DepartureScheduled`, `DepartureCapacityChanged`, `DepartureCancelled`, `LoadDeparted`, `LoadArrived`, `BookingMoved`, `BookingFailed` | - |
 | `linehaul-transportation` | `last-mile-delivery` | C/S | `LoadArrived` | - |
@@ -213,7 +213,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `node-topology` | `linehaul-transportation` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneClosed` | - |
 | `node-topology` | `node-performance` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared` | - |
 | `node-topology` | `offer-availability` | CF | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | - |
-| `node-topology` | `order-sourcing` | ? + CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneCostDeclared`, `LaneClosed`, `ServiceAreaAssigned`, `RegionDefined` | - |
+| `node-topology` | `order-sourcing` | ? + CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneCostDeclared`, `LaneEmissionDeclared`, `LaneClosed`, `ServiceAreaAssigned`, `RegionDefined` | - |
 | `node-topology` | `seller-inbound` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | - |
 | `node-topology` | `shipping-and-tracking` | CF | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `ServiceAreaAssigned` | - |
 | `node-topology` | `vendor-connectivity` | ? + C/S + CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | cmd RegisterNode, DeclareOperationalProfile (`REST POST /nodes, PUT /nodes/{nodeId}/operational-profile`) |
