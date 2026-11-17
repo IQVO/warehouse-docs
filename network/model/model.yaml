@@ -1584,20 +1584,27 @@ contexts:
           - [OPEN, OPEN, DeclareEmission]
           - [INDUCTION_CLOSED, INDUCTION_CLOSED, DeclareEmission]
           - [DISPATCHED, DISPATCHED, DeclareEmission]
+          # as built (last-mile-delivery ADR 0011): same shape, the stop-cost declaration
+          - [OPEN, OPEN, DeclareCost]
+          - [INDUCTION_CLOSED, INDUCTION_CLOSED, DeclareCost]
+          - [DISPATCHED, DISPATCHED, DeclareCost]
         value_objects:
           - "Window{start, end}"
           - "StopCapacity{stops, assigned}"
           - "Induction{trackingNumber, stopKey, kind(DELIVERY|PICKUP)}: why a package takes a stop of the wave. DELIVERY is the default and what every writer of this context passes; a PICKUP induction occupies stop capacity and raises DeliveryWaveCapacityChanged exactly like a delivery. There is no REST induction route, so the kind rides the domain command only (last-mile-delivery ADR 0017)"
+          - "CostPerStopCents (int64 integer cents, 0 to 10000000, default 0): the planner's declared marginal cost of ONE delivery stop on the wave (route driver time plus the stop's mileage share), per stop (the stopKey grouping), never per package; no currency field (single-currency study). Published and read on the REST wave as costPerStopCents. 0 is a legal declaration; a wave with no declaration also reads 0 (last-mile-delivery ADR 0011)"
           - "EmissionPerStopG (int64 grams of CO2 equivalent, 0 to 10000000, default 0): the planner's declared marginal greenhouse emission of ONE delivery stop on the wave (the stop's share of the route's driving), per stop (the stopKey grouping), never per package; no unit field. Published and read on the REST wave as gCo2ePerStop. 0 is a legal declaration; a wave with no declaration also reads 0 (last-mile-delivery ADR 0016)"
         invariants:
           - {rule: "inductCutoffAt < windowStart < windowEnd", error: ErrInvalidWaveTimes}
           - {rule: "assigned stops <= stops, where assigned stops counts the distinct stopKeys among the wave's inductions", error: ErrWaveFull}
           - {rule: "no package joins after induction closes", error: ErrInductionClosed}
           - {rule: "a wave is scheduled only for a known DELIVERY_STATION of StationView; checked by the use case, not by the aggregate (ADR 0002 A1)", error: ErrUnknownStation}
+          - {rule: "a declared stop cost is an integer from 0 to 10000000 cents; HTTP 422 validation-failed outside the range (last-mile-delivery ADR 0011)", error: ErrValidation}
+          - {rule: "a stop cost is declared only while the wave still runs (OPEN, INDUCTION_CLOSED or DISPATCHED); a CANCELLED or COMPLETED wave refuses the declaration", error: ErrIllegalTransition}
           - {rule: "a declared stop emission is an integer from 0 to 10000000 grams of CO2 equivalent; HTTP 422 validation-failed outside the range (last-mile-delivery ADR 0016)", error: ErrValidation}
           - {rule: "an emission is declared only while the wave still runs (OPEN, INDUCTION_CLOSED or DISPATCHED); a CANCELLED or COMPLETED wave refuses the declaration", error: ErrIllegalTransition}
-        commands: [ScheduleWave, InductPackage, CloseInduction, DispatchWave, CompleteWave, CancelWave, DeclareEmission]
-        events: [DeliveryWaveScheduled, DeliveryWaveCapacityChanged, DeliveryWaveCancelled, WaveEmissionDeclared]
+        commands: [ScheduleWave, InductPackage, CloseInduction, DispatchWave, CompleteWave, CancelWave, DeclareCost, DeclareEmission]
+        events: [DeliveryWaveScheduled, DeliveryWaveCapacityChanged, DeliveryWaveCancelled, WaveCostDeclared, WaveEmissionDeclared]
         throughput_estimate: "medium"
         size_estimate: "stations x waves/day x horizon"
       - name: Route
@@ -1651,6 +1658,7 @@ contexts:
     policies:
       - {name: InductOnArrival, rule: "on LoadArrived at a delivery station induct every package into the earliest eligible wave"}
       - {name: RetryNextWave, rule: "a FAILED attempt re-inducts the package into the next wave; three failures return it to sender"}
+      - {name: StopCostIsDeclared, rule: "DeclareCost (REST POST /waves/{waveId}/cost-declarations, Idempotency-Key required, 201 returning the wave) sets the wave's costPerStopCents, bumps the version and raises WaveCostDeclared (subject and key the waveId). A later declaration overwrites the earlier one and publishes again; the last one wins. A wave with no declaration reads 0 and contributes 0 to a consumer's sum while leaving its estimate incomplete; whether an undeclared wave may be treated as free is the consumer's decision. What the planner bases the number on (driver pay, fuel, van depreciation) stays outside the contract; only the cents cross the boundary (last-mile-delivery ADR 0011)"}
       - {name: StopEmissionIsDeclared, rule: "DeclareEmission (REST POST /waves/{waveId}/emission-declarations, Idempotency-Key required, 201 returning the wave) sets the wave's emissionPerStopG, bumps the version and raises WaveEmissionDeclared (subject and key the waveId). A later declaration overwrites the earlier one and publishes again; the last one wins. A wave with no declaration reads 0 and contributes 0 to a consumer's sum while leaving its estimate incomplete; whether an undeclared wave may be treated as emission-free is the consumer's decision. What the planner bases the number on stays outside the contract (last-mile-delivery ADR 0016)"}
       - {name: CompleteRouteOnLastAttempt, rule: "a route completes (OUT_FOR_DELIVERY to COMPLETED) in the same unit of work as the attempt that records its last outstanding package, so CompleteRoute has no REST route and no caller; a route whose driver never records every package stays OUT_FOR_DELIVERY (ADR 0002 A16)"}
       - {name: CompleteWaveWithLastRoute, rule: "a DISPATCHED wave completes in the transaction in which its last route completes; a wave dispatched with no route completes at once, so the dispatch response may show COMPLETED. CompleteWave has no REST route and no caller (ADR 0002 A9)"}
@@ -1668,6 +1676,7 @@ contexts:
       - {from: "station planner (human)", type: cmd, channel: "REST POST /waves, POST /waves/{waveId}/induction-closures, POST /waves/{waveId}/dispatches, POST /waves/{waveId}/cancellations, POST /routes, POST /partners, POST /partners/{dspId}/deactivations", routes: ["POST /waves", "POST /waves/{waveId}/induction-closures", "POST /waves/{waveId}/dispatches", "POST /waves/{waveId}/cancellations", "POST /routes", "POST /partners", "POST /partners/{dspId}/deactivations"], message: "ScheduleWave, CloseInduction, DispatchWave, CancelWave, PlanRoute, ContractPartner, DeactivatePartner", relationship: UI}
       # caller inferred for GET /waves; the spec says the planner builds PlanRoute from the stops list
       - {from: "station planner (human)", type: qry, channel: "REST GET /waves, GET /waves/{waveId}/stops", routes: ["GET /waves", "GET /waves/{waveId}/stops"], message: "ListWaves, GetWaveStops", relationship: UI}
+      - {from: "station planner (human)", type: cmd, channel: "REST POST /waves/{waveId}/cost-declarations", routes: ["POST /waves/{waveId}/cost-declarations"], message: "DeclareCost", relationship: UI}
       - {from: "station planner (human)", type: cmd, channel: "REST POST /waves/{waveId}/emission-declarations", routes: ["POST /waves/{waveId}/emission-declarations"], message: "DeclareEmission", relationship: UI}
       - {from: delivery service partner driver app, type: cmd, channel: "REST POST /routes/{routeId}/starts, POST /routes/{routeId}/attempts", routes: ["POST /routes/{routeId}/starts", "POST /routes/{routeId}/attempts"], message: "StartRoute, RecordAttempt", relationship: UI}
       # caller inferred: the spec names no caller; the driver app records the attempts the route read returns
@@ -1687,6 +1696,7 @@ contexts:
       - "POST /partners"
       - "GET /waves/{waveId}/stops"
       - "POST /waves/{waveId}/cancellations"
+      - "POST /waves/{waveId}/cost-declarations"
       - "POST /waves/{waveId}/emission-declarations"
       - "GET /routes/{routeId}"
       - "POST /partners/{dspId}/deactivations"
@@ -1737,6 +1747,7 @@ contexts:
     ul:
       - {term: Last Mile, definition: "From the delivery station to the customer's door.", code: "(context)"}
       - {term: Delivery Wave, definition: "A station's dispatch slot: induct cutoff, delivery window and stop capacity.", code: "wave.DeliveryWave"}
+      - {term: Stop Cost, definition: "The planner's declared marginal cost of one delivery stop on a wave, in integer cents (0 to 10000000), with no currency field; per stop, never per package. A declaration, not a measurement; 0 is legal and an undeclared wave also reads 0.", code: "wave.DeliveryWave.CostPerStopCents"}
       - {term: Stop Emission, definition: "The planner's declared marginal greenhouse emission of one delivery stop on a wave, in grams of CO2 equivalent (0 to 10000000); per stop, never per package. A declaration, not a measurement; 0 is legal and an undeclared wave also reads 0.", code: "wave.DeliveryWave.EmissionPerStopG"}
       - {term: Induction, definition: "Placing an arrived package into a wave.", code: "wave.InductPackage"}
       - {term: Route, definition: "One van's ordered stops in one wave.", code: "route.Route"}

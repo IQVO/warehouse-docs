@@ -29,7 +29,10 @@ One dispatch wave of one delivery station on one service date. It carries
 the induct cutoff (`inductCutoffAt`), the delivery window
 (`Window{start, end}`) and the stop capacity (`StopCapacity{stops, assigned}`).
 `delivery-promise` and `order-sourcing` plan the last leg of every path on
-it, so its capacity is published on every change. As built (ADR 0016) the
+it, so its capacity is published on every change. As built (ADR 0011) the
+wave carries `costPerStopCents`: the planner's declared marginal cost of one
+delivery stop, an integer of cents from 0 to 10000000, default 0, with no
+currency field, per stop and never per package. As built (ADR 0016) the
 wave also carries `emissionPerStopG`: the planner's declared marginal
 greenhouse emission of one delivery stop, an integer of grams of CO2
 equivalent from 0 to 10000000, default 0, per stop and never per package.
@@ -49,7 +52,7 @@ stateDiagram-v2
         InductPackage is accepted only here, it changes assigned stops, not the state
     end note
     note right of DISPATCHED
-        DeclareEmission is accepted in OPEN, INDUCTION_CLOSED and DISPATCHED, it changes no state
+        DeclareCost and DeclareEmission are accepted in OPEN, INDUCTION_CLOSED and DISPATCHED, they change no state
     end note
 ```
 
@@ -68,6 +71,8 @@ Omitted: nothing in the model. The creation edge (`ScheduleWave`) and the
 | assigned stops `<=` stops | `ErrWaveFull` |
 | no package joins after induction closes | `ErrInductionClosed` |
 | a wave is scheduled only for a known `DELIVERY_STATION` (use case, ADR 0002 A1) | `ErrUnknownStation` |
+| a declared stop cost is an integer from 0 to 10000000 cents | `ErrValidation` |
+| a stop cost is declared only while the wave still runs (`OPEN`, `INDUCTION_CLOSED` or `DISPATCHED`) | `ErrIllegalTransition` |
 | a declared stop emission is an integer from 0 to 10000000 grams of CO2 equivalent | `ErrValidation` |
 | an emission is declared only while the wave still runs (`OPEN`, `INDUCTION_CLOSED` or `DISPATCHED`) | `ErrIllegalTransition` |
 
@@ -96,6 +101,7 @@ Omitted: nothing in the model. The creation edge (`ScheduleWave`) and the
 | `DispatchWave` | `INDUCTION_CLOSED` → `DISPATCHED` | Station planner, REST `POST /waves/{waveId}/dispatches` |
 | `CompleteWave` | `DISPATCHED` → `COMPLETED` | automatic: the last route of the wave completes, or a dispatch with no route (ADR 0002 A9); no REST route |
 | `CancelWave` | `OPEN` → `CANCELLED` | Station planner, REST `POST /waves/{waveId}/cancellations` |
+| `DeclareCost` | none (`OPEN`, `INDUCTION_CLOSED` or `DISPATCHED`; the version is bumped) | Station planner, REST `POST /waves/{waveId}/cost-declarations` |
 | `DeclareEmission` | none (`OPEN`, `INDUCTION_CLOSED` or `DISPATCHED`; the version is bumped) | Station planner, REST `POST /waves/{waveId}/emission-declarations` |
 
 ### 7. Created Events
@@ -105,6 +111,7 @@ Omitted: nothing in the model. The creation edge (`ScheduleWave`) and the
 | `DeliveryWaveScheduled` | `ScheduleWave` is saved | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveScheduled` |
 | `DeliveryWaveCapacityChanged` | assigned stops change (`InductPackage`) | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCapacityChanged` |
 | `DeliveryWaveCancelled` | `CancelWave` is saved | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCancelled` |
+| `WaveCostDeclared` | `DeclareCost` is saved (every declaration) | `com.retailnetwork.logistics.last-mile-delivery.wave.WaveCostDeclared` |
 | `WaveEmissionDeclared` | `DeclareEmission` is saved (every declaration) | `com.retailnetwork.logistics.last-mile-delivery.wave.WaveEmissionDeclared` |
 
 `CloseInduction`, `DispatchWave` and `CompleteWave` raise no event of their
