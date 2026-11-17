@@ -120,6 +120,6 @@ case-packed cartons refused at `AddCarton`.
 ## 11. Open questions
 
 See the gap register, [G41 to G55](/network/strategic-design/model-gap-register#introduced-by-seller-inbound-and-case-packed-shipments):
-commingling, compliance scoring beyond the informational scorecard (nothing
-acts on its tier), inbound freight, EDI adapters, FEFO, who
+commingling, compliance scoring beyond the scorecard (only the monthly
+capacity gate reads its tier, service ADR 0015), inbound freight, EDI adapters, FEFO, who
 creates owner-scoped listings from received stock, pallets and inner packs.

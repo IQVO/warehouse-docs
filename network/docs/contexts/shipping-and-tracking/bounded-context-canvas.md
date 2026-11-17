@@ -176,6 +176,7 @@ address ([ADR 0006](/network/adr/0006-pii-confinement)). It publishes no address
 | Collaborator | Message | Type | Channel | Relationship |
 | --- | --- | --- | --- | --- |
 | `vendor-connectivity` | `IssueLabel` | Command | REST `POST /labels` (in-org) | Customer/Supplier (`vendor-connectivity` is the Customer) |
+| `customer-returns` | `IssueReturnLabel` | Command | REST `POST /return-labels` (in-org, service ADR 0017) | Customer/Supplier (`customer-returns` is the Customer) |
 | `vendor-connectivity` | `VendorShipmentConfirmed` | Event | Kafka `retailnetwork.vendor-connectivity.events`, `com.retailnetwork.partner.vendor-connectivity.purchaseorder.VendorShipmentConfirmed` | Customer/Supplier (this context is the Customer) |
 | `linehaul-transportation` | `LoadDeparted` | Event | Kafka `retailnetwork.linehaul-transportation.events`, `com.retailnetwork.logistics.linehaul-transportation.load.LoadDeparted` | Conformist |
 | `linehaul-transportation` | `LoadArrived` | Event | Kafka `retailnetwork.linehaul-transportation.events`, `com.retailnetwork.logistics.linehaul-transportation.load.LoadArrived` | Conformist |
