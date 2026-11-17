@@ -217,25 +217,30 @@ contexts:
         size_estimate: "one row + one profile row per revision; ~10^3 nodes"
       - name: Lane
         root_id: laneId
-        description: A directed, mode-specific connection between two nodes with a nominal transit time and a planner-declared carbon emission per package-unit. Its scheduled departures belong to linehaul-transportation.
+        description: A directed, mode-specific connection between two nodes with a nominal transit time, a planner-declared cost per package-unit and a planner-declared carbon emission per package-unit. Its scheduled departures belong to linehaul-transportation.
         states: [OPEN, CLOSED]
         transitions:
           - [OPEN, CLOSED, CloseLane]
           # as built (node-topology ADR 0018): a declaration changes no state, bumps the lane version and is valid on an OPEN lane only
           - [OPEN, OPEN, DeclareLaneEmission]
+          # as built (node-topology ADR 0014): same shape, the cost declaration
+          - [OPEN, OPEN, DeclareLaneCost]
         value_objects:
           - "NominalTransit{minutes}"
           - "LaneMode(GROUND|AIR)"
+          - "CostPerUnitCents (int64 integer cents, 0 to 10000000, default 0): the planner's declared marginal cost of moving ONE package-unit across the lane on one departure; no currency field (single-currency study). Published and read on the REST lane as costPerUnitCents. 0 is a legal declaration; a lane never declared on also reads 0 but publishes nothing (node-topology ADR 0014)"
           - "EmissionPerUnitG (int64 grams of CO2-equivalent, 0 to 10000000, default 0): the planner's declared carbon emission of moving ONE package-unit across the lane on one departure; no unit field. Published as gCo2ePerUnit, read on the REST lane as emissionPerUnitG. 0 is a legal declaration; a lane never declared on also reads 0 but publishes nothing (node-topology ADR 0018)"
         invariants:
           - {rule: "origin and destination differ", error: ErrLaneLoop}
           - {rule: "(origin type, destination type) is an allowed pair", error: ErrLaneTypePairNotAllowed}
           - {rule: "both ends ACTIVE when opening", error: ErrLaneEndpointNotActive}
           - {rule: "at most one OPEN lane per (origin, destination, mode)", error: ErrDuplicateLane}
+          - {rule: "a declared cost is an integer from 0 to 10000000 cents; HTTP 422 validation-failed outside the range (node-topology ADR 0014)", error: ErrValidation}
+          - {rule: "a cost is declared on an OPEN lane only; a CLOSED lane refuses the declaration (HTTP 409 illegal-transition)", error: ErrIllegalTransition}
           - {rule: "a declared emission is an integer from 0 to 10000000 grams of CO2-equivalent; HTTP 422 validation-failed outside the range (node-topology ADR 0018)", error: ErrValidation}
           - {rule: "an emission is declared on an OPEN lane only; a CLOSED lane refuses the declaration (HTTP 409 illegal-transition)", error: ErrIllegalTransition}
-        commands: [OpenLane, CloseLane, DeclareLaneEmission]
-        events: [LaneOpened, LaneClosed, LaneEmissionDeclared]
+        commands: [OpenLane, CloseLane, DeclareLaneCost, DeclareLaneEmission]
+        events: [LaneOpened, LaneClosed, LaneCostDeclared, LaneEmissionDeclared]
         throughput_estimate: "low"
         size_estimate: "~10^4 lanes"
       - name: ServiceArea
@@ -274,12 +279,14 @@ contexts:
       - {name: DefaultCapabilitiesByType, rule: "node capabilities are derived from node_types, never typed by hand"}
       - {name: SuspendedEndpointsUnusable, rule: "suspending or retiring a node closes nothing: its OPEN lanes and ASSIGNED service areas stay as they are, and consumers treat them as unusable while the node is not ACTIVE (they react to NodeSuspended and NodeRetired)"}
       - {name: NoDefaultLaneNoPackagesPerOrder, rule: "node-topology declares no default outbound lane and no packagesPerOrder: neither is a field of Node, Lane or OperationalProfile. linehaul-transportation derives the pickup's lane itself (policy DefaultOutboundLane) and keeps its own packagesPerOrder setting (policy PickupCapacity); delivery-promise reads packagesPerOrder from its PromisePolicy"}
+      - {name: CostIsDeclaredNotMeasured, rule: "a lane cost is a planner declaration and a fact: every DeclareLaneCost (REST POST /lanes/{laneId}/cost-declarations, Idempotency-Key required, 201 returning the lane) supersedes the previous value, bumps the lane version and publishes LaneCostDeclared (subject and key the laneId); nothing re-derives it from invoices or measurements, and it is neither a quote nor an invoice. An undeclared lane reads 0 and publishes nothing, so a consumer tells a declared zero from no declaration only by whether an event arrived: an undeclared lane contributes 0 to a money sum and leaves the consumer's estimate incomplete, and what incomplete means is the consumer's decision. One number per lane is one number per mode; there is no currency field (node-topology ADR 0014)"}
       - {name: EmissionIsDeclaredNotMeasured, rule: "a lane emission is a planner declaration and a fact: every DeclareLaneEmission supersedes the previous value and publishes LaneEmissionDeclared, nothing re-derives it from fuel, energy or distance, and no measurement replaces it. An undeclared lane reads 0 and publishes nothing, so a consumer tells a declared zero from no declaration only by whether an event arrived; what an undeclared lane means for an estimate is the consumer's decision (node-topology ADR 0018)"}
     inbound:
       - {from: vendor-connectivity, type: cmd, channel: "REST POST /nodes (in-org)", routes: ["POST /nodes"], message: "RegisterNode (vendor node)", relationship: Customer/Supplier}
       - {from: vendor-connectivity, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile (in-org)", routes: ["PUT /nodes/{nodeId}/operational-profile"], message: "DeclareOperationalProfile", relationship: Customer/Supplier}
       - {from: network-ops planner, type: cmd, channel: "REST PUT /nodes/{nodeId}/operational-profile", routes: ["PUT /nodes/{nodeId}/operational-profile"], message: "DeclareOperationalProfile (declaredBy NETWORK_OPS)", relationship: UI}
       - {from: network-ops planner, type: cmd, channel: "REST POST /nodes, POST /nodes/{nodeId}/activations, POST /nodes/{nodeId}/suspensions, POST /nodes/{nodeId}/retirements, POST /lanes, POST /lanes/{laneId}/closures, PUT /service-areas/{postalPrefix}, POST /regions", routes: ["POST /nodes", "POST /nodes/{nodeId}/activations", "POST /nodes/{nodeId}/suspensions", "POST /nodes/{nodeId}/retirements", "POST /lanes", "POST /lanes/{laneId}/closures", "PUT /service-areas/{postalPrefix}", "POST /regions"], message: "RegisterNode (network node), ActivateNode, SuspendNode, RetireNode, OpenLane, CloseLane, AssignServiceArea, DefineRegion", relationship: UI}
+      - {from: network-ops planner, type: cmd, channel: "REST POST /lanes/{laneId}/cost-declarations", routes: ["POST /lanes/{laneId}/cost-declarations"], message: "DeclareLaneCost", relationship: UI}
       - {from: network-ops planner, type: cmd, channel: "REST POST /lanes/{laneId}/emission-declarations", routes: ["POST /lanes/{laneId}/emission-declarations"], message: "DeclareLaneEmission", relationship: UI}
       - {from: any context, type: qry, channel: "REST GET /nodes/{nodeId}, GET /nodes, GET /lanes, GET /service-areas/{postalPrefix}, GET /regions, GET /regions/{regionId}", routes: ["GET /nodes/{nodeId}", "GET /nodes", "GET /lanes", "GET /service-areas/{postalPrefix}", "GET /regions", "GET /regions/{regionId}"], message: "GetNode, ListNodes, ListLanes, ResolveServiceArea, ListRegions, GetRegion", relationship: OHS}
     rest:
@@ -292,6 +299,7 @@ contexts:
       - "POST /nodes/{nodeId}/retirements"
       - "POST /lanes"
       - "POST /lanes/{laneId}/closures"
+      - "POST /lanes/{laneId}/cost-declarations"
       - "POST /lanes/{laneId}/emission-declarations"
       - "GET /lanes?origin=&destination="
       - "PUT /service-areas/{postalPrefix}"
@@ -330,6 +338,7 @@ contexts:
       - {term: Throughput Cap, definition: "Declared maximum orders per time unit a node accepts.", code: "node.ThroughputCap"}
       - {term: Inbound Limits, definition: "A receiving node's declared carton weight and size limits, whether it accepts pallets and whether it requires an SSCC on every carton.", code: "node.OperationalProfile.Inbound"}
       - {term: Lane, definition: "A directed, mode-specific connection between two nodes.", code: "lane.Lane"}
+      - {term: Lane Cost, definition: "The planner's declared marginal cost of moving one package-unit across a lane on one departure, in integer cents (0 to 10000000), with no currency field. A declaration, never a quote, an invoice or a measurement; 0 is legal, and a lane never declared on also reads 0 but publishes nothing.", code: "lane.Lane.CostPerUnitCents"}
       - {term: Lane Emission, definition: "The planner's declared carbon emission of moving one package-unit across a lane on one departure, in grams of CO2-equivalent (0 to 10000000). A declaration, never a measurement; 0 is legal, and a lane never declared on also reads 0 but publishes nothing.", code: "lane.Lane.EmissionPerUnitG"}
       - {term: Region, definition: "A largely self-sufficient partition of the network.", code: "region.Region"}
       - {term: Service Area, definition: "The postal prefixes one delivery station serves.", code: "servicearea.ServiceArea"}

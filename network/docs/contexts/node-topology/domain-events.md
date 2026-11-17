@@ -48,6 +48,7 @@ Derived from: model.yaml → `conventions.cloudevents`,
 | `NodeSuspended` | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | `nodeId` | `SuspendNode` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound` |
 | `NodeRetired` | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `nodeId` | `RetireNode` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound` |
 | `LaneOpened` | `com.retailnetwork.logistics.node-topology.lane.LaneOpened` | `laneId` | `OpenLane` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
+| `LaneCostDeclared` | `com.retailnetwork.logistics.node-topology.lane.LaneCostDeclared` | `laneId` | `DeclareLaneCost` | `order-sourcing` |
 | `LaneEmissionDeclared` | `com.retailnetwork.logistics.node-topology.lane.LaneEmissionDeclared` | `laneId` | `DeclareLaneEmission` | `order-sourcing` |
 | `LaneClosed` | `com.retailnetwork.logistics.node-topology.lane.LaneClosed` | `laneId` | `CloseLane` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
 | `ServiceAreaAssigned` | `com.retailnetwork.logistics.node-topology.servicearea.ServiceAreaAssigned` | `postalPrefix` | `AssignServiceArea` | `delivery-promise`, `order-sourcing`, `last-mile-delivery` |
@@ -148,6 +149,20 @@ graph.
 | `destinationNodeId` | string | Destination node |
 | `mode` | enum | `GROUND` or `AIR` |
 | `nominalTransitMinutes` | integer | Nominal transit time |
+
+### LaneCostDeclared
+
+Producing use case: `DeclareLaneCost`, on every declaration; a newer
+declaration supersedes the previous value. A lane that was never declared on
+publishes nothing. `order-sourcing` keeps the latest declaration per `laneId`
+and folds the declared cents into its money-denominated assignment cost
+(node-topology ADR 0014).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `laneId` | string | The lane |
+| `costPerUnitCents` | integer | The planner's declared marginal cost of moving one package-unit across the lane on one departure, integer cents (0 to 10000000; 0 is a legal declaration; no currency field) |
+| `declaredAt` | timestamp | When the planner declared it |
 
 ### LaneEmissionDeclared
 

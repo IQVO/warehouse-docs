@@ -86,6 +86,7 @@ are the proposed Go package and type names. Each context's own
 | **Inventory Feed** | `offer-availability` | One vendor submission of availability for one node, full or partial. | `feed.InventoryFeed` |
 | **Label** | `vendor-connectivity` | labelRef + trackingNumber + carrier; never the address. | `po.Label` |
 | **Lane** | `node-topology` | A directed, mode-specific connection between two nodes. | `lane.Lane` |
+| **Lane Cost** | `node-topology` | The planner's declared marginal cost of moving one package-unit across a lane on one departure, in integer cents (0 to 10000000), with no currency field. A declaration, never a quote, an invoice or a measurement; 0 is legal, and a lane never declared on also reads 0 but publishes nothing. | `lane.Lane.CostPerUnitCents` |
 | **Lane Emission** | `node-topology` | The planner's declared carbon emission of moving one package-unit across a lane on one departure, in grams of CO2-equivalent (0 to 10000000). A declaration, never a measurement; 0 is legal, and a lane never declared on also reads 0 but publishes nothing. | `lane.Lane.EmissionPerUnitG` |
 | **Lane Schedule** | `linehaul-transportation` | The weekly template that generates a lane's departures. | `schedule.LaneSchedule` |
 | **Last Mile** | `last-mile-delivery` | From the delivery station to the customer's door. | `(context)` |

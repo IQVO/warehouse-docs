@@ -145,6 +145,12 @@ activations, suspensions and one retirement.
 A directed, mode-specific connection between two nodes with a nominal
 transit time. Its scheduled departures belong to `linehaul-transportation`.
 Value objects: `NominalTransit{minutes}` and `LaneMode` (`GROUND` or `AIR`).
+As built (node-topology ADR 0014) the lane carries `costPerUnitCents`: the
+planner's declared marginal cost of moving one package-unit across the lane
+on one departure, an integer of cents from 0 to 10000000, default 0, with no
+currency field. It is a declaration, never a quote, an invoice or a
+measurement; 0 is a legal declaration, and a lane never declared on also
+reads 0 but publishes nothing.
 As built (node-topology ADR 0018) the lane also carries `emissionPerUnitG`:
 the planner's declared carbon emission of moving one package-unit across the
 lane on one departure, an integer of grams of CO2-equivalent from 0 to
@@ -156,6 +162,7 @@ declaration, and a lane never declared on also reads 0 but publishes nothing.
 ```mermaid
 stateDiagram-v2
     [*] --> OPEN: OpenLane
+    OPEN --> OPEN: DeclareLaneCost
     OPEN --> OPEN: DeclareLaneEmission
     OPEN --> CLOSED: CloseLane
     CLOSED --> [*]
@@ -174,6 +181,8 @@ Omitted: nothing. There is no reopen; a new lane is opened instead.
 | (origin type, destination type) is an allowed pair (model `lane_rules.allowed`) | `OpenLane` → `ErrLaneTypePairNotAllowed` |
 | Both ends are `ACTIVE` when opening | `OpenLane` → `ErrLaneEndpointNotActive` (reads both `Node` aggregates) |
 | At most one `OPEN` lane per (origin, destination, mode) | `OpenLane` → `ErrDuplicateLane` (spans `Lane` aggregates; backed by a partial unique index) |
+| A declared cost is an integer from 0 to 10000000 cents | `DeclareLaneCost` → `ErrValidation` (422 `validation-failed`) |
+| A cost is declared on an `OPEN` lane only | `DeclareLaneCost` → `ErrIllegalTransition` (409 `illegal-transition`) |
 | A declared emission is an integer from 0 to 10000000 grams of CO2-equivalent | `DeclareLaneEmission` → `ErrValidation` (422 `validation-failed`) |
 | An emission is declared on an `OPEN` lane only | `DeclareLaneEmission` → `ErrIllegalTransition` (409 `illegal-transition`) |
 
@@ -193,6 +202,7 @@ Omitted: nothing. There is no reopen; a new lane is opened instead.
 | --- | --- | --- |
 | `OpenLane` | `POST /lanes` | network-ops planner |
 | `CloseLane` | `POST /lanes/{laneId}/closures` | network-ops planner |
+| `DeclareLaneCost` | `POST /lanes/{laneId}/cost-declarations` | network-ops planner |
 | `DeclareLaneEmission` | `POST /lanes/{laneId}/emission-declarations` | network-ops planner |
 
 ### 7. Created Events
@@ -201,6 +211,7 @@ Omitted: nothing. There is no reopen; a new lane is opened instead.
 | --- | --- | --- |
 | `LaneOpened` | `OpenLane` is saved | `com.retailnetwork.logistics.node-topology.lane.LaneOpened` |
 | `LaneClosed` | `CloseLane` is saved | `com.retailnetwork.logistics.node-topology.lane.LaneClosed` |
+| `LaneCostDeclared` | `DeclareLaneCost` is saved (every declaration) | `com.retailnetwork.logistics.node-topology.lane.LaneCostDeclared` |
 | `LaneEmissionDeclared` | `DeclareLaneEmission` is saved (every declaration) | `com.retailnetwork.logistics.node-topology.lane.LaneEmissionDeclared` |
 
 ### 8. Throughput
