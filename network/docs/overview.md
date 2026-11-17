@@ -2,7 +2,7 @@
 id: overview
 title: retail-network
 sidebar_label: Overview
-description: "A large-scale retail and logistics network, modelled with Domain-Driven Design as eleven bounded contexts, and the one seam through which it connects to the warehouse-systems WMS/WES fleet."
+description: "A large-scale retail and logistics network, modelled with Domain-Driven Design as twelve bounded contexts, and the one seam through which it connects to the warehouse-systems WMS/WES fleet."
 slug: /
 ---
 
@@ -26,25 +26,31 @@ context is the only fleet service that talks to the network, through the
 network's Vendor API.
 
 :::info[As built]
-All eleven contexts are built as services (re-checked against each
-repository's `develop` on 2026-10-26) and wired in warehouse-infra `develop`;
+All twelve contexts are built as services (eleven re-checked against each
+repository's `develop` on 2026-10-26; `customer-returns`, the twelfth, read from
+its `develop` on 2026-11-16) and wired in warehouse-infra `develop`;
 each has adopted the fleet observability standard. Each ships a read-only MCP server (`cmd/mcp`,
 Streamable HTTP on `:8090`, no auth, its own reads only) exposed by the
 gateway as `/api/mcp/` + the context id — for example
-`/api/mcp/delivery-promise` — and a console Module Federation remote
+`/api/mcp/delivery-promise` — and, except `customer-returns`, whose repository
+carries no console remote yet, a console Module Federation remote
 mounted as `/mfes/` + the context id (for example `/mfes/delivery-promise/`):
 read-only screens over the existing REST reads. Four contexts now have an
 analytics read side: `shipping-and-tracking`, `last-mile-delivery`,
 `delivery-promise` and `order-sourcing` each run a projector over their OWN
 topics into a separate analytical database and a read-only reports binary
-(`/reports/...` on `:8092`). The other seven have none, and there are no
-report screens yet. The model is derived from public fulfillment-network research and the fleet's repositories. The canonical model is
+(`/reports/...` on `:8092`). The other eight have none, and there are no
+report screens yet. Two seams of `customer-returns` are built on its side only:
+the reverse-label route of `shipping-and-tracking` and the return advices and
+outcomes of `vendor-connectivity` are decided in those services' ADRs but are
+not in their `develop` contracts, so the model does not draw them (see the
+[context](/network/contexts/customer-returns)). The model is derived from public fulfillment-network research and the fleet's repositories. The canonical model is
 [`network/model/model.yaml`](https://github.com/IQVO/warehouse-docs/blob/main/network/model/model.yaml);
 every page is derived from it, and a CI gate fails the build when a page names
 a message the model does not have. Where a service had to decide something the model left open, the decision is an assumption in that service's ADRs and appears in the [gap register](/network/strategic-design/model-gap-register).
 :::
 
-## The eleven bounded contexts
+## The twelve bounded contexts
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 18, "rankSpacing": 36, "padding": 6}}}%%
@@ -59,6 +65,7 @@ flowchart TB
         DP["delivery-promise"]:::core
         OS["order-sourcing"]:::core
         OA["offer-availability"]:::sup
+        CR["customer-returns"]:::sup
     end
     subgraph LOG["logistics"]
         direction TB
@@ -85,6 +92,8 @@ flowchart TB
     NP --> DP
     OA --> DP
     SI --> VC
+    CO --> CR
+    CR --> OA
 ```
 
 Derived from: `model.yaml` → `contexts[*].classification`, `contexts[*].tier`,
@@ -105,6 +114,7 @@ map with every relationship pattern is on
 | [`customer-ordering`](/network/contexts/customer-ordering) | Checkout and the customer order; the only holder of the (synthetic) ship-to address. Generic. |
 | [`shipping-and-tracking`](/network/contexts/shipping-and-tracking) | Labels and the package journey timeline. Generic. |
 | [`seller-inbound`](/network/contexts/seller-inbound) | Sellers plan, pack, label and ship stock, including case-packed master cartons identified by SSCC, to vendor nodes; receipts close each shipment. |
+| [`customer-returns`](/network/contexts/customer-returns) | The shopper-facing return authorization of a shipped or delivered order group: the disposition is decided at authorization (keep, nearest returns centre or origin node), and the graded outcome comes back as a restock fact. No money, no address, no free text. |
 
 ## How to read this site
 
@@ -119,6 +129,6 @@ map with every relationship pattern is on
 4. [WMS/WES Integration](/network/integration): exactly how the warehouse-systems
    fleet plugs in, what crosses the seam, and what the fleet must change.
 5. [Bounded Contexts](/network/contexts): the same 14-page ddd-crew pack for each of
-   the eleven contexts, and [API Reference](/network/api-reference) for their REST
+   the twelve contexts, and [API Reference](/network/api-reference) for their REST
    contracts.
 6. [ADRs](/network/adr): the nine domain decisions (Proposed) and an index of every service repository's own ADRs.

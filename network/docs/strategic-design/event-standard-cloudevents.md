@@ -34,7 +34,7 @@ Tiers (the `<tier>` segment):
 
 | Tier | Contexts |
 | --- | --- |
-| `commerce` | `offer-availability`, `delivery-promise`, `customer-ordering`, `order-sourcing` |
+| `commerce` | `offer-availability`, `delivery-promise`, `customer-ordering`, `order-sourcing`, `customer-returns` |
 | `logistics` | `node-topology`, `linehaul-transportation`, `last-mile-delivery`, `shipping-and-tracking` |
 | `partner` | `vendor-connectivity`, `node-performance`, `seller-inbound` |
 
@@ -82,16 +82,16 @@ Topic `retailnetwork.node-topology.events`.
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
-| `NodeRegistered` | `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `last-mile-delivery`, `node-performance`, `vendor-connectivity`, `seller-inbound`, `shipping-and-tracking` |
+| `NodeRegistered` | `com.retailnetwork.logistics.node-topology.node.NodeRegistered` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `last-mile-delivery`, `node-performance`, `vendor-connectivity`, `seller-inbound`, `shipping-and-tracking`, `customer-returns` |
 | `NodeOperationalProfileDeclared` | `com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared` | `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `node-performance`, `vendor-connectivity`, `seller-inbound` |
-| `NodeActivated` | `com.retailnetwork.logistics.node-topology.node.NodeActivated` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound`, `shipping-and-tracking` |
-| `NodeSuspended` | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound`, `shipping-and-tracking` |
-| `NodeRetired` | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound`, `shipping-and-tracking` |
+| `NodeActivated` | `com.retailnetwork.logistics.node-topology.node.NodeActivated` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound`, `shipping-and-tracking`, `customer-returns` |
+| `NodeSuspended` | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound`, `shipping-and-tracking`, `customer-returns` |
+| `NodeRetired` | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound`, `shipping-and-tracking`, `customer-returns` |
 | `LaneOpened` | `com.retailnetwork.logistics.node-topology.lane.LaneOpened` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
 | `LaneCostDeclared` | `com.retailnetwork.logistics.node-topology.lane.LaneCostDeclared` | `order-sourcing` |
 | `LaneEmissionDeclared` | `com.retailnetwork.logistics.node-topology.lane.LaneEmissionDeclared` | `order-sourcing` |
 | `LaneClosed` | `com.retailnetwork.logistics.node-topology.lane.LaneClosed` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
-| `ServiceAreaAssigned` | `com.retailnetwork.logistics.node-topology.servicearea.ServiceAreaAssigned` | `delivery-promise`, `order-sourcing`, `last-mile-delivery`, `shipping-and-tracking` |
+| `ServiceAreaAssigned` | `com.retailnetwork.logistics.node-topology.servicearea.ServiceAreaAssigned` | `delivery-promise`, `order-sourcing`, `last-mile-delivery`, `shipping-and-tracking`, `customer-returns` |
 | `RegionDefined` | `com.retailnetwork.logistics.node-topology.region.RegionDefined` | `delivery-promise`, `order-sourcing` |
 
 ### `offer-availability`
@@ -135,8 +135,9 @@ Topic `retailnetwork.customer-ordering.events`.
 
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
-| `CustomerOrderPlaced` | `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderPlaced` | `order-sourcing`, `delivery-promise` |
+| `CustomerOrderPlaced` | `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderPlaced` | `order-sourcing`, `delivery-promise`, `customer-returns` |
 | `CustomerOrderCancelled` | `com.retailnetwork.commerce.customer-ordering.customerorder.CustomerOrderCancelled` | `order-sourcing`, `delivery-promise` |
+| `ShopperNoticeDecided` | `com.retailnetwork.commerce.customer-ordering.order.ShopperNoticeDecided` | `customer-returns` |
 
 ### `order-sourcing`
 
@@ -145,10 +146,10 @@ Topic `retailnetwork.order-sourcing.events`.
 | Event | CloudEvents type | Consumers |
 | --- | --- | --- |
 | `FulfillmentQueued` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentQueued` | analytics only |
-| `FulfillmentReleasedToNode` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | `vendor-connectivity`, `linehaul-transportation`, `seller-inbound` |
+| `FulfillmentReleasedToNode` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | `vendor-connectivity`, `linehaul-transportation`, `seller-inbound`, `customer-returns` |
 | `FulfillmentReleaseWithdrawn` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleaseWithdrawn` | `vendor-connectivity` |
 | `FulfillmentReassigned` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReassigned` | `linehaul-transportation` |
-| `FulfillmentLocked` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | `delivery-promise`, `customer-ordering`, `linehaul-transportation` |
+| `FulfillmentLocked` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | `delivery-promise`, `customer-ordering`, `linehaul-transportation`, `customer-returns` |
 | `FulfillmentShipped` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | `customer-ordering`, `delivery-promise` |
 | `FulfillmentDelivered` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentDelivered` | analytics only |
 | `FulfillmentUnsourceable` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentUnsourceable` | `delivery-promise`, `customer-ordering` |
@@ -208,6 +209,7 @@ Topic `retailnetwork.last-mile-delivery.events`.
 | `DeliveryWaveCancelled` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCancelled` | `delivery-promise`, `order-sourcing` |
 | `RoutePlanned` | `com.retailnetwork.logistics.last-mile-delivery.route.RoutePlanned` | analytics only |
 | `PackageOutForDelivery` | `com.retailnetwork.logistics.last-mile-delivery.route.PackageOutForDelivery` | `shipping-and-tracking` |
+| `PackagePickupOut` | `com.retailnetwork.logistics.last-mile-delivery.route.PackagePickupOut` | none (dormant: no writer inducts a PICKUP yet) |
 | `StopEtaWindowAssigned` | `com.retailnetwork.logistics.last-mile-delivery.route.StopEtaWindowAssigned` | `shipping-and-tracking` |
 | `DeliveryAttempted` | `com.retailnetwork.logistics.last-mile-delivery.route.DeliveryAttempted` | `shipping-and-tracking` |
 | `PackageInductionDeferred` | `com.retailnetwork.logistics.last-mile-delivery.packageattempthistory.PackageInductionDeferred` | `delivery-promise` |
@@ -260,6 +262,17 @@ Topic `retailnetwork.seller-inbound.events`.
 | `InboundShipmentReceived` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | `vendor-connectivity`, `offer-availability` |
 | `InboundDiscrepancyRecorded` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundDiscrepancyRecorded` | analytics only |
 | `SellerComplianceViolationRecorded` | `com.retailnetwork.partner.seller-inbound.seller.SellerComplianceViolationRecorded` | analytics only |
+
+### `customer-returns`
+
+Topic `retailnetwork.customer-returns.events`.
+
+| Event | CloudEvents type | Consumers |
+| --- | --- | --- |
+| `ReturnAuthorized` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnAuthorized` | none on develop (vendor-connectivity ADR 0014 decides the consumer) |
+| `ReturnLabelIssued` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnLabelIssued` | none on develop (vendor-connectivity ADR 0014 decides the consumer) |
+| `ReturnCompleted` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCompleted` | `offer-availability` |
+| `ReturnCancelled` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCancelled` | none on develop (vendor-connectivity ADR 0014 decides the consumer) |
 
 ## Reason vocabularies
 
@@ -325,6 +338,34 @@ Appears in: REST `OfferConstraint`.
 | `PAST_ORDER_DEADLINE` | The tier's order deadline in the destination region has passed. |
 | `DELIVERY_SLA_UNAVAILABLE` | No feasible path (cutoff, departures, delivery wave) reaches the destination inside the tier. For CONSOLIDATED also: the group has no STANDARD candidate to anchor the fastest window, or the chosen day is more than 14 local days from now or has no wave (ADR 0024). |
 | `NODE_CAPACITY_EXHAUSTED` | A feasible path exists, but its pickup cutoff has no remaining capacity. |
+
+### Reasons of `customer-ordering`
+
+**`ShopperNoticeFamily`**: The family of fact a shopper notice was decided for (customer-ordering ADR 0017). One event per family occurrence, whatever the notifier.
+
+Appears in: `ShopperNoticeDecided.family`.
+
+| Value | Meaning |
+| --- | --- |
+| `DELAY_EXPECTED` | A promise revision moved the window later; the fact carries the revised deliverByLatest. |
+| `ETA_WINDOW_ASSIGNED` | A day-of ETA window was assigned to a package of the group; the fact carries etaStart and etaEnd. |
+| `DELIVERY_POINT_ADVISORY` | The delivery point of a package was flagged; the fact carries the flag reason. |
+| `GROUP_SHIPPED` | The group became SHIPPED; the fact carries the group status. |
+| `GROUP_DELIVERED` | The group became DELIVERED; the fact carries the group status. |
+| `GROUP_LOST` | The group became LOST; the fact carries the group status. |
+| `GROUP_RETURNED` | The group became RETURNED; the fact carries the group status. |
+
+Branched on by `customer-returns` (`GROUP_SHIPPED`, `GROUP_DELIVERED`, `GROUP_LOST`, `GROUP_RETURNED`): the four terminal families set the status of the OrderGroupView row (the status of the fact wins over the family); GROUP_SHIPPED and GROUP_DELIVERED make the group authorizable. The other families are ignored.
+
+**`ShopperNoticeNotifier`**: Who the notification policy names to deliver the notice. The network itself sends nothing.
+
+Appears in: `ShopperNoticeDecided.notifier`.
+
+| Value | Meaning |
+| --- | --- |
+| `MARKETPLACE` | The storefront delivers the notice. |
+| `SELLER` | The seller should deliver it; delivery is deferred, no seller consumer exists. |
+| `NOBODY` | Drop the notice; the fact still flows. The default of every family (policy version 0). |
 
 ### Reasons of `order-sourcing`
 
@@ -441,7 +482,7 @@ Appears in: `DeliveryAttempted.outcome`, REST `Outcome`, REST `Attempt.outcome`.
 | Value | Meaning |
 | --- | --- |
 | `DELIVERED` | The package was handed over. |
-| `COLLECTED` | The package was collected (e.g. picked up at the courier by the recipient). |
+| `COLLECTED` | A return-pickup package was collected at the stop. Valid only for a package inducted as a PICKUP; it carries no failureReason and no outcomeDetail and is a terminal success. Dormant until a PICKUP is inducted (last-mile-delivery ADR 0017). |
 | `FAILED` | The package was not handed over; failureReason is required. |
 
 Branched on by `shipping-and-tracking` (`DELIVERED`, `FAILED`): DELIVERED becomes a DELIVERED scan; any other outcome becomes a DELIVERY_FAILED scan.
@@ -526,5 +567,68 @@ Appears in: REST `SellerScorecard.complianceTier`.
 | `WATCH` | Receipt accuracy below 0.98, or at least 0.5 discrepancies per shipment, or at least one compliance violation. |
 | `AT_RISK` | Receipt accuracy below 0.90, or at least 2.0 discrepancies per shipment, or at least five compliance violations. |
 
-Contexts that own no closed reason vocabulary (their reason fields, if any, are free text): `node-topology`, `customer-ordering`.
+### Reasons of `customer-returns`
+
+**`ReturnReason`**: Why the shopper returns the group. An enum, never free text.
+
+Appears in: `ReturnAuthorized.reason`, REST `AuthorizeReturnRequest.reason`, REST `ReturnAuthorization.reason`.
+
+| Value | Meaning |
+| --- | --- |
+| `DEFECTIVE` | The item does not work or arrived broken. |
+| `NOT_AS_DESCRIBED` | The item differs from what the listing described. |
+| `WRONG_ITEM` | A different item than the one ordered arrived. |
+| `NOT_NEEDED` | The shopper no longer wants the item. |
+| `OTHER` | None of the other codes; no text accompanies it. |
+
+**`ReturnDisposition`**: What happens to the goods, decided by this context at authorization and never chosen by the caller.
+
+Appears in: `ReturnAuthorized.disposition`, REST `ReturnAuthorization.disposition`.
+
+| Value | Meaning |
+| --- | --- |
+| `KEEP` | Returnless: the shopper keeps the goods; no destination, no label, the authorization closes at once. |
+| `NEAREST_RETURNS_CENTER` | The goods go to the ACTIVE returns centre of the region of the group's destination prefix. |
+| `ORIGIN_NODE` | The goods go back to the node that fulfilled the group, named by a sourcing fact. |
+
+**`ReturnMethod`**: How the shopper hands the package back.
+
+Appears in: `ReturnAuthorized.method`, REST `AuthorizeReturnRequest.method`, REST `ReturnAuthorization.method`.
+
+| Value | Meaning |
+| --- | --- |
+| `DROP_OFF` | The shopper hands the labelled package to the carrier; the default. |
+| `PICKUP` | A doorstep pickup inside the declared window; never KEEP. Recorded only: the pickup leg is not run yet. |
+
+**`ReturnAuthorizationState`**: The state of a return authorization on the REST view.
+
+Appears in: REST `ReturnAuthorization.state`.
+
+| Value | Meaning |
+| --- | --- |
+| `AUTHORIZED` | The return is authorized and open: labels may be linked, an outcome may arrive, the shopper may cancel. |
+| `IN_TRANSIT` | The package is on its way back. No use case sets it yet. |
+| `RECEIVED` | A returns centre graded the return; terminal. |
+| `CLOSED_KEEP` | A returnless KEEP, closed at authorization; terminal. |
+| `CANCELLED` | Cancelled by the shopper or by the lazy expiry; terminal. |
+| `PICKUP_FAILED` | The doorstep pickup was given up; reserved, no use case sets it yet. |
+
+**`ReturnOutcome`**: The outcome a completed return was closed with. One value; offer-availability does not read it.
+
+Appears in: `ReturnCompleted.outcome`.
+
+| Value | Meaning |
+| --- | --- |
+| `RECEIVED` | The returns centre received and graded the authorized lines. |
+
+**`ReturnCancelReason`**: Why an authorization was cancelled.
+
+Appears in: `ReturnCancelled.reason`.
+
+| Value | Meaning |
+| --- | --- |
+| `SHOPPER_REQUESTED` | The shopper cancelled while the authorization was AUTHORIZED. |
+| `EXPIRED` | The authorization passed its expiry and was cancelled on the next touch. |
+
+Contexts that own no closed reason vocabulary (their reason fields, if any, are free text): `node-topology`.
 

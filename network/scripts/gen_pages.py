@@ -106,7 +106,7 @@ def mermaid_view(title, nodes, ext=None):
 def context_map():
     E = edges()
     out = ["---", "id: context-map", "title: Context Map", "sidebar_label: Context Map",
-           'description: "Every relationship between the eleven retail-network bounded contexts and the one seam to the warehouse-systems fleet, with the ddd-crew context-mapping pattern on each edge."',
+           'description: "Every relationship between the twelve retail-network bounded contexts and the one seam to the warehouse-systems fleet, with the ddd-crew context-mapping pattern on each edge."',
            "---", "", "# Context Map", "", BANNER, ""]
     out.append("""Following the ddd-crew [Context Mapping](https://github.com/ddd-crew/context-mapping)
 notation. On every edge, **U** is upstream and **D** downstream; the pattern
@@ -114,7 +114,7 @@ names how the downstream relates to the upstream's model: **OHS** Open Host
 Service, **PL** Published Language, **CF** Conformist, **ACL** Anti-Corruption
 Layer, **C/S** Customer/Supplier. Thick arrows are Kafka events (CloudEvents
 1.0), thin arrows synchronous in-organization REST calls. The map is split
-into four views so each stays readable; an edge label such as `CF 3e +REST`
+into five views so each stays readable; an edge label such as `CF 3e +REST`
 reads "Conformist, three events, plus a synchronous call". The table under the
 views lists every edge with its messages.
 
@@ -164,6 +164,10 @@ shared in either direction. Details on
     out.append("`seller-inbound` is the proposed eleventh context ([ADR 0009](/adr/0009-seller-inbound-and-case-packed-shipments)). It reaches the vendor only through `vendor-connectivity`.\n")
     out.append(mermaid_view("partner", ["seller-inbound", "vendor-connectivity", "offer-availability", "node-topology", "node-performance"]))
     out.append("Derived from: same sections as above.\n")
+    out.append("## Returns view: the authorization, the facts it reads and the restock\n")
+    out.append("`customer-returns` is the twelfth context ([ADR 0012](/adr/0012-customer-returns-is-a-bounded-context)). Its reverse-label call to `shipping-and-tracking` and the vendor seam through `vendor-connectivity` are built on its side only: those services' `develop` contracts do not carry them yet, so they are not edges of this map.\n")
+    out.append(mermaid_view("returns", ["customer-returns", "customer-ordering", "order-sourcing", "node-topology", "offer-availability"]))
+    out.append("Derived from: same sections as above.\n")
     out.append("## Feedback view: what feeds the two Core contexts\n")
     out.append(mermaid_view("feedback", ["node-topology", "offer-availability", "linehaul-transportation", "last-mile-delivery", "node-performance", "delivery-promise", "order-sourcing"]))
     out.append("Derived from: same sections as above. Omitted from all views: analytics-only events, which have no integration consumer.\n")
@@ -205,6 +209,13 @@ shared in either direction. Details on
   A node's inbound limits and a catalogue item's packaging hierarchy are
   their facts; `seller-inbound` keeps local, event-fed copies
   (`NodeInboundView`, `CatalogPackagingView`) and makes no synchronous call.
+- **`customer-returns` conforms to `customer-ordering`, `node-topology` and
+  `order-sourcing`, and `offer-availability` conforms to it.** Whether a group
+  may be returned, which returns centre serves its region and which node
+  fulfilled it are their facts; `customer-returns` keeps local, event-fed
+  copies (`OrderGroupView`, `ReturnsNetworkView`) and never calls them back.
+  Its `ReturnCompleted` is a restock fact that `offer-availability` applies to
+  the owner listing.
 """)
     return "\n".join(out) + "\n"
 

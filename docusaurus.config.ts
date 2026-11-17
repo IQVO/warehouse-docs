@@ -304,6 +304,12 @@ const config: Config = {
             sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
             hideSendButton: true,
           },
+          customerReturns: {
+            specPath: 'network/apis/customer-returns/openapi.yaml',
+            outputDir: 'network/docs/api-reference/rest/customer-returns',
+            sidebarOptions: {groupPathsBy: 'tag', categoryLinkSource: 'tag'},
+            hideSendButton: true,
+          },
         } satisfies Record<string, OpenApiPlugin.Options>,
       },
     ],

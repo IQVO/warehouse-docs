@@ -2,7 +2,7 @@
 id: context-map
 title: Context Map
 sidebar_label: Context Map
-description: "Every relationship between the eleven retail-network bounded contexts and the one seam to the warehouse-systems fleet, with the ddd-crew context-mapping pattern on each edge."
+description: "Every relationship between the twelve retail-network bounded contexts and the one seam to the warehouse-systems fleet, with the ddd-crew context-mapping pattern on each edge."
 ---
 
 # Context Map
@@ -18,7 +18,7 @@ names how the downstream relates to the upstream's model: **OHS** Open Host
 Service, **PL** Published Language, **CF** Conformist, **ACL** Anti-Corruption
 Layer, **C/S** Customer/Supplier. Thick arrows are Kafka events (CloudEvents
 1.0), thin arrows synchronous in-organization REST calls. The map is split
-into four views so each stays readable; an edge label such as `CF 3e +REST`
+into five views so each stays readable; an edge label such as `CF 3e +REST`
 reads "Conformist, three events, plus a synchronous call". The table under the
 views lists every edge with its messages.
 
@@ -148,6 +148,35 @@ flowchart TB
 
 Derived from: same sections as above.
 
+## Returns view: the authorization, the facts it reads and the restock
+
+`customer-returns` is the twelfth context ([ADR 0012](/network/adr/0012-customer-returns-is-a-bounded-context)). Its reverse-label call to `shipping-and-tracking` and the vendor seam through `vendor-connectivity` are built on its side only: those services' `develop` contracts do not carry them yet, so they are not edges of this map.
+
+```mermaid
+%%{init: {"flowchart": {"nodeSpacing": 22, "rankSpacing": 56, "padding": 6}}}%%
+flowchart TB
+    classDef core fill:#1e3a8a,stroke:#1e3a8a,color:#fff
+    classDef sup fill:#dbeafe,stroke:#1e40af,color:#172554
+    classDef gen fill:#f1f5f9,stroke:#64748b,color:#0f172a
+    classDef ext fill:#ffe3e3,stroke:#c92a2a,color:#000
+    CR["customer-returns"]:::sup
+    CO["customer-ordering"]:::gen
+    OS["order-sourcing"]:::core
+    NT["node-topology"]:::sup
+    OA["offer-availability"]:::sup
+    NT ==>|"CF 4e"| OA
+    NT ==>|"? + CF 11e"| OS
+    NT ==>|"CF 5e"| CR
+    OA ==>|"CF 5e"| OS
+    CO ==>|"C/S 2e"| OS
+    CO ==>|"CF 2e"| CR
+    OS ==>|"CF 2e"| CR
+    OS ==>|"? + CF 5e"| CO
+    CR ==>|"CF 1e"| OA
+```
+
+Derived from: same sections as above.
+
 ## Feedback view: what feeds the two Core contexts
 
 ```mermaid
@@ -192,9 +221,11 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 
 | Upstream | Downstream | Pattern | Events (Kafka) | Synchronous calls |
 | --- | --- | --- | --- | --- |
+| `customer-ordering` | `customer-returns` | CF | `CustomerOrderPlaced`, `ShopperNoticeDecided` | - |
 | `customer-ordering` | `delivery-promise` | C/S | `CustomerOrderPlaced`, `CustomerOrderCancelled` | - |
 | `customer-ordering` | `order-sourcing` | C/S | `CustomerOrderPlaced`, `CustomerOrderCancelled` | - |
 | `customer-ordering` | `shipping-and-tracking` | C/S | - | qry GetShipTo (`REST GET /orders/{orderId}/ship-to`) |
+| `customer-returns` | `offer-availability` | CF | `ReturnCompleted` | - |
 | `delivery-promise` | `customer-ordering` | ? + C/S | `PromiseAtRisk`, `PromiseRevised`, `PromiseKept`, `PromiseBroken`, `PromiseUnkeepable` | qry QuoteDeliveryOffers (`REST POST /delivery-quotes`); cmd MakePromise, ConfirmPromise, CancelPromise (`REST POST /promises, POST /promises/{promiseId}/confirmations, POST /promises/{promiseId}/cancellations`) |
 | `delivery-promise` | `node-performance` | CF | `PromiseKept`, `PromiseBroken` | - |
 | `delivery-promise` | `order-sourcing` | C/S | `PromiseRevised`, `PromiseBookExhausted` | - |
@@ -208,6 +239,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `node-performance` | `delivery-promise` | CF | `NodeScorecardUpdated`, `NodeTierEligibilityChanged` | - |
 | `node-performance` | `order-sourcing` | CF | `NodeScorecardUpdated` | - |
 | `node-performance` | `vendor-connectivity` | C/S | - | qry GetScorecard (`REST GET /scorecards/{nodeId}`) |
+| `node-topology` | `customer-returns` | CF | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `ServiceAreaAssigned` | - |
 | `node-topology` | `delivery-promise` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneClosed`, `ServiceAreaAssigned`, `RegionDefined` | - |
 | `node-topology` | `last-mile-delivery` | CF | `NodeRegistered`, `ServiceAreaAssigned` | - |
 | `node-topology` | `linehaul-transportation` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneClosed` | - |
@@ -224,6 +256,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `offer-availability` | `shipping-and-tracking` | CF | `CatalogItemCreated` | - |
 | `offer-availability` | `vendor-connectivity` | C/S + CF | `CatalogItemPackagingDeclared`, `CatalogItemPackLevelRetired`, `ListingCreated` | cmd ApplyInventoryFeed (`REST POST /inventory-feeds`) |
 | `order-sourcing` | `customer-ordering` | ? + CF | `FulfillmentLocked`, `FulfillmentShipped`, `FulfillmentUnsourceable`, `FulfillmentCancelled`, `FulfillmentCancelRefused` | - |
+| `order-sourcing` | `customer-returns` | CF | `FulfillmentReleasedToNode`, `FulfillmentLocked` | - |
 | `order-sourcing` | `delivery-promise` | ? + C/S | `FulfillmentLocked`, `FulfillmentShipped`, `FulfillmentUnsourceable` | - |
 | `order-sourcing` | `linehaul-transportation` | C/S | `FulfillmentReleasedToNode`, `FulfillmentReassigned`, `FulfillmentLocked`, `FulfillmentCancelled` | - |
 | `order-sourcing` | `seller-inbound` | CF | `FulfillmentReleasedToNode`, `FulfillmentCancelled` | - |
@@ -273,4 +306,11 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
   A node's inbound limits and a catalogue item's packaging hierarchy are
   their facts; `seller-inbound` keeps local, event-fed copies
   (`NodeInboundView`, `CatalogPackagingView`) and makes no synchronous call.
+- **`customer-returns` conforms to `customer-ordering`, `node-topology` and
+  `order-sourcing`, and `offer-availability` conforms to it.** Whether a group
+  may be returned, which returns centre serves its region and which node
+  fulfilled it are their facts; `customer-returns` keeps local, event-fed
+  copies (`OrderGroupView`, `ReturnsNetworkView`) and never calls them back.
+  Its `ReturnCompleted` is a restock fact that `offer-availability` applies to
+  the owner listing.
 

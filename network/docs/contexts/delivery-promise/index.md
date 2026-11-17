@@ -86,6 +86,6 @@ a local read model fed by events.
   [ADR 0007: CloudEvents namespace](/network/adr/0007-cloudevents-namespace).
 - The REST contract (as built, from the service repository): `apis/delivery-promise/openapi.yaml`, rendered
   under the [API reference](/network/api-reference).
-- Where this context sits among the eleven:
+- Where this context sits among the twelve:
   [the domain context map](/network/strategic-design/context-map) and
   [the core domain chart](/network/strategic-design/core-domain-chart).

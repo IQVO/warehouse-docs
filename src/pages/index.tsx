@@ -48,6 +48,7 @@ const NETWORK_CONTEXTS: ContextCard[] = [
   {slug: 'shipping-and-tracking', name: 'shipping-and-tracking', tier: 'Generic'},
   {slug: 'node-performance', name: 'node-performance', tier: 'Supporting'},
   {slug: 'seller-inbound', name: 'seller-inbound', tier: 'Supporting'},
+  {slug: 'customer-returns', name: 'customer-returns', tier: 'Supporting'},
 ];
 
 const STOREFRONT_CONTEXTS: ContextCard[] = [
@@ -89,7 +90,7 @@ const SECTIONS = [
     name: 'Retail Network',
     tagline: 'The large-scale retail & logistics network',
     description:
-      'Eleven bounded contexts modelling catalogue, delivery promise, order sourcing, vendor connectivity, seller inbound, middle and last mile, tracking and node performance — the seam through which the network connects to the WMS/WES fleet. Source of truth: the retail-network domain model.',
+      'Twelve bounded contexts modelling catalogue, delivery promise, order sourcing, vendor connectivity, seller inbound, customer returns, middle and last mile, tracking and node performance — the seam through which the network connects to the WMS/WES fleet. Source of truth: the retail-network domain model.',
     links: [
       {label: 'Network Overview', to: '/network'},
       {label: 'Domain Vision', to: '/network/strategic-design/domain-vision'},

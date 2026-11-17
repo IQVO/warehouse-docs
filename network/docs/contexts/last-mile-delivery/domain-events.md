@@ -46,6 +46,7 @@ aggregate and drained by a relay (model `integration_rules`).
 | `DeliveryWaveCancelled` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCancelled` | `waveId` | `CancelWave` | analytics only |
 | `RoutePlanned` | `com.retailnetwork.logistics.last-mile-delivery.route.RoutePlanned` | `routeId` | `PlanRoute` | analytics only |
 | `PackageOutForDelivery` | `com.retailnetwork.logistics.last-mile-delivery.route.PackageOutForDelivery` | `routeId` | `StartRoute` (one per tracking number) | `shipping-and-tracking` |
+| `PackagePickupOut` | `com.retailnetwork.logistics.last-mile-delivery.route.PackagePickupOut` | `routeId` | `StartRoute` (one per package inducted as a `PICKUP`; dormant, service ADR 0017) | none |
 | `StopEtaWindowAssigned` | `com.retailnetwork.logistics.last-mile-delivery.route.StopEtaWindowAssigned` | `routeId` | `StartRoute` (one per stop, after every `PackageOutForDelivery`) | `shipping-and-tracking` |
 | `DeliveryAttempted` | `com.retailnetwork.logistics.last-mile-delivery.route.DeliveryAttempted` | `routeId` | `RecordAttempt` | `shipping-and-tracking` |
 | `PackageInductionDeferred` | `com.retailnetwork.logistics.last-mile-delivery.packageattempthistory.PackageInductionDeferred` | `trackingNumber` | `InductPackage` (`RetryNextWave`, no eligible wave) | `delivery-promise` |
@@ -131,6 +132,21 @@ sums it into its carbon estimate; its ranking does not change
 | `trackingNumber` | string | the package |
 | `stationNodeId` | string | the station it left |
 | `at` | date-time | when the route started |
+
+### PackagePickupOut
+
+| Field | Type (proposed) | Meaning |
+| --- | --- | --- |
+| `routeId` | string | the route |
+| `trackingNumber` | string | the pickup package |
+| `stopKey` | string | the stop the package is collected at |
+| `stationNodeId` | string | the station the route left |
+| `at` | date-time | when the route started |
+
+Raised by `StartRoute` for a package whose induction kind is `PICKUP`, in
+place of `PackageOutForDelivery`. Dormant: every writer of this context
+inducts with kind `DELIVERY`, so none is produced today and no context
+consumes it (service ADR 0017, policy `PickupInductionDormant`).
 
 ### StopEtaWindowAssigned
 

@@ -2,7 +2,7 @@
 id: index
 title: Bounded Contexts
 sidebar_label: Overview
-description: "The eleven retail-network bounded contexts, each documented with the same 14-page ddd-crew pack."
+description: "The twelve retail-network bounded contexts, each documented with the same 14-page ddd-crew pack."
 slug: /contexts
 ---
 
@@ -28,8 +28,12 @@ relationship and sequence diagrams. All are derived from
 | [`shipping-and-tracking`](/network/contexts/shipping-and-tracking) | <span class="badge-generic">Generic</span> | `logistics` | 2 | 8 | 7 |
 | [`node-performance`](/network/contexts/node-performance) | <span class="badge-supporting">Supporting</span> | `partner` | 1 | 2 | 15 |
 | [`seller-inbound`](/network/contexts/seller-inbound) | <span class="badge-supporting">Supporting</span> | `partner` | 3 | 9 | 8 |
+| [`customer-returns`](/network/contexts/customer-returns) | <span class="badge-supporting">Supporting</span> | `commerce` | 1 | 4 | 9 |
 
-Future contexts named by the model but not documented: `customer-returns`,
+Future contexts named by the model but not documented:
 `customer-notification`, `payments-and-invoicing`. `inventory-placement`, named
 earlier, is absorbed by `seller-inbound`
-([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)).
+([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments));
+`customer-returns`, named there until
+[ADR 0012](/network/adr/0012-customer-returns-is-a-bounded-context), is the
+twelfth context above.

@@ -85,4 +85,4 @@ between the two organizations.
   [ADR 0006, PII confinement](/network/adr/0006-pii-confinement),
   [ADR 0003, declared and measured capability](/network/adr/0003-declared-and-measured-capability),
   [ADR 0004, parcel nodes are network-operated](/network/adr/0004-parcel-nodes-are-network-operated).
-- Where the context sits among the eleven: [Context Map](/network/strategic-design/context-map).
+- Where the context sits among the twelve: [Context Map](/network/strategic-design/context-map).

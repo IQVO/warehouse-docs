@@ -60,6 +60,7 @@ are the proposed Go package and type names. Each context's own
 | **Delivery-Point Advisory** | `customer-ordering` | The reason-and-flaggedAt pair shown on the tracking view while the package has not ended and its delivery point is flagged (two counted failed attempts). A code for the storefront to word: not an address change, not delivery instructions, not a notification. | `readmodel.Package.PointFlagReason` |
 | **Delivery-Point Flag** | `shipping-and-tracking` | The pointFlagReason and pointFlaggedAt stored on each journey of a flagged delivery point (consumed from last-mile-delivery without the stop key) and republished per package by orderId. Not a scan; there is no cleared event, so it ends when the package ends. | `journey.PackageJourney` |
 | **Departure** | `linehaul-transportation` | One scheduled trip on a lane with a cutoff and a capacity. | `departure.Departure` |
+| **Disposition** | `customer-returns` | What happens to the returned goods: KEEP, NEAREST_RETURNS_CENTER or ORIGIN_NODE. Decided by the context at authorization, never by the caller. | `returnauthorization.Disposition` |
 | **Each** | `seller-inbound` | The lowest packaging level, intended for individual resale and the unit of every quantity in the network's ledgers. | `catalog.PackLevel.EACH` |
 | **EAN** | `seller-inbound` | A 13-digit GTIN as printed on a consumer unit. Treated as a GTIN input like any other length. | `gs1.GTIN` |
 | **Effective Cost** | `order-sourcing` | The estimated cost of a candidate plus the policy's cross-region surcharge; the leading key of the comparator. | `sourcing.Option.EffectiveCostCents` |
@@ -69,6 +70,7 @@ are the proposed Go package and type names. Each context's own
 | **Fulfillment Assignment** | `order-sourcing` | The decision of which node and path fulfil one shipment group. | `assignment.FulfillmentAssignment` |
 | **Full Feed** | `offer-availability` | A feed that is the complete truth for its node; omitted listings become zero. | `feed.InventoryFeed.FullUpdate` |
 | **Grade** | `node-performance` | A, B, C or D; PROVISIONAL below the observation minimum. | `scorecard.Grade` |
+| **Graded Outcome** | `customer-returns` | What a returns centre reports for a return: per item, how many units are restockable and how many unsellable. | `returnauthorization.OutcomeLine` |
 | **GTIN** | `seller-inbound` | The global trade item number identifying an item at one packaging level. Stored as 14 digits, zero-left-padded; accepted as 8, 12, 13 or 14 digits with a valid check digit. | `gs1.GTIN` |
 | **Handicap** | `delivery-promise` | The scorecard-driven delay applied to a node's shipBy. | `promise.ScorecardHandicap` |
 | **Handling Time** | `node-topology` | Declared time from order release to a package ready for handover. | `node.OperationalProfile.HandlingTime` |
@@ -99,6 +101,8 @@ are the proposed Go package and type names. Each context's own
 | **Node Type** | `node-topology` | FULFILLMENT_CENTER, INBOUND_CROSS_DOCK, RETURNS_CENTER, SORTATION_CENTER, DELIVERY_STATION, AIR_HUB or PICKUP_POINT. | `node.Type` |
 | **On-Time Handover Rate** | `node-performance` | Share of packages handed over before requiredShipBy. | `scorecard.Metrics.OnTimeHandoverRate` |
 | **Operational Profile** | `node-topology` | The node's declared operating hours, cutoffs, handling time, throughput cap and time zone, versioned by profileRevision. | `node.OperationalProfile` |
+| **Order Group View** | `customer-returns` | The local, event-fed copy of an order group's status, destination postal prefix and placed lines; the only source of whether a group may be returned. | `network.OrderGroup` |
+| **Origin Node** | `customer-returns` | The node that fulfilled the group, named by the sourcing lock fact; the fallback destination of a return. | `network.GroupOrigin` |
 | **Owner / Seller of Record** | `seller-inbound` | Whose stock it is. On the network ownerRef equals the sellerId; stock, listings and reservations are segregated by it. | `seller.ID (shared.ValidOwnerRef)` |
 | **Owner Reference** | `offer-availability` | The opaque ownerRef on a listing: the seller of record of the stock. Empty means the vendor's own stock. | `listing.OwnerRef` |
 | **Owner Suspended** | `offer-availability` | The suppression cause of a listing whose seller is suspended; the lowest of the three causes. | `listing.ReasonOwnerSuspended` |
@@ -120,6 +124,13 @@ are the proposed Go package and type names. Each context's own
 | **Region** | `node-topology` | A largely self-sufficient partition of the network. | `region.Region` |
 | **Release (to node)** | `order-sourcing` | Sending a group to one node; for a vendor node this issues a purchase order. | `assignment.Release` |
 | **Required Ship-By** | `vendor-connectivity` | The pickup cutoff the PO must be ready for; the fleet calls it the CPT. | `po.PurchaseOrder.RequiredShipBy` |
+| **Return Authorization** | `customer-returns` | The network's permission for a shopper to return one shipped or delivered order group, with the decided disposition and its state. | `returnauthorization.ReturnAuthorization` |
+| **Return Method** | `customer-returns` | How the shopper hands the package back: DROP_OFF, or PICKUP with a window. | `returnauthorization.Method` |
+| **Return Reason** | `customer-returns` | The enum code of why the group is returned; never free text. | `returnauthorization.Reason` |
+| **Returnless Return (Keep)** | `customer-returns` | A return whose goods the shopper keeps, chosen when every price is known and the declared total is within the returnless threshold; no label and no movement. | `returnauthorization.KeepDisposition` |
+| **Returnless Threshold** | `customer-returns` | The ceiling on the caller-declared total, 1500 cents, under which a return is returnless. | `returnauthorization.ReturnlessThresholdCents` |
+| **Returns Network View** | `customer-returns` | The local, event-fed copy of the returns centres, the region of each postal prefix and the node that fulfilled each group. | `network.Node, network.PrefixAssignment, network.GroupOrigin` |
+| **Reverse Label** | `customer-returns` | The carrier label of a return package, issued by shipping-and-tracking; this context keeps only its tracking number. | `ports.LabelIssuer` |
 | **Route** | `last-mile-delivery` | One van's ordered stops in one wave. | `route.Route` |
 | **Scan** | `shipping-and-tracking` | One observation of a package at a node. | `journey.Scan` |
 | **Scorecard** | `node-performance` | A node's measured performance over a rolling window, with a grade. | `scorecard.NodeScorecard` |
@@ -144,6 +155,7 @@ are the proposed Go package and type names. Each context's own
 | **Submission / Transaction** | `vendor-connectivity` | An asynchronous vendor write and its outcome, reconciled by transactionId. | `submission.Submission` |
 | **Throughput Cap** | `node-topology` | Declared maximum orders per time unit a node accepts. | `node.ThroughputCap` |
 | **Tracking Number** | `shipping-and-tracking` | The network-wide unique id of one package. | `journey.TrackingNumber` |
+| **Unexpected Line** | `customer-returns` | An outcome line the authorization never covered; recorded as a fact, never published and never restocked. | `requests.OutcomeFactLine` |
 | **Unsourceable** | `order-sourcing` | No node can still meet the promise; the group goes back to delivery-promise. | `assignment.StateUnsourceable` |
 | **Vendor** | `vendor-connectivity` | An organisation operating fulfillment nodes for the network (the warehouse-systems fleet is vendor V-WS). | `vendor.VendorAccount` |
 | **Vendor API** | `vendor-connectivity` | The Open Host Service of this context; its JSON schemas are the Published Language. | `apis/vendor-connectivity/openapi.yaml` |

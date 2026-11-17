@@ -16,6 +16,7 @@ const CONTEXTS = [
   'shipping-and-tracking',
   'node-performance',
   'seller-inbound',
+  'customer-returns',
 ];
 
 /**

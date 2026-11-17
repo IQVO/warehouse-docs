@@ -55,7 +55,7 @@ Generic.
 | Partner Management | Vendor Integration | onboard vendors; publish the Vendor API; issue purchase orders; enforce fill-or-kill and the ack window; process asynchronous transactions; rate-limit | `vendor-connectivity` |
 | Partner Management | Node Performance Management | record observations; compute rolling scorecards; grade nodes; alert on thresholds | `node-performance` |
 | Partner Management | Seller Inbound | onboard sellers; plan inbound shipments in eaches; validate case-packed cartons; issue SSCCs and labels; reconcile receipts and record discrepancies | `seller-inbound` |
-| Commerce | Returns (future) | authorize returns; route to a returns centre | `customer-returns` (future) |
+| Commerce | Returns | authorize the return of a shipped or delivered group; decide the disposition (keep, nearest returns centre, origin node); link reverse labels; close on the graded outcome | `customer-returns` |
 
 ## Heat: where investment goes
 
