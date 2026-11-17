@@ -165,7 +165,7 @@ flowchart TB
     NT["node-topology"]:::sup
     OA["offer-availability"]:::sup
     NT ==>|"CF 4e"| OA
-    NT ==>|"? + CF 11e"| OS
+    NT ==>|"CF 11e"| OS
     NT ==>|"CF 5e"| CR
     OA ==>|"CF 5e"| OS
     CO ==>|"C/S 2e"| OS
@@ -195,7 +195,7 @@ flowchart TB
     OS["order-sourcing"]:::core
     NT ==>|"CF 4e"| OA
     NT ==>|"CF 9e"| DP
-    NT ==>|"? + CF 11e"| OS
+    NT ==>|"CF 11e"| OS
     NT ==>|"CF 7e"| LH
     NT ==>|"CF 2e"| LM
     NT ==>|"CF 2e"| NP
@@ -245,7 +245,7 @@ Derived from: same sections as above. Omitted from all views: analytics-only eve
 | `node-topology` | `linehaul-transportation` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneClosed` | - |
 | `node-topology` | `node-performance` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared` | - |
 | `node-topology` | `offer-availability` | CF | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | - |
-| `node-topology` | `order-sourcing` | ? + CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneCostDeclared`, `LaneEmissionDeclared`, `LaneClosed`, `ServiceAreaAssigned`, `RegionDefined` | - |
+| `node-topology` | `order-sourcing` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `LaneOpened`, `LaneCostDeclared`, `LaneEmissionDeclared`, `LaneClosed`, `ServiceAreaAssigned`, `RegionDefined` | - |
 | `node-topology` | `seller-inbound` | CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | - |
 | `node-topology` | `shipping-and-tracking` | CF | `NodeRegistered`, `NodeActivated`, `NodeSuspended`, `NodeRetired`, `ServiceAreaAssigned` | - |
 | `node-topology` | `vendor-connectivity` | ? + C/S + CF | `NodeRegistered`, `NodeOperationalProfileDeclared`, `NodeActivated`, `NodeSuspended`, `NodeRetired` | cmd RegisterNode, DeclareOperationalProfile (`REST POST /nodes, PUT /nodes/{nodeId}/operational-profile`) |
