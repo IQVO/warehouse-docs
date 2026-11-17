@@ -17,18 +17,21 @@ relationship and sequence diagrams. All are derived from
 
 | Context | Classification | Tier | Aggregates | Events published | Events consumed |
 | --- | --- | --- | --- | --- | --- |
-| [`node-topology`](/network/contexts/node-topology) | <span class="badge-supporting">Supporting</span> | `logistics` | 4 | 9 | 0 |
-| [`offer-availability`](/network/contexts/offer-availability) | <span class="badge-supporting">Supporting</span> | `commerce` | 3 | 9 | 4 |
-| [`delivery-promise`](/network/contexts/delivery-promise) | <span class="badge-core">Core</span> | `commerce` | 3 | 12 | 34 |
-| [`customer-ordering`](/network/contexts/customer-ordering) | <span class="badge-generic">Generic</span> | `commerce` | 2 | 2 | 17 |
-| [`order-sourcing`](/network/contexts/order-sourcing) | <span class="badge-core">Core</span> | `commerce` | 1 | 10 | 32 |
-| [`vendor-connectivity`](/network/contexts/vendor-connectivity) | <span class="badge-supporting">Supporting</span> | `partner` | 3 | 11 | 13 |
+| [`node-topology`](/network/contexts/node-topology) | <span class="badge-supporting">Supporting</span> | `logistics` | 4 | 11 | 0 |
+| [`offer-availability`](/network/contexts/offer-availability) | <span class="badge-supporting">Supporting</span> | `commerce` | 3 | 9 | 8 |
+| [`delivery-promise`](/network/contexts/delivery-promise) | <span class="badge-core">Core</span> | `commerce` | 3 | 12 | 39 |
+| [`customer-ordering`](/network/contexts/customer-ordering) | <span class="badge-generic">Generic</span> | `commerce` | 3 | 3 | 19 |
+| [`order-sourcing`](/network/contexts/order-sourcing) | <span class="badge-core">Core</span> | `commerce` | 2 | 15 | 36 |
+| [`vendor-connectivity`](/network/contexts/vendor-connectivity) | <span class="badge-supporting">Supporting</span> | `partner` | 3 | 12 | 17 |
 | [`linehaul-transportation`](/network/contexts/linehaul-transportation) | <span class="badge-supporting">Supporting</span> | `logistics` | 3 | 10 | 13 |
-| [`last-mile-delivery`](/network/contexts/last-mile-delivery) | <span class="badge-supporting">Supporting</span> | `logistics` | 3 | 8 | 4 |
-| [`shipping-and-tracking`](/network/contexts/shipping-and-tracking) | <span class="badge-generic">Generic</span> | `logistics` | 2 | 8 | 7 |
-| [`node-performance`](/network/contexts/node-performance) | <span class="badge-supporting">Supporting</span> | `partner` | 1 | 2 | 15 |
-| [`seller-inbound`](/network/contexts/seller-inbound) | <span class="badge-supporting">Supporting</span> | `partner` | 3 | 9 | 8 |
-| [`customer-returns`](/network/contexts/customer-returns) | <span class="badge-supporting">Supporting</span> | `commerce` | 1 | 4 | 9 |
+| [`last-mile-delivery`](/network/contexts/last-mile-delivery) | <span class="badge-supporting">Supporting</span> | `logistics` | 4 | 13 | 4 |
+| [`shipping-and-tracking`](/network/contexts/shipping-and-tracking) | <span class="badge-generic">Generic</span> | `logistics` | 2 | 13 | 14 |
+| [`node-performance`](/network/contexts/node-performance) | <span class="badge-supporting">Supporting</span> | `partner` | 1 | 3 | 15 |
+| [`seller-inbound`](/network/contexts/seller-inbound) | <span class="badge-supporting">Supporting</span> | `partner` | 4 | 10 | 11 |
+| [`customer-returns`](/network/contexts/customer-returns) | <span class="badge-supporting">Supporting</span> | `commerce` | 1 | 4 | 10 |
+
+The counts are the lengths of each context's `aggregates`, `publishes`
+(analytics-only events included) and `consumes` lists in the model.
 
 Future contexts named by the model but not documented:
 `customer-notification`, `payments-and-invoicing`. `inventory-placement`, named
