@@ -344,7 +344,7 @@ Appears in: REST `OfferConstraint`.
 
 **`ShopperNoticeFamily`**: The family of fact a shopper notice was decided for (customer-ordering ADR 0017). One event per family occurrence, whatever the notifier.
 
-Appears in: `ShopperNoticeDecided.family`.
+Appears in: `ShopperNoticeDecided.family`, REST `NotificationPolicyRow.family`.
 
 | Value | Meaning |
 | --- | --- |
@@ -360,7 +360,7 @@ Branched on by `customer-returns` (`GROUP_SHIPPED`, `GROUP_DELIVERED`, `GROUP_LO
 
 **`ShopperNoticeNotifier`**: Who the notification policy names to deliver the notice. The network itself sends nothing.
 
-Appears in: `ShopperNoticeDecided.notifier`.
+Appears in: `ShopperNoticeDecided.notifier`, REST `NotificationPolicyRow.notifier`.
 
 | Value | Meaning |
 | --- | --- |

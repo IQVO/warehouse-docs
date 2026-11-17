@@ -102,6 +102,9 @@ are the proposed Go package and type names. Each context's own
 | **Node** | `node-topology` | One physical building of the network, of exactly one node type. | `node.Node` |
 | **Node Operator** | `node-topology` | Who runs the building: NETWORK, a VENDOR, or a PARTNER (a pickup-point operator, RN-0011). | `node.Operator` |
 | **Node Type** | `node-topology` | FULFILLMENT_CENTER, INBOUND_CROSS_DOCK, RETURNS_CENTER, SORTATION_CENTER, DELIVERY_STATION, AIR_HUB or PICKUP_POINT. | `node.Type` |
+| **Notice Family** | `customer-ordering` | The kind of fact a shopper notice is decided for: a delay, a day-of ETA window, a delivery-point advisory, or a group becoming shipped, delivered, lost or returned. | `notice.Family` |
+| **Notification Policy** | `customer-ordering` | The versioned document that names, for each notice family, who notifies the shopper: the marketplace, the seller or nobody. Version 0 names nobody for every family; each publish is the whole document and creates the next version. | `notice.Policy` |
+| **Notifier** | `customer-ordering` | Who the notification policy names to deliver a notice: MARKETPLACE, SELLER or NOBODY. An instruction to the side that delivers; the network sends nothing. | `notice.Notifier` |
 | **On-Time Handover Rate** | `node-performance` | Share of packages handed over before requiredShipBy. | `scorecard.Metrics.OnTimeHandoverRate` |
 | **Operational Profile** | `node-topology` | The node's declared operating hours, cutoffs, handling time, throughput cap and time zone, versioned by profileRevision. | `node.OperationalProfile` |
 | **Order Group View** | `customer-returns` | The local, event-fed copy of an order group's status, destination postal prefix and placed lines; the only source of whether a group may be returned. | `network.OrderGroup` |
@@ -154,6 +157,7 @@ are the proposed Go package and type names. Each context's own
 | **Shipment Group** | `delivery-promise` | The lines of an order promised and shipped together from one node. | `promise.ShipmentGroup` |
 | **Shipping Label** | `shipping-and-tracking` | What is printed on the package; the only artefact outside customer-ordering that carries the address. | `label.ShippingLabel` |
 | **Shopper** | `customer-ordering` | The (synthetic) customer placing orders. | `shopper.Shopper` |
+| **Shopper Notice** | `customer-ordering` | The decided fact that a notice family occurred for an order group, stamped with the notifier and the policy version and published as ShopperNoticeDecided; a fact, not a notification. | `notice.ShopperNoticeDecided` |
 | **Sort Dwell** | `node-topology` | Declared minutes a package normally spends inside a sortation centre or air hub between arrival and departure; declared only by those node types. | `node.OperationalProfile.SortDwellMinutes` |
 | **Sourcing Policy** | `order-sourcing` | The operator's versioned lever over cross-region cost and consolidation: a surcharge in cents, a deviation percent and a cap on merged groups; version 0 is the default and changes nothing. | `policy.Policy` |
 | **SSCC** | `seller-inbound` | The 18-digit serial shipping container code identifying one logistic unit. Unique network-wide, with a mod-10 check digit. | `gs1.SSCC` |
