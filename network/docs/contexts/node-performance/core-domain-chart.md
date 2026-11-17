@@ -34,7 +34,7 @@ contexts[node-performance].classification,
 contexts[node-performance].aggregates[NodeScorecard],
 contexts[node-performance].policies.
 
-Omitted: the other ten contexts (their positions are on the
+Omitted: the other eleven contexts (their positions are on the
 [network-wide chart](/network/strategic-design/core-domain-chart)). The three
 internal slices are placed by this page, not by the model; the model gives
 only the context point.

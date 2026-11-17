@@ -48,6 +48,7 @@ Derived from: model.yaml → `conventions.cloudevents`,
 | `NodeSuspended` | `com.retailnetwork.logistics.node-topology.node.NodeSuspended` | `nodeId` | `SuspendNode` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound` |
 | `NodeRetired` | `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `nodeId` | `RetireNode` | `offer-availability`, `delivery-promise`, `order-sourcing`, `linehaul-transportation`, `vendor-connectivity`, `seller-inbound` |
 | `LaneOpened` | `com.retailnetwork.logistics.node-topology.lane.LaneOpened` | `laneId` | `OpenLane` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
+| `LaneEmissionDeclared` | `com.retailnetwork.logistics.node-topology.lane.LaneEmissionDeclared` | `laneId` | `DeclareLaneEmission` | `order-sourcing` |
 | `LaneClosed` | `com.retailnetwork.logistics.node-topology.lane.LaneClosed` | `laneId` | `CloseLane` | `linehaul-transportation`, `delivery-promise`, `order-sourcing` |
 | `ServiceAreaAssigned` | `com.retailnetwork.logistics.node-topology.servicearea.ServiceAreaAssigned` | `postalPrefix` | `AssignServiceArea` | `delivery-promise`, `order-sourcing`, `last-mile-delivery` |
 | `RegionDefined` | `com.retailnetwork.logistics.node-topology.region.RegionDefined` | `regionId` | `DefineRegion` | `delivery-promise`, `order-sourcing` |
@@ -147,6 +148,20 @@ graph.
 | `destinationNodeId` | string | Destination node |
 | `mode` | enum | `GROUND` or `AIR` |
 | `nominalTransitMinutes` | integer | Nominal transit time |
+
+### LaneEmissionDeclared
+
+Producing use case: `DeclareLaneEmission`, on every declaration; a newer
+declaration supersedes the previous value. A lane that was never declared on
+publishes nothing. `order-sourcing` keeps the latest declaration per `laneId`
+and records it in its carbon estimate; its ranking does not change
+(node-topology ADR 0018).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `laneId` | string | The lane |
+| `gCo2ePerUnit` | integer | The planner's declared carbon emission of moving one package-unit across the lane on one departure, grams of CO2-equivalent (0 to 10000000; 0 is a legal declaration) |
+| `declaredAt` | timestamp | When the planner declared it |
 
 ### LaneClosed
 

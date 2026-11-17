@@ -10,9 +10,10 @@ Merged into [warehouse-docs](https://github.com/IQVO/warehouse-docs) as the
 `network/` section (served at `/network/`); this directory is no longer a
 standalone site. Full history preserved via the subtree merge.
 
-**Status: as built.** All eleven contexts are built as services (`seller-inbound`
-since 2026-10-24), and the model carries their as-built contracts, re-checked
-against each repository's `develop` on 2026-10-26. Each service has a
+**Status: as built.** All twelve contexts are built as services (`seller-inbound`
+since 2026-10-24, `customer-returns` since 2026-11-16), and the model carries their
+as-built contracts, re-checked against each repository's `develop` on 2026-10-26
+(`customer-returns` on 2026-11-16). Each service has a
 `terraform/apps.yaml` entry and a `helm-values/<context>.yaml` in warehouse-infra
 `develop`, and has adopted the fleet observability standard (logs, metrics and
 traces over OTLP, one Tier-2 business counter; an ADR in each repository). Each service also ships a read-only MCP server
@@ -36,7 +37,7 @@ benchmarks.
 | `scripts/fleet_contract_edges.py` | Regenerates the contract edge registry and pin lists from the sibling repos' `origin/develop`; run locally, commit the output JSON. |
 | `research/citations-ledger.json` | The grounded-citations ledger (verbatim quotes and source URLs) is held privately, outside this repo. |
 | `docs/` | The site (Docusaurus). |
-| `apis/<context>/openapi.yaml` | REST contracts of the eleven contexts, copied from each service's `apis/openapi.yaml` on `develop`; `vendor-connectivity` is the Published Language the fleet's `network-fulfillment` conforms to. |
+| `apis/<context>/openapi.yaml` | REST contracts of the twelve contexts, copied from each service's `apis/openapi.yaml` on `develop`; `vendor-connectivity` is the Published Language the fleet's `network-fulfillment` conforms to. |
 
 ## Local
 

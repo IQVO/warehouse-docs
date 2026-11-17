@@ -28,6 +28,7 @@ are the proposed Go package and type names. Each context's own
 | **Calibration Buffer** | `delivery-promise` | The minutes a quote adds to its arrival, learned from the lateness of this service's own judged promises in the same segment; one-sided and capped. | `search.Calibration.BufferMinutes` |
 | **Capacity Band** | `delivery-promise` | AMPLE, TIGHT or SCARCE: how full the promise book behind an offer's window is at quote time (under 60%, 60% to under 85%, 85% and over of its share). A signal, never a price. | `shared.CapacityBand` |
 | **Capacity Hold** | `delivery-promise` | A provisional reservation on a promise book released if the order is not placed in time. | `book.Capacity.Provisional` |
+| **Carbon Estimate** | `order-sourcing` | The estimated carbon footprint of a candidate path in planner-declared grams of CO2e: the per-unit lane emissions of every departure traversed plus the final wave's per-stop emission. Recorded beside the money estimate and never used to rank; absent on the wire when a component was not declared. | `assignment.Candidate.EstimatedCo2eGrams` |
 | **Carrier** | `order-sourcing` | The QUEUED assignment whose release is due and which carries a consolidation merge: one purchase order, one label and one tracking number carry its id. | `assignment.Assignment.Members` |
 | **Carrier Event** | `shipping-and-tracking` | A carrier's report on a package it carries, received on POST /carrier-events through an inbound translation layer and applied as a scan; statuses PICKED_UP, IN_TRANSIT, OUT_FOR_DELIVERY, DELIVERED and DELIVERY_FAILED. No carrier writes to a network topic. | `journey.CarrierEvent` |
 | **Carrier Option** | `node-topology` | A carrier declared on a CARRIER_HANDOFF service area: carrier id, handoff node, cost per package and transit minutes. | `servicearea.CarrierOption` |
@@ -59,6 +60,7 @@ are the proposed Go package and type names. Each context's own
 | **Delivery-Point Advisory** | `customer-ordering` | The reason-and-flaggedAt pair shown on the tracking view while the package has not ended and its delivery point is flagged (two counted failed attempts). A code for the storefront to word: not an address change, not delivery instructions, not a notification. | `readmodel.Package.PointFlagReason` |
 | **Delivery-Point Flag** | `shipping-and-tracking` | The pointFlagReason and pointFlaggedAt stored on each journey of a flagged delivery point (consumed from last-mile-delivery without the stop key) and republished per package by orderId. Not a scan; there is no cleared event, so it ends when the package ends. | `journey.PackageJourney` |
 | **Departure** | `linehaul-transportation` | One scheduled trip on a lane with a cutoff and a capacity. | `departure.Departure` |
+| **Disposition** | `customer-returns` | What happens to the returned goods: KEEP, NEAREST_RETURNS_CENTER or ORIGIN_NODE. Decided by the context at authorization, never by the caller. | `returnauthorization.Disposition` |
 | **Each** | `seller-inbound` | The lowest packaging level, intended for individual resale and the unit of every quantity in the network's ledgers. | `catalog.PackLevel.EACH` |
 | **EAN** | `seller-inbound` | A 13-digit GTIN as printed on a consumer unit. Treated as a GTIN input like any other length. | `gs1.GTIN` |
 | **Effective Cost** | `order-sourcing` | The estimated cost of a candidate plus the policy's cross-region surcharge; the leading key of the comparator. | `sourcing.Option.EffectiveCostCents` |
@@ -68,6 +70,7 @@ are the proposed Go package and type names. Each context's own
 | **Fulfillment Assignment** | `order-sourcing` | The decision of which node and path fulfil one shipment group. | `assignment.FulfillmentAssignment` |
 | **Full Feed** | `offer-availability` | A feed that is the complete truth for its node; omitted listings become zero. | `feed.InventoryFeed.FullUpdate` |
 | **Grade** | `node-performance` | A, B, C or D; PROVISIONAL below the observation minimum. | `scorecard.Grade` |
+| **Graded Outcome** | `customer-returns` | What a returns centre reports for a return: per item, how many units are restockable and how many unsellable. | `returnauthorization.OutcomeLine` |
 | **GTIN** | `seller-inbound` | The global trade item number identifying an item at one packaging level. Stored as 14 digits, zero-left-padded; accepted as 8, 12, 13 or 14 digits with a valid check digit. | `gs1.GTIN` |
 | **Handicap** | `delivery-promise` | The scorecard-driven delay applied to a node's shipBy. | `promise.ScorecardHandicap` |
 | **Handling Time** | `node-topology` | Declared time from order release to a package ready for handover. | `node.OperationalProfile.HandlingTime` |
@@ -83,6 +86,7 @@ are the proposed Go package and type names. Each context's own
 | **Inventory Feed** | `offer-availability` | One vendor submission of availability for one node, full or partial. | `feed.InventoryFeed` |
 | **Label** | `vendor-connectivity` | labelRef + trackingNumber + carrier; never the address. | `po.Label` |
 | **Lane** | `node-topology` | A directed, mode-specific connection between two nodes. | `lane.Lane` |
+| **Lane Emission** | `node-topology` | The planner's declared carbon emission of moving one package-unit across a lane on one departure, in grams of CO2-equivalent (0 to 10000000). A declaration, never a measurement; 0 is legal, and a lane never declared on also reads 0 but publishes nothing. | `lane.Lane.EmissionPerUnitG` |
 | **Lane Schedule** | `linehaul-transportation` | The weekly template that generates a lane's departures. | `schedule.LaneSchedule` |
 | **Last Mile** | `last-mile-delivery` | From the delivery station to the customer's door. | `(context)` |
 | **Late Ack Rate** | `node-performance` | Share of purchase orders acknowledged in the last 10% of the window or expired. | `scorecard.Metrics.LateAckRate` |
@@ -97,6 +101,8 @@ are the proposed Go package and type names. Each context's own
 | **Node Type** | `node-topology` | FULFILLMENT_CENTER, INBOUND_CROSS_DOCK, RETURNS_CENTER, SORTATION_CENTER, DELIVERY_STATION, AIR_HUB or PICKUP_POINT. | `node.Type` |
 | **On-Time Handover Rate** | `node-performance` | Share of packages handed over before requiredShipBy. | `scorecard.Metrics.OnTimeHandoverRate` |
 | **Operational Profile** | `node-topology` | The node's declared operating hours, cutoffs, handling time, throughput cap and time zone, versioned by profileRevision. | `node.OperationalProfile` |
+| **Order Group View** | `customer-returns` | The local, event-fed copy of an order group's status, destination postal prefix and placed lines; the only source of whether a group may be returned. | `network.OrderGroup` |
+| **Origin Node** | `customer-returns` | The node that fulfilled the group, named by the sourcing lock fact; the fallback destination of a return. | `network.GroupOrigin` |
 | **Owner / Seller of Record** | `seller-inbound` | Whose stock it is. On the network ownerRef equals the sellerId; stock, listings and reservations are segregated by it. | `seller.ID (shared.ValidOwnerRef)` |
 | **Owner Reference** | `offer-availability` | The opaque ownerRef on a listing: the seller of record of the stock. Empty means the vendor's own stock. | `listing.OwnerRef` |
 | **Owner Suspended** | `offer-availability` | The suppression cause of a listing whose seller is suspended; the lowest of the three causes. | `listing.ReasonOwnerSuspended` |
@@ -118,6 +124,13 @@ are the proposed Go package and type names. Each context's own
 | **Region** | `node-topology` | A largely self-sufficient partition of the network. | `region.Region` |
 | **Release (to node)** | `order-sourcing` | Sending a group to one node; for a vendor node this issues a purchase order. | `assignment.Release` |
 | **Required Ship-By** | `vendor-connectivity` | The pickup cutoff the PO must be ready for; the fleet calls it the CPT. | `po.PurchaseOrder.RequiredShipBy` |
+| **Return Authorization** | `customer-returns` | The network's permission for a shopper to return one shipped or delivered order group, with the decided disposition and its state. | `returnauthorization.ReturnAuthorization` |
+| **Return Method** | `customer-returns` | How the shopper hands the package back: DROP_OFF, or PICKUP with a window. | `returnauthorization.Method` |
+| **Return Reason** | `customer-returns` | The enum code of why the group is returned; never free text. | `returnauthorization.Reason` |
+| **Returnless Return (Keep)** | `customer-returns` | A return whose goods the shopper keeps, chosen when every price is known and the declared total is within the returnless threshold; no label and no movement. | `returnauthorization.KeepDisposition` |
+| **Returnless Threshold** | `customer-returns` | The ceiling on the caller-declared total, 1500 cents, under which a return is returnless. | `returnauthorization.ReturnlessThresholdCents` |
+| **Returns Network View** | `customer-returns` | The local, event-fed copy of the returns centres, the region of each postal prefix and the node that fulfilled each group. | `network.Node, network.PrefixAssignment, network.GroupOrigin` |
+| **Reverse Label** | `customer-returns` | The carrier label of a return package, issued by shipping-and-tracking; this context keeps only its tracking number. | `ports.LabelIssuer` |
 | **Route** | `last-mile-delivery` | One van's ordered stops in one wave. | `route.Route` |
 | **Scan** | `shipping-and-tracking` | One observation of a package at a node. | `journey.Scan` |
 | **Scorecard** | `node-performance` | A node's measured performance over a rolling window, with a grade. | `scorecard.NodeScorecard` |
@@ -136,11 +149,13 @@ are the proposed Go package and type names. Each context's own
 | **Sourcing Policy** | `order-sourcing` | The operator's versioned lever over cross-region cost and consolidation: a surcharge in cents, a deviation percent and a cap on merged groups; version 0 is the default and changes nothing. | `policy.Policy` |
 | **SSCC** | `seller-inbound` | The 18-digit serial shipping container code identifying one logistic unit. Unique network-wide, with a mod-10 check digit. | `gs1.SSCC` |
 | **Stop** | `last-mile-delivery` | The packages of one route that share one stop key; wave capacity is counted in stops. | `route.Stop` |
+| **Stop Emission** | `last-mile-delivery` | The planner's declared marginal greenhouse emission of one delivery stop on a wave, in grams of CO2 equivalent (0 to 10000000); per stop, never per package. A declaration, not a measurement; 0 is legal and an undeclared wave also reads 0. | `wave.DeliveryWave.EmissionPerStopG` |
 | **Stop ETA Window** | `last-mile-delivery` | The day-of delivery window of one stop of a started route: at most two hours, spread linearly over what is left of the wave's delivery window at the start instant. A deterministic spread, not a prediction; never retracted. | `route.StopEta` |
 | **Stop Key** | `shipping-and-tracking` | An opaque keyed hash of the normalized ship-to address, put on the label event so last-mile-delivery can group packages into stops without ever receiving an address. | `label.StopKey` |
 | **Submission / Transaction** | `vendor-connectivity` | An asynchronous vendor write and its outcome, reconciled by transactionId. | `submission.Submission` |
 | **Throughput Cap** | `node-topology` | Declared maximum orders per time unit a node accepts. | `node.ThroughputCap` |
 | **Tracking Number** | `shipping-and-tracking` | The network-wide unique id of one package. | `journey.TrackingNumber` |
+| **Unexpected Line** | `customer-returns` | An outcome line the authorization never covered; recorded as a fact, never published and never restocked. | `requests.OutcomeFactLine` |
 | **Unsourceable** | `order-sourcing` | No node can still meet the promise; the group goes back to delivery-promise. | `assignment.StateUnsourceable` |
 | **Vendor** | `vendor-connectivity` | An organisation operating fulfillment nodes for the network (the warehouse-systems fleet is vendor V-WS). | `vendor.VendorAccount` |
 | **Vendor API** | `vendor-connectivity` | The Open Host Service of this context; its JSON schemas are the Published Language. | `apis/vendor-connectivity/openapi.yaml` |

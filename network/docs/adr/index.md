@@ -11,9 +11,10 @@ description: "The domain-level decisions behind the retail-network model, and th
 
 ## Domain ADRs
 
-All nine are **Proposed** (the status in each ADR body). All eleven context
+All nine are **Proposed** (the status in each ADR body). All twelve context
 repositories exist and are built on `develop`: 0001 to 0008 are realized by
-the ten contexts other than `seller-inbound`, and 0009 by `seller-inbound`, whose ADR 0001 takes this model
+the ten contexts other than `seller-inbound` and `customer-returns`, 0009 by `seller-inbound` and 0012 by
+`customer-returns`; the ADR 0001 of each of those two takes this model
 as its design source. Each repository carries its own ADR sequence on top of
 these domain-level decisions (below). An ADR becomes Accepted when the user
 accepts it.

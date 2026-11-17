@@ -15,7 +15,7 @@ reported a gap. 2026-10-22 produced about 140 reports. This page holds them
 deduplicated into 36 items.
 
 **The model carries the as-built contracts, not every resolution below.** The
-events, fields, consumers and routes of the eleven services are in `model.yaml`
+events, fields, consumers and routes of the twelve services are in `model.yaml`
 (checked against each service's specification). The Status column says whether a
 service built the proposed resolution; the resolution text of a Closed row is what was actually decided. A gap is
 Closed only when the aggregates, invariants and policies it names are also edited
@@ -35,7 +35,7 @@ the 15, **3 are Closed** (G47, G48, G51, by the network evolution wave 0,
 checked against each repo's `develop` on 2026-11-09), **4 are Built** (G42,
 G49, G53, G55) and **8 are Open**; the counts above cover G1 to G40 only.
 Of the eight storefront-driven rows G56 to G63, **1 is Closed** (G60),
-**4 are Built** (G56, G57, G58, G61) and **3 are Open** (G59, G62, G63).
+**4 are Built** (G56, G57, G58, G61), **1 is Built differently** (G62) and **2 are Open** (G59, G63).
 Rows G64 and G65 record differences between the model and the built services
 found by the same check: G64 is **Closed**, G65 is Open. Wave 1 (2026-11-09: fast-tier eligibility, calibrated quotes, predicted-late flagging and the capacity band) opened and closed no gap number; it changes the wording of G20 only. Wave 2 (2026-11-10: the versioned sourcing policy, cross-order consolidation and the opt-in consolidated tier) closed no gap number either; it refines G26 and records one new Open gap, G66, a direct-lane advisory that is blocked on a missing input.
 
@@ -43,6 +43,7 @@ found by the same check: G64 is **Closed**, G65 is Open. Wave 1 (2026-11-09: fas
 | --- | --- |
 | **Closed** | Built, and the model says what was built. The note names where in `model.yaml` and the repo ADR assumption. G3, G9, G11, G12 and G40 were built differently from the proposal; their resolution cell now states the decision. G36 and G37 are enforced by `check_model.py` (rules 5 and 6). |
 | **Built** | A service implemented the proposed resolution as written. The note names the repo, its ADR and the assumption (A followed by a number). |
+| **Built differently** | A service built something that answers the gap in another shape than the proposed resolution. The note names the ADR, what was built, where the model carries it and the residual. |
 
 Severity:
 
@@ -150,7 +151,7 @@ merged before the storefront's checkout is built.
 | G59 (NG4) | S1 | Kong exposes the whole `/api/customer-ordering` and `/api/delivery-promise` prefixes, so the restricted ship-to route and the in-org promise routes are reachable from outside. | warehouse-infra | Browser traffic goes only to `/api/storefront`; decide whether the network prefixes stay public for ops tools or move to an internal-only listener. The model's "restricted, not exposed through the storefront edge" is not true on the cluster today. | Open |
 | G60 (NG5) | S3 | Every quote persists offers with a TTL; delivery dates on listing pages would write one offer row per product per view. | delivery-promise | As built: `POST /delivery-estimates`, a SAFE noun route (no offer row, hold, outbox row or event; an `Idempotency-Key` is ignored): up to 50 unique items for one destination, each searched as a single-line group with the quote's own search, answering per item the options (tier, window, basis, `orderByAt`) and the `OfferConstraint` vocabulary. The read-only MCP tool `estimate_delivery` is bound to the same use case. | Closed - model: contexts[delivery-promise].policies[BatchDeliveryEstimates], .aggregates[DeliveryOffer].commands (`EstimateDeliveries`), .rest, .inbound; build: delivery-promise ADR 0019 |
 | G61 (NG6) | S3 | `expiresAt` mixes TTL and pickup cutoff; there is no separate "order within" instant for messaging. | delivery-promise | Expose the order-by instant (cutoff-derived) on `DeliveryOffer`. | Built - delivery-promise `orderByAt` (F1, IQVO/delivery-promise#44: the cutoff-bound order-by instant on `DeliveryOffer`; no ADR of its own, also returned by `POST /delivery-estimates`) |
-| G62 (NG7) | S2 (later) | A future customer-notification context would have to re-derive order status from three streams. | customer-ordering | Publish group status facts (shipped, delivered, lost, returned) as customer-order events. Defer until notifications is planned. | Open |
+| G62 (NG7) | S2 (later) | A future customer-notification context would have to re-derive order status from three streams. | customer-ordering | Publish group status facts (shipped, delivered, lost, returned) as customer-order events. Defer until notifications is planned. As built (customer-ordering ADR 0017, read on `develop` 2026-11-16): customer-ordering now publishes `ShopperNoticeDecided` on its events topic, one per family occurrence, for seven families: the four group families (`GROUP_SHIPPED`, `GROUP_DELIVERED`, `GROUP_LOST`, `GROUP_RETURNED`, whose fact carries the group status) plus `DELAY_EXPECTED`, `ETA_WINDOW_ASSIGNED` and `DELIVERY_POINT_ADVISORY`. Each carries the `notifier` (`MARKETPLACE`, `SELLER` or `NOBODY`, the default) that a versioned notification policy decided, and a `noticeKey` to dedupe on. The notice is delivered outside the network (the storefront; seller delivery is deferred), and no customer-notification context exists. | Built differently - customer-ordering ADR 0017: per-family decided notices under the `order` entity, not plain group status events on the `customerorder` entity; the four terminal families carry the group status, so a consumer no longer re-derives it from three streams. Model: `contexts[customer-ordering].publishes[ShopperNoticeDecided]`, `.reasons[ShopperNoticeFamily]`, `.reasons[ShopperNoticeNotifier]`, `.policies[ShopperNoticeDecision]`. Inside the network the only consumer is `customer-returns` (the terminal families, for its `OrderGroupView`). Residual: the `NotificationPolicy` document and its operator routes (`GET /notification-policy`, `PUT /notification-policy`) are not in the model yet; publishing a policy raises no event; there is no customer-notification context, so nothing inside the network delivers a notice. |
 | G63 (NG8) | decision | The network's future `payments-and-invoicing` and the storefront's `customer-payments` would be two owners of one capability. | network model | Split `payments-and-invoicing` into `customer-payments` (storefront, now) and `vendor-settlement` (network, later): different language (authorize/capture/refund vs invoice/remittance) and different organisationally owned flows (storefront D5). | Open |
 
 ## As-built discrepancies found on 2026-10-26

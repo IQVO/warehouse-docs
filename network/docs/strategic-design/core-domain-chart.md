@@ -2,7 +2,7 @@
 id: core-domain-chart
 title: Core Domain Chart
 sidebar_label: Core Domain Chart
-description: "All eleven retail-network bounded contexts on the ddd-crew Core Domain Chart: business differentiation against model complexity."
+description: "All twelve retail-network bounded contexts on the ddd-crew Core Domain Chart: business differentiation against model complexity."
 ---
 
 # Core Domain Chart
@@ -28,6 +28,7 @@ quadrantChart
     vendor-connectivity: [0.46, 0.36]
     node-performance: [0.34, 0.45]
     seller-inbound: [0.48, 0.34]
+    customer-returns: [0.42, 0.36]
     last-mile-delivery: [0.40, 0.40]
     offer-availability: [0.30, 0.38]
     shipping-and-tracking: [0.62, 0.22]
@@ -39,7 +40,7 @@ y = `differentiation`).
 
 Omitted: internal slices (each context's own chart shows them, for example
 `delivery-promise` splits the `PromiseBook` from the quote search) and the
-three future contexts.
+two future contexts.
 
 ## Reading the chart
 
@@ -47,7 +48,7 @@ three future contexts.
   differentiation and high complexity: a time-expanded path search with
   capacity holds, and late assignment with a lock. This is where to put the
   best people and the most tests.
-- **Bottom left, Supporting.** Seven contexts cluster just under the middle.
+- **Bottom left, Supporting.** Eight contexts cluster just under the middle.
   `linehaul-transportation` sits closest to the Core boundary: at a larger
   scale, route and load optimization would push it up and right, and the
   chart would then be redrawn rather than the context merged.
@@ -68,5 +69,6 @@ three future contexts.
 | `last-mile-delivery` | Custom-built | Routing could be bought behind a port. |
 | `node-performance` | Custom-built | Towards product. |
 | `seller-inbound` | Custom-built | The carton and receipt rules are the network's own. |
+| `customer-returns` | Custom-built | The disposition rule is the network's own; label issuing and grading stay with their owners. |
 | `customer-ordering` | Commodity | Replaceable by a bought storefront behind the promise API. |
 | `shipping-and-tracking` | Commodity | Replaceable by a carrier platform. |

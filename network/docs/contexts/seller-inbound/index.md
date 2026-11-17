@@ -83,4 +83,4 @@ Vendor API of `vendor-connectivity` remains the only channel.
 - Console remote (service ADR 0007): `web/`, a Vite + React Module Federation remote —
   federation container `seller_inbound_mfe`, gateway mount `/mfes/seller-inbound/`,
   dev/preview port `4022`.
-- Where the context sits among the eleven: [Context Map](/network/strategic-design/context-map).
+- Where the context sits among the twelve: [Context Map](/network/strategic-design/context-map).

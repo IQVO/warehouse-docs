@@ -41,10 +41,12 @@ aggregate and drained by a relay (model `integration_rules`).
 | --- | --- | --- | --- | --- |
 | `DeliveryWaveScheduled` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveScheduled` | `waveId` | `ScheduleWave` | `delivery-promise`, `order-sourcing` |
 | `WaveCostDeclared` | `com.retailnetwork.logistics.last-mile-delivery.wave.WaveCostDeclared` | `waveId` | `DeclareCost` | `order-sourcing` |
+| `WaveEmissionDeclared` | `com.retailnetwork.logistics.last-mile-delivery.wave.WaveEmissionDeclared` | `waveId` | `DeclareEmission` | `order-sourcing` |
 | `DeliveryWaveCapacityChanged` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCapacityChanged` | `waveId` | `InductPackage` (policies `InductOnArrival`, `RetryNextWave`) | `delivery-promise`, `order-sourcing` |
 | `DeliveryWaveCancelled` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCancelled` | `waveId` | `CancelWave` | analytics only |
 | `RoutePlanned` | `com.retailnetwork.logistics.last-mile-delivery.route.RoutePlanned` | `routeId` | `PlanRoute` | analytics only |
 | `PackageOutForDelivery` | `com.retailnetwork.logistics.last-mile-delivery.route.PackageOutForDelivery` | `routeId` | `StartRoute` (one per tracking number) | `shipping-and-tracking` |
+| `PackagePickupOut` | `com.retailnetwork.logistics.last-mile-delivery.route.PackagePickupOut` | `routeId` | `StartRoute` (one per package inducted as a `PICKUP`; dormant, service ADR 0017) | none |
 | `StopEtaWindowAssigned` | `com.retailnetwork.logistics.last-mile-delivery.route.StopEtaWindowAssigned` | `routeId` | `StartRoute` (one per stop, after every `PackageOutForDelivery`) | `shipping-and-tracking` |
 | `DeliveryAttempted` | `com.retailnetwork.logistics.last-mile-delivery.route.DeliveryAttempted` | `routeId` | `RecordAttempt` | `shipping-and-tracking` |
 | `PackageInductionDeferred` | `com.retailnetwork.logistics.last-mile-delivery.packageattempthistory.PackageInductionDeferred` | `trackingNumber` | `InductPackage` (`RetryNextWave`, no eligible wave) | `delivery-promise` |
@@ -92,6 +94,20 @@ Raised by `DeclareCost` while the wave still runs; a later declaration
 overwrites the earlier one. `order-sourcing` sums it into its
 money-denominated cost.
 
+### WaveEmissionDeclared
+
+| Field | Type (proposed) | Meaning |
+| --- | --- | --- |
+| `waveId` | string | the wave |
+| `gCo2ePerStop` | integer | the planner's declared marginal greenhouse emission of one stop, grams of CO2 equivalent (0 to 10000000; 0 is a legal declared zero) |
+| `declaredAt` | date-time | when the planner declared it |
+
+Raised by `DeclareEmission` while the wave still runs (`OPEN`,
+`INDUCTION_CLOSED` or `DISPATCHED`); a later declaration overwrites the
+earlier one. The emission is per stop, never per package. `order-sourcing`
+sums it into its carbon estimate; its ranking does not change
+(last-mile-delivery ADR 0016).
+
 ### DeliveryWaveCancelled
 
 | Field | Type (proposed) | Meaning |
@@ -116,6 +132,21 @@ money-denominated cost.
 | `trackingNumber` | string | the package |
 | `stationNodeId` | string | the station it left |
 | `at` | date-time | when the route started |
+
+### PackagePickupOut
+
+| Field | Type (proposed) | Meaning |
+| --- | --- | --- |
+| `routeId` | string | the route |
+| `trackingNumber` | string | the pickup package |
+| `stopKey` | string | the stop the package is collected at |
+| `stationNodeId` | string | the station the route left |
+| `at` | date-time | when the route started |
+
+Raised by `StartRoute` for a package whose induction kind is `PICKUP`, in
+place of `PackageOutForDelivery`. Dormant: every writer of this context
+inducts with kind `DELIVERY`, so none is produced today and no context
+consumes it (service ADR 0017, policy `PickupInductionDormant`).
 
 ### StopEtaWindowAssigned
 

@@ -32,7 +32,7 @@ quadrantChart
 Derived from: model.yaml → contexts[seller-inbound].chart,
 .classification, .aggregates, .policies.
 
-Omitted: the other ten contexts (their positions are on the
+Omitted: the other eleven contexts (their positions are on the
 [network-wide chart](/network/strategic-design/core-domain-chart)). The three slices
 are placed by this page; the model gives only the context point.
 

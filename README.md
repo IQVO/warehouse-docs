@@ -6,7 +6,7 @@ and AsyncAPI references, and the business context for twenty backend
 contexts: nineteen domain bounded contexts plus `warehouse-ops-agent`. Built with [Docusaurus](https://docusaurus.io/) and
 published to **GitHub Pages** through GitHub Actions. It also hosts the
 **retail-network** domain documentation — the large-scale retail and logistics
-network, eleven bounded contexts — as a second docs section served at `/network/`
+network, twelve bounded contexts — as a second docs section served at `/network/`
 (merged from the former `IQVO/retail-network-docs` repository, history
 preserved under `network/`).
 
@@ -79,7 +79,7 @@ GitHub Pages: **https://iqvo.github.io/warehouse-docs/**. Page map:
 - **ADRs** (`docs/adr/`): an index that links to each context's own ADR
   trail. ADRs are never copied, so the index never drifts.
 - **Retail Network** (`network/`): the retail-network domain — research,
-  strategic design, node & promise models, WMS/WES integration, eleven bounded
+  strategic design, node & promise models, WMS/WES integration, twelve bounded
   contexts and their REST reference. The source of truth is
   `network/model/model.yaml`; `network/docs/strategic-design/` pages generated
   from it must be regenerated via `network/scripts/gen_pages.py`, never edited.

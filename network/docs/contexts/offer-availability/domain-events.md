@@ -175,6 +175,13 @@ and counted, never dead-lettered.
 | `SellerReinstated` | `com.retailnetwork.partner.seller-inbound.seller.SellerReinstated` | `sellerId`, `reinstatedAt` | Sets the seller `ACTIVE`; every `OWNER_SUSPENDED` listing of the owner is reconciled: `LIVE` when no other cause holds, otherwise suppressed with the remaining highest cause. |
 | `InboundShipmentReceived` | `com.retailnetwork.partner.seller-inbound.inboundshipment.InboundShipmentReceived` | `sellerId`, `nodeId`, `received` | Creates the missing owner listing per received item at availability 0 / `UNKNOWN`, suppressed when a cause holds; an existing listing is left as it is (gap G51). |
 
+As built (service ADR 0015) the context also consumes one event of
+`customer-returns`, from `retailnetwork.customer-returns.events`:
+
+| Event | Full `type` | Fields used | What this context does |
+| --- | --- | --- | --- |
+| `ReturnCompleted` | `com.retailnetwork.commerce.customer-returns.returnauthorization.ReturnCompleted` | `authorizationId`, `nodeId`, `lines`, `receivedAt` | Per line, raises the available quantity of the listing of (`catalogItemId`, `nodeId`, `ownerRef`) by `qtyRestockable`: a delta, not a snapshot. A line with nothing restockable, without a usable item or without a listing is skipped and counted. Unsellable units touch no listing, and no listing is created from a return (policy `RestockOnReturnCompleted`). |
+
 ### Idempotency and ordering
 
 - **Inbox.** Each consumed CloudEvents `id` is recorded in

@@ -43,10 +43,10 @@ events and the policy event were added by wave 2.
 | Event | Full `type` | Producing command | Consumers |
 | --- | --- | --- | --- |
 | `FulfillmentQueued` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentQueued` | `QueueAssignment` | analytics only |
-| `FulfillmentReleasedToNode` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | `ReleaseToNode` | `vendor-connectivity`, `linehaul-transportation`, `seller-inbound` |
+| `FulfillmentReleasedToNode` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleasedToNode` | `ReleaseToNode` | `vendor-connectivity`, `linehaul-transportation`, `seller-inbound`, `customer-returns` |
 | `FulfillmentReleaseWithdrawn` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReleaseWithdrawn` | `Requeue` (a merge dissolved by a promise revision) | `vendor-connectivity` |
 | `FulfillmentReassigned` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentReassigned` | `ReoptimiseAssignment`, `HandleNodeRefusal` (node changed), `Requeue` (node changed) | `linehaul-transportation` |
-| `FulfillmentLocked` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | `LockAssignment` | `delivery-promise`, `customer-ordering`, `linehaul-transportation` |
+| `FulfillmentLocked` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentLocked` | `LockAssignment` | `delivery-promise`, `customer-ordering`, `linehaul-transportation`, `customer-returns` |
 | `FulfillmentShipped` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentShipped` | `MarkShipped` | `customer-ordering` |
 | `FulfillmentDelivered` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentDelivered` | `MarkDelivered` | analytics only |
 | `FulfillmentUnsourceable` | `com.retailnetwork.commerce.order-sourcing.assignment.FulfillmentUnsourceable` | `ReleaseToNode`, `HandleNodeRefusal` (no candidate left) | `delivery-promise`, `customer-ordering` |
@@ -88,6 +88,8 @@ are the proposed JSON types; the model gives names only.
 | `estimatedCostCents` | integer | Optional; omitted when the estimate is incomplete (service ADR 0011) |
 | `policyVersion` | integer | Optional; the sourcing policy version the search read, present only when version 1 or more was in force (service ADR 0014) |
 | `effectiveCostCents` | integer | Optional; the estimate plus the cross-region surcharge, present only when the surcharge changed the cost (service ADR 0014) |
+| `estimatedCo2eGrams` | integer | Optional; the carbon estimate of the released path in planner-declared grams of CO2e, omitted when the estimate is incomplete (service ADR 0017). Recorded only: the ranking never reads it |
+| `emissionComplete` | boolean | Optional; every emission component of the path was declared. Omitted exactly when `estimatedCo2eGrams` is omitted |
 | `lines` | array of `{catalogItemId, listingId, quantity, ownerRef?, assignmentId?}` | The whole group (fill-or-kill); `listingId` is this node's listing; `ownerRef` is the owner OwnerChoice picked, omitted when operator-owned (service ADR 0012). For a merged release the union of the members' lines in member order, each line naming its own `assignmentId` |
 | `members` | array of `{assignmentId, orderId, groupNo, promiseId}` | Optional; present only on a merged release: the carrier first, then ascending `assignmentId`. Absent means a single-group release (service ADR 0015) |
 
@@ -279,9 +281,9 @@ idempotency comes on top, per row below.
 | --- | --- | --- | --- |
 | `delivery-promise` | `com.retailnetwork.commerce.delivery-promise.promisebook.PromiseBookExhausted` | `PromiseBookPressureView` (`bookId`, `nodeId`, `pickupDepartureId`, `share`) | upsert by `bookId` |
 | `node-topology` | `com.retailnetwork.logistics.node-topology.node.NodeRegistered`, `com.retailnetwork.logistics.node-topology.node.NodeOperationalProfileDeclared`, `com.retailnetwork.logistics.node-topology.node.NodeActivated`, `com.retailnetwork.logistics.node-topology.node.NodeSuspended`, `com.retailnetwork.logistics.node-topology.node.NodeRetired` | `NodeProfileView` | upsert by `nodeId`; a profile with a lower `profileRevision` is ignored |
-| `node-topology` | `com.retailnetwork.logistics.node-topology.lane.LaneOpened`, `com.retailnetwork.logistics.node-topology.lane.LaneClosed`, `com.retailnetwork.logistics.node-topology.servicearea.ServiceAreaAssigned`, `com.retailnetwork.logistics.node-topology.region.RegionDefined` | `NetworkGraphView` | upsert by `laneId`, `postalPrefix` (newer `assignmentVersion` wins), `regionId` |
+| `node-topology` | `com.retailnetwork.logistics.node-topology.lane.LaneOpened`, `com.retailnetwork.logistics.node-topology.lane.LaneClosed`, `com.retailnetwork.logistics.node-topology.lane.LaneEmissionDeclared`, `com.retailnetwork.logistics.node-topology.servicearea.ServiceAreaAssigned`, `com.retailnetwork.logistics.node-topology.region.RegionDefined` | `NetworkGraphView` | upsert by `laneId`, `postalPrefix` (newer `assignmentVersion` wins), `regionId` |
 | `linehaul-transportation` | `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureScheduled`, `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCapacityChanged`, `com.retailnetwork.logistics.linehaul-transportation.departure.DepartureCancelled` | `NetworkGraphView` | upsert by `departureId` |
-| `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveScheduled`, `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCapacityChanged` | `NetworkGraphView` | upsert by `waveId` |
+| `last-mile-delivery` | `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveScheduled`, `com.retailnetwork.logistics.last-mile-delivery.wave.DeliveryWaveCapacityChanged`, `com.retailnetwork.logistics.last-mile-delivery.wave.WaveEmissionDeclared` | `NetworkGraphView` | upsert by `waveId`; a declared emission is kept by the newer `declaredAt`, also for a wave not known yet |
 | `offer-availability` | `com.retailnetwork.commerce.offer-availability.listing.ListingCreated`, `com.retailnetwork.commerce.offer-availability.listing.ListingAvailabilityChanged`, `com.retailnetwork.commerce.offer-availability.listing.ListingSuppressed`, `com.retailnetwork.commerce.offer-availability.listing.ListingRestored`, `com.retailnetwork.commerce.offer-availability.catalogitem.CatalogItemDiscontinued` | `AvailabilityView` | upsert by `listingId` / `catalogItemId`; an availability with an older `asOf` is ignored |
 | `node-performance` | `com.retailnetwork.partner.node-performance.scorecard.NodeScorecardUpdated` | `ScorecardView` | upsert by (`nodeId`, `window`); an older `computedAt` is ignored |
 

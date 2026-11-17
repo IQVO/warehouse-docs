@@ -100,6 +100,22 @@ second event from `delivery-promise`, and `PromiseMade` and
 | `cancelledAt` | timestamp | When the cancellation was recorded. |
 | `groupNos` | integer[] | The shipment groups concerned: for a shopper request exactly the groups that were still unlocked (now `CANCELLATION_REQUESTED`), for the policy the one cancelled group. |
 
+### ShopperNoticeDecided
+
+As built (service ADR 0017). The third published event, on the same topic,
+subject and key the `orderId`.
+
+| Attribute | Value |
+| --- | --- |
+| Full type | `com.retailnetwork.commerce.customer-ordering.order.ShopperNoticeDecided` (the `order` entity; the other two events keep `customerorder`) |
+| Fields | `orderId`, `groupNo`, `family`, `notifier`, `policyVersion`, `noticeKey`, `decidedAt`, `fact` (`deliverByLatest`, `etaStart`, `etaEnd`, `reason`, `status`, each optional) |
+| `family` | `DELAY_EXPECTED`, `ETA_WINDOW_ASSIGNED`, `DELIVERY_POINT_ADVISORY`, `GROUP_SHIPPED`, `GROUP_DELIVERED`, `GROUP_LOST`, `GROUP_RETURNED` |
+| `notifier` | `MARKETPLACE`, `SELLER` or `NOBODY` (the default of every family) |
+| Consumers | `customer-returns` (the four `GROUP_` families, for its `OrderGroupView`). The notice itself is delivered outside the network. |
+
+One event per family occurrence, whatever the notifier, written in the same
+unit of work as the fact it is about (policy `ShopperNoticeDecision`).
+
 ## Consumed
 
 Every consumer is idempotent on the CloudEvents `id`: the id is inserted into

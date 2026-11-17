@@ -77,7 +77,7 @@ flowchart TB
 Derived from: `model.yaml` → `delivery-promise.policies`,
 `order-sourcing.policies`, `node-performance.policies`.
 
-The loop is the reason the network is eleven contexts, not one: each arrow is a
+The loop is the reason the network is twelve contexts, not one: each arrow is a
 published event between two models that change at different speeds, for
 different reasons, under different owners.
 
@@ -97,7 +97,7 @@ different reasons, under different owners.
   `seller-inbound` context, which picks no node for them: the seller names
   the destination ([ADR 0009](/network/adr/0009-seller-inbound-and-case-packed-shipments)).
 
-## The eleven contexts in one sentence each
+## The twelve contexts in one sentence each
 
 | Context | Classification | Purpose |
 | --- | --- | --- |
@@ -110,6 +110,7 @@ different reasons, under different owners.
 | `last-mile-delivery` | Supporting | Delivery waves, routes for delivery partners, delivery attempts, the day-of stop ETA window at route start and the delivery-point profile that learns from failed attempts. |
 | `node-performance` | Supporting | Scorecards and grades from observed facts. |
 | `seller-inbound` | Supporting | Sellers plan, pack, label and ship stock in eaches or case-packed cartons identified by SSCC; receipts close each shipment. |
+| `customer-returns` | Supporting | Authorize the return of a shipped or delivered order group, decide the disposition at authorization and publish the graded outcome as a restock fact; no money, no address, no free text. |
 | `customer-ordering` | Generic | Checkout and the customer order; holds the ship-to address. |
 | `shipping-and-tracking` | Generic | Labels and the package journey. |
 
