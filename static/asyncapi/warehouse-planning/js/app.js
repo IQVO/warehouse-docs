@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **warehouse-planning** bounded context (WES\nsubdomain): *can this warehouse process the demand assigned to it?*\n\n**Published (Phase 4).** The `CapacityPlan` aggregate raises four events,\npublished to `warehouse.warehouse-planning.events` through a\n**transactional outbox**: the plan and its already-encoded events are\nwritten in ONE database transaction, and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is persisted with the outbox row, so\na retry republishes the same `id` -- consumers dedupe on it). Per plan:\n`CapacityPlanCreated` on creation; on publication\n`CapacityPlanPublished`, plus `CapacityShortageDetected` and\n`BottleneckDetected` only when the plan has a shortage.\nThe `ProcessCapacity` aggregate publishes on the same topic and the same\noutbox: `ProcessCapacityRegistered` when its first (native) constraint\nbrings it into being, `ProcessCapacityChanged` when a registration\nmoves the effective rate (the minimum rate value, the binding\nconstraint, or both); a registration the effective rate does not notice\nraises nothing. ProcessCapacity events are integration-stream only: the\nanalytics fanout carries plan facts only (ADR 0005).\n\n**Consumed (Phase 3).** `ShiftPlanCommitted` (workforce-management) and\n`LocationSlotRegistered`/`LocationSlotDecommissioned` (facility-layout) keep\nlocal ProcessCapacity read models current; this context never makes a\nlive cross-context call.\n\n**Consumed (ADR 0004).** `OrderAllocated` and\n`OrderPartiallyAllocated` (order-management, topic\n`warehouse.order-management.events`) keep a local expected-demand read\nmodel current under the REQUIRED consumer group `DEMAND_CONSUMER_GROUP`.\nEach order is counted once, at its latest promise cutoff, and attributed to\nthe ONE configured site (`DEMAND_SITE_ID`): order-management's events carry\nno fulfillment site. `OrderRepromised` and every other type are ignored.\n\n**Consumed (ADR 0017, source switched by ADR 0020).** dock-scheduling's\n`DockAppointmentBooked`, `DockAppointmentRescheduled`,\n`DockAppointmentCancelled` and `DockAppointmentNoShow` (topic\n`warehouse.dock-scheduling.events`, group `DOCK_APPOINTMENT_CONSUMER_GROUP`)\nkeep a local inbound-demand read model current: a capacity plan carries the\nINBOUND dock appointments of its window and the labour the operator-declared\ninbound standard attributes to them. Each appointment is attributed to the\n`site_id` of its events; the producer's aggregate `version` orders them (a\nCancelled that arrives before its Booked wins). inbound-receiving's\nappointment events are NO LONGER consumed, and a deployment that still sets\n`INBOUND_DEMAND_CONSUMER_GROUP` is refused at boot. `TaskCompleted`\n(fulfillment-execution, topic `warehouse.fulfillment.events`, group\n`OBSERVED_CAPACITY_CONSUMER_GROUP`) keeps a local observed-capacity read\nmodel current that feeds an ADVISORY planned-versus-observed variance; it\nnever changes a planned capacity and is attributed to the configured site\n(`DEMAND_SITE_ID`). Both consumers dead-letter unusable payloads to\n`<topic>.dlq`.\n\n**Analytics stream (ADR 0005).** The same four events are ALSO written to\n`warehouse.warehouse-planning.analytics` in the SAME outbox transaction\n(two outbox rows per event, one per topic), as CloudEvents 1.0 with the\nSAME `type` and the SAME `id` per occurrence but\n`dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`.\nThe integration messages are byte-identical to what they were before the\nstream existed. The analytics payloads are the integration payloads plus\nadditive, analytics-only fields: today `binding_constraint` on\n`CapacityPlanPublished` (the constraint type -- LABOR, STATION, ... --\nbinding the bottleneck step; `\"\"` for a plan created before it was\nrecorded). Only this service's own `planning-projector` consumes it (fixed\nconsumer group, at-least-once, offsets committed after the projection\ncommitted), into a SEPARATE analytical database that\n`planning-reports` serves read-only. Poison messages go to\n`warehouse.warehouse-planning.analytics.dlq`.\n\n**Envelope (mandatory).** Every message is a CloudEvents 1.0 event in\n*structured content mode* (Kafka value = JSON event format) with the Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0014); consumers may extract them, and must not require\nthem. All of\n`specversion` (`1.0`), `id`, `source` (`/warehouse/warehouse-planning`),\n`type`, `subject`, `time`, `datacontenttype` (`application/json`) and\n`dataschema` are required; the payload sits under `data`. No flat\nenvelope, no toggle.\n\n**Type naming.** `com.warehouse.wes.warehouse-planning.<entity>.<EventName>`\nwhere `<entity>` is the aggregate that raised the event, lowercase, no\nseparators -- `capacityplan` or `processcapacity`. **dataschema** =\n`urn:warehouse:warehouse-planning:events:<EventName>:v1`. **subject** and\nthe Kafka message key = the aggregate's id: the capacity plan id, or\n`<processType>/<location>/<windowStart>/<windowEnd>` for a\nProcessCapacity (one aggregate's events stay ordered on one partition).\nA breaking payload change gets a new `.v2` type and dataschema, never a\nmutation.\n"
+    "description": "Event catalog for the **warehouse-planning** bounded context (WES\nsubdomain): *can this warehouse process the demand assigned to it?*\n\n**Published (Phase 4).** The `CapacityPlan` aggregate raises four events,\npublished to `warehouse.warehouse-planning.events` through a\n**transactional outbox**: the plan and its already-encoded events are\nwritten in ONE database transaction, and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is persisted with the outbox row, so\na retry republishes the same `id` -- consumers dedupe on it). Per plan:\n`CapacityPlanCreated` on creation; on publication\n`CapacityPlanPublished`, plus `CapacityShortageDetected` and\n`BottleneckDetected` only when the plan has a shortage.\nThe `ProcessCapacity` aggregate publishes on the same topic and the same\noutbox: `ProcessCapacityRegistered` when its first (native) constraint\nbrings it into being, `ProcessCapacityChanged` when a registration\nmoves the effective rate (the minimum rate value, the binding\nconstraint, or both); a registration the effective rate does not notice\nraises nothing. ProcessCapacity events are integration-stream only: the\nanalytics fanout carries plan facts only (ADR 0005).\n\n**Consumed (Phase 3).** `ShiftPlanCommitted` (workforce-management) and\n`LocationSlotRegistered`/`LocationSlotDecommissioned` (facility-layout) keep\nlocal ProcessCapacity read models current; this context never makes a\nlive cross-context call.\n\n**Consumed (ADR 0004).** `OrderAllocated` and\n`OrderPartiallyAllocated` (order-management, topic\n`warehouse.order-management.events`) keep a local expected-demand read\nmodel current under the REQUIRED consumer group `DEMAND_CONSUMER_GROUP`.\nEach order is counted once, at its latest promise cutoff, and attributed to\nthe event's own optional `site_id` (order-management ADR 0050), or to the\nconfigured fallback site (`DEMAND_SITE_ID`) when the event carries none\n(ADR 0021). `OrderRepromised` and every other type are ignored.\n\n**Consumed (ADR 0017, source switched by ADR 0020).** dock-scheduling's\n`DockAppointmentBooked`, `DockAppointmentRescheduled`,\n`DockAppointmentCancelled` and `DockAppointmentNoShow` (topic\n`warehouse.dock-scheduling.events`, group `DOCK_APPOINTMENT_CONSUMER_GROUP`)\nkeep a local inbound-demand read model current: a capacity plan carries the\nINBOUND dock appointments of its window and the labour the operator-declared\ninbound standard attributes to them. Each appointment is attributed to the\n`site_id` of its events; the producer's aggregate `version` orders them (a\nCancelled that arrives before its Booked wins). inbound-receiving's\nappointment events are NO LONGER consumed, and a deployment that still sets\n`INBOUND_DEMAND_CONSUMER_GROUP` is refused at boot. `TaskCompleted`\n(fulfillment-execution, topic `warehouse.fulfillment.events`, group\n`OBSERVED_CAPACITY_CONSUMER_GROUP`) keeps a local observed-capacity read\nmodel current that feeds an ADVISORY planned-versus-observed variance; it\nnever changes a planned capacity and is attributed to the configured site\n(`DEMAND_SITE_ID`). Both consumers dead-letter unusable payloads to\n`<topic>.dlq`.\n\n**Analytics stream (ADR 0005).** The same four events are ALSO written to\n`warehouse.warehouse-planning.analytics` in the SAME outbox transaction\n(two outbox rows per event, one per topic), as CloudEvents 1.0 with the\nSAME `type` and the SAME `id` per occurrence but\n`dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`.\nThe integration messages are byte-identical to what they were before the\nstream existed. The analytics payloads are the integration payloads plus\nadditive, analytics-only fields: today `binding_constraint` on\n`CapacityPlanPublished` (the constraint type -- LABOR, STATION, ... --\nbinding the bottleneck step; `\"\"` for a plan created before it was\nrecorded). Only this service's own `planning-projector` consumes it (fixed\nconsumer group, at-least-once, offsets committed after the projection\ncommitted), into a SEPARATE analytical database that\n`planning-reports` serves read-only. Poison messages go to\n`warehouse.warehouse-planning.analytics.dlq`.\n\n**Envelope (mandatory).** Every message is a CloudEvents 1.0 event in\n*structured content mode* (Kafka value = JSON event format) with the Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0014); consumers may extract them, and must not require\nthem. All of\n`specversion` (`1.0`), `id`, `source` (`/warehouse/warehouse-planning`),\n`type`, `subject`, `time`, `datacontenttype` (`application/json`) and\n`dataschema` are required; the payload sits under `data`. No flat\nenvelope, no toggle.\n\n**Type naming.** `com.warehouse.wes.warehouse-planning.<entity>.<EventName>`\nwhere `<entity>` is the aggregate that raised the event, lowercase, no\nseparators -- `capacityplan` or `processcapacity`. **dataschema** =\n`urn:warehouse:warehouse-planning:events:<EventName>:v1`. **subject** and\nthe Kafka message key = the aggregate's id: the capacity plan id, or\n`<processType>/<location>/<windowStart>/<windowEnd>` for a\nProcessCapacity (one aggregate's events stay ordered on one partition).\nA breaking payload change gets a new `.v2` type and dataschema, never a\nmutation.\n"
   },
   "servers": {
     "production": {
@@ -1362,7 +1362,7 @@
           "name": "ShiftPlanCommitted",
           "title": "Shift plan committed (consumed)",
           "summary": "workforce-management committed a headcount split for a path.",
-          "description": "CONSUMED from `warehouse.workforce.events` (producer: workforce-management;\none message per PathPlan line). Becomes a LABOR `CapacityConstraint` on the\nProcessCapacity of ProcessType = upper-case(`path_id`), location =\n`building_id`: rate = `planned_heads * planned_rate` (UNIT/HOUR), window =\n`[time, time + planned_hours)`. Deduped on the CloudEvents `id`.\n",
+          "description": "CONSUMED from `warehouse.workforce.events` (producer: workforce-management;\none message per PathPlan line). Becomes a LABOR `CapacityConstraint` on the\nProcessCapacity of ProcessType = upper-case(`path_id`), location =\n`site_code`, or the deprecated `building_id` when `site_code` is absent\n(ADR 0021): rate = `planned_heads * planned_rate` (UNIT/HOUR), window =\n`[time, time + planned_hours)`. Deduped on the CloudEvents `id`.\n",
           "contentType": "application/cloudevents+json",
           "tags": [
             {
@@ -1389,44 +1389,50 @@
                   },
                   "data": {
                     "type": "object",
-                    "description": "Fields this service reads from one fanned-out ShiftPlanCommitted message (one per PathPlan line). A message with a blank building_id or path_id is skipped (WARN). The LABOR constraint is planned_heads x planned_rate UNIT per HOUR at location building_id for the window [CloudEvents time, time + planned_hours); heads, rate and hours are not range-checked here (a value the domain rejects is skipped). shift_id is not read.",
+                    "description": "Fields this service reads from one fanned-out ShiftPlanCommitted message (one per PathPlan line). A message with no site (blank site_code and building_id) or a blank path_id is skipped (WARN). The LABOR constraint is planned_heads x planned_rate UNIT per HOUR at location site_code (or building_id when site_code is absent, ADR 0021) for the window [CloudEvents time, time + planned_hours); heads, rate and hours are not range-checked here (a value the domain rejects is skipped). shift_id is not read.",
                     "required": [
-                      "building_id",
                       "path_id"
                     ],
                     "properties": {
-                      "building_id": {
+                      "site_code": {
                         "type": "string",
+                        "description": "The canonical site (workforce-management's site_code); the constraint's location.",
                         "example": "BLD1",
                         "x-parser-schema-id": "<anonymous-schema-109>"
+                      },
+                      "building_id": {
+                        "type": "string",
+                        "description": "DEPRECATED twin of site_code (same value); read only when site_code is absent.",
+                        "example": "BLD1",
+                        "x-parser-schema-id": "<anonymous-schema-110>"
                       },
                       "shift_id": {
                         "type": "string",
                         "example": "SHIFT1",
-                        "x-parser-schema-id": "<anonymous-schema-110>"
+                        "x-parser-schema-id": "<anonymous-schema-111>"
                       },
                       "path_id": {
                         "type": "string",
                         "description": "Becomes the ProcessType (upper-cased) of the LABOR constraint.",
                         "example": "pack",
-                        "x-parser-schema-id": "<anonymous-schema-111>"
+                        "x-parser-schema-id": "<anonymous-schema-112>"
                       },
                       "planned_heads": {
                         "type": "integer",
                         "example": 3,
-                        "x-parser-schema-id": "<anonymous-schema-112>"
+                        "x-parser-schema-id": "<anonymous-schema-113>"
                       },
                       "planned_rate": {
                         "type": "number",
                         "format": "double",
                         "example": 50,
-                        "x-parser-schema-id": "<anonymous-schema-113>"
+                        "x-parser-schema-id": "<anonymous-schema-114>"
                       },
                       "planned_hours": {
                         "type": "number",
                         "format": "double",
                         "example": 8,
-                        "x-parser-schema-id": "<anonymous-schema-114>"
+                        "x-parser-schema-id": "<anonymous-schema-115>"
                       }
                     },
                     "x-parser-schema-id": "ShiftPlanCommittedData"
@@ -1440,7 +1446,7 @@
           "examples": [
             {
               "name": "packLine",
-              "summary": "One fanned-out line of a plan committed for building BLD1.",
+              "summary": "One fanned-out line of a plan committed for site BLD1.",
               "payload": {
                 "specversion": "1.0",
                 "id": "9f1c2b7e-4c3a-4a1d-9f0b-6c2b8a7d1e33",
@@ -1451,6 +1457,7 @@
                 "datacontenttype": "application/json",
                 "dataschema": "urn:warehouse:workforce-management:events:ShiftPlanCommitted:v1",
                 "data": {
+                  "site_code": "BLD1",
                   "building_id": "BLD1",
                   "shift_id": "SHIFT1",
                   "path_id": "pack",
@@ -1500,11 +1507,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.LocationSlotRegistered",
-                        "x-parser-schema-id": "<anonymous-schema-116>"
+                        "x-parser-schema-id": "<anonymous-schema-117>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:LocationSlotRegistered:v1",
-                        "x-parser-schema-id": "<anonymous-schema-117>"
+                        "x-parser-schema-id": "<anonymous-schema-118>"
                       },
                       "data": {
                         "type": "object",
@@ -1517,18 +1524,18 @@
                           "locationCode": {
                             "type": "string",
                             "example": "A-01-01",
-                            "x-parser-schema-id": "<anonymous-schema-118>"
+                            "x-parser-schema-id": "<anonymous-schema-119>"
                           },
                           "zoneId": {
                             "type": "string",
                             "example": "ZONE-A",
-                            "x-parser-schema-id": "<anonymous-schema-119>"
+                            "x-parser-schema-id": "<anonymous-schema-120>"
                           },
                           "locationType": {
                             "type": "string",
                             "description": "Required (non-blank) when role is Storage or absent; not read for WorkCenter.",
                             "example": "BULK",
-                            "x-parser-schema-id": "<anonymous-schema-120>"
+                            "x-parser-schema-id": "<anonymous-schema-121>"
                           },
                           "role": {
                             "type": "string",
@@ -1538,22 +1545,22 @@
                             ],
                             "description": "Storage (default when absent or empty) tallies storage positions per locationType; WorkCenter tallies stations per activity. Any other value is skipped.",
                             "example": "Storage",
-                            "x-parser-schema-id": "<anonymous-schema-121>"
+                            "x-parser-schema-id": "<anonymous-schema-122>"
                           },
                           "activities": {
                             "type": "array",
                             "description": "Required (at least one) when role is WorkCenter; each is upper-cased to form the station tally key.",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-123>"
+                              "x-parser-schema-id": "<anonymous-schema-124>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-122>"
+                            "x-parser-schema-id": "<anonymous-schema-123>"
                           }
                         },
                         "x-parser-schema-id": "LocationSlotRegisteredData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-115>"
+                    "x-parser-schema-id": "<anonymous-schema-116>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotRegisteredEvent"
@@ -1604,11 +1611,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned",
-                        "x-parser-schema-id": "<anonymous-schema-125>"
+                        "x-parser-schema-id": "<anonymous-schema-126>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:facility-layout:events:LocationSlotDecommissioned:v1",
-                        "x-parser-schema-id": "<anonymous-schema-126>"
+                        "x-parser-schema-id": "<anonymous-schema-127>"
                       },
                       "data": {
                         "type": "object",
@@ -1620,13 +1627,13 @@
                           "locationCode": {
                             "type": "string",
                             "example": "A-01-01",
-                            "x-parser-schema-id": "<anonymous-schema-127>"
+                            "x-parser-schema-id": "<anonymous-schema-128>"
                           }
                         },
                         "x-parser-schema-id": "LocationSlotDecommissionedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-124>"
+                    "x-parser-schema-id": "<anonymous-schema-125>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotDecommissionedEvent"
@@ -1660,7 +1667,7 @@
       "publish": {
         "operationId": "consumeOrderAllocationEvents",
         "summary": "Consume order-management's order allocation events.",
-        "description": "Consumed by this service into a LOCAL expected-demand read model\n(`order_demand`, one row per order id; `GET /demand`,\n`get_expected_demand`, and the default of `POST /capacity-plans`\n`assigned_demand`). An order is demand in a window [start, end) when its\n`promise_date` (the promise cutoff) is at or after start and strictly\nbefore end. Last writer wins per order id on the CloudEvents `time`\n(a later or equal time replaces, an older one is a no-op). The\nidempotency claim on the CloudEvents `id` and the upsert commit in ONE\ndatabase transaction; the offset is committed only afterwards. order-\nmanagement's events carry no site, no quantities and no cancellations\n(OrderCancelled is analytics-topic only), so demand is counted in\nORDERS, attributed to the one configured site, and not netted; see\ndocs/adr/0004-demand-ingestion-from-order-management.md.\n",
+        "description": "Consumed by this service into a LOCAL expected-demand read model\n(`order_demand`, one row per order id; `GET /demand`,\n`get_expected_demand`, and the default of `POST /capacity-plans`\n`assigned_demand`). An order is demand in a window [start, end) when its\n`promise_date` (the promise cutoff) is at or after start and strictly\nbefore end. Last writer wins per order id on the CloudEvents `time`\n(a later or equal time replaces, an older one is a no-op). The\nidempotency claim on the CloudEvents `id` and the upsert commit in ONE\ndatabase transaction; the offset is committed only afterwards. order-\nmanagement's events carry no quantities and no cancellations\n(OrderCancelled is analytics-topic only), so demand is counted in\nORDERS and not netted; see\ndocs/adr/0004-demand-ingestion-from-order-management.md. An order is\nattributed to the event's optional `site_id`, or to the configured\nfallback site `DEMAND_SITE_ID` when it carries none\n(docs/adr/0021-order-demand-and-labour-read-the-events-own-site.md).\n",
         "tags": [
           {
             "name": "consumed"
@@ -1672,7 +1679,7 @@
               "name": "OrderAllocated",
               "title": "Order allocated (consumed)",
               "summary": "order-management allocated every line of an order and released the eligible ones.",
-              "description": "CONSUMED from `warehouse.order-management.events` (producer: order-management,\nits own `apis/asyncapi.yaml`). Upserts the order into the expected-demand read\nmodel: promise cutoff = `data.promise_date`, released lines = `len(data.lines)`,\nsite = the configured `DEMAND_SITE_ID` (the event carries none). `subject` must\nequal `data.order_id`. Deduped on the CloudEvents `id`; last writer wins per\norder on `time`. `type` =\n`com.warehouse.wes.order-management.order.OrderAllocated`.\n",
+              "description": "CONSUMED from `warehouse.order-management.events` (producer: order-management,\nits own `apis/asyncapi.yaml`). Upserts the order into the expected-demand read\nmodel: promise cutoff = `data.promise_date`, released lines = `len(data.lines)`,\nsite = `data.site_id`, or the configured `DEMAND_SITE_ID` when it is absent or\nblank (ADR 0021). `subject` must\nequal `data.order_id`. Deduped on the CloudEvents `id`; last writer wins per\norder on `time`. `type` =\n`com.warehouse.wes.order-management.order.OrderAllocated`.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -1691,11 +1698,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderAllocated",
-                        "x-parser-schema-id": "<anonymous-schema-129>"
+                        "x-parser-schema-id": "<anonymous-schema-130>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:events:OrderAllocated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-130>"
+                        "x-parser-schema-id": "<anonymous-schema-131>"
                       },
                       "data": {
                         "type": "object",
@@ -1705,18 +1712,24 @@
                           "promise_date"
                         ],
                         "properties": {
+                          "site_id": {
+                            "type": "string",
+                            "description": "Optional (order-management ADR 0050). The order's caller-assigned fulfillment site; the order's demand is attributed to it (surrounding space trimmed). Absent or blank means the configured fallback site DEMAND_SITE_ID (ADR 0021).",
+                            "example": "WH2",
+                            "x-parser-schema-id": "<anonymous-schema-132>"
+                          },
                           "order_id": {
                             "type": "string",
                             "description": "Must equal the CloudEvents `subject`.",
                             "example": "ord-7c9e6679-7d5a-4b37-b2f1-93b0c4a1d8f2",
-                            "x-parser-schema-id": "<anonymous-schema-131>"
+                            "x-parser-schema-id": "<anonymous-schema-133>"
                           },
                           "promise_date": {
                             "type": "string",
                             "format": "date-time",
                             "description": "The order's promise cutoff instant. The window predicate is applied to it.",
                             "example": "2026-10-05T10:00:00Z",
-                            "x-parser-schema-id": "<anonymous-schema-132>"
+                            "x-parser-schema-id": "<anonymous-schema-134>"
                           },
                           "lines": {
                             "type": "array",
@@ -1726,18 +1739,18 @@
                               "properties": {
                                 "line_no": {
                                   "type": "integer",
-                                  "x-parser-schema-id": "<anonymous-schema-135>"
+                                  "x-parser-schema-id": "<anonymous-schema-137>"
                                 }
                               },
-                              "x-parser-schema-id": "<anonymous-schema-134>"
+                              "x-parser-schema-id": "<anonymous-schema-136>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-133>"
+                            "x-parser-schema-id": "<anonymous-schema-135>"
                           }
                         },
                         "x-parser-schema-id": "OrderAllocationData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-128>"
+                    "x-parser-schema-id": "<anonymous-schema-129>"
                   }
                 ],
                 "x-parser-schema-id": "OrderAllocatedEvent"
@@ -1802,15 +1815,15 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderPartiallyAllocated",
-                        "x-parser-schema-id": "<anonymous-schema-137>"
+                        "x-parser-schema-id": "<anonymous-schema-139>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:events:OrderPartiallyAllocated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-138>"
+                        "x-parser-schema-id": "<anonymous-schema-140>"
                       },
                       "data": "$ref:$.channels.warehouse.order-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-136>"
+                    "x-parser-schema-id": "<anonymous-schema-138>"
                   }
                 ],
                 "x-parser-schema-id": "OrderPartiallyAllocatedEvent"
@@ -1856,11 +1869,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentBooked",
-                        "x-parser-schema-id": "<anonymous-schema-140>"
+                        "x-parser-schema-id": "<anonymous-schema-142>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:dock-scheduling:events:DockAppointmentBooked:v1",
-                        "x-parser-schema-id": "<anonymous-schema-141>"
+                        "x-parser-schema-id": "<anonymous-schema-143>"
                       },
                       "data": {
                         "type": "object",
@@ -1878,12 +1891,12 @@
                           "appointment_id": {
                             "type": "string",
                             "description": "Must equal the CloudEvents `subject`.",
-                            "x-parser-schema-id": "<anonymous-schema-142>"
+                            "x-parser-schema-id": "<anonymous-schema-144>"
                           },
                           "site_id": {
                             "type": "string",
                             "description": "The facility-layout siteCode the demand is attributed to.",
-                            "x-parser-schema-id": "<anonymous-schema-143>"
+                            "x-parser-schema-id": "<anonymous-schema-145>"
                           },
                           "direction": {
                             "type": "string",
@@ -1892,40 +1905,40 @@
                               "OUTBOUND"
                             ],
                             "description": "Only INBOUND appointments are demand.",
-                            "x-parser-schema-id": "<anonymous-schema-144>"
+                            "x-parser-schema-id": "<anonymous-schema-146>"
                           },
                           "window_start": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Door window start; the window predicate (ADR 0003) is applied to it.",
-                            "x-parser-schema-id": "<anonymous-schema-145>"
+                            "x-parser-schema-id": "<anonymous-schema-147>"
                           },
                           "window_end": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Must be after window_start.",
-                            "x-parser-schema-id": "<anonymous-schema-146>"
+                            "x-parser-schema-id": "<anonymous-schema-148>"
                           },
                           "asn_numbers": {
                             "type": "array",
                             "description": "Only its length is read (the ASN count that `minutes_per_asn` multiplies); at least one for an INBOUND booking, empty for an OUTBOUND one.",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-148>"
+                              "x-parser-schema-id": "<anonymous-schema-150>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-147>"
+                            "x-parser-schema-id": "<anonymous-schema-149>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "The aggregate version; the ordering key.",
-                            "x-parser-schema-id": "<anonymous-schema-149>"
+                            "x-parser-schema-id": "<anonymous-schema-151>"
                           }
                         },
                         "x-parser-schema-id": "DockAppointmentBookedData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-139>"
+                    "x-parser-schema-id": "<anonymous-schema-141>"
                   }
                 ],
                 "x-parser-schema-id": "DockAppointmentBookedEvent"
@@ -1988,11 +2001,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentRescheduled",
-                        "x-parser-schema-id": "<anonymous-schema-151>"
+                        "x-parser-schema-id": "<anonymous-schema-153>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:dock-scheduling:events:DockAppointmentRescheduled:v1",
-                        "x-parser-schema-id": "<anonymous-schema-152>"
+                        "x-parser-schema-id": "<anonymous-schema-154>"
                       },
                       "data": {
                         "type": "object",
@@ -2008,34 +2021,34 @@
                           "appointment_id": {
                             "type": "string",
                             "description": "Must equal the CloudEvents `subject`.",
-                            "x-parser-schema-id": "<anonymous-schema-153>"
+                            "x-parser-schema-id": "<anonymous-schema-155>"
                           },
                           "site_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-154>"
+                            "x-parser-schema-id": "<anonymous-schema-156>"
                           },
                           "window_start": {
                             "type": "string",
                             "format": "date-time",
                             "description": "The new door window start.",
-                            "x-parser-schema-id": "<anonymous-schema-155>"
+                            "x-parser-schema-id": "<anonymous-schema-157>"
                           },
                           "window_end": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Must be after window_start.",
-                            "x-parser-schema-id": "<anonymous-schema-156>"
+                            "x-parser-schema-id": "<anonymous-schema-158>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-157>"
+                            "x-parser-schema-id": "<anonymous-schema-159>"
                           }
                         },
                         "x-parser-schema-id": "DockAppointmentRescheduledData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-150>"
+                    "x-parser-schema-id": "<anonymous-schema-152>"
                   }
                 ],
                 "x-parser-schema-id": "DockAppointmentRescheduledEvent"
@@ -2090,11 +2103,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentCancelled",
-                        "x-parser-schema-id": "<anonymous-schema-159>"
+                        "x-parser-schema-id": "<anonymous-schema-161>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:dock-scheduling:events:DockAppointmentCancelled:v1",
-                        "x-parser-schema-id": "<anonymous-schema-160>"
+                        "x-parser-schema-id": "<anonymous-schema-162>"
                       },
                       "data": {
                         "type": "object",
@@ -2108,22 +2121,22 @@
                           "appointment_id": {
                             "type": "string",
                             "description": "Must equal the CloudEvents `subject`.",
-                            "x-parser-schema-id": "<anonymous-schema-161>"
+                            "x-parser-schema-id": "<anonymous-schema-163>"
                           },
                           "site_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-162>"
+                            "x-parser-schema-id": "<anonymous-schema-164>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-163>"
+                            "x-parser-schema-id": "<anonymous-schema-165>"
                           }
                         },
                         "x-parser-schema-id": "DockAppointmentCancelledData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-158>"
+                    "x-parser-schema-id": "<anonymous-schema-160>"
                   }
                 ],
                 "x-parser-schema-id": "DockAppointmentCancelledEvent"
@@ -2175,11 +2188,11 @@
                     "properties": {
                       "type": {
                         "const": "com.warehouse.wms.dock-scheduling.dockappointment.DockAppointmentNoShow",
-                        "x-parser-schema-id": "<anonymous-schema-165>"
+                        "x-parser-schema-id": "<anonymous-schema-167>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:dock-scheduling:events:DockAppointmentNoShow:v1",
-                        "x-parser-schema-id": "<anonymous-schema-166>"
+                        "x-parser-schema-id": "<anonymous-schema-168>"
                       },
                       "data": {
                         "type": "object",
@@ -2194,11 +2207,11 @@
                           "appointment_id": {
                             "type": "string",
                             "description": "Must equal the CloudEvents `subject`.",
-                            "x-parser-schema-id": "<anonymous-schema-167>"
+                            "x-parser-schema-id": "<anonymous-schema-169>"
                           },
                           "site_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-168>"
+                            "x-parser-schema-id": "<anonymous-schema-170>"
                           },
                           "direction": {
                             "type": "string",
@@ -2206,18 +2219,18 @@
                               "INBOUND",
                               "OUTBOUND"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-169>"
+                            "x-parser-schema-id": "<anonymous-schema-171>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-170>"
+                            "x-parser-schema-id": "<anonymous-schema-172>"
                           }
                         },
                         "x-parser-schema-id": "DockAppointmentNoShowData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-164>"
+                    "x-parser-schema-id": "<anonymous-schema-166>"
                   }
                 ],
                 "x-parser-schema-id": "DockAppointmentNoShowEvent"
@@ -2286,11 +2299,11 @@
                 "properties": {
                   "type": {
                     "const": "com.warehouse.wes.fulfillment-execution.task.TaskCompleted",
-                    "x-parser-schema-id": "<anonymous-schema-172>"
+                    "x-parser-schema-id": "<anonymous-schema-174>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:fulfillment-execution:events:TaskCompleted:v1",
-                    "x-parser-schema-id": "<anonymous-schema-173>"
+                    "x-parser-schema-id": "<anonymous-schema-175>"
                   },
                   "data": {
                     "type": "object",
@@ -2303,26 +2316,26 @@
                       "task_id": {
                         "type": "string",
                         "description": "Must equal the CloudEvents `subject`; a mismatch or a blank value is dead-lettered.",
-                        "x-parser-schema-id": "<anonymous-schema-174>"
+                        "x-parser-schema-id": "<anonymous-schema-176>"
                       },
                       "task_type": {
                         "type": "string",
                         "description": "The process step (PICK, PACK, ...); upper-cased to form the read model's process_type.",
                         "example": "PICK",
-                        "x-parser-schema-id": "<anonymous-schema-175>"
+                        "x-parser-schema-id": "<anonymous-schema-177>"
                       },
                       "duration_seconds": {
                         "type": "integer",
                         "format": "int64",
                         "minimum": 0,
                         "description": "Optional; completions without it count as tasks but do not contribute to the mean duration.",
-                        "x-parser-schema-id": "<anonymous-schema-176>"
+                        "x-parser-schema-id": "<anonymous-schema-178>"
                       }
                     },
                     "x-parser-schema-id": "TaskCompletedData"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-171>"
+                "x-parser-schema-id": "<anonymous-schema-173>"
               }
             ],
             "x-parser-schema-id": "TaskCompletedEvent"

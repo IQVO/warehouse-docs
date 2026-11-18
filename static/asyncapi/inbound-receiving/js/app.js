@@ -62,6 +62,9 @@
           },
           {
             "name": "receipt"
+          },
+          {
+            "name": "policy"
           }
         ],
         "message": {
@@ -1044,7 +1047,7 @@
               "name": "ReceiptClosed",
               "title": "Receipt closed",
               "summary": "Receiving ended, with the discrepancies against the ASN.",
-              "description": "`type` = `com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed`;\nsubject = the receipt id, key = the ASN number. `discrepancies` is\npresent and empty when everything matched; a line can appear once per\nkind (`Short`, `Over`, `Damaged`); each carries `w13_code` and\n`cbv_disposition` (ADR 0023).\n",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.receipt.ReceiptClosed`;\nsubject = the receipt id, key = the ASN number. `discrepancies` is\npresent and empty when everything matched; a line can appear once per\nkind (`Short`, `Over`, `Damaged`); each carries `w13_code` and\n`cbv_disposition` (ADR 0023). Under a declared receiving policy (ADR 0026) the\nclose judges each line against the band: a within-band variance raises no finding,\nan override raises `OverTolerance` (W13 `03`) or `UnderTolerance` (W13 `02`) with\nthe `reason_code` the operator gave, and the optional `tolerance` object names the\nband the close was judged under (present exactly when a policy was applied).\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -1107,8 +1110,11 @@
                                   "enum": [
                                     "Short",
                                     "Over",
-                                    "Damaged"
+                                    "Damaged",
+                                    "OverTolerance",
+                                    "UnderTolerance"
                                   ],
+                                  "description": "`OverTolerance` and `UnderTolerance` (ADR 0026) replace `Over`/`Short` on a line whose variance an operator overrode; a within-band variance raises no kind.",
                                   "x-parser-schema-id": "<anonymous-schema-118>"
                                 },
                                 "expected_qty": {
@@ -1134,7 +1140,7 @@
                                     "02",
                                     "03"
                                   ],
-                                  "description": "X12 W13 receiving condition code of the kind (ADR 0023): Damaged 01, Short 02, Over 03.",
+                                  "description": "X12 W13 receiving condition code of the kind (ADR 0023): Damaged 01, Short 02, Over 03; UnderTolerance 02, OverTolerance 03 (ADR 0026).",
                                   "x-parser-schema-id": "<anonymous-schema-122>"
                                 },
                                 "cbv_disposition": {
@@ -1145,11 +1151,63 @@
                                   ],
                                   "description": "GS1 CBV disposition of the kind (ADR 0023).",
                                   "x-parser-schema-id": "<anonymous-schema-123>"
+                                },
+                                "reason_code": {
+                                  "type": "string",
+                                  "enum": [
+                                    "supplier-agreed",
+                                    "damaged-in-transit-recounted",
+                                    "mislabelled-recounted",
+                                    "recount-confirmed"
+                                  ],
+                                  "description": "The override reason (ADR 0026); present exactly on `OverTolerance` and `UnderTolerance`.",
+                                  "x-parser-schema-id": "<anonymous-schema-124>"
                                 }
                               },
                               "x-parser-schema-id": "DiscrepancyData"
                             },
                             "x-parser-schema-id": "<anonymous-schema-115>"
+                          },
+                          "tolerance": {
+                            "type": "object",
+                            "description": "The receiving policy the close was judged under (ADR 0026); present exactly when a policy was applied.",
+                            "required": [
+                              "over_tolerance",
+                              "under_tolerance",
+                              "over_hard_stop",
+                              "under_hard_stop"
+                            ],
+                            "properties": {
+                              "over_tolerance": {
+                                "type": "number",
+                                "format": "double",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "x-parser-schema-id": "<anonymous-schema-126>"
+                              },
+                              "under_tolerance": {
+                                "type": "number",
+                                "format": "double",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "x-parser-schema-id": "<anonymous-schema-127>"
+                              },
+                              "over_hard_stop": {
+                                "type": "number",
+                                "format": "double",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "x-parser-schema-id": "<anonymous-schema-128>"
+                              },
+                              "under_hard_stop": {
+                                "type": "number",
+                                "format": "double",
+                                "minimum": 0,
+                                "maximum": 1,
+                                "x-parser-schema-id": "<anonymous-schema-129>"
+                              }
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-125>"
                           }
                         },
                         "x-parser-schema-id": "<anonymous-schema-111>"
@@ -1241,51 +1299,51 @@
                         "properties": {
                           "receipt_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-126>"
+                            "x-parser-schema-id": "<anonymous-schema-132>"
                           },
                           "asn_number": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-127>"
+                            "x-parser-schema-id": "<anonymous-schema-133>"
                           },
                           "appointment_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-128>"
+                            "x-parser-schema-id": "<anonymous-schema-134>"
                           },
                           "arrived_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "yard-management's gate arrival.",
-                            "x-parser-schema-id": "<anonymous-schema-129>"
+                            "x-parser-schema-id": "<anonymous-schema-135>"
                           },
                           "closed_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-130>"
+                            "x-parser-schema-id": "<anonymous-schema-136>"
                           },
                           "stowed_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "The latest stow of a Good carton.",
-                            "x-parser-schema-id": "<anonymous-schema-131>"
+                            "x-parser-schema-id": "<anonymous-schema-137>"
                           },
                           "dock_to_stock_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "minimum": 0,
                             "description": "stowed_at - arrived_at, clamped at 0.",
-                            "x-parser-schema-id": "<anonymous-schema-132>"
+                            "x-parser-schema-id": "<anonymous-schema-138>"
                           },
                           "carton_count": {
                             "type": "integer",
                             "minimum": 1,
                             "description": "How many Good cartons were stowed.",
-                            "x-parser-schema-id": "<anonymous-schema-133>"
+                            "x-parser-schema-id": "<anonymous-schema-139>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-125>"
+                        "x-parser-schema-id": "<anonymous-schema-131>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-124>"
+                    "x-parser-schema-id": "<anonymous-schema-130>"
                   }
                 ],
                 "x-parser-schema-id": "ReceiptStowCompletedEvent"
@@ -1353,49 +1411,49 @@
                         "properties": {
                           "receipt_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-136>"
+                            "x-parser-schema-id": "<anonymous-schema-142>"
                           },
                           "asn_number": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-137>"
+                            "x-parser-schema-id": "<anonymous-schema-143>"
                           },
                           "despatch_advice_ref": {
                             "type": "string",
                             "description": "The reference to the despatch advice: the ASN number.",
-                            "x-parser-schema-id": "<anonymous-schema-138>"
+                            "x-parser-schema-id": "<anonymous-schema-144>"
                           },
                           "supplier_ref": {
                             "type": "string",
                             "description": "The supplier as the ASN knows it.",
-                            "x-parser-schema-id": "<anonymous-schema-139>"
+                            "x-parser-schema-id": "<anonymous-schema-145>"
                           },
                           "owner_ref": {
                             "type": "string",
                             "description": "The 3PL depositor. Omitted for fleet-owned stock.",
-                            "x-parser-schema-id": "<anonymous-schema-140>"
+                            "x-parser-schema-id": "<anonymous-schema-146>"
                           },
                           "issued_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-141>"
+                            "x-parser-schema-id": "<anonymous-schema-147>"
                           },
                           "last_carton_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the last unit was received; the receipt's opening when nothing was.",
-                            "x-parser-schema-id": "<anonymous-schema-142>"
+                            "x-parser-schema-id": "<anonymous-schema-148>"
                           },
                           "sla_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "minimum": 1,
                             "description": "The committed window (RECEIVING_ADVICE_SLA) in force at close.",
-                            "x-parser-schema-id": "<anonymous-schema-143>"
+                            "x-parser-schema-id": "<anonymous-schema-149>"
                           },
                           "within_sla": {
                             "type": "boolean",
                             "description": "issued_at - last_carton_at <= sla_seconds.",
-                            "x-parser-schema-id": "<anonymous-schema-144>"
+                            "x-parser-schema-id": "<anonymous-schema-150>"
                           },
                           "lines": {
                             "type": "array",
@@ -1418,52 +1476,52 @@
                                 "line_no": {
                                   "type": "integer",
                                   "minimum": 1,
-                                  "x-parser-schema-id": "<anonymous-schema-147>"
+                                  "x-parser-schema-id": "<anonymous-schema-153>"
                                 },
                                 "sku": {
                                   "type": "string",
-                                  "x-parser-schema-id": "<anonymous-schema-148>"
+                                  "x-parser-schema-id": "<anonymous-schema-154>"
                                 },
                                 "gtin": {
                                   "type": "string",
                                   "pattern": "^[0-9]{14}$",
                                   "description": "Omitted when the line has no known GTIN.",
-                                  "x-parser-schema-id": "<anonymous-schema-149>"
+                                  "x-parser-schema-id": "<anonymous-schema-155>"
                                 },
                                 "expected_qty": {
                                   "type": "integer",
                                   "minimum": 0,
-                                  "x-parser-schema-id": "<anonymous-schema-150>"
+                                  "x-parser-schema-id": "<anonymous-schema-156>"
                                 },
                                 "received_qty": {
                                   "type": "integer",
                                   "minimum": 0,
                                   "description": "Accepted plus rejected plus held.",
-                                  "x-parser-schema-id": "<anonymous-schema-151>"
+                                  "x-parser-schema-id": "<anonymous-schema-157>"
                                 },
                                 "accepted_qty": {
                                   "type": "integer",
                                   "minimum": 0,
                                   "description": "The Good units that are not held.",
-                                  "x-parser-schema-id": "<anonymous-schema-152>"
+                                  "x-parser-schema-id": "<anonymous-schema-158>"
                                 },
                                 "rejected_qty": {
                                   "type": "integer",
                                   "minimum": 0,
                                   "description": "The Damaged units.",
-                                  "x-parser-schema-id": "<anonymous-schema-153>"
+                                  "x-parser-schema-id": "<anonymous-schema-159>"
                                 },
                                 "held_qty": {
                                   "type": "integer",
                                   "minimum": 0,
                                   "description": "The Good units declared held by the Hold command.",
-                                  "x-parser-schema-id": "<anonymous-schema-154>"
+                                  "x-parser-schema-id": "<anonymous-schema-160>"
                                 },
                                 "sscc_count": {
                                   "type": "integer",
                                   "minimum": 0,
                                   "description": "The real number of SSCCs received on the line.",
-                                  "x-parser-schema-id": "<anonymous-schema-155>"
+                                  "x-parser-schema-id": "<anonymous-schema-161>"
                                 },
                                 "ssccs": {
                                   "type": "array",
@@ -1471,26 +1529,26 @@
                                   "items": {
                                     "type": "string",
                                     "pattern": "^[0-9]{18}$",
-                                    "x-parser-schema-id": "<anonymous-schema-157>"
+                                    "x-parser-schema-id": "<anonymous-schema-163>"
                                   },
-                                  "x-parser-schema-id": "<anonymous-schema-156>"
+                                  "x-parser-schema-id": "<anonymous-schema-162>"
                                 },
                                 "ssccs_truncated": {
                                   "type": "boolean",
                                   "description": "True when ssccs lists fewer than sscc_count. Omitted when false.",
-                                  "x-parser-schema-id": "<anonymous-schema-158>"
+                                  "x-parser-schema-id": "<anonymous-schema-164>"
                                 },
                                 "earliest_best_before": {
                                   "type": "string",
                                   "format": "date",
                                   "description": "The earliest best-before date (AI 15) of the accepted cartons of the line (ADR 0024). Omitted when none carried one.",
-                                  "x-parser-schema-id": "<anonymous-schema-159>"
+                                  "x-parser-schema-id": "<anonymous-schema-165>"
                                 },
                                 "earliest_expiry": {
                                   "type": "string",
                                   "format": "date",
                                   "description": "The earliest expiry date (AI 17) of the accepted cartons of the line (ADR 0024). Omitted when none carried one.",
-                                  "x-parser-schema-id": "<anonymous-schema-160>"
+                                  "x-parser-schema-id": "<anonymous-schema-166>"
                                 },
                                 "discrepancies": {
                                   "type": "array",
@@ -1509,14 +1567,16 @@
                                           "Over",
                                           "Damaged",
                                           "IncorrectProduct",
-                                          "Hold"
+                                          "Hold",
+                                          "OverTolerance",
+                                          "UnderTolerance"
                                         ],
-                                        "x-parser-schema-id": "<anonymous-schema-163>"
+                                        "x-parser-schema-id": "<anonymous-schema-169>"
                                       },
                                       "quantity": {
                                         "type": "integer",
                                         "minimum": 1,
-                                        "x-parser-schema-id": "<anonymous-schema-164>"
+                                        "x-parser-schema-id": "<anonymous-schema-170>"
                                       },
                                       "w13_code": {
                                         "type": "string",
@@ -1527,7 +1587,7 @@
                                           "05",
                                           "09"
                                         ],
-                                        "x-parser-schema-id": "<anonymous-schema-165>"
+                                        "x-parser-schema-id": "<anonymous-schema-171>"
                                       },
                                       "cbv_disposition": {
                                         "type": "string",
@@ -1537,28 +1597,39 @@
                                           "mismatch_class",
                                           "non_conformant"
                                         ],
-                                        "x-parser-schema-id": "<anonymous-schema-166>"
+                                        "x-parser-schema-id": "<anonymous-schema-172>"
+                                      },
+                                      "reason_code": {
+                                        "type": "string",
+                                        "enum": [
+                                          "supplier-agreed",
+                                          "damaged-in-transit-recounted",
+                                          "mislabelled-recounted",
+                                          "recount-confirmed"
+                                        ],
+                                        "description": "The override reason (ADR 0026); present exactly on OverTolerance and UnderTolerance.",
+                                        "x-parser-schema-id": "<anonymous-schema-173>"
                                       }
                                     },
-                                    "x-parser-schema-id": "<anonymous-schema-162>"
+                                    "x-parser-schema-id": "<anonymous-schema-168>"
                                   },
-                                  "x-parser-schema-id": "<anonymous-schema-161>"
+                                  "x-parser-schema-id": "<anonymous-schema-167>"
                                 }
                               },
-                              "x-parser-schema-id": "<anonymous-schema-146>"
+                              "x-parser-schema-id": "<anonymous-schema-152>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-145>"
+                            "x-parser-schema-id": "<anonymous-schema-151>"
                           },
                           "lines_total": {
                             "type": "integer",
                             "minimum": 0,
                             "description": "The real number of lines.",
-                            "x-parser-schema-id": "<anonymous-schema-167>"
+                            "x-parser-schema-id": "<anonymous-schema-174>"
                           },
                           "lines_truncated": {
                             "type": "boolean",
                             "description": "True when lines lists fewer than lines_total. Omitted when false.",
-                            "x-parser-schema-id": "<anonymous-schema-168>"
+                            "x-parser-schema-id": "<anonymous-schema-175>"
                           },
                           "carton_findings": {
                             "type": "array",
@@ -1572,24 +1643,24 @@
                               "properties": {
                                 "kind": {
                                   "type": "string",
-                                  "x-parser-schema-id": "<anonymous-schema-171>"
+                                  "x-parser-schema-id": "<anonymous-schema-178>"
                                 },
                                 "sscc": {
                                   "type": "string",
-                                  "x-parser-schema-id": "<anonymous-schema-172>"
+                                  "x-parser-schema-id": "<anonymous-schema-179>"
                                 },
                                 "expected": {
                                   "type": "string",
-                                  "x-parser-schema-id": "<anonymous-schema-173>"
+                                  "x-parser-schema-id": "<anonymous-schema-180>"
                                 },
                                 "actual": {
                                   "type": "string",
-                                  "x-parser-schema-id": "<anonymous-schema-174>"
+                                  "x-parser-schema-id": "<anonymous-schema-181>"
                                 },
                                 "at": {
                                   "type": "string",
                                   "format": "date-time",
-                                  "x-parser-schema-id": "<anonymous-schema-175>"
+                                  "x-parser-schema-id": "<anonymous-schema-182>"
                                 },
                                 "w13_code": {
                                   "type": "string",
@@ -1601,32 +1672,32 @@
                                     "09"
                                   ],
                                   "description": "Absent for a kind with no W13 code.",
-                                  "x-parser-schema-id": "<anonymous-schema-176>"
+                                  "x-parser-schema-id": "<anonymous-schema-183>"
                                 },
                                 "cbv_disposition": {
                                   "type": "string",
-                                  "x-parser-schema-id": "<anonymous-schema-177>"
+                                  "x-parser-schema-id": "<anonymous-schema-184>"
                                 },
                                 "supplier_ref": {
                                   "type": "string",
                                   "description": "Set on label findings (ADR 0024).",
-                                  "x-parser-schema-id": "<anonymous-schema-178>"
+                                  "x-parser-schema-id": "<anonymous-schema-185>"
                                 }
                               },
-                              "x-parser-schema-id": "<anonymous-schema-170>"
+                              "x-parser-schema-id": "<anonymous-schema-177>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-169>"
+                            "x-parser-schema-id": "<anonymous-schema-176>"
                           },
                           "carton_findings_total": {
                             "type": "integer",
                             "minimum": 0,
-                            "x-parser-schema-id": "<anonymous-schema-179>"
+                            "x-parser-schema-id": "<anonymous-schema-186>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-135>"
+                        "x-parser-schema-id": "<anonymous-schema-141>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-134>"
+                    "x-parser-schema-id": "<anonymous-schema-140>"
                   }
                 ],
                 "x-parser-schema-id": "ReceivingAdviceIssuedEvent"
@@ -1731,40 +1802,40 @@
                         "properties": {
                           "receipt_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-182>"
+                            "x-parser-schema-id": "<anonymous-schema-189>"
                           },
                           "asn_number": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-183>"
+                            "x-parser-schema-id": "<anonymous-schema-190>"
                           },
                           "last_carton_at": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-184>"
+                            "x-parser-schema-id": "<anonymous-schema-191>"
                           },
                           "due_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "last_carton_at + sla_seconds.",
-                            "x-parser-schema-id": "<anonymous-schema-185>"
+                            "x-parser-schema-id": "<anonymous-schema-192>"
                           },
                           "sla_seconds": {
                             "type": "integer",
                             "format": "int64",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-186>"
+                            "x-parser-schema-id": "<anonymous-schema-193>"
                           },
                           "overdue_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When the sweep saw the receipt past due.",
-                            "x-parser-schema-id": "<anonymous-schema-187>"
+                            "x-parser-schema-id": "<anonymous-schema-194>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-181>"
+                        "x-parser-schema-id": "<anonymous-schema-188>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-180>"
+                    "x-parser-schema-id": "<anonymous-schema-187>"
                   }
                 ],
                 "x-parser-schema-id": "ReceivingAdviceOverdueEvent"
@@ -1788,6 +1859,122 @@
                       "due_at": "2026-10-10T09:10:00Z",
                       "sla_seconds": 86400,
                       "overdue_at": "2026-10-10T10:00:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "x-no-consumer-reason": "none yet: a declaration others will copy later (supplier-compliance scorecards, quality-inspection sampling, trusted-ASN); no consumer exists and none is invented (ADR 0026)",
+              "name": "ReceivingPolicyDeclared",
+              "title": "Receiving policy declared",
+              "summary": "A receiving tolerance policy was created or replaced.",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.policy.ReceivingPolicyDeclared`; subject and\nkey = the supplier reference (owner variants of one supplier are independent declarations).\nRaised by `POST /receiving-policies` in the same transaction as the upsert (ADR 0026).\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "policy"
+                }
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "data": {
+                        "type": "object",
+                        "required": [
+                          "supplier_ref",
+                          "over_tolerance",
+                          "under_tolerance",
+                          "over_hard_stop",
+                          "under_hard_stop",
+                          "version",
+                          "declared_at"
+                        ],
+                        "properties": {
+                          "supplier_ref": {
+                            "type": "string",
+                            "minLength": 1,
+                            "maxLength": 64,
+                            "x-parser-schema-id": "<anonymous-schema-197>"
+                          },
+                          "owner_ref": {
+                            "type": "string",
+                            "description": "The 3PL depositor; omitted for the house default.",
+                            "x-parser-schema-id": "<anonymous-schema-198>"
+                          },
+                          "over_tolerance": {
+                            "type": "number",
+                            "format": "double",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-199>"
+                          },
+                          "under_tolerance": {
+                            "type": "number",
+                            "format": "double",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-200>"
+                          },
+                          "over_hard_stop": {
+                            "type": "number",
+                            "format": "double",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-201>"
+                          },
+                          "under_hard_stop": {
+                            "type": "number",
+                            "format": "double",
+                            "minimum": 0,
+                            "maximum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-202>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 1,
+                            "description": "1 on create, +1 per replace.",
+                            "x-parser-schema-id": "<anonymous-schema-203>"
+                          },
+                          "declared_at": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-204>"
+                          }
+                        },
+                        "x-parser-schema-id": "<anonymous-schema-196>"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-195>"
+                  }
+                ],
+                "x-parser-schema-id": "ReceivingPolicyDeclaredEvent"
+              },
+              "examples": [
+                {
+                  "name": "declared",
+                  "summary": "ACME house-default policy created.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7c9e1b3d-5a2f-4d68-8b04-1e2f3a4b5c6d",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.policy.ReceivingPolicyDeclared",
+                    "subject": "ACME",
+                    "time": "2026-11-13T10:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:events:ReceivingPolicyDeclared:v1",
+                    "data": {
+                      "supplier_ref": "ACME",
+                      "over_tolerance": 0.05,
+                      "under_tolerance": 0.05,
+                      "over_hard_stop": 0.2,
+                      "under_hard_stop": 0.3,
+                      "version": 1,
+                      "declared_at": "2026-11-13T10:00:00Z"
                     }
                   }
                 }
@@ -2298,6 +2485,44 @@
                   }
                 }
               ]
+            },
+            {
+              "name": "ReceivingPolicyDeclared",
+              "title": "Receiving policy declared (analytics)",
+              "summary": "A receiving tolerance policy was created or replaced, on the analytics stream.",
+              "description": "`type` = `com.warehouse.wms.inbound-receiving.policy.ReceivingPolicyDeclared` (the same as on the integration topic); dataschema `urn:warehouse:inbound-receiving:analytics:ReceivingPolicyDeclared:v1`; payload equal to the integration payload. The projector does not fold it (the tolerance block reads closes, not declarations).",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "analytics"
+                }
+              ],
+              "payload": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[11].payload",
+              "examples": [
+                {
+                  "name": "analytics",
+                  "summary": "The analytics copy of the integration example (same id).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7c9e1b3d-5a2f-4d68-8b04-1e2f3a4b5c6d",
+                    "source": "/warehouse/inbound-receiving",
+                    "type": "com.warehouse.wms.inbound-receiving.policy.ReceivingPolicyDeclared",
+                    "subject": "ACME",
+                    "time": "2026-11-13T10:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:inbound-receiving:analytics:ReceivingPolicyDeclared:v1",
+                    "data": {
+                      "supplier_ref": "ACME",
+                      "over_tolerance": 0.05,
+                      "under_tolerance": 0.05,
+                      "over_hard_stop": 0.2,
+                      "under_hard_stop": 0.3,
+                      "version": 1,
+                      "declared_at": "2026-11-13T10:00:00Z"
+                    }
+                  }
+                }
+              ]
             }
           ]
         }
@@ -2343,22 +2568,22 @@
                         "properties": {
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-190>"
+                            "x-parser-schema-id": "<anonymous-schema-207>"
                           },
                           "description": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-191>"
+                            "x-parser-schema-id": "<anonymous-schema-208>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-192>"
+                            "x-parser-schema-id": "<anonymous-schema-209>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-189>"
+                        "x-parser-schema-id": "<anonymous-schema-206>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-188>"
+                    "x-parser-schema-id": "<anonymous-schema-205>"
                   }
                 ],
                 "x-parser-schema-id": "ProductRegisteredEvent"
@@ -2417,7 +2642,7 @@
                         "properties": {
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-195>"
+                            "x-parser-schema-id": "<anonymous-schema-212>"
                           },
                           "level": {
                             "type": "string",
@@ -2427,55 +2652,55 @@
                               "CASE",
                               "PALLET"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-196>"
+                            "x-parser-schema-id": "<anonymous-schema-213>"
                           },
                           "gtin": {
                             "type": "string",
                             "pattern": "^[0-9]{14}$",
-                            "x-parser-schema-id": "<anonymous-schema-197>"
+                            "x-parser-schema-id": "<anonymous-schema-214>"
                           },
                           "child_gtin": {
                             "type": "string",
                             "pattern": "^[0-9]{14}$",
-                            "x-parser-schema-id": "<anonymous-schema-198>"
+                            "x-parser-schema-id": "<anonymous-schema-215>"
                           },
                           "qty_of_child": {
                             "type": "integer",
                             "minimum": 2,
                             "maximum": 1000000,
                             "description": "Absent for EACH.",
-                            "x-parser-schema-id": "<anonymous-schema-199>"
+                            "x-parser-schema-id": "<anonymous-schema-216>"
                           },
                           "units_per_pack": {
                             "type": "integer",
                             "minimum": 1,
                             "maximum": 1000000,
                             "description": "Direct factor to eaches; 1 for EACH.",
-                            "x-parser-schema-id": "<anonymous-schema-200>"
+                            "x-parser-schema-id": "<anonymous-schema-217>"
                           },
                           "is_orderable": {
                             "type": "boolean",
-                            "x-parser-schema-id": "<anonymous-schema-201>"
+                            "x-parser-schema-id": "<anonymous-schema-218>"
                           },
                           "is_despatch_unit": {
                             "type": "boolean",
-                            "x-parser-schema-id": "<anonymous-schema-202>"
+                            "x-parser-schema-id": "<anonymous-schema-219>"
                           },
                           "effective_from": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-203>"
+                            "x-parser-schema-id": "<anonymous-schema-220>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-204>"
+                            "x-parser-schema-id": "<anonymous-schema-221>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-194>"
+                        "x-parser-schema-id": "<anonymous-schema-211>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-193>"
+                    "x-parser-schema-id": "<anonymous-schema-210>"
                   }
                 ],
                 "x-parser-schema-id": "ProductPackLevelDeclaredEvent"
@@ -2511,7 +2736,7 @@
                         "properties": {
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-207>"
+                            "x-parser-schema-id": "<anonymous-schema-224>"
                           },
                           "level": {
                             "type": "string",
@@ -2521,34 +2746,34 @@
                               "CASE",
                               "PALLET"
                             ],
-                            "x-parser-schema-id": "<anonymous-schema-208>"
+                            "x-parser-schema-id": "<anonymous-schema-225>"
                           },
                           "gtin": {
                             "type": "string",
                             "pattern": "^[0-9]{14}$",
-                            "x-parser-schema-id": "<anonymous-schema-209>"
+                            "x-parser-schema-id": "<anonymous-schema-226>"
                           },
                           "effective_to": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-210>"
+                            "x-parser-schema-id": "<anonymous-schema-227>"
                           },
                           "reason": {
                             "type": "string",
                             "minLength": 1,
                             "maxLength": 200,
-                            "x-parser-schema-id": "<anonymous-schema-211>"
+                            "x-parser-schema-id": "<anonymous-schema-228>"
                           },
                           "version": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-212>"
+                            "x-parser-schema-id": "<anonymous-schema-229>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-206>"
+                        "x-parser-schema-id": "<anonymous-schema-223>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-205>"
+                    "x-parser-schema-id": "<anonymous-schema-222>"
                   }
                 ],
                 "x-parser-schema-id": "ProductPackLevelRetiredEvent"
@@ -2601,37 +2826,37 @@
                         "properties": {
                           "eventName": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-215>"
+                            "x-parser-schema-id": "<anonymous-schema-232>"
                           },
                           "eventType": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-216>"
+                            "x-parser-schema-id": "<anonymous-schema-233>"
                           },
                           "occurredAt": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-217>"
+                            "x-parser-schema-id": "<anonymous-schema-234>"
                           },
                           "locationCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-218>"
+                            "x-parser-schema-id": "<anonymous-schema-235>"
                           },
                           "aisleId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-219>"
+                            "x-parser-schema-id": "<anonymous-schema-236>"
                           },
                           "zoneId": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-220>"
+                            "x-parser-schema-id": "<anonymous-schema-237>"
                           },
                           "locationType": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-221>"
+                            "x-parser-schema-id": "<anonymous-schema-238>"
                           },
                           "role": {
                             "type": "string",
                             "description": "Storage, Dock, Yard, WorkCenter, Drop, Staging, QC, Consolidation or Shipping; absent means Storage.",
-                            "x-parser-schema-id": "<anonymous-schema-222>"
+                            "x-parser-schema-id": "<anonymous-schema-239>"
                           },
                           "dockFlow": {
                             "type": "string",
@@ -2641,30 +2866,30 @@
                               "Both"
                             ],
                             "description": "Present only when role is Dock.",
-                            "x-parser-schema-id": "<anonymous-schema-223>"
+                            "x-parser-schema-id": "<anonymous-schema-240>"
                           },
                           "activities": {
                             "type": "array",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-225>"
+                              "x-parser-schema-id": "<anonymous-schema-242>"
                             },
                             "description": "Present only when role is WorkCenter.",
-                            "x-parser-schema-id": "<anonymous-schema-224>"
+                            "x-parser-schema-id": "<anonymous-schema-241>"
                           },
                           "maxWeightKg": {
                             "type": "number",
-                            "x-parser-schema-id": "<anonymous-schema-226>"
+                            "x-parser-schema-id": "<anonymous-schema-243>"
                           },
                           "maxVolumeM3": {
                             "type": "number",
-                            "x-parser-schema-id": "<anonymous-schema-227>"
+                            "x-parser-schema-id": "<anonymous-schema-244>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-214>"
+                        "x-parser-schema-id": "<anonymous-schema-231>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-213>"
+                    "x-parser-schema-id": "<anonymous-schema-230>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotRegisteredEvent"
@@ -2724,26 +2949,26 @@
                         "properties": {
                           "eventName": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-230>"
+                            "x-parser-schema-id": "<anonymous-schema-247>"
                           },
                           "eventType": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-231>"
+                            "x-parser-schema-id": "<anonymous-schema-248>"
                           },
                           "occurredAt": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-232>"
+                            "x-parser-schema-id": "<anonymous-schema-249>"
                           },
                           "locationCode": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-233>"
+                            "x-parser-schema-id": "<anonymous-schema-250>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-229>"
+                        "x-parser-schema-id": "<anonymous-schema-246>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-228>"
+                    "x-parser-schema-id": "<anonymous-schema-245>"
                   }
                 ],
                 "x-parser-schema-id": "LocationSlotDecommissionedEvent"
@@ -2820,7 +3045,7 @@
                         "properties": {
                           "appointment_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-236>"
+                            "x-parser-schema-id": "<anonymous-schema-253>"
                           },
                           "direction": {
                             "type": "string",
@@ -2829,47 +3054,47 @@
                               "OUTBOUND"
                             ],
                             "description": "Only INBOUND is copied.",
-                            "x-parser-schema-id": "<anonymous-schema-237>"
+                            "x-parser-schema-id": "<anonymous-schema-254>"
                           },
                           "door_code": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-238>"
+                            "x-parser-schema-id": "<anonymous-schema-255>"
                           },
                           "carrier": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-239>"
+                            "x-parser-schema-id": "<anonymous-schema-256>"
                           },
                           "window_start": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-240>"
+                            "x-parser-schema-id": "<anonymous-schema-257>"
                           },
                           "window_end": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-241>"
+                            "x-parser-schema-id": "<anonymous-schema-258>"
                           },
                           "asn_numbers": {
                             "type": "array",
                             "description": "At least one for an INBOUND appointment.",
                             "items": {
                               "type": "string",
-                              "x-parser-schema-id": "<anonymous-schema-243>"
+                              "x-parser-schema-id": "<anonymous-schema-260>"
                             },
-                            "x-parser-schema-id": "<anonymous-schema-242>"
+                            "x-parser-schema-id": "<anonymous-schema-259>"
                           },
                           "version": {
                             "type": "integer",
                             "format": "int64",
                             "minimum": 1,
                             "description": "dock-scheduling's aggregate version; the version guard of the copy.",
-                            "x-parser-schema-id": "<anonymous-schema-244>"
+                            "x-parser-schema-id": "<anonymous-schema-261>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-235>"
+                        "x-parser-schema-id": "<anonymous-schema-252>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-234>"
+                    "x-parser-schema-id": "<anonymous-schema-251>"
                   }
                 ],
                 "x-parser-schema-id": "DockSchedulingAppointmentBookedEvent"
@@ -2934,19 +3159,19 @@
                         "properties": {
                           "appointment_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-247>"
+                            "x-parser-schema-id": "<anonymous-schema-264>"
                           },
                           "version": {
                             "type": "integer",
                             "format": "int64",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-248>"
+                            "x-parser-schema-id": "<anonymous-schema-265>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-246>"
+                        "x-parser-schema-id": "<anonymous-schema-263>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-245>"
+                    "x-parser-schema-id": "<anonymous-schema-262>"
                   }
                 ],
                 "x-parser-schema-id": "DockSchedulingAppointmentCancelledEvent"
@@ -3005,63 +3230,63 @@
                         "properties": {
                           "appointment_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-251>"
+                            "x-parser-schema-id": "<anonymous-schema-268>"
                           },
                           "site_id": {
                             "type": "string",
                             "description": "Ignored.",
-                            "x-parser-schema-id": "<anonymous-schema-252>"
+                            "x-parser-schema-id": "<anonymous-schema-269>"
                           },
                           "door_code": {
                             "type": "string",
                             "description": "The new door.",
-                            "x-parser-schema-id": "<anonymous-schema-253>"
+                            "x-parser-schema-id": "<anonymous-schema-270>"
                           },
                           "previous_door_code": {
                             "type": "string",
                             "description": "Logged only.",
-                            "x-parser-schema-id": "<anonymous-schema-254>"
+                            "x-parser-schema-id": "<anonymous-schema-271>"
                           },
                           "window_start": {
                             "type": "string",
                             "format": "date-time",
-                            "x-parser-schema-id": "<anonymous-schema-255>"
+                            "x-parser-schema-id": "<anonymous-schema-272>"
                           },
                           "window_end": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Must be after `window_start`.",
-                            "x-parser-schema-id": "<anonymous-schema-256>"
+                            "x-parser-schema-id": "<anonymous-schema-273>"
                           },
                           "previous_window_start": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Ignored.",
-                            "x-parser-schema-id": "<anonymous-schema-257>"
+                            "x-parser-schema-id": "<anonymous-schema-274>"
                           },
                           "previous_window_end": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Ignored.",
-                            "x-parser-schema-id": "<anonymous-schema-258>"
+                            "x-parser-schema-id": "<anonymous-schema-275>"
                           },
                           "arrival_tolerance_minutes": {
                             "type": "integer",
                             "description": "Ignored.",
-                            "x-parser-schema-id": "<anonymous-schema-259>"
+                            "x-parser-schema-id": "<anonymous-schema-276>"
                           },
                           "version": {
                             "type": "integer",
                             "format": "int64",
                             "minimum": 1,
                             "description": "dock-scheduling's aggregate version; the version guard of the copy.",
-                            "x-parser-schema-id": "<anonymous-schema-260>"
+                            "x-parser-schema-id": "<anonymous-schema-277>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-250>"
+                        "x-parser-schema-id": "<anonymous-schema-267>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-249>"
+                    "x-parser-schema-id": "<anonymous-schema-266>"
                   }
                 ],
                 "x-parser-schema-id": "DockSchedulingAppointmentRescheduledEvent"
@@ -3123,34 +3348,34 @@
                         "properties": {
                           "appointment_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-263>"
+                            "x-parser-schema-id": "<anonymous-schema-280>"
                           },
                           "site_id": {
                             "type": "string",
                             "description": "Ignored.",
-                            "x-parser-schema-id": "<anonymous-schema-264>"
+                            "x-parser-schema-id": "<anonymous-schema-281>"
                           },
                           "from_door_code": {
                             "type": "string",
                             "description": "Logged only.",
-                            "x-parser-schema-id": "<anonymous-schema-265>"
+                            "x-parser-schema-id": "<anonymous-schema-282>"
                           },
                           "to_door_code": {
                             "type": "string",
                             "description": "The new door.",
-                            "x-parser-schema-id": "<anonymous-schema-266>"
+                            "x-parser-schema-id": "<anonymous-schema-283>"
                           },
                           "version": {
                             "type": "integer",
                             "format": "int64",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-267>"
+                            "x-parser-schema-id": "<anonymous-schema-284>"
                           }
                         },
-                        "x-parser-schema-id": "<anonymous-schema-262>"
+                        "x-parser-schema-id": "<anonymous-schema-279>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-261>"
+                    "x-parser-schema-id": "<anonymous-schema-278>"
                   }
                 ],
                 "x-parser-schema-id": "DockSchedulingAppointmentDoorReassignedEvent"
@@ -3222,7 +3447,7 @@
                     "properties": {
                       "visit_id": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-270>"
+                        "x-parser-schema-id": "<anonymous-schema-287>"
                       },
                       "appointment_id": {
                         "type": [
@@ -3230,25 +3455,25 @@
                           "null"
                         ],
                         "description": "Null for a walk-in visit, which is ignored.",
-                        "x-parser-schema-id": "<anonymous-schema-271>"
+                        "x-parser-schema-id": "<anonymous-schema-288>"
                       },
                       "arrived_at": {
                         "type": "string",
                         "format": "date-time",
                         "description": "The gate arrival: the start of dock-to-stock.",
-                        "x-parser-schema-id": "<anonymous-schema-272>"
+                        "x-parser-schema-id": "<anonymous-schema-289>"
                       },
                       "version": {
                         "type": "integer",
                         "format": "int64",
                         "minimum": 1,
-                        "x-parser-schema-id": "<anonymous-schema-273>"
+                        "x-parser-schema-id": "<anonymous-schema-290>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-269>"
+                    "x-parser-schema-id": "<anonymous-schema-286>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-268>"
+                "x-parser-schema-id": "<anonymous-schema-285>"
               }
             ],
             "x-parser-schema-id": "VisitCheckedInEvent"
@@ -3318,19 +3543,19 @@
                       "lpn": {
                         "type": "string",
                         "description": "The license plate; for a receipt carton it is its SSCC.",
-                        "x-parser-schema-id": "<anonymous-schema-276>"
+                        "x-parser-schema-id": "<anonymous-schema-293>"
                       },
                       "at": {
                         "type": "string",
                         "format": "date-time",
                         "description": "When the container was stowed.",
-                        "x-parser-schema-id": "<anonymous-schema-277>"
+                        "x-parser-schema-id": "<anonymous-schema-294>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-275>"
+                    "x-parser-schema-id": "<anonymous-schema-292>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-274>"
+                "x-parser-schema-id": "<anonymous-schema-291>"
               }
             ],
             "x-parser-schema-id": "ContainerStowedEvent"
@@ -3375,6 +3600,7 @@
       "ReceiptLineReceived": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[4]",
       "ReceiptCartonReceived": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[5]",
       "CartonDiscrepancyRaised": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[6]",
+      "ReceivingPolicyDeclared": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[11]",
       "ReceiptClosed": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[7]",
       "VisitCheckedIn": "$ref:$.channels.warehouse.yard-management.events.publish.message",
       "ContainerStowed": "$ref:$.channels.warehouse.inventory.events.publish.message",
@@ -3391,6 +3617,7 @@
       "ReceiptLineReceivedAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[4]",
       "ReceiptCartonReceivedAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[5]",
       "CartonDiscrepancyRaisedAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[6]",
+      "ReceivingPolicyDeclaredAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[11]",
       "ReceiptClosedAnalytics": "$ref:$.channels.warehouse.inbound-receiving.analytics.subscribe.message.oneOf[7]",
       "ProductRegistered": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[0]",
       "ProductPackLevelDeclared": "$ref:$.channels.warehouse.product-master.events.publish.message.oneOf[1]",
@@ -3414,6 +3641,7 @@
       "ReceiptCartonReceivedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[5].payload",
       "CartonDiscrepancyRaisedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[6].payload",
       "ReceiptClosedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[7].payload",
+      "ReceivingPolicyDeclaredEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[11].payload",
       "ReceivingAdviceIssuedEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[9].payload",
       "ReceivingAdviceOverdueEvent": "$ref:$.channels.warehouse.inbound-receiving.events.subscribe.message.oneOf[10].payload",
       "VisitCheckedInEvent": "$ref:$.channels.warehouse.yard-management.events.publish.message.payload",
