@@ -407,6 +407,7 @@ const config: Config = {
           items: [
             {type: 'docSidebar', sidebarId: 'strategicSidebar', label: 'Strategic Design'},
             {type: 'docSidebar', sidebarId: 'wmsWesSidebar', label: 'WMS & WES'},
+            {type: 'docSidebar', sidebarId: 'wcsSidebar', label: 'WCS (designed)'},
             {type: 'docSidebar', sidebarId: 'capabilitySidebar', label: 'Business Capabilities'},
             {type: 'docSidebar', sidebarId: 'architectureSidebar', label: 'Architecture'},
             {type: 'docSidebar', sidebarId: 'contextsSidebar', label: 'Bounded Contexts'},
@@ -469,6 +470,7 @@ const config: Config = {
             {label: 'Overview', to: '/overview'},
             {label: 'Strategic Design', to: '/strategic-design/domain-vision'},
             {label: 'WMS and WES', to: '/wms-wes'},
+            {label: 'WCS (designed)', to: '/wcs'},
             {label: 'Business Capability Architecture', to: '/business-capability-architecture'},
             {label: 'Bounded Contexts', to: '/contexts'},
             {label: 'API Reference', to: '/api-reference'},

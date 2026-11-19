@@ -204,6 +204,30 @@ const sidebars: SidebarsConfig = {
     },
   ],
 
+  wcsSidebar: [
+    {
+      type: 'category',
+      label: 'WCS (designed, not built)',
+      link: {type: 'doc', id: 'wcs/index'},
+      collapsed: false,
+      items: [
+        'wcs/industry-reference',
+        'wcs/subdomains',
+        'wcs/context-map',
+        {
+          type: 'category',
+          label: 'Bounded contexts',
+          collapsed: false,
+          items: ['wcs/material-flow-control', 'wcs/amr-fleet-control', 'wcs/asrs-control'],
+        },
+        'wcs/seam-decisions',
+        'wcs/message-flows',
+        'wcs/ecosystem-impact',
+        'wcs/implementation-handoff',
+      ],
+    },
+  ],
+
   capabilitySidebar: [
     {
       type: 'category',
