@@ -882,7 +882,7 @@
                           },
                           "order_ref": {
                             "type": "string",
-                            "description": "The package's order reference.",
+                            "description": "The package's order reference (its correlated task's orderRef). NOTE — de-facto shape, not a parsed contract: for order-originated work wes-work-planning releases one work unit per order line, so this de-facto reads `<order_id>-line-<n>` (ADR-0040; the trailing `-line-N` suffix is exactly what source_order_id strips, above); transfer work carries the demand id, and tasks created directly via REST/MCP carry the caller's opaque string. This service never parses it (ADR-0041, decision 3); consumers that need the order identity should read source_order_id, not parse this field.",
                             "x-parser-schema-id": "<anonymous-schema-78>"
                           },
                           "site_id": {
@@ -1288,7 +1288,7 @@
                   },
                   "payload": {
                     "specversion": "1.0",
-                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "id": "3f5e1a2c-4b6d-4c7e-8d9f-0a1b2c3d4e5f",
                     "source": "/warehouse/fulfillment-execution",
                     "type": "com.warehouse.wes.fulfillment-execution.transfer.TransferPicked",
                     "subject": "task-tr-8a1f",
@@ -1364,18 +1364,18 @@
                   },
                   "payload": {
                     "specversion": "1.0",
-                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "id": "4a6f2b3d-5c7e-4d8f-9e0a-1b2c3d4e5f60",
                     "source": "/warehouse/fulfillment-execution",
                     "type": "com.warehouse.wes.fulfillment-execution.transfer.TransferDispatched",
-                    "subject": "task-tr-8a1f",
-                    "time": "2026-10-06T15:04:05Z",
+                    "subject": "task-tr-8a1f-dsp",
+                    "time": "2026-10-06T18:42:10Z",
                     "datacontenttype": "application/json",
                     "dataschema": "urn:warehouse:fulfillment-execution:events:TransferDispatched:v1",
                     "data": {
                       "transfer_ref": "tr-9f2a",
                       "demand_id": "demand-77",
                       "work_unit_id": "wu-tr-8a1f",
-                      "task_id": "task-tr-8a1f",
+                      "task_id": "task-tr-8a1f-dsp",
                       "work_kind": "TRANSFER_DISPATCH",
                       "site_id": "site-north",
                       "sku": "SKU-0042",
@@ -1440,18 +1440,18 @@
                   },
                   "payload": {
                     "specversion": "1.0",
-                    "id": "6f1c2a3b-4d5e-4f60-8a7b-9c0d1e2f3a4b",
+                    "id": "5b703c4e-6d8f-4e90-af1b-2c3d4e5f6071",
                     "source": "/warehouse/fulfillment-execution",
                     "type": "com.warehouse.wes.fulfillment-execution.transfer.TransferArrived",
-                    "subject": "task-tr-8a1f",
-                    "time": "2026-10-06T15:04:05Z",
+                    "subject": "task-tr-8a1f-arv",
+                    "time": "2026-10-07T08:15:30Z",
                     "datacontenttype": "application/json",
                     "dataschema": "urn:warehouse:fulfillment-execution:events:TransferArrived:v1",
                     "data": {
                       "transfer_ref": "tr-9f2a",
                       "demand_id": "demand-77",
                       "work_unit_id": "wu-tr-8a1f",
-                      "task_id": "task-tr-8a1f",
+                      "task_id": "task-tr-8a1f-arv",
                       "work_kind": "TRANSFER_ARRIVAL",
                       "site_id": "site-south",
                       "sku": "SKU-0042",
