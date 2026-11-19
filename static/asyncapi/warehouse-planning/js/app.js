@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **warehouse-planning** bounded context (WES\nsubdomain): *can this warehouse process the demand assigned to it?*\n\n**Published (Phase 4).** The `CapacityPlan` aggregate raises four events,\npublished to `warehouse.warehouse-planning.events` through a\n**transactional outbox**: the plan and its already-encoded events are\nwritten in ONE database transaction, and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is persisted with the outbox row, so\na retry republishes the same `id` -- consumers dedupe on it). Per plan:\n`CapacityPlanCreated` on creation; on publication\n`CapacityPlanPublished`, plus `CapacityShortageDetected` and\n`BottleneckDetected` only when the plan has a shortage.\nThe `ProcessCapacity` aggregate publishes on the same topic and the same\noutbox: `ProcessCapacityRegistered` when its first (native) constraint\nbrings it into being, `ProcessCapacityChanged` when a registration\nmoves the effective rate (the minimum rate value, the binding\nconstraint, or both); a registration the effective rate does not notice\nraises nothing. ProcessCapacity events are integration-stream only: the\nanalytics fanout carries plan facts only (ADR 0005).\n\n**Consumed (Phase 3).** `ShiftPlanCommitted` (workforce-management) and\n`LocationSlotRegistered`/`LocationSlotDecommissioned` (facility-layout) keep\nlocal ProcessCapacity read models current; this context never makes a\nlive cross-context call.\n\n**Consumed (ADR 0004).** `OrderAllocated` and\n`OrderPartiallyAllocated` (order-management, topic\n`warehouse.order-management.events`) keep a local expected-demand read\nmodel current under the REQUIRED consumer group `DEMAND_CONSUMER_GROUP`.\nEach order is counted once, at its latest promise cutoff, and attributed to\nthe event's own optional `site_id` (order-management ADR 0050), or to the\nconfigured fallback site (`DEMAND_SITE_ID`) when the event carries none\n(ADR 0021). `OrderRepromised` and every other type are ignored.\n\n**Consumed (ADR 0017, source switched by ADR 0020).** dock-scheduling's\n`DockAppointmentBooked`, `DockAppointmentRescheduled`,\n`DockAppointmentCancelled` and `DockAppointmentNoShow` (topic\n`warehouse.dock-scheduling.events`, group `DOCK_APPOINTMENT_CONSUMER_GROUP`)\nkeep a local inbound-demand read model current: a capacity plan carries the\nINBOUND dock appointments of its window and the labour the operator-declared\ninbound standard attributes to them. Each appointment is attributed to the\n`site_id` of its events; the producer's aggregate `version` orders them (a\nCancelled that arrives before its Booked wins). inbound-receiving's\nappointment events are NO LONGER consumed, and a deployment that still sets\n`INBOUND_DEMAND_CONSUMER_GROUP` is refused at boot. `TaskCompleted`\n(fulfillment-execution, topic `warehouse.fulfillment.events`, group\n`OBSERVED_CAPACITY_CONSUMER_GROUP`) keeps a local observed-capacity read\nmodel current that feeds an ADVISORY planned-versus-observed variance; it\nnever changes a planned capacity and is attributed to the configured site\n(`DEMAND_SITE_ID`). Both consumers dead-letter unusable payloads to\n`<topic>.dlq`.\n\n**Analytics stream (ADR 0005).** The same four events are ALSO written to\n`warehouse.warehouse-planning.analytics` in the SAME outbox transaction\n(two outbox rows per event, one per topic), as CloudEvents 1.0 with the\nSAME `type` and the SAME `id` per occurrence but\n`dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`.\nThe integration messages are byte-identical to what they were before the\nstream existed. The analytics payloads are the integration payloads plus\nadditive, analytics-only fields: today `binding_constraint` on\n`CapacityPlanPublished` (the constraint type -- LABOR, STATION, ... --\nbinding the bottleneck step; `\"\"` for a plan created before it was\nrecorded). Only this service's own `planning-projector` consumes it (fixed\nconsumer group, at-least-once, offsets committed after the projection\ncommitted), into a SEPARATE analytical database that\n`planning-reports` serves read-only. Poison messages go to\n`warehouse.warehouse-planning.analytics.dlq`.\n\n**Envelope (mandatory).** Every message is a CloudEvents 1.0 event in\n*structured content mode* (Kafka value = JSON event format) with the Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0014); consumers may extract them, and must not require\nthem. All of\n`specversion` (`1.0`), `id`, `source` (`/warehouse/warehouse-planning`),\n`type`, `subject`, `time`, `datacontenttype` (`application/json`) and\n`dataschema` are required; the payload sits under `data`. No flat\nenvelope, no toggle.\n\n**Type naming.** `com.warehouse.wes.warehouse-planning.<entity>.<EventName>`\nwhere `<entity>` is the aggregate that raised the event, lowercase, no\nseparators -- `capacityplan` or `processcapacity`. **dataschema** =\n`urn:warehouse:warehouse-planning:events:<EventName>:v1`. **subject** and\nthe Kafka message key = the aggregate's id: the capacity plan id, or\n`<processType>/<location>/<windowStart>/<windowEnd>` for a\nProcessCapacity (one aggregate's events stay ordered on one partition).\nA breaking payload change gets a new `.v2` type and dataschema, never a\nmutation.\n"
+    "description": "Event catalog for the **warehouse-planning** bounded context (WES\nsubdomain): *can this warehouse process the demand assigned to it?*\n\n**Published (Phase 4).** The `CapacityPlan` aggregate raises four events,\npublished to `warehouse.warehouse-planning.events` through a\n**transactional outbox**: the plan and its already-encoded events are\nwritten in ONE database transaction, and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is persisted with the outbox row, so\na retry republishes the same `id` -- consumers dedupe on it). Per plan:\n`CapacityPlanCreated` on creation; on publication\n`CapacityPlanPublished`, plus `CapacityShortageDetected` and\n`BottleneckDetected` only when the plan has a shortage.\nThe `ProcessCapacity` aggregate publishes on the same topic and the same\noutbox: `ProcessCapacityRegistered` when its first (native) constraint\nbrings it into being, `ProcessCapacityChanged` when a registration\nmoves the effective rate (the minimum rate value, the binding\nconstraint, or both); a registration the effective rate does not notice\nraises nothing. ProcessCapacity events are integration-stream only: the\nanalytics fanout carries plan facts only (ADR 0005).\n\n**Consumed (Phase 3).** `ShiftPlanCommitted` (workforce-management) and\n`LocationSlotRegistered`/`LocationSlotDecommissioned` (facility-layout) keep\nlocal ProcessCapacity read models current; this context never makes a\nlive cross-context call.\n\n**Consumed (ADR 0004).** `OrderAllocated` and\n`OrderPartiallyAllocated` (order-management, topic\n`warehouse.order-management.events`) keep a local expected-demand read\nmodel current under the REQUIRED consumer group `DEMAND_CONSUMER_GROUP`.\nEach order is counted once, at its latest promise cutoff, and attributed to\nthe event's own optional `site_id` (order-management ADR 0050), or to the\nconfigured fallback site (`DEMAND_SITE_ID`) when the event carries none\n(ADR 0021). `OrderRepromised` and every other type are ignored.\n\n**Consumed (ADR 0017, source switched by ADR 0020).** dock-scheduling's\n`DockAppointmentBooked`, `DockAppointmentRescheduled`,\n`DockAppointmentCancelled` and `DockAppointmentNoShow` (topic\n`warehouse.dock-scheduling.events`, group `DOCK_APPOINTMENT_CONSUMER_GROUP`)\nkeep a local inbound-demand read model current: a capacity plan carries the\nINBOUND dock appointments of its window and the labour the operator-declared\ninbound standard attributes to them. Each appointment is attributed to the\n`site_id` of its events; the producer's aggregate `version` orders them (a\nCancelled that arrives before its Booked wins). inbound-receiving's\nappointment events are NO LONGER consumed, and a deployment that still sets\n`INBOUND_DEMAND_CONSUMER_GROUP` is refused at boot. `TaskCompleted`\n(fulfillment-execution, topic `warehouse.fulfillment.events`, group\n`OBSERVED_CAPACITY_CONSUMER_GROUP`) keeps a local observed-capacity read\nmodel current that feeds an ADVISORY planned-versus-observed variance; it\nnever changes a planned capacity and is attributed to the configured site\n(`DEMAND_SITE_ID`). Both consumers dead-letter unusable payloads to\n`<topic>.dlq`.\n\n**Consumed (ADR 0022).** labor-performance's `LaborStandardDefined` and\n`LaborStandardRevised` (topic `warehouse.labor-performance.events`, its\nINTEGRATION topic per its ADR 0038; group `LABOR_STANDARD_CONSUMER_GROUP`)\nkeep a local copy of the engineered labour standards, one record per\n`standard_id`. A capacity plan prices each step of its path with the\nstandard of its task type in force for the plan's site at the window start\n(`labour_requirement`, REST and MCP only: no event this service publishes\ncarries it). Every other type on that topic is ignored, the producer's\nanalytics topic is never read, and an unusable payload is dead-lettered to\n`warehouse.labor-performance.events.dlq`.\n\n**Analytics stream (ADR 0005).** The same four events are ALSO written to\n`warehouse.warehouse-planning.analytics` in the SAME outbox transaction\n(two outbox rows per event, one per topic), as CloudEvents 1.0 with the\nSAME `type` and the SAME `id` per occurrence but\n`dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`.\nThe integration messages are byte-identical to what they were before the\nstream existed. The analytics payloads are the integration payloads plus\nadditive, analytics-only fields: today `binding_constraint` on\n`CapacityPlanPublished` (the constraint type -- LABOR, STATION, ... --\nbinding the bottleneck step; `\"\"` for a plan created before it was\nrecorded). Only this service's own `planning-projector` consumes it (fixed\nconsumer group, at-least-once, offsets committed after the projection\ncommitted), into a SEPARATE analytical database that\n`planning-reports` serves read-only. Poison messages go to\n`warehouse.warehouse-planning.analytics.dlq`.\n\n**Envelope (mandatory).** Every message is a CloudEvents 1.0 event in\n*structured content mode* (Kafka value = JSON event format) with the Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0014); consumers may extract them, and must not require\nthem. All of\n`specversion` (`1.0`), `id`, `source` (`/warehouse/warehouse-planning`),\n`type`, `subject`, `time`, `datacontenttype` (`application/json`) and\n`dataschema` are required; the payload sits under `data`. No flat\nenvelope, no toggle.\n\n**Type naming.** `com.warehouse.wes.warehouse-planning.<entity>.<EventName>`\nwhere `<entity>` is the aggregate that raised the event, lowercase, no\nseparators -- `capacityplan` or `processcapacity`. **dataschema** =\n`urn:warehouse:warehouse-planning:events:<EventName>:v1`. **subject** and\nthe Kafka message key = the aggregate's id: the capacity plan id, or\n`<processType>/<location>/<windowStart>/<windowEnd>` for a\nProcessCapacity (one aggregate's events stay ordered on one partition).\nA breaking payload change gets a new `.v2` type and dataschema, never a\nmutation.\n"
   },
   "servers": {
     "production": {
@@ -2363,6 +2363,195 @@
           ]
         }
       }
+    },
+    "warehouse.labor-performance.events": {
+      "description": "labor-performance's integration topic (`LaborPerformanceTopic`; the standard events are\nkeyed by task type, labor-performance ADR 0038). This service consumes it with a STABLE consumer group read from\nenv `LABOR_STANDARD_CONSUMER_GROUP` (REQUIRED, no default; ADR 0016/0022). Only the\nfull types `com.warehouse.wes.labor-performance.standard.LaborStandardDefined` and\n`...standard.LaborStandardRevised` are acted on; every other `type`\n(`TaskPerformanceRecorded`, ...) is ignored. A message that is not CloudEvents 1.0, or\na standard without `standard_id`/`task_type`/`effective_from`/event `time`, with\n`expected_seconds <= 0`, a negative `travel_component_seconds` or an unknown\n`handling_unit`, is published to `warehouse.labor-performance.events.dlq` (raw bytes\nplus `x-dlq-*` headers).\n",
+      "publish": {
+        "operationId": "consumeLaborStandardEvents",
+        "summary": "Consume labor-performance's LaborStandardDefined / LaborStandardRevised.",
+        "description": "Consumed by this service into a LOCAL copy of the engineered labour standards\n(`labor_standards`, one row per `standard_id`; additive). The copy stores facts, not\na current value: a redelivered or replayed `standard_id` changes nothing, and the\nstandard that applies to a plan of site S, task type T and window W is resolved at\nREAD time among task-type-only rows (`handling_unit` absent) with\n`effective_from <= W.start`: S's own `site_code` over a site-less row, then the latest\n`effective_from`, then the latest event `time`. The idempotency claim on the\nCloudEvents `id` and the write commit in ONE transaction. See\ndocs/adr/0022-labour-standards-from-labor-performance.md.\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "LaborStandardDefined",
+              "title": "Labour standard defined (consumed)",
+              "summary": "labor-performance defined an engineered labour standard for a task type.",
+              "description": "CONSUMED from `warehouse.labor-performance.events` (producer: labor-performance, its own\n`apis/asyncapi.yaml`, ADR 0038: the same payload as its analytics copy). Recorded in the\nlocal `labor_standards` copy under `standard_id`; `as_of` = the CloudEvents `time`.\n`site_code` absent = every site. A standard with a `handling_unit` is stored but not\nused to price a plan (plan demand has no handling-unit split). `type` =\n`com.warehouse.wes.labor-performance.standard.LaborStandardDefined`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                },
+                {
+                  "name": "warehouse-planning"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of labor-performance's LaborStandardDefined (consumed).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.labor-performance.standard.LaborStandardDefined",
+                        "x-parser-schema-id": "<anonymous-schema-180>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "Fields this service reads from labor-performance's LaborStandardDefined / LaborStandardRevised `data` (hand-mirrored, never imported; docs/adr/0022 decision 2). Everything else (previous_expected_seconds, team_lift_threshold_g, team_lift_expected_seconds) is ignored.",
+                        "required": [
+                          "standard_id",
+                          "task_type",
+                          "expected_seconds",
+                          "effective_from"
+                        ],
+                        "properties": {
+                          "standard_id": {
+                            "type": "string",
+                            "description": "labor-performance's standard id; one row per id in the local copy, the same id again changes nothing.",
+                            "x-parser-schema-id": "<anonymous-schema-181>"
+                          },
+                          "task_type": {
+                            "type": "string",
+                            "description": "The task type the standard measures (PICK, PACK, SLAM on the producer); it names the plan step of the same process type.",
+                            "example": "PACK",
+                            "x-parser-schema-id": "<anonymous-schema-182>"
+                          },
+                          "expected_seconds": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 1,
+                            "description": "Engineered seconds per task; 0 or negative is dead-lettered.",
+                            "x-parser-schema-id": "<anonymous-schema-183>"
+                          },
+                          "travel_component_seconds": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 0,
+                            "description": "Optional part of expected_seconds attributed to travel; stored, not used to price a plan.",
+                            "x-parser-schema-id": "<anonymous-schema-184>"
+                          },
+                          "handling_unit": {
+                            "type": "string",
+                            "enum": [
+                              "EACH",
+                              "CASE",
+                              "PALLET"
+                            ],
+                            "description": "Optional; absent = a task-type-only standard, the only kind that prices a plan step.",
+                            "x-parser-schema-id": "<anonymous-schema-185>"
+                          },
+                          "site_code": {
+                            "type": "string",
+                            "description": "Optional (labor-performance ADR 0038); a facility-layout site code. Absent = every site.",
+                            "example": "SIM1",
+                            "x-parser-schema-id": "<anonymous-schema-186>"
+                          },
+                          "effective_from": {
+                            "type": "string",
+                            "format": "date-time",
+                            "description": "When the standard came into force (RFC 3339).",
+                            "x-parser-schema-id": "<anonymous-schema-187>"
+                          }
+                        },
+                        "x-parser-schema-id": "LaborStandardData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-179>"
+                  }
+                ],
+                "x-parser-schema-id": "LaborStandardDefinedEvent"
+              },
+              "examples": [
+                {
+                  "name": "packStandardDefined",
+                  "summary": "A fleet-wide PACK standard of 90 s per task.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "4d1f6a3e-2b7c-4c5d-9e8f-1a2b3c4d5e6f",
+                    "source": "/warehouse/labor-performance",
+                    "type": "com.warehouse.wes.labor-performance.standard.LaborStandardDefined",
+                    "subject": "std-pack-1",
+                    "time": "2026-10-01T00:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:labor-performance:events:LaborStandardDefined:v1",
+                    "data": {
+                      "standard_id": "std-pack-1",
+                      "task_type": "PACK",
+                      "expected_seconds": 90,
+                      "travel_component_seconds": 15,
+                      "effective_from": "2026-10-01T00:00:00Z"
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "LaborStandardRevised",
+              "title": "Labour standard revised (consumed)",
+              "summary": "labor-performance revised a labour standard (a new record under a new standard_id).",
+              "description": "CONSUMED from `warehouse.labor-performance.events`. A revision closes the prior record in\nlabor-performance and opens a new one, so it is recorded like a definition: a new row,\nand the latest `effective_from` before a plan's window start is the standard in force.\n`previous_expected_seconds` and the team-lift fields are ignored. `type` =\n`com.warehouse.wes.labor-performance.standard.LaborStandardRevised`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                },
+                {
+                  "name": "warehouse-planning"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of labor-performance's LaborStandardRevised (consumed).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.labor-performance.standard.LaborStandardRevised",
+                        "x-parser-schema-id": "<anonymous-schema-189>"
+                      },
+                      "data": "$ref:$.channels.warehouse.labor-performance.events.publish.message.oneOf[0].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-188>"
+                  }
+                ],
+                "x-parser-schema-id": "LaborStandardRevisedEvent"
+              },
+              "examples": [
+                {
+                  "name": "pickStandardRevisedForASite",
+                  "summary": "SIM1's own PICK standard revised to 12 s per task.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "8a7b6c5d-4e3f-4a2b-9c1d-0e9f8a7b6c5d",
+                    "source": "/warehouse/labor-performance",
+                    "type": "com.warehouse.wes.labor-performance.standard.LaborStandardRevised",
+                    "subject": "std-pick-sim1-2",
+                    "time": "2026-10-02T06:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:labor-performance:events:LaborStandardRevised:v1",
+                    "data": {
+                      "standard_id": "std-pick-sim1-2",
+                      "task_type": "PICK",
+                      "expected_seconds": 12,
+                      "previous_expected_seconds": 14,
+                      "site_code": "SIM1",
+                      "effective_from": "2026-10-02T06:00:00Z"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
     }
   },
   "components": {
@@ -2386,7 +2575,9 @@
       "DockAppointmentRescheduled": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[1]",
       "DockAppointmentCancelled": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[2]",
       "DockAppointmentNoShow": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[3]",
-      "TaskCompleted": "$ref:$.channels.warehouse.fulfillment.events.publish.message"
+      "TaskCompleted": "$ref:$.channels.warehouse.fulfillment.events.publish.message",
+      "LaborStandardDefined": "$ref:$.channels.warehouse.labor-performance.events.publish.message.oneOf[0]",
+      "LaborStandardRevised": "$ref:$.channels.warehouse.labor-performance.events.publish.message.oneOf[1]"
     },
     "schemas": {
       "CloudEventEnvelope": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
@@ -2425,7 +2616,10 @@
       "DockAppointmentNoShowData": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[3].payload.allOf[1].properties.data",
       "DockAppointmentNoShowEvent": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[3].payload",
       "TaskCompletedData": "$ref:$.channels.warehouse.fulfillment.events.publish.message.payload.allOf[1].properties.data",
-      "TaskCompletedEvent": "$ref:$.channels.warehouse.fulfillment.events.publish.message.payload"
+      "TaskCompletedEvent": "$ref:$.channels.warehouse.fulfillment.events.publish.message.payload",
+      "LaborStandardData": "$ref:$.channels.warehouse.labor-performance.events.publish.message.oneOf[0].payload.allOf[1].properties.data",
+      "LaborStandardDefinedEvent": "$ref:$.channels.warehouse.labor-performance.events.publish.message.oneOf[0].payload",
+      "LaborStandardRevisedEvent": "$ref:$.channels.warehouse.labor-performance.events.publish.message.oneOf[1].payload"
     }
   },
   "x-parser-spec-parsed": true,
