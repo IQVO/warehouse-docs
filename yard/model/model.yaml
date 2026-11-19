@@ -627,7 +627,7 @@ contexts:
     publishes:
       - event: VisitCheckedIn
         entity: yardvisit
-        data: [visit_id, site_id, carrier, carrier_scac, carrier_flag, purpose, appointment_id, trailers, arrived_at, version]
+        data: [visit_id, site_id, carrier, carrier_scac, carrier_flag, purpose, appointment_id, trailers, arrived_at, version, x12_status, cbv_biz_step]
         consumers: [dock-scheduling, inbound-receiving]
       - event: VisitRejected
         entity: yardvisit
@@ -635,7 +635,7 @@ contexts:
         consumers: [dock-scheduling, exception-management]
       - event: VisitCheckedOut
         entity: yardvisit
-        data: [visit_id, site_id, trailers_out, departed_at, on_site_minutes, version]
+        data: [visit_id, site_id, trailers_out, departed_at, on_site_minutes, version, x12_status, cbv_biz_step]
         consumers: [analytics only]
       - event: TrailerDocked
         entity: trailer
@@ -659,7 +659,7 @@ contexts:
         consumers: [outbound-shipping]
       - event: TrailerDeparted
         entity: trailer
-        data: [trailer_id, site_id, visit_id, departed_at, dwell_minutes, load_state, seal_number, version, seal_state, seal_class]
+        data: [trailer_id, site_id, visit_id, departed_at, dwell_minutes, load_state, seal_number, version, seal_state, seal_class, x12_status, cbv_biz_step]
         consumers: [outbound-shipping]
       - event: TrailerSecured
         entity: trailer
@@ -671,11 +671,11 @@ contexts:
         consumers: []
       - event: InspectionCompleted
         entity: inspection
-        data: [inspection_id, site_id, trailer_id, visit_id, template_id, template_version, gate, outcome, condition_grade, completed_at, failed_item_codes]
+        data: [inspection_id, site_id, trailer_id, visit_id, template_id, template_version, gate, outcome, condition_grade, completed_at, failed_item_codes, cbv_biz_step, cbv_disposition]
         consumers: []
       - event: InspectionFailed
         entity: inspection
-        data: [inspection_id, site_id, trailer_id, template_id, gate, failed_items, failed_at, hold_placed]
+        data: [inspection_id, site_id, trailer_id, template_id, gate, failed_items, failed_at, hold_placed, cbv_biz_step, cbv_disposition]
         consumers: [exception-management]
       - event: SealExceptionRaised
         entity: trailer
@@ -687,7 +687,7 @@ contexts:
         consumers: [exception-management]
       - event: TrailerHeld
         entity: trailer
-        data: [trailer_id, site_id, reason, version]
+        data: [trailer_id, site_id, reason, version, cbv_disposition]
         consumers: [analytics only]
       - event: TrailerHoldReleased
         entity: trailer

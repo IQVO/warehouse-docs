@@ -807,7 +807,7 @@
               "name": "ReturnLineStaged",
               "title": "Return line staged",
               "summary": "A RESTOCK disposition hands the goods to inventory-storage as a staged receipt line.",
-              "description": "`type` = `com.warehouse.wms.returns-processing.disposition.ReturnLineStaged`;\nsubject and key = the dispositionId. `data` is inbound-receiving's\n`ReceiptLineReceived` shape (`receipt_id`, `line_no`, `sku`,\n`quantity`, `condition`, `received_at`) plus `rma_id`,\n`disposition_id` and `site_id`; inventory-storage consumes it into its\nstaged-receipt use case and the stow stays an RF action there. Raised\nexactly once per RESTOCK disposition (idempotent on `disposition_id`);\nno other outcome touches any sibling.\n",
+              "description": "`type` = `com.warehouse.wms.returns-processing.disposition.ReturnLineStaged`;\nsubject and key = the dispositionId. `data` is inbound-receiving's\n`ReceiptLineReceived` shape (`receipt_id`, `line_no`, `sku`,\n`quantity`, `condition`, `received_at`) plus `rma_id` (null for an\nUNEXPECTED line), `disposition_id` and `site_id`; inventory-storage\nconsumes it into its staged-receipt use case and the stow stays an RF\naction there. Raised\nexactly once per RESTOCK disposition (idempotent on `disposition_id`);\nno other outcome touches any sibling.\n",
               "contentType": "application/cloudevents+json",
               "tags": [
                 {
@@ -866,7 +866,8 @@
                           },
                           "rma_id": {
                             "type": "string",
-                            "description": "The RMA the line was authorized against.",
+                            "nullable": true,
+                            "description": "The RMA the line was authorized against; null when the line is UNEXPECTED (a parcel line with no RMA that was still inspected and restocked).",
                             "x-parser-schema-id": "<anonymous-schema-79>"
                           },
                           "disposition_id": {

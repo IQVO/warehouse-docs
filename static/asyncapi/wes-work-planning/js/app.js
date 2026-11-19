@@ -1516,7 +1516,26 @@
                   }
                 ],
                 "x-parser-schema-id": "ChargeForecastReceivedAnalyticsEvent"
-              }
+              },
+              "examples": [
+                {
+                  "name": "chargeForecastReceivedAnalytics",
+                  "summary": "Charge forecast recorded for the pick-to-tote path (analytics stream).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "b3cd5540-79c7-4e4f-867c-e0444d03ada6",
+                    "source": "/warehouse/wes-work-planning",
+                    "type": "com.warehouse.wes.work-planning.charge.ChargeForecastReceived",
+                    "subject": "pick-to-tote",
+                    "time": "2026-08-21T22:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:wes-work-planning:analytics:ChargeForecastReceived:v1",
+                    "data": {
+                      "path_id": "pick-to-tote"
+                    }
+                  }
+                }
+              ]
             },
             {
               "name": "ShiftPlanCommittedAnalytics",
@@ -1568,7 +1587,26 @@
                   }
                 ],
                 "x-parser-schema-id": "ShiftPlanCommittedAnalyticsEvent"
-              }
+              },
+              "examples": [
+                {
+                  "name": "shiftPlanCommittedAnalytics",
+                  "summary": "Shift plan committed for the pack-singles path (analytics stream).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "d4156625-a93d-4106-b7d9-43f8c4293bf5",
+                    "source": "/warehouse/wes-work-planning",
+                    "type": "com.warehouse.wes.work-planning.plan.ShiftPlanCommitted",
+                    "subject": "pack-singles",
+                    "time": "2026-08-21T22:05:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:wes-work-planning:analytics:ShiftPlanCommitted:v1",
+                    "data": {
+                      "path_id": "pack-singles"
+                    }
+                  }
+                }
+              ]
             },
             {
               "name": "WorkUnitCreatedAnalytics",
@@ -1625,7 +1663,27 @@
                   }
                 ],
                 "x-parser-schema-id": "WorkUnitCreatedAnalyticsEvent"
-              }
+              },
+              "examples": [
+                {
+                  "name": "workUnitCreatedAnalytics",
+                  "summary": "A pick task was enqueued into the pick-to-tote pool (analytics stream).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "2d68a704-5a03-467b-a956-522f9ae1ef87",
+                    "source": "/warehouse/wes-work-planning",
+                    "type": "com.warehouse.wes.work-planning.workunit.WorkUnitCreated",
+                    "subject": "wu-10231",
+                    "time": "2026-08-21T22:10:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:wes-work-planning:analytics:WorkUnitCreated:v1",
+                    "data": {
+                      "path_id": "pick-to-tote",
+                      "work_unit_id": "wu-10231"
+                    }
+                  }
+                }
+              ]
             },
             {
               "name": "WorkReleasedAnalytics",
@@ -1769,7 +1827,27 @@
                   }
                 ],
                 "x-parser-schema-id": "WorkUnitCompletedAnalyticsEvent"
-              }
+              },
+              "examples": [
+                {
+                  "name": "workUnitCompletedAnalytics",
+                  "summary": "A pick task completed on the pick-to-tote path (analytics stream).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "ccc098ff-c787-4ef6-b389-80ffb28a7d4d",
+                    "source": "/warehouse/wes-work-planning",
+                    "type": "com.warehouse.wes.work-planning.workunit.WorkUnitCompleted",
+                    "subject": "wu-10231",
+                    "time": "2026-08-21T22:19:45Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:wes-work-planning:analytics:WorkUnitCompleted:v1",
+                    "data": {
+                      "path_id": "pick-to-tote",
+                      "work_unit_id": "wu-10231"
+                    }
+                  }
+                }
+              ]
             },
             {
               "name": "BacklogThresholdBreachedAnalytics",
@@ -1821,7 +1899,26 @@
                   }
                 ],
                 "x-parser-schema-id": "BacklogThresholdBreachedAnalyticsEvent"
-              }
+              },
+              "examples": [
+                {
+                  "name": "backlogThresholdBreachedAnalytics",
+                  "summary": "The pack-singles buffer went over its alarm threshold (analytics stream).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "eb2e362b-313e-4016-a0f7-f64b73c8fc73",
+                    "source": "/warehouse/wes-work-planning",
+                    "type": "com.warehouse.wes.work-planning.workpool.BacklogThresholdBreached",
+                    "subject": "pack-singles",
+                    "time": "2026-08-21T22:25:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:wes-work-planning:analytics:BacklogThresholdBreached:v1",
+                    "data": {
+                      "path_id": "pack-singles"
+                    }
+                  }
+                }
+              ]
             },
             {
               "name": "RateDeviationDetectedAnalytics",
@@ -1874,7 +1971,26 @@
                   }
                 ],
                 "x-parser-schema-id": "RateDeviationDetectedAnalyticsEvent"
-              }
+              },
+              "examples": [
+                {
+                  "name": "rateDeviationDetectedAnalytics",
+                  "summary": "Actual rate on pick-to-tote drifted away from plan (analytics stream).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "184eeee4-fe00-45d3-bdb6-544cf2ddb68c",
+                    "source": "/warehouse/wes-work-planning",
+                    "type": "com.warehouse.wes.work-planning.workpool.RateDeviationDetected",
+                    "subject": "pick-to-tote",
+                    "time": "2026-08-21T22:30:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:wes-work-planning:analytics:RateDeviationDetected:v1",
+                    "data": {
+                      "path_id": "pick-to-tote"
+                    }
+                  }
+                }
+              ]
             },
             {
               "name": "PathThrottledAnalytics",
@@ -1926,7 +2042,26 @@
                   }
                 ],
                 "x-parser-schema-id": "PathThrottledAnalyticsEvent"
-              }
+              },
+              "examples": [
+                {
+                  "name": "pathThrottledAnalytics",
+                  "summary": "Upstream release into pack-singles was throttled (analytics stream).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "842a8b9b-3d64-474d-8bd9-1ad9e0f08bcf",
+                    "source": "/warehouse/wes-work-planning",
+                    "type": "com.warehouse.wes.work-planning.workpool.PathThrottled",
+                    "subject": "pack-singles",
+                    "time": "2026-08-21T22:31:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:wes-work-planning:analytics:PathThrottled:v1",
+                    "data": {
+                      "path_id": "pack-singles"
+                    }
+                  }
+                }
+              ]
             },
             {
               "name": "LaborReassignmentFlaggedAnalytics",
@@ -1978,7 +2113,26 @@
                   }
                 ],
                 "x-parser-schema-id": "LaborReassignmentFlaggedAnalyticsEvent"
-              }
+              },
+              "examples": [
+                {
+                  "name": "laborReassignmentFlaggedAnalytics",
+                  "summary": "Labor reassignment recommended for pick-to-tote (analytics stream).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "142d3c1c-2669-442e-afce-d4f1ae91f17e",
+                    "source": "/warehouse/wes-work-planning",
+                    "type": "com.warehouse.wes.work-planning.workpool.LaborReassignmentFlagged",
+                    "subject": "pick-to-tote",
+                    "time": "2026-08-21T22:33:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:wes-work-planning:analytics:LaborReassignmentFlagged:v1",
+                    "data": {
+                      "path_id": "pick-to-tote"
+                    }
+                  }
+                }
+              ]
             },
             {
               "name": "PathCapacityChangedAnalytics",
@@ -2046,7 +2200,29 @@
                   }
                 ],
                 "x-parser-schema-id": "PathCapacityChangedAnalyticsEvent"
-              }
+              },
+              "examples": [
+                {
+                  "name": "pathCapacityChangedAnalytics",
+                  "summary": "pick-to-tote (ReleaseFed, WIP limit 40, WIP 23) reports 17 remaining units of admission capacity for the 02:00 UTC cutoff (analytics stream).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "28b0b164-7eb3-4aba-aac1-d7498b344ed4",
+                    "source": "/warehouse/wes-work-planning",
+                    "type": "com.warehouse.wes.work-planning.workpool.PathCapacityChanged",
+                    "subject": "pick-to-tote",
+                    "time": "2026-08-21T22:40:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:wes-work-planning:analytics:PathCapacityChanged:v1",
+                    "data": {
+                      "path_id": "pick-to-tote",
+                      "cutoff_at": "2026-08-22T02:00:00Z",
+                      "remaining_units": 17,
+                      "known": true
+                    }
+                  }
+                }
+              ]
             },
             {
               "name": "PathPlanDriftDetectedAnalytics",
@@ -2126,7 +2302,30 @@
                   }
                 ],
                 "x-parser-schema-id": "PathPlanDriftDetectedAnalyticsEvent"
-              }
+              },
+              "examples": [
+                {
+                  "name": "pathPlanDriftDetectedAnalytics",
+                  "summary": "Workforce committed 8 heads for pick-to-tote; our PathPlan has 6 (analytics stream).",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "c75df77f-d33c-4d9d-837b-7c77dee8a963",
+                    "source": "/warehouse/wes-work-planning",
+                    "type": "com.warehouse.wes.work-planning.pathplan.PathPlanDriftDetected",
+                    "subject": "pick-to-tote",
+                    "time": "2026-08-21T09:05:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:wes-work-planning:analytics:PathPlanDriftDetected:v1",
+                    "data": {
+                      "path_id": "pick-to-tote",
+                      "wes_planned_heads": 6,
+                      "observed_planned_heads": 8,
+                      "drift_heads": 2,
+                      "observed_at": "2026-08-21T09:00:00Z"
+                    }
+                  }
+                }
+              ]
             }
           ]
         }

@@ -1014,6 +1014,28 @@
               ],
               "summary": "A coded slot was permanently retired.",
               "description": "Raised by `DecommissionLocationSlot`. Kafka key: `locationCode`. **Consumed live** by inventory-storage's location-classification cache, which evicts the slot (its stow placement check then fails open for that location, by design). Decommissioning is irreversible — there is no compensating event.\n",
+              "examples": [
+                {
+                  "name": "storageBinRetired",
+                  "summary": "A storage bin permanently retired from the warehouse map",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+                    "source": "/warehouse/facility-layout",
+                    "type": "com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned",
+                    "subject": "WH1-STOR-AMB-A07-03-02-B",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:facility-layout:events:LocationSlotDecommissioned:v1",
+                    "time": "2026-02-03T04:05:06Z",
+                    "data": {
+                      "eventName": "LocationSlotDecommissioned",
+                      "eventType": "com.warehouse.wms.facility-layout.locationslot.LocationSlotDecommissioned",
+                      "occurredAt": "2026-02-03T04:05:06Z",
+                      "locationCode": "WH1-STOR-AMB-A07-03-02-B"
+                    }
+                  }
+                }
+              ],
               "payload": {
                 "allOf": [
                   "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[0].payload.allOf[0]",
@@ -1199,6 +1221,35 @@
               ],
               "summary": "A coded slot's physical position/footprint was set or changed.",
               "description": "Raised by `SetLocationGeometry` (ADR-0017). CloudEvents `subject`: `locationCode`. Kafka key: `locationCode` (same partition as that location's `LocationSlotRegistered`). No consumer wired today.\n",
+              "examples": [
+                {
+                  "name": "storageBinGeometry",
+                  "summary": "A storage bin positioned in the site frame with a pick-path override",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+                    "source": "/warehouse/facility-layout",
+                    "type": "com.warehouse.wms.facility-layout.locationslot.LocationGeometryUpdated",
+                    "subject": "WH1-STOR-AMB-A07-03-02-B",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:facility-layout:events:LocationGeometryUpdated:v1",
+                    "time": "2026-02-03T04:05:06Z",
+                    "data": {
+                      "eventName": "LocationGeometryUpdated",
+                      "eventType": "com.warehouse.wms.facility-layout.locationslot.LocationGeometryUpdated",
+                      "occurredAt": "2026-02-03T04:05:06Z",
+                      "locationCode": "WH1-STOR-AMB-A07-03-02-B",
+                      "xM": 12.5,
+                      "yM": 40.25,
+                      "zM": 1.5,
+                      "widthM": 1.2,
+                      "depthM": 1,
+                      "heightM": 1.8,
+                      "pickSequence": 4217
+                    }
+                  }
+                }
+              ],
               "payload": {
                 "allOf": [
                   "$ref:$.channels.warehouse.facility.events.subscribe.message.oneOf[0].payload.allOf[0]",
