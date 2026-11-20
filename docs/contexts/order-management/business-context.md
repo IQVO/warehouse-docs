@@ -115,6 +115,20 @@ at all**, because "could not determine" and "can meet it" must never be
 the same answer (see
 [ADR-0020](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0020-network-originated-demand-hold-and-deadline-feasibility.md)).
 
+### A capacity warning informs the promise; it never changes it (ADR-0031, 0052, 0053)
+
+When `warehouse-planning` publishes a capacity plan with a shortage, the order
+whose promise overlaps that window carries a `capacityConstraint`
+annotation naming it. It is information for the caller: the promise itself is
+not moved, and the integration is opt-in (`PLANNED_CAPACITY_CONSUMER_GROUP`).
+Two rules keep the warning honest. A plan **replaced** by a newer one for the
+same window stops constraining at once: order-management consumes
+`CapacityPlanSuperseded`, marks the older plan's row `SUPERSEDED`, and nothing
+that arrives later (a redelivery, an out-of-order event) can revive it (ADR
+0052). And a plan belongs to an order's site by the plan's own `site_id`
+when it carries one, else by its `location` (ADR 0053), so a plan for another
+site is not applied to this order just because a location string matches.
+
 ### The order's status can never lie
 
 An order's overall status is always **computed** from the state of its

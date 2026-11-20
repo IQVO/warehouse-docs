@@ -24,15 +24,18 @@ Two things make that problem non-trivial:
    staffed capacity. Volume clears only as fast as the slowest path that
    touches it.
 
-This bounded context exists to reconcile those two staircases in real time.
-It is the only place in the platform that holds both at once.
+This bounded context exists to act on those two staircases in real time.
+It does not forecast the first or plan the second: the workload forecast and
+the labour plan are decided in `warehouse-planning`
+([ADR-0049](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0049-charge-forecast-and-shift-plan-move-to-warehouse-planning.md)).
+What stays here is the live side of both: the CPT on every unit of work and
+the WIP and backlog on every path.
 
 ## The vision
 
-> **Turn a shift's charge into a committed plan, then admit work onto the
-> floor continuously in deadline order, correcting the flow from live buffer
-> telemetry — so that every parcel makes its truck without the floor ever
-> being starved or flooded.**
+> **Admit work onto the floor continuously in deadline order, and correct
+> the flow from live buffer telemetry — so that every parcel makes its truck
+> without the floor ever being starved or flooded.**
 
 The phrase that matters is **"continuously re-optimising physical work in
 real time"** — the platform's reference model names this the heartbeat of
@@ -48,11 +51,12 @@ system of record that says what must happen and why.
 Concretely for this service:
 
 - **WMS says**: "900 units for the 18:00 truck, 500 more for the 21:00
-  truck, all on the pick path." → arrives here as a **charge forecast**.
-- **This service decides**: 6 heads on `pick-a` at 95 units/hour for 8
-  hours; release `wu-2` next because its CPT is 18:00 and `wu-1`'s is 21:00;
-  the pool is at its WIP limit with backlog remaining, so flag a headcount
-  move.
+  truck, all on the pick path." → arrives here as work units, each with its
+  CPT. (The same volume, bucketed by CPT ahead of the shift, is
+  `warehouse-planning`'s workload forecast; this service no longer records it.)
+- **This service decides**: release `wu-2` next because its CPT is 18:00
+  and `wu-1`'s is 21:00; the pool is at its WIP limit with backlog
+  remaining, so flag a headcount move.
 - **Downstream execution does**: turn the released unit into a claimable
   task and put it in front of an associate or a machine.
 
@@ -63,7 +67,10 @@ bucketed by CPT. "Demand" or "orders due today" flattens the staircase into
 a single number, and the moment you flatten it you can no longer tell
 whether you are on track: a path that has cleared 60% of the day's volume
 may be perfectly on plan or may have already missed the 18:00 truck, and
-only the CPT bucketing distinguishes those two worlds.
+only the CPT bucketing distinguishes those two worlds. Since ADR-0049 the
+bucketed forecast is `warehouse-planning`'s *workload forecast*; here the
+word survives as the vocabulary of the problem, and the CPT stays the only
+sort key on the floor.
 
 ## Why a process path is a queue, not a step
 
@@ -203,7 +210,7 @@ asks.** A path can sit over its alarm threshold indefinitely with no
 recommendation computed, because the trigger is a request. Continuous
 monitoring has to come from *outside* — a poller, a dashboard, an operator.
 
-## Three boundaries this context refuses to cross
+## Boundaries this context refuses to cross
 
 The value of the boundary is what it *keeps out*. Each of these is a
 decision, not an omission.
@@ -220,12 +227,19 @@ decision, not an omission.
   Releasing work is an *admission decision*, made in units of work, not
   actuator commands.
 - **It does not own geography or the list of paths.** Physical location
-  and travel distance belong to `facility-layout` (read once, optionally,
-  at shift-plan commit —
-  [ADR-0017](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0017-travel-distance-lookup-on-commit-shift-plan.md));
-  which process paths exist belongs to `process-path-management`
-  ([ADR-0012](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0012-process-path-catalogue-validation.md)).
-  This context conforms to both rather than modelling either.
+  and travel distance belong to `facility-layout`; this context no longer
+  reads them (the commit-time lookup of
+  [ADR-0017](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0017-travel-distance-lookup-on-commit-shift-plan.md)
+  was retired with the shift plan in ADR-0049). Which process paths exist
+  belongs to `process-path-management`
+  ([ADR-0012](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0012-process-path-catalogue-validation.md)),
+  and this context conforms to it rather than modelling it.
+- **It does not forecast or plan.** The workload forecast, the labour plan
+  and drift against it belong to `warehouse-planning`. `POST
+  /paths/{pathId}/charge` and `POST /paths/{pathId}/plan` answer `410` and
+  name the replacement routes. What this context still holds is
+  `LaborPlanObserved`, a pure projection of what `workforce-management`
+  last committed, which `RebalanceDecision` returns as context.
 
 ## Closing the promise loop
 

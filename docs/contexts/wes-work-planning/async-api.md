@@ -85,28 +85,27 @@ cutoff **timestamp** rather than process-path-management's `cptId`.
 provisioned. See
 [ADR-0018](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0018-path-capacity-changed.md).
 
-The other eight domain events are also written to this topic by the
+The other five domain events are also written to this topic by the
 outbound adapter, with small payloads (most carry only `path_id`), but
-nothing consumes them today — see [Domain Events](./domain-events). (Separately,
+nothing consumes them today — see [Domain Events](./domain-events). The
+retired `charge.ChargeForecastReceived`, `plan.ShiftPlanCommitted` and
+`pathplan.PathPlanDriftDetected` are no longer published (ADR-0049). (Separately,
 with `EVENT_PUBLISHER=kafka` a second publisher writes every domain event,
 as CloudEvents with an `…:analytics:…` `dataschema`, to
 `warehouse.wes.analytics` for the analytics data product —
 [ADR-0011](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0011-analytical-data-product.md).)
 
-Set `EVENT_PUBLISHER=kafka` (with `KAFKA_BROKERS`) to publish here; the
-default `log` publisher writes the same events to the log instead. Both
-implement the same `ports.EventPublisher` interface, so the use cases
-cannot tell which is wired. With `kafka` **and** `DATABASE_URL` set, the
-publishers act only as encoders inside the use case's transaction: one
-`outbox_events` row per event per topic, drained onto Kafka by an
-in-process relay
+`EVENT_PUBLISHER` accepts only `kafka` (with `KAFKA_BROKERS`): there is no
+log-only publisher
+([ADR-0044](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0044-postgres-and-kafka-are-the-only-runtime.md)).
+Every event is written to the transactional outbox, one `outbox_events` row
+per event per topic, and drained onto Kafka by an in-process relay
 ([ADR-0014](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0014-transactional-outbox.md)).
-Without `DATABASE_URL` events are published directly.
 
 ## Consumed
 
-Setting `KAFKA_BROKERS` starts the inbound consumer automatically,
-**independent of `EVENT_PUBLISHER`**. It reads six topics concurrently,
+The inbound consumer always runs: `KAFKA_BROKERS` and `KAFKA_CONSUMER_GROUP` are required and the process
+refuses to boot without them (ADR-0044), so it no longer depends on `EVENT_PUBLISHER`. It reads six topics concurrently,
 one goroutine each (workforce, inventory, fulfillment, order-management,
 network-inventory-planning and slotting-optimization), under the consumer
 group `KAFKA_CONSUMER_GROUP`
@@ -144,9 +143,13 @@ pick-face-replenishment's topic — see the sections below.
 Projected into `LaborPlanObserved`, keyed by `path_id`, read at
 `GET /paths/{pathId}/labor-plan-view`. Workforce publishes **one message
 per path line** of its own shift plan, which is why the projection keys on
-`path_id` with one row per path. **It is not fed into this service's own
-`ShiftPlan` aggregate or `CommitShiftPlan` use case** — same word,
-different bounded context.
+`path_id` with one row per path. Since
+[ADR-0049](https://github.com/IQVO/wes-work-planning/blob/develop/docs/docs/adr/0049-charge-forecast-and-shift-plan-move-to-warehouse-planning.md)
+this is a pure projection: this service has no `ShiftPlan` aggregate or
+`CommitShiftPlan` use case of its own, and no drift check against one (the
+`drift_heads` field of the view is deprecated). The shift's labour plan is
+`warehouse-planning`'s, and it publishes it as `LabourPlanCommitted`, which
+this service does not consume.
 
 ### `warehouse.inventory.events` — `StockReserved`, `ReservationRevoked`, from `inventory-storage`
 
@@ -419,9 +422,9 @@ nobody reads.
 
 | Env var | Default | Effect |
 |---|---|---|
-| `KAFKA_BROKERS` | *(unset)* | Comma-separated brokers. **Setting it starts the inbound consumer.** |
-| `KAFKA_CONSUMER_GROUP` | `wes-work-planning` | Consumer group of the integration-event consumer; set a unique value for any second process on the shared broker. |
-| `EVENT_PUBLISHER` | `log` | `kafka` switches the outbound publisher; requires `KAFKA_BROKERS`. With `DATABASE_URL` also set, events go through the transactional outbox. |
+| `KAFKA_BROKERS` | *(none, required)* | Comma-separated brokers. Unset or blank is a boot error (ADR-0044). |
+| `KAFKA_CONSUMER_GROUP` | *(none, required)* | Stable consumer group of the integration-event consumer, shared by every replica (the chart renders `wes-work-planning`); set a unique value for any second process on the shared broker. |
+| `EVENT_PUBLISHER` | `kafka` | The only accepted value; requires `KAFKA_BROKERS`. Events go through the transactional outbox (ADR-0044). |
 | `OUTBOX_RELAY_INTERVAL` | `1s` | How long the outbox relay sleeps between empty passes (outbox mode only). |
 | `PRODUCT_CLASSIFICATION_MODE` | `permissive` | `kafka` keeps the local copy of product-master's classification; `http` is rejected at boot (ADR-0035). |
 | `PRODUCT_CLASSIFICATION_CONSUMER_GROUP` | *(none)* | Required with `kafka`: the stable consumer group of the classification copy. |

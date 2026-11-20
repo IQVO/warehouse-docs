@@ -19,62 +19,98 @@ have"): none of the other contexts computes a normalized, cross-process
 effective capacity or a forward-looking capacity shortage
 ([ADR 0001](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0001-warehouse-planning-bounded-context.md)).
 
-It owns three things: **process and process-path capacity** (the minimum
-across a step's registered constraints, normalized to orders per hour), the
-rule by which a registered capacity window is **resolved by coverage**
+It owns two sides of one question. The **capacity side**: **process and
+process-path capacity** (the minimum across a step's registered constraints,
+normalized to orders per hour), the rule by which a registered capacity
+window is **resolved by coverage**
 ([ADR 0003](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0003-window-coverage-semantics.md)),
 and the **station capacity composition** done at read time
 ([ADR 0002](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0002-station-capacity-composition.md)).
 On top of those it keeps the **CapacityPlan** aggregate: assigned demand
 versus path capacity over a planning window, with the resulting shortage and
-the bottleneck step.
+the bottleneck step. The **requirement side** (ADRs 0022 to 0025, accepted
+2026-11-18): the **workload forecast** per site and path, the **labour plan**
+per site, shift and path with its **drift** against what workforce-management
+committed (both moved here from `wes-work-planning`, ADR 0023), the **labour
+requirement** a plan states per step from labor-performance's standards
+([ADR 0022](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0022-labour-standards-from-labor-performance.md)),
+and plans that take their demand from the forecast, **scenarios**, a
+**comparison read** and **supersession**
+([ADR 0024](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0024-forecast-demand-and-plan-scenarios.md)).
 
 :::info[What is live, what is opt-in, and what is planned]
-Per this context's own [Context Map](/contexts/warehouse-planning/context-map):
+Per this context's own [Context Map](/contexts/warehouse-planning/context-map)
+and [Domain Events](/contexts/warehouse-planning/domain-events):
 
-**Live:** `workforce-management` to `warehouse-planning`
-(`ShiftPlanCommitted` on `warehouse.workforce.events`) and
-`facility-layout` to `warehouse-planning` (`LocationSlotRegistered` and
-`LocationSlotDecommissioned` on `warehouse.facility.events`) are real Kafka
-consumers. The context publishes six CloudEvents types on
-`warehouse.warehouse-planning.events` through a transactional outbox: four
-`capacityplan` types, with an analytics copy of each on
+**Live, consumed (every consumer group is required, none is optional):**
+`workforce-management`'s `ShiftPlanCommitted` (a `LABOR` constraint, and the
+committed heads the drift compares), `facility-layout`'s
+`LocationSlotRegistered` and `LocationSlotDecommissioned`, `order-management`'s
+`OrderAllocated` and `OrderPartiallyAllocated` (expected demand, at the
+event's own `site_id`, else `DEMAND_SITE_ID`, ADR 0021), `dock-scheduling`'s
+dock appointment events (inbound labour demand, ADR 0020, which replaced the
+`inbound-receiving` events of ADR 0017), `fulfillment-execution`'s
+`TaskCompleted` (observed capacity), and `labor-performance`'s
+`LaborStandardDefined` and `LaborStandardRevised` from its integration topic
+(a local copy of the standards, ADR 0022).
+
+**Live, published:** ten CloudEvents types on
+`warehouse.warehouse-planning.events` through a transactional outbox: five
+`capacityplan` types (`CapacityPlanCreated`, `CapacityPlanPublished`,
+`CapacityShortageDetected`, `BottleneckDetected` and `CapacityPlanSuperseded`,
+raised when publishing a plan replaces the plan published before it for the
+same site, location, path and window), two `processcapacity` types
+(`ProcessCapacityRegistered` and `ProcessCapacityChanged`, no consumer) and
+three requirement-side types: `WorkloadForecastReceived`,
+`LabourPlanCommitted` and `LabourPlanDriftDetected`. The capacity-plan and
+requirement-side events also have an analytics copy on
 `warehouse.warehouse-planning.analytics` for its own projector and reports
-(ADR 0005), and the integration-only `processcapacity` types
-`ProcessCapacityRegistered` and `ProcessCapacityChanged`, raised when a
-registration brings a ProcessCapacity into being or moves its effective rate
-(no consumer yet). It serves REST (Kong route
-`/api/warehouse-planning`) and MCP. `warehouse-ops-agent` reads
-`get_process_path_capacity` for its daily-brief capacity outlook, and the
-console hosts this context's own `capacity_mfe` remote.
+(ADR 0005). It serves REST (Kong route `/api/warehouse-planning`) and MCP;
+`warehouse-ops-agent` reads `get_process_path_capacity` for its daily-brief
+capacity outlook, and the console hosts this context's own `capacity_mfe`
+remote.
 
-**Wired, opt-in:** consuming `order-management`'s `OrderAllocated` and
-`OrderPartiallyAllocated` as expected demand (off unless
-`DEMAND_CONSUMER_GROUP` is set, ADR 0004), and `order-management`
-consuming this context's capacity-plan events (its ADR 0031, off unless
-`PLANNED_CAPACITY_CONSUMER_GROUP` is set).
+**Live, consumed by siblings:** `order-management` reads the capacity-plan
+events into a local read model, including `CapacityPlanSuperseded` (its ADRs
+0031 and 0052; opt-in on its side with `PLANNED_CAPACITY_CONSUMER_GROUP`) and
+matches a plan by `site_id`, else by `location` (its ADR 0053).
+`workforce-management` keeps `LabourPlanCommitted` as the heads a shift
+requires and proposes from it (its ADR 0043).
 
-**Built by [ADR 0017](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0017-inbound-labour-demand-and-observed-capacity-feedback.md),
-consumer groups pinned in `warehouse-infra` `develop`:** inbound labour
-demand from `inbound-receiving`'s `DockAppointmentBooked` and
-`DockAppointmentCancelled` (local `inbound_appointments` read model, labour
-composed at read time from an operator-declared `InboundLabourStandard`,
-`PUT /inbound-labour-standards/{location}/{path_id}`, `GET /inbound-demand`),
-and observed-capacity feedback from `fulfillment-execution`'s
-`TaskCompleted`, compared with the plan by
-`GET /capacity-plans/{id}/variance`. Both attribute to the configured
-`DEMAND_SITE_ID` because neither event carries a site.
+**New REST surface:** `PUT`/`GET /workload-forecasts/{site_id}/{path_id}`,
+`PUT`/`GET /labour-plans/{site_id}/{shift_id}/{path_id}`, `GET /labour-plans`
+and `GET /capacity-plans/comparisons`. `POST /capacity-plans` takes an
+optional `demand_source` (`request`, `orders` or `forecast`) and an optional
+`scenario` label. `wes-work-planning`'s `POST /paths/{pathId}/charge` and
+`/plan` answer `410` and name these routes.
+
+**Built by [ADR 0017](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0017-inbound-labour-demand-and-observed-capacity-feedback.md):**
+observed-capacity feedback from `fulfillment-execution`'s `TaskCompleted`,
+compared with the plan by `GET /capacity-plans/{id}/variance`, and inbound
+labour demand composed at read time from an operator-declared
+`InboundLabourStandard` (`PUT /inbound-labour-standards/{location}/{path_id}`,
+`GET /inbound-demand`).
+
+**Decided, not built:** `ProcessFlow`
+([ADR 0025](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0025-process-flows-from-process-path-management.md)).
+`process-path-management` would publish an ordered sequence of process-path
+stages, this context would keep a version-guarded local copy as the path
+capacity's steps, and `POST /process-paths` would retire through a strangler.
+Nothing of it is in the code on `develop`: the process paths are still
+declared here.
 
 **Planned, not implemented:** observed capacity from `wes-work-planning`
 and demand from `network-fulfillment`, as drawn in ADR 0001's context map.
 :::
 
-:::note[Deliberately not consumed]
-`process-path-management` is **not** consumed. Its `ProcessPath` carries
+:::note[Not consumed today]
+`process-path-management` is **not** consumed yet. Its `ProcessPath` carries
 routing and capability metadata (`path_id`, `required_capabilities`,
 `eligibility`), never an ordered list of physical process steps, so this
 context owns its own, operator-declared `ProcessPath` and shares only the
-`path_id` string as a loose human cross-reference (ADR 0001 Addendum).
+`path_id` string as a loose human cross-reference (ADR 0001 Addendum). ADR 0025
+replaces that Separate Ways with a customer/supplier edge once `ProcessFlow`
+is built.
 :::
 
 ## This context's pages
@@ -83,7 +119,8 @@ context owns its own, operator-declared `ProcessPath` and shares only the
   "how much work can we perform" needed its own context.
 - [Ubiquitous Language](/contexts/warehouse-planning/ubiquitous-language):
   ProcessCapacity, CapacityConstraint, CapacityRate, CapacityWindow,
-  WorkloadProfile, ProcessPath, StationStandard, CapacityPlan, Bottleneck.
+  WorkloadProfile, ProcessPath, StationStandard, CapacityPlan, Bottleneck,
+  workload forecast, labour plan, labour plan drift.
 - [Core Domain Chart](/contexts/warehouse-planning/core-domain-chart)
   ([ddd-crew core-domain-charts](https://github.com/ddd-crew/core-domain-charts)):
   why this context is Core.
@@ -99,8 +136,11 @@ context owns its own, operator-declared `ProcessPath` and shares only the
   ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
   the `CapacityPlan` aggregate (plus the `ProcessCapacity` aggregate).
 - [Domain Events](/contexts/warehouse-planning/domain-events):
-  `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected`
-  and `BottleneckDetected`, plus the events it consumes.
+  the capacity-plan events (`CapacityPlanCreated`, `CapacityPlanPublished`,
+  `CapacityShortageDetected`, `BottleneckDetected`), the `processcapacity`
+  events, `WorkloadForecastReceived`, `LabourPlanCommitted` and
+  `LabourPlanDriftDetected`, plus the events it consumes. The synced page does
+  not list `CapacityPlanSuperseded` yet; the generated AsyncAPI reference does.
 - [Domain Message Flow](/contexts/warehouse-planning/domain-message-flow)
   ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):
   key scenarios as commands, events and queries.
@@ -127,7 +167,8 @@ is synced from the `warehouse-planning` repository.
   [0002](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0002-station-capacity-composition.md)
   and
   [0003](https://github.com/IQVO/warehouse-planning/blob/develop/docs/adr/0003-window-coverage-semantics.md).
-  There are eleven on `develop` (0001 to 0011).
+  There are twenty-five on `develop` (0001 to 0025); 0022 to 0025 are the
+  requirement side.
 - [ADR index](/adr): links to this context's own decision records.
 - **Generated references on this site**: [REST](/api-reference/rest/warehouse-planning/warehouse-planning)
   and [AsyncAPI](/api-reference/async/warehouse-planning), generated from

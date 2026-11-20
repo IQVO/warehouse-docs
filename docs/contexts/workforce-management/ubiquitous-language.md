@@ -2,6 +2,7 @@
 id: ubiquitous-language
 title: Ubiquitous language
 sidebar_label: Ubiquitous language
+sidebar_position: 5
 description: The exact vocabulary of this bounded context, with the definitions the code implements.
 ---
 

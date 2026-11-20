@@ -77,7 +77,13 @@ identity and becomes the upstream that supplies it to the others.
   ([ADR 0043](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0043-release-confirmation-from-workunitcreated.md))
   is analytics-only. The page also
   covers the CloudEvents types it consumes from sibling contexts. On
-  `develop` it consumes `product-master`'s `ProductClassified` into a
+  `develop` it consumes `warehouse-planning`'s capacity-plan events,
+  `CapacityPlanSuperseded` included, into a planned-capacity read model
+  ([ADR 0031](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0031-consume-warehouse-planning-capacity-plans.md),
+  [0052](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0052-consume-capacity-plan-superseded.md),
+  [0053](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0053-match-planned-capacity-by-plan-site-id.md):
+  a plan matches an order's site by its `site_id`, else by its `location`;
+  opt-in with `PLANNED_CAPACITY_CONSUMER_GROUP`), `product-master`'s `ProductClassified` into a
   local `product_classification_copy`
   ([ADR 0036](https://github.com/IQVO/order-management/blob/develop/docs/docs/adr/0036-product-classification-local-copy.md);
   `PRODUCT_CLASSIFICATION_MODE=kafka` in the reference deployment), and, opt-in

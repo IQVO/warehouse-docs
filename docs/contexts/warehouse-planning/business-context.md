@@ -44,6 +44,52 @@ bolt onto an existing service (ADR 0001, Context).
   capacity over that window, with the **shortage** (never negative; demand
   exactly equal to capacity is not a shortage) and the **bottleneck** step
   that limits end-to-end flow.
+- **The labour a plan requires** — per step of the path, the tasks the demand
+  implies times the engineered standard seconds from `labor-performance`,
+  as required labour hours and average heads. A step with no standard or no
+  task factor is reported unknown with a reason, never guessed (ADR 0022).
+
+## The requirement side: forecast, labour plan, scenarios
+
+On 2026-11-18 four decisions (ADRs 0022 to 0025) made this context the owner
+of the requirement side of planning, next to the capacity side above. Before,
+the forecast and the shift plan were saved in `wes-work-planning`, and the
+shift's heads were committed separately in `workforce-management`. Now:
+
+- **The workload forecast** — the volume a process path will receive at a
+  site, in CPT buckets, saved by `PUT /workload-forecasts/{site_id}/{path_id}`
+  (ADR 0023). It is what `wes-work-planning` called the charge forecast;
+  that context stopped recording it (ADR 0049 there).
+- **The labour plan** — the heads a path needs for one shift at one site,
+  saved by `PUT /labour-plans/{site_id}/{shift_id}/{path_id}` and published as
+  `LabourPlanCommitted`, which `workforce-management` turns into proposed
+  heads (its ADR 0043). Heads can be derived from the forecast when the caller
+  omits them. The invariant that planned heads never exceed installed
+  stations moved here unchanged.
+- **Drift** — the signed difference between the heads workforce-management
+  committed (read from `ShiftPlanCommitted`) and the heads the plan needs,
+  raised as `LabourPlanDriftDetected` only when it is non-zero and has
+  changed. It never corrects either side.
+- **Forecast demand** — `POST /capacity-plans` accepts
+  `demand_source: forecast`: the demand is the forecast quantity whose CPT
+  falls in the plan window, divided by the request's `units_per_order`
+  (required for this source). No bucket in the window is no data, not zero
+  demand (ADR 0024).
+- **Scenarios and the comparison read** — several draft plans of one window
+  are what-if scenarios, each with a `scenario` label.
+  `GET /capacity-plans/comparisons?ids=` lines two to five of them up side by
+  side, reading stored plans rather than recomputing.
+- **Supersession** — publishing a plan moves the plan previously published for
+  the same site, location, path and window to the terminal status
+  `SUPERSEDED` and raises `CapacityPlanSuperseded`, so a consumer keeps the
+  newest published plan per window. `order-management` consumes it (its ADR
+  0052) and matches plans by the plan's `site_id`, else by `location` (its
+  ADR 0053).
+
+`ProcessFlow` (ADR 0025) is decided and not built: `process-path-management`
+would publish the ordered stages of a flow and this context would read them
+as a path's steps instead of declaring them with `POST /process-paths`. Until
+it is built, a path's steps are still declared here.
 
 ## Why capacity is composed, not stored
 
@@ -76,12 +122,16 @@ and `labor-performance` (ADR 0001).
 ## Honest scope today
 
 - **Demand.** Order demand arrives from `order-management`'s allocation
-  events (ADR 0004) and inbound labour demand from `inbound-receiving`'s dock
-  appointments (ADR 0017); `assigned_demand` and the `WorkloadProfile`
-  factors can still travel in the `POST /capacity-plans` body. Demand from
+  events (ADR 0004), at the event's own `site_id` (ADR 0021), and inbound
+  labour demand from `dock-scheduling`'s dock appointments (ADR 0020, which
+  replaced `inbound-receiving`'s); the workload forecast (ADR 0024) and
+  `assigned_demand` with the `WorkloadProfile` factors can still travel in
+  the `POST /capacity-plans` body. Demand from
   `network-fulfillment` remains a documented later decision (ADR 0001).
 - **Downstream consumption.** `order-management` consumes the capacity-plan
-  events into a local read model (its ADR 0031); see the
+  events, `CapacityPlanSuperseded` included, into a local read model (its
+  ADRs 0031 and 0052); `workforce-management` consumes `LabourPlanCommitted`
+  (its ADR 0043); see the
   [Context Map](/strategic-design/context-map).
 - **Read side.** The analytics stream and `planning-projector` (ADR 0005)
   and the console's `capacity_mfe` remote are built.
