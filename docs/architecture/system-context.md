@@ -89,9 +89,14 @@ a wired integration**:
 
 ## What is deliberately outside the boundary
 
-- **No warehouse control system (WCS).** This platform does not drive
-  conveyors, sorters, or robotics. Its lowest level of physical detail is a
-  `LocationSlot` and a `Station`.
+- **WCS tier begun, WES seam still closed.** `asrs-control` (IQVO/asrs-control,
+  develop, merged 2026-11-20) drives the emulated AS/RS over MQTT telegrams and
+  publishes on `warehouse.asrs-control.events`; conveyors, sorters and AMR
+  fleets remain unbuilt (`amr-fleet-control`, `material-flow-control` are
+  designed), and `fulfillment-execution` keeps its empty `EquipmentCommandPort`
+  (ADR-0015) until plan 04 wires the subsystem controller in. Outside the WCS
+  contexts, the platform's lowest level of physical detail is a `LocationSlot`
+  and a `Station`.
 - **No transportation management.** Route planning, carrier rating and
   manifesting are out of scope.
 - **No identity provider.** Every REST and MCP endpoint in the fleet is
