@@ -12,7 +12,7 @@
     "license": {
       "name": "UNLICENSED"
     },
-    "description": "Event catalog for the **warehouse-planning** bounded context (WES\nsubdomain): *can this warehouse process the demand assigned to it?*\n\n**Published (Phase 4).** The `CapacityPlan` aggregate raises four events,\npublished to `warehouse.warehouse-planning.events` through a\n**transactional outbox**: the plan and its already-encoded events are\nwritten in ONE database transaction, and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is persisted with the outbox row, so\na retry republishes the same `id` -- consumers dedupe on it). Per plan:\n`CapacityPlanCreated` on creation; on publication\n`CapacityPlanPublished`, plus `CapacityShortageDetected` and\n`BottleneckDetected` only when the plan has a shortage. Publishing a plan\nsupersedes the plan published before it for the same site, location,\npath and window (ADR 0024 decision 3): `CapacityPlanSuperseded` of that\nOLDER plan is queued first, in the same transaction.\nThe `ProcessCapacity` aggregate publishes on the same topic and the same\noutbox: `ProcessCapacityRegistered` when its first (native) constraint\nbrings it into being, `ProcessCapacityChanged` when a registration\nmoves the effective rate (the minimum rate value, the binding\nconstraint, or both); a registration the effective rate does not notice\nraises nothing. ProcessCapacity events are integration-stream only: the\nanalytics fanout carries plan facts only (ADR 0005).\n\n**Published (ADR 0023).** The workload forecast and the shift labour plan\nmoved here from wes-work-planning. `WorkloadForecastReceived` (entity\n`workloadforecast`, key `site_id/path_id`) is raised by every receipt that\nchanged a forecast; `LabourPlanCommitted` (entity `labourplan`, key\n`site_id/shift_id/path_id`) by every commit that changed a labour plan,\ncarrying every field of the plan (workforce-management keeps a copy and\napplies a message only when its `version` is greater than the stored\none); `LabourPlanDriftDetected` (same entity and key) when the heads\nworkforce-management committed differ from the plan's and the drift is\nnew. A PUT that changes nothing raises nothing. All three are written to\nBOTH topics through the same outbox, with the same payload on each.\n\n**Consumed (Phase 3).** `ShiftPlanCommitted` (workforce-management) and\n`LocationSlotRegistered`/`LocationSlotDecommissioned` (facility-layout) keep\nlocal ProcessCapacity read models current; this context never makes a\nlive cross-context call.\n\n**Consumed (ADR 0004).** `OrderAllocated` and\n`OrderPartiallyAllocated` (order-management, topic\n`warehouse.order-management.events`) keep a local expected-demand read\nmodel current under the REQUIRED consumer group `DEMAND_CONSUMER_GROUP`.\nEach order is counted once, at its latest promise cutoff, and attributed to\nthe event's own optional `site_id` (order-management ADR 0050), or to the\nconfigured fallback site (`DEMAND_SITE_ID`) when the event carries none\n(ADR 0021). `OrderRepromised` and every other type are ignored.\n\n**Consumed (ADR 0017, source switched by ADR 0020).** dock-scheduling's\n`DockAppointmentBooked`, `DockAppointmentRescheduled`,\n`DockAppointmentCancelled` and `DockAppointmentNoShow` (topic\n`warehouse.dock-scheduling.events`, group `DOCK_APPOINTMENT_CONSUMER_GROUP`)\nkeep a local inbound-demand read model current: a capacity plan carries the\nINBOUND dock appointments of its window and the labour the operator-declared\ninbound standard attributes to them. Each appointment is attributed to the\n`site_id` of its events; the producer's aggregate `version` orders them (a\nCancelled that arrives before its Booked wins). inbound-receiving's\nappointment events are NO LONGER consumed, and a deployment that still sets\n`INBOUND_DEMAND_CONSUMER_GROUP` is refused at boot. `TaskCompleted`\n(fulfillment-execution, topic `warehouse.fulfillment.events`, group\n`OBSERVED_CAPACITY_CONSUMER_GROUP`) keeps a local observed-capacity read\nmodel current that feeds an ADVISORY planned-versus-observed variance; it\nnever changes a planned capacity and is attributed to the configured site\n(`DEMAND_SITE_ID`). Both consumers dead-letter unusable payloads to\n`<topic>.dlq`.\n\n**Consumed (ADR 0022).** labor-performance's `LaborStandardDefined` and\n`LaborStandardRevised` (topic `warehouse.labor-performance.events`, its\nINTEGRATION topic per its ADR 0038; group `LABOR_STANDARD_CONSUMER_GROUP`)\nkeep a local copy of the engineered labour standards, one record per\n`standard_id`. A capacity plan prices each step of its path with the\nstandard of its task type in force for the plan's site at the window start\n(`labour_requirement`, REST and MCP only: no event this service publishes\ncarries it). Every other type on that topic is ignored, the producer's\nanalytics topic is never read, and an unusable payload is dead-lettered to\n`warehouse.labor-performance.events.dlq`.\n\n**Analytics stream (ADR 0005).** The same four events are ALSO written to\n`warehouse.warehouse-planning.analytics` in the SAME outbox transaction\n(two outbox rows per event, one per topic), as CloudEvents 1.0 with the\nSAME `type` and the SAME `id` per occurrence but\n`dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`.\nThe three ADR 0023 events get the same analytics copy, with the\nintegration payload unchanged; the projector does not project them yet\n(it acknowledges and ignores them).\nThe integration messages are byte-identical to what they were before the\nstream existed. The analytics payloads are the integration payloads plus\nadditive, analytics-only fields: today `binding_constraint` on\n`CapacityPlanPublished` (the constraint type -- LABOR, STATION, ... --\nbinding the bottleneck step; `\"\"` for a plan created before it was\nrecorded). Only this service's own `planning-projector` consumes it (fixed\nconsumer group, at-least-once, offsets committed after the projection\ncommitted), into a SEPARATE analytical database that\n`planning-reports` serves read-only. Poison messages go to\n`warehouse.warehouse-planning.analytics.dlq`.\n\n**Envelope (mandatory).** Every message is a CloudEvents 1.0 event in\n*structured content mode* (Kafka value = JSON event format) with the Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0014); consumers may extract them, and must not require\nthem. All of\n`specversion` (`1.0`), `id`, `source` (`/warehouse/warehouse-planning`),\n`type`, `subject`, `time`, `datacontenttype` (`application/json`) and\n`dataschema` are required; the payload sits under `data`. No flat\nenvelope, no toggle.\n\n**Type naming.** `com.warehouse.wes.warehouse-planning.<entity>.<EventName>`\nwhere `<entity>` is the aggregate that raised the event, lowercase, no\nseparators -- `capacityplan`, `processcapacity`, `workloadforecast` or\n`labourplan`. **dataschema** =\n`urn:warehouse:warehouse-planning:events:<EventName>:v1`. **subject** and\nthe Kafka message key = the aggregate's id: the capacity plan id,\n`<processType>/<location>/<windowStart>/<windowEnd>` for a\nProcessCapacity, `<site_id>/<path_id>` for a WorkloadForecast, or\n`<site_id>/<shift_id>/<path_id>` for a LabourPlan (one aggregate's events\nstay ordered on one partition).\nA breaking payload change gets a new `.v2` type and dataschema, never a\nmutation.\n"
+    "description": "Event catalog for the **warehouse-planning** bounded context (WES\nsubdomain): *can this warehouse process the demand assigned to it?*\n\n**Published (Phase 4).** The `CapacityPlan` aggregate raises four events,\npublished to `warehouse.warehouse-planning.events` through a\n**transactional outbox**: the plan and its already-encoded events are\nwritten in ONE database transaction, and a relay drains them to Kafka\n(at-least-once; the CloudEvents `id` is persisted with the outbox row, so\na retry republishes the same `id` -- consumers dedupe on it). Per plan:\n`CapacityPlanCreated` on creation; on publication\n`CapacityPlanPublished`, plus `CapacityShortageDetected` and\n`BottleneckDetected` only when the plan has a shortage. Publishing a plan\nsupersedes the plan published before it for the same site, location,\npath and window (ADR 0024 decision 3): `CapacityPlanSuperseded` of that\nOLDER plan is queued first, in the same transaction.\nThe `ProcessCapacity` aggregate publishes on the same topic and the same\noutbox: `ProcessCapacityRegistered` when its first (native) constraint\nbrings it into being, `ProcessCapacityChanged` when a registration\nmoves the effective rate (the minimum rate value, the binding\nconstraint, or both); a registration the effective rate does not notice\nraises nothing. ProcessCapacity events are integration-stream only: the\nanalytics fanout carries plan facts only (ADR 0005).\n\n**Published (ADR 0023).** The workload forecast and the shift labour plan\nmoved here from wes-work-planning. `WorkloadForecastReceived` (entity\n`workloadforecast`, key `site_id/path_id`) is raised by every receipt that\nchanged a forecast; `LabourPlanCommitted` (entity `labourplan`, key\n`site_id/shift_id/path_id`) by every commit that changed a labour plan,\ncarrying every field of the plan (workforce-management keeps a copy and\napplies a message only when its `version` is greater than the stored\none); `LabourPlanDriftDetected` (same entity and key) when the heads\nworkforce-management committed differ from the plan's and the drift is\nnew. A PUT that changes nothing raises nothing. All three are written to\nBOTH topics through the same outbox, with the same payload on each.\n\n**Consumed (Phase 3).** `ShiftPlanCommitted` (workforce-management) and\n`LocationSlotRegistered`/`LocationSlotDecommissioned` (facility-layout) keep\nlocal ProcessCapacity read models current; this context never makes a\nlive cross-context call.\n\n**Consumed (ADR 0004).** `OrderAllocated` and\n`OrderPartiallyAllocated` (order-management, topic\n`warehouse.order-management.events`) keep a local expected-demand read\nmodel current under the REQUIRED consumer group `DEMAND_CONSUMER_GROUP`.\nEach order is counted once, at its latest promise cutoff, and attributed to\nthe event's own optional `site_id` (order-management ADR 0050), or to the\nconfigured fallback site (`DEMAND_SITE_ID`) when the event carries none\n(ADR 0021). `OrderRepromised` and every other type are ignored.\n\n**Consumed (ADR 0017, source switched by ADR 0020).** dock-scheduling's\n`DockAppointmentBooked`, `DockAppointmentRescheduled`,\n`DockAppointmentCancelled` and `DockAppointmentNoShow` (topic\n`warehouse.dock-scheduling.events`, group `DOCK_APPOINTMENT_CONSUMER_GROUP`)\nkeep a local inbound-demand read model current: a capacity plan carries the\nINBOUND dock appointments of its window and the labour the operator-declared\ninbound standard attributes to them. Each appointment is attributed to the\n`site_id` of its events; the producer's aggregate `version` orders them (a\nCancelled that arrives before its Booked wins). inbound-receiving's\nappointment events are NO LONGER consumed, and a deployment that still sets\n`INBOUND_DEMAND_CONSUMER_GROUP` is refused at boot. `TaskCompleted`\n(fulfillment-execution, topic `warehouse.fulfillment.events`, group\n`OBSERVED_CAPACITY_CONSUMER_GROUP`) keeps a local observed-capacity read\nmodel current that feeds an ADVISORY planned-versus-observed variance; it\nnever changes a planned capacity and is attributed to the configured site\n(`DEMAND_SITE_ID`). Both consumers dead-letter unusable payloads to\n`<topic>.dlq`.\n\n**Consumed (ADR 0022).** labor-performance's `LaborStandardDefined` and\n`LaborStandardRevised` (topic `warehouse.labor-performance.events`, its\nINTEGRATION topic per its ADR 0038; group `LABOR_STANDARD_CONSUMER_GROUP`)\nkeep a local copy of the engineered labour standards, one record per\n`standard_id`. A capacity plan prices each step of its path with the\nstandard of its task type in force for the plan's site at the window start\n(`labour_requirement`, REST and MCP only: no event this service publishes\ncarries it). Every other type on that topic is ignored, the producer's\nanalytics topic is never read, and an unusable payload is dead-lettered to\n`warehouse.labor-performance.events.dlq`.\n\n**Consumed (ADR 0025).** process-path-management's `ProcessFlowDefined`,\n`ProcessFlowRevised` and `ProcessFlowRetired` (topic\n`warehouse.process-path-management.events`, its INTEGRATION topic; group\n`PROCESS_FLOW_CONSUMER_GROUP`) keep a local copy of the process flows, one\nrow per `flow_id`. Every message is the FULL state of the flow and carries\nits `version`; it is applied only when its version is greater than the\nstored one, so a redelivery, the producer's startup republish and a\nreordered message are harmless. The path capacity resolves a `path_id` from\nan ACTIVE flow first (its steps are the stages' `process_type` values in\norder) and falls back to the locally declared path; the REST and MCP reads\nof a path carry a read-only `source` (`flow` or `local`). Every other type\non that topic is ignored, the producer's analytics topic is never read, and\nan unusable payload (an unknown `process_type`, no stages, a bad status or\nversion) is dead-lettered to `warehouse.process-path-management.events.dlq`.\n\n**Analytics stream (ADR 0005).** The same four events are ALSO written to\n`warehouse.warehouse-planning.analytics` in the SAME outbox transaction\n(two outbox rows per event, one per topic), as CloudEvents 1.0 with the\nSAME `type` and the SAME `id` per occurrence but\n`dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`.\nThe three ADR 0023 events get the same analytics copy, with the\nintegration payload unchanged; the projector does not project them yet\n(it acknowledges and ignores them).\nThe integration messages are byte-identical to what they were before the\nstream existed. The analytics payloads are the integration payloads plus\nadditive, analytics-only fields: today `binding_constraint` on\n`CapacityPlanPublished` (the constraint type -- LABOR, STATION, ... --\nbinding the bottleneck step; `\"\"` for a plan created before it was\nrecorded). Only this service's own `planning-projector` consumes it (fixed\nconsumer group, at-least-once, offsets committed after the projection\ncommitted), into a SEPARATE analytical database that\n`planning-reports` serves read-only. Poison messages go to\n`warehouse.warehouse-planning.analytics.dlq`.\n\n**Envelope (mandatory).** Every message is a CloudEvents 1.0 event in\n*structured content mode* (Kafka value = JSON event format) with the Kafka\nheader `content-type: application/cloudevents+json; charset=UTF-8`.\nOptional W3C trace-context headers (`traceparent`, and `tracestate` /\n`baggage` when present) carry the trace of the request that wrote the\noutbox row (ADR 0014); consumers may extract them, and must not require\nthem. All of\n`specversion` (`1.0`), `id`, `source` (`/warehouse/warehouse-planning`),\n`type`, `subject`, `time`, `datacontenttype` (`application/json`) and\n`dataschema` are required; the payload sits under `data`. No flat\nenvelope, no toggle.\n\n**Type naming.** `com.warehouse.wes.warehouse-planning.<entity>.<EventName>`\nwhere `<entity>` is the aggregate that raised the event, lowercase, no\nseparators -- `capacityplan`, `processcapacity`, `workloadforecast` or\n`labourplan`. **dataschema** =\n`urn:warehouse:warehouse-planning:events:<EventName>:v1`. **subject** and\nthe Kafka message key = the aggregate's id: the capacity plan id,\n`<processType>/<location>/<windowStart>/<windowEnd>` for a\nProcessCapacity, `<site_id>/<path_id>` for a WorkloadForecast, or\n`<site_id>/<shift_id>/<path_id>` for a LabourPlan (one aggregate's events\nstay ordered on one partition).\nA breaking payload change gets a new `.v2` type and dataschema, never a\nmutation.\n"
   },
   "servers": {
     "production": {
@@ -3345,6 +3345,300 @@
           ]
         }
       }
+    },
+    "warehouse.process-path-management.events": {
+      "description": "process-path-management's integration topic (`ProcessPathManagementTopic`; the flow events\nare keyed by `flow_id`, its ADR 0042). This service consumes it with a STABLE consumer\ngroup read from env `PROCESS_FLOW_CONSUMER_GROUP` (REQUIRED, no default; ADR 0016/0025).\nOnly the full types `com.warehouse.wes.process-path-management.processflow.ProcessFlowDefined`,\n`...processflow.ProcessFlowRevised` and `...processflow.ProcessFlowRetired` are acted on;\nevery other `type` (`ProcessPathCreated`, `ProcessPathUpdated`, `ProcessPathDeactivated`,\n`CPTScheduleChanged`) is acknowledged and ignored. A message that is not CloudEvents 1.0,\nor a flow without `flow_id`, without stages, with a stage without `path_id` or with a\n`process_type` outside PICK, REBIN, PACK, SLAM, DISPATCH, ARRIVAL, RELOCATE, REPLENISH,\na `status` other than ACTIVE or RETIRED, a `version` below 1 or no event `time`, is\npublished to `warehouse.process-path-management.events.dlq` (raw bytes plus `x-dlq-*`\nheaders) and never applied.\n",
+      "publish": {
+        "operationId": "consumeProcessFlowEvents",
+        "summary": "Consume process-path-management's ProcessFlowDefined / ProcessFlowRevised / ProcessFlowRetired.",
+        "description": "Consumed by this service into a LOCAL copy of the process flows (`process_flows`, one\nrow per `flow_id`; additive). Each message is the full state of the flow; it is applied\nONLY when its `version` is greater than the stored one (equal or lower is acknowledged\nand changes nothing; a first message of any of the three types for an unknown flow is\nstored, a Retired one as a RETIRED row). The idempotency claim on the CloudEvents `id`\nand the write commit in ONE transaction. See\ndocs/adr/0025-process-flows-from-process-path-management.md.\n",
+        "tags": [
+          {
+            "name": "consumed"
+          }
+        ],
+        "message": {
+          "oneOf": [
+            {
+              "name": "ProcessFlowDefined",
+              "title": "Process flow defined (consumed)",
+              "summary": "process-path-management defined a process flow (version 1).",
+              "description": "CONSUMED from `warehouse.process-path-management.events` (producer: process-path-management,\nits own `apis/asyncapi.yaml`, ADR 0042). The FULL state of the flow at its version; applied to\nthe local `process_flows` copy only when `version` is greater than the stored one (a first\nmessage for an unknown flow is stored). `type` =\n`com.warehouse.wes.process-path-management.processflow.ProcessFlowDefined`, `subject` and Kafka\nkey = `flow_id`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                },
+                {
+                  "name": "warehouse-planning"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of process-path-management's ProcessFlowDefined (consumed).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.process-path-management.processflow.ProcessFlowDefined",
+                        "x-parser-schema-id": "<anonymous-schema-245>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "The FULL state of one process flow at one version, as this service reads it from process-path-management's ProcessFlowDefined / ProcessFlowRevised / ProcessFlowRetired `data` (hand-mirrored, never imported; docs/adr/0025 decision 1). Applied only when `version` is greater than the stored one.",
+                        "required": [
+                          "flow_id",
+                          "name",
+                          "stages",
+                          "status",
+                          "version"
+                        ],
+                        "properties": {
+                          "flow_id": {
+                            "type": "string",
+                            "description": "The flow's identity, also the `path_id` plans and path-capacity reads use.",
+                            "example": "single-unit",
+                            "x-parser-schema-id": "<anonymous-schema-246>"
+                          },
+                          "name": {
+                            "type": "string",
+                            "example": "Single unit",
+                            "x-parser-schema-id": "<anonymous-schema-247>"
+                          },
+                          "stages": {
+                            "type": "array",
+                            "minItems": 1,
+                            "description": "The ordered stages; the array order IS the flow's order and the steps of a plan.",
+                            "items": {
+                              "type": "object",
+                              "required": [
+                                "path_id",
+                                "process_type"
+                              ],
+                              "properties": {
+                                "path_id": {
+                                  "type": "string",
+                                  "example": "PICK",
+                                  "x-parser-schema-id": "<anonymous-schema-250>"
+                                },
+                                "process_type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "PICK",
+                                    "REBIN",
+                                    "PACK",
+                                    "SLAM",
+                                    "DISPATCH",
+                                    "ARRIVAL",
+                                    "RELOCATE",
+                                    "REPLENISH"
+                                  ],
+                                  "description": "A value outside the closed set is dead-lettered and never applied.",
+                                  "x-parser-schema-id": "<anonymous-schema-251>"
+                                }
+                              },
+                              "x-parser-schema-id": "<anonymous-schema-249>"
+                            },
+                            "x-parser-schema-id": "<anonymous-schema-248>"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "ACTIVE",
+                              "RETIRED"
+                            ],
+                            "x-parser-schema-id": "<anonymous-schema-252>"
+                          },
+                          "version": {
+                            "type": "integer",
+                            "format": "int64",
+                            "minimum": 1,
+                            "x-parser-schema-id": "<anonymous-schema-253>"
+                          }
+                        },
+                        "x-parser-schema-id": "ProcessFlowData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-244>"
+                  }
+                ],
+                "x-parser-schema-id": "ProcessFlowDefinedEvent"
+              },
+              "examples": [
+                {
+                  "name": "singleUnitDefined",
+                  "summary": "The flow single-unit at version 1.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7a1e5c32-6b04-4d58-9e3f-2c8d1f0a4b66",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processflow.ProcessFlowDefined",
+                    "subject": "single-unit",
+                    "time": "2026-11-20T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:events:ProcessFlowDefined:v1",
+                    "data": {
+                      "flow_id": "single-unit",
+                      "name": "Single unit",
+                      "stages": [
+                        {
+                          "path_id": "PICK",
+                          "process_type": "PICK"
+                        },
+                        {
+                          "path_id": "PACK",
+                          "process_type": "PACK"
+                        }
+                      ],
+                      "status": "ACTIVE",
+                      "version": 1
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProcessFlowRevised",
+              "title": "Process flow revised (consumed)",
+              "summary": "process-path-management revised a process flow, or republished it at its start.",
+              "description": "CONSUMED from `warehouse.process-path-management.events`. The FULL new state at the next\nversion; also the producer's startup republish of every ACTIVE flow at its CURRENT version,\nwhich a caught-up copy ignores (equal version) and a fresh one learns. `type` =\n`com.warehouse.wes.process-path-management.processflow.ProcessFlowRevised`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                },
+                {
+                  "name": "warehouse-planning"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of process-path-management's ProcessFlowRevised (consumed).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.process-path-management.processflow.ProcessFlowRevised",
+                        "x-parser-schema-id": "<anonymous-schema-255>"
+                      },
+                      "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-254>"
+                  }
+                ],
+                "x-parser-schema-id": "ProcessFlowRevisedEvent"
+              },
+              "examples": [
+                {
+                  "name": "singleUnitRevised",
+                  "summary": "The flow single-unit at version 2, a REBIN stage added.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7a1e5c32-6b04-4d58-9e3f-2c8d1f0a4b67",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processflow.ProcessFlowRevised",
+                    "subject": "single-unit",
+                    "time": "2026-11-20T08:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:events:ProcessFlowRevised:v1",
+                    "data": {
+                      "flow_id": "single-unit",
+                      "name": "Single unit",
+                      "stages": [
+                        {
+                          "path_id": "PICK",
+                          "process_type": "PICK"
+                        },
+                        {
+                          "path_id": "REBIN",
+                          "process_type": "REBIN"
+                        },
+                        {
+                          "path_id": "PACK",
+                          "process_type": "PACK"
+                        }
+                      ],
+                      "status": "ACTIVE",
+                      "version": 2
+                    }
+                  }
+                }
+              ]
+            },
+            {
+              "name": "ProcessFlowRetired",
+              "title": "Process flow retired (consumed)",
+              "summary": "process-path-management retired a process flow.",
+              "description": "CONSUMED from `warehouse.process-path-management.events`. The FULL state with status RETIRED\nat the next version. A RETIRED flow does not resolve a path id: the locally declared path of\nthat id, if any, is used. `type` =\n`com.warehouse.wes.process-path-management.processflow.ProcessFlowRetired`.\n",
+              "contentType": "application/cloudevents+json",
+              "tags": [
+                {
+                  "name": "consumed"
+                },
+                {
+                  "name": "warehouse-planning"
+                }
+              ],
+              "payload": {
+                "description": "CloudEvents 1.0 envelope of process-path-management's ProcessFlowRetired (consumed).",
+                "allOf": [
+                  "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "type": {
+                        "const": "com.warehouse.wes.process-path-management.processflow.ProcessFlowRetired",
+                        "x-parser-schema-id": "<anonymous-schema-257>"
+                      },
+                      "data": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data"
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-256>"
+                  }
+                ],
+                "x-parser-schema-id": "ProcessFlowRetiredEvent"
+              },
+              "examples": [
+                {
+                  "name": "singleUnitRetired",
+                  "summary": "The flow single-unit at version 3.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "7a1e5c32-6b04-4d58-9e3f-2c8d1f0a4b68",
+                    "source": "/warehouse/process-path-management",
+                    "type": "com.warehouse.wes.process-path-management.processflow.ProcessFlowRetired",
+                    "subject": "single-unit",
+                    "time": "2026-11-20T09:00:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:process-path-management:events:ProcessFlowRetired:v1",
+                    "data": {
+                      "flow_id": "single-unit",
+                      "name": "Single unit",
+                      "stages": [
+                        {
+                          "path_id": "PICK",
+                          "process_type": "PICK"
+                        },
+                        {
+                          "path_id": "REBIN",
+                          "process_type": "REBIN"
+                        },
+                        {
+                          "path_id": "PACK",
+                          "process_type": "PACK"
+                        }
+                      ],
+                      "status": "RETIRED",
+                      "version": 3
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      }
     }
   },
   "components": {
@@ -3378,7 +3672,10 @@
       "DockAppointmentNoShow": "$ref:$.channels.warehouse.dock-scheduling.events.publish.message.oneOf[3]",
       "TaskCompleted": "$ref:$.channels.warehouse.fulfillment.events.publish.message",
       "LaborStandardDefined": "$ref:$.channels.warehouse.labor-performance.events.publish.message.oneOf[0]",
-      "LaborStandardRevised": "$ref:$.channels.warehouse.labor-performance.events.publish.message.oneOf[1]"
+      "LaborStandardRevised": "$ref:$.channels.warehouse.labor-performance.events.publish.message.oneOf[1]",
+      "ProcessFlowDefined": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0]",
+      "ProcessFlowRevised": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[1]",
+      "ProcessFlowRetired": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[2]"
     },
     "schemas": {
       "CloudEventEnvelope": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[0]",
@@ -3432,7 +3729,11 @@
       "TaskCompletedEvent": "$ref:$.channels.warehouse.fulfillment.events.publish.message.payload",
       "LaborStandardData": "$ref:$.channels.warehouse.labor-performance.events.publish.message.oneOf[0].payload.allOf[1].properties.data",
       "LaborStandardDefinedEvent": "$ref:$.channels.warehouse.labor-performance.events.publish.message.oneOf[0].payload",
-      "LaborStandardRevisedEvent": "$ref:$.channels.warehouse.labor-performance.events.publish.message.oneOf[1].payload"
+      "LaborStandardRevisedEvent": "$ref:$.channels.warehouse.labor-performance.events.publish.message.oneOf[1].payload",
+      "ProcessFlowData": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload.allOf[1].properties.data",
+      "ProcessFlowDefinedEvent": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[0].payload",
+      "ProcessFlowRevisedEvent": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[1].payload",
+      "ProcessFlowRetiredEvent": "$ref:$.channels.warehouse.process-path-management.events.publish.message.oneOf[2].payload"
     }
   },
   "x-parser-spec-parsed": true,
