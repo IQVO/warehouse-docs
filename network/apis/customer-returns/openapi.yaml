@@ -240,9 +240,10 @@ paths:
       - Return Authorizations
       operationId: cancelReturn
       summary: Cancel a return (CancelReturn)
-      description: The shopper's cancellation, allowed while AUTHORIZED (before anything is in transit) and by lazy expiry; publishes `ReturnCancelled` with reason
-        `SHOPPER_REQUESTED`. Cancelling again, or after RECEIVED/CLOSED_KEEP, is `409 illegal-transition`; an authorization that expired untouched answers
-        `422 authorization-expired` (and is cancelled by that very read).
+      description: The shopper's cancellation, allowed while AUTHORIZED (before anything is in transit); publishes `ReturnCancelled` with reason `SHOPPER_REQUESTED`
+        and answers `200` with the CANCELLED authorization. An authorization whose `expiresAt` passed untouched is cancelled by this very call with reason
+        `EXPIRED` and also answers `200` (the lazy expiry IS the cancellation; this route never answers `authorization-expired`). Cancelling again, or after
+        RECEIVED/CLOSED_KEEP, is `409 illegal-transition`.
       parameters:
       - $ref: '#/components/parameters/AuthorizationIdPath'
       - $ref: '#/components/parameters/IdempotencyKey'
