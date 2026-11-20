@@ -2,6 +2,7 @@
 id: bounded-context-canvas
 title: Bounded context canvas
 sidebar_label: Bounded context canvas
+sidebar_position: 9
 description: ddd-crew Bounded Context Canvas v5 for workforce-management — purpose, classification, roles, every inbound and outbound message, business decisions and open questions.
 ---
 

@@ -31,15 +31,15 @@ wins. For one alphabetical index across every context, see
 | --- | --- | --- |
 | `order-management` | Order, Order line, Allocation, Backordered, Release, Held order, Ship-complete, Promise, Re-promise, Planned capacity window | [Ubiquitous Language](/contexts/order-management/ubiquitous-language) |
 | `inventory-storage` | StockUnit, ProductClassification, Bin, Stow, Usable inventory, Reservation, Allocation, Cycle count, Unlocated, Demand reference | [Ubiquitous Language](/contexts/inventory-storage/ubiquitous-language) |
-| `wes-work-planning` | Charge, CPT, Process path, Work pool, Work unit, Shift plan and path plan, Release, Flow balancing, Remaining capacity, Drift | [Ubiquitous Language](/contexts/wes-work-planning/ubiquitous-language) |
+| `wes-work-planning` | CPT, Process path, Work pool, Work unit, Release, Flow balancing, Remaining admission capacity, Labor plan view (`LaborPlanObserved`, read-only). The charge, the shift plan and the drift moved to warehouse-planning (ADR 0049) | [Ubiquitous Language](/contexts/wes-work-planning/ubiquitous-language) |
 | `fulfillment-execution` | Task, Task type, claimNext, Lease, Station, Capability, Package, SLAM, Manifested, CPT missed, OrderRef | [Ubiquitous Language](/contexts/fulfillment-execution/ubiquitous-language) |
-| `workforce-management` | ShiftPlan, PathPlan, AssociateShift, LaborAssignment, Certification, PathUnderstaffed, Installed stations and installed capacity, Measured rate, Idle share | [Ubiquitous Language](/contexts/workforce-management/ubiquitous-language) |
+| `workforce-management` | ShiftPlan, PathPlan, AssociateShift, LaborAssignment, Certification, PathUnderstaffed, Installed stations and installed capacity, Measured rate, Idle share, Labour plan (a local copy of warehouse-planning's `LabourPlanCommitted`, the source of proposed heads) | [Ubiquitous Language](/contexts/workforce-management/ubiquitous-language) |
 | `facility-layout` | Site, Zone, Aisle, LocationType, LocationRole, LocationSlot, PlacementRule, LocationCode, Travel graph | [Ubiquitous Language](/contexts/facility-layout/ubiquitous-language) |
 | `process-path-management` | Process Path, Path Id, Match Prefix, Capability, Cycle Time p95, Eligibility, CPT Schedule, Cutoff | [Ubiquitous Language](/contexts/process-path-management/ubiquitous-language) |
-| `labor-performance` | LaborStandard, Expected seconds, TaskPerformance, EfficiencyPct, Idle Gap, Utilization, Scorecard, Coaching flag | [Ubiquitous Language](/contexts/labor-performance/ubiquitous-language) |
+| `labor-performance` | LaborStandard (optional site scope; `LaborStandardDefined` and `LaborStandardRevised` are published), Expected seconds, TaskPerformance, EfficiencyPct, Idle Gap, Utilization, Scorecard, Coaching flag | [Ubiquitous Language](/contexts/labor-performance/ubiquitous-language) |
 | `warehouse-ops-agent` | FlowBalanceException, StrandedReservation, DailyBrief, OpenException, Blast radius, PathTarget, Capacity outlook | [Ubiquitous Language](/contexts/warehouse-ops-agent/ubiquitous-language) |
 | `network-fulfillment` | NetworkOrder, NetworkRef, NetworkProductId, Product translation, Acknowledgement window, Held order, Shipment confirmation, CapabilityOffer | [Ubiquitous Language](/contexts/network-fulfillment/ubiquitous-language) |
-| `warehouse-planning` | ProcessCapacity, CapacityConstraint, CapacityWindow, WorkloadProfile, ProcessPath, StationStandard, CapacityPlan, Shortage, Bottleneck | [Ubiquitous Language](/contexts/warehouse-planning/ubiquitous-language) |
+| `warehouse-planning` | ProcessCapacity, CapacityConstraint, CapacityWindow, WorkloadProfile, ProcessPath, StationStandard, CapacityPlan (with a scenario label; DRAFT, PUBLISHED, SUPERSEDED), Shortage, Bottleneck, Planned capacity, Workload forecast, Forecast bucket, Labour plan, Committed heads, Labour plan drift, Labour requirement | [Ubiquitous Language](/contexts/warehouse-planning/ubiquitous-language) |
 | `product-master` | Product (master record), Classification, Handling tag, TemperatureClass, DOT hazard class, Physical profile, Declared, Measured, Effective, Discrepancy, Version | [Ubiquitous Language](/contexts/product-master/ubiquitous-language) |
 | `network-inventory-planning` | InterWarehouseTransfer, Proposal, ScoreBreakdown, PlanningSnapshot, SiteCapability, SiteSkuDemand, WorkDemand, Picked quantity, StuckTransfer, RebalanceRun | [Ubiquitous Language](/contexts/network-inventory-planning/ubiquitous-language) |
 | `inbound-receiving` | ASN, Dock appointment, Receipt, Receipt line, Condition (Good or Damaged), Discrepancy (Short, Over, Damaged), Dock door | [Ubiquitous Language](/contexts/inbound-receiving/ubiquitous-language) |
@@ -149,23 +149,65 @@ it to a different subject:
 | `inventory-storage` | **Demand reference** (`demandRef`) | An opaque string for what a reservation is for. It is stored and echoed, never parsed. That opacity is the anti-corruption boundary. |
 | `network-fulfillment` | **NetworkRef** | The external network's own purchase-order number. It is the primary key, never parsed. `LocalOrderId` maps it to order-management's `OrderId`. |
 
-### "ShiftPlan"
+### "ShiftPlan" and "labour plan"
 
 - In **`workforce-management`**, `ShiftPlan` is the labor commitment: one
   per building per shift, made of `PathPlan` lines, proposed by the
-  software and committed by a human.
-- In **`wes-work-planning`**, `ShiftPlan` is **its own aggregate**. It is a
-  committed split of rate × heads × hours per path, with the invariant
-  `plannedHeads ≤ installedStations`. It is committed through
-  `POST /paths/{pathId}/plan`.
-- workforce-management's `ShiftPlanCommitted` is **not** fed into
-  wes-work-planning's aggregate. It is projected into a separate read model,
-  `LaborPlanObserved`. The two are compared (`PathPlanDriftDetected`),
-  never merged (wes-work-planning ADR 0006 and ADR 0019).
-- Two CloudEvents types share the name:
-  `com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted` and
-  `com.warehouse.wes.work-planning.plan.ShiftPlanCommitted`. Consumers must
-  dispatch on the full `type`.
+  software and committed by a human. It is the **supply** of labour.
+- The **requirement** side is **`warehouse-planning`'s**. Its `LabourPlan`
+  (one per site, shift and process path: the heads a path needs, at a planned
+  rate for a number of hours, invariant `planned_heads ≤ installed_stations`) is
+  committed through `PUT /labour-plans/{site_id}/{shift_id}/{path_id}`. It was
+  wes-work-planning's `ShiftPlan` aggregate (`POST /paths/{pathId}/plan`, now
+  answering 410; wes-work-planning ADR 0049). wes-work-planning's own `PathPlan`
+  term is retired with it.
+- workforce-management's `ShiftPlanCommitted` reaches warehouse-planning, which
+  records its `planned_heads` as the **committed heads** and compares them with
+  its labour plan. The difference is the **labour plan drift**
+  (`LabourPlanDriftDetected`, formerly wes-work-planning's
+  `PathPlanDriftDetected`). It never corrects either side.
+- wes-work-planning keeps only a read-only view of workforce-management's plan,
+  `LaborPlanObserved`.
+- `LabourPlanCommitted` flows the other way: workforce-management keeps a local
+  copy and proposes heads from it (workforce-management ADR 0043).
+- Only one CloudEvents type is still named `ShiftPlanCommitted`:
+  `com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted`. The
+  `com.warehouse.wes.work-planning.plan.ShiftPlanCommitted` type is retired.
+  Consumers should still dispatch on the full `type`.
+
+### "Capacity": planned vs remaining admission
+
+| Context | What it means |
+| --- | --- |
+| `warehouse-planning` | **Planned capacity**: its capacity figure for a path and a window, the path capacity of a capacity plan (and a shift's labour plan). A newer published plan of the same site, location, path and window **supersedes** the older one (`CapacityPlanSuperseded`, status `SUPERSEDED`, terminal). |
+| `wes-work-planning` | **Remaining admission capacity**: its live figure, how much more work a release-fed path admits before its WIP limit, per CPT cutoff (`PathCapacityChanged`). Never computed by warehouse-planning. |
+| `order-management` | Reads both for the ship promise. A `SUPERSEDED` plan never constrains. |
+
+### "Workload forecast" and "charge"
+
+`warehouse-planning`'s **workload forecast** (`PUT /workload-forecasts/{site_id}/{path_id}`,
+`WorkloadForecastReceived`) is the volume a process path is expected to receive,
+as CPT buckets. It was wes-work-planning's **charge forecast**
+(`POST /paths/{pathId}/charge`, `ChargeForecastReceived`, both retired); "charge"
+is no longer a term of wes-work-planning. A capacity plan may take its demand from
+it (`demand_source: forecast`) instead of from allocated orders.
+
+### "Labour standard" and "labour requirement"
+
+`labor-performance` owns the **labour standard** (expected seconds per task type,
+now with an optional site scope) and publishes `LaborStandardDefined` and
+`LaborStandardRevised`. `warehouse-planning` prices the **labour requirement** of
+a plan from them: the labour hours and average heads a plan's demand needs per
+step (`labour_requirement`), or *unknown* when no standard or task factor
+exists. workforce-management supplies people, it does not state the requirement.
+
+### "Process flow"
+
+A `ProcessFlow` (the topology of a path: which steps, in what order) is
+**decided, not built**. process-path-management would own it (its ADR 0042;
+warehouse-planning ADR 0025). Neither is implemented, and no context uses the
+term in code yet. Today `ProcessPath` in warehouse-planning is a locally declared,
+ordered sequence of process types.
 
 ### "Release"
 

@@ -2,6 +2,7 @@
 id: sequence-diagrams
 title: Sequence diagrams
 sidebar_label: Sequence diagrams
+sidebar_position: 10
 description: UML sequence diagrams for Labor Performance's use cases — DefineStandard over REST, RecordTaskPerformance from Kafka, the outbox relay, the scorecard and utilization queries, and the analytics projector — following the real function bodies.
 ---
 

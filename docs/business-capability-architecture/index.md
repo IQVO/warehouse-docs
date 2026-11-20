@@ -83,7 +83,7 @@ This site uses three levels:
 | --- | --- | --- | --- |
 | **L1** | A top-level business area, placed in one stratification tier | executives, the whole fleet | 14 |
 | **L2** | A capability group: where ownership and service levels can first be stated | product owners of the contexts | 54 |
-| **L3** | A business capability, the building block, tied to the routes, events and MCP tools that realize it | engineers and architects | 135 |
+| **L3** | A business capability, the building block, tied to the routes, events and MCP tools that realize it | engineers and architects | 139 |
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 14, "rankSpacing": 34, "padding": 6}}}%%
@@ -201,6 +201,16 @@ The harvest read each repository at these `develop` commits (2026-10-16):
 | facility-layout | `f222d1d` | inbound-receiving | `eb3bb4b` |
 | process-path-management | `13615d3` | slotting-optimization | `4494616` |
 | network-inventory-planning | `6e45a27` | | |
+
+Five contexts were re-read on their `develop` branch after the warehouse-planning
+reshape (2026-11-19): warehouse-planning, wes-work-planning (ADR 0049),
+workforce-management (ADR 0043), labor-performance (ADR 0038) and order-management
+(ADRs 0052, 0053). The requirement side of planning (the workload forecast, the
+labour plan, its drift, the labour requirement, scenarios and supersession) is now
+warehouse-planning's, not wes-work-planning's, and the model says so. The commits in
+the table are the first harvest, not those re-reads. The process flow
+(process-path-management ADR 0042, warehouse-planning ADR 0025) is decided, not built,
+and is not a capability in this map.
 
 ## Pages in this section
 

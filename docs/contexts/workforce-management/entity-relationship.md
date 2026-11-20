@@ -2,6 +2,7 @@
 id: entity-relationship
 title: Entity-relationship diagram
 sidebar_label: Entity-relationship
+sidebar_position: 14
 description: ER diagrams of the OLTP schema (migrations/*.up.sql) and the analytics schema (migrations/analytics), with the table-to-aggregate mapping.
 ---
 

@@ -2,6 +2,7 @@
 id: core-domain-chart
 title: Core Domain Chart
 sidebar_label: Core Domain Chart
+sidebar_position: 2
 description: The ddd-crew Core Domain Chart for Labor Performance — a Supporting subdomain with modest model complexity, plus its evolution note.
 ---
 

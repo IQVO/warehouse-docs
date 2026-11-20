@@ -103,6 +103,12 @@ Flow balancing watches backlog and rates and recommends or throttles
 `LaborReassignmentFlagged`). That is the "smart order release … to create a
 level flow of work" the trade press describes as the reason WES exists.[8]
 
+It no longer owns the requirement side of planning. The charge (workload) forecast,
+the shift plan and the drift moved to warehouse-planning (ADR 0049): both planning
+POSTs answer 410 and the three events are retired. It keeps a read-only view of
+workforce-management's plan (`LaborPlanObserved`, `GET /paths/{pathId}/labor-plan-view`)
+and `PathCapacityChanged`.
+
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 40, "padding": 6}}}%%
 flowchart LR
@@ -229,11 +235,15 @@ shift plan that splits headcount across process paths
 `ShiftPlanCommitted`), the staffing gap per path
 (`GET /sites/{siteCode}/shifts/{shiftId}/staffing-gap`, `PathUnderstaffed`) and
 assignments (`POST /associates/{id}/assignments`, `LaborAssigned`). The plan is
-capped by installed station capacity read from fulfillment-execution.
+capped by installed station capacity read from fulfillment-execution. It also
+reads warehouse-planning's `LabourPlanCommitted` into a local copy and proposes
+heads from it (workforce-management ADR 0043); the labour supply stays here, the
+labour requirement is warehouse-planning's.
 
 **Why not WES.** Rebalancing is a human decision it records, not one it makes.
-Its output, the committed plan, is an *input* to the WES
-(`wes-work-planning` reads `ShiftPlanCommitted`).
+Its output, the committed plan, is an *input* to the WES and to the planner
+(`wes-work-planning` reads `ShiftPlanCommitted` into `LaborPlanObserved`, a
+read-only view, and `warehouse-planning` compares it with its own labour plan).
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 40, "padding": 6}}}%%
@@ -242,13 +252,14 @@ flowchart LR
     IN2["fulfillment-execution<br/>REST installed capacity"] --> WFM
     IN3["labor-performance<br/>TaskPerformanceRecorded"] ==> WFM
     IN4["process-path-management<br/>ProcessPath events"] ==> WFM
+    IN5["warehouse-planning<br/>LabourPlanCommitted"] ==> WFM
     WFM["<b>workforce-management</b><br/>WMS extended - labor"]
     WFM ==>|"ShiftPlanCommitted"| OUT1["wes-work-planning,<br/>warehouse-planning"]
 
     classDef wms fill:#ccfbf1,stroke:#0f766e,color:#042f2e
     classDef other fill:#f1f5f9,stroke:#475569,color:#0f172a
     class WFM wms
-    class IN1,IN2,IN3,IN4,OUT1 other
+    class IN1,IN2,IN3,IN4,IN5,OUT1 other
 ```
 
 ### labor-performance
@@ -266,7 +277,10 @@ flowchart LR
 type (`GET /associates/{associateId}/scorecard`,
 `GET /task-types/{taskType}/performance`) and idle-gap utilization
 (`GET /task-types/{taskType}/utilization`). This is the "productivity tracking"
-that Frazelle's survey ranks among the top three WMS priorities.[12]
+that Frazelle's survey ranks among the top three WMS priorities.[12] It owns the
+labour standards and publishes them as `LaborStandardDefined` and
+`LaborStandardRevised` (ADR 0038), which warehouse-planning reads to price the
+labour a plan requires.
 
 **Why not WES.** It is a pure downstream observer of `TaskCompleted`. It makes
 no REST or MCP call to a sibling (fleet rule).
@@ -278,12 +292,13 @@ flowchart LR
     IN2["Industrial engineers<br/>labor standards"] --> LP
     LP["<b>labor-performance</b><br/>WMS extended - labor"]
     LP ==>|"TaskPerformanceRecorded"| OUT1["workforce-management"]
+    LP ==>|"LaborStandardDefined,<br/>LaborStandardRevised"| OUT3["warehouse-planning"]
     LP -->|"MCP scorecards,<br/>reports"| OUT2["warehouse-ops-agent"]
 
     classDef wms fill:#ccfbf1,stroke:#0f766e,color:#042f2e
     classDef other fill:#f1f5f9,stroke:#475569,color:#0f172a
     class LP wms
-    class IN1,IN2,OUT1,OUT2 other
+    class IN1,IN2,OUT1,OUT2,OUT3 other
 ```
 
 ## Above the WMS
@@ -313,21 +328,36 @@ shortage and bottleneck detection (`POST /capacity-plans`,
 `POST /capacity-plans/{id}/publications`, `CapacityShortageDetected`,
 `BottleneckDetected`, `CapacityPlanPublished`).
 
+It also owns the **requirement side** of planning, which moved from
+wes-work-planning (its ADR 0049): the workload forecast
+(`PUT /workload-forecasts/{site_id}/{path_id}`, `WorkloadForecastReceived`), the
+labour plan (`PUT /labour-plans/{site_id}/{shift_id}/{path_id}`,
+`LabourPlanCommitted`) and its drift against workforce-management's committed
+heads (`LabourPlanDriftDetected`). A plan can take its demand from the forecast
+(`demand_source: forecast`), states the labour its demand requires from
+labor-performance's standards (`labour_requirement`), carries a scenario label
+(`GET /capacity-plans/comparisons`) and is superseded by a newer published plan of
+the same site, location, path and window (`CapacityPlanSuperseded`). The
+process-flow topology of a path is process-path-management's: decided (its ADR
+0042, warehouse-planning ADR 0025), **not built**.
+
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 40, "padding": 6}}}%%
 flowchart LR
     IN1["order-management<br/>OrderAllocated"] ==> WPL
     IN2["workforce-management<br/>ShiftPlanCommitted"] ==> WPL
     IN3["facility-layout<br/>LocationSlot events"] ==> WPL
-    IN4["Planners<br/>constraints, station standards"] --> WPL
+    IN4["Planners<br/>constraints, station standards,<br/>workload forecast"] --> WPL
+    IN5["labor-performance<br/>LaborStandardDefined, LaborStandardRevised"] ==> WPL
     WPL["<b>warehouse-planning</b><br/>above the WMS - capacity"]
-    WPL ==>|"CapacityPlanPublished,<br/>shortage, bottleneck"| OUT1["order-management"]
+    WPL ==>|"CapacityPlanPublished,<br/>CapacityPlanSuperseded,<br/>shortage, bottleneck"| OUT1["order-management"]
     WPL ==>|"CapacityPlanPublished"| OUT2["network-inventory-planning"]
+    WPL ==>|"LabourPlanCommitted"| OUT3["workforce-management"]
 
     classDef above fill:#ede9fe,stroke:#6d28d9,color:#2e1065
     classDef other fill:#f1f5f9,stroke:#475569,color:#0f172a
     class WPL above
-    class IN1,IN2,IN3,IN4,OUT1,OUT2 other
+    class IN1,IN2,IN3,IN4,IN5,OUT1,OUT2,OUT3 other
 ```
 
 ### order-management
@@ -343,7 +373,8 @@ flowchart LR
 **Why above the WMS.** It is the front door for customer demand: order intake
 (`POST /orders`), hold and release (`POST /orders/{id}/releases`), cancellation
 (`DELETE /orders/{id}`), a ship promise derived from the CPT schedule, path
-capacity and published capacity plans (`GET /planned-capacity`), and
+capacity and published capacity plans (`GET /planned-capacity`; a `SUPERSEDED`
+plan, announced by `CapacityPlanSuperseded`, never constrains), and
 re-promising when a task misses its cutoff (`OrderRepromised`). It also
 publishes the demand signal (`SiteSkuDemandChanged`) that slotting and network
 planning read.

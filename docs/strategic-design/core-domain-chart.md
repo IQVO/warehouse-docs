@@ -120,7 +120,10 @@ This page keeps each context's own placement and the fleet classification.
     at-most-once leases.
   - `warehouse-planning` computes the normalized, cross-process effective
     capacity and the forward-looking shortage. No other context computes
-    either (its ADR 0001).
+    either (its ADR 0001). It also owns the requirement side of planning: the
+    workload forecast, the labour plan and its drift, the labour requirement
+    priced from labor-performance's standards (taken over from
+    `wes-work-planning`, its ADR 0049).
   - `network-inventory-planning` decides whether stock should move between
     warehouses and carries an approved transfer to the destination as a saga.
     No other context relates stock, demand and capacity across sites (its ADR

@@ -16,16 +16,21 @@ slug: /contexts/labor-performance
 standard"). Since ADR 0014, it also derives idle-gap / utilization
 read models — the between-task waits `TaskPerformance` scoring alone
 never measured — additively on the same event stream, and since ADR 0015 a
-standard may carry an optional, caller-supplied travel-time component. It
-is one of the fleet's sixteen domain bounded contexts.
+standard may carry an optional, caller-supplied travel-time component. Since
+ADR 0038 a standard may also carry an optional `site_code` scope and its two
+events are published on the integration topic, so `warehouse-planning` plans
+labour with the same standards this context scores against. It is one of the
+fleet's sixteen domain bounded contexts.
 
-:::info[One input, zero outbound calls]
+:::info[One input, no outbound calls]
 This context has exactly **one input**: it is a Kafka **Customer** of
 `fulfillment-execution`'s `TaskCompleted` event, on the same shared,
 fan-out topic `wes-work-planning` also consumes from. Everything else
-points the other way: it publishes `TaskPerformanceRecorded` on
-`warehouse.labor-performance.events`, consumed by `workforce-management`
-(ADR 0013), and exposes its own OLTP REST, reports and MCP surfaces, read
+points the other way: it publishes `TaskPerformanceRecorded`,
+`LaborStandardDefined` and `LaborStandardRevised` on
+`warehouse.labor-performance.events`. `workforce-management` consumes the
+first (ADR 0013) and `warehouse-planning` the other two (ADR 0038). It also
+exposes its own OLTP REST, reports and MCP surfaces, read
 by the console's `labor_mfe` remote and by `warehouse-ops-agent`. It makes
 **no outbound REST or MCP call** to any sibling context. See
 [Bounded Context Canvas](/contexts/labor-performance/bounded-context-canvas) and
@@ -56,9 +61,9 @@ by the console's `labor_mfe` remote and by `warehouse-ops-agent`. It makes
   the `TaskPerformance` aggregate, with notes on `LaborStandard` and
   `IdlePeriod`.
 - [Domain Events](/contexts/labor-performance/domain-events):
-  `LaborStandardDefined` and `LaborStandardRevised` (analytics topic only),
-  `TaskPerformanceRecorded` (analytics topic and the integration topic
-  `warehouse.labor-performance.events`), and the consumed
+  `LaborStandardDefined` and `LaborStandardRevised` (analytics topic and, since
+  ADR 0038, the integration topic `warehouse.labor-performance.events`),
+  `TaskPerformanceRecorded` (both topics), and the consumed
   `fulfillment-execution` `TaskCompleted`.
 - [Domain Message Flow](/contexts/labor-performance/domain-message-flow)
   ([ddd-crew domain-message-flow-modelling](https://github.com/ddd-crew/domain-message-flow-modelling)):

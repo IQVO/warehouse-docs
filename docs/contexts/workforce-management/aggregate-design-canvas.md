@@ -2,6 +2,7 @@
 id: aggregate-design-canvas
 title: Aggregate design canvas
 sidebar_label: Aggregate design canvas
+sidebar_position: 10
 description: ddd-crew Aggregate Design Canvas v1.1 for ShiftPlan, AssociateShift and LaborAssignment — state transitions, invariants with the Err values that enforce them, commands, events, throughput and size.
 ---
 

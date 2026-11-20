@@ -2,6 +2,7 @@
 id: eventstorming
 title: EventStorming (design level)
 sidebar_label: EventStorming
+sidebar_position: 12
 description: Design-level EventStorming of workforce-management in ddd-crew cheat-sheet notation — shift-start planning and intra-shift assignment, with every sticky traced to code.
 ---
 

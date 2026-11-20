@@ -2,14 +2,14 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: Two live Kafka integrations for labor-performance — an inbound Customer/Supplier consumption of warehouse.fulfillment.events, and, since ADR 0013, an outbound Open-Host-Service publish onto warehouse.labor-performance.events for workforce-management to consume.
+description: Two live Kafka integrations for labor-performance — an inbound Customer/Supplier consumption of warehouse.fulfillment.events, and an outbound Open-Host-Service publish onto warehouse.labor-performance.events (task performance for workforce-management, labor standards for warehouse-planning).
 ---
 
 # Async API
 
 Labor Performance has **two** live Kafka integrations today: one inbound,
 one outbound. Until ADR 0013 it had only the inbound one and was the
-fleet's only pure event sink — this page now documents both directions.
+fleet's only pure event sink — this page documents both directions.
 
 ## Inbound: consuming `warehouse.fulfillment.events`
 
@@ -139,12 +139,18 @@ another bounded context to consume; before it existed, this service
 consumed `TaskCompleted` but published nothing any sibling service could
 subscribe to.
 
-**What is published:** only `TaskPerformanceRecorded`, raised by every
+**What is published:** `TaskPerformanceRecorded`, raised by every
 successful `RecordTaskPerformance` call (including unscorable/unmeasurable
-rows — see [Domain Events](./domain-events)). `LaborStandardDefined` and
-`LaborStandardRevised` remain analytics-only; widening the integration
-contract to include them is a purely additive future change, not done
-speculatively here.
+rows — see [Domain Events](./domain-events)), and, since
+[ADR 0038](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0038-labor-standards-on-the-integration-topic-and-site-scope.md),
+`LaborStandardDefined` and `LaborStandardRevised`. The two standard events keep
+the analytics payload unchanged and add one optional field, `site_code` (omitted
+for a standard that applies to every site). They are written through the same
+outbox with the same `type`
+(`com.warehouse.wes.labor-performance.standard.<Event>`), `dataschema`
+`urn:warehouse:labor-performance:events:<Event>:v1`, `subject` = the
+`standard_id` and partition key `task_type`, so every revision of one task
+type stays in order. The analytics copy is unchanged.
 
 **Envelope:** CloudEvents 1.0 — the SAME envelope this service consumes
 on `warehouse.fulfillment.events` and publishes on the analytics topic
@@ -154,11 +160,13 @@ on both topics; `dataschema` tells them apart
 (`urn:warehouse:labor-performance:events:TaskPerformanceRecorded:v1` here,
 `…:analytics:…` on the analytics topic).
 
-**Partition key:** `AssociateId` — not `TaskType`, which the analytics
+**Partition key:** `AssociateId` for `TaskPerformanceRecorded` — not
+`TaskType`, which the analytics
 publisher keys on. The intended consumer (workforce-management's
 per-associate cache) needs every event for one associate applied in
 publish order on a single partition. A task with no checked-in associate
-(a robot station) keys on the empty string.
+(a robot station) keys on the empty string. The two standard events key on
+`task_type` instead (above).
 
 **Delivery mechanism:** the same transactional-outbox pattern this
 service already uses for the analytics topic (ADR 0010) — no new
@@ -167,19 +175,28 @@ persistence or delivery code. `postgres.OutboxPublisher` and
 `(event, encoder)` pair), so adding this topic required zero changes to
 either file; only `cmd/labor/main.go`'s `buildEventPublisher` wiring
 changed, to construct a second encoder alongside the existing analytics
-one. Publishing is opt-in via `EVENT_PUBLISHER=kafka`, same as the
-analytics topic; the log-only default is unchanged.
+one. `EVENT_PUBLISHER` is `kafka` by default and `log` is rejected at boot
+([ADR 0034](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0034-postgres-and-kafka-are-the-only-runtime.md)).
 
-**Live consumer:** `workforce-management`, replacing what was previously
-a synchronous `GET /task-types/{taskType}/performance` call from
-`ProposePathPlan` with a local, event-fed running-mean cache
-(`LABOR_PERFORMANCE_MODE=kafka-cache`, that repo's ADR 0019), which also
-reads the additive `idle_seconds_before` field as a staffing signal (its
-ADR 0020). That mode is opt-in: `workforce-management`'s binary defaults
-`LABOR_PERFORMANCE_MODE` to `permissive`, keeps an older `http` option
-that calls this service's REST API, and the kind cluster sets
-`kafka-cache`. Either way the dependency points from
-`workforce-management` to this context.
+**Live consumers:**
+
+- `workforce-management`, for `TaskPerformanceRecorded`, replacing what was
+  previously a synchronous `GET /task-types/{taskType}/performance` call from
+  `ProposePathPlan` with a local, event-fed running-mean cache
+  (`LABOR_PERFORMANCE_MODE=kafka-cache`, that repo's ADR 0019), which also
+  reads the additive `idle_seconds_before` field as a staffing signal (its
+  ADR 0020). That mode is opt-in: `workforce-management`'s binary defaults
+  `LABOR_PERFORMANCE_MODE` to `permissive`, keeps an older `http` option
+  that calls this service's REST API, and the kind cluster sets
+  `kafka-cache`. Either way the dependency points from
+  `workforce-management` to this context.
+- `warehouse-planning`, for `LaborStandardDefined` and `LaborStandardRevised`
+  (its `LaborStandardConsumer`, group from the required
+  `LABOR_STANDARD_CONSUMER_GROUP`, ADR 0022 there). It keeps one row per
+  `standard_id` and resolves the standard in force at read time, preferring a
+  standard scoped to the plan's site over a site-less one. It uses them to
+  state the labour a capacity plan requires per step. It ignores every other
+  type on the topic.
 
 See [ADR 0013](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0013-labor-performance-integration-events.md)
 in the source repository for the full decision record.

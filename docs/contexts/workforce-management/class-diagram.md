@@ -2,6 +2,7 @@
 id: class-diagram
 title: Class diagram
 sidebar_label: Class diagram
+sidebar_position: 13
 description: UML class diagrams of internal/domain (aggregates, value objects, domain events) and the hexagonal ports-and-adapters wiring of workforce-management.
 ---
 

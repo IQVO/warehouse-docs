@@ -7,9 +7,10 @@ description: One integration topic out, two opt-in sibling topics in — the Kaf
 
 # Async API
 
-One integration topic out (plus an internal analytics topic). Two sibling
-topics in, both opt-in and both feeding in-memory caches only. The
-synchronous calls this context makes (`fulfillment-execution`'s installed
+One integration topic out (plus an internal analytics topic). Three sibling
+topics in: two opt-in ones feeding in-memory caches, and
+`warehouse-planning`'s labour plan, which is always on and kept in Postgres.
+The synchronous calls this context makes (`fulfillment-execution`'s installed
 capacity, and optionally `labor-performance` over HTTP) are covered on the
 [Bounded Context Canvas](./bounded-context-canvas).
 
@@ -23,7 +24,7 @@ capacity, and optionally `labor-performance` over HTTP) are covered on the
 | **Trigger** | a successful `CommitShiftPlan` |
 | **Fan-out** | one message per `PathPlan` line |
 | **Adapter** | `internal/adapters/outbound/kafka/publisher.go` |
-| **Consumers** | `wes-work-planning`, into its `LaborPlanObserved` read model, keyed by `path_id`; `warehouse-planning`, as a `LABOR` capacity constraint per path line (group `warehouse-planning-labor-capacity`). Both live |
+| **Consumers** | `wes-work-planning`, into its `LaborPlanObserved` read model, a pure projection keyed by `path_id`; `warehouse-planning`, as a `LABOR` capacity constraint per path line (group `warehouse-planning-labor-capacity`) and as the committed heads its `LabourPlanDriftDetected` compares with the labour plan (its ADR 0023). All live |
 
 ## Why asynchronous, and why one-way
 
@@ -37,27 +38,24 @@ client, retries, and knowledge of the consumer's availability — and would
 gain a reason to fail a `CommitShiftPlan` that already succeeded in its own
 domain. Publishing to Kafka and forgetting avoids both: nothing in this
 edge needs a client, a retry, or knowledge of the consumer. (This context
-does consume two *other* sibling topics and does make one fail-loud
+does consume three *other* sibling topics and does make one fail-loud
 synchronous read at commit time — see below and the
-[Bounded Context Canvas](./bounded-context-canvas) — but neither involves
+[Bounded Context Canvas](./bounded-context-canvas) — but none involves
 `wes-work-planning`.)
 
-## Selecting the publisher
+## The publisher
 
-The Kafka publisher is off by default. Both publishers implement the same
-`ports.EventPublisher` interface, so nothing above the adapter layer knows
-the difference.
+The Kafka publisher is the only one: `EVENT_PUBLISHER` is `kafka` by default
+and `log` is rejected at boot
+([ADR 0038](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0038-postgres-and-kafka-are-the-only-runtime.md)).
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `EVENT_PUBLISHER` | `log` | `log` (in-memory/log publisher) or `kafka` |
-| `KAFKA_BROKERS` | `localhost:9092` | comma-separated broker list, used when `EVENT_PUBLISHER=kafka` |
+| `EVENT_PUBLISHER` | `kafka` | the only accepted value |
+| `KAFKA_BROKERS` | `localhost:9092` | comma-separated broker list |
 
-The default keeps local runs and the whole test suite free of any broker
-dependency.
-
-With `EVENT_PUBLISHER=kafka`, delivery goes through a **transactional
-outbox** ([ADR 0016](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0016-transactional-outbox.md)):
+Delivery goes through a **transactional outbox**
+([ADR 0016](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0016-transactional-outbox.md)):
 the use case writes the already-encoded messages for both the integration
 topic and the analytics topic (`warehouse.workforce.analytics`, all ten
 events, consumed only by this service's own `cmd/workforce-projector`) into
@@ -98,12 +96,13 @@ A committed shift plan's path line on the wire:
   "id": "9f1c2b7e-4c3a-4a1d-9f0b-6c2b8a7d1e33",
   "source": "/warehouse/workforce-management",
   "type": "com.warehouse.wes.workforce-management.shiftplan.ShiftPlanCommitted",
-  "subject": "BLD1/SHIFT1",
+  "subject": "WH1/SHIFT1",
   "time": "2026-08-21T22:00:00Z",
   "datacontenttype": "application/json",
   "dataschema": "urn:warehouse:workforce-management:events:ShiftPlanCommitted:v1",
   "data": {
-    "building_id": "BLD1",
+    "site_code": "WH1",
+    "building_id": "WH1",
     "shift_id": "SHIFT1",
     "path_id": "pack",
     "planned_heads": 3,
@@ -115,9 +114,11 @@ A committed shift plan's path line on the wire:
 
 `id` is a UUID v4 minted once per domain event and persisted with the
 outbox row (stable across redelivery); `time` is the domain occurred-at,
-RFC 3339 UTC. The `data` payload is unchanged from the earlier flat
-envelope, which no longer exists anywhere in the fleet (no dual-write, no
-envelope toggle).
+RFC 3339 UTC. `site_code` is the canonical Site code; `building_id` carries
+the same value as a deprecated alias
+([ADR 0035](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0035-sitecode-converges-building-id.md)).
+The envelope is the only one in the fleet (no flat envelope, no dual-write,
+no envelope toggle).
 
 ## Consuming this channel
 
@@ -147,7 +148,7 @@ roster or break events today.
 
 ## What is consumed
 
-Two sibling topics, both **opt-in**, both used only to build an in-memory
+Three sibling topics. Two are **opt-in** and used only to build an in-memory
 cache that `cmd/workforce` rebuilds from the earliest offset on every
 start:
 
@@ -156,14 +157,46 @@ start:
 | `warehouse.process-path-management.events` | `ProcessPathCreated`/`Updated`/`Deactivated` | `internal/adapters/outbound/kafkacatalog` | `PATH_CATALOGUE_SOURCE=kafka` (default `file`) | Path-id validation on propose, commit, assign and staffing-gap ([ADR 0013](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0013-process-path-catalogue-validation.md)) |
 | `warehouse.labor-performance.events` | `TaskPerformanceRecorded` (incl. the nullable `idle_seconds_before`) | `internal/adapters/outbound/laborperformancecache` | `LABOR_PERFORMANCE_MODE=kafka-cache` (default `permissive`) | Measured rates for `ProposePathPlan` ([ADR 0019](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0019-labor-performance-cache-consumer.md)); observed idle share for `GetStaffingGap` and the `ProposePathPlan` trim ([ADR 0020](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0020-idle-share-staffing-signal.md)) |
 
-Both consumers use a **per-process-unique consumer group** (prefix + host +
+Both use a **per-process-unique consumer group** (prefix + host +
 PID + timestamp), so every process replays the full history, and each waits
 up to 60s for the replay to catch up before serving traffic. Both require
 `KAFKA_BROKERS`; the `warehouse-infra` kind cluster turns both on. Neither
-writes to Postgres, so there is no `processed_events` table on the OLTP
-side — the only dedupe table (`analytics_processed_events`) belongs to the
-analytics projector, which consumes this service's own analytics topic
-under the fixed group `workforce-analytics`.
+writes to Postgres.
+
+### `warehouse.warehouse-planning.events` — `LabourPlanCommitted`, from `warehouse-planning`
+
+The third consumer is **always on** (Kafka is part of the runtime,
+[ADR 0038](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0038-postgres-and-kafka-are-the-only-runtime.md))
+and keeps state in Postgres
+([ADR 0043](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0043-propose-heads-from-the-published-labour-plan.md)).
+It acts only on
+`com.warehouse.wes.warehouse-planning.labourplan.LabourPlanCommitted`,
+published by `warehouse-planning` per site, shift and path, and keeps
+`labour_requirements`: one row per `(site_code, shift_id, path_id)` with
+`planned_heads`, `rate_units_per_hour`, `hours`, `heads_source` and
+`version`. A message is applied only when its `version` is greater than the
+stored one; the wire `site_id` (a facility-layout site code) is stored as
+`site_code`. The CloudEvents `id` claim and the upsert commit in one unit of
+work. Other types on the topic are ignored.
+
+- **Group.** The stable, shared `LABOUR_PLAN_CONSUMER_GROUP` (required;
+  the chart's `labourPlan.consumerGroup` defaults to
+  `workforce-management-labour-plans`). Only `cmd/workforce` consumes;
+  `cmd/mcp` and `cmd/a2a` read the copy.
+- **What it feeds.** `ProposePathPlan` takes `proposedHeads` from the copy
+  when the request omits `charge` and names a `shiftId` (`rateSource`
+  `labour-plan`; no row answers `404 labour-plan-not-found`). The staffing-gap
+  lines and the committed shift-plan lines gain an optional `requiredHeads`.
+  A request that sends `charge` still behaves as before, deprecated.
+- **What it does not do.** `CommitShiftPlan` never refuses a line that
+  differs from the requirement: committing fewer heads than required is a
+  supply decision, and `warehouse-planning` surfaces the difference as
+  `LabourPlanDriftDetected`.
+
+Besides the analytics projector's `analytics_processed_events` (it consumes
+this service's own analytics topic under the fixed group
+`workforce-analytics`), this consumer keeps its own claim on the CloudEvents
+`id` in Postgres.
 
 ## Generated reference
 

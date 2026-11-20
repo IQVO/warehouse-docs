@@ -2,6 +2,7 @@
 id: domain-message-flow
 title: Domain message flow
 sidebar_label: Domain message flow
+sidebar_position: 11
 description: ddd-crew Domain Message Flow Modelling — four key workforce-management scenarios with every command, event and query numbered.
 ---
 

@@ -2,6 +2,7 @@
 id: core-domain-chart
 title: Core domain chart
 sidebar_label: Core domain chart
+sidebar_position: 8
 description: ddd-crew Core Domain Chart — workforce-management plotted as a Supporting subdomain on business differentiation versus model complexity.
 ---
 

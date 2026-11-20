@@ -23,7 +23,10 @@ a specific task, by design (ADR-0002), leaving task dispatch entirely to
 `fulfillment-execution`. Since ADR 0020, it also folds `labor-performance`'s
 observed idle share into `GetStaffingGap` (`observedIdlePct`) and into
 `ProposePathPlan`'s headcount trim — a staffing signal, never a second
-source of truth about task dispatch. Its one synchronous dependency is a
+source of truth about task dispatch. Since ADR 0043 it also keeps a local
+copy of `warehouse-planning`'s published `LabourPlanCommitted` and proposes
+heads from it, so the requirement is read, never computed twice; this
+context keeps labour supply. Its one synchronous dependency is a
 fail-loud read of `fulfillment-execution`'s installed station capacity on
 every `CommitShiftPlan` (ADR 0014) — a count, not tasks.
 
@@ -69,8 +72,10 @@ every `CommitShiftPlan` (ADR 0014) — a count, not tasks.
   the main runtime interactions.
 - [Async API](/contexts/workforce-management/async-api): the Kafka
   integration in narrative form. It covers `ShiftPlanCommitted` to
-  `wes-work-planning` and `warehouse-planning`, and the two opt-in sibling
-  topics it consumes (`process-path-management` and `labor-performance`).
+  `wes-work-planning` and `warehouse-planning`, the two opt-in sibling
+  topics it consumes (`process-path-management` and `labor-performance`) and
+  `warehouse-planning`'s `LabourPlanCommitted`, which it keeps as the
+  required heads (ADR 0043).
 
 Every page above except the Business Context and the Async API narrative
 is synced from the `workforce-management` repository.

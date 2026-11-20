@@ -53,9 +53,15 @@ WES-adjacent Supporting context the WMS tier never reads and never writes.
 
 ### Software proposes, humans commit
 
-`ProposePathPlan` computes `heads = ceil(charge ÷ plannedRate)` and returns a
-number. It writes nothing, raises no persisted state, and has no aggregate
-identity. `CommitShiftPlan` is a separate call that a human makes — a shift
+`ProposePathPlan` returns a number and writes nothing: it raises no
+persisted state and has no aggregate identity. Where the number comes from
+depends on the request. With a `charge`, it computes
+`heads = ceil(charge ÷ plannedRate)` (deprecated since
+[ADR 0043](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0043-propose-heads-from-the-published-labour-plan.md)).
+Without one, and with a `shiftId`, it returns the heads `warehouse-planning`
+published in `LabourPlanCommitted` (`rateSource` `labour-plan`): the
+requirement is read from its owner, never computed twice. `CommitShiftPlan`
+is a separate call that a human makes — a shift
 plan is a *commitment* that implies a staffing roster, break scheduling, and
 often an actual conversation with a shift manager. Making the arithmetic
 available without making it automatic keeps accountability where it belongs
@@ -76,22 +82,29 @@ two.
 ```mermaid
 timeline
   title One shift, as this context sees it
-  Before the shift : ProposePathPlan (advisory arithmetic) : CommitShiftPlan (a human commits)
+  Before the shift : ProposePathPlan (advisory, from a charge or the published labour plan) : CommitShiftPlan (a human commits)
   Shift start : StartAssociateShift : CertifyAssociate
   During the shift : AssignLabor : StartBreak / EndBreak : GetStaffingGap raises PathUnderstaffed : AssignLabor again (a human rebalances)
   Shift end : EndAssociateShift closes active assignments
 ```
 
 **Horizon 1 — shift-start planning.** Before the shift runs, someone answers:
-given the charge due on each path and the rate expected, how many people are
-needed where? The arithmetic (`heads = ceil(charge ÷ plannedRate)`) is
-trivial and the software does it via `ProposePathPlan`, which persists
+given the volume due on each path and the rate expected, how many people are
+needed where? `warehouse-planning` owns the requirement side (its workload
+forecast and labour plan) and this context keeps a local copy of what it
+publishes, so a supervisor sees the required heads next to the committed ones
+(`requiredHeads` on the staffing gap and on the committed lines). This
+context keeps the supply side. Proposing heads is trivial arithmetic or a
+lookup, done by `ProposePathPlan`, which persists
 nothing and has no identity. The commitment is not trivial: `CommitShiftPlan`
 takes the full set of `PathPlan` lines for a building's shift and validates
 them as **one atomic decision** — every line's `plannedHeads` at most the
 path's `installedStations`, every line's `plannedHours` fitting inside
 `plannedHeads × maxHoursPerShift`, at least one line present. If any line
 fails, none of them commit, because heads are a finite pool being divided.
+Committing fewer heads than the requirement is not refused: it is a legitimate
+supply decision, and `warehouse-planning` reports the difference as
+`LabourPlanDriftDetected`.
 
 `installedStations` arrives *in the request* rather than being looked up
 from `wes-work-planning`. Work Planning owns installed-station counts, but

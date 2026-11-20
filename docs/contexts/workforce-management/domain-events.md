@@ -2,6 +2,7 @@
 id: domain-events
 title: Domain events
 sidebar_label: Domain events
+sidebar_position: 5
 description: All ten past-tense domain events, what raises them, and which leave the process.
 ---
 
@@ -28,7 +29,7 @@ names are fixed vocabulary — they appear verbatim in the Go code, in
 | `AssociateBreakStarted` | `AssociateShift` | A logged break began | `associateId` |
 | `AssociateBreakEnded` | `AssociateShift` | A logged break ended | `associateId` |
 | `LaborAssigned` | `LaborAssignment` | An associate was placed on a path (first assignment) | `associateId`, `pathId` |
-| `LaborReassigned` | `LaborAssignment` | An active assignment was closed in favour of another path | `associateId`, `fromPathId`, `toPathId` |
+| `LaborReassigned` | `LaborAssignment` | An active assignment was closed in favour of a new one (another path, or the same path again: `fromPathId` may equal `toPathId`) | `associateId`, `fromPathId`, `toPathId` |
 | `PathUnderstaffed` | `GetStaffingGap` use case | Active assignments fell short of committed heads | `pathId`, `plannedHeads`, `activeHeads`, optional `siteCode` ([ADR 0034](https://github.com/IQVO/workforce-management/blob/develop/docs/docs/adr/0034-site-scoped-staffing-gap.md)) |
 | `AssociateShiftEnded` | `AssociateShift` | A shift closed, ending all active assignments | `associateId` |
 
