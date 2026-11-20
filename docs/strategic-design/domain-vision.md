@@ -28,8 +28,9 @@ understood, but rarely reconciled well together in practice:
 1. **What work exists** — orders accepted, allocated, and released
    (`order-management`, `inventory-storage`).
 2. **What capacity exists** — staffed, certified, path-eligible labor
-   (`workforce-management`) and installed station/equipment capacity
-   (`fulfillment-execution`).
+   (`workforce-management`), the labour the planned demand requires
+   (`warehouse-planning`, priced from `labor-performance`'s standards) and
+   installed station/equipment capacity (`fulfillment-execution`).
 3. **How work should flow right now** — waveless release and flow balancing
    across process paths, re-planned continuously rather than computed once
    (`wes-work-planning`).
@@ -46,15 +47,15 @@ current facts, never to make decisions on its own.
 | --- | --- |
 | `order-management` | Accepts orders, allocates stock, and releases work — the missing upstream front door. |
 | `inventory-storage` | The authoritative source of stock truth under chaotic storage; owns reservations and applies hazmat placement and DOT segregation from a local copy of product-master's classification. |
-| `wes-work-planning` | The conductor: waveless release and continuous flow balancing across process paths. |
+| `wes-work-planning` | The conductor: waveless release and continuous flow balancing across process paths. It executes; it no longer holds the charge forecast, the shift plan or the drift (they moved to `warehouse-planning`). |
 | `fulfillment-execution` | The Pick/Pack/SLAM task lifecycle; claims, executes, and completes floor work. |
-| `workforce-management` | Certifies, assigns, and tracks labor against process-path capability requirements. |
+| `workforce-management` | Certifies, assigns, and tracks labor against process-path capability requirements; owns the labour **supply** and proposes heads from warehouse-planning's committed labour plan. |
 | `facility-layout` | The physical warehouse structure — site, zone, aisle, coded location — as a Generic subdomain. |
-| `process-path-management` | The operator-configurable catalogue of process paths (PICK/PACK/REBIN/SLAM), extracted once instead of duplicated. |
-| `labor-performance` | Scores actual-vs-standard task performance per associate; a pure downstream observer. |
+| `process-path-management` | The operator-configurable catalogue of process paths (PICK/PACK/REBIN/SLAM), extracted once instead of duplicated. It is also meant to own the process-flow topology (`ProcessFlow`, its ADR 0042): decided, not built. |
+| `labor-performance` | Owns the labour standards (and publishes them) and scores actual-vs-standard task performance per associate; otherwise a pure downstream observer. |
 | `warehouse-ops-agent` | An agentic read-side aggregator (daily brief, exception correlation) and the console's BFF; owns no domain aggregate. |
 | `network-fulfillment` | The anti-corruption layer to an external retail fulfillment network: polls network demand, places it with `order-management` as a held order, and owns the acknowledgement deadline. |
-| `warehouse-planning` | Answers whether the warehouse can process the demand assigned to it: composes labor, station and other constraints into path capacity and records capacity plans with shortage and bottleneck detection. |
+| `warehouse-planning` | Answers whether the warehouse can process the demand assigned to it: composes labor, station and other constraints into path capacity and records capacity plans with shortage and bottleneck detection. It owns the **requirement side** of planning: the workload forecast, the labour plan, its drift against the committed heads, the labour requirement a plan states from the standards, scenario comparison and supersession of published plans. |
 | `product-master` | The single source of truth for what a SKU is: its handling classification (taken over from `inventory-storage`) and its declared and measured physical profile, published as events that four contexts keep local copies of. |
 | `network-inventory-planning` | Recommends inter-warehouse stock transfers from fail-closed local facts and carries an operator-approved transfer through reservation, floor work and destination stow as a saga, without ever moving stock itself. |
 | `inbound-receiving` | Everything before the first stow: the advance ship notice, the dock appointment and the receipt with its discrepancies (Short, Over, Damaged); hands good units to `inventory-storage` as events. Decided 2026-10-08, built and deployed in the reference cluster. |

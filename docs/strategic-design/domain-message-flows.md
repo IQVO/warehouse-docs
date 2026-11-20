@@ -58,12 +58,16 @@ context's own projector and are never read by a sibling.
 | | | `TaskCPTMissed`, `PackageManifested` | order-management |
 | `warehouse.workforce.events` | workforce-management | `ShiftPlanCommitted` | wes-work-planning, warehouse-planning |
 | `warehouse.labor-performance.events` | labor-performance | `TaskPerformanceRecorded` | workforce-management |
+| | | `LaborStandardDefined`, `LaborStandardRevised` (ADR 0038) | warehouse-planning (labour requirement, its ADR 0022) |
 | `warehouse.process-path-management.events` | process-path-management | `ProcessPathCreated`, `ProcessPathUpdated`, `ProcessPathDeactivated` | fulfillment-execution, wes-work-planning, workforce-management, order-management, network-fulfillment |
 | | | `CPTScheduleChanged` | order-management, network-fulfillment |
 | `warehouse.facility.events` | facility-layout | `ZoneRegistered`, `LocationSlotRegistered`, `LocationSlotDecommissioned` | inventory-storage (all three), warehouse-planning and inbound-receiving (the two slot events); slotting-optimization (all three); pick-face-replenishment (all three) |
 | | | `LocationGeometryUpdated` | task-interleaving (with the three above) |
 | | | `SiteCapabilityChanged` | network-inventory-planning |
 | `warehouse.warehouse-planning.events` | warehouse-planning | `CapacityPlanCreated`, `CapacityPlanPublished`, `CapacityShortageDetected` | order-management (`BottleneckDetected` is ignored); `CapacityPlanPublished` also network-inventory-planning |
+| | | `CapacityPlanSuperseded` | order-management (terminal `SUPERSEDED` status, never constrains; its ADR 0052) |
+| | | `LabourPlanCommitted` | workforce-management (local copy; its ADR 0043) |
+| | | `WorkloadForecastReceived`, `LabourPlanDriftDetected` | no sibling consumer (analytics copies only) |
 | `warehouse.network-fulfillment.events` | network-fulfillment | none | no consumer (wired but unused) |
 | `warehouse.network-inventory-planning.events` | network-inventory-planning | `TransferAllocationRequested` | inventory-storage |
 | | | `WorkDemandReleased` | wes-work-planning |
@@ -87,10 +91,11 @@ context's own projector and are never read by a sibling.
 | `warehouse.exception-management.events` | exception-management | all seven types | none |
 
 Several published types have no sibling consumer today. These are
-eight of the eleven `warehouse.work-planning.events`
+five of the eight `warehouse.work-planning.events`
 types (all but `WorkReleased`, `PathCapacityChanged` and `WorkUnitCreated`,
 which `order-management` reads only with `RELEASE_CONFIRMATION_MODE=kafka`; for
-example `PathPlanDriftDetected` and `WorkUnitCompleted`),
+example `WorkUnitCompleted`; the charge forecast, shift plan and drift events were
+retired with ADR 0049 and now live in `warehouse-planning`),
 `BottleneckDetected`, `TransferPlanApproved`, every `warehouse.network-fulfillment.events` type,
 `ProductDescriptionChanged`, every
 `warehouse.inbound-receiving.events` type except `ReceiptLineReceived`,
@@ -405,15 +410,18 @@ sequenceDiagram
     FE-)LP: evt: TaskCompleted on warehouse.fulfillment.events
     Note over LP: score against the standard active at completion, derive idle gap
     LP-)WFM: evt: TaskPerformanceRecorded on warehouse.labor-performance.events
+    LP-)WPL: evt: LaborStandardDefined and LaborStandardRevised on warehouse.labor-performance.events
+    Note over WPL: labour requirement of a plan is priced from the standards
     Note over WFM: laborperformancecache keeps measured mean and idle share
+    WPL-)WFM: evt: LabourPlanCommitted on warehouse.warehouse-planning.events
     Lead->>WFM: cmd: POST /paths/{pathId}/plan-proposals
     Lead->>WFM: cmd: POST /shift-plans
     WFM->>FE: qry: GET /capacity/{capability} per required capability
     WFM-)WP: evt: ShiftPlanCommitted on warehouse.workforce.events, one per PathPlan line
     WFM-)WPL: evt: ShiftPlanCommitted, the same messages
-    Note over WP: LaborPlanObserved compared with its own ShiftPlan
-    WP-)WP: evt: PathPlanDriftDetected on warehouse.work-planning.events, no consumer
-    Note over WPL: LABOR constraint registered per process type
+    Note over WP: LaborPlanObserved, a read-only view
+    Note over WPL: heads compared with its own labour plan, LABOR constraint registered per process type
+    WPL-)WPL: evt: LabourPlanDriftDetected on warehouse.warehouse-planning.events
     OA->>WFM: qry: MCP get_staffing_gap
     OA->>WP: qry: MCP get_rebalance_recommendation
     Lead->>WFM: cmd: POST /associates/{id}/assignments
@@ -423,9 +431,12 @@ sequenceDiagram
 consumes `TaskCompleted`. The measured-rate feed into `workforce-management`
 uses Kafka when `LABOR_PERFORMANCE_MODE=kafka-cache`. The REST client for
 `GET /task-types/{taskType}/performance` is still wired as the alternative.
-`wes-work-planning` publishes its own, different
-`com.warehouse.wes.work-planning.plan.ShiftPlanCommitted` when a planner
-calls `POST /paths/{pathId}/plan`. Consumers must dispatch on the full type.
+`wes-work-planning` no longer publishes a `ShiftPlanCommitted`: its own
+`com.warehouse.wes.work-planning.plan.ShiftPlanCommitted`, the charge forecast and
+`PathPlanDriftDetected` were retired when the requirement side of planning moved to
+`warehouse-planning` (wes-work-planning ADR 0049). The labour plan is now
+`LabourPlanCommitted`, and its drift `LabourPlanDriftDetected`, both from
+`warehouse-planning`; the only `ShiftPlanCommitted` left is workforce-management's.
 
 Sources: [labor-performance flow 1](/contexts/labor-performance/domain-message-flow),
 [workforce-management flows 1, 2 and 4](/contexts/workforce-management/domain-message-flow),
