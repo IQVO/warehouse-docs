@@ -44,6 +44,10 @@ The ability to know the demand and the committed labor a capacity plan must be c
 | --- | --- | --- | --- | --- | --- |
 | 1.2.1 | Expected Demand Projection | The ability to project a site's expected demand over a window from allocated orders. | [warehouse-planning](/contexts/warehouse-planning) | `REST GET /demand`<br/>`event OrderAllocated (consumed)`<br/>`MCP get_expected_demand` | Implemented |
 | 1.2.2 | Committed Labor Intake | The ability to take the committed shift plan into capacity planning. | [warehouse-planning](/contexts/warehouse-planning) | `event ShiftPlanCommitted (consumed)` | Implemented |
+| 1.2.3 | Workload Forecast Intake | The ability to receive the expected workload of a process path, in units due by each CPT. | [warehouse-planning](/contexts/warehouse-planning) | `REST PUT /workload-forecasts/{site_id}/{path_id}`<br/>`REST GET /workload-forecasts/{site_id}/{path_id}`<br/>`event WorkloadForecastReceived` | Implemented |
+| 1.2.4 | Labour Plan Commitment | The ability to commit the labour plan of a shift for a path, the heads the planned demand requires. | [warehouse-planning](/contexts/warehouse-planning) | `REST PUT /labour-plans/{site_id}/{shift_id}/{path_id}`<br/>`REST GET /labour-plans`<br/>`event LabourPlanCommitted` | Implemented |
+| 1.2.5 | Labour Plan Drift Detection | The ability to detect that the heads workforce management committed differ from the labour plan. | [warehouse-planning](/contexts/warehouse-planning) | `event LabourPlanDriftDetected`<br/>`event ShiftPlanCommitted (consumed)` | Implemented |
+| 1.2.6 | Forecast Demand Projection | The ability to project a window's demand from the workload forecast of a path instead of from allocated orders. | [warehouse-planning](/contexts/warehouse-planning) | `REST POST /capacity-plans (demand_source forecast)` | Implemented |
 
 ### L2 1.3 Capacity Plan Management
 
@@ -54,6 +58,9 @@ The ability to draft, check and publish a capacity plan with its shortages and b
 | 1.3.1 | Capacity Plan Drafting | The ability to create a draft capacity plan and compute its shortage. | [warehouse-planning](/contexts/warehouse-planning) | `REST POST /capacity-plans`<br/>`event CapacityPlanCreated`<br/>`event CapacityShortageDetected`<br/>`MCP create_capacity_plan` | Implemented |
 | 1.3.2 | Bottleneck Detection | The ability to name the step and binding constraint that limit a plan. | [warehouse-planning](/contexts/warehouse-planning) | `event BottleneckDetected` | Implemented |
 | 1.3.3 | Capacity Plan Publication | The ability to publish a plan so that order promising and network planning can act on it. | [warehouse-planning](/contexts/warehouse-planning) | `REST POST /capacity-plans/{id}/publications`<br/>`event CapacityPlanPublished`<br/>`MCP publish_capacity_plan` | Implemented |
+| 1.3.4 | Capacity Plan Supersession | The ability to retire a published plan when a newer one of the same site, location, path and window is published. | [warehouse-planning](/contexts/warehouse-planning) | `event CapacityPlanSuperseded` | Implemented |
+| 1.3.5 | Labour Requirement Calculation | The ability to state, for each step of a plan, the labour its demand requires from the labour standards. | [warehouse-planning](/contexts/warehouse-planning) | `event LaborStandardDefined (consumed)`<br/>`event LaborStandardRevised (consumed)`<br/>`REST GET /capacity-plans/{id}` | Implemented |
+| 1.3.6 | Capacity Plan Scenario Comparison | The ability to compare two to five labelled plans of a site, path and window side by side. | [warehouse-planning](/contexts/warehouse-planning) | `REST GET /capacity-plans/comparisons` | Implemented |
 
 ## L1 2 Operations Performance Management
 
@@ -115,7 +122,7 @@ The ability to commit a ship promise that the warehouse can keep, and to correct
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 3.3.1 | Capacity-Aware Ship Promise | The ability to derive a promise from the cutoff schedule, path capacity and published capacity plans. | [order-management](/contexts/order-management) | `REST GET /planned-capacity`<br/>`event CPTScheduleChanged (consumed)`<br/>`event PathCapacityChanged (consumed)`<br/>`event CapacityPlanPublished (consumed)` | Implemented |
+| 3.3.1 | Capacity-Aware Ship Promise | The ability to derive a promise from the cutoff schedule, path capacity and published capacity plans. | [order-management](/contexts/order-management) | `REST GET /planned-capacity`<br/>`event CPTScheduleChanged (consumed)`<br/>`event PathCapacityChanged (consumed)`<br/>`event CapacityPlanPublished (consumed)`<br/>`event CapacityPlanSuperseded (consumed)` | Implemented |
 | 3.3.2 | Order Re-promising | The ability to re-promise an order when a task misses its cutoff. | [order-management](/contexts/order-management) | `event TaskCPTMissed (consumed)`<br/>`event OrderRepromised` | Implemented |
 | 3.3.3 | Promise Health Monitoring | The ability to judge how well promises are being kept. | [order-management](/contexts/order-management) | `MCP get_promise_health` | Implemented |
 
@@ -276,7 +283,6 @@ The ability to turn demand of every kind into work units on the right process pa
 | 7.1.1 | Order Work Intake | The ability to create work units from allocated orders. | [wes-work-planning](/contexts/wes-work-planning) | `event OrderAllocated (consumed)`<br/>`event WorkUnitCreated`<br/>`REST POST /paths/{pathId}/work-units` | Implemented |
 | 7.1.2 | Transfer Work Intake | The ability to create work units from released transfer demand. | [wes-work-planning](/contexts/wes-work-planning) | `event WorkDemandReleased (consumed)` | Implemented |
 | 7.1.3 | Relocation Work Intake | The ability to turn an approved slot plan into sequenced relocation work units. | [wes-work-planning](/contexts/wes-work-planning) | `event SlotPlanApproved (consumed)` | Implemented |
-| 7.1.4 | Charge Forecast Intake | The ability to receive the expected charge of a process path. | [wes-work-planning](/contexts/wes-work-planning) | `REST POST /paths/{pathId}/charge`<br/>`event ChargeForecastReceived` | Implemented |
 
 ### L2 7.2 Work Release
 
@@ -301,13 +307,11 @@ The ability to watch the flow across paths and correct it.
 
 ### L2 7.4 Shift Plan Alignment
 
-The ability to execute against the labor plan and notice when the floor drifts from it.
+The ability to see, while executing, the labor plan workforce management committed for a path; the plan itself, its commitment and its drift belong to warehouse-planning (ADR 0049).
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 7.4.1 | Path Plan Commitment | The ability to commit the shift plan this context executes for a path. | [wes-work-planning](/contexts/wes-work-planning) | `REST POST /paths/{pathId}/plan`<br/>`event ShiftPlanCommitted (work-planning)` | Implemented |
-| 7.4.2 | Labor Plan View | The ability to read the labor plan workforce management committed for a path. | [wes-work-planning](/contexts/wes-work-planning) | `REST GET /paths/{pathId}/labor-plan-view`<br/>`event ShiftPlanCommitted (consumed)` | Implemented |
-| 7.4.3 | Plan Drift Detection | The ability to detect that a path drifts from its plan. | [wes-work-planning](/contexts/wes-work-planning) | `event PathPlanDriftDetected` | Implemented |
+| 7.4.1 | Labor Plan View | The ability to read the labor plan workforce management committed for a path. | [wes-work-planning](/contexts/wes-work-planning) | `REST GET /paths/{pathId}/labor-plan-view`<br/>`event ShiftPlanCommitted (consumed)` | Implemented |
 
 ### L2 7.5 Work Completion Tracking
 
@@ -427,7 +431,7 @@ The ability to split a shift's headcount across process paths within installed c
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 10.2.1 | Path Head Proposal | The ability to propose planned heads for a path without committing them. | [workforce-management](/contexts/workforce-management) | `REST POST /paths/{pathId}/plan-proposals`<br/>`MCP propose_path_heads` | Implemented |
+| 10.2.1 | Path Head Proposal | The ability to propose planned heads for a path without committing them. | [workforce-management](/contexts/workforce-management) | `REST POST /paths/{pathId}/plan-proposals`<br/>`event LabourPlanCommitted (consumed)`<br/>`MCP propose_path_heads` | Implemented |
 | 10.2.2 | Shift Plan Commitment | The ability to commit a shift's headcount split, capped by installed station capacity. | [workforce-management](/contexts/workforce-management) | `REST POST /shift-plans`<br/>`event ShiftPlanCommitted` | Implemented |
 | 10.2.3 | Staffing Gap Analysis | The ability to show where a committed plan is understaffed. | [workforce-management](/contexts/workforce-management) | `REST GET /sites/{siteCode}/shifts/{shiftId}/staffing-gap`<br/>`event PathUnderstaffed (analytics)`<br/>`MCP cover_staffing_gaps` | Implemented |
 
@@ -445,7 +449,7 @@ The ability to define how long work of each type should take.
 
 | L3 | Capability | Description | Realized by | Evidence | Status |
 | --- | --- | --- | --- | --- | --- |
-| 10.4.1 | Engineered Labor Standard | The ability to define or revise the labor standard of a task type. | [labor-performance](/contexts/labor-performance) | `REST POST /standards`<br/>`REST GET /standards/{taskType}`<br/>`MCP get_labor_standard` | Implemented |
+| 10.4.1 | Engineered Labor Standard | The ability to define or revise the labor standard of a task type. | [labor-performance](/contexts/labor-performance) | `REST POST /standards`<br/>`REST GET /standards/{taskType}`<br/>`event LaborStandardDefined`<br/>`event LaborStandardRevised`<br/>`MCP get_labor_standard` | Implemented |
 
 ### L2 10.5 Labor Performance Measurement
 

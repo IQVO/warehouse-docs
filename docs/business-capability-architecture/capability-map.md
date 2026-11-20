@@ -14,7 +14,7 @@ generator; do not edit this page by hand. The method and the sources are on
 [Business Capability Architecture](/business-capability-architecture).
 :::
 
-The map has **14 L1**, **54 L2** and **135 L3** capabilities, and every one
+The map has **14 L1**, **54 L2** and **139 L3** capabilities, and every one
 has code behind it: each L3 names the routes, events or MCP tools on `develop`
 that realize it. 4 L3 capabilities are marked partial, with the limitation
 stated (see the [catalogue](/business-capability-architecture/capability-catalogue)).
@@ -35,7 +35,7 @@ a context. That one is overlaid on the
 flowchart TB
     subgraph TSTR["Strategic tier - Direction setting: plans and measures the operation"]
         direction TB
-        C1["<b>1 Capacity Planning</b><br/>3 L2, 9 L3"]
+        C1["<b>1 Capacity Planning</b><br/>3 L2, 16 L3"]
         C2["<b>2 Operations Performance<br/>Management</b><br/>2 L2, 13 L3"]
     end
     subgraph TCOR["Core tier - Customer-facing value delivery: orders, stock, work, network"]
@@ -44,7 +44,7 @@ flowchart TB
         C4["<b>4 Channel Management</b><br/>4 L2, 6 L3"]
         C5["<b>5 Inbound Management</b><br/>4 L2, 7 L3"]
         C6["<b>6 Inventory Management</b><br/>6 L2, 12 L3"]
-        C7["<b>7 Warehouse Work<br/>Orchestration</b><br/>5 L2, 16 L3"]
+        C7["<b>7 Warehouse Work<br/>Orchestration</b><br/>5 L2, 13 L3"]
         C8["<b>8 Warehouse Task<br/>Execution</b><br/>5 L2, 16 L3"]
         C9["<b>9 Network Inventory<br/>Management</b><br/>3 L2, 9 L3"]
         C3 ~~~ C7
@@ -122,10 +122,10 @@ flowchart LR
     N1_1["<b>L2 1.1 Capacity Constraint Management</b><br/>1.1.1 Process Capacity Constraint Registration<br/>1.1.2 Station Standard Declaration<br/>1.1.3 Effective Capacity Calculation<br/>1.1.4 Storage Capacity Visibility"]
     L1 --> N1_1
     class N1_1 impl
-    N1_2["<b>L2 1.2 Demand and Labor Outlook</b><br/>1.2.1 Expected Demand Projection<br/>1.2.2 Committed Labor Intake"]
+    N1_2["<b>L2 1.2 Demand and Labor Outlook</b><br/>1.2.1 Expected Demand Projection<br/>1.2.2 Committed Labor Intake<br/>1.2.3 Workload Forecast Intake<br/>1.2.4 Labour Plan Commitment<br/>1.2.5 Labour Plan Drift Detection<br/>1.2.6 Forecast Demand Projection"]
     L1 --> N1_2
     class N1_2 impl
-    N1_3["<b>L2 1.3 Capacity Plan Management</b><br/>1.3.1 Capacity Plan Drafting<br/>1.3.2 Bottleneck Detection<br/>1.3.3 Capacity Plan Publication"]
+    N1_3["<b>L2 1.3 Capacity Plan Management</b><br/>1.3.1 Capacity Plan Drafting<br/>1.3.2 Bottleneck Detection<br/>1.3.3 Capacity Plan Publication<br/>1.3.4 Capacity Plan Supersession<br/>1.3.5 Labour Requirement Calculation<br/>1.3.6 Capacity Plan Scenario Comparison"]
     L1 --> N1_3
     class N1_3 impl
     class L1 strategic
@@ -361,7 +361,7 @@ flowchart LR
 %%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 34, "padding": 6}}}%%
 flowchart LR
     L1["<b>L1 7</b><br/>Warehouse Work<br/>Orchestration"]
-    N7_1["<b>L2 7.1 Work Intake</b><br/>7.1.1 Order Work Intake<br/>7.1.2 Transfer Work Intake<br/>7.1.3 Relocation Work Intake<br/>7.1.4 Charge Forecast Intake"]
+    N7_1["<b>L2 7.1 Work Intake</b><br/>7.1.1 Order Work Intake<br/>7.1.2 Transfer Work Intake<br/>7.1.3 Relocation Work Intake"]
     L1 --> N7_1
     class N7_1 impl
     N7_2["<b>L2 7.2 Work Release</b><br/>7.2.1 Waveless Priority Release<br/>7.2.2 Work Pool Configuration<br/>7.2.3 Path Throttling"]
@@ -370,7 +370,7 @@ flowchart LR
     N7_3["<b>L2 7.3 Flow Balancing</b><br/>7.3.1 Backlog Telemetry<br/>7.3.2 Rebalance Recommendation<br/>7.3.3 Rate Deviation Detection<br/>7.3.4 Path Capacity Publication"]
     L1 --> N7_3
     class N7_3 impl
-    N7_4["<b>L2 7.4 Shift Plan Alignment</b><br/>7.4.1 Path Plan Commitment<br/>7.4.2 Labor Plan View<br/>7.4.3 Plan Drift Detection"]
+    N7_4["<b>L2 7.4 Shift Plan Alignment</b><br/>7.4.1 Labor Plan View"]
     L1 --> N7_4
     class N7_4 impl
     N7_5["<b>L2 7.5 Work Completion Tracking</b><br/>7.5.1 Work Unit Completion<br/>7.5.2 Work Unit Inquiry"]
@@ -395,7 +395,7 @@ flowchart LR
 | 7.1 | Work Intake | The ability to turn demand of every kind into work units on the right process path. | [wes-work-planning](/contexts/wes-work-planning) |
 | 7.2 | Work Release | The ability to admit work into the floor continuously, in priority order, within limits. | [wes-work-planning](/contexts/wes-work-planning) |
 | 7.3 | Flow Balancing | The ability to watch the flow across paths and correct it. | [wes-work-planning](/contexts/wes-work-planning) |
-| 7.4 | Shift Plan Alignment | The ability to execute against the labor plan and notice when the floor drifts from it. | [wes-work-planning](/contexts/wes-work-planning) |
+| 7.4 | Shift Plan Alignment | The ability to see, while executing, the labor plan workforce management committed for a path; the plan itself, its commitment and its drift belong to warehouse-planning (ADR 0049). | [wes-work-planning](/contexts/wes-work-planning) |
 | 7.5 | Work Completion Tracking | The ability to close the loop from released work back to completed work. | [wes-work-planning](/contexts/wes-work-planning) |
 
 ### 8 Warehouse Task Execution
