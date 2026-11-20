@@ -39,7 +39,7 @@ const sidebar: SidebarsConfig = {
         {
           type: "doc",
           id: "api-reference/rest/warehouse-planning/list-process-paths",
-          label: "List the registered ProcessPaths",
+          label: "List the ProcessPaths (process flows and locally declared paths)",
           className: "api-method get",
         },
         {
@@ -47,6 +47,12 @@ const sidebar: SidebarsConfig = {
           id: "api-reference/rest/warehouse-planning/register-process-path",
           label: "Register (seed) a ProcessPath read model",
           className: "api-method post",
+        },
+        {
+          type: "doc",
+          id: "api-reference/rest/warehouse-planning/get-process-path",
+          label: "Get the ProcessPath an id resolves to",
+          className: "api-method get",
         },
         {
           type: "doc",
