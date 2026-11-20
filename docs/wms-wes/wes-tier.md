@@ -338,8 +338,9 @@ heads (`LabourPlanDriftDetected`). A plan can take its demand from the forecast
 labor-performance's standards (`labour_requirement`), carries a scenario label
 (`GET /capacity-plans/comparisons`) and is superseded by a newer published plan of
 the same site, location, path and window (`CapacityPlanSuperseded`). The
-process-flow topology of a path is process-path-management's: decided (its ADR
-0042, warehouse-planning ADR 0025), **not built**.
+process-flow topology of a path is process-path-management's: built on `develop`
+(its ADR 0042, PR #272; warehouse-planning ADR 0025 stage 1, PR #156) — warehouse-planning
+resolves an ACTIVE flow first, its locally declared paths remain until stages 2-3.
 
 ```mermaid
 %%{init: {"flowchart": {"nodeSpacing": 12, "rankSpacing": 40, "padding": 6}}}%%

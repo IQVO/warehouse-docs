@@ -20,10 +20,7 @@ description: Kafka integration for warehouse-planning — one published integrat
 | `warehouse.labor-performance.events` | **Consumed** (producer: `labor-performance`) | `LaborStandardDefined`, `LaborStandardRevised` (every other type is ignored) | **Live**. ADR 0022; labor-performance's ADR 0038 put both types on its integration topic with an optional `site_code` scope; `LABOR_STANDARD_CONSUMER_GROUP` is required |
 | `warehouse.warehouse-planning.analytics` | **Published** and consumed only by this context's own `planning-projector` (ADR 0005) | the capacity-plan events and the three requirement-side events, same `type` and `id`, `dataschema=urn:warehouse:warehouse-planning:analytics:<EventName>:v1`; `CapacityPlanPublished` adds `binding_constraint`. The `processcapacity` types are integration-stream only; the projector acknowledges the requirement-side types and `CapacityPlanSuperseded` without projecting them | **Live** (internal, not an integration contract) |
 
-`process-path-management`'s topic is not consumed today. ADR 0025 decides to
-consume its `ProcessFlowDefined`, `ProcessFlowRevised` and
-`ProcessFlowRetired` into a local copy of the flows, but that is **decided and
-not built**: there is no such consumer on `develop`.
+| `warehouse.process-path-management.events` | **Consumed** (producer: `process-path-management`) | `ProcessFlowDefined`, `ProcessFlowRevised`, `ProcessFlowRetired` (each the FULL flow state with a `version`, applied only when greater; every other type ignored) | **Live**, always on. ADR 0025 stage 1; `PROCESS_FLOW_CONSUMER_GROUP` (chart default `warehouse-planning-process-flows`) |
 
 ## The envelope
 

@@ -1,7 +1,7 @@
 ---
-id: sequence-diagrams
 title: Sequence Diagrams
 sidebar_label: Sequence Diagrams
+sidebar_position: 11
 description: UML sequence diagrams for every process-path-management command use case — define, revise and deactivate a path, define or revise a CPT schedule — plus the outbox relay and the analytics projection, derived from the use-case code.
 ---
 

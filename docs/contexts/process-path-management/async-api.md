@@ -2,7 +2,7 @@
 id: async-api
 title: Async API
 sidebar_label: Async API
-description: Kafka integration for process-path-management — topics, CloudEvents envelope, the four event types, and the live consumer state of this integration today.
+description: Kafka integration for process-path-management — topics, CloudEvents envelope, the seven event types, and the live consumer state of this integration today.
 ---
 
 # Async API
@@ -36,13 +36,21 @@ every event goes through the transactional outbox (ADR 0003), relayed to
 Kafka by an in-process relay, and each domain event enqueues one row per
 topic in the same transaction as the aggregate change.
 
-The topic carries four event types, filtered by consumers on the full
+The topic carries seven event types, filtered by consumers on the full
 CloudEvents `type`:
 `com.warehouse.wes.process-path-management.processpath.ProcessPathCreated`,
 `…processpath.ProcessPathUpdated`, `…processpath.ProcessPathDeactivated`
-(keyed and `subject`ed by `path_id`), and
+(keyed and `subject`ed by `path_id`),
 `com.warehouse.wes.process-path-management.cptschedule.CPTScheduleChanged`
-(keyed by `site_id`, ADR 0010).
+(keyed by `site_id`, ADR 0010), and since
+[ADR 0042](https://github.com/IQVO/process-path-management/blob/develop/docs/docs/adr/0042-process-flows.md)
+the full-state flow types `…processflow.ProcessFlowDefined`,
+`…processflow.ProcessFlowRevised` and `…processflow.ProcessFlowRetired`
+(keyed and `subject`ed by `flow_id`; each carries `name`, the ordered `stages`
+(`path_id` + `process_type`), `status` and `version`). Every ACTIVE flow is
+republished as `ProcessFlowRevised` at startup. `warehouse-planning` consumes
+the three flow types into its `process_flows` copy (its ADR 0025); a path that
+an ACTIVE flow uses cannot be deactivated (`409 path-in-active-flow`).
 
 The `intake` array of a `ProcessPath*` payload (the demand sources allowed to
 route work onto the path, ADR 0034) is a closed vocabulary: `CUSTOMER_ORDER`,
