@@ -2,6 +2,7 @@
 id: context-map
 title: Context map
 sidebar_label: Context map
+sidebar_position: 2
 description: What is actually wired between this service and its siblings today, and what is only strategically related.
 ---
 

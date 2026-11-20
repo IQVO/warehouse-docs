@@ -1,7 +1,7 @@
 ---
-id: sequence-diagrams
 title: Sequence Diagrams
 sidebar_label: Sequence Diagrams
+sidebar_position: 9
 description: "UML sequence diagrams for every command and query use case of order-management (REST, MCP and Kafka entry points), traced from the use-case function bodies on develop."
 ---
 
@@ -412,7 +412,7 @@ sequenceDiagram
   alt not a CloudEvent
     K->>K: dead-letter to warehouse.warehouse-planning.events.dlq
   end
-  K->>K: planningRequestFrom, DRAFT for Created, PUBLISHED otherwise
+  K->>K: planningRequestFrom, DRAFT for Created, SUPERSEDED for Superseded (ADR 0052), PUBLISHED otherwise
   alt other type, e.g. BottleneckDetected
     K->>K: commit and ignore
   else invalid payload or subject differs from plan_id
@@ -467,8 +467,9 @@ Source: `internal/adapters/outbound/postgres/outbox_relay.go`,
 `outbox_publisher.go`, `internal/adapters/outbound/kafka/relay_sink.go`,
 `writer_config.go`. Omits: the housekeeping sweeper that later deletes
 published rows and the `order.outbox.lag_seconds` gauge (both ADR 0032).
-`OrderRepromised` is also written to the integration topic; no consumer of
-it is known from this repository.
+`OrderRepromised` is also written to the integration topic; exception-management reads it
+(`internal/adapters/inbound/kafka/order_correlation_consumer.go` in that repository) to auto-resolve open exception cases,
+and no other sibling consumes it.
 
 ## 10. ApplyProductClassification — Kafka `warehouse.product-master.events`
 

@@ -2,6 +2,7 @@
 id: class-diagram
 title: Class diagrams
 sidebar_label: Class diagrams
+sidebar_position: 8
 description: UML class diagrams of Labor Performance's domain model, application ports and read models, plus the hexagonal ports-and-adapters view — real type names, fields and state-changing methods from internal/domain and internal/application.
 ---
 

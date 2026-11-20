@@ -1,8 +1,8 @@
 ---
-id: use-cases
 title: Use Cases
 sidebar_label: Use Cases
-description: The twelve application-layer use cases, their HTTP, MCP, Kafka and housekeeping triggers, the events they raise and their failure modes.
+sidebar_position: 1
+description: The thirteen application-layer use cases, their HTTP, MCP, Kafka and housekeeping triggers, the events they raise and their failure modes.
 ---
 
 # Use Cases
@@ -12,11 +12,11 @@ This page is a copy of [`docs/docs/ddd/use-cases.md`](https://github.com/IQVO/or
 :::
 
 
-Twelve use cases, one struct each, in `internal/application/usecases`. Each
+Thirteen use cases, one struct each, in `internal/application/usecases`. Each
 depends only on the domain and on `application/ports` — never on an
 adapter. Dependencies are plain struct fields, wired in `cmd/order`
 (`main.go`, `wiring.go`, `planned_capacity.go`, `product_classification.go`,
-`release_confirmation.go`)
+`release_confirmation.go`, `outbound_shipping.go`)
 and, for `GetOrder` over MCP, in `cmd/mcp`.
 
 Per [ADR 0005](https://iqvo.github.io/order-management/docs/adr/0005-choreographed-release-via-kafka), allocation
@@ -44,6 +44,7 @@ infrastructure.
 | 10 | `ApplyProductClassification` | Kafka `ProductClassified` on `warehouse.product-master.events` (opt-in, `PRODUCT_CLASSIFICATION_MODE=kafka`) | — (local copy write) |
 | 11 | `ConfirmRelease` | Kafka `WorkUnitCreated` on `warehouse.work-planning.events` (opt-in, `RELEASE_CONFIRMATION_MODE=kafka`, off by default) | — (process-manager write) |
 | 12 | `FlagUnconfirmedReleases` | the housekeeping sweeper, every `HOUSEKEEPING_INTERVAL` (same opt-in) | `OrderReleaseUnconfirmed` (analytics only) |
+| 13 | `ConfirmShipment` | Kafka `ShipmentConfirmed` on `warehouse.outbound-shipping.events` (opt-in, `OUTBOUND_SHIPPING_CONSUMER_MODE=kafka`, off by default) | `OrderLineShipped`, `OrderShipped`/`OrderPartiallyShipped` (local, not published) |
 
 Step-by-step diagrams for every row are on
 [Sequence Diagrams](/contexts/order-management/sequence-diagrams).
@@ -183,7 +184,7 @@ order `Backordered` — BR3 is a hold, not a problem type, so there is no
 ## 5. CancelOrder(orderId)
 
 Checks `EnsureCancellable` first (**BR6**: `409` `order-already-released`
-if any line is `Released`, before anything is revoked), then revokes every
+if any line is `Released` or `Shipped`, before anything is revoked), then revokes every
 allocated line's reservation via `DELETE /reservations/{id}`, cancels every
 line and saves.
 
@@ -221,9 +222,11 @@ dead-lettered to `warehouse.fulfillment.events.dlq`.
 
 Runs only when `PLANNED_CAPACITY_CONSUMER_GROUP` is set
 ([ADR 0031](https://iqvo.github.io/order-management/docs/adr/0031-consume-warehouse-planning-capacity-plans)).
-`PlannedCapacityConsumer` maps `CapacityPlanCreated` to a `DRAFT` window
-and `CapacityPlanPublished`/`CapacityShortageDetected` to a `PUBLISHED`
-one; the use case validates the window, claims the event id
+`PlannedCapacityConsumer` maps `CapacityPlanCreated` to a `DRAFT` window,
+`CapacityPlanPublished`/`CapacityShortageDetected` to a `PUBLISHED`
+one and `CapacityPlanSuperseded` to a terminal `SUPERSEDED` one that never
+constrains an order ([ADR 0052](https://iqvo.github.io/order-management/docs/adr/0052-consume-capacity-plan-superseded));
+the use case validates the window, claims the event id
 (`ports.PlannedCapacityProcessedEvents`) and upserts it into
 `planned_capacity_windows` (last writer wins, a DRAFT never overwrites a
 PUBLISHED plan). No order changes and no event is raised.
@@ -299,6 +302,35 @@ increments `order.release_confirmation.unconfirmed`. It is a fact, never an
 action: nothing is cancelled, re-released or retried, and the order is not
 touched. With the default 1h `HOUSEKEEPING_INTERVAL` a line is flagged up to
 1h15m after release; use about `5m` when the loop is on.
+
+## 13. ConfirmShipment (Kafka-driven, opt-in, off by default)
+
+Runs only when `OUTBOUND_SHIPPING_CONSUMER_MODE=kafka`, which also requires
+`OUTBOUND_SHIPPING_CONSUMER_GROUP`, `KAFKA_BROKERS` and `DATABASE_URL`
+([ADR 0051](https://iqvo.github.io/order-management/docs/adr/0051-consume-shipment-confirmed-and-package-missedload)).
+`OutboundShippingConsumer` acts only on outbound-shipping's
+`com.warehouse.wms.outbound-shipping.outboundload.ShipmentConfirmed` and reads
+`load_id` and `orders[].order_id`. In one `UnitOfWork` the use case claims the
+raw CloudEvents id in `shipment_processed_events`
+(`ports.ShipmentProcessedEvents`; one claim covers every order the event names),
+then for each named order moves its `Released` lines to `Shipped`
+(`Order.ShipAll`), saves it and raises `OrderLineShipped` per moved line plus one
+`OrderShipped` (every line shipped) or `OrderPartiallyShipped`, each carrying
+the `load_id`. Outcomes per order, also the structured-log values:
+`shipped`, `no_change` (first-seen event, order already fully shipped),
+`duplicate` (id already claimed; the whole event is a no-op), `ignored_no_orders`
+(empty `orders[]`), `ignored_unknown_order` and `ignored_not_shippable` (no
+`Released` or `Shipped` line, or cancelled). The skip outcomes are logged at WARN
+and committed past; the other orders in the event still ship. None of the three
+events is published.
+
+The same consumer routes `PackageMissedLoad` (`source_order_id`, a bare order
+id) to `RepromiseOrder.ExecuteForMissedLoad`, the order-wide variant of use case 6:
+every promise group of the order is recomputed, and each group whose promise
+moved publishes one `OrderRepromised` with reason `PackageMissedLoad`.
+
+**Fails when:** a transient error — retried in process, then the message goes to
+`warehouse.outbound-shipping.events.dlq`; a shutdown never dead-letters it.
 
 ## REST endpoint summary
 

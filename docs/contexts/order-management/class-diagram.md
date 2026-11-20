@@ -1,7 +1,7 @@
 ---
-id: class-diagram
 title: UML Class Diagrams
 sidebar_label: Class Diagrams
+sidebar_position: 7
 description: "UML class diagrams of internal/domain (Order aggregate, promise and routing policies, planned capacity, domain events) plus the hexagonal ports and adapters, drawn from the code on develop."
 ---
 
@@ -72,6 +72,7 @@ classDiagram
     Allocated
     Backordered
     Released
+    Shipped
     Cancelled
   }
   class Status {
@@ -82,6 +83,8 @@ classDiagram
     Backordered
     Released
     PartiallyReleased
+    Shipped
+    PartiallyShipped
     Cancelled
   }
   class FulfillmentClass {

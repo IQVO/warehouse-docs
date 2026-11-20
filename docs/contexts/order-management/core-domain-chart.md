@@ -1,7 +1,7 @@
 ---
-id: core-domain-chart
 title: Core Domain Chart
 sidebar_label: Core Domain Chart
+sidebar_position: 1
 description: "ddd-crew Core Domain Chart: order-management plotted on business differentiation vs model complexity, with the evidence for its Generic/Supporting position and its evolution."
 ---
 

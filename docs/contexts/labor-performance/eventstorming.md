@@ -2,6 +2,7 @@
 id: eventstorming
 title: EventStorming (design level)
 sidebar_label: EventStorming
+sidebar_position: 6
 description: Design-level EventStorming boards for Labor Performance — scoring a completed task, defining or revising a standard, and building the analytical report — in ddd-crew cheat-sheet notation, with code evidence for every sticky.
 ---
 
@@ -124,8 +125,9 @@ flowchart LR
     AG1["LaborStandard"]:::aggregate
     E1["LaborStandardDefined"]:::event
     E2["LaborStandardRevised"]:::event
-    P1["When a standard is open for the TaskType, close it at the same instant"]:::policy
+    P1["When a standard is open for the same TaskType, handling unit and site, close it at the same instant"]:::policy
     PRJ["labor-performance projector"]:::external
+    WP["warehouse-planning"]:::external
     H1["Hotspot: anyone can POST /standards - no auth since ADR 0012"]:::hotspot
 
     A1 --> RM0
@@ -136,6 +138,8 @@ flowchart LR
     AG1 --> E2
     E1 --> PRJ
     E2 --> PRJ
+    E1 --> WP
+    E2 --> WP
     H1 -.- C1
 
     classDef actor fill:#fff59d,stroke:#b59f00,color:#000,font-size:11px;
@@ -159,11 +163,12 @@ Omitted: the idempotency-key replay and the 409 concurrency branch (see
 | Industrial engineer | Actor | `web/src/screens/LaborPerformanceScreen.tsx` (`apiPost("/standards")`) |
 | Current standard | Read Model | `GET /standards/{taskType}` → `GetStandard` → `StandardRepo.FindCurrentlyActive` |
 | DefineStandard | Command | `POST /standards` → `usecases.DefineStandard.Execute` |
-| Close the open standard | Policy | `prior.Close(now)` in `DefineStandard.Execute` |
-| LaborStandard | Aggregate | `standard.New`, `LaborStandard.Close` |
+| Close the open standard | Policy | `next.Supersede(prior)` in `DefineStandard.ExecuteSpec` (same `standard.Scope` only) |
+| LaborStandard | Aggregate | `standard.NewForScope`, `LaborStandard.Supersede` |
 | LaborStandardDefined | Domain Event | `shared.NewLaborStandardDefined`; CE type `com.warehouse.wes.labor-performance.standard.LaborStandardDefined` |
 | LaborStandardRevised | Domain Event | `shared.NewLaborStandardRevised`; CE type `com.warehouse.wes.labor-performance.standard.LaborStandardRevised` |
 | labor-performance projector | External System (own process) | `analytics_consumer.go` (`isProjecting`) |
+| warehouse-planning | External System | integration topic `warehouse.labor-performance.events` (`integration_publisher.go`, ADR 0038) |
 | No auth on POST /standards | Hotspot | ADR 0012; `NewRouter` has no auth middleware |
 
 ## Board 3 — Build the Labor Performance Report
