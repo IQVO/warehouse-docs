@@ -643,7 +643,7 @@ GAPS = [
     {"name": "Task Interleaving", "l1": "Warehouse Task Execution", "desc": "The ability to combine tasks of different types into one trip.",
      "src": [12], "why": "No L3 yet: the capability has an owner but the industry qualification of the owner is still open. Pull dispatch still hands one task at a time. Owner: the task-interleaving context (wes, Supporting), built and deployed in the reference cluster; it issues an advisory hint of nearby open tasks after each completed task, and fulfillment-execution consumes the hint as a tie-break inside one claimNext priority band (ADR 0051, TASK_INTERLEAVING_MODE=kafka); it never reorders across a priority or CPT boundary and fails open to the unhinted order."},
     {"name": "Equipment Control", "l1": "Warehouse Task Execution", "desc": "The ability to drive conveyors, sorters, AS/RS and robot fleets deterministically.",
-     "src": [13], "why": "fulfillment-execution reserves an EquipmentCommandPort with no methods; no WCS is integrated."},
+     "src": [13], "why": "asrs-control (develop, merged 2026-11-20) drives the emulated AS/RS over MQTT telegrams; conveyors, sorters and AMR fleets are not automated, and fulfillment-execution still reserves its EquipmentCommandPort with no methods - no WCS is integrated into the WES."},
     {"name": "Value-added Services and Kitting", "l1": "Warehouse Task Execution", "desc": "The ability to perform kitting, light assembly and other value-added work.",
      "src": [12], "why": "facility-layout can model VAS work centres, but no VAS or kitting task type exists."},
     {"name": "Yard Management", "l1": "Inbound Management", "desc": "The ability to manage trailers in the yard between gate and dock.",

@@ -144,6 +144,7 @@ Subdomain and bounded-context segments (authoritative):
 | wes-work-planning        | wes       | work-planning            | /warehouse/wes-work-planning |
 | network-inventory-planning | wes     | network-inventory-planning | /warehouse/network-inventory-planning |
 | task-interleaving        | wes       | task-interleaving        | /warehouse/task-interleaving |
+| asrs-control             | wes       | asrs-control             | /warehouse/asrs-control |
 | exception-management     | wes       | exception-management     | /warehouse/exception-management |
 | outbound-shipping        | wms       | outbound-shipping        | /warehouse/outbound-shipping |
 

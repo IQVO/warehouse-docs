@@ -49,7 +49,7 @@ flowchart TB
         LP["labor-performance"]
     end
     subgraph WCS["WCS - equipment control - ISA-95 level 2"]
-        NOWCS["designed, not built<br/>reserved seam in fulfillment-execution"]
+        NOWCS["asrs-control built (WCS-02);<br/>WES seam still reserved"]
     end
     ABOVE ==>|"OrderAllocated,<br/>WorkDemandReleased"| WES
     ABOVE ==>|"reservations,<br/>TransferAllocationRequested"| WMSC

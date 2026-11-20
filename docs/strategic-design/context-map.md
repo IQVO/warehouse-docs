@@ -162,7 +162,7 @@ That is not always the direction of the network call. For example,
 flowchart LR
     subgraph EXTERNAL["Outside the fleet"]
         RN["retail-network<br/>external network role<br/>via vendor-connectivity"]
-        WCS["WCS / equipment<br/>not built"]
+        WCS["WCS / equipment<br/>asrs-control built; rest designed"]
     end
 
     subgraph WMS["wms subdomain"]
