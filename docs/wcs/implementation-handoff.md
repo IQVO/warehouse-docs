@@ -5,7 +5,7 @@ sidebar_label: Implementation handoff
 description: What the next phase needs to build the WCS - the build order, the equipment emulator's scope, acceptance criteria per flow, and the questions left open by the strategic design.
 ---
 
-{/* drift-allow-file: the WCS tier is designed, not built; every route on this page is a design proposal with no OpenAPI on develop yet */}
+{/* drift-allow-file: the WCS tier mixes built (asrs-control) and proposed contexts; routes here are design proposals except where the page says a context is built */}
 
 # WCS implementation handoff
 
@@ -19,7 +19,7 @@ and synced here once the repositories exist.
 | Step | What | Why this order |
 | --- | --- | --- |
 | 1 | `equipment-emulator` and the MQTT broker | Nothing else can be tested without robots and an AS/RS to talk to. |
-| 2 | `asrs-control` | The smaller subsystem model; it proves the subsystem-controller interface. |
+| 2 | `asrs-control` | DONE - built by plan WCS-02, merged to develop 2026-11-20 (IQVO/asrs-control PR #2); it proves the subsystem-controller interface. |
 | 3 | `amr-fleet-control` | VDA 5050 master control against the emulated robots, with the map from `facility-layout`. |
 | 4 | `material-flow-control` | Needs both subsystems to plan multi-leg transports. |
 | 5 | Changes to existing contexts | `inventory-storage`, then `facility-layout`, `fulfillment-execution`, `wes-work-planning`, `exception-management` (see [ecosystem impact](/wcs/ecosystem-impact)). |

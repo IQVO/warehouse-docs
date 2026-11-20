@@ -5,7 +5,7 @@ sidebar_label: Ecosystem impact
 description: What the WCS design changes in each existing context, the ADRs to write in each owning repository, and the infrastructure it adds (an MQTT broker, three services and an emulator).
 ---
 
-{/* drift-allow-file: the WCS tier is designed, not built; every route on this page is a design proposal with no OpenAPI on develop yet */}
+{/* drift-allow-file: the WCS tier mixes built (asrs-control) and proposed contexts; routes here are design proposals except where the page says a context is built */}
 
 # WCS ecosystem impact
 

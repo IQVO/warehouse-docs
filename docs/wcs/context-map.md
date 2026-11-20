@@ -2,10 +2,10 @@
 id: context-map
 title: WCS context map
 sidebar_label: Context map
-description: The three WCS bounded contexts and every relationship to the existing fleet and to the emulated equipment, with the context-mapping pattern, the channel and what crosses each one. Designed, not built.
+description: The three WCS bounded contexts and every relationship to the existing fleet and to the emulated equipment, with the context-mapping pattern, the channel and what crosses each one. asrs-control is built; the other two contexts are designed, not built.
 ---
 
-{/* drift-allow-file: the WCS tier is designed, not built; every route on this page is a design proposal with no OpenAPI on develop yet */}
+{/* drift-allow-file: the WCS tier mixes built (asrs-control) and proposed contexts; routes here are design proposals except where the page says a context is built */}
 
 # WCS context map
 
@@ -28,7 +28,7 @@ flowchart TB
     FL["facility-layout"]
   end
   EM["exception-management<br/>existing"]
-  subgraph WCS["WCS tier - designed, not built"]
+  subgraph WCS["WCS tier - asrs-control built, amr-fleet-control and material-flow-control designed"]
     direction LR
     MFC["material-flow-control<br/>Supporting"]
     AMR["amr-fleet-control<br/>Generic"]

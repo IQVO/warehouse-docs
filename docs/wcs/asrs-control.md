@@ -2,19 +2,19 @@
 id: asrs-control
 title: asrs-control
 sidebar_label: asrs-control
-description: The AS/RS controller bounded context (Generic) - rack position assignment, shuttle and lift job scheduling, port presentation, reshuffles and equipment state. Designed, not built.
+description: The AS/RS controller bounded context (Generic) - rack position assignment, shuttle and lift job scheduling, port presentation, reshuffles and equipment state. Built on develop (IQVO/asrs-control).
 ---
 
-{/* drift-allow-file: the WCS tier is designed, not built; every route on this page is a design proposal with no OpenAPI on develop yet */}
+{/* drift-allow-file: strategic design page, not a spec mirror - the built context's authoritative contracts are IQVO/asrs-control apis/openapi.yaml and apis/asyncapi.yaml on develop */}
 
 # asrs-control
 
-:::note[Designed, not built]
+:::note[Built - IQVO/asrs-control on develop]
 Classification **Generic**: AS/RS controllers ship with the hardware; this one is
 built behind the subsystem-controller interface so a vendor controller could
 replace it. CloudEvents segment `wes`. Topics `warehouse.asrs-control.events`
 and `.analytics`. Speaks a fleet-defined telegram protocol over MQTT to the
-emulated shuttles and lifts. No repository exists yet.
+emulated shuttles and lifts. Repository: [IQVO/asrs-control](https://github.com/IQVO/asrs-control), merged 2026-11-20 (plan WCS-02, PR #2): OpenAPI and AsyncAPI contracts, telegram protocol v1 over MQTT, CloudEvents on warehouse.asrs-control.events and .analytics.
 :::
 
 ## Purpose

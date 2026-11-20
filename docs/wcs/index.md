@@ -2,17 +2,21 @@
 id: index
 title: Warehouse Control System (WCS)
 sidebar_label: Overview
-description: The strategic Domain-Driven Design of the warehouse control system tier for the AMR fleet and the AS/RS - subdomains, three bounded contexts, context map, seam decisions and message flows. Designed, not built.
+description: The strategic Domain-Driven Design of the warehouse control system tier for the AMR fleet and the AS/RS - subdomains, three bounded contexts, context map, seam decisions and message flows. asrs-control is built; amr-fleet-control and material-flow-control are designed, not built.
 ---
 
 # Warehouse Control System (WCS)
 
-:::warning[Status: designed, not built]
-This section is the **strategic design** of the WCS tier. No WCS repository,
-service, topic or route exists yet. Every context, event and route named here
-is a design proposal for the next implementation phase, not a fact about
-`develop`. The fleet today has no WCS: `fulfillment-execution` keeps an empty
-`EquipmentCommandPort` reserved for it (its ADR-0015).
+:::warning[Status: one of three contexts built]
+This section is the **strategic design** of the WCS tier. `asrs-control` is now
+BUILT: [IQVO/asrs-control](https://github.com/IQVO/asrs-control) on `develop`
+(merged 2026-11-20, plan WCS-02) with its OpenAPI, AsyncAPI,
+`warehouse.asrs-control.events` and `.analytics` topics, and the telegram
+protocol v1 MQTT adapter against `equipment-emulator`. `amr-fleet-control` and
+`material-flow-control` remain design proposals: no repository, service, topic
+or route exists for them yet. `fulfillment-execution` still keeps its empty
+`EquipmentCommandPort` reserved (ADR-0015) - asrs-control is not wired into the
+WES until plan 04 builds `material-flow-control`.
 :::
 
 A warehouse runs on a stack of software categories. The **WMS** keeps the
@@ -46,7 +50,7 @@ flowchart TB
         INV["inventory-storage"]
         FL["facility-layout"]
     end
-    subgraph WCS["WCS - how the equipment moves - designed, not built"]
+    subgraph WCS["WCS - how the equipment moves - asrs-control built, rest designed"]
         direction LR
         MFC["material-flow-control<br/>Supporting"]
         AMR["amr-fleet-control<br/>Generic"]
