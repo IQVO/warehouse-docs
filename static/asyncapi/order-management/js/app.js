@@ -77,19 +77,19 @@
                       "content-type": {
                         "type": "string",
                         "const": "application/cloudevents+json; charset=UTF-8",
-                        "x-parser-schema-id": "<anonymous-schema-421>"
+                        "x-parser-schema-id": "<anonymous-schema-437>"
                       },
                       "traceparent": {
                         "type": "string",
                         "description": "W3C trace context of the producing span.",
-                        "x-parser-schema-id": "<anonymous-schema-422>"
+                        "x-parser-schema-id": "<anonymous-schema-438>"
                       },
                       "tracestate": {
                         "type": "string",
-                        "x-parser-schema-id": "<anonymous-schema-423>"
+                        "x-parser-schema-id": "<anonymous-schema-439>"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-420>"
+                    "x-parser-schema-id": "<anonymous-schema-436>"
                   },
                   "bindings": {
                     "kafka": {
@@ -2122,7 +2122,7 @@
       "subscribe": {
         "operationId": "consumeWarehousePlanningEvents",
         "summary": "Maintain the local planned-capacity read model.",
-        "description": "Dispatch is on the FULL CloudEvents type. CapacityPlanCreated stores a DRAFT row; CapacityPlanPublished and CapacityShortageDetected store a PUBLISHED row; BottleneckDetected is recognised and ignored (its bottleneck_step is already carried by CapacityShortageDetected). The row is keyed by plan id with last-writer-wins on the CloudEvents `time` (a DRAFT never replaces a PUBLISHED row). The idempotency claim on the CloudEvents `id` and the upsert commit in ONE database transaction; the Kafka offset is committed only afterwards. Only a PUBLISHED plan with `shortage > 0` ever influences an order (ADR 0031). These contracts are warehouse-planning's own — see its apis/asyncapi.yaml — decoded independently here, never imported.",
+        "description": "Dispatch is on the FULL CloudEvents type. CapacityPlanCreated stores a DRAFT row; CapacityPlanPublished and CapacityShortageDetected store a PUBLISHED row; CapacityPlanSuperseded moves the older plan's row to a terminal SUPERSEDED status that never influences an order, or inserts a SUPERSEDED tombstone for a plan never seen (ADR 0052); BottleneckDetected is recognised and ignored (its bottleneck_step is already carried by CapacityShortageDetected). The row is keyed by plan id with last-writer-wins on the CloudEvents `time` (a DRAFT never replaces a PUBLISHED row; nothing replaces a SUPERSEDED row, and SUPERSEDED replaces any other status regardless of time). The idempotency claim on the CloudEvents `id` and the upsert commit in ONE database transaction; the Kafka offset is committed only afterwards. Only a PUBLISHED plan with `shortage > 0` ever influences an order (ADR 0031). These contracts are warehouse-planning's own — see its apis/asyncapi.yaml — decoded independently here, never imported.",
         "tags": [
           {
             "name": "order-management"
@@ -2481,6 +2481,121 @@
                   }
                 }
               }
+            },
+            {
+              "name": "CapacityPlanSuperseded",
+              "title": "CapacityPlanSuperseded (inbound, warehouse-planning)",
+              "summary": "A newer plan of the same window replaced this one (stored as a terminal SUPERSEDED row that never influences an order; ADR 0052).",
+              "tags": [
+                {
+                  "name": "order-management"
+                }
+              ],
+              "traits": [
+                "$ref:$.channels.warehouse.order-management.events.subscribe.message.oneOf[0].traits[0]"
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.order-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "const": "/warehouse/warehouse-planning",
+                        "x-parser-schema-id": "<anonymous-schema-272>"
+                      },
+                      "type": {
+                        "const": "com.warehouse.wes.warehouse-planning.capacityplan.CapacityPlanSuperseded",
+                        "x-parser-schema-id": "<anonymous-schema-273>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:warehouse-planning:events:CapacityPlanSuperseded:v1",
+                        "x-parser-schema-id": "<anonymous-schema-274>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "description": "warehouse-planning's CapacityPlanSuperseded payload (its ADR 0024 decision 3; order-management ADR 0052). plan_id is the OLDER plan and equals the CloudEvents subject; superseded_by is the newer plan. It carries no warehouse or quantities. The optional location (the same field the plan's other events carry) becomes a tombstone row's location, else site_id does; on a known row every stored fact is kept. window_end is exclusive.",
+                        "required": [
+                          "plan_id",
+                          "superseded_by",
+                          "site_id",
+                          "window_start",
+                          "window_end"
+                        ],
+                        "properties": {
+                          "plan_id": {
+                            "type": "string",
+                            "description": "The superseded (older) CapacityPlan id; equals the CloudEvents subject.",
+                            "x-parser-schema-id": "<anonymous-schema-275>"
+                          },
+                          "superseded_by": {
+                            "type": "string",
+                            "description": "The newer CapacityPlan id; never equal to plan_id.",
+                            "x-parser-schema-id": "<anonymous-schema-276>"
+                          },
+                          "site_id": {
+                            "type": "string",
+                            "description": "Site/building code, e.g. SIM1.",
+                            "x-parser-schema-id": "<anonymous-schema-277>"
+                          },
+                          "location": {
+                            "type": "string",
+                            "description": "Optional. The plan's location, as on CapacityPlanCreated/Published; preferred over site_id for the row.",
+                            "x-parser-schema-id": "<anonymous-schema-278>"
+                          },
+                          "path_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-279>"
+                          },
+                          "window_start": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-280>"
+                          },
+                          "window_end": {
+                            "type": "string",
+                            "format": "date-time",
+                            "x-parser-schema-id": "<anonymous-schema-281>"
+                          }
+                        },
+                        "x-parser-schema-id": "CapacityPlanSupersededData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-271>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-270>"
+              },
+              "contentType": "application/cloudevents+json",
+              "headers": {
+                "type": "object",
+                "required": "$ref:$.channels.warehouse.order-management.events.subscribe.message.oneOf[0].traits[0].headers.required",
+                "properties": {
+                  "content-type": {
+                    "type": "string",
+                    "const": "application/cloudevents+json; charset=UTF-8",
+                    "x-parser-schema-id": "<anonymous-schema-267>"
+                  },
+                  "traceparent": {
+                    "type": "string",
+                    "description": "W3C trace context of the producing span.",
+                    "x-parser-schema-id": "<anonymous-schema-268>"
+                  },
+                  "tracestate": {
+                    "type": "string",
+                    "x-parser-schema-id": "<anonymous-schema-269>"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-266>"
+              },
+              "bindings": {
+                "kafka": {
+                  "key": {
+                    "type": "string",
+                    "description": "The aggregate id (also the CloudEvents subject); Hash-partitioned."
+                  }
+                }
+              }
             }
           ]
         }
@@ -2518,15 +2633,15 @@
                 "properties": {
                   "source": {
                     "const": "/warehouse/product-master",
-                    "x-parser-schema-id": "<anonymous-schema-272>"
+                    "x-parser-schema-id": "<anonymous-schema-288>"
                   },
                   "type": {
                     "const": "com.warehouse.wms.product-master.product.ProductClassified",
-                    "x-parser-schema-id": "<anonymous-schema-273>"
+                    "x-parser-schema-id": "<anonymous-schema-289>"
                   },
                   "dataschema": {
                     "const": "urn:warehouse:product-master:events:ProductClassified:v1",
-                    "x-parser-schema-id": "<anonymous-schema-274>"
+                    "x-parser-schema-id": "<anonymous-schema-290>"
                   },
                   "data": {
                     "type": "object",
@@ -2541,7 +2656,7 @@
                       "sku": {
                         "type": "string",
                         "description": "Equals the CloudEvents subject.",
-                        "x-parser-schema-id": "<anonymous-schema-275>"
+                        "x-parser-schema-id": "<anonymous-schema-291>"
                       },
                       "handling_tags": {
                         "type": "array",
@@ -2554,9 +2669,9 @@
                             "Oversized",
                             "HighValue"
                           ],
-                          "x-parser-schema-id": "<anonymous-schema-277>"
+                          "x-parser-schema-id": "<anonymous-schema-293>"
                         },
-                        "x-parser-schema-id": "<anonymous-schema-276>"
+                        "x-parser-schema-id": "<anonymous-schema-292>"
                       },
                       "temperature_class": {
                         "type": "string",
@@ -2565,13 +2680,13 @@
                           "Chilled",
                           "Frozen"
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-278>"
+                        "x-parser-schema-id": "<anonymous-schema-294>"
                       },
                       "dot_hazard_class": {
                         "type": "integer",
                         "minimum": 1,
                         "maximum": 9,
-                        "x-parser-schema-id": "<anonymous-schema-279>"
+                        "x-parser-schema-id": "<anonymous-schema-295>"
                       },
                       "classification_source": {
                         "type": "string",
@@ -2579,23 +2694,23 @@
                           "native",
                           "legacy-import"
                         ],
-                        "x-parser-schema-id": "<anonymous-schema-280>"
+                        "x-parser-schema-id": "<anonymous-schema-296>"
                       },
                       "version": {
                         "type": "integer",
                         "format": "int64",
                         "minimum": 1,
                         "description": "product-master's aggregate version after the change; applied only when greater than the stored one.",
-                        "x-parser-schema-id": "<anonymous-schema-281>"
+                        "x-parser-schema-id": "<anonymous-schema-297>"
                       }
                     },
                     "x-parser-schema-id": "ProductClassifiedData"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-271>"
+                "x-parser-schema-id": "<anonymous-schema-287>"
               }
             ],
-            "x-parser-schema-id": "<anonymous-schema-270>"
+            "x-parser-schema-id": "<anonymous-schema-286>"
           },
           "examples": [
             {
@@ -2632,19 +2747,19 @@
               "content-type": {
                 "type": "string",
                 "const": "application/cloudevents+json; charset=UTF-8",
-                "x-parser-schema-id": "<anonymous-schema-267>"
+                "x-parser-schema-id": "<anonymous-schema-283>"
               },
               "traceparent": {
                 "type": "string",
                 "description": "W3C trace context of the producing span.",
-                "x-parser-schema-id": "<anonymous-schema-268>"
+                "x-parser-schema-id": "<anonymous-schema-284>"
               },
               "tracestate": {
                 "type": "string",
-                "x-parser-schema-id": "<anonymous-schema-269>"
+                "x-parser-schema-id": "<anonymous-schema-285>"
               }
             },
-            "x-parser-schema-id": "<anonymous-schema-266>"
+            "x-parser-schema-id": "<anonymous-schema-282>"
           },
           "bindings": {
             "kafka": {
@@ -2704,15 +2819,15 @@
                     "properties": {
                       "source": {
                         "const": "/warehouse/order-management",
-                        "x-parser-schema-id": "<anonymous-schema-288>"
+                        "x-parser-schema-id": "<anonymous-schema-304>"
                       },
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderReceived",
-                        "x-parser-schema-id": "<anonymous-schema-289>"
+                        "x-parser-schema-id": "<anonymous-schema-305>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:analytics:OrderReceived:v1",
-                        "x-parser-schema-id": "<anonymous-schema-290>"
+                        "x-parser-schema-id": "<anonymous-schema-306>"
                       },
                       "data": {
                         "type": "object",
@@ -2725,25 +2840,25 @@
                         "properties": {
                           "order_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-291>"
+                            "x-parser-schema-id": "<anonymous-schema-307>"
                           },
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-292>"
+                            "x-parser-schema-id": "<anonymous-schema-308>"
                           },
                           "line_count": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-293>"
+                            "x-parser-schema-id": "<anonymous-schema-309>"
                           }
                         },
                         "x-parser-schema-id": "OrderReceivedAnalyticsData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-287>"
+                    "x-parser-schema-id": "<anonymous-schema-303>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-286>"
+                "x-parser-schema-id": "<anonymous-schema-302>"
               },
               "examples": [
                 {
@@ -2774,19 +2889,19 @@
                   "content-type": {
                     "type": "string",
                     "const": "application/cloudevents+json; charset=UTF-8",
-                    "x-parser-schema-id": "<anonymous-schema-283>"
+                    "x-parser-schema-id": "<anonymous-schema-299>"
                   },
                   "traceparent": {
                     "type": "string",
                     "description": "W3C trace context of the producing span.",
-                    "x-parser-schema-id": "<anonymous-schema-284>"
+                    "x-parser-schema-id": "<anonymous-schema-300>"
                   },
                   "tracestate": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-285>"
+                    "x-parser-schema-id": "<anonymous-schema-301>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-282>"
+                "x-parser-schema-id": "<anonymous-schema-298>"
               },
               "bindings": {
                 "kafka": {
@@ -2818,15 +2933,15 @@
                     "properties": {
                       "source": {
                         "const": "/warehouse/order-management",
-                        "x-parser-schema-id": "<anonymous-schema-300>"
+                        "x-parser-schema-id": "<anonymous-schema-316>"
                       },
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderLineAllocated",
-                        "x-parser-schema-id": "<anonymous-schema-301>"
+                        "x-parser-schema-id": "<anonymous-schema-317>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:analytics:OrderLineAllocated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-302>"
+                        "x-parser-schema-id": "<anonymous-schema-318>"
                       },
                       "data": {
                         "type": "object",
@@ -2840,29 +2955,29 @@
                         "properties": {
                           "order_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-303>"
+                            "x-parser-schema-id": "<anonymous-schema-319>"
                           },
                           "line_no": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-304>"
+                            "x-parser-schema-id": "<anonymous-schema-320>"
                           },
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-305>"
+                            "x-parser-schema-id": "<anonymous-schema-321>"
                           },
                           "sku": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-306>"
+                            "x-parser-schema-id": "<anonymous-schema-322>"
                           }
                         },
                         "x-parser-schema-id": "OrderLineAnalyticsData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-299>"
+                    "x-parser-schema-id": "<anonymous-schema-315>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-298>"
+                "x-parser-schema-id": "<anonymous-schema-314>"
               },
               "examples": [
                 {
@@ -2894,19 +3009,19 @@
                   "content-type": {
                     "type": "string",
                     "const": "application/cloudevents+json; charset=UTF-8",
-                    "x-parser-schema-id": "<anonymous-schema-295>"
+                    "x-parser-schema-id": "<anonymous-schema-311>"
                   },
                   "traceparent": {
                     "type": "string",
                     "description": "W3C trace context of the producing span.",
-                    "x-parser-schema-id": "<anonymous-schema-296>"
+                    "x-parser-schema-id": "<anonymous-schema-312>"
                   },
                   "tracestate": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-297>"
+                    "x-parser-schema-id": "<anonymous-schema-313>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-294>"
+                "x-parser-schema-id": "<anonymous-schema-310>"
               },
               "bindings": {
                 "kafka": {
@@ -2938,22 +3053,22 @@
                     "properties": {
                       "source": {
                         "const": "/warehouse/order-management",
-                        "x-parser-schema-id": "<anonymous-schema-313>"
+                        "x-parser-schema-id": "<anonymous-schema-329>"
                       },
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderLineBackordered",
-                        "x-parser-schema-id": "<anonymous-schema-314>"
+                        "x-parser-schema-id": "<anonymous-schema-330>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:analytics:OrderLineBackordered:v1",
-                        "x-parser-schema-id": "<anonymous-schema-315>"
+                        "x-parser-schema-id": "<anonymous-schema-331>"
                       },
                       "data": "$ref:$.channels.warehouse.order-management.analytics.subscribe.message.oneOf[1].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-312>"
+                    "x-parser-schema-id": "<anonymous-schema-328>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-311>"
+                "x-parser-schema-id": "<anonymous-schema-327>"
               },
               "examples": [
                 {
@@ -2985,19 +3100,19 @@
                   "content-type": {
                     "type": "string",
                     "const": "application/cloudevents+json; charset=UTF-8",
-                    "x-parser-schema-id": "<anonymous-schema-308>"
+                    "x-parser-schema-id": "<anonymous-schema-324>"
                   },
                   "traceparent": {
                     "type": "string",
                     "description": "W3C trace context of the producing span.",
-                    "x-parser-schema-id": "<anonymous-schema-309>"
+                    "x-parser-schema-id": "<anonymous-schema-325>"
                   },
                   "tracestate": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-310>"
+                    "x-parser-schema-id": "<anonymous-schema-326>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-307>"
+                "x-parser-schema-id": "<anonymous-schema-323>"
               },
               "bindings": {
                 "kafka": {
@@ -3029,15 +3144,15 @@
                     "properties": {
                       "source": {
                         "const": "/warehouse/order-management",
-                        "x-parser-schema-id": "<anonymous-schema-322>"
+                        "x-parser-schema-id": "<anonymous-schema-338>"
                       },
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderAllocated",
-                        "x-parser-schema-id": "<anonymous-schema-323>"
+                        "x-parser-schema-id": "<anonymous-schema-339>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:analytics:OrderAllocated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-324>"
+                        "x-parser-schema-id": "<anonymous-schema-340>"
                       },
                       "data": {
                         "type": "object",
@@ -3049,11 +3164,11 @@
                         "properties": {
                           "order_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-325>"
+                            "x-parser-schema-id": "<anonymous-schema-341>"
                           },
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-326>"
+                            "x-parser-schema-id": "<anonymous-schema-342>"
                           },
                           "promise_basis": {
                             "type": "string",
@@ -3063,27 +3178,27 @@
                               "Network"
                             ],
                             "description": "ADR 0014 §6 / ADR 0019's additive promise-basis- distribution field, mirrored from the OrderAllocated domain event's own promise_basis. Absent on events published before this ADR, or when the underlying promise had no basis recorded.",
-                            "x-parser-schema-id": "<anonymous-schema-327>"
+                            "x-parser-schema-id": "<anonymous-schema-343>"
                           },
                           "promise_cutoff_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "ADR 0014 §6 / ADR 0019's additive promise-to-cutoff-gap source field: the promise's cutoff instant. Present ONLY when promise_basis is \"Capability\" — a LeadTime-basis promise's \"cutoff\" is just now-plus-a-configured-duration, not a real departure, and is deliberately excluded from the gap KPI.",
-                            "x-parser-schema-id": "<anonymous-schema-328>"
+                            "x-parser-schema-id": "<anonymous-schema-344>"
                           },
                           "split_shipment": {
                             "type": "boolean",
                             "description": "ADR 0014 §6 / ADR 0019's additive split-shipment-rate source field: true when the order had more than one order.PromiseGroup at allocation time (ADR 0014 §3 / ADR 0017), derived via an OrderRepo lookup at publish time.",
-                            "x-parser-schema-id": "<anonymous-schema-329>"
+                            "x-parser-schema-id": "<anonymous-schema-345>"
                           }
                         },
                         "x-parser-schema-id": "OrderAnalyticsData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-321>"
+                    "x-parser-schema-id": "<anonymous-schema-337>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-320>"
+                "x-parser-schema-id": "<anonymous-schema-336>"
               },
               "examples": [
                 {
@@ -3113,19 +3228,19 @@
                   "content-type": {
                     "type": "string",
                     "const": "application/cloudevents+json; charset=UTF-8",
-                    "x-parser-schema-id": "<anonymous-schema-317>"
+                    "x-parser-schema-id": "<anonymous-schema-333>"
                   },
                   "traceparent": {
                     "type": "string",
                     "description": "W3C trace context of the producing span.",
-                    "x-parser-schema-id": "<anonymous-schema-318>"
+                    "x-parser-schema-id": "<anonymous-schema-334>"
                   },
                   "tracestate": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-319>"
+                    "x-parser-schema-id": "<anonymous-schema-335>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-316>"
+                "x-parser-schema-id": "<anonymous-schema-332>"
               },
               "bindings": {
                 "kafka": {
@@ -3157,15 +3272,15 @@
                     "properties": {
                       "source": {
                         "const": "/warehouse/order-management",
-                        "x-parser-schema-id": "<anonymous-schema-336>"
+                        "x-parser-schema-id": "<anonymous-schema-352>"
                       },
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderPartiallyAllocated",
-                        "x-parser-schema-id": "<anonymous-schema-337>"
+                        "x-parser-schema-id": "<anonymous-schema-353>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:analytics:OrderPartiallyAllocated:v1",
-                        "x-parser-schema-id": "<anonymous-schema-338>"
+                        "x-parser-schema-id": "<anonymous-schema-354>"
                       },
                       "data": {
                         "type": "object",
@@ -3179,21 +3294,21 @@
                         "properties": {
                           "order_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-339>"
+                            "x-parser-schema-id": "<anonymous-schema-355>"
                           },
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-340>"
+                            "x-parser-schema-id": "<anonymous-schema-356>"
                           },
                           "allocated_lines": {
                             "type": "integer",
                             "minimum": 0,
-                            "x-parser-schema-id": "<anonymous-schema-341>"
+                            "x-parser-schema-id": "<anonymous-schema-357>"
                           },
                           "backordered_lines": {
                             "type": "integer",
                             "minimum": 0,
-                            "x-parser-schema-id": "<anonymous-schema-342>"
+                            "x-parser-schema-id": "<anonymous-schema-358>"
                           },
                           "promise_basis": {
                             "type": "string",
@@ -3203,27 +3318,27 @@
                               "Network"
                             ],
                             "description": "Same ADR 0014 §6 / ADR 0019 field as OrderAnalyticsEvent's.",
-                            "x-parser-schema-id": "<anonymous-schema-343>"
+                            "x-parser-schema-id": "<anonymous-schema-359>"
                           },
                           "promise_cutoff_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "Same ADR 0014 §6 / ADR 0019 field as OrderAnalyticsEvent's.",
-                            "x-parser-schema-id": "<anonymous-schema-344>"
+                            "x-parser-schema-id": "<anonymous-schema-360>"
                           },
                           "split_shipment": {
                             "type": "boolean",
                             "description": "Same ADR 0014 §6 / ADR 0019 field as OrderAnalyticsEvent's.",
-                            "x-parser-schema-id": "<anonymous-schema-345>"
+                            "x-parser-schema-id": "<anonymous-schema-361>"
                           }
                         },
                         "x-parser-schema-id": "OrderPartiallyAllocatedAnalyticsData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-335>"
+                    "x-parser-schema-id": "<anonymous-schema-351>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-334>"
+                "x-parser-schema-id": "<anonymous-schema-350>"
               },
               "examples": [
                 {
@@ -3243,127 +3358,6 @@
                       "path_id": "pick",
                       "allocated_lines": 1,
                       "backordered_lines": 1
-                    }
-                  }
-                }
-              ],
-              "contentType": "application/cloudevents+json",
-              "headers": {
-                "type": "object",
-                "required": "$ref:$.channels.warehouse.order-management.events.subscribe.message.oneOf[0].traits[0].headers.required",
-                "properties": {
-                  "content-type": {
-                    "type": "string",
-                    "const": "application/cloudevents+json; charset=UTF-8",
-                    "x-parser-schema-id": "<anonymous-schema-331>"
-                  },
-                  "traceparent": {
-                    "type": "string",
-                    "description": "W3C trace context of the producing span.",
-                    "x-parser-schema-id": "<anonymous-schema-332>"
-                  },
-                  "tracestate": {
-                    "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-333>"
-                  }
-                },
-                "x-parser-schema-id": "<anonymous-schema-330>"
-              },
-              "bindings": {
-                "kafka": {
-                  "key": {
-                    "type": "string",
-                    "description": "The aggregate id (also the CloudEvents subject); Hash-partitioned."
-                  }
-                }
-              }
-            },
-            {
-              "name": "OrderAllocationPartiallyFailed",
-              "title": "Order Allocation Partialially Failed (analytics)",
-              "summary": "A hard failure hit mid-allocation; some lines genuinely allocated.",
-              "description": "Fail-closed visibility (ADR 0003): the already-succeeded reservations are kept, remaining lines stay Pending, and this fact makes the outcome observable rather than silent.",
-              "tags": [
-                {
-                  "name": "order"
-                }
-              ],
-              "traits": [
-                "$ref:$.channels.warehouse.order-management.events.subscribe.message.oneOf[0].traits[0]"
-              ],
-              "payload": {
-                "allOf": [
-                  "$ref:$.channels.warehouse.order-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
-                  {
-                    "type": "object",
-                    "properties": {
-                      "source": {
-                        "const": "/warehouse/order-management",
-                        "x-parser-schema-id": "<anonymous-schema-352>"
-                      },
-                      "type": {
-                        "const": "com.warehouse.wes.order-management.order.OrderAllocationPartiallyFailed",
-                        "x-parser-schema-id": "<anonymous-schema-353>"
-                      },
-                      "dataschema": {
-                        "const": "urn:warehouse:order-management:analytics:OrderAllocationPartiallyFailed:v1",
-                        "x-parser-schema-id": "<anonymous-schema-354>"
-                      },
-                      "data": {
-                        "type": "object",
-                        "additionalProperties": false,
-                        "required": [
-                          "order_id",
-                          "path_id",
-                          "allocated_lines",
-                          "remaining_lines"
-                        ],
-                        "properties": {
-                          "order_id": {
-                            "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-355>"
-                          },
-                          "path_id": {
-                            "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-356>"
-                          },
-                          "allocated_lines": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "x-parser-schema-id": "<anonymous-schema-357>"
-                          },
-                          "remaining_lines": {
-                            "type": "integer",
-                            "minimum": 0,
-                            "x-parser-schema-id": "<anonymous-schema-358>"
-                          }
-                        },
-                        "x-parser-schema-id": "OrderAllocationPartiallyFailedAnalyticsData"
-                      }
-                    },
-                    "x-parser-schema-id": "<anonymous-schema-351>"
-                  }
-                ],
-                "x-parser-schema-id": "<anonymous-schema-350>"
-              },
-              "examples": [
-                {
-                  "name": "orderAllocationPartiallyFailed",
-                  "summary": "One line allocated before inventory-storage became unreachable.",
-                  "payload": {
-                    "specversion": "1.0",
-                    "id": "b6c7d8e9-0f1a-4b2c-3d4e-5f6a7b8c9d0e",
-                    "source": "/warehouse/order-management",
-                    "type": "com.warehouse.wes.order-management.order.OrderAllocationPartiallyFailed",
-                    "subject": "ord-3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e7f",
-                    "time": "2026-09-07T10:03:00Z",
-                    "datacontenttype": "application/json",
-                    "dataschema": "urn:warehouse:order-management:analytics:OrderAllocationPartiallyFailed:v1",
-                    "data": {
-                      "order_id": "ord-3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e7f",
-                      "path_id": "pick",
-                      "allocated_lines": 1,
-                      "remaining_lines": 1
                     }
                   }
                 }
@@ -3400,6 +3394,127 @@
               }
             },
             {
+              "name": "OrderAllocationPartiallyFailed",
+              "title": "Order Allocation Partialially Failed (analytics)",
+              "summary": "A hard failure hit mid-allocation; some lines genuinely allocated.",
+              "description": "Fail-closed visibility (ADR 0003): the already-succeeded reservations are kept, remaining lines stay Pending, and this fact makes the outcome observable rather than silent.",
+              "tags": [
+                {
+                  "name": "order"
+                }
+              ],
+              "traits": [
+                "$ref:$.channels.warehouse.order-management.events.subscribe.message.oneOf[0].traits[0]"
+              ],
+              "payload": {
+                "allOf": [
+                  "$ref:$.channels.warehouse.order-management.events.subscribe.message.oneOf[0].payload.allOf[0]",
+                  {
+                    "type": "object",
+                    "properties": {
+                      "source": {
+                        "const": "/warehouse/order-management",
+                        "x-parser-schema-id": "<anonymous-schema-368>"
+                      },
+                      "type": {
+                        "const": "com.warehouse.wes.order-management.order.OrderAllocationPartiallyFailed",
+                        "x-parser-schema-id": "<anonymous-schema-369>"
+                      },
+                      "dataschema": {
+                        "const": "urn:warehouse:order-management:analytics:OrderAllocationPartiallyFailed:v1",
+                        "x-parser-schema-id": "<anonymous-schema-370>"
+                      },
+                      "data": {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "order_id",
+                          "path_id",
+                          "allocated_lines",
+                          "remaining_lines"
+                        ],
+                        "properties": {
+                          "order_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-371>"
+                          },
+                          "path_id": {
+                            "type": "string",
+                            "x-parser-schema-id": "<anonymous-schema-372>"
+                          },
+                          "allocated_lines": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "x-parser-schema-id": "<anonymous-schema-373>"
+                          },
+                          "remaining_lines": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "x-parser-schema-id": "<anonymous-schema-374>"
+                          }
+                        },
+                        "x-parser-schema-id": "OrderAllocationPartiallyFailedAnalyticsData"
+                      }
+                    },
+                    "x-parser-schema-id": "<anonymous-schema-367>"
+                  }
+                ],
+                "x-parser-schema-id": "<anonymous-schema-366>"
+              },
+              "examples": [
+                {
+                  "name": "orderAllocationPartiallyFailed",
+                  "summary": "One line allocated before inventory-storage became unreachable.",
+                  "payload": {
+                    "specversion": "1.0",
+                    "id": "b6c7d8e9-0f1a-4b2c-3d4e-5f6a7b8c9d0e",
+                    "source": "/warehouse/order-management",
+                    "type": "com.warehouse.wes.order-management.order.OrderAllocationPartiallyFailed",
+                    "subject": "ord-3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e7f",
+                    "time": "2026-09-07T10:03:00Z",
+                    "datacontenttype": "application/json",
+                    "dataschema": "urn:warehouse:order-management:analytics:OrderAllocationPartiallyFailed:v1",
+                    "data": {
+                      "order_id": "ord-3c4d5e6f-7a8b-4c9d-0e1f-2a3b4c5d6e7f",
+                      "path_id": "pick",
+                      "allocated_lines": 1,
+                      "remaining_lines": 1
+                    }
+                  }
+                }
+              ],
+              "contentType": "application/cloudevents+json",
+              "headers": {
+                "type": "object",
+                "required": "$ref:$.channels.warehouse.order-management.events.subscribe.message.oneOf[0].traits[0].headers.required",
+                "properties": {
+                  "content-type": {
+                    "type": "string",
+                    "const": "application/cloudevents+json; charset=UTF-8",
+                    "x-parser-schema-id": "<anonymous-schema-363>"
+                  },
+                  "traceparent": {
+                    "type": "string",
+                    "description": "W3C trace context of the producing span.",
+                    "x-parser-schema-id": "<anonymous-schema-364>"
+                  },
+                  "tracestate": {
+                    "type": "string",
+                    "x-parser-schema-id": "<anonymous-schema-365>"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-362>"
+              },
+              "bindings": {
+                "kafka": {
+                  "key": {
+                    "type": "string",
+                    "description": "The aggregate id (also the CloudEvents subject); Hash-partitioned."
+                  }
+                }
+              }
+            },
+            {
               "name": "OrderLineReleased",
               "title": "Order Line Released (analytics)",
               "summary": "A line's work was announced as released to wes-work-planning.",
@@ -3420,15 +3535,15 @@
                     "properties": {
                       "source": {
                         "const": "/warehouse/order-management",
-                        "x-parser-schema-id": "<anonymous-schema-365>"
+                        "x-parser-schema-id": "<anonymous-schema-381>"
                       },
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderLineReleased",
-                        "x-parser-schema-id": "<anonymous-schema-366>"
+                        "x-parser-schema-id": "<anonymous-schema-382>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:analytics:OrderLineReleased:v1",
-                        "x-parser-schema-id": "<anonymous-schema-367>"
+                        "x-parser-schema-id": "<anonymous-schema-383>"
                       },
                       "data": {
                         "type": "object",
@@ -3442,30 +3557,30 @@
                         "properties": {
                           "order_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-368>"
+                            "x-parser-schema-id": "<anonymous-schema-384>"
                           },
                           "line_no": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-369>"
+                            "x-parser-schema-id": "<anonymous-schema-385>"
                           },
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-370>"
+                            "x-parser-schema-id": "<anonymous-schema-386>"
                           },
                           "work_unit_id": {
                             "type": "string",
                             "description": "{order_id}-line-{line_no} — deterministic, derived by BOTH sides.",
-                            "x-parser-schema-id": "<anonymous-schema-371>"
+                            "x-parser-schema-id": "<anonymous-schema-387>"
                           }
                         },
                         "x-parser-schema-id": "OrderLineReleasedAnalyticsData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-364>"
+                    "x-parser-schema-id": "<anonymous-schema-380>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-363>"
+                "x-parser-schema-id": "<anonymous-schema-379>"
               },
               "examples": [
                 {
@@ -3497,19 +3612,19 @@
                   "content-type": {
                     "type": "string",
                     "const": "application/cloudevents+json; charset=UTF-8",
-                    "x-parser-schema-id": "<anonymous-schema-360>"
+                    "x-parser-schema-id": "<anonymous-schema-376>"
                   },
                   "traceparent": {
                     "type": "string",
                     "description": "W3C trace context of the producing span.",
-                    "x-parser-schema-id": "<anonymous-schema-361>"
+                    "x-parser-schema-id": "<anonymous-schema-377>"
                   },
                   "tracestate": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-362>"
+                    "x-parser-schema-id": "<anonymous-schema-378>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-359>"
+                "x-parser-schema-id": "<anonymous-schema-375>"
               },
               "bindings": {
                 "kafka": {
@@ -3541,22 +3656,22 @@
                     "properties": {
                       "source": {
                         "const": "/warehouse/order-management",
-                        "x-parser-schema-id": "<anonymous-schema-378>"
+                        "x-parser-schema-id": "<anonymous-schema-394>"
                       },
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderReleased",
-                        "x-parser-schema-id": "<anonymous-schema-379>"
+                        "x-parser-schema-id": "<anonymous-schema-395>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:analytics:OrderReleased:v1",
-                        "x-parser-schema-id": "<anonymous-schema-380>"
+                        "x-parser-schema-id": "<anonymous-schema-396>"
                       },
                       "data": "$ref:$.channels.warehouse.order-management.analytics.subscribe.message.oneOf[3].payload.allOf[1].properties.data"
                     },
-                    "x-parser-schema-id": "<anonymous-schema-377>"
+                    "x-parser-schema-id": "<anonymous-schema-393>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-376>"
+                "x-parser-schema-id": "<anonymous-schema-392>"
               },
               "examples": [
                 {
@@ -3586,19 +3701,19 @@
                   "content-type": {
                     "type": "string",
                     "const": "application/cloudevents+json; charset=UTF-8",
-                    "x-parser-schema-id": "<anonymous-schema-373>"
+                    "x-parser-schema-id": "<anonymous-schema-389>"
                   },
                   "traceparent": {
                     "type": "string",
                     "description": "W3C trace context of the producing span.",
-                    "x-parser-schema-id": "<anonymous-schema-374>"
+                    "x-parser-schema-id": "<anonymous-schema-390>"
                   },
                   "tracestate": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-375>"
+                    "x-parser-schema-id": "<anonymous-schema-391>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-372>"
+                "x-parser-schema-id": "<anonymous-schema-388>"
               },
               "bindings": {
                 "kafka": {
@@ -3630,15 +3745,15 @@
                     "properties": {
                       "source": {
                         "const": "/warehouse/order-management",
-                        "x-parser-schema-id": "<anonymous-schema-387>"
+                        "x-parser-schema-id": "<anonymous-schema-403>"
                       },
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderCancelled",
-                        "x-parser-schema-id": "<anonymous-schema-388>"
+                        "x-parser-schema-id": "<anonymous-schema-404>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:analytics:OrderCancelled:v1",
-                        "x-parser-schema-id": "<anonymous-schema-389>"
+                        "x-parser-schema-id": "<anonymous-schema-405>"
                       },
                       "data": {
                         "type": "object",
@@ -3651,25 +3766,25 @@
                         "properties": {
                           "order_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-390>"
+                            "x-parser-schema-id": "<anonymous-schema-406>"
                           },
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-391>"
+                            "x-parser-schema-id": "<anonymous-schema-407>"
                           },
                           "revoked_reservations": {
                             "type": "integer",
                             "minimum": 0,
-                            "x-parser-schema-id": "<anonymous-schema-392>"
+                            "x-parser-schema-id": "<anonymous-schema-408>"
                           }
                         },
                         "x-parser-schema-id": "OrderCancelledAnalyticsData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-386>"
+                    "x-parser-schema-id": "<anonymous-schema-402>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-385>"
+                "x-parser-schema-id": "<anonymous-schema-401>"
               },
               "examples": [
                 {
@@ -3700,19 +3815,19 @@
                   "content-type": {
                     "type": "string",
                     "const": "application/cloudevents+json; charset=UTF-8",
-                    "x-parser-schema-id": "<anonymous-schema-382>"
+                    "x-parser-schema-id": "<anonymous-schema-398>"
                   },
                   "traceparent": {
                     "type": "string",
                     "description": "W3C trace context of the producing span.",
-                    "x-parser-schema-id": "<anonymous-schema-383>"
+                    "x-parser-schema-id": "<anonymous-schema-399>"
                   },
                   "tracestate": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-384>"
+                    "x-parser-schema-id": "<anonymous-schema-400>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-381>"
+                "x-parser-schema-id": "<anonymous-schema-397>"
               },
               "bindings": {
                 "kafka": {
@@ -3747,15 +3862,15 @@
                     "properties": {
                       "source": {
                         "const": "/warehouse/order-management",
-                        "x-parser-schema-id": "<anonymous-schema-399>"
+                        "x-parser-schema-id": "<anonymous-schema-415>"
                       },
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderRepromised",
-                        "x-parser-schema-id": "<anonymous-schema-400>"
+                        "x-parser-schema-id": "<anonymous-schema-416>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:analytics:OrderRepromised:v1",
-                        "x-parser-schema-id": "<anonymous-schema-401>"
+                        "x-parser-schema-id": "<anonymous-schema-417>"
                       },
                       "data": {
                         "type": "object",
@@ -3770,17 +3885,17 @@
                         "properties": {
                           "order_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-402>"
+                            "x-parser-schema-id": "<anonymous-schema-418>"
                           },
                           "cpt_id_old": {
                             "type": "string",
                             "description": "The CPT identity the affected group targeted BEFORE the recompute. Always present on the analytics payload; the empty string for a LeadTime-basis previous promise.",
-                            "x-parser-schema-id": "<anonymous-schema-403>"
+                            "x-parser-schema-id": "<anonymous-schema-419>"
                           },
                           "cpt_id_new": {
                             "type": "string",
                             "description": "The CPT identity the affected group targets AFTER the recompute. Always present on the analytics payload; the empty string for a LeadTime-basis new promise.",
-                            "x-parser-schema-id": "<anonymous-schema-404>"
+                            "x-parser-schema-id": "<anonymous-schema-420>"
                           },
                           "reason": {
                             "type": "string",
@@ -3789,16 +3904,16 @@
                               "PackageManifested"
                             ],
                             "description": "The name of the fulfillment-execution event that triggered this recompute (the last segment of its CloudEvents type).",
-                            "x-parser-schema-id": "<anonymous-schema-405>"
+                            "x-parser-schema-id": "<anonymous-schema-421>"
                           }
                         },
                         "x-parser-schema-id": "OrderRepromisedAnalyticsData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-398>"
+                    "x-parser-schema-id": "<anonymous-schema-414>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-397>"
+                "x-parser-schema-id": "<anonymous-schema-413>"
               },
               "examples": [
                 {
@@ -3830,19 +3945,19 @@
                   "content-type": {
                     "type": "string",
                     "const": "application/cloudevents+json; charset=UTF-8",
-                    "x-parser-schema-id": "<anonymous-schema-394>"
+                    "x-parser-schema-id": "<anonymous-schema-410>"
                   },
                   "traceparent": {
                     "type": "string",
                     "description": "W3C trace context of the producing span.",
-                    "x-parser-schema-id": "<anonymous-schema-395>"
+                    "x-parser-schema-id": "<anonymous-schema-411>"
                   },
                   "tracestate": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-396>"
+                    "x-parser-schema-id": "<anonymous-schema-412>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-393>"
+                "x-parser-schema-id": "<anonymous-schema-409>"
               },
               "bindings": {
                 "kafka": {
@@ -3874,15 +3989,15 @@
                     "properties": {
                       "source": {
                         "const": "/warehouse/order-management",
-                        "x-parser-schema-id": "<anonymous-schema-412>"
+                        "x-parser-schema-id": "<anonymous-schema-428>"
                       },
                       "type": {
                         "const": "com.warehouse.wes.order-management.order.OrderReleaseUnconfirmed",
-                        "x-parser-schema-id": "<anonymous-schema-413>"
+                        "x-parser-schema-id": "<anonymous-schema-429>"
                       },
                       "dataschema": {
                         "const": "urn:warehouse:order-management:analytics:OrderReleaseUnconfirmed:v1",
-                        "x-parser-schema-id": "<anonymous-schema-414>"
+                        "x-parser-schema-id": "<anonymous-schema-430>"
                       },
                       "data": {
                         "type": "object",
@@ -3897,36 +4012,36 @@
                         "properties": {
                           "order_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-415>"
+                            "x-parser-schema-id": "<anonymous-schema-431>"
                           },
                           "line_no": {
                             "type": "integer",
                             "minimum": 1,
-                            "x-parser-schema-id": "<anonymous-schema-416>"
+                            "x-parser-schema-id": "<anonymous-schema-432>"
                           },
                           "path_id": {
                             "type": "string",
-                            "x-parser-schema-id": "<anonymous-schema-417>"
+                            "x-parser-schema-id": "<anonymous-schema-433>"
                           },
                           "work_unit_id": {
                             "type": "string",
                             "description": "{order_id}-line-{line_no} — the same deterministic id OrderLineReleased carried.",
-                            "x-parser-schema-id": "<anonymous-schema-418>"
+                            "x-parser-schema-id": "<anonymous-schema-434>"
                           },
                           "released_at": {
                             "type": "string",
                             "format": "date-time",
                             "description": "When this service released the line (the CloudEvents `time` is when it was flagged).",
-                            "x-parser-schema-id": "<anonymous-schema-419>"
+                            "x-parser-schema-id": "<anonymous-schema-435>"
                           }
                         },
                         "x-parser-schema-id": "OrderReleaseUnconfirmedAnalyticsData"
                       }
                     },
-                    "x-parser-schema-id": "<anonymous-schema-411>"
+                    "x-parser-schema-id": "<anonymous-schema-427>"
                   }
                 ],
-                "x-parser-schema-id": "<anonymous-schema-410>"
+                "x-parser-schema-id": "<anonymous-schema-426>"
               },
               "examples": [
                 {
@@ -3959,19 +4074,19 @@
                   "content-type": {
                     "type": "string",
                     "const": "application/cloudevents+json; charset=UTF-8",
-                    "x-parser-schema-id": "<anonymous-schema-407>"
+                    "x-parser-schema-id": "<anonymous-schema-423>"
                   },
                   "traceparent": {
                     "type": "string",
                     "description": "W3C trace context of the producing span.",
-                    "x-parser-schema-id": "<anonymous-schema-408>"
+                    "x-parser-schema-id": "<anonymous-schema-424>"
                   },
                   "tracestate": {
                     "type": "string",
-                    "x-parser-schema-id": "<anonymous-schema-409>"
+                    "x-parser-schema-id": "<anonymous-schema-425>"
                   }
                 },
-                "x-parser-schema-id": "<anonymous-schema-406>"
+                "x-parser-schema-id": "<anonymous-schema-422>"
               },
               "bindings": {
                 "kafka": {
@@ -4018,6 +4133,7 @@
       "CapacityPlanPublishedInbound": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[1]",
       "CapacityShortageDetectedInbound": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[2]",
       "BottleneckDetectedInbound": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[3]",
+      "CapacityPlanSupersededInbound": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[4]",
       "ProductClassifiedInbound": "$ref:$.channels.warehouse.product-master.events.subscribe.message"
     },
     "messageTraits": {
@@ -4048,6 +4164,7 @@
       "WorkUnitCreatedData": "$ref:$.channels.warehouse.work-planning.events.subscribe.message.oneOf[1].payload.allOf[1].properties.data",
       "CapacityPlanData": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[0].payload.allOf[1].properties.data",
       "BottleneckData": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[3].payload.allOf[1].properties.data",
+      "CapacityPlanSupersededData": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.oneOf[4].payload.allOf[1].properties.data",
       "ProductClassifiedData": "$ref:$.channels.warehouse.product-master.events.subscribe.message.payload.allOf[1].properties.data"
     }
   },

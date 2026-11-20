@@ -1786,6 +1786,227 @@
           ]
         }
       }
+    },
+    "warehouse.warehouse-planning.events": {
+      "description": "warehouse-planning's integration topic (its ADR 0023; the\n`LabourPlanTopic` constant in\n`internal/adapters/inbound/kafka/labour_plan_consumer.go`), CONSUMED by\nthis service, not published: `source=/warehouse/warehouse-planning`,\nkey and `subject` = `site_id/shift_id/path_id`. This service acts ONLY\non `LabourPlanCommitted` (ADR 0043) and commits past every other type\non the topic (CapacityPlan*, Shortage/Bottleneck,\nWorkloadForecastReceived, LabourPlanDriftDetected). The consumer runs\nin `cmd/workforce` only, on the STABLE, shared consumer group of the\nrequired `LABOUR_PLAN_CONSUMER_GROUP` (chart default\n`workforce-management-labour-plans`), starting a new group at the\nearliest offset; `cmd/mcp` and `cmd/a2a` read the copy and never\nconsume. This channel mirrors warehouse-planning's own\napis/asyncapi.yaml read-only.\n",
+      "subscribe": {
+        "operationId": "consumeWarehousePlanningEvents",
+        "summary": "Keep the local copy of the published labour plan current.",
+        "description": "Upsert `labour_requirements` (one row per `site_id` stored as\n`site_code`, `shift_id`, `path_id`: `planned_heads`,\n`rate_units_per_hour`, `hours`, `heads_source`, `version`) only when\nthe message's `version` is greater than the stored one; an equal or\nlower version is a no-op. The claim on the CloudEvents `id` and the\nupsert commit in one transaction, so a redelivery is a no-op.\n`installed_stations` and the optional `shift_start` are part of\nthe contract but not kept. A message that is not a valid CloudEvents 1.0 event or that\nbreaks the contract (missing site/shift/path or planned_heads,\nnegative heads, version < 1) is dead-lettered to\n`warehouse.warehouse-planning.events.dlq` and committed past. Read by\nPOST /paths/{pathId}/plan-proposals (no charge + shiftId) and shown\nas `requiredHeads` on staffing-gap and committed plan lines.\n",
+        "tags": [
+          {
+            "name": "warehouse-planning",
+            "description": "Consumed from the warehouse-planning bounded context."
+          }
+        ],
+        "message": {
+          "name": "LabourPlanCommitted",
+          "title": "Labour Plan Committed (from warehouse-planning, consumed)",
+          "summary": "The heads the demand requires on one path for a site's shift.",
+          "description": "CONSUMED, not produced (ADR 0043). Pinned by warehouse-planning ADR\n0023 decision 2: type\n`com.warehouse.wes.warehouse-planning.labourplan.LabourPlanCommitted`,\n`source=/warehouse/warehouse-planning`, subject and Kafka key\n`site_id/shift_id/path_id`, dataschema\n`urn:warehouse:warehouse-planning:events:LabourPlanCommitted:v1`.\n`version` grows by 1 per accepted change of the key.\n",
+          "contentType": "application/cloudevents+json",
+          "tags": [
+            {
+              "name": "warehouse-planning",
+              "description": "Consumed from warehouse-planning."
+            }
+          ],
+          "payload": {
+            "type": "object",
+            "description": "CloudEvents 1.0 envelope of warehouse-planning's LabourPlanCommitted,\nas consumed here (not composed from CloudEventBase, whose `source` is\nthis service's own). Snake_case data, pinned by warehouse-planning\nADR 0023 decision 2.\n",
+            "required": [
+              "specversion",
+              "id",
+              "source",
+              "type",
+              "subject",
+              "time",
+              "datacontenttype",
+              "dataschema",
+              "data"
+            ],
+            "properties": {
+              "specversion": {
+                "type": "string",
+                "enum": [
+                  "1.0"
+                ],
+                "x-parser-schema-id": "<anonymous-schema-144>"
+              },
+              "id": {
+                "type": "string",
+                "description": "CloudEvents id; the consumer's claim (dedupe) key.",
+                "x-parser-schema-id": "<anonymous-schema-145>"
+              },
+              "source": {
+                "type": "string",
+                "enum": [
+                  "/warehouse/warehouse-planning"
+                ],
+                "x-parser-schema-id": "<anonymous-schema-146>"
+              },
+              "type": {
+                "type": "string",
+                "const": "com.warehouse.wes.warehouse-planning.labourplan.LabourPlanCommitted",
+                "x-parser-schema-id": "<anonymous-schema-147>"
+              },
+              "subject": {
+                "type": "string",
+                "description": "site_id/shift_id/path_id (also the Kafka key).",
+                "x-parser-schema-id": "<anonymous-schema-148>"
+              },
+              "time": {
+                "type": "string",
+                "format": "date-time",
+                "x-parser-schema-id": "<anonymous-schema-149>"
+              },
+              "datacontenttype": {
+                "type": "string",
+                "enum": [
+                  "application/json"
+                ],
+                "x-parser-schema-id": "<anonymous-schema-150>"
+              },
+              "dataschema": {
+                "type": "string",
+                "description": "urn:warehouse:warehouse-planning:events:LabourPlanCommitted:v1",
+                "x-parser-schema-id": "<anonymous-schema-151>"
+              },
+              "data": {
+                "type": "object",
+                "required": [
+                  "site_id",
+                  "shift_id",
+                  "path_id",
+                  "planned_heads",
+                  "rate_units_per_hour",
+                  "hours",
+                  "installed_stations",
+                  "heads_source",
+                  "version"
+                ],
+                "properties": {
+                  "site_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "description": "The facility-layout site code (ADR 0035); stored here as site_code.",
+                    "x-parser-schema-id": "<anonymous-schema-153>"
+                  },
+                  "shift_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "x-parser-schema-id": "<anonymous-schema-154>"
+                  },
+                  "path_id": {
+                    "type": "string",
+                    "minLength": 1,
+                    "x-parser-schema-id": "<anonymous-schema-155>"
+                  },
+                  "planned_heads": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "The heads the demand requires; the proposal's proposedHeads when no charge is sent.",
+                    "x-parser-schema-id": "<anonymous-schema-156>"
+                  },
+                  "rate_units_per_hour": {
+                    "type": "number",
+                    "format": "double",
+                    "exclusiveMinimum": 0,
+                    "x-parser-schema-id": "<anonymous-schema-157>"
+                  },
+                  "hours": {
+                    "type": "number",
+                    "format": "double",
+                    "exclusiveMinimum": 0,
+                    "x-parser-schema-id": "<anonymous-schema-158>"
+                  },
+                  "installed_stations": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "description": "Not kept by this service; at least planned_heads.",
+                    "x-parser-schema-id": "<anonymous-schema-159>"
+                  },
+                  "shift_start": {
+                    "type": "string",
+                    "format": "date-time",
+                    "description": "OPTIONAL; may be absent. Not kept by this service.",
+                    "x-parser-schema-id": "<anonymous-schema-160>"
+                  },
+                  "heads_source": {
+                    "type": "string",
+                    "enum": [
+                      "request",
+                      "forecast"
+                    ],
+                    "x-parser-schema-id": "<anonymous-schema-161>"
+                  },
+                  "version": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "description": "+1 per accepted change of the key; the copy applies only a greater version.",
+                    "x-parser-schema-id": "<anonymous-schema-162>"
+                  }
+                },
+                "x-parser-schema-id": "<anonymous-schema-152>"
+              }
+            },
+            "x-parser-schema-id": "LabourPlanCommittedEvent"
+          },
+          "examples": [
+            {
+              "name": "forecastDayShift",
+              "summary": "Six heads required on PICK for the WH1 day shift (with shift_start).",
+              "payload": {
+                "specversion": "1.0",
+                "id": "7f1c2a9e-3b4d-4e5f-8a6b-1c2d3e4f5a6b",
+                "source": "/warehouse/warehouse-planning",
+                "type": "com.warehouse.wes.warehouse-planning.labourplan.LabourPlanCommitted",
+                "subject": "WH1/2026-11-18-day/PICK",
+                "time": "2026-11-18T05:30:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:warehouse-planning:events:LabourPlanCommitted:v1",
+                "data": {
+                  "site_id": "WH1",
+                  "shift_id": "2026-11-18-day",
+                  "path_id": "PICK",
+                  "planned_heads": 6,
+                  "rate_units_per_hour": 120,
+                  "hours": 8,
+                  "installed_stations": 10,
+                  "shift_start": "2026-11-18T06:00:00Z",
+                  "heads_source": "forecast",
+                  "version": 2
+                }
+              }
+            },
+            {
+              "name": "requestNightShiftNoShiftStart",
+              "summary": "Zero heads requested on PACK for the night shift (shift_start absent).",
+              "payload": {
+                "specversion": "1.0",
+                "id": "0b9d8c7e-6f5a-4b3c-9d2e-1f0a9b8c7d6e",
+                "source": "/warehouse/warehouse-planning",
+                "type": "com.warehouse.wes.warehouse-planning.labourplan.LabourPlanCommitted",
+                "subject": "WH1/2026-11-18-night/PACK",
+                "time": "2026-11-18T17:30:00Z",
+                "datacontenttype": "application/json",
+                "dataschema": "urn:warehouse:warehouse-planning:events:LabourPlanCommitted:v1",
+                "data": {
+                  "site_id": "WH1",
+                  "shift_id": "2026-11-18-night",
+                  "path_id": "PACK",
+                  "planned_heads": 0,
+                  "rate_units_per_hour": 45.5,
+                  "hours": 7.5,
+                  "installed_stations": 4,
+                  "heads_source": "request",
+                  "version": 1
+                }
+              }
+            }
+          ]
+        }
+      }
     }
   },
   "components": {
@@ -1804,7 +2025,8 @@
       "TaskPerformanceRecorded": "$ref:$.channels.warehouse.labor-performance.events.subscribe.message",
       "ProcessPathCreated": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[0]",
       "ProcessPathUpdated": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[1]",
-      "ProcessPathDeactivated": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[2]"
+      "ProcessPathDeactivated": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[2]",
+      "LabourPlanCommitted": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message"
     },
     "schemas": {
       "CloudEventBase": "$ref:$.channels.warehouse.workforce.events.subscribe.message.oneOf[0].payload.allOf[0]",
@@ -1823,7 +2045,8 @@
       "TaskPerformanceRecordedEvent": "$ref:$.channels.warehouse.labor-performance.events.subscribe.message.payload",
       "ProcessPathCreatedEvent": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[0].payload",
       "ProcessPathUpdatedEvent": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[1].payload",
-      "ProcessPathDeactivatedEvent": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[2].payload"
+      "ProcessPathDeactivatedEvent": "$ref:$.channels.warehouse.process-path-management.events.subscribe.message.oneOf[2].payload",
+      "LabourPlanCommittedEvent": "$ref:$.channels.warehouse.warehouse-planning.events.subscribe.message.payload"
     }
   },
   "x-parser-spec-parsed": true,
