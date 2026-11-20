@@ -10,11 +10,13 @@ slug: /contexts/wes-work-planning
 
 <span className="badge-core">Core Subdomain</span> · WES tier · **the conductor**
 
-**wes-work-planning** turns a shift's **charge** (volume due by CPT) into a
-committed **plan** (rate × heads per process path), then **releases work
-continuously** — waveless, one unit at a time, earliest-CPT-first — and
-performs **flow balancing** from live buffer telemetry so that every parcel
-makes its truck without the floor ever being starved or flooded.
+**wes-work-planning** **releases work continuously** — waveless, one unit at
+a time, earliest-CPT-first — and performs **flow balancing** from live buffer
+telemetry so that every parcel makes its truck without the floor ever being
+starved or flooded. The shift's forecast and labour plan are decided in
+[`warehouse-planning`](/contexts/warehouse-planning), not here: `POST
+/paths/{pathId}/charge` and `POST /paths/{pathId}/plan` answer `410` since
+ADR-0049.
 
 It sits downstream of seven upstream event suppliers (`inventory-storage`,
 `workforce-management`, `order-management`, [`network-inventory-planning`](/contexts/network-inventory-planning)'s
@@ -23,9 +25,9 @@ plans (ADR-0040: one `RELOCATE` work unit per move), `pick-face-replenishment`'s
 replenishment requests (ADR-0042: one `REPLENISH` work unit per request, an
 opt-in consumer that is off in the reference deployment) and `product-master`,
 whose `ProductClassified` it keeps as a local copy for release-time hazmat and
-fragile hints), conforms to two Generic
-contexts (`process-path-management`'s catalogue and `facility-layout`'s
-travel distances), closes a control loop with `fulfillment-execution`
+fragile hints), conforms to one Generic context (`process-path-management`'s
+catalogue; the `facility-layout` travel-distance lookup went with the shift
+plan, ADR-0049), closes a control loop with `fulfillment-execution`
 (`WorkReleased` out, `TaskCompleted` back), and reports remaining path
 capacity (`PathCapacityChanged`) to `order-management` and
 `network-fulfillment`. Following
@@ -50,7 +52,8 @@ justification.
   waveless, continuous release beats wave-based batching, and what flow
   balancing means operationally (Drum-Buffer-Rope with CPT as the drum).
 - [Ubiquitous Language](/contexts/wes-work-planning/ubiquitous-language):
-  Charge, CPT, Process Path, Work Pool, WorkUnit, ShiftPlan/PathPlan, and
+  Charge, CPT, Process Path, Work Pool, WorkUnit, the retired ShiftPlan/PathPlan,
+  and
   the traps where the same word means something different in another
   bounded context.
 - [Core Domain Chart](/contexts/wes-work-planning/core-domain-chart)
@@ -69,7 +72,7 @@ justification.
   ([ddd-crew aggregate-design-canvas](https://github.com/ddd-crew/aggregate-design-canvas)):
   the `WorkPool` aggregate, with its state, invariants, corrective
   policies, commands, events, throughput and size.
-- [Domain Events](/contexts/wes-work-planning/domain-events): the eleven
+- [Domain Events](/contexts/wes-work-planning/domain-events): the eight
   past-tense domain events, including the three that siblings consume today
   (`WorkReleased`, `PathCapacityChanged` and, opt-in and off by default in
   `order-management`, `WorkUnitCreated`), and the events this context

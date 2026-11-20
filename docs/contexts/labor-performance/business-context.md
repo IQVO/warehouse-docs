@@ -91,6 +91,21 @@ duration from) or a `TaskType` with no standard yet defined
 (`StandardSecondsAtCompletion<=0`) both yield a clean `null`, a real
 business fact, not a fabricated number.
 
+### The same standard also plans the labour
+
+An engineered standard is also what a planning context needs to say how many
+labour hours a day's demand requires. Rather than let `warehouse-planning`
+declare a second set of numbers that would drift from the ones scoring uses,
+this context publishes `LaborStandardDefined` and `LaborStandardRevised` on its
+integration topic `warehouse.labor-performance.events`, where
+`warehouse-planning` keeps a local copy
+([ADR 0038](https://github.com/IQVO/labor-performance/blob/develop/docs/docs/adr/0038-labor-standards-on-the-integration-topic-and-site-scope.md)).
+A standard also gains an optional `site_code`: engineered times differ between
+buildings, and an empty site code still means every site. A consumer that knows
+the site prefers the site-specific standard; **scoring is unchanged** — this
+context does not attribute a completed task to a site, so
+`RecordTaskPerformance` keeps scoring against the site-less standard.
+
 ## A pure observer, not a decision-maker
 
 Both Manhattan and Blue Yonder go further than pure visibility —
