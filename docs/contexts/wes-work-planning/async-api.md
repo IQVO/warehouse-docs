@@ -104,8 +104,8 @@ per event per topic, and drained onto Kafka by an in-process relay
 
 ## Consumed
 
-Setting `KAFKA_BROKERS` starts the inbound consumer automatically,
-**independent of `EVENT_PUBLISHER`**. It reads six topics concurrently,
+The inbound consumer always runs: `KAFKA_BROKERS` and `KAFKA_CONSUMER_GROUP` are required and the process
+refuses to boot without them (ADR-0044), so it no longer depends on `EVENT_PUBLISHER`. It reads six topics concurrently,
 one goroutine each (workforce, inventory, fulfillment, order-management,
 network-inventory-planning and slotting-optimization), under the consumer
 group `KAFKA_CONSUMER_GROUP`
@@ -422,8 +422,8 @@ nobody reads.
 
 | Env var | Default | Effect |
 |---|---|---|
-| `KAFKA_BROKERS` | *(unset)* | Comma-separated brokers. **Setting it starts the inbound consumer.** |
-| `KAFKA_CONSUMER_GROUP` | `wes-work-planning` | Consumer group of the integration-event consumer; set a unique value for any second process on the shared broker. |
+| `KAFKA_BROKERS` | *(none, required)* | Comma-separated brokers. Unset or blank is a boot error (ADR-0044). |
+| `KAFKA_CONSUMER_GROUP` | *(none, required)* | Stable consumer group of the integration-event consumer, shared by every replica (the chart renders `wes-work-planning`); set a unique value for any second process on the shared broker. |
 | `EVENT_PUBLISHER` | `kafka` | The only accepted value; requires `KAFKA_BROKERS`. Events go through the transactional outbox (ADR-0044). |
 | `OUTBOX_RELAY_INTERVAL` | `1s` | How long the outbox relay sleeps between empty passes (outbox mode only). |
 | `PRODUCT_CLASSIFICATION_MODE` | `permissive` | `kafka` keeps the local copy of product-master's classification; `http` is rejected at boot (ADR-0035). |
